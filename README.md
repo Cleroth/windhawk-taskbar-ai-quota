@@ -45,6 +45,7 @@ Useful settings include:
 - provider and credential source per account
 - account labels
 - bar length, thickness, and layout
+- bar mode: used (fills as quota is consumed) or remaining (fills with quota left, tooltips show "X% remaining")
 - label position and font size
 - account, label, bar, and tray spacing
 - compact percent text
