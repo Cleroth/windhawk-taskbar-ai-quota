@@ -245,11 +245,6 @@ struct QuotaUiInstance {
     std::vector<AppliedState> applied;
 };
 
-struct InjectTaskbarParam {
-    HWND hWnd;
-    bool* injected;
-};
-
 static Settings g_settings;
 static std::mutex g_settingsMutex;
 static ULONGLONG g_settingsGeneration = 0;
@@ -277,8 +272,8 @@ static const wchar_t* kDefaultOpenCodeAuthFile = L"%USERPROFILE%\\.local\\share\
 static const wchar_t* kDefaultClaudeCodeAuthFile = L"%USERPROFILE%\\.claude\\.credentials.json";
 static const wchar_t* kDefaultCodexAuthFile = L"%USERPROFILE%\\.codex\\auth.json";
 
-using WindowThreadProc = void (*)(void*);
-static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param);
+using WindowThreadProc = bool (*)(void*);
+static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, DWORD timeoutMs = 2000);
 static std::vector<HWND> FindCurrentProcessTaskbarWnds();
 static QuotaUiInstance* FindUiState(HWND hWnd);
 static void UpdateQuotaUi(QuotaUiInstance& state);
@@ -972,10 +967,11 @@ static void PostUiUpdate() {
     if (g_unloading || !g_uiInjected.load(std::memory_order_acquire)) return;
 
     for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
-        RunFromWindowThread(hWnd, [](void* param) {
+        RunFromWindowThread(hWnd, [](void* param) -> bool {
             HWND hWnd = static_cast<HWND>(param);
             auto* state = FindUiState(hWnd);
             if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
+            return true;
         }, hWnd);
     }
 }
@@ -1109,14 +1105,18 @@ static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
 static void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 
-static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
+static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, DWORD timeoutMs) {
     static const UINT kMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    struct Payload { WindowThreadProc proc; void* param; };
+    struct Payload {
+        WindowThreadProc proc;
+        void* param;
+        bool ran = false;
+        bool result = false;
+    };
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
     if (!tid) return false;
     if (tid == GetCurrentThreadId()) {
-        proc(param);
-        return true;
+        return proc(param);
     }
 
     HHOOK hook = SetWindowsHookExW(
@@ -1127,23 +1127,34 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
                 static const UINT kM = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == kM) {
                     auto* p = reinterpret_cast<Payload*>(cwp->lParam);
-                    p->proc(p->param);
+                    p->ran = true;
+                    p->result = p->proc(p->param);
                 }
             }
             return CallNextHookEx(nullptr, code, w, l);
         }, nullptr, tid);
     if (!hook) return false;
 
-    Payload pay{proc, param};
-    DWORD_PTR ignored = 0;
-    // Avoid worker/UI deadlocks during unload if the target thread stops pumping messages.
-    if (!SendMessageTimeoutW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay),
-                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &ignored)) {
+    auto* pay = new Payload{proc, param};
+    bool sent = true;
+    if (timeoutMs == INFINITE) {
+        SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(pay));
+    } else {
+        DWORD_PTR ignored = 0;
+        // Avoid worker/UI deadlocks during unload if the target thread stops pumping messages.
+        sent = SendMessageTimeoutW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(pay),
+                                   SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &ignored) != 0;
+    }
+
+    bool result = sent && pay->ran && pay->result;
+    if (!sent) {
         UnhookWindowsHookEx(hook);
+        // The target thread may still run the hook after a timeout; keep payload memory valid.
         return false;
     }
     UnhookWindowsHookEx(hook);
-    return true;
+    delete pay;
+    return result;
 }
 
 static std::vector<HWND> FindCurrentProcessTaskbarWnds() {
@@ -1802,16 +1813,17 @@ static void RemoveQuotaGrid(HWND hWnd) {
     EraseUiState(hWnd);
 }
 
-static void RemoveAllQuotaGrids() {
+static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
     std::vector<HWND> hWnds;
     hWnds.reserve(g_uiInstances.size());
     for (auto& state : g_uiInstances) hWnds.push_back(state->hWnd);
 
     for (HWND hWnd : hWnds) {
         if (!hWnd || !IsWindow(hWnd)) continue;
-        if (!RunFromWindowThread(hWnd, [](void* param) {
+        if (!RunFromWindowThread(hWnd, [](void* param) -> bool {
                 RemoveQuotaGrid(static_cast<HWND>(param));
-            }, hWnd)) {
+                return true;
+            }, hWnd, waitForCompletion ? INFINITE : 2000)) {
             Wh_Log(L"RemoveQuotaGrid marshal failed");
         }
     }
@@ -1854,12 +1866,9 @@ static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
         }
         bool allInjected = !hWnds.empty();
         for (HWND hWnd : hWnds) {
-            bool injected = false;
-            InjectTaskbarParam param{hWnd, &injected};
-            RunFromWindowThread(hWnd, [](void* param) {
-                auto* p = static_cast<InjectTaskbarParam*>(param);
-                *p->injected = !g_unloading && InjectQuotaGrid(p->hWnd);
-            }, &param);
+            bool injected = RunFromWindowThread(hWnd, [](void* param) -> bool {
+                return !g_unloading && InjectQuotaGrid(static_cast<HWND>(param));
+            }, hWnd);
             allInjected = allInjected && injected;
         }
         if (allInjected) break;
@@ -1891,12 +1900,9 @@ static void StartRetryInject() {
 
     bool anyInjected = false;
     for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
-        bool injected = false;
-        InjectTaskbarParam param{hWnd, &injected};
-        if (RunFromWindowThread(hWnd, [](void* param) {
-                auto* p = static_cast<InjectTaskbarParam*>(param);
-                *p->injected = !g_unloading && InjectQuotaGrid(p->hWnd);
-            }, &param) && injected) {
+        if (RunFromWindowThread(hWnd, [](void* param) -> bool {
+                return !g_unloading && InjectQuotaGrid(static_cast<HWND>(param));
+            }, hWnd)) {
             anyInjected = true;
         }
     }
@@ -2154,7 +2160,7 @@ void Wh_ModUninit() {
     }
     g_fetchThreadStarted.store(false, std::memory_order_release);
 
-    RemoveAllQuotaGrids();
+    RemoveAllQuotaGrids(true);
 
     if (g_stopEvent) CloseHandle(g_stopEvent);
     if (g_refreshEvent) CloseHandle(g_refreshEvent);
