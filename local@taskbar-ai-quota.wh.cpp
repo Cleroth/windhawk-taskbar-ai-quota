@@ -2,11 +2,11 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.4
+// @version         0.5.0
 // @author          Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,6 +24,9 @@ Each account gets one narrow column:
 Hover for exact percentages and reset times. Click a column to refresh that account.
 Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
 Stale errors can mark labels/tooltips with `!`.
+
+Optionally fires a Windows notification when an account first crosses the red threshold
+(5-hour or weekly), so you don't have to keep glancing at the bars.
 
 Supported credential sources:
 - OpenCode: `%USERPROFILE%\.local\share\opencode\auth.json`
@@ -117,6 +120,9 @@ own auth files if requests start returning `401`.
 - redThreshold: 90
   $name: Red threshold (%)
   $description: 'Default: 90. Usage at or above this turns red.'
+- enableNotifications: true
+  $name: Threshold notifications
+  $description: 'Default: true. Shows a Windows notification when an account first crosses the red threshold (5h or weekly). Re-arms after usage drops back below.'
 - colorblindMode: false
   $name: Colorblind mode
   $description: 'Default: false. Uses a blue-to-orange palette instead of green/red.'
@@ -129,6 +135,7 @@ own auth files if requests start returning `401`.
 #include <windhawk_utils.h>
 
 #include <windows.h>
+#include <shellapi.h>
 #include <winhttp.h>
 #include <unknwn.h>
 
@@ -148,6 +155,7 @@ own auth files if requests start returning `401`.
 #include <winrt/Windows.UI.Xaml.Media.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <memory>
@@ -202,6 +210,7 @@ struct Settings {
     bool showCodexSparkInTooltip = false;
     bool colorblindMode = false;
     bool showStaleWarning = true;
+    bool enableNotifications = true;
 };
 
 struct WindowUsage {
@@ -264,6 +273,9 @@ static HANDLE g_retryThread = nullptr;
 static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
 static std::mutex g_httpHandlesMutex;
 static std::vector<HINTERNET> g_httpHandles;
+
+// Fetch-thread-owned: hidden message-only window that owns the mod's tray icon.
+static HWND g_notifyWnd = nullptr;
 
 static std::vector<std::unique_ptr<QuotaUiInstance>> g_uiInstances;
 
@@ -976,6 +988,72 @@ static void PostUiUpdate() {
     }
 }
 
+/**********************************************/
+//  Threshold Notifications
+/**********************************************/
+
+static const UINT kNotifyIconId = 1;
+static PCWSTR kNotifyClassName = L"AiQuotaNotify_" WH_MOD_ID;
+
+// Fetch-thread only. Drops the tray icon, window, and class created on demand.
+static void RemoveNotifyIcon() {
+    if (!g_notifyWnd) return;
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_notifyWnd;
+    nid.uID = kNotifyIconId;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+    DestroyWindow(g_notifyWnd);
+    g_notifyWnd = nullptr;
+    UnregisterClassW(kNotifyClassName, GetModuleHandleW(nullptr));
+}
+
+// Fetch-thread only. Lazily creates a hidden message-only window owning one tray
+// icon, then shows a balloon (rendered as a toast on Win11, kept in notify center).
+static void FireThresholdNotification(const std::wstring& title, const std::wstring& body) {
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    if (!g_notifyWnd) {
+        WNDCLASSEXW wc{};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = DefWindowProcW;
+        wc.hInstance = hInst;
+        wc.lpszClassName = kNotifyClassName;
+        RegisterClassExW(&wc);  // ERROR_CLASS_ALREADY_EXISTS is fine; CreateWindow reuses it.
+
+        g_notifyWnd = CreateWindowExW(0, kNotifyClassName, L"", 0, 0, 0, 0, 0,
+                                      HWND_MESSAGE, nullptr, hInst, nullptr);
+        if (!g_notifyWnd) {
+            Wh_Log(L"Notify window creation failed: %lu", GetLastError());
+            return;
+        }
+
+        NOTIFYICONDATAW nid{};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = g_notifyWnd;
+        nid.uID = kNotifyIconId;
+        nid.uFlags = NIF_ICON | NIF_STATE;
+        nid.dwState = NIS_HIDDEN;
+        nid.dwStateMask = NIS_HIDDEN;
+        nid.hIcon = LoadIconW(nullptr, IDI_WARNING);
+        if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+            Wh_Log(L"Shell_NotifyIcon NIM_ADD failed");
+            DestroyWindow(g_notifyWnd);
+            g_notifyWnd = nullptr;
+            return;
+        }
+    }
+
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_notifyWnd;
+    nid.uID = kNotifyIconId;
+    nid.uFlags = NIF_INFO;
+    nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
+    wcsncpy_s(nid.szInfoTitle, title.c_str(), _TRUNCATE);
+    wcsncpy_s(nid.szInfo, body.c_str(), _TRUNCATE);
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
+
 static DWORD WINAPI FetchThreadProc(LPVOID) {
     bool apartmentInitialized = false;
     try {
@@ -985,21 +1063,28 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
 
     std::vector<std::wstring> lastLoggedErrorStates;
     std::vector<ULONGLONG> retryDeadlineMs;
+    // Per-account red-crossing arm state, indexed [account][0=5h,1=weekly]:
+    // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
+    std::vector<std::array<int, 2>> redState;
     ULONGLONG lastLoggedSettingsGeneration = 0;
     while (!g_unloading) {
         ULONGLONG refreshGeneration = g_refreshGeneration.load();
         int refreshAccountIndex = g_refreshAccountIndex.load();
         std::vector<AccountConfig> accounts;
-        int intervalMin;
+        int intervalMin, redThreshold;
+        bool enableNotifications;
         ULONGLONG settingsGeneration;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
             intervalMin = g_settings.pollMinutes;
+            redThreshold = g_settings.redThreshold;
+            enableNotifications = g_settings.enableNotifications;
             settingsGeneration = g_settingsGeneration;
         }
-        if (lastLoggedSettingsGeneration != settingsGeneration ||
-            lastLoggedErrorStates.size() != accounts.size()) {
+        bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
+                               lastLoggedErrorStates.size() != accounts.size();
+        if (settingsChanged) {
             lastLoggedErrorStates.assign(accounts.size(), {});
             retryDeadlineMs.assign(accounts.size(), 0);
             lastLoggedSettingsGeneration = settingsGeneration;
@@ -1010,9 +1095,19 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             std::lock_guard<std::mutex> lk(g_dataMutex);
             if (g_data.size() == results.size()) results = g_data;
         }
+        if (settingsChanged || redState.size() != accounts.size()) {
+            redState.assign(accounts.size(), std::array<int, 2>{-1, -1});
+            for (size_t i = 0; i < accounts.size(); i++) {
+                for (int w = 0; w < 2; w++) {
+                    const WindowUsage& wu = w == 0 ? results[i].win5h : results[i].winWeek;
+                    if (wu.pct >= 0) redState[i][w] = wu.pct >= redThreshold ? 1 : 0;
+                }
+            }
+        }
 
         bool refreshSingleAccount = g_refreshing.load() && refreshAccountIndex >= 0 &&
                                     refreshAccountIndex < (int)accounts.size();
+        std::vector<bool> fetchedOk(accounts.size(), false);
         ULONGLONG nextRetryMs = 0;
         bool anyError = false;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
@@ -1055,8 +1150,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
             } else {
                 lastLoggedErrorStates[i].clear();
+                fetchedOk[i] = true;
             }
         }
+        if (!enableNotifications && g_notifyWnd) RemoveNotifyIcon();
 
         bool published = false;
         {
@@ -1064,7 +1161,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             if (settingsGeneration == g_settingsGeneration) {
                 std::lock_guard<std::mutex> lk2(g_dataMutex);
                 if (g_data.size() == results.size()) {
-                    g_data = std::move(results);
+                    g_data = results;
                     published = true;
                 }
             }
@@ -1073,7 +1170,34 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             g_refreshing = false;
             g_refreshAccountIndex = -1;
         }
-        if (published) PostUiUpdate();
+        if (published) {
+            // Fire one toast per upward crossing of the red threshold; re-arm when
+            // usage drops back below. Notification side effects happen only after the
+            // matching settings generation publishes, avoiding stale in-flight toasts.
+            for (size_t i = 0; i < accounts.size(); i++) {
+                if (!fetchedOk[i]) continue;
+                for (int w = 0; w < 2; w++) {
+                    const WindowUsage& wu = w == 0 ? results[i].win5h : results[i].winWeek;
+                    int& st = redState[i][w];
+                    if (wu.pct < 0) continue;
+                    if (wu.pct >= redThreshold) {
+                        if (st == 0 && enableNotifications) {
+                            std::wstring providerName =
+                                accounts[i].provider == L"anthropic" ? L"Anthropic" : L"OpenAI";
+                            wchar_t title[96];
+                            swprintf(title, ARRAYSIZE(title), L"%s %s usage at %.0f%%",
+                                     accounts[i].label.c_str(), w == 0 ? L"5h" : L"weekly", wu.pct);
+                            std::wstring body = providerName + L" - resets " + FormatReset(wu.resetUnixMs);
+                            FireThresholdNotification(title, body);
+                        }
+                        st = 1;
+                    } else {
+                        st = 0;
+                    }
+                }
+            }
+            PostUiUpdate();
+        }
 
         DWORD waitMs = (DWORD)intervalMin * 60000;
         if (anyError) waitMs = std::min(waitMs, (DWORD)120000);
@@ -1085,6 +1209,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         HANDLE handles[2] = {g_stopEvent, g_refreshEvent};
         if (WaitForMultipleObjects(2, handles, FALSE, waitMs) == WAIT_OBJECT_0) break;
     }
+    RemoveNotifyIcon();
     if (apartmentInitialized) winrt::uninit_apartment();
     return 0;
 }
@@ -2077,6 +2202,7 @@ static void LoadSettings() {
     s.showCodexSparkInTooltip = getBoolSetting(L"showCodexSparkInTooltip", false);
     s.colorblindMode = getBoolSetting(L"colorblindMode", false);
     s.showStaleWarning = getBoolSetting(L"showStaleWarning", true);
+    s.enableNotifications = getBoolSetting(L"enableNotifications", true);
 
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);

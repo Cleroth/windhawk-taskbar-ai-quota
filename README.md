@@ -16,6 +16,8 @@ Hover for exact percentages and reset times. Click a column to refresh that acco
 
 Bars use configurable green/yellow/orange/red thresholds, with an optional colorblind palette. Stale errors can mark labels and tooltips with `!`.
 
+It can also fire a Windows notification when an account first crosses the red threshold (5-hour or weekly), so you don't have to keep glancing at the bars. The notification re-arms once usage drops back below the threshold.
+
 ## Setup
 
 Install the Windhawk mod from `local@taskbar-ai-quota.wh.cpp`, then configure accounts in the mod settings.
@@ -47,6 +49,7 @@ Useful settings include:
 - compact percent text
 - taskbar monitor mode: primary, all, or specific monitor number (`1` = primary, `2+` = secondary taskbars)
 - color thresholds
+- threshold notifications (toast when an account crosses the red threshold)
 - colorblind palette
 - stale-warning marker
 
