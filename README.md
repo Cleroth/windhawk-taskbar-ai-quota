@@ -1,6 +1,7 @@
 # Taskbar AI Quota Bars
 
 Shows Anthropic Claude and OpenAI/Codex AI agent and LLM subscription quota usage as compact bars on the Windows 11 taskbar.
+Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ![Taskbar AI Quota Bars](screenshot.png)
 
@@ -43,6 +44,7 @@ Useful settings include:
 - bar width and height
 - label position and font size
 - compact percent text
+- taskbar monitor mode: primary, all, or specific monitor number (`1` = primary, `2+` = secondary taskbars)
 - color thresholds
 - colorblind palette
 - stale-warning marker
@@ -58,5 +60,6 @@ Do not share auth files. They contain access tokens.
 ## Limitations
 
 - Windows 11 taskbar only.
+- Specific monitor numbers use taskbar order: `1` is primary, `2+` are secondary taskbars in monitor order.
 - Uses local auth files from supported tools.
 - Expired access tokens can cause `401` until the owning app refreshes them.

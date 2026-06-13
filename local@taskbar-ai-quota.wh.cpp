@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.2
+// @version         0.4
 // @author          Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
@@ -15,6 +15,7 @@
 
 Shows Anthropic Claude and OpenAI/Codex AI agent and LLM subscription quota usage as
 compact bars on the Windows 11 taskbar, next to the system tray.
+Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 Each account gets one narrow column:
 - top bar: 5-hour usage
@@ -61,6 +62,16 @@ own auth files if requests start returning `401`.
       - authKey: ""
   $name: Accounts
   $description: 'Default: two accounts, Anthropic A and OpenAI O'
+- taskbarMonitorMode: primary
+  $name: Taskbar monitors
+  $description: 'Default: Primary only. Choose where quota bars are shown.'
+  $options:
+    - primary: Primary monitor only
+    - all: All monitors
+    - specific: Specific monitor number
+- taskbarMonitorNumber: 1
+  $name: Specific monitor number
+  $description: 'Default: 1. Used when Taskbar monitors is Specific. 1 is the primary taskbar; 2+ are secondary taskbars in monitor order.'
 - pollIntervalMinutes: 10
   $name: Poll interval (minutes)
   $description: 'Default: 10'
@@ -127,6 +138,7 @@ own auth files if requests start returning `401`.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -151,8 +163,16 @@ struct AccountConfig {
     std::wstring authKey;
 };
 
+enum class TaskbarMonitorMode {
+    Primary,
+    All,
+    Specific,
+};
+
 struct Settings {
     std::vector<AccountConfig> accounts;
+    TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
+    int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
     int barWidth = 100;
     int barHeight = 8;
@@ -199,12 +219,26 @@ struct TapHandler {
     winrt::event_token token{};
 };
 
+struct QuotaUiInstance {
+    HWND hWnd = nullptr;
+    Grid quotaGrid{nullptr};
+    Grid injectionParent{nullptr};
+    int quotaColumn = -1;
+    bool insertedColumn = false;
+    std::vector<TapHandler> tapHandlers;
+    std::vector<AppliedState> applied;
+};
+
+struct InjectTaskbarParam {
+    HWND hWnd;
+    bool* injected;
+};
+
 static Settings g_settings;
 static std::mutex g_settingsMutex;
 static ULONGLONG g_settingsGeneration = 0;
 static std::vector<AccountData> g_data;
 static std::mutex g_dataMutex;
-static std::vector<AppliedState> g_applied;
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_refreshing{false};
@@ -214,12 +248,9 @@ static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
 static HANDLE g_fetchThread = nullptr;
 static HANDLE g_retryThread = nullptr;
-static std::atomic<HWND> g_taskbarWnd{nullptr};
+static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
 
-static Grid g_quotaGrid = nullptr;
-static Grid g_injectionParent = nullptr;
-static int g_quotaColumn = -1;
-static std::vector<TapHandler> g_tapHandlers;
+static std::vector<std::unique_ptr<QuotaUiInstance>> g_uiInstances;
 
 static const wchar_t* kRootName = L"AiQuota_Root";
 static const wchar_t* kDefaultOpenCodeAuthFile = L"%USERPROFILE%\\.local\\share\\opencode\\auth.json";
@@ -228,16 +259,10 @@ static const wchar_t* kDefaultCodexAuthFile = L"%USERPROFILE%\\.codex\\auth.json
 
 using WindowThreadProc = void (*)(void*);
 static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param);
-static HWND FindCurrentProcessTaskbarWnd();
-
-static HWND GetCachedTaskbarWnd() {
-    HWND hWnd = g_taskbarWnd.load(std::memory_order_acquire);
-    if (hWnd) return hWnd;
-
-    hWnd = FindCurrentProcessTaskbarWnd();
-    if (hWnd) g_taskbarWnd.store(hWnd, std::memory_order_release);
-    return hWnd;
-}
+static std::vector<HWND> FindCurrentProcessTaskbarWnds();
+static QuotaUiInstance* FindUiState(HWND hWnd);
+static void UpdateQuotaUi(QuotaUiInstance& state);
+static void PostUiUpdate();
 
 /**********************************************/
 //  Helpers
@@ -852,17 +877,17 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     *d = std::move(fresh);
 }
 
-static void UpdateQuotaUi();
-
 static void PostUiUpdate() {
     // Never resolve XAML refs on the fetch thread; marshal first.
     if (g_unloading || !g_uiInjected.load(std::memory_order_acquire)) return;
 
-    HWND hWnd = GetCachedTaskbarWnd();
-    if (!hWnd) return;
-    RunFromWindowThread(hWnd, [](void*) {
-        if (!g_unloading && g_uiInjected.load(std::memory_order_acquire) && g_quotaGrid) UpdateQuotaUi();
-    }, nullptr);
+    for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
+        RunFromWindowThread(hWnd, [](void* param) {
+            HWND hWnd = static_cast<HWND>(param);
+            auto* state = FindUiState(hWnd);
+            if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
+        }, hWnd);
+    }
 }
 
 static DWORD WINAPI FetchThreadProc(LPVOID) {
@@ -963,13 +988,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
 /**********************************************/
 
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
 using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
 using Std_Ref_Decref_t = void(WINAPI*)(void*);
 
 static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
+static CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original = nullptr;
 static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+static void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 
 static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     static const UINT kMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
@@ -1002,18 +1030,83 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     return true;
 }
 
-static HWND FindCurrentProcessTaskbarWnd() {
-    HWND result = nullptr;
+static std::vector<HWND> FindCurrentProcessTaskbarWnds() {
+    TaskbarMonitorMode mode;
+    int targetMonitorNumber;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        mode = g_settings.taskbarMonitorMode;
+        targetMonitorNumber = g_settings.taskbarMonitorNumber;
+    }
+
+    std::vector<HMONITOR> monitors;
+    EnumDisplayMonitors(nullptr, nullptr,
+        [](HMONITOR hMonitor, HDC, LPRECT, LPARAM lp) CALLBACK -> BOOL {
+            reinterpret_cast<std::vector<HMONITOR>*>(lp)->push_back(hMonitor);
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&monitors));
+
+    struct TaskbarWindowInfo {
+        HWND hWnd;
+        bool primary;
+        int monitorNumber;
+    };
+    struct EnumContext {
+        DWORD pid;
+        TaskbarMonitorMode mode;
+        std::vector<HMONITOR>* monitors;
+        std::vector<TaskbarWindowInfo>* windows;
+    } ctx{GetCurrentProcessId(), mode, &monitors, nullptr};
+
+    std::vector<TaskbarWindowInfo> windows;
+    ctx.windows = &windows;
     EnumWindows([](HWND hWnd, LPARAM lp) CALLBACK -> BOOL {
+        auto* ctx = reinterpret_cast<EnumContext*>(lp);
         DWORD pid = 0;
-        wchar_t cls[32] = {};
-        if (GetWindowThreadProcessId(hWnd, &pid) && pid == GetCurrentProcessId() &&
-            GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && _wcsicmp(cls, L"Shell_TrayWnd") == 0) {
-            *reinterpret_cast<HWND*>(lp) = hWnd;
-            return FALSE;
+        wchar_t cls[64] = {};
+        if (!GetWindowThreadProcessId(hWnd, &pid) || pid != ctx->pid ||
+            !GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
+            return TRUE;
         }
+
+        bool primary = _wcsicmp(cls, L"Shell_TrayWnd") == 0;
+        bool secondary = _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0;
+        if (!primary && !secondary) return TRUE;
+        if (ctx->mode == TaskbarMonitorMode::Primary && !primary) return TRUE;
+
+        int monitorNumber = 0;
+        if (HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST)) {
+            for (size_t i = 0; i < ctx->monitors->size(); ++i) {
+                if ((*ctx->monitors)[i] == hMonitor) {
+                    monitorNumber = (int)i + 1;
+                    break;
+                }
+            }
+        }
+        ctx->windows->push_back({hWnd, primary, monitorNumber});
         return TRUE;
-    }, reinterpret_cast<LPARAM>(&result));
+    }, reinterpret_cast<LPARAM>(&ctx));
+
+    std::sort(windows.begin(), windows.end(), [](const auto& a, const auto& b) {
+        if (a.primary != b.primary) return a.primary;
+        if (a.monitorNumber != b.monitorNumber) {
+            if (a.monitorNumber == 0) return false;
+            if (b.monitorNumber == 0) return true;
+            return a.monitorNumber < b.monitorNumber;
+        }
+        return reinterpret_cast<UINT_PTR>(a.hWnd) < reinterpret_cast<UINT_PTR>(b.hWnd);
+    });
+
+    std::vector<HWND> result;
+    result.reserve(windows.size());
+    if (mode == TaskbarMonitorMode::Specific) {
+        if (targetMonitorNumber >= 1 && targetMonitorNumber <= (int)windows.size()) {
+            result.push_back(windows[targetMonitorNumber - 1].hWnd);
+        }
+        return result;
+    }
+
+    for (const auto& window : windows) result.push_back(window.hWnd);
     return result;
 }
 
@@ -1025,20 +1118,30 @@ static HRESULT TryGetTaskbarElementAbi(HWND hTaskbarWnd, void** result) {
         if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
     };
 
-    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    wchar_t cls[64] = {};
+    bool isSecondary = GetClassNameW(hTaskbarWnd, cls, ARRAYSIZE(cls)) &&
+                       _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0;
+    HWND hTaskSwWnd = isSecondary ? FindWindowExW(hTaskbarWnd, nullptr, L"WorkerW", nullptr)
+                                  : (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
     if (!hTaskSwWnd) return E_HANDLE;
 
     void* taskBand = (void*)GetWindowLongPtrW(hTaskSwWnd, 0);
     if (!taskBand) return E_POINTER;
 
+    void* taskBandVftable = isSecondary ? CSecondaryTaskBand_ITaskListWndSite_vftable
+                                        : CTaskBand_ITaskListWndSite_vftable;
+    auto getTaskbarHost = isSecondary ? CSecondaryTaskBand_GetTaskbarHost_Original
+                                      : CTaskBand_GetTaskbarHost_Original;
+    if (!taskBandVftable || !getTaskbarHost) return E_NOINTERFACE;
+
     void* taskBandForTaskListWndSite = taskBand;
-    for (int i = 0; *(void**)taskBandForTaskListWndSite != CTaskBand_ITaskListWndSite_vftable; i++) {
+    for (int i = 0; *(void**)taskBandForTaskListWndSite != taskBandVftable; i++) {
         if (i == 20) return E_NOINTERFACE;
         taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
         if (!taskBandForTaskListWndSite) return E_POINTER;
     }
 
-    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite, taskbarHostSharedPtr);
+    getTaskbarHost(taskBandForTaskListWndSite, taskbarHostSharedPtr);
     if (!taskbarHostSharedPtr[0]) {
         cleanup();
         return E_POINTER;
@@ -1101,9 +1204,22 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
 //  UI
 /**********************************************/
 
-static void ClearQuotaEventState() {
+static QuotaUiInstance* FindUiState(HWND hWnd) {
+    for (auto& state : g_uiInstances) {
+        if (state->hWnd == hWnd) return state.get();
+    }
+    return nullptr;
+}
+
+static void EraseUiState(HWND hWnd) {
+    g_uiInstances.erase(std::remove_if(g_uiInstances.begin(), g_uiInstances.end(),
+        [hWnd](const auto& state) { return state->hWnd == hWnd; }), g_uiInstances.end());
+    g_uiInjected.store(!g_uiInstances.empty(), std::memory_order_release);
+}
+
+static void ClearQuotaEventState(QuotaUiInstance& state) {
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
-    for (auto& handler : g_tapHandlers) {
+    for (auto& handler : state.tapHandlers) {
         if (!handler.element) continue;
 
         try { handler.element.Tapped(handler.token); } catch (...) {}
@@ -1111,10 +1227,10 @@ static void ClearQuotaEventState() {
             ToolTipService::SetToolTip(handler.element, winrt::Windows::Foundation::IInspectable{nullptr});
         } catch (...) {}
     }
-    g_tapHandlers.clear();
+    state.tapHandlers.clear();
 }
 
-static Grid BuildQuotaGrid() {
+static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         std::vector<AccountConfig> accounts;
         int barWidth, barHeight, labelFontSize;
@@ -1215,26 +1331,27 @@ static Grid BuildQuotaGrid() {
             ToolTipService::SetToolTip(col, winrt::box_value(winrt::hstring(L"loading...")));
             ToolTipService::SetPlacement(col, wuxcp::PlacementMode::Top);
             UIElement tappedElement = col.as<UIElement>();
+            QuotaUiInstance* statePtr = &state;
             auto tappedToken = tappedElement.Tapped(
-                [](winrt::Windows::Foundation::IInspectable const&, wuxi::TappedRoutedEventArgs const& e) {
-                    if (g_unloading || !g_quotaGrid) {
+                [statePtr](winrt::Windows::Foundation::IInspectable const&, wuxi::TappedRoutedEventArgs const& e) {
+                    if (g_unloading || !statePtr->quotaGrid) {
                         e.Handled(true);
                         return;
                     }
 
                     if (!g_fetchThreadStarted.load(std::memory_order_acquire)) {
                         g_refreshing = false;
-                        UpdateQuotaUi();
+                        PostUiUpdate();
                         e.Handled(true);
                         return;
                     }
 
                     g_refreshing = true;
-                    UpdateQuotaUi();
+                    PostUiUpdate();
                     if (g_refreshEvent) SetEvent(g_refreshEvent);
                     e.Handled(true);
                 });
-            g_tapHandlers.push_back({tappedElement, tappedToken});
+            state.tapHandlers.push_back({tappedElement, tappedToken});
 
             panel.Children().Append(col);
         }
@@ -1242,14 +1359,14 @@ static Grid BuildQuotaGrid() {
         root.Children().Append(panel);
         return root;
     } catch (...) {
-        ClearQuotaEventState();
+        ClearQuotaEventState(state);
         Wh_Log(L"BuildQuotaGrid: exception");
         return nullptr;
     }
 }
 
-static void UpdateQuotaUi() {
-    if (!g_quotaGrid) return;
+static void UpdateQuotaUi(QuotaUiInstance& state) {
+    if (!state.quotaGrid) return;
 
     std::vector<AccountConfig> accounts;
     int intervalMin, barWidth, yellowThreshold, orangeThreshold, redThreshold;
@@ -1274,7 +1391,7 @@ static void UpdateQuotaUi() {
         data = g_data;
     }
     if (data.size() != accounts.size()) return;
-    if (g_applied.size() != data.size()) g_applied.assign(data.size(), {});
+    if (state.applied.size() != data.size()) state.applied.assign(data.size(), {});
 
     ULONGLONG now = NowUnixMs();
     bool refreshing = g_refreshing.load();
@@ -1282,7 +1399,7 @@ static void UpdateQuotaUi() {
     try {
         for (size_t i = 0; i < data.size(); i++) {
             const AccountData& d = data[i];
-            AppliedState& ap = g_applied[i];
+            AppliedState& ap = state.applied[i];
             bool stale = d.stale || d.lastSuccessMs == 0 ||
                          now - d.lastSuccessMs > (ULONGLONG)intervalMin * 2 * 60000;
             bool warn = showStaleWarning && stale && !d.error.empty();
@@ -1296,7 +1413,7 @@ static void UpdateQuotaUi() {
                               ((uint32_t)c.G << 8) | c.B;
                 if (px != ap.fillPx[w] || cv != ap.fillColor[w]) {
                     swprintf(name, ARRAYSIZE(name), L"AiQuota_Fill_%d_%d", (int)i, w);
-                    if (auto fe = FindChildByName(g_quotaGrid, name)) {
+                    if (auto fe = FindChildByName(state.quotaGrid, name)) {
                         if (auto b = fe.try_as<Border>()) {
                             b.Width(px);
                             b.Background(SolidColorBrush(c));
@@ -1353,7 +1470,7 @@ static void UpdateQuotaUi() {
                 }
                 if (percentText != ap.percentText) {
                     swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d", (int)i);
-                    if (auto fe = FindChildByName(g_quotaGrid, name)) {
+                    if (auto fe = FindChildByName(state.quotaGrid, name)) {
                         if (auto tb = fe.try_as<TextBlock>()) tb.Text(percentText);
                     }
                     ap.percentText = percentText;
@@ -1362,7 +1479,7 @@ static void UpdateQuotaUi() {
 
             if (tip != ap.tip) {
                 swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
-                if (auto fe = FindChildByName(g_quotaGrid, name)) {
+                if (auto fe = FindChildByName(state.quotaGrid, name)) {
                     ToolTipService::SetToolTip(fe, winrt::box_value(winrt::hstring(tip)));
                 }
                 ap.tip = tip;
@@ -1371,7 +1488,7 @@ static void UpdateQuotaUi() {
             double columnOpacity = refreshing ? 0.65 : 1.0;
             if (columnOpacity != ap.columnOpacity) {
                 swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
-                if (auto fe = FindChildByName(g_quotaGrid, name)) fe.Opacity(columnOpacity);
+                if (auto fe = FindChildByName(state.quotaGrid, name)) fe.Opacity(columnOpacity);
                 ap.columnOpacity = columnOpacity;
             }
 
@@ -1379,7 +1496,7 @@ static void UpdateQuotaUi() {
             std::wstring labelText = warn ? accounts[i].label + L"!" : accounts[i].label;
             if (labelOpacity != ap.labelOpacity || labelText != ap.labelText) {
                 swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
-                if (auto fe = FindChildByName(g_quotaGrid, name)) {
+                if (auto fe = FindChildByName(state.quotaGrid, name)) {
                     fe.Opacity(labelOpacity);
                     if (auto tb = fe.try_as<TextBlock>()) tb.Text(labelText);
                 }
@@ -1392,9 +1509,9 @@ static void UpdateQuotaUi() {
     }
 }
 
-static int RemoveQuotaChildren(Grid const& targetGrid) {
+static int RemoveQuotaChildren(Grid const& targetGrid, QuotaUiInstance& state) {
     if (!targetGrid) return -1;
-    ClearQuotaEventState();
+    ClearQuotaEventState(state);
 
     int firstCol = -1;
     for (int i = (int)targetGrid.Children().Size() - 1; i >= 0; --i) {
@@ -1407,78 +1524,21 @@ static int RemoveQuotaChildren(Grid const& targetGrid) {
     return firstCol;
 }
 
-static bool InjectQuotaGrid() {
-    if (g_quotaGrid) return true;
-    HWND hWnd = GetCachedTaskbarWnd();
-    if (!hWnd) return false;
-
-    try {
-        auto xamlRoot = GetTaskbarXamlRoot(hWnd);
-        if (!xamlRoot) return false;
-        auto root = xamlRoot.Content().try_as<FrameworkElement>();
-        if (!root) return false;
-        auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
-        auto trayGrid = trayFrame ? trayFrame.try_as<Grid>() : nullptr;
-        if (!trayGrid) return false;
-
-        int oldCol = RemoveQuotaChildren(trayGrid);
-        if (oldCol >= 0 && oldCol < (int)trayGrid.ColumnDefinitions().Size()) {
-            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child) {
-                    int childCol = Grid::GetColumn(child);
-                    if (childCol > oldCol) Grid::SetColumn(child, childCol - 1);
-                }
-            }
-            trayGrid.ColumnDefinitions().RemoveAt(oldCol);
-        }
-        Grid quota = BuildQuotaGrid();
-        if (!quota) return false;
-
-        ColumnDefinition newCol;
-        newCol.Width({1.0, GridUnitType::Auto});
-        trayGrid.ColumnDefinitions().InsertAt(0, newCol);
-        for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-            if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
-        }
-        Grid::SetColumn(quota, 0);
-        trayGrid.Children().Append(quota);
-
-        g_quotaGrid = quota;
-        g_injectionParent = trayGrid;
-        g_quotaColumn = 0;
-        g_uiInjected.store(true, std::memory_order_release);
-        g_applied.clear();
-        UpdateQuotaUi();
-        Wh_Log(L"Injected quota bars");
-        return true;
-    } catch (...) {
-        g_uiInjected.store(false, std::memory_order_release);
-        ClearQuotaEventState();
-        g_quotaGrid = nullptr;
-        g_injectionParent = nullptr;
-        g_quotaColumn = -1;
-        g_applied.clear();
-        Wh_Log(L"InjectQuotaGrid: exception");
-        return false;
-    }
-}
-
-static void RemoveQuotaGrid() {
-    g_uiInjected.store(false, std::memory_order_release);
-    ClearQuotaEventState();
-
-    if (!g_injectionParent) {
-        g_quotaGrid = nullptr;
-        g_applied.clear();
+static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
+    if (!state.injectionParent) {
+        ClearQuotaEventState(state);
+        state.quotaGrid = nullptr;
+        state.quotaColumn = -1;
+        state.insertedColumn = false;
+        state.applied.clear();
         return;
     }
 
     try {
-        auto targetGrid = g_injectionParent;
-        int quotaCol = RemoveQuotaChildren(targetGrid);
-        if (quotaCol >= 0 && quotaCol < (int)targetGrid.ColumnDefinitions().Size()) {
+        auto targetGrid = state.injectionParent;
+        int quotaCol = RemoveQuotaChildren(targetGrid, state);
+        if (quotaCol < 0) quotaCol = state.quotaColumn;
+        if (state.insertedColumn && quotaCol >= 0 && quotaCol < (int)targetGrid.ColumnDefinitions().Size()) {
             for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
                 auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
                 if (child) {
@@ -1492,22 +1552,188 @@ static void RemoveQuotaGrid() {
         Wh_Log(L"RemoveQuotaGrid: exception");
     }
 
-    g_quotaGrid = nullptr;
-    g_injectionParent = nullptr;
-    g_quotaColumn = -1;
-    g_applied.clear();
+    state.quotaGrid = nullptr;
+    state.injectionParent = nullptr;
+    state.quotaColumn = -1;
+    state.insertedColumn = false;
+    state.applied.clear();
+}
+
+static bool InjectQuotaGrid(HWND hWnd) {
+    if (!hWnd) return false;
+    if (auto* existingState = FindUiState(hWnd); existingState && existingState->quotaGrid) return true;
+
+    auto fail = [&](PCWSTR reason) {
+        ULONGLONG now = NowUnixMs();
+        ULONGLONG nextLogMs = g_nextInjectFailureLogMs.load(std::memory_order_acquire);
+        if (now >= nextLogMs &&
+            g_nextInjectFailureLogMs.compare_exchange_strong(nextLogMs, now + 5000,
+                                                            std::memory_order_acq_rel)) {
+            wchar_t cls[64] = {};
+            GetClassNameW(hWnd, cls, ARRAYSIZE(cls));
+            Wh_Log(L"InjectQuotaGrid failed: hwnd=%p class=%s reason=%s", hWnd, cls, reason);
+        }
+        return false;
+    };
+
+    QuotaUiInstance* state = nullptr;
+    try {
+        auto xamlRoot = GetTaskbarXamlRoot(hWnd);
+        if (!xamlRoot) return fail(L"no XamlRoot");
+        auto root = xamlRoot.Content().try_as<FrameworkElement>();
+        if (!root) return fail(L"no XamlRoot content");
+        auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
+        auto trayGrid = trayFrame ? trayFrame.try_as<Grid>() : nullptr;
+        bool overlayFallback = false;
+        if (!trayGrid) {
+            auto rootGrid = FindChildByName(root, L"RootGrid");
+            trayGrid = rootGrid ? rootGrid.try_as<Grid>() : nullptr;
+            if (!trayGrid) trayGrid = root.try_as<Grid>();
+            if (!trayGrid) return fail(L"no injection grid");
+            overlayFallback = true;
+        }
+
+        state = FindUiState(hWnd);
+        if (!state) {
+            auto newState = std::make_unique<QuotaUiInstance>();
+            newState->hWnd = hWnd;
+            state = newState.get();
+            g_uiInstances.push_back(std::move(newState));
+        }
+        state->injectionParent = trayGrid;
+
+        int oldCol = RemoveQuotaChildren(trayGrid, *state);
+        if (!overlayFallback && oldCol >= 0 && oldCol < (int)trayGrid.ColumnDefinitions().Size()) {
+            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child) {
+                    int childCol = Grid::GetColumn(child);
+                    if (childCol > oldCol) Grid::SetColumn(child, childCol - 1);
+                }
+            }
+            trayGrid.ColumnDefinitions().RemoveAt(oldCol);
+        }
+        Grid quota = BuildQuotaGrid(*state);
+        if (!quota) {
+            ClearQuotaEventState(*state);
+            state->injectionParent = nullptr;
+            state->quotaColumn = -1;
+            state->insertedColumn = false;
+            state->applied.clear();
+            EraseUiState(hWnd);
+            return fail(L"BuildQuotaGrid failed");
+        }
+
+        if (overlayFallback) {
+            quota.HorizontalAlignment(HorizontalAlignment::Right);
+            quota.VerticalAlignment(VerticalAlignment::Center);
+            quota.Margin({0, 0, 4, 0});
+            Grid::SetColumn(quota, 0);
+            Grid::SetRow(quota, 0);
+            Grid::SetColumnSpan(quota, std::max(1, (int)trayGrid.ColumnDefinitions().Size()));
+            Grid::SetRowSpan(quota, std::max(1, (int)trayGrid.RowDefinitions().Size()));
+            state->quotaColumn = -1;
+            state->insertedColumn = false;
+        } else {
+            ColumnDefinition newCol;
+            newCol.Width({1.0, GridUnitType::Auto});
+            trayGrid.ColumnDefinitions().InsertAt(0, newCol);
+            state->quotaColumn = 0;
+            state->insertedColumn = true;
+            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+            }
+            Grid::SetColumn(quota, 0);
+        }
+        trayGrid.Children().Append(quota);
+
+        state->quotaGrid = quota;
+        g_uiInjected.store(true, std::memory_order_release);
+        state->applied.clear();
+        UpdateQuotaUi(*state);
+        Wh_Log(L"Injected quota bars");
+        return true;
+    } catch (...) {
+        if (state) {
+            RemoveQuotaGridFromState(*state);
+            EraseUiState(hWnd);
+        }
+        g_uiInjected.store(!g_uiInstances.empty(), std::memory_order_release);
+        Wh_Log(L"InjectQuotaGrid: exception");
+        return false;
+    }
+}
+
+static void RemoveQuotaGrid(HWND hWnd) {
+    auto* state = FindUiState(hWnd);
+    if (!state) return;
+
+    RemoveQuotaGridFromState(*state);
+    EraseUiState(hWnd);
+}
+
+static void RemoveAllQuotaGrids() {
+    std::vector<HWND> hWnds;
+    hWnds.reserve(g_uiInstances.size());
+    for (auto& state : g_uiInstances) hWnds.push_back(state->hWnd);
+
+    for (HWND hWnd : hWnds) {
+        if (!hWnd || !IsWindow(hWnd)) continue;
+        if (!RunFromWindowThread(hWnd, [](void* param) {
+                RemoveQuotaGrid(static_cast<HWND>(param));
+            }, hWnd)) {
+            Wh_Log(L"RemoveQuotaGrid marshal failed");
+        }
+    }
+
+    for (auto& state : g_uiInstances) {
+        if (state->hWnd && IsWindow(state->hWnd)) continue;
+
+        state->tapHandlers.clear();
+        state->quotaGrid = nullptr;
+        state->injectionParent = nullptr;
+        state->quotaColumn = -1;
+        state->insertedColumn = false;
+        state->applied.clear();
+    }
+    g_uiInstances.erase(std::remove_if(g_uiInstances.begin(), g_uiInstances.end(),
+        [](const auto& state) { return !state->hWnd || !IsWindow(state->hWnd); }),
+        g_uiInstances.end());
+    g_uiInjected.store(!g_uiInstances.empty(), std::memory_order_release);
 }
 
 static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
     for (int attempt = 0; attempt < 600 && !g_unloading; attempt++) {
-        HWND hWnd = GetCachedTaskbarWnd();
-        if (hWnd) {
-            bool injected = false;
-            RunFromWindowThread(hWnd, [](void* param) {
-                *static_cast<bool*>(param) = !g_unloading && InjectQuotaGrid();
-            }, &injected);
-            if (injected) break;
+        auto hWnds = FindCurrentProcessTaskbarWnds();
+        TaskbarMonitorMode mode;
+        int targetMonitorNumber;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            mode = g_settings.taskbarMonitorMode;
+            targetMonitorNumber = g_settings.taskbarMonitorNumber;
         }
+        if (hWnds.empty() || (mode == TaskbarMonitorMode::All && hWnds.size() < 2)) {
+            ULONGLONG now = NowUnixMs();
+            ULONGLONG nextLogMs = g_nextInjectFailureLogMs.load(std::memory_order_acquire);
+            if (now >= nextLogMs &&
+                g_nextInjectFailureLogMs.compare_exchange_strong(nextLogMs, now + 5000,
+                                                                std::memory_order_acq_rel)) {
+                Wh_Log(L"Taskbar discovery: mode=%d target=%d eligible=%zu",
+                       (int)mode, targetMonitorNumber, hWnds.size());
+            }
+        }
+        bool allInjected = !hWnds.empty();
+        for (HWND hWnd : hWnds) {
+            bool injected = false;
+            InjectTaskbarParam param{hWnd, &injected};
+            RunFromWindowThread(hWnd, [](void* param) {
+                auto* p = static_cast<InjectTaskbarParam*>(param);
+                *p->injected = !g_unloading && InjectQuotaGrid(p->hWnd);
+            }, &param);
+            allInjected = allInjected && injected;
+        }
+        if (allInjected) break;
 
         if (g_stopEvent) {
             if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) break;
@@ -1534,11 +1760,18 @@ static void StartRetryInject() {
     DWORD err = GetLastError();
     Wh_Log(L"CreateThread RetryInjectThreadProc failed: %lu", err);
 
-    HWND hWnd = GetCachedTaskbarWnd();
-    bool injected = false;
-    if (!hWnd || !RunFromWindowThread(hWnd, [](void* param) {
-            *static_cast<bool*>(param) = !g_unloading && InjectQuotaGrid();
-        }, &injected) || !injected) {
+    bool anyInjected = false;
+    for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
+        bool injected = false;
+        InjectTaskbarParam param{hWnd, &injected};
+        if (RunFromWindowThread(hWnd, [](void* param) {
+                auto* p = static_cast<InjectTaskbarParam*>(param);
+                *p->injected = !g_unloading && InjectQuotaGrid(p->hWnd);
+            }, &param) && injected) {
+            anyInjected = true;
+        }
+    }
+    if (!anyInjected) {
         Wh_Log(L"InjectQuotaGrid fallback failed");
     }
 }
@@ -1554,17 +1787,7 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     TrayUI_StartTaskbar_Original(pThis);
     if (g_unloading) return;
 
-    g_uiInjected.store(false, std::memory_order_release);
-    ClearQuotaEventState();
-    g_quotaGrid = nullptr;
-    g_injectionParent = nullptr;
-    g_quotaColumn = -1;
-    g_applied.clear();
-
-    HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (!hWnd) return;
-    g_taskbarWnd.store(hWnd, std::memory_order_release);
-
+    RemoveAllQuotaGrids();
     StartRetryInject();
 }
 
@@ -1574,7 +1797,9 @@ static bool HookTaskbarDllSymbols() {
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CSecondaryTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"}, &CSecondaryTaskBand_GetTaskbarHost_Original},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
@@ -1658,6 +1883,18 @@ static void LoadSettings() {
     int orangeThreshold = Wh_GetIntSetting(L"orangeThreshold");
     int redThreshold = Wh_GetIntSetting(L"redThreshold");
 
+    PCWSTR taskbarMonitorModeText = Wh_GetStringSetting(L"taskbarMonitorMode");
+    std::wstring taskbarMonitorMode = taskbarMonitorModeText;
+    Wh_FreeStringSetting(taskbarMonitorModeText);
+    if (taskbarMonitorMode == L"all") {
+        s.taskbarMonitorMode = TaskbarMonitorMode::All;
+    } else if (taskbarMonitorMode == L"specific") {
+        s.taskbarMonitorMode = TaskbarMonitorMode::Specific;
+    } else {
+        s.taskbarMonitorMode = TaskbarMonitorMode::Primary;
+    }
+    int taskbarMonitorNumber = Wh_GetIntSetting(L"taskbarMonitorNumber");
+
     // Older configs do not have threshold keys; Windhawk reports missing ints as 0.
     if (yellowThreshold == 0 && orangeThreshold == 0 && redThreshold == 0) {
         yellowThreshold = 50;
@@ -1666,6 +1903,7 @@ static void LoadSettings() {
     }
 
     s.pollMinutes = std::clamp(pollMinutes > 0 ? pollMinutes : 10, 2, 24 * 60);
+    s.taskbarMonitorNumber = std::clamp(taskbarMonitorNumber > 0 ? taskbarMonitorNumber : 1, 1, 64);
     s.barWidth = std::clamp(barWidth > 0 ? barWidth : 100, 10, 100);
     s.barHeight = std::clamp(barHeight > 0 ? barHeight : 8, 2, 20);
     s.labelFontSize = std::clamp(labelFontSize > 0 ? labelFontSize : 11, 6, 24);
@@ -1715,9 +1953,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    HWND hWnd = FindCurrentProcessTaskbarWnd();
-    g_taskbarWnd.store(hWnd, std::memory_order_release);
-
     g_fetchThread = CreateThread(nullptr, 0, FetchThreadProc, nullptr, 0, nullptr);
     if (g_fetchThread) {
         g_fetchThreadStarted.store(true, std::memory_order_release);
@@ -1735,7 +1970,7 @@ void Wh_ModAfterInit() {
         }
     }
 
-    if (hWnd) StartRetryInject();
+    StartRetryInject();
     if (!g_fetchThread) PostUiUpdate();
 }
 
@@ -1758,10 +1993,7 @@ void Wh_ModUninit() {
     }
     g_fetchThreadStarted.store(false, std::memory_order_release);
 
-    HWND hWnd = GetCachedTaskbarWnd();
-    if (hWnd && !RunFromWindowThread(hWnd, [](void*) { RemoveQuotaGrid(); }, nullptr)) {
-        Wh_Log(L"RemoveQuotaGrid marshal failed");
-    }
+    RemoveAllQuotaGrids();
 
     if (g_stopEvent) CloseHandle(g_stopEvent);
     if (g_refreshEvent) CloseHandle(g_refreshEvent);
@@ -1773,12 +2005,7 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     LoadSettings();
 
-    HWND hWnd = GetCachedTaskbarWnd();
-    if (hWnd) {
-        RunFromWindowThread(hWnd, [](void*) {
-            RemoveQuotaGrid();
-            InjectQuotaGrid();
-        }, nullptr);
-    }
+    RemoveAllQuotaGrids();
+    StartRetryInject();
     if (g_refreshEvent) SetEvent(g_refreshEvent);
 }
