@@ -672,14 +672,19 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
             return resetAfter > 0 ? NowUnixMs() + (ULONGLONG)(resetAfter * 1000) : 0ULL;
         };
 
-        if (auto pw = GetObj(rl, L"primary_window")) {
-            d->win5h.pct = GetNum(pw, L"used_percent");
-            d->win5h.resetUnixMs = resetUnixMs(pw);
-        }
-        if (auto sw = GetObj(rl, L"secondary_window")) {
-            d->winWeek.pct = GetNum(sw, L"used_percent");
-            d->winWeek.resetUnixMs = resetUnixMs(sw);
-        }
+        auto applyWindow = [&](JsonObject const& window, WindowUsage* fallback) {
+            if (!window) return;
+            WindowUsage* target = fallback;
+            double windowSeconds = GetNum(window, L"limit_window_seconds", 0);
+            if (windowSeconds == 5 * 60 * 60) target = &d->win5h;
+            else if (windowSeconds == 7 * 24 * 60 * 60) target = &d->winWeek;
+
+            target->pct = GetNum(window, L"used_percent");
+            target->resetUnixMs = resetUnixMs(window);
+        };
+
+        applyWindow(GetObj(rl, L"primary_window"), &d->win5h);
+        applyWindow(GetObj(rl, L"secondary_window"), &d->winWeek);
 
         d->plan = GetStr(usage, L"plan_type");
         d->codexSparkLines.clear();
