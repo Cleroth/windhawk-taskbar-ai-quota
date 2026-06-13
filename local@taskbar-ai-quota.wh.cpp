@@ -2033,9 +2033,28 @@ static void LoadSettings() {
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         std::lock_guard<std::mutex> lk2(g_dataMutex);
+        std::vector<AccountData> newData(s.accounts.size());
+        std::vector<bool> oldDataUsed(g_data.size(), false);
+        for (size_t i = 0; i < s.accounts.size(); i++) {
+            for (size_t j = 0; j < g_settings.accounts.size() && j < g_data.size(); j++) {
+                if (oldDataUsed[j]) continue;
+
+                const AccountConfig& oldAccount = g_settings.accounts[j];
+                const AccountConfig& newAccount = s.accounts[i];
+                if (oldAccount.provider == newAccount.provider &&
+                    oldAccount.authSource == newAccount.authSource &&
+                    oldAccount.authFile == newAccount.authFile &&
+                    oldAccount.authKey == newAccount.authKey) {
+                    newData[i] = g_data[j];
+                    oldDataUsed[j] = true;
+                    break;
+                }
+            }
+        }
+
         g_settings = std::move(s);
         g_settingsGeneration++;
-        g_data.assign(g_settings.accounts.size(), {});
+        g_data = std::move(newData);
     }
 }
 
