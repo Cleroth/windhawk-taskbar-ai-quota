@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
-// @description     Shows Anthropic and OpenAI quota usage as compact bars on the Windows 11 taskbar, left of the system tray
+// @description     Shows LLM/agent quota usage for Anthropic and OpenAI as compact bars on the Windows 11 taskbar, left of the system tray
 // @version         0.1
 // @author          Cleroth
 // @include         explorer.exe
@@ -13,7 +13,7 @@
 /*
 # Taskbar AI Quota Bars
 
-Shows Anthropic Claude and OpenAI Codex subscription quota usage directly on
+Shows Anthropic Claude and OpenAI Codex LLM/agent subscription quota usage directly on
 the Windows 11 taskbar, to the left of the system tray.
 
 Each account gets one narrow column:
