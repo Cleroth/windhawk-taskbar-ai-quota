@@ -47,6 +47,12 @@ Mods are published via PR to `ramensoftware/windhawk-mods`. Rules (their README)
 - New mod: any `@version` is fine. Update: bump `@version` and put the version note in the commit
   message (it becomes the catalog changelog). You can only update mods whose `@github` is yours.
 
+The mod's Changelog tab in the Windhawk app/catalog is generated entirely from the **update PR's
+commit message** — there is NO `@changelog` metadata field and NO changelog section in the
+`.wh.cpp`. So the only way to add a changelog entry is the commit message of the update PR (the
+`version` must change). Confirmed by the catalog README ("Submitting a Mod Update") and by the
+reference mod `taskbar-clock-customization.wh.cpp`, which carries no in-file changelog.
+
 This repo's `local@taskbar-ai-quota.wh.cpp` is the source of truth; the catalog file is a copy with
 the `local@` filename prefix stripped. Keep the metadata (incl. `@github`/`@license`) in sync here.
 
