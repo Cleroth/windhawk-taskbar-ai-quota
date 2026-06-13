@@ -90,6 +90,18 @@ own auth files if requests start returning `401`.
 - labelFontSize: 11
   $name: Label font size (px)
   $description: 'Default: 11'
+- accountMargin: 3
+  $name: Account margin (px)
+  $description: 'Default: 3. Horizontal margin around each account column.'
+- labelGap: 3
+  $name: Label gap (px)
+  $description: 'Default: 3. Gap between label and bars.'
+- barGap: 2
+  $name: Bar gap (px)
+  $description: 'Default: 2. Vertical gap between the two quota bars.'
+- rightMargin: 4
+  $name: Right tray gap (px)
+  $description: 'Default: 4. Gap between quota bars and the system tray side.'
 - showPercentText: false
   $name: Show percent text
   $description: 'Default: false. Shows compact 5h/week percentages over the bars.'
@@ -177,6 +189,10 @@ struct Settings {
     int barWidth = 100;
     int barHeight = 8;
     int labelFontSize = 11;
+    int accountMargin = 3;
+    int labelGap = 3;
+    int barGap = 2;
+    int rightMargin = 4;
     int yellowThreshold = 50;
     int orangeThreshold = 75;
     int redThreshold = 90;
@@ -1333,7 +1349,7 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         std::vector<AccountConfig> accounts;
-        int barWidth, barHeight, labelFontSize;
+        int barWidth, barHeight, labelFontSize, accountMargin, labelGap, barGap, rightMargin;
         bool showLabels, labelOnLeft, showPercentText;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -1341,6 +1357,10 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             barWidth = g_settings.barWidth;
             barHeight = g_settings.barHeight;
             labelFontSize = g_settings.labelFontSize;
+            accountMargin = g_settings.accountMargin;
+            labelGap = g_settings.labelGap;
+            barGap = g_settings.barGap;
+            rightMargin = g_settings.rightMargin;
             showLabels = g_settings.showLabels;
             labelOnLeft = g_settings.labelOnLeft;
             showPercentText = g_settings.showPercentText;
@@ -1353,14 +1373,14 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
         StackPanel panel;
         panel.Orientation(Orientation::Horizontal);
-        panel.Margin({4, 0, 4, 0});
+        panel.Margin({4, 0, (double)rightMargin, 0});
 
         wchar_t name[64];
         for (size_t i = 0; i < accounts.size(); i++) {
             StackPanel col;
             col.Orientation(labelOnLeft ? Orientation::Horizontal : Orientation::Vertical);
             col.VerticalAlignment(VerticalAlignment::Center);
-            col.Margin({3, 0, 3, 0});
+            col.Margin({(double)accountMargin, 0, (double)accountMargin, 0});
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);
@@ -1371,7 +1391,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 label.FontSize(labelFontSize);
                 label.VerticalAlignment(VerticalAlignment::Center);
                 label.HorizontalAlignment(labelOnLeft ? HorizontalAlignment::Left : HorizontalAlignment::Center);
-                label.Margin(labelOnLeft ? Thickness{0, -2, 3, 0} : Thickness{0, 0, 0, 1});
+                label.Margin(labelOnLeft ? Thickness{0, -2, (double)labelGap, 0} :
+                                           Thickness{0, 0, 0, (double)labelGap});
                 label.Opacity(0.8);
                 swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
                 label.Name(name);
@@ -1383,12 +1404,13 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             bars.VerticalAlignment(VerticalAlignment::Center);
 
             double radius = std::max(1.0, barHeight / 2.0);
+            double halfBarGap = barGap / 2.0;
             for (int w = 0; w < 2; w++) {
                 Border track;
                 track.Width(barWidth);
                 track.Height(barHeight);
                 track.CornerRadius({radius, radius, radius, radius});
-                track.Margin({0, 1, 0, 1});
+                track.Margin(w == 0 ? Thickness{0, 1, 0, halfBarGap} : Thickness{0, halfBarGap, 0, 1});
                 track.HorizontalAlignment(HorizontalAlignment::Center);
                 track.Background(SolidColorBrush(winrt::Windows::UI::Color{0x46, 0x80, 0x80, 0x80}));
 
@@ -1999,6 +2021,10 @@ static void LoadSettings() {
     int barWidth = getIntSetting(L"barWidth", 100);
     int barHeight = getIntSetting(L"barHeight", 8);
     int labelFontSize = getIntSetting(L"labelFontSize", 11);
+    int accountMargin = getIntSetting(L"accountMargin", 3);
+    int labelGap = getIntSetting(L"labelGap", 3);
+    int barGap = getIntSetting(L"barGap", 2);
+    int rightMargin = getIntSetting(L"rightMargin", 4);
     int yellowThreshold = getIntSetting(L"yellowThreshold", 50);
     int orangeThreshold = getIntSetting(L"orangeThreshold", 75);
     int redThreshold = getIntSetting(L"redThreshold", 90);
@@ -2020,6 +2046,10 @@ static void LoadSettings() {
     s.barWidth = std::max(barWidth > 0 ? barWidth : 100, 10);
     s.barHeight = std::clamp(barHeight > 0 ? barHeight : 8, 2, 20);
     s.labelFontSize = std::clamp(labelFontSize > 0 ? labelFontSize : 11, 6, 24);
+    s.accountMargin = std::max(accountMargin, 0);
+    s.labelGap = std::max(labelGap, 0);
+    s.barGap = std::max(barGap, 0);
+    s.rightMargin = std::max(rightMargin, 0);
     s.yellowThreshold = std::clamp(yellowThreshold, 0, 100);
     s.orangeThreshold = std::clamp(orangeThreshold, s.yellowThreshold, 100);
     s.redThreshold = std::clamp(redThreshold, s.orangeThreshold, 100);

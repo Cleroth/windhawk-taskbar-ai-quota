@@ -43,6 +43,7 @@ Useful settings include:
 - account labels
 - bar width and height
 - label position and font size
+- account, label, bar, and tray spacing
 - compact percent text
 - taskbar monitor mode: primary, all, or specific monitor number (`1` = primary, `2+` = secondary taskbars)
 - color thresholds
