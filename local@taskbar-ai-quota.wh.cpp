@@ -70,6 +70,9 @@ Default source: `%USERPROFILE%\.local\share\opencode\auth.json`.
 - labelFontSize: 11
   $name: Label font size (px)
   $description: 'Default: 11'
+- showPercentText: false
+  $name: Show percent text
+  $description: 'Default: false. Shows compact 5h/week percentages over the bars.'
 */
 // ==/WindhawkModSettings==
 
@@ -130,6 +133,7 @@ struct Settings {
     int labelFontSize = 11;
     bool showLabels = true;
     bool labelOnLeft = true;
+    bool showPercentText = false;
 };
 
 struct WindowUsage {
@@ -151,6 +155,7 @@ struct AppliedState {
     int fillPx[2] = {-1, -1};
     uint32_t fillColor[2] = {0, 0};
     std::wstring tip;
+    std::wstring percentText;
     double labelOpacity = -1;
 };
 
@@ -1017,7 +1022,7 @@ static Grid BuildQuotaGrid() {
     try {
         std::vector<AccountConfig> accounts;
         int barWidth, barHeight, labelFontSize;
-        bool showLabels, labelOnLeft;
+        bool showLabels, labelOnLeft, showPercentText;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
@@ -1026,6 +1031,7 @@ static Grid BuildQuotaGrid() {
             labelFontSize = g_settings.labelFontSize;
             showLabels = g_settings.showLabels;
             labelOnLeft = g_settings.labelOnLeft;
+            showPercentText = g_settings.showPercentText;
         }
         if (accounts.empty()) return nullptr;
 
@@ -1087,7 +1093,28 @@ static Grid BuildQuotaGrid() {
                 bars.Children().Append(track);
             }
 
-            col.Children().Append(bars);
+            if (showPercentText) {
+                Grid overlay;
+                overlay.Width(barWidth);
+                overlay.VerticalAlignment(VerticalAlignment::Center);
+                overlay.Children().Append(bars);
+
+                TextBlock percent;
+                percent.FontSize(std::max(8, labelFontSize - 2));
+                percent.HorizontalAlignment(HorizontalAlignment::Center);
+                percent.VerticalAlignment(VerticalAlignment::Center);
+                percent.TextAlignment(TextAlignment::Center);
+                percent.Foreground(SolidColorBrush(winrt::Windows::UI::Color{255, 255, 255, 255}));
+                percent.Opacity(0.9);
+                percent.IsHitTestVisible(false);
+                swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d", (int)i);
+                percent.Name(name);
+                overlay.Children().Append(percent);
+
+                col.Children().Append(overlay);
+            } else {
+                col.Children().Append(bars);
+            }
 
             ToolTipService::SetToolTip(col, winrt::box_value(winrt::hstring(L"loading...")));
             ToolTipService::SetPlacement(col, wuxcp::PlacementMode::Top);
@@ -1112,11 +1139,13 @@ static void UpdateQuotaUi() {
 
     std::vector<AccountConfig> accounts;
     int intervalMin, barWidth;
+    bool showPercentText;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         accounts = g_settings.accounts;
         intervalMin = g_settings.pollMinutes;
         barWidth = g_settings.barWidth;
+        showPercentText = g_settings.showPercentText;
     }
 
     std::vector<AccountData> data;
@@ -1177,6 +1206,26 @@ static void UpdateQuotaUi() {
             if (!d.error.empty()) tip += L"\nerror: " + d.error;
             tip += L"\n" + FormatUpdated(d.lastSuccessMs, stale);
             tip += L"\nclick to refresh";
+
+            if (showPercentText) {
+                std::wstring percentText;
+                if (d.win5h.pct >= 0 && d.winWeek.pct >= 0) {
+                    wchar_t text[32];
+                    swprintf(text, ARRAYSIZE(text), L"%.0f/%.0f", d.win5h.pct, d.winWeek.pct);
+                    percentText = text;
+                } else if (d.win5h.pct >= 0 || d.winWeek.pct >= 0) {
+                    wchar_t text[32];
+                    swprintf(text, ARRAYSIZE(text), L"%.0f%%", d.win5h.pct >= 0 ? d.win5h.pct : d.winWeek.pct);
+                    percentText = text;
+                }
+                if (percentText != ap.percentText) {
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d", (int)i);
+                    if (auto fe = FindChildByName(g_quotaGrid, name)) {
+                        if (auto tb = fe.try_as<TextBlock>()) tb.Text(percentText);
+                    }
+                    ap.percentText = percentText;
+                }
+            }
 
             if (tip != ap.tip) {
                 swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
@@ -1425,6 +1474,7 @@ static void LoadSettings() {
     s.labelFontSize = std::clamp(labelFontSize > 0 ? labelFontSize : 11, 6, 24);
     s.showLabels = Wh_GetIntSetting(L"showLabels") != 0;
     s.labelOnLeft = Wh_GetIntSetting(L"labelOnLeft") != 0;
+    s.showPercentText = Wh_GetIntSetting(L"showPercentText") != 0;
 
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
