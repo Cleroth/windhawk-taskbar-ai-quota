@@ -35,6 +35,36 @@ linking errors only surface when Windhawk actually builds the mod.
 runtime test requires Windhawk loading the mod into `explorer.exe`; it can't be tested from a
 plain compile.
 
+# Publishing to the windhawk-mods catalog
+
+Mods are published via PR to `ramensoftware/windhawk-mods`. Rules (their README):
+
+- PR must change **exactly one file**: `mods/<mod-id>.wh.cpp`. Here `<mod-id>` is `taskbar-ai-quota`
+  (the `@id`), so the file is `mods/taskbar-ai-quota.wh.cpp`. The local `local@` filename prefix is
+  a Windhawk local-dev convention and is **dropped** in the catalog; `@id` itself never has it.
+- `@github` is **required** and must be the PR author's profile URL: `https://github.com/Cleroth`.
+- No `@license` => MIT by default; we set `@license MIT` explicitly.
+- New mod: any `@version` is fine. Update: bump `@version` and put the version note in the commit
+  message (it becomes the catalog changelog). You can only update mods whose `@github` is yours.
+
+This repo's `local@taskbar-ai-quota.wh.cpp` is the source of truth; the catalog file is a copy with
+the `local@` filename prefix stripped. Keep the metadata (incl. `@github`/`@license`) in sync here.
+
+## Workflow (gh, authed as Cleroth)
+
+```pwsh
+# pre-flight: clang -fsyntax-only check above must exit 0 first
+$dest = "$env:TEMP\windhawk-mods"
+gh repo sync Cleroth/windhawk-mods --source ramensoftware/windhawk-mods --branch main
+git clone --single-branch --branch main https://github.com/Cleroth/windhawk-mods.git $dest
+git -C $dest checkout -b <branch>
+Copy-Item "local@taskbar-ai-quota.wh.cpp" "$dest\mods\taskbar-ai-quota.wh.cpp" -Force
+git -C $dest add mods/taskbar-ai-quota.wh.cpp   # stage ONLY this file
+git -C $dest commit -m "<msg>"                  # update => include version note
+git -C $dest push -u origin <branch>
+gh pr create -R ramensoftware/windhawk-mods -B main -H Cleroth:<branch>
+```
+
 # Architecture (threading model)
 
 Single `.wh.cpp` injected into `explorer.exe`. Two execution domains:

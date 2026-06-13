@@ -4,8 +4,10 @@
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
 // @version         0.8.0
 // @author          Cleroth
+// @github          https://github.com/Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
+// @license         MIT
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32
 // ==/WindhawkMod==
 
