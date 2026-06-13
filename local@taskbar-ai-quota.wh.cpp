@@ -703,6 +703,7 @@ static void PostUiUpdate() {
 static DWORD WINAPI FetchThreadProc(LPVOID) {
     try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
 
+    std::vector<std::wstring> lastLoggedErrorStates;
     while (!g_unloading) {
         std::vector<AccountConfig> accounts;
         int intervalMin;
@@ -711,6 +712,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             accounts = g_settings.accounts;
             intervalMin = g_settings.pollMinutes;
         }
+        if (lastLoggedErrorStates.size() != accounts.size()) lastLoggedErrorStates.assign(accounts.size(), {});
 
         std::vector<AccountData> results(accounts.size());
         {
@@ -725,7 +727,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             FetchAccount(accounts[i], &results[i], &retryAfter);
             if (!results[i].error.empty()) {
                 anyError = true;
-                Wh_Log(L"Fetch [%d] %s: %s", (int)i, accounts[i].provider.c_str(), results[i].error.c_str());
+                std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].authFile + L"\n" +
+                                          accounts[i].authKey + L"\n" + results[i].error;
+                if (errorState != lastLoggedErrorStates[i]) {
+                    Wh_Log(L"Fetch [%d] %s: %s", (int)i, accounts[i].provider.c_str(), results[i].error.c_str());
+                    lastLoggedErrorStates[i] = std::move(errorState);
+                }
+            } else {
+                lastLoggedErrorStates[i].clear();
             }
             if (retryAfter > 0 && (minRetryAfter == 0 || retryAfter < minRetryAfter)) {
                 minRetryAfter = retryAfter;
