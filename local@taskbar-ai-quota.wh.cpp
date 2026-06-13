@@ -183,6 +183,11 @@ struct AppliedState {
     double columnOpacity = -1;
 };
 
+struct TapHandler {
+    UIElement element{nullptr};
+    winrt::event_token token{};
+};
+
 static Settings g_settings;
 static std::mutex g_settingsMutex;
 static std::vector<AccountData> g_data;
@@ -191,6 +196,7 @@ static std::vector<AppliedState> g_applied;
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_refreshing{false};
+static std::atomic<bool> g_uiInjected{false};
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
 static HANDLE g_fetchThread = nullptr;
@@ -200,8 +206,7 @@ static HWND g_taskbarWnd = nullptr;
 static Grid g_quotaGrid = nullptr;
 static Grid g_injectionParent = nullptr;
 static int g_quotaColumn = -1;
-static winrt::weak_ref<Grid> g_quotaGridWeak;
-static std::mutex g_gridWeakMutex;
+static std::vector<TapHandler> g_tapHandlers;
 
 static const wchar_t* kRootName = L"AiQuota_Root";
 static const wchar_t* kDefaultAuthFile = L"%USERPROFILE%\\.local\\share\\opencode\\auth.json";
@@ -758,17 +763,13 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
 static void UpdateQuotaUi();
 
 static void PostUiUpdate() {
-    Grid grid = nullptr;
-    {
-        std::lock_guard<std::mutex> lk(g_gridWeakMutex);
-        grid = g_quotaGridWeak.get();
-    }
-    if (!grid) return;
+    // Never resolve XAML refs on the fetch thread; marshal first.
+    if (g_unloading || !g_uiInjected.load(std::memory_order_acquire)) return;
 
     HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
     if (!hWnd) return;
     RunFromWindowThread(hWnd, [](void*) {
-        if (!g_unloading) UpdateQuotaUi();
+        if (!g_unloading && g_uiInjected.load(std::memory_order_acquire) && g_quotaGrid) UpdateQuotaUi();
     }, nullptr);
 }
 
@@ -973,6 +974,19 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
 //  UI
 /**********************************************/
 
+static void ClearQuotaEventState() {
+    // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
+    for (auto& handler : g_tapHandlers) {
+        if (!handler.element) continue;
+
+        try { handler.element.Tapped(handler.token); } catch (...) {}
+        try {
+            ToolTipService::SetToolTip(handler.element, winrt::Windows::Foundation::IInspectable{nullptr});
+        } catch (...) {}
+    }
+    g_tapHandlers.clear();
+}
+
 static Grid BuildQuotaGrid() {
     try {
         std::vector<AccountConfig> accounts;
@@ -1073,12 +1087,20 @@ static Grid BuildQuotaGrid() {
 
             ToolTipService::SetToolTip(col, winrt::box_value(winrt::hstring(L"loading...")));
             ToolTipService::SetPlacement(col, wuxcp::PlacementMode::Top);
-            col.Tapped([](winrt::Windows::Foundation::IInspectable const&, wuxi::TappedRoutedEventArgs const& e) {
-                g_refreshing = true;
-                UpdateQuotaUi();
-                if (g_refreshEvent) SetEvent(g_refreshEvent);
-                e.Handled(true);
-            });
+            UIElement tappedElement = col.as<UIElement>();
+            auto tappedToken = tappedElement.Tapped(
+                [](winrt::Windows::Foundation::IInspectable const&, wuxi::TappedRoutedEventArgs const& e) {
+                    if (g_unloading || !g_quotaGrid) {
+                        e.Handled(true);
+                        return;
+                    }
+
+                    g_refreshing = true;
+                    UpdateQuotaUi();
+                    if (g_refreshEvent) SetEvent(g_refreshEvent);
+                    e.Handled(true);
+                });
+            g_tapHandlers.push_back({tappedElement, tappedToken});
 
             panel.Children().Append(col);
         }
@@ -1086,6 +1108,7 @@ static Grid BuildQuotaGrid() {
         root.Children().Append(panel);
         return root;
     } catch (...) {
+        ClearQuotaEventState();
         Wh_Log(L"BuildQuotaGrid: exception");
         return nullptr;
     }
@@ -1226,6 +1249,8 @@ static void UpdateQuotaUi() {
 
 static int RemoveQuotaChildren(Grid const& targetGrid) {
     if (!targetGrid) return -1;
+    ClearQuotaEventState();
+
     int firstCol = -1;
     for (int i = (int)targetGrid.Children().Size() - 1; i >= 0; --i) {
         auto fe = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
@@ -1279,27 +1304,30 @@ static bool InjectQuotaGrid() {
         g_quotaGrid = quota;
         g_injectionParent = trayGrid;
         g_quotaColumn = 0;
-        {
-            std::lock_guard<std::mutex> lk(g_gridWeakMutex);
-            g_quotaGridWeak = quota;
-        }
+        g_uiInjected.store(true, std::memory_order_release);
         g_applied.clear();
         UpdateQuotaUi();
         Wh_Log(L"Injected quota bars");
         return true;
     } catch (...) {
+        g_uiInjected.store(false, std::memory_order_release);
+        ClearQuotaEventState();
+        g_quotaGrid = nullptr;
+        g_injectionParent = nullptr;
+        g_quotaColumn = -1;
+        g_applied.clear();
         Wh_Log(L"InjectQuotaGrid: exception");
         return false;
     }
 }
 
 static void RemoveQuotaGrid() {
-    {
-        std::lock_guard<std::mutex> lk(g_gridWeakMutex);
-        g_quotaGridWeak = nullptr;
-    }
+    g_uiInjected.store(false, std::memory_order_release);
+    ClearQuotaEventState();
+
     if (!g_injectionParent) {
         g_quotaGrid = nullptr;
+        g_applied.clear();
         return;
     }
 
@@ -1371,14 +1399,12 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     TrayUI_StartTaskbar_Original(pThis);
     if (g_unloading) return;
 
+    g_uiInjected.store(false, std::memory_order_release);
+    ClearQuotaEventState();
     g_quotaGrid = nullptr;
     g_injectionParent = nullptr;
     g_quotaColumn = -1;
     g_applied.clear();
-    {
-        std::lock_guard<std::mutex> lk(g_gridWeakMutex);
-        g_quotaGridWeak = nullptr;
-    }
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) return;
@@ -1479,6 +1505,8 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     g_unloading = false;
+    g_refreshing = false;
+    g_uiInjected.store(false, std::memory_order_release);
     LoadSettings();
 
     if (!HookTaskbarDllSymbols()) {
@@ -1500,6 +1528,7 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
     g_unloading = true;
+    g_uiInjected.store(false, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent);
 
     if (g_retryThread) {
@@ -1515,7 +1544,9 @@ void Wh_ModUninit() {
     }
 
     HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
-    if (hWnd) RunFromWindowThread(hWnd, [](void*) { RemoveQuotaGrid(); }, nullptr);
+    if (hWnd && !RunFromWindowThread(hWnd, [](void*) { RemoveQuotaGrid(); }, nullptr)) {
+        Wh_Log(L"RemoveQuotaGrid marshal failed");
+    }
 
     if (g_stopEvent) CloseHandle(g_stopEvent);
     if (g_refreshEvent) CloseHandle(g_refreshEvent);
