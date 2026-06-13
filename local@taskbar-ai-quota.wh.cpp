@@ -21,6 +21,7 @@ Each account gets one narrow column:
 - bottom bar: weekly usage
 
 Bars use green/yellow/orange/red threshold colors, and gray when stale.
+Enable colorblind mode to switch to a blue/orange palette.
 Hover for exact percentages/reset times. Click a column to refresh.
 
 Credentials are read-only. The mod never refreshes or rewrites tokens.
@@ -82,6 +83,9 @@ Default source: `%USERPROFILE%\.local\share\opencode\auth.json`.
 - redThreshold: 90
   $name: Red threshold (%)
   $description: 'Default: 90. Usage at or above this turns red.'
+- colorblindMode: false
+  $name: Colorblind mode
+  $description: 'Default: false. Uses a blue-to-orange palette instead of green/red.'
 */
 // ==/WindhawkModSettings==
 
@@ -146,6 +150,7 @@ struct Settings {
     bool showLabels = true;
     bool labelOnLeft = true;
     bool showPercentText = false;
+    bool colorblindMode = false;
 };
 
 struct WindowUsage {
@@ -335,8 +340,16 @@ static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
 }
 
 static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
-                                            int orangeThreshold, int redThreshold) {
+                                            int orangeThreshold, int redThreshold,
+                                            bool colorblindMode) {
     if (stale || pct < 0) return {255, 0x9E, 0x9E, 0x9E};
+
+    if (colorblindMode) {
+        if (pct >= redThreshold) return {255, 0xD5, 0x5E, 0x00};
+        if (pct >= orangeThreshold) return {255, 0xE6, 0x9F, 0x00};
+        if (pct >= yellowThreshold) return {255, 0x56, 0xB4, 0xE9};
+        return {255, 0x00, 0x72, 0xB2};
+    }
 
     if (pct >= redThreshold) return {255, 0xE5, 0x39, 0x35};
     if (pct >= orangeThreshold) return {255, 0xFB, 0x8C, 0x00};
@@ -1139,7 +1152,7 @@ static void UpdateQuotaUi() {
 
     std::vector<AccountConfig> accounts;
     int intervalMin, barWidth, yellowThreshold, orangeThreshold, redThreshold;
-    bool showPercentText;
+    bool showPercentText, colorblindMode;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         accounts = g_settings.accounts;
@@ -1149,6 +1162,7 @@ static void UpdateQuotaUi() {
         orangeThreshold = g_settings.orangeThreshold;
         redThreshold = g_settings.redThreshold;
         showPercentText = g_settings.showPercentText;
+        colorblindMode = g_settings.colorblindMode;
     }
 
     std::vector<AccountData> data;
@@ -1171,7 +1185,8 @@ static void UpdateQuotaUi() {
             for (int w = 0; w < 2; w++) {
                 const WindowUsage& wu = w == 0 ? d.win5h : d.winWeek;
                 int px = wu.pct > 0 ? std::clamp((int)std::lround(barWidth * wu.pct / 100.0), 2, barWidth) : 0;
-                auto c = UsageColor(wu.pct, stale, yellowThreshold, orangeThreshold, redThreshold);
+                auto c = UsageColor(wu.pct, stale, yellowThreshold, orangeThreshold, redThreshold,
+                                    colorblindMode);
                 uint32_t cv = ((uint32_t)c.A << 24) | ((uint32_t)c.R << 16) |
                               ((uint32_t)c.G << 8) | c.B;
                 if (px != ap.fillPx[w] || cv != ap.fillColor[w]) {
@@ -1484,6 +1499,7 @@ static void LoadSettings() {
     s.showLabels = Wh_GetIntSetting(L"showLabels") != 0;
     s.labelOnLeft = Wh_GetIntSetting(L"labelOnLeft") != 0;
     s.showPercentText = Wh_GetIntSetting(L"showPercentText") != 0;
+    s.colorblindMode = Wh_GetIntSetting(L"colorblindMode") != 0;
 
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
