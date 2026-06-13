@@ -213,7 +213,7 @@ static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
 static HANDLE g_fetchThread = nullptr;
 static HANDLE g_retryThread = nullptr;
-static HWND g_taskbarWnd = nullptr;
+static std::atomic<HWND> g_taskbarWnd{nullptr};
 
 static Grid g_quotaGrid = nullptr;
 static Grid g_injectionParent = nullptr;
@@ -228,6 +228,15 @@ static const wchar_t* kDefaultCodexAuthFile = L"%USERPROFILE%\\.codex\\auth.json
 using WindowThreadProc = void (*)(void*);
 static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param);
 static HWND FindCurrentProcessTaskbarWnd();
+
+static HWND GetCachedTaskbarWnd() {
+    HWND hWnd = g_taskbarWnd.load(std::memory_order_acquire);
+    if (hWnd) return hWnd;
+
+    hWnd = FindCurrentProcessTaskbarWnd();
+    if (hWnd) g_taskbarWnd.store(hWnd, std::memory_order_release);
+    return hWnd;
+}
 
 /**********************************************/
 //  Helpers
@@ -842,7 +851,7 @@ static void PostUiUpdate() {
     // Never resolve XAML refs on the fetch thread; marshal first.
     if (g_unloading || !g_uiInjected.load(std::memory_order_acquire)) return;
 
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = GetCachedTaskbarWnd();
     if (!hWnd) return;
     RunFromWindowThread(hWnd, [](void*) {
         if (!g_unloading && g_uiInjected.load(std::memory_order_acquire) && g_quotaGrid) UpdateQuotaUi();
@@ -1386,9 +1395,8 @@ static int RemoveQuotaChildren(Grid const& targetGrid) {
 
 static bool InjectQuotaGrid() {
     if (g_quotaGrid) return true;
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = GetCachedTaskbarWnd();
     if (!hWnd) return false;
-    g_taskbarWnd = hWnd;
 
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
@@ -1478,9 +1486,8 @@ static void RemoveQuotaGrid() {
 
 static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
     for (int attempt = 0; attempt < 600 && !g_unloading; attempt++) {
-        HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+        HWND hWnd = GetCachedTaskbarWnd();
         if (hWnd) {
-            g_taskbarWnd = hWnd;
             bool injected = false;
             RunFromWindowThread(hWnd, [](void* param) {
                 *static_cast<bool*>(param) = !g_unloading && InjectQuotaGrid();
@@ -1530,7 +1537,7 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) return;
-    g_taskbarWnd = hWnd;
+    g_taskbarWnd.store(hWnd, std::memory_order_release);
 
     StartRetryInject();
 }
@@ -1681,8 +1688,9 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    g_taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (g_taskbarWnd) StartRetryInject();
+    HWND hWnd = FindCurrentProcessTaskbarWnd();
+    g_taskbarWnd.store(hWnd, std::memory_order_release);
+    if (hWnd) StartRetryInject();
     g_fetchThread = CreateThread(nullptr, 0, FetchThreadProc, nullptr, 0, nullptr);
 }
 
@@ -1704,7 +1712,7 @@ void Wh_ModUninit() {
         g_fetchThread = nullptr;
     }
 
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = GetCachedTaskbarWnd();
     if (hWnd && !RunFromWindowThread(hWnd, [](void*) { RemoveQuotaGrid(); }, nullptr)) {
         Wh_Log(L"RemoveQuotaGrid marshal failed");
     }
@@ -1719,7 +1727,7 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     LoadSettings();
 
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = GetCachedTaskbarWnd();
     if (hWnd) {
         RunFromWindowThread(hWnd, [](void*) {
             RemoveQuotaGrid();
