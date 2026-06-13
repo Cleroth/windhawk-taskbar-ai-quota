@@ -730,29 +730,33 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         d->plan = GetStr(usage, L"plan_type");
         d->codexSparkLines.clear();
         d->extraLines.clear();
+        int extraLimitLineCount = 0;
         auto addLimitLine = [&](JsonObject const& item) {
             auto itemRl = GetObj(item, L"rate_limit");
             auto pw = GetObj(itemRl, L"primary_window");
             auto sw = GetObj(itemRl, L"secondary_window");
             std::wstring name = GetStr(item, L"limit_name");
             if (name.empty() || (!pw && !sw)) return;
-            wchar_t line[128];
-            swprintf(line, ARRAYSIZE(line), L"%s: 5h %.0f%% | wk %.0f%%",
-                     name.c_str(), GetNum(pw, L"used_percent", 0),
-                     GetNum(sw, L"used_percent", 0));
             bool isCodexSpark = name.find(L"Codex-Spark") != std::wstring::npos ||
                                  name.find(L"Codex Spark") != std::wstring::npos ||
                                  name.find(L"codex-spark") != std::wstring::npos ||
                                  name.find(L"codex spark") != std::wstring::npos;
+            if (!isCodexSpark && extraLimitLineCount >= 3) return;
+
+            wchar_t line[128];
+            swprintf(line, ARRAYSIZE(line), L"%s: 5h %.0f%% | wk %.0f%%",
+                     name.c_str(), GetNum(pw, L"used_percent", 0),
+                     GetNum(sw, L"used_percent", 0));
             std::wstring& target = isCodexSpark ? d->codexSparkLines : d->extraLines;
             if (!target.empty()) target += L"\n";
             target += line;
+            if (!isCodexSpark) extraLimitLineCount++;
         };
         if (usage.HasKey(L"additional_rate_limits")) {
             auto limits = usage.GetNamedValue(L"additional_rate_limits");
             if (limits.ValueType() == JsonValueType::Array) {
                 auto arr = limits.GetArray();
-                for (uint32_t i = 0; i < arr.Size() && i < 3; i++) {
+                for (uint32_t i = 0; i < arr.Size(); i++) {
                     if (arr.GetAt(i).ValueType() == JsonValueType::Object) addLimitLine(arr.GetAt(i).GetObject());
                 }
             } else if (limits.ValueType() == JsonValueType::Object) {
