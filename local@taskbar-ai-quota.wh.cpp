@@ -754,52 +754,87 @@ static HWND FindCurrentProcessTaskbarWnd() {
     return result;
 }
 
+static HRESULT TryGetTaskbarElementAbi(HWND hTaskbarWnd, void** result) {
+    *result = nullptr;
+    HRESULT hr = E_FAIL;
+    void* taskbarHostSharedPtr[2]{};
+
+    __try {
+        __try {
+            HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+            if (!hTaskSwWnd) {
+                hr = E_HANDLE;
+                __leave;
+            }
+
+            void* taskBand = (void*)GetWindowLongPtrW(hTaskSwWnd, 0);
+            if (!taskBand) {
+                hr = E_POINTER;
+                __leave;
+            }
+
+            void* taskBandForTaskListWndSite = taskBand;
+            for (int i = 0; *(void**)taskBandForTaskListWndSite != CTaskBand_ITaskListWndSite_vftable; i++) {
+                if (i == 20) {
+                    hr = E_NOINTERFACE;
+                    __leave;
+                }
+                taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+                if (!taskBandForTaskListWndSite) {
+                    hr = E_POINTER;
+                    __leave;
+                }
+            }
+
+            CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite, taskbarHostSharedPtr);
+            if (!taskbarHostSharedPtr[0]) {
+                hr = E_POINTER;
+                __leave;
+            }
+
+            size_t taskbarElementIUnknownOffset = 0x10;
+            const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+            if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+                b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+                taskbarElementIUnknownOffset = b[7];
+            } else {
+                Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
+            }
+
+            auto* taskbarElementIUnknown =
+                *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] + taskbarElementIUnknownOffset);
+            if (!taskbarElementIUnknown) {
+                hr = E_POINTER;
+                __leave;
+            }
+
+            hr = taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(), result);
+        } __finally {
+            if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (*result) {
+            static_cast<IUnknown*>(*result)->Release();
+            *result = nullptr;
+        }
+        hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    }
+
+    return hr;
+}
+
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     if (!CTaskBand_ITaskListWndSite_vftable || !CTaskBand_GetTaskbarHost_Original ||
         !TaskbarHost_FrameHeight_Original) {
         return nullptr;
     }
 
-    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
-    if (!hTaskSwWnd) return nullptr;
-
-    void* taskBand = (void*)GetWindowLongPtrW(hTaskSwWnd, 0);
-    if (!taskBand) return nullptr;
-
-    void* taskBandForTaskListWndSite = taskBand;
-    for (int i = 0; *(void**)taskBandForTaskListWndSite != CTaskBand_ITaskListWndSite_vftable; i++) {
-        if (i == 20) return nullptr;
-        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
-        if (!taskBandForTaskListWndSite) return nullptr;
-    }
-
-    void* taskbarHostSharedPtr[2]{};
-    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite, taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0]) {
-        if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
-        return nullptr;
-    }
-
-    size_t taskbarElementIUnknownOffset = 0x10;
-    const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
-    if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
-        b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
-        taskbarElementIUnknownOffset = b[7];
-    } else {
-        Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
-    }
-
-    auto* taskbarElementIUnknown =
-        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] + taskbarElementIUnknownOffset);
-    if (!taskbarElementIUnknown) {
-        if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
-        return nullptr;
-    }
+    void* taskbarElementAbi = nullptr;
+    if (FAILED(TryGetTaskbarElementAbi(hTaskbarWnd, &taskbarElementAbi)) || !taskbarElementAbi) return nullptr;
 
     FrameworkElement taskbarElement{nullptr};
-    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(taskbarElement));
+    winrt::attach_abi(taskbarElement, taskbarElementAbi);
     auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-    if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
     return result;
 }
 
