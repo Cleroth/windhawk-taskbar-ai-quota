@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.6.2
+// @version         0.6.3
 // @author          Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
@@ -426,6 +426,27 @@ static ULONGLONG ParseIso8601Ms(const std::wstring& s) {
     return unixMs;
 }
 
+static bool UnixMsToLocalSystemTime(ULONGLONG unixMs, SYSTEMTIME* local) {
+    if (!unixMs || !local) return false;
+
+    ULONGLONG t = (unixMs + 11644473600000ULL) * 10000;
+    FILETIME ft{(DWORD)(t & 0xFFFFFFFF), (DWORD)(t >> 32)};
+    SYSTEMTIME utc;
+    return FileTimeToSystemTime(&ft, &utc) &&
+           SystemTimeToTzSpecificLocalTime(nullptr, &utc, local);
+}
+
+static std::wstring FormatLocalTime(SYSTEMTIME const& local) {
+    wchar_t buf[64];
+    if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &local, nullptr, buf,
+                        ARRAYSIZE(buf)) > 0) {
+        return buf;
+    }
+
+    swprintf(buf, ARRAYSIZE(buf), L"%02u:%02u", local.wHour, local.wMinute);
+    return buf;
+}
+
 static std::wstring FormatReset(ULONGLONG unixMs) {
     if (!unixMs) return L"?";
     LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
@@ -447,38 +468,28 @@ static std::wstring FormatReset(ULONGLONG unixMs) {
         swprintf(rel, ARRAYSIZE(rel), L"in %llum", mins);
     }
 
-    ULONGLONG t = (unixMs + 11644473600000ULL) * 10000;
-    FILETIME ft{(DWORD)(t & 0xFFFFFFFF), (DWORD)(t >> 32)};
-    SYSTEMTIME utc, local;
-    if (!FileTimeToSystemTime(&ft, &utc) ||
-        !SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) {
+    SYSTEMTIME local;
+    if (!UnixMsToLocalSystemTime(unixMs, &local)) {
         return rel;
     }
 
-    wchar_t buf[64];
+    std::wstring localTime = FormatLocalTime(local);
     if (delta < 24LL * 3600 * 1000) {
-        swprintf(buf, ARRAYSIZE(buf), L"%s (%02u:%02u)", rel, local.wHour, local.wMinute);
-    } else {
-        wchar_t day[16] = L"";
-        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd", day, ARRAYSIZE(day), nullptr);
-        swprintf(buf, ARRAYSIZE(buf), L"%s (%s %02u:%02u)", rel, day, local.wHour, local.wMinute);
+        return std::wstring(rel) + L" (" + localTime + L")";
     }
-    return buf;
+
+    wchar_t day[16] = L"";
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd", day, ARRAYSIZE(day), nullptr);
+    return std::wstring(rel) + L" (" + day + L" " + localTime + L")";
 }
 
 static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
     if (!unixMs) return L"no data yet";
-    ULONGLONG t = (unixMs + 11644473600000ULL) * 10000;
-    FILETIME ft{(DWORD)(t & 0xFFFFFFFF), (DWORD)(t >> 32)};
-    SYSTEMTIME utc, local;
-    if (!FileTimeToSystemTime(&ft, &utc) ||
-        !SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) {
+    SYSTEMTIME local;
+    if (!UnixMsToLocalSystemTime(unixMs, &local)) {
         return L"updated ?";
     }
-    wchar_t buf[64];
-    swprintf(buf, ARRAYSIZE(buf), L"updated %02u:%02u%s", local.wHour, local.wMinute,
-             stale ? L" (stale)" : L"");
-    return buf;
+    return std::wstring(L"updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
 }
 
 static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
