@@ -166,6 +166,8 @@ static HANDLE g_refreshEvent = nullptr;
 static HANDLE g_fetchThread = nullptr;
 static HANDLE g_retryThread = nullptr;
 static HWND g_taskbarWnd = nullptr;
+static std::mutex g_httpHandlesMutex;
+static std::vector<std::atomic<HINTERNET>*> g_httpHandles;
 
 static Grid g_quotaGrid = nullptr;
 static Grid g_injectionParent = nullptr;
@@ -428,32 +430,78 @@ struct HttpResult {
     std::string body;
 };
 
+static void CloseHttpHandle(std::atomic<HINTERNET>& handle) {
+    HINTERNET h = handle.exchange(nullptr);
+    if (h) WinHttpCloseHandle(h);
+}
+
+static bool TrackHttpHandle(std::atomic<HINTERNET>* handle) {
+    HINTERNET h = handle->load();
+    if (!h) return false;
+
+    std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
+    if (g_unloading) {
+        h = handle->exchange(nullptr);
+        if (h) WinHttpCloseHandle(h);
+        return false;
+    }
+
+    g_httpHandles.push_back(handle);
+    return true;
+}
+
+static void UntrackHttpHandle(std::atomic<HINTERNET>* handle) {
+    std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
+    g_httpHandles.erase(std::remove(g_httpHandles.begin(), g_httpHandles.end(), handle),
+                        g_httpHandles.end());
+}
+
+static void CloseActiveHttpHandles() {
+    std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
+    for (auto* handle : g_httpHandles) {
+        HINTERNET h = handle->exchange(nullptr);
+        if (h) WinHttpCloseHandle(h);
+    }
+}
+
 static HttpResult HttpGet(PCWSTR host, PCWSTR path, PCWSTR userAgent,
                           const std::wstring& headers) {
     HttpResult res;
-    HINTERNET ses = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!ses) return res;
-    WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
+    std::atomic<HINTERNET> ses{WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                           WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
+    if (!ses.load()) return res;
+    if (!TrackHttpHandle(&ses)) return res;
 
-    HINTERNET con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", path, nullptr,
-                                             WINHTTP_NO_REFERER,
-                                             WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                             WINHTTP_FLAG_SECURE)
-                        : nullptr;
-    if (req && WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
-                                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-        WinHttpReceiveResponse(req, nullptr)) {
+    if (HINTERNET hSes = ses.load()) WinHttpSetTimeouts(hSes, 5000, 5000, 5000, 10000);
+
+    std::atomic<HINTERNET> con{nullptr};
+    if (HINTERNET hSes = ses.load()) {
+        con.store(WinHttpConnect(hSes, host, INTERNET_DEFAULT_HTTPS_PORT, 0));
+        if (con.load()) TrackHttpHandle(&con);
+    }
+
+    std::atomic<HINTERNET> req{nullptr};
+    if (HINTERNET hCon = con.load()) {
+        req.store(WinHttpOpenRequest(hCon, L"GET", path, nullptr,
+                                     WINHTTP_NO_REFERER,
+                                     WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                     WINHTTP_FLAG_SECURE));
+        if (req.load()) TrackHttpHandle(&req);
+    }
+
+    HINTERNET hReq = req.load();
+    if (hReq && WinHttpSendRequest(hReq, headers.c_str(), (DWORD)headers.size(),
+                                   WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpReceiveResponse(hReq, nullptr)) {
         DWORD status = 0, sz = sizeof(status);
-        WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+        WinHttpQueryHeaders(hReq, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
                             WINHTTP_NO_HEADER_INDEX);
         res.status = (int)status;
 
         wchar_t ra[32];
         DWORD raSz = sizeof(ra);
-        if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER,
+        if (WinHttpQueryHeaders(hReq, WINHTTP_QUERY_RETRY_AFTER,
                                 WINHTTP_HEADER_NAME_BY_INDEX, ra, &raSz,
                                 WINHTTP_NO_HEADER_INDEX)) {
             res.retryAfterSec = _wtoi(ra);
@@ -461,20 +509,25 @@ static HttpResult HttpGet(PCWSTR host, PCWSTR path, PCWSTR userAgent,
 
         for (;;) {
             DWORD avail = 0;
-            if (!WinHttpQueryDataAvailable(req, &avail) || !avail) break;
+            hReq = req.load();
+            if (!hReq || !WinHttpQueryDataAvailable(hReq, &avail) || !avail) break;
             size_t prev = res.body.size();
             res.body.resize(prev + avail);
             DWORD read = 0;
-            if (!WinHttpReadData(req, res.body.data() + prev, avail, &read)) break;
+            hReq = req.load();
+            if (!hReq || !WinHttpReadData(hReq, res.body.data() + prev, avail, &read)) break;
             res.body.resize(prev + read);
             if (!read || res.body.size() > 4 * 1024 * 1024) break;
         }
         res.ok = true;
     }
 
-    if (req) WinHttpCloseHandle(req);
-    if (con) WinHttpCloseHandle(con);
-    WinHttpCloseHandle(ses);
+    CloseHttpHandle(req);
+    UntrackHttpHandle(&req);
+    CloseHttpHandle(con);
+    UntrackHttpHandle(&con);
+    CloseHttpHandle(ses);
+    UntrackHttpHandle(&ses);
     return res;
 }
 
@@ -1307,6 +1360,7 @@ void Wh_ModUninit() {
     Wh_Log(L"Uninit");
     g_unloading = true;
     if (g_stopEvent) SetEvent(g_stopEvent);
+    CloseActiveHttpHandles();
 
     if (g_retryThread) {
         WaitForSingleObject(g_retryThread, INFINITE);
