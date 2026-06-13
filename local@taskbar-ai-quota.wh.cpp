@@ -962,7 +962,7 @@ static void UpdateQuotaUi() {
             }
 
             std::wstring tip = accounts[i].label + L" - " +
-                               (accounts[i].provider == L"anthropic" ? L"Claude" : L"OpenAI");
+                               (accounts[i].provider == L"anthropic" ? L"Anthropic" : L"OpenAI");
             if (!d.plan.empty()) tip += L" (" + d.plan + L")";
             wchar_t line[160];
             if (d.win5h.pct >= 0) {
