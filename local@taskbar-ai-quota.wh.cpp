@@ -1110,9 +1110,12 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
     struct Payload {
         WindowThreadProc proc;
         void* param;
-        bool ran = false;
-        bool result = false;
+        std::atomic<bool> ran{false};
+        std::atomic<bool> result{false};
+
+        Payload(WindowThreadProc proc, void* param) : proc(proc), param(param) {}
     };
+    using PayloadRef = std::shared_ptr<Payload>;
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
     if (!tid) return false;
     if (tid == GetCurrentThreadId()) {
@@ -1126,34 +1129,38 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
                 auto* cwp = reinterpret_cast<const CWPSTRUCT*>(l);
                 static const UINT kM = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == kM) {
-                    auto* p = reinterpret_cast<Payload*>(cwp->lParam);
-                    p->ran = true;
-                    p->result = p->proc(p->param);
+                    std::unique_ptr<PayloadRef> holder(reinterpret_cast<PayloadRef*>(cwp->lParam));
+                    PayloadRef p = *holder;
+                    p->result.store(p->proc(p->param), std::memory_order_release);
+                    p->ran.store(true, std::memory_order_release);
                 }
             }
             return CallNextHookEx(nullptr, code, w, l);
         }, nullptr, tid);
     if (!hook) return false;
 
-    auto* pay = new Payload{proc, param};
+    PayloadRef pay = std::make_shared<Payload>(proc, param);
+    auto* holder = new PayloadRef(pay);
     bool sent = true;
     if (timeoutMs == INFINITE) {
-        SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(pay));
+        SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(holder));
     } else {
         DWORD_PTR ignored = 0;
         // Avoid worker/UI deadlocks during unload if the target thread stops pumping messages.
-        sent = SendMessageTimeoutW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(pay),
-                                   SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &ignored) != 0;
+        sent = SendMessageTimeoutW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(holder),
+                                   SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_NOTIMEOUTIFNOTHUNG,
+                                   timeoutMs, &ignored) != 0;
     }
 
-    bool result = sent && pay->ran && pay->result;
+    bool ran = pay->ran.load(std::memory_order_acquire);
+    bool result = sent && ran && pay->result.load(std::memory_order_acquire);
     if (!sent) {
         UnhookWindowsHookEx(hook);
-        // The target thread may still run the hook after a timeout; keep payload memory valid.
+        // The target thread may still consume holder after a timeout; the hook owns it now.
         return false;
     }
+    if (!ran) delete holder;
     UnhookWindowsHookEx(hook);
-    delete pay;
     return result;
 }
 
@@ -2010,17 +2017,22 @@ static void LoadSettings() {
         s.accounts.push_back({L"openai", L"opencode", L"O", authFile, L""});
     }
 
-    auto hasSetting = [](PCWSTR name) {
+    auto getSettingText = [](PCWSTR name) {
         PCWSTR text = Wh_GetStringSetting(name);
-        bool hasValue = *text != L'\0';
+        std::wstring value = text;
         Wh_FreeStringSetting(text);
-        return hasValue;
+        return value;
     };
     auto getIntSetting = [&](PCWSTR name, int defaultValue) {
-        return hasSetting(name) ? Wh_GetIntSetting(name) : defaultValue;
+        std::wstring text = getSettingText(name);
+        return text.empty() ? defaultValue : _wtoi(text.c_str());
     };
     auto getBoolSetting = [&](PCWSTR name, bool defaultValue) {
-        return hasSetting(name) ? Wh_GetIntSetting(name) != 0 : defaultValue;
+        std::wstring text = getSettingText(name);
+        if (text.empty()) return defaultValue;
+        if (_wcsicmp(text.c_str(), L"true") == 0) return true;
+        if (_wcsicmp(text.c_str(), L"false") == 0) return false;
+        return _wtoi(text.c_str()) != 0;
     };
 
     int pollMinutes = getIntSetting(L"pollIntervalMinutes", 10);
