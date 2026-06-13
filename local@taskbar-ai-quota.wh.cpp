@@ -77,7 +77,7 @@ own auth files if requests start returning `401`.
   $description: 'Default: 10'
 - barWidth: 100
   $name: Bar width (px)
-  $description: 'Default: 100. Range: 10-300'
+  $description: 'Default: 100. Minimum: 10'
 - barHeight: 8
   $name: Bar height (px)
   $description: 'Default: 8'
@@ -2017,7 +2017,7 @@ static void LoadSettings() {
 
     s.pollMinutes = std::clamp(pollMinutes > 0 ? pollMinutes : 10, 2, 24 * 60);
     s.taskbarMonitorNumber = std::clamp(taskbarMonitorNumber > 0 ? taskbarMonitorNumber : 1, 1, 64);
-    s.barWidth = std::clamp(barWidth > 0 ? barWidth : 100, 10, 300);
+    s.barWidth = std::max(barWidth > 0 ? barWidth : 100, 10);
     s.barHeight = std::clamp(barHeight > 0 ? barHeight : 8, 2, 20);
     s.labelFontSize = std::clamp(labelFontSize > 0 ? labelFontSize : 11, 6, 24);
     s.yellowThreshold = std::clamp(yellowThreshold, 0, 100);
