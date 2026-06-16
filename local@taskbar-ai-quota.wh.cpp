@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.9.2
+// @version         0.9.3
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -27,8 +27,10 @@ Each account gets one compact column:
 - vertical layout: side-by-side bars, filling bottom-up
 
 Hover for exact percentages and reset times. Click a column to refresh that account
-or open the provider dashboard, depending on settings. Right-click for Refresh all
-and Open dashboard.
+or open the provider dashboard, depending on settings. Right-click for Refresh all,
+Open dashboard, and a checkbox list to show/hide individual accounts. Hidden accounts
+stop updating and are left to go stale; the choice persists across restarts (at least
+one account always stays visible).
 Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
 Stale errors can mark labels/tooltips with `!`.
 
@@ -209,6 +211,7 @@ struct AccountConfig {
     std::wstring label;
     std::wstring authFile;
     std::wstring authKey;
+    bool hidden = false;  // Runtime show/hide toggle (right-click menu), persisted in mod storage.
 };
 
 enum class TaskbarMonitorMode {
@@ -284,6 +287,7 @@ struct AppliedState {
     std::wstring labelText;
     double labelOpacity = -1;
     double columnOpacity = -1;
+    int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
 };
 
 struct TapHandler {
@@ -313,6 +317,9 @@ struct QuotaUiInstance {
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<AccountUiRefs> accountRefs;
     std::vector<AppliedState> applied;
+    // Per-account show/hide toggle items, paired with their account index, for cross-instance
+    // IsChecked sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
+    std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
 };
 
 static Settings g_settings;
@@ -386,6 +393,19 @@ static std::wstring ExpandEnv(PCWSTR s) {
         return expanded;
     }
     return buf;
+}
+
+// Stable identity used both to preserve g_data across settings reloads and to persist the
+// show/hide toggle. FNV-1a over the same fields the g_data match uses (label excluded so
+// relabeling doesn't reset hidden state).
+static uint64_t AccountIdentityHash(const AccountConfig& a) {
+    std::wstring id = a.provider + L"\n" + a.authSource + L"\n" + a.authFile + L"\n" + a.authKey;
+    uint64_t h = 1469598103934665603ull;
+    for (const auto* p = reinterpret_cast<const unsigned char*>(id.data());
+         p != reinterpret_cast<const unsigned char*>(id.data() + id.size()); ++p) {
+        h = (h ^ *p) * 1099511628211ull;
+    }
+    return h;
 }
 
 static bool ReadFileUtf8(const std::wstring& path, std::string* out) {
@@ -754,6 +774,73 @@ static void OpenDashboardForAccount(int accountIndex) {
 
     OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage"
                                      : L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
+}
+
+// Right-click menu: flip an account's show/hide state, keep at least one visible, persist the
+// hidden-set to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
+// taskbar UI thread (menu click); `sender` is the clicked ToggleMenuFlyoutItem (already flipped).
+static void ToggleAccountVisibility(int accountIndex,
+                                    winrt::Windows::Foundation::IInspectable const& sender) {
+    if (g_unloading) return;
+
+    auto toggle = sender.try_as<ToggleMenuFlyoutItem>();
+    std::wstring hashes;
+    bool refreshNow = false;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        if (accountIndex < 0 || accountIndex >= (int)g_settings.accounts.size()) return;
+        bool wantVisible = toggle ? toggle.IsChecked() : g_settings.accounts[accountIndex].hidden;
+
+        // Refuse to hide the last visible account: there'd be no bar left to right-click.
+        if (!wantVisible && !g_settings.accounts[accountIndex].hidden) {
+            int visibleCount = 0;
+            for (const auto& a : g_settings.accounts) {
+                if (!a.hidden) visibleCount++;
+            }
+            if (visibleCount <= 1) {
+                if (toggle) toggle.IsChecked(true);
+                return;
+            }
+        }
+        bool newHidden = !wantVisible;
+        if (newHidden != g_settings.accounts[accountIndex].hidden) {
+            g_settings.accounts[accountIndex].hidden = newHidden;
+            if (newHidden) {
+                // Hiding: bump the generation so a fetch already in flight from the pre-toggle
+                // snapshot is discarded at publish (guard checks settingsGeneration), preventing a
+                // refresh or red-threshold notification for the now-hidden account.
+                g_settingsGeneration++;
+            } else {
+                // Showing: keep the existing (possibly stale) data and only re-query if it has
+                // already gone stale, matching the UI's grey-out threshold. This stops repeated
+                // hide/show from triggering fetches and hitting provider rate limits.
+                int intervalMin = g_settings.pollMinutes;
+                ULONGLONG now = NowUnixMs();
+                std::lock_guard<std::mutex> lk2(g_dataMutex);
+                if (accountIndex >= (int)g_data.size()) {
+                    refreshNow = true;
+                } else {
+                    const AccountData& d = g_data[accountIndex];
+                    refreshNow = d.stale || d.lastSuccessMs == 0 ||
+                                 now - d.lastSuccessMs > (ULONGLONG)intervalMin * 2 * 60000;
+                }
+            }
+        }
+
+        wchar_t buf[24];
+        for (const auto& a : g_settings.accounts) {
+            if (!a.hidden) continue;
+            if (!hashes.empty()) hashes += L";";
+            swprintf(buf, ARRAYSIZE(buf), L"%016llx", (unsigned long long)AccountIdentityHash(a));
+            hashes += buf;
+        }
+    }
+
+    Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
+    // RefreshQuota re-queries only this account (and posts the UI); otherwise just repaint so the
+    // column collapses/reappears with its existing data without any network request.
+    if (refreshNow) RefreshQuota(accountIndex);
+    else PostUiUpdate();
 }
 
 /**********************************************/
@@ -1400,6 +1487,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool anyError = false;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
+            // Hidden accounts are never fetched (poll or Refresh all); results[i] keeps the
+            // prior g_data[i] value and goes stale via the lastSuccessMs/interval check.
+            if (accounts[i].hidden) continue;
             if (refreshSingleAccount && (int)i != refreshAccountIndex) {
                 if (retryDeadlineMs[i] > nowMs &&
                     (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs)) {
@@ -1808,6 +1898,7 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
         try { handler.item.Click(handler.token); } catch (...) {}
     }
     state.menuItemClickHandlers.clear();
+    state.accountToggleItems.clear();
     state.accountRefs.clear();
 }
 
@@ -1856,6 +1947,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);
+            col.Visibility(accounts[i].hidden ? Visibility::Collapsed : Visibility::Visible);
             AccountUiRefs refs;
             refs.column = col;
 
@@ -1969,6 +2061,28 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             state.menuItemClickHandlers.push_back({dashboardItem, dashboardToken});
             menu.Items().Append(dashboardItem);
 
+            // Per-account show/hide checkboxes (checked = visible). Every column carries the same
+            // list; toggling flips global state, persists, and re-syncs all instances via UpdateQuotaUi.
+            menu.Items().Append(MenuFlyoutSeparator{});
+            for (size_t k = 0; k < accounts.size(); k++) {
+                std::wstring src = accounts[k].authSource == L"claude-code" ? L"Claude Code" :
+                                   accounts[k].authSource == L"codex" ? L"Codex" : L"OpenCode";
+                ToggleMenuFlyoutItem toggle;
+                toggle.Text(accounts[k].label + L" - " +
+                            (accounts[k].provider == L"anthropic" ? L"Anthropic" : L"OpenAI") +
+                            L" (" + src + L")");
+                toggle.IsChecked(!accounts[k].hidden);
+                int toggleIndex = (int)k;
+                auto toggleToken = toggle.Click(
+                    [toggleIndex](winrt::Windows::Foundation::IInspectable const& sender,
+                                  RoutedEventArgs const&) {
+                        ToggleAccountVisibility(toggleIndex, sender);
+                    });
+                state.menuItemClickHandlers.push_back({toggle, toggleToken});
+                state.accountToggleItems.push_back({toggleIndex, toggle});
+                menu.Items().Append(toggle);
+            }
+
             tappedElement.ContextFlyout(menu);
 
             panel.Children().Append(col);
@@ -2033,6 +2147,18 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             const AccountData& d = data[i];
             AppliedState& ap = state.applied[i];
             const AccountUiRefs& ui = state.accountRefs[i];
+
+            // Hidden accounts collapse their column (no space, not right-clickable) and skip
+            // visual work; data stays in g_data and repaints on un-hide (which posts an update).
+            int visible = accounts[i].hidden ? 0 : 1;
+            if (visible != ap.visible) {
+                if (ui.column) {
+                    ui.column.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
+                }
+                ap.visible = visible;
+            }
+            if (!visible) continue;
+
             bool stale = d.stale || d.lastSuccessMs == 0 ||
                          now - d.lastSuccessMs > (ULONGLONG)intervalMin * 2 * 60000;
             bool warn = showStaleWarning && stale && !d.error.empty();
@@ -2157,6 +2283,14 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ap.labelOpacity = labelOpacity;
                 ap.labelText = std::move(labelText);
             }
+        }
+
+        // Keep every instance's menu checkboxes in sync with the shared hidden state
+        // (programmatic IsChecked does not raise Click).
+        for (auto& [idx, item] : state.accountToggleItems) {
+            if (!item || idx < 0 || idx >= (int)accounts.size()) continue;
+            bool checked = !accounts[idx].hidden;
+            if (item.IsChecked() != checked) item.IsChecked(checked);
         }
     } catch (...) {
         Wh_Log(L"UpdateQuotaUi: exception");
@@ -2522,6 +2656,28 @@ static void LoadSettings() {
         std::wstring authFile = ExpandEnv(kDefaultOpenCodeAuthFile);
         s.accounts.push_back({L"anthropic", L"opencode", L"A", authFile, L""});
         s.accounts.push_back({L"openai", L"opencode", L"O", authFile, L""});
+    }
+
+    // Apply persisted show/hide toggles from mod storage (semicolon-separated identity hashes).
+    {
+        wchar_t buf[4096] = {};
+        Wh_GetStringValue(L"hiddenAccounts", buf, ARRAYSIZE(buf));
+        std::vector<uint64_t> hiddenHashes;
+        for (std::wstring rest = buf; !rest.empty();) {
+            size_t end = rest.find(L';');
+            std::wstring tok = rest.substr(0, end);
+            if (!tok.empty()) hiddenHashes.push_back(wcstoull(tok.c_str(), nullptr, 16));
+            if (end == std::wstring::npos) break;
+            rest.erase(0, end + 1);
+        }
+        int visibleCount = 0;
+        for (auto& a : s.accounts) {
+            a.hidden = std::find(hiddenHashes.begin(), hiddenHashes.end(),
+                                 AccountIdentityHash(a)) != hiddenHashes.end();
+            if (!a.hidden) visibleCount++;
+        }
+        // Never persist into an all-hidden state with no bar left to right-click.
+        if (visibleCount == 0 && !s.accounts.empty()) s.accounts[0].hidden = false;
     }
 
     auto getSettingText = [](PCWSTR name) {
