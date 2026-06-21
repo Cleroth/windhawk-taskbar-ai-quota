@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.10.0
+// @version         0.10.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1006,6 +1006,26 @@ struct StoredToken {
 };
 
 static std::mutex g_authMutex;
+static std::mutex g_authEpochMutex;
+static std::vector<std::pair<uint64_t, ULONGLONG>> g_authEpochs;
+
+enum class TokenSaveResult {
+    Saved,
+    Stale,
+    Failed,
+};
+
+static ULONGLONG AuthEpochLocked(uint64_t idHash) {
+    for (const auto& [hash, epoch] : g_authEpochs) {
+        if (hash == idHash) return epoch;
+    }
+    return 0;
+}
+
+static ULONGLONG CurrentAuthEpoch(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    return AuthEpochLocked(idHash);
+}
 
 static std::wstring TokenStorageKey(uint64_t idHash) {
     wchar_t buf[32];
@@ -1055,6 +1075,26 @@ static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
 static void ClearStoredToken(uint64_t idHash) {
     std::lock_guard<std::mutex> lk(g_authMutex);
     Wh_SetStringValue(TokenStorageKey(idHash).c_str(), L"");
+}
+
+static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
+                                                const StoredToken& t) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    if (AuthEpochLocked(idHash) != authEpoch) return TokenSaveResult::Stale;
+    return SaveStoredToken(idHash, t) ? TokenSaveResult::Saved : TokenSaveResult::Failed;
+}
+
+static void ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    for (auto& [hash, epoch] : g_authEpochs) {
+        if (hash == idHash) {
+            epoch++;
+            ClearStoredToken(idHash);
+            return;
+        }
+    }
+    g_authEpochs.push_back({idHash, 1});
+    ClearStoredToken(idHash);
 }
 
 /**********************************************/
@@ -1332,7 +1372,7 @@ static bool PostTokenEndpoint(bool anthropic, const std::wstring& contentType,
         *err = L"network error";
         return false;
     }
-    if (r.status != 200) {
+    if (r.status < 200 || r.status >= 300) {
         std::wstring detail = ParseOAuthError(r.body);
         *err = detail.empty() ? (L"HTTP " + std::to_wstring(r.status)) : detail;
         return false;
@@ -1372,6 +1412,7 @@ struct LoginRequest {
     std::wstring provider;
     std::wstring label;
     uint64_t idHash = 0;
+    ULONGLONG authEpoch = 0;
     int index = -1;
 };
 
@@ -1507,7 +1548,8 @@ static bool StartLoopback(SOCKET* outSock, int* outPort) {
 // Accepts one localhost callback and returns the (URL-decoded) authorization code. Polls with
 // a 1s select timeout so it stays responsive to g_unloading and an overall deadline.
 static std::string WaitForLoopbackCode(SOCKET listener, const std::string& expectedState,
-                                       DWORD totalTimeoutMs) {
+                                       DWORD totalTimeoutMs, std::wstring* terminalError) {
+    if (terminalError) terminalError->clear();
     auto getParam = [](const std::string& query, const std::string& key) -> std::string {
         std::string pat = key + "=";
         for (size_t p = 0; (p = query.find(pat, p)) != std::string::npos; p += pat.size()) {
@@ -1557,11 +1599,16 @@ static std::string WaitForLoopbackCode(SOCKET listener, const std::string& expec
             path = request.substr(sp1 + 1, sp2 - sp1 - 1);
         }
         size_t q = path.find('?');
+        std::string route = q == std::string::npos ? path : path.substr(0, q);
         std::string query = q == std::string::npos ? "" : path.substr(q + 1);
         std::string code = getParam(query, "code");
         std::string state = getParam(query, "state");
-        bool stateOk = expectedState.empty() || state == expectedState;
+        std::string oauthError = getParam(query, "error");
+        std::string oauthErrorDesc = getParam(query, "error_description");
+        bool callback = route == "/auth/callback";
+        bool stateOk = callback && (expectedState.empty() || state == expectedState);
         bool success = !code.empty() && stateOk;
+        bool terminalFailure = stateOk && (code.empty() || !oauthError.empty());
 
         std::string html = success
             ? "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:2em'>"
@@ -1575,6 +1622,14 @@ static std::string WaitForLoopbackCode(SOCKET listener, const std::string& expec
         closesocket(c);
 
         if (success) return code;
+        if (terminalFailure) {
+            if (terminalError) {
+                if (!oauthErrorDesc.empty()) *terminalError = Utf8ToWide(oauthErrorDesc);
+                else if (!oauthError.empty()) *terminalError = Utf8ToWide(oauthError);
+                else *terminalError = L"missing authorization code";
+            }
+            return {};
+        }
         // Ignore stray hits (favicon, etc.) and keep waiting until the deadline.
         if (GetTickCount64() > deadline) break;
     }
@@ -1626,7 +1681,15 @@ static void DoAnthropicLogin(const LoginRequest& req) {
     StoredToken tok;
     std::wstring err;
     if (PostTokenEndpoint(/*anthropic*/ true, L"application/json", body, &tok, &err)) {
-        SaveStoredToken(req.idHash, tok);
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        if (saved == TokenSaveResult::Stale) {
+            Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
+            return;
+        }
+        if (saved != TokenSaveResult::Saved) {
+            Wh_Log(L"Sign-in [%s] failed: could not save token", req.label.c_str());
+            return;
+        }
         RefreshQuota(req.index);
         Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
     } else {
@@ -1652,11 +1715,18 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     }
     g_loginSocket.store(listener);
     OpenUrl(BuildOpenAiAuthorizeUrl(port, challenge, state).c_str());
-    std::string code = WaitForLoopbackCode(listener, state, 180000);
+    std::wstring callbackErr;
+    std::string code = WaitForLoopbackCode(listener, state, 180000, &callbackErr);
     SOCKET s = g_loginSocket.exchange(INVALID_SOCKET);
     if (s != INVALID_SOCKET) closesocket(s);
     if (g_unloading || code.empty()) {
-        if (code.empty() && !g_unloading) Wh_Log(L"Sign-in [%s]: cancelled or timed out", req.label.c_str());
+        if (code.empty() && !g_unloading) {
+            if (!callbackErr.empty()) {
+                Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), callbackErr.c_str());
+            } else {
+                Wh_Log(L"Sign-in [%s]: cancelled or timed out", req.label.c_str());
+            }
+        }
         return;
     }
 
@@ -1670,7 +1740,15 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     std::wstring err;
     if (PostTokenEndpoint(/*anthropic*/ false, L"application/x-www-form-urlencoded", formBody,
                           &tok, &err)) {
-        SaveStoredToken(req.idHash, tok);
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        if (saved == TokenSaveResult::Stale) {
+            Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
+            return;
+        }
+        if (saved != TokenSaveResult::Saved) {
+            Wh_Log(L"Sign-in [%s] failed: could not save token", req.label.c_str());
+            return;
+        }
         RefreshQuota(req.index);
         Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
     } else {
@@ -1719,6 +1797,7 @@ static void StartLogin(int accountIndex) {
         req->idHash = AccountIdentityHash(a);
         req->index = accountIndex;
     }
+    req->authEpoch = CurrentAuthEpoch(req->idHash);
 
     // Hand off g_loginThread under the lock and re-check g_unloading: Wh_ModUninit sets
     // g_unloading before joining under the same lock, so we never spawn a thread into an
@@ -1749,7 +1828,7 @@ static void SignOutAccount(int accountIndex) {
         if (accountIndex < 0 || accountIndex >= (int)g_settings.accounts.size()) return;
         idHash = AccountIdentityHash(g_settings.accounts[accountIndex]);
     }
-    ClearStoredToken(idHash);
+    ClearStoredTokenAndBumpAuthEpoch(idHash);
     RefreshQuota(accountIndex);  // re-fetch so the column flips to "not signed in".
 }
 
@@ -1933,6 +2012,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     d->needsLogin = false;
 
     uint64_t idHash = AccountIdentityHash(acc);
+    ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
     StoredToken tok;
     if (!LoadStoredToken(idHash, &tok) || tok.accessToken.empty()) {
         d->stale = true;
@@ -1945,7 +2025,18 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     if (tok.expiresMs && tok.expiresMs < NowUnixMs() + 60000) {
         std::wstring refreshErr;
         if (RefreshToken(acc.provider, &tok, &refreshErr)) {
-            SaveStoredToken(idHash, tok);
+            TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
+            if (saved == TokenSaveResult::Stale) {
+                d->stale = true;
+                d->needsLogin = true;
+                d->error = L"not signed in - click to sign in";
+                return;
+            }
+            if (saved != TokenSaveResult::Saved) {
+                d->stale = true;
+                d->error = L"could not save refreshed token";
+                return;
+            }
         } else {
             d->stale = true;
             d->needsLogin = true;
@@ -1976,8 +2067,19 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     if (r.ok && r.status == 401 && !tok.refreshToken.empty()) {
         std::wstring refreshErr;
         if (RefreshToken(acc.provider, &tok, &refreshErr)) {
-            SaveStoredToken(idHash, tok);
-            r = requestUsage(tok);
+            TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
+            if (saved == TokenSaveResult::Saved) {
+                r = requestUsage(tok);
+            } else if (saved == TokenSaveResult::Stale) {
+                d->stale = true;
+                d->needsLogin = true;
+                d->error = L"not signed in - click to sign in";
+                return;
+            } else {
+                d->stale = true;
+                d->error = L"could not save refreshed token";
+                return;
+            }
         }
     }
 
@@ -2189,7 +2291,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
 
             if (!results[i].error.empty()) {
-                if (retryAfter <= 0) anyError = true;
+                if (retryAfter <= 0 && !results[i].needsLogin) anyError = true;
                 std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].label +
                                           L"\n" + results[i].error;
                 if (errorState != lastLoggedErrorStates[i]) {
