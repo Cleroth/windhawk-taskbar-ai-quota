@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -lws2_32 -lcrypt32 -lbcrypt
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -lws2_32 -lcrypt32 -lbcrypt
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -157,7 +157,10 @@ Have a suggestion or found a bug?
 */
 // ==/WindhawkModSettings==
 
-// winsock2.h must precede windows.h to avoid the legacy winsock.h being pulled in.
+// Windhawk implicitly includes windhawk_api.h (and thus windows.h) before this file,
+// so winsock2.h can't be ordered ahead of windows.h here. WIN32_LEAN_AND_MEAN (set in
+// @compilerOptions) keeps that windows.h from pulling in the legacy winsock.h, so
+// winsock2.h is included cleanly below without redefinition conflicts.
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
