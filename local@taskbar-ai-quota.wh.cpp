@@ -332,6 +332,9 @@ struct QuotaUiInstance {
     Grid injectionParent{nullptr};
     int quotaColumn = -1;
     bool insertedColumn = false;
+    int quotaRow = -1;
+    bool insertedRow = false;
+    bool isVerticalTaskbar = false;
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<AccountUiRefs> accountRefs;
@@ -2707,6 +2710,17 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
     state.accountRefs.clear();
 }
 
+static bool IsVerticalTaskbar(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return false;
+    RECT rect = {0};
+    if (GetWindowRect(hWnd, &rect)) {
+        LONG w = rect.right - rect.left;
+        LONG h = rect.bottom - rect.top;
+        return w < h;
+    }
+    return false;
+}
+
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         std::vector<AccountConfig> accounts;
@@ -2734,6 +2748,10 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         if (accounts.empty()) return nullptr;
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
+        if (state.isVerticalTaskbar) {
+            verticalBars = true;
+            labelOnLeft = false;
+        }
         UINT toolTipDurationSeconds = 5;
         if (!SystemParametersInfoW(SPI_GETMESSAGEDURATION, 0, &toolTipDurationSeconds, 0)) {
             toolTipDurationSeconds = 5;
@@ -2755,11 +2773,20 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
         Grid root;
         root.Name(kRootName);
-        root.VerticalAlignment(VerticalAlignment::Center);
+        if (state.isVerticalTaskbar) {
+            root.HorizontalAlignment(HorizontalAlignment::Center);
+        } else {
+            root.VerticalAlignment(VerticalAlignment::Center);
+        }
 
         StackPanel panel;
-        panel.Orientation(Orientation::Horizontal);
-        panel.Margin({4, 0, (double)rightMargin, 0});
+        if (state.isVerticalTaskbar) {
+            panel.Orientation(Orientation::Vertical);
+            panel.Margin({0, 4, 0, (double)rightMargin});
+        } else {
+            panel.Orientation(Orientation::Horizontal);
+            panel.Margin({4, 0, (double)rightMargin, 0});
+        }
 
         wchar_t name[64];
         for (size_t i = 0; i < accounts.size(); i++) {
@@ -3146,6 +3173,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool refreshing = g_refreshing.load();
     int refreshAccountIndex = g_refreshAccountIndex.load();
     bool verticalBars = barLayout == BarLayout::Vertical;
+    if (state.isVerticalTaskbar) {
+        verticalBars = true;
+    }
     // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged.
     auto displayPct = [&](double pct) {
         return barMode == BarMode::Remaining && pct >= 0 ? std::clamp(100.0 - pct, 0.0, 100.0) : pct;
@@ -3325,6 +3355,8 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
         state.quotaGrid = nullptr;
         state.quotaColumn = -1;
         state.insertedColumn = false;
+        state.quotaRow = -1;
+        state.insertedRow = false;
         state.applied.clear();
         return;
     }
@@ -3333,6 +3365,9 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
         auto targetGrid = state.injectionParent;
         int quotaCol = RemoveQuotaChildren(targetGrid, state);
         if (quotaCol < 0) quotaCol = state.quotaColumn;
+        int quotaRow = quotaCol;
+        if (quotaRow < 0) quotaRow = state.quotaRow;
+
         if (state.insertedColumn && quotaCol >= 0 && quotaCol < (int)targetGrid.ColumnDefinitions().Size()) {
             for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
                 auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
@@ -3343,6 +3378,17 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
             }
             targetGrid.ColumnDefinitions().RemoveAt(quotaCol);
         }
+
+        if (state.insertedRow && quotaRow >= 0 && quotaRow < (int)targetGrid.RowDefinitions().Size()) {
+            for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
+                auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child) {
+                    int childRow = Grid::GetRow(child);
+                    if (childRow > quotaRow) Grid::SetRow(child, childRow - 1);
+                }
+            }
+            targetGrid.RowDefinitions().RemoveAt(quotaRow);
+        }
     } catch (...) {
         Wh_Log(L"RemoveQuotaGrid: exception");
     }
@@ -3351,8 +3397,12 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
     state.injectionParent = nullptr;
     state.quotaColumn = -1;
     state.insertedColumn = false;
+    state.quotaRow = -1;
+    state.insertedRow = false;
     state.applied.clear();
 }
+
+static LRESULT CALLBACK TaskbarWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 static bool InjectQuotaGrid(HWND hWnd) {
     if (!hWnd) return false;
@@ -3392,18 +3442,40 @@ static bool InjectQuotaGrid(HWND hWnd) {
             state = newState.get();
             g_uiInstances.push_back(std::move(newState));
         }
+        state->isVerticalTaskbar = IsVerticalTaskbar(hWnd);
         state->injectionParent = trayGrid;
 
-        int oldCol = RemoveQuotaChildren(trayGrid, *state);
-        if (oldCol >= 0 && oldCol < (int)trayGrid.ColumnDefinitions().Size()) {
-            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child) {
-                    int childCol = Grid::GetColumn(child);
-                    if (childCol > oldCol) Grid::SetColumn(child, childCol - 1);
-                }
+        if (!GetPropW(hWnd, L"Windhawk_OldWndProc_" WH_MOD_ID)) {
+            WNDPROC oldWndProc = (WNDPROC)SetWindowLongPtrW(hWnd, GWLP_WNDPROC, (LONG_PTR)TaskbarWndProc);
+            if (oldWndProc) {
+                SetPropW(hWnd, L"Windhawk_OldWndProc_" WH_MOD_ID, (HANDLE)oldWndProc);
             }
-            trayGrid.ColumnDefinitions().RemoveAt(oldCol);
+        }
+
+        int oldCol = RemoveQuotaChildren(trayGrid, *state);
+        if (state->isVerticalTaskbar) {
+            int oldRow = oldCol;
+            if (oldRow >= 0 && oldRow < (int)trayGrid.RowDefinitions().Size()) {
+                for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                    auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (child) {
+                        int childRow = Grid::GetRow(child);
+                        if (childRow > oldRow) Grid::SetRow(child, childRow - 1);
+                    }
+                }
+                trayGrid.RowDefinitions().RemoveAt(oldRow);
+            }
+        } else {
+            if (oldCol >= 0 && oldCol < (int)trayGrid.ColumnDefinitions().Size()) {
+                for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                    auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (child) {
+                        int childCol = Grid::GetColumn(child);
+                        if (childCol > oldCol) Grid::SetColumn(child, childCol - 1);
+                    }
+                }
+                trayGrid.ColumnDefinitions().RemoveAt(oldCol);
+            }
         }
         Grid quota = BuildQuotaGrid(*state);
         if (!quota) {
@@ -3411,22 +3483,40 @@ static bool InjectQuotaGrid(HWND hWnd) {
             state->injectionParent = nullptr;
             state->quotaColumn = -1;
             state->insertedColumn = false;
+            state->quotaRow = -1;
+            state->insertedRow = false;
             state->applied.clear();
             EraseUiState(hWnd);
             return fail(L"BuildQuotaGrid failed");
         }
 
-        ColumnDefinition newCol;
-        newCol.Width({1.0, GridUnitType::Auto});
-        trayGrid.ColumnDefinitions().InsertAt(0, newCol);
-        state->quotaColumn = 0;
-        state->insertedColumn = true;
-        for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-            if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+        if (state->isVerticalTaskbar) {
+            RowDefinition newRow;
+            newRow.Height({1.0, GridUnitType::Auto});
+            trayGrid.RowDefinitions().InsertAt(0, newRow);
+            state->quotaRow = 0;
+            state->insertedRow = true;
+            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child) Grid::SetRow(child, Grid::GetRow(child) + 1);
+            }
+            Grid::SetRow(quota, 0);
+            Grid::SetColumn(quota, 0);
+            trayGrid.Children().Append(quota);
+        } else {
+            ColumnDefinition newCol;
+            newCol.Width({1.0, GridUnitType::Auto});
+            trayGrid.ColumnDefinitions().InsertAt(0, newCol);
+            state->quotaColumn = 0;
+            state->insertedColumn = true;
+            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+            }
+            Grid::SetColumn(quota, 0);
+            Grid::SetRow(quota, 0);
+            trayGrid.Children().Append(quota);
         }
-        Grid::SetColumn(quota, 0);
-        trayGrid.Children().Append(quota);
 
         state->quotaGrid = quota;
         g_uiInjected.store(true, std::memory_order_release);
@@ -3445,9 +3535,51 @@ static bool InjectQuotaGrid(HWND hWnd) {
     }
 }
 
+static LRESULT CALLBACK TaskbarWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    WNDPROC oldWndProc = (WNDPROC)GetPropW(hWnd, L"Windhawk_OldWndProc_" WH_MOD_ID);
+    if (!oldWndProc) return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+
+    static const UINT rebuildMsg = RegisterWindowMessage(L"Windhawk_RebuildQuotaGrid_" WH_MOD_ID);
+
+    if (uMsg == rebuildMsg) {
+        auto* state = FindUiState(hWnd);
+        if (state) {
+            RemoveQuotaGridFromState(*state);
+            InjectQuotaGrid(hWnd);
+        }
+        return 0;
+    }
+
+    if (uMsg == WM_WINDOWPOSCHANGED) {
+        auto* lpwp = reinterpret_cast<WINDOWPOS*>(lParam);
+        if (!(lpwp->flags & SWP_NOSIZE) || !(lpwp->flags & SWP_NOMOVE)) {
+            auto* state = FindUiState(hWnd);
+            if (state) {
+                bool isVertical = IsVerticalTaskbar(hWnd);
+                if (isVertical != state->isVerticalTaskbar) {
+                    PostMessageW(hWnd, rebuildMsg, 0, 0);
+                }
+            }
+        }
+    }
+
+    if (uMsg == WM_NCDESTROY) {
+        SetWindowLongPtrW(hWnd, GWLP_WNDPROC, (LONG_PTR)oldWndProc);
+        RemovePropW(hWnd, L"Windhawk_OldWndProc_" WH_MOD_ID);
+    }
+
+    return CallWindowProcW(oldWndProc, hWnd, uMsg, wParam, lParam);
+}
+
 static void RemoveQuotaGrid(HWND hWnd) {
     auto* state = FindUiState(hWnd);
     if (!state) return;
+
+    WNDPROC oldWndProc = (WNDPROC)GetPropW(hWnd, L"Windhawk_OldWndProc_" WH_MOD_ID);
+    if (oldWndProc) {
+        SetWindowLongPtrW(hWnd, GWLP_WNDPROC, (LONG_PTR)oldWndProc);
+        RemovePropW(hWnd, L"Windhawk_OldWndProc_" WH_MOD_ID);
+    }
 
     RemoveQuotaGridFromState(*state);
     EraseUiState(hWnd);
