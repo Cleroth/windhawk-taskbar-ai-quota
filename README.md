@@ -21,7 +21,7 @@ It can also fire a Windows notification when an account first crosses the red th
 
 ## Setup
 
-Install the Windhawk mod from `local@taskbar-ai-quota.wh.cpp`. Configure accounts (provider + label) in the mod settings, then sign in to Anthropic/OpenAI accounts from a quota column's right-click menu. Antigravity reads quota from its running app.
+Install the Windhawk mod from `local@taskbar-ai-quota.wh.cpp`. Configure accounts (provider + label) in the mod settings, then sign in to Anthropic/OpenAI accounts from a quota column's right-click menu. Labels must be unique within each provider; duplicate identities are ignored. Antigravity reads quota from its running app.
 
 The default accounts are one Anthropic (`A`) and one OpenAI (`O`). Add a Google Antigravity account (`G`) when needed.
 

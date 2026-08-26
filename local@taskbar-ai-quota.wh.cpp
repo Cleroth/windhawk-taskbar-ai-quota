@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         0.11.1
+// @version         0.11.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -70,7 +70,7 @@ Have a suggestion or found a bug?
           - antigravity: Google Antigravity
       - label: A
         $name: Label
-        $description: 'Default: A for Anthropic, O for OpenAI, G for Antigravity. For Anthropic/OpenAI the label also identifies the stored sign-in; renaming it requires signing in again.'
+        $description: 'Default: A for Anthropic, O for OpenAI, G for Antigravity. Labels must be unique within each provider; duplicates are ignored. For Anthropic/OpenAI the label also identifies the stored sign-in; renaming it requires signing in again.'
     - - provider: openai
       - label: O
   $name: Accounts
@@ -367,6 +367,7 @@ static HANDLE g_refreshEvent = nullptr;
 static HANDLE g_fetchThread = nullptr;
 static HANDLE g_retryThread = nullptr;
 static std::mutex g_retryThreadMutex;
+static bool g_winsockStarted = false;
 static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
 static std::mutex g_httpHandlesMutex;
 static std::vector<HINTERNET> g_httpHandles;
@@ -1246,6 +1247,11 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
             if (!available) break;
 
             size_t prev = res.body.size();
+            constexpr size_t kMaxResponseBytes = 4 * 1024 * 1024;
+            if (available > kMaxResponseBytes - prev) {
+                bodyOk = false;
+                break;
+            }
             res.body.resize(prev + available);
             DWORD read = 0;
             if (!WinHttpReadData(req, res.body.data() + prev, available, &read)) {
@@ -1254,7 +1260,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
                 break;
             }
             res.body.resize(prev + read);
-            if (!read || res.body.size() > 4 * 1024 * 1024) break;
+            if (!read) break;
         }
         res.ok = bodyOk;
     }
@@ -1558,7 +1564,12 @@ static std::wstring ShowLoginInputDialog(const std::wstring& title, const std::w
     wc.lpszClassName = kClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
-    RegisterClassExW(&wc);  // ERROR_CLASS_ALREADY_EXISTS is fine.
+    if (!RegisterClassExW(&wc)) {
+        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS ||
+            !UnregisterClassW(kClass, hInst) || !RegisterClassExW(&wc)) {
+            return {};
+        }
+    }
 
     LoginDialogState st;
     int w = 460, h = 184;
@@ -1567,12 +1578,17 @@ static std::wstring ShowLoginInputDialog(const std::wstring& title, const std::w
     HWND wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_DLGMODALFRAME, kClass, title.c_str(),
                                WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, w, h,
                                nullptr, nullptr, hInst, &st);
-    if (!wnd) return {};
+    if (!wnd) {
+        UnregisterClassW(kClass, hInst);
+        return {};
+    }
     SetWindowTextW(GetDlgItem(wnd, 100), instructions.c_str());
     g_loginWnd.store(wnd);
 
     MSG msg;
-    while (!g_unloading && GetMessageW(&msg, nullptr, 0, 0)) {
+    while (!g_unloading) {
+        int getMessageResult = GetMessageW(&msg, nullptr, 0, 0);
+        if (getMessageResult <= 0) break;
         if (!IsDialogMessageW(wnd, &msg)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
@@ -2965,7 +2981,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         ULONGLONG nowMs = NowUnixMs();
         if (nextRetryMs > nowMs) {
             waitMs = (DWORD)std::min<ULONGLONG>(waitMs, nextRetryMs - nowMs);
-            waitMs = std::min<DWORD>(waitMs, 1000);
         }
         if (nextPollMs <= nowMs && nextPollMs != 0) {
             waitMs = 0;
@@ -4387,6 +4402,15 @@ static void LoadSettings() {
             a.label = a.provider == L"anthropic" ? L"A" :
                       a.provider == L"openai" ? L"O" : L"G";
         }
+        bool duplicate = std::any_of(s.accounts.begin(), s.accounts.end(),
+            [&](const AccountConfig& existing) {
+                return existing.provider == a.provider && existing.label == a.label;
+            });
+        if (duplicate) {
+            Wh_Log(L"Ignoring duplicate account identity: %s (%s)",
+                   a.label.c_str(), a.provider.c_str());
+            continue;
+        }
         s.accounts.push_back(std::move(a));
     }
 
@@ -4522,21 +4546,36 @@ BOOL Wh_ModInit() {
     g_uiInjected.store(false, std::memory_order_release);
     g_fetchThreadStarted.store(false, std::memory_order_release);
     g_loginInProgress.store(false);
+    g_winsockStarted = false;
     LoadSettings();
 
-    WSADATA wsaData{};
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        Wh_Log(L"WSAStartup failed; OpenAI sign-in unavailable");
+    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    g_refreshEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_refreshEvent) {
+        Wh_Log(L"Event creation failed");
+        if (g_stopEvent) CloseHandle(g_stopEvent);
+        if (g_refreshEvent) CloseHandle(g_refreshEvent);
+        g_stopEvent = nullptr;
+        g_refreshEvent = nullptr;
+        return FALSE;
     }
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"HookTaskbarDllSymbols failed");
+        CloseHandle(g_stopEvent);
+        CloseHandle(g_refreshEvent);
+        g_stopEvent = nullptr;
+        g_refreshEvent = nullptr;
         return FALSE;
     }
 
-    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    g_refreshEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    return g_stopEvent && g_refreshEvent;
+    WSADATA wsaData{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
+        g_winsockStarted = true;
+    } else {
+        Wh_Log(L"WSAStartup failed; OpenAI sign-in unavailable");
+    }
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
@@ -4619,7 +4658,10 @@ void Wh_ModUninit() {
     if (g_refreshEvent) CloseHandle(g_refreshEvent);
     g_stopEvent = nullptr;
     g_refreshEvent = nullptr;
-    WSACleanup();
+    if (g_winsockStarted) {
+        WSACleanup();
+        g_winsockStarted = false;
+    }
 }
 
 void Wh_ModSettingsChanged() {
