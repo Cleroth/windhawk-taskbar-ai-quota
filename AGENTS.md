@@ -82,6 +82,9 @@ Single `.wh.cpp` injected into `explorer.exe`. Execution domains:
   with its own message loop) or runs the OpenAI loopback listener (`g_loginSocket`). It does
   network + token storage but must NEVER touch XAML. Spawned from a taskbar UI thread by
   `StartLogin`.
+- **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the native Win32 settings
+  window and account editor. It persists autosaved configuration to mod LocalStorage and requests
+  taskbar UI rebuilds, but must NEVER touch XAML directly.
 - **Taskbar UI threads**: all XAML lives here. One `QuotaUiInstance` per taskbar window in
   `g_uiInstances`.
 
@@ -91,7 +94,9 @@ first, then reads/updates XAML. Never resolve XAML refs on the fetch or login th
 
 # Concurrency rules
 
-- Lock order is `g_settingsMutex` before `g_dataMutex`. Never take them in the reverse order.
+- Lock order is `g_configEditMutex` before `g_settingsMutex` before `g_dataMutex`. Never take them
+  in the reverse order. Release `g_configEditMutex` before marshaling to taskbar UI threads or
+  showing user-paced dialogs.
   `g_authMutex` (token store) is independent and only held inside `LoadStoredToken`/
   `SaveStoredToken`/`ClearStoredToken`; don't call other locked code while holding it.
 - `g_settingsGeneration` gates published data; `g_refreshGeneration` drives manual single-account
@@ -109,8 +114,9 @@ first, then reads/updates XAML. Never resolve XAML refs on the fetch or login th
 A crash takes down the shell. Keep it defensive:
 
 - Wrap WinRT/XAML calls in `try/catch` (existing pattern) and bail when `g_unloading`.
-- Unload must stay clean: set `g_unloading`, signal `g_stopEvent`, unblock+join the login thread,
-  join the fetch/retry threads, remove injected UI, delete the tray icon, `WSACleanup`.
+- Unload must stay clean: set `g_unloading`, signal `g_stopEvent`, close+join the settings window,
+  unblock+join the login thread, join the fetch/retry threads, remove injected UI, delete the tray
+  icon, `WSACleanup`.
 
 # Symbol hooks are version-fragile
 
@@ -135,8 +141,9 @@ when extending auth handling:
 # Conventions
 
 - Bump `@version` in the mod header on user-facing changes.
-- A new setting must be kept in sync in three places: the `==WindhawkModSettings==` block, the
-  `Settings` struct + `LoadSettings`, and the README settings list.
+- Settings are owned by the native dialog and stored as versioned JSON in `settings_v1`; Windhawk
+  settings are legacy import data only. A new setting must be kept in sync in `Settings`, JSON
+  serialization/deserialization, normalization, the native controls, and the README list.
 - Wide strings throughout; `swprintf`'s `%s` is wide here.
 
 # Testing
