@@ -8,16 +8,16 @@ Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ## What It Shows
 
-Each configured account gets one compact taskbar column:
+Each configured account gets one compact taskbar column. Choose its 5-hour, weekly, and Anthropic monthly extra-usage bars independently; selected bars auto-hide when the provider does not return that quota.
 
-- stacked layout: top bar = 5-hour usage, bottom bar = weekly usage
-- vertical layout: side-by-side 5h | weekly bars, both filling bottom-up
+- stacked layout: selected bars stack horizontally and fill left-to-right
+- vertical layout: selected bars sit side-by-side and fill bottom-up
 
 Hover for exact percentages and reset times. Click a column to refresh that account or open its provider dashboard, depending on settings and provider support. Right-click a column for Refresh all, provider actions, and show/hide toggles.
 
 Bars use configurable green/yellow/orange/red thresholds, with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark labels and tooltips with `!`.
 
-It can also fire a Windows notification when an account first crosses the red threshold (5-hour or weekly), so you don't have to keep glancing at the bars. The notification re-arms once usage drops back below the threshold.
+It can also fire a Windows notification when an account first crosses the red threshold on a selected bar, so you don't have to keep glancing at the bars. The notification re-arms once usage drops back below the threshold.
 
 ## Setup
 
@@ -41,6 +41,7 @@ Useful settings include:
 
 - provider (Anthropic, OpenAI, or Google Antigravity) per account
 - account labels
+- per-account 5-hour, weekly, and Anthropic monthly extra-usage bar selection
 - bar length, thickness, and layout
 - bar mode: used (fills as quota is consumed) or remaining (fills with quota left, tooltips show "X% remaining")
 - pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining)
