@@ -3149,7 +3149,7 @@ static HRESULT TryGetTaskbarElementAbi(HWND hTaskbarWnd, void** result) {
         return E_POINTER;
     }
 
-    size_t taskbarElementIUnknownOffset = 0x10;
+    size_t taskbarElementIUnknownOffset;
 
 #if defined(_M_X64)
     {
@@ -3161,6 +3161,8 @@ static HRESULT TryGetTaskbarElementAbi(HWND hTaskbarWnd, void** result) {
             taskbarElementIUnknownOffset = b[7];
         } else {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+            cleanup();
+            return E_NOINTERFACE;
         }
     }
 #elif defined(_M_ARM64)
@@ -3175,6 +3177,8 @@ static HRESULT TryGetTaskbarElementAbi(HWND hTaskbarWnd, void** result) {
             taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
         } else {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+            cleanup();
+            return E_NOINTERFACE;
         }
     }
 #else
