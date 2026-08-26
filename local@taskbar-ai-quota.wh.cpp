@@ -2770,6 +2770,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     } catch (...) {}
 
     std::vector<std::wstring> lastLoggedErrorStates;
+    std::vector<uint64_t> retryIdentityHashes;
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
     // Per-account red-crossing arm state, indexed [account][0=5h,1=weekly]:
@@ -2795,7 +2796,26 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                lastLoggedErrorStates.size() != accounts.size();
         if (settingsChanged) {
             lastLoggedErrorStates.assign(accounts.size(), {});
+
+            // A settings-generation bump cancels in-flight publication, but provider-directed
+            // Retry-After deadlines still apply. Remap them by stable account identity.
+            auto oldIdentityHashes = std::move(retryIdentityHashes);
+            auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
+            std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
+            retryIdentityHashes.resize(accounts.size());
             retryDeadlineMs.assign(accounts.size(), 0);
+            for (size_t i = 0; i < accounts.size(); ++i) {
+                retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
+                for (size_t j = 0; j < oldIdentityHashes.size() &&
+                                   j < oldRetryDeadlineMs.size(); ++j) {
+                    if (!oldDeadlineUsed[j] &&
+                        oldIdentityHashes[j] == retryIdentityHashes[i]) {
+                        retryDeadlineMs[i] = oldRetryDeadlineMs[j];
+                        oldDeadlineUsed[j] = true;
+                        break;
+                    }
+                }
+            }
             nextPollDeadlineMs.assign(accounts.size(), 0);
             lastLoggedSettingsGeneration = settingsGeneration;
         }
