@@ -2,13 +2,13 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         0.11.0
+// @version         0.11.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -336,10 +336,11 @@ struct AccountUiRefs {
 
 struct QuotaUiInstance {
     HWND hWnd = nullptr;
+    DWORD ownerThreadId = 0;
+    bool windowSubclassed = false;
     Grid quotaGrid{nullptr};
     Grid injectionParent{nullptr};
-    int quotaColumn = -1;
-    bool insertedColumn = false;
+    ColumnDefinition quotaColumnDefinition{nullptr};
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<AccountUiRefs> accountRefs;
@@ -373,6 +374,7 @@ static std::vector<HINTERNET> g_httpHandles;
 static HWND g_notifyWnd = nullptr;
 
 static std::vector<std::unique_ptr<QuotaUiInstance>> g_uiInstances;
+static std::mutex g_uiInstancesMutex;
 
 static const wchar_t* kRootName = L"AiQuota_Root";
 static constexpr ULONGLONG kFileTimeUnixEpochOffsetMs = 11644473600000ULL;
@@ -384,6 +386,15 @@ static std::vector<HWND> FindCurrentProcessTaskbarWnds();
 static QuotaUiInstance* FindUiState(HWND hWnd);
 static void UpdateQuotaUi(QuotaUiInstance& state);
 static void PostUiUpdate();
+static void RemoveQuotaGrid(HWND hWnd);
+static void ReleaseQuotaUiState(HWND hWnd);
+static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                                  LPARAM lParam, DWORD_PTR refData);
+
+static UINT GetQuotaCleanupMessage() {
+    static const UINT message = RegisterWindowMessageW(L"Windhawk_CleanupQuotaUi_" WH_MOD_ID);
+    return message;
+}
 
 /**********************************************/
 //  Helpers
@@ -3186,7 +3197,10 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
 //  UI
 /**********************************************/
 
+// Registry access is locked, while state contents remain owner-UI-thread-only. Raw pointers stay
+// valid after lookup because only that owner thread can erase its state.
 static QuotaUiInstance* FindUiState(HWND hWnd) {
+    std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
     for (auto& state : g_uiInstances) {
         if (state->hWnd == hWnd) return state.get();
     }
@@ -3194,9 +3208,28 @@ static QuotaUiInstance* FindUiState(HWND hWnd) {
 }
 
 static void EraseUiState(HWND hWnd) {
-    g_uiInstances.erase(std::remove_if(g_uiInstances.begin(), g_uiInstances.end(),
-        [hWnd](const auto& state) { return state->hWnd == hWnd; }), g_uiInstances.end());
-    g_uiInjected.store(!g_uiInstances.empty(), std::memory_order_release);
+    std::unique_ptr<QuotaUiInstance> removed;
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        auto it = std::find_if(g_uiInstances.begin(), g_uiInstances.end(),
+            [hWnd](const auto& state) { return state->hWnd == hWnd; });
+        if (it == g_uiInstances.end()) return;
+        if ((*it)->ownerThreadId != GetCurrentThreadId()) {
+            Wh_Log(L"Refusing to destroy UI state from a non-owner thread");
+            return;
+        }
+
+        removed = std::move(*it);
+        g_uiInstances.erase(it);
+        g_uiInjected.store(!g_unloading && !g_uiInstances.empty(), std::memory_order_release);
+    }
+
+    if (removed->windowSubclassed && removed->hWnd && IsWindow(removed->hWnd)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            removed->hWnd, TaskbarWindowSubclassProc);
+        removed->windowSubclassed = false;
+    }
+    removed.reset();
 }
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
@@ -3854,44 +3887,63 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
 }
 
-static int RemoveQuotaChildren(Grid const& targetGrid, QuotaUiInstance& state) {
-    if (!targetGrid) return -1;
+static void RemoveQuotaChildren(Grid const& targetGrid, QuotaUiInstance& state) {
+    if (!targetGrid) return;
     ClearQuotaEventState(state);
 
-    int firstCol = -1;
     for (int i = (int)targetGrid.Children().Size() - 1; i >= 0; --i) {
         auto fe = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
         if (fe && fe.Name() == kRootName) {
-            if (firstCol < 0) firstCol = Grid::GetColumn(fe);
             try { targetGrid.Children().RemoveAt(i); } catch (...) {}
         }
     }
-    return firstCol;
 }
 
 static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
+    if (state.ownerThreadId && state.ownerThreadId != GetCurrentThreadId()) {
+        Wh_Log(L"Refusing XAML cleanup from a non-owner thread");
+        return;
+    }
+
     if (!state.injectionParent) {
         ClearQuotaEventState(state);
         state.quotaGrid = nullptr;
-        state.quotaColumn = -1;
-        state.insertedColumn = false;
+        state.quotaColumnDefinition = nullptr;
         state.applied.clear();
         return;
     }
 
     try {
         auto targetGrid = state.injectionParent;
-        int quotaCol = RemoveQuotaChildren(targetGrid, state);
-        if (quotaCol < 0) quotaCol = state.quotaColumn;
-        if (state.insertedColumn && quotaCol >= 0 && quotaCol < (int)targetGrid.ColumnDefinitions().Size()) {
+        RemoveQuotaChildren(targetGrid, state);
+        int ownedCol = -1;
+        if (state.quotaColumnDefinition) {
+            auto definitions = targetGrid.ColumnDefinitions();
+            for (uint32_t i = 0; i < definitions.Size(); ++i) {
+                auto definition = definitions.GetAt(i);
+                if (winrt::get_abi(definition) == winrt::get_abi(state.quotaColumnDefinition)) {
+                    ownedCol = (int)i;
+                    break;
+                }
+            }
+        }
+
+        // If another component already removed our definition, it also owns the resulting
+        // child shifts. Never substitute a numeric column belonging to somebody else.
+        if (ownedCol >= 0 && ownedCol < (int)targetGrid.ColumnDefinitions().Size()) {
+            targetGrid.ColumnDefinitions().RemoveAt(ownedCol);
             for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
                 auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
                 if (child) {
                     int childCol = Grid::GetColumn(child);
-                    if (childCol > quotaCol) Grid::SetColumn(child, childCol - 1);
+                    int childSpan = Grid::GetColumnSpan(child);
+                    if (childCol > ownedCol) {
+                        Grid::SetColumn(child, childCol - 1);
+                    } else if (childCol < ownedCol && childCol + childSpan > ownedCol) {
+                        Grid::SetColumnSpan(child, childSpan - 1);
+                    }
                 }
             }
-            targetGrid.ColumnDefinitions().RemoveAt(quotaCol);
         }
     } catch (...) {
         Wh_Log(L"RemoveQuotaGrid: exception");
@@ -3899,14 +3951,21 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
 
     state.quotaGrid = nullptr;
     state.injectionParent = nullptr;
-    state.quotaColumn = -1;
-    state.insertedColumn = false;
+    state.quotaColumnDefinition = nullptr;
     state.applied.clear();
 }
 
 static bool InjectQuotaGrid(HWND hWnd) {
     if (!hWnd) return false;
-    if (auto* existingState = FindUiState(hWnd); existingState && existingState->quotaGrid) return true;
+    DWORD ownerThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (!ownerThreadId || ownerThreadId != GetCurrentThreadId()) return false;
+    if (auto* existingState = FindUiState(hWnd); existingState) {
+        if (existingState->ownerThreadId != ownerThreadId) {
+            Wh_Log(L"Taskbar HWND was reused by a different UI thread");
+            return false;
+        }
+        if (existingState->quotaGrid) return true;
+    }
 
     auto fail = [&](PCWSTR reason) {
         ULONGLONG now = NowUnixMs();
@@ -3939,38 +3998,38 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!state) {
             auto newState = std::make_unique<QuotaUiInstance>();
             newState->hWnd = hWnd;
-            state = newState.get();
-            g_uiInstances.push_back(std::move(newState));
+            newState->ownerThreadId = ownerThreadId;
+            {
+                std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+                g_uiInstances.push_back(std::move(newState));
+                state = g_uiInstances.back().get();
+            }
+            if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                    hWnd, TaskbarWindowSubclassProc, 0)) {
+                EraseUiState(hWnd);
+                state = nullptr;
+                return fail(L"window subclass failed");
+            }
+            state->windowSubclassed = true;
+            // Remove a visual left by an earlier failed teardown, but don't guess which column
+            // definition it owned.
+            RemoveQuotaChildren(trayGrid, *state);
+        } else {
+            RemoveQuotaGridFromState(*state);
         }
         state->injectionParent = trayGrid;
-
-        int oldCol = RemoveQuotaChildren(trayGrid, *state);
-        if (oldCol >= 0 && oldCol < (int)trayGrid.ColumnDefinitions().Size()) {
-            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child) {
-                    int childCol = Grid::GetColumn(child);
-                    if (childCol > oldCol) Grid::SetColumn(child, childCol - 1);
-                }
-            }
-            trayGrid.ColumnDefinitions().RemoveAt(oldCol);
-        }
         Grid quota = BuildQuotaGrid(*state);
         if (!quota) {
-            ClearQuotaEventState(*state);
-            state->injectionParent = nullptr;
-            state->quotaColumn = -1;
-            state->insertedColumn = false;
-            state->applied.clear();
+            RemoveQuotaGridFromState(*state);
             EraseUiState(hWnd);
             return fail(L"BuildQuotaGrid failed");
         }
 
         ColumnDefinition newCol;
         newCol.Width({1.0, GridUnitType::Auto});
+        state->quotaColumnDefinition = newCol;
         trayGrid.ColumnDefinitions().InsertAt(0, newCol);
-        state->quotaColumn = 0;
-        state->insertedColumn = true;
+        // Inserting at the left edge means no existing child can span across the new column.
         for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
             auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
             if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
@@ -3989,7 +4048,6 @@ static bool InjectQuotaGrid(HWND hWnd) {
             RemoveQuotaGridFromState(*state);
             EraseUiState(hWnd);
         }
-        g_uiInjected.store(!g_uiInstances.empty(), std::memory_order_release);
         Wh_Log(L"InjectQuotaGrid: exception");
         return false;
     }
@@ -3998,40 +4056,107 @@ static bool InjectQuotaGrid(HWND hWnd) {
 static void RemoveQuotaGrid(HWND hWnd) {
     auto* state = FindUiState(hWnd);
     if (!state) return;
+    if (state->ownerThreadId != GetCurrentThreadId()) {
+        Wh_Log(L"Refusing UI removal from a non-owner thread");
+        return;
+    }
 
     RemoveQuotaGridFromState(*state);
     EraseUiState(hWnd);
 }
 
-static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
-    std::vector<HWND> hWnds;
-    hWnds.reserve(g_uiInstances.size());
-    for (auto& state : g_uiInstances) hWnds.push_back(state->hWnd);
+static void ReleaseQuotaUiState(HWND hWnd) {
+    auto* state = FindUiState(hWnd);
+    if (!state) return;
+    if (state->ownerThreadId != GetCurrentThreadId()) {
+        Wh_Log(L"Refusing UI state release from a non-owner thread");
+        return;
+    }
 
-    for (HWND hWnd : hWnds) {
-        if (!hWnd || !IsWindow(hWnd)) continue;
-        if (!RunFromWindowThread(hWnd, [](void* param) -> bool {
-                RemoveQuotaGrid(static_cast<HWND>(param));
-                return true;
-            }, hWnd, waitForCompletion ? INFINITE : 2000)) {
-            Wh_Log(L"RemoveQuotaGrid marshal failed");
+    ClearQuotaEventState(*state);
+    state->quotaGrid = nullptr;
+    state->injectionParent = nullptr;
+    state->quotaColumnDefinition = nullptr;
+    state->applied.clear();
+    EraseUiState(hWnd);
+}
+
+static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                                  LPARAM lParam, DWORD_PTR) {
+    if (message == WM_NCDESTROY) {
+        // Windhawk's wrapper has already removed the subclass. The XAML tree is dying, so only
+        // revoke callbacks and release references; don't mutate its columns.
+        if (auto* state = FindUiState(hWnd)) state->windowSubclassed = false;
+        ReleaseQuotaUiState(hWnd);
+    } else if (message == GetQuotaCleanupMessage()) {
+        // Fallback when installing a temporary marshal hook fails during unload.
+        if (auto* state = FindUiState(hWnd)) {
+            if (state->windowSubclassed) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                    hWnd, TaskbarWindowSubclassProc);
+                state->windowSubclassed = false;
+            }
+            RemoveQuotaGrid(hWnd);
+        }
+    }
+    return DefSubclassProc(hWnd, message, wParam, lParam);
+}
+
+static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
+    std::vector<std::pair<HWND, DWORD>> windows;
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        windows.reserve(g_uiInstances.size());
+        for (auto& state : g_uiInstances) {
+            windows.push_back({state->hWnd, state->ownerThreadId});
         }
     }
 
-    for (auto& state : g_uiInstances) {
-        if (state->hWnd && IsWindow(state->hWnd)) continue;
+    for (auto [hWnd, ownerThreadId] : windows) {
+        if (!hWnd) continue;
+        if (ownerThreadId == GetCurrentThreadId()) {
+            if (IsWindow(hWnd)) RemoveQuotaGrid(hWnd);
+            else ReleaseQuotaUiState(hWnd);
+            continue;
+        }
 
-        state->pointerHandlers.clear();
-        state->quotaGrid = nullptr;
-        state->injectionParent = nullptr;
-        state->quotaColumn = -1;
-        state->insertedColumn = false;
-        state->applied.clear();
+        DWORD liveThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+        bool removed = false;
+        if (liveThreadId == ownerThreadId) {
+            removed = RunFromWindowThread(hWnd, [](void* param) -> bool {
+                RemoveQuotaGrid(static_cast<HWND>(param));
+                return true;
+            }, hWnd, waitForCompletion ? INFINITE : 2000);
+            if (!removed && IsWindow(hWnd)) {
+                if (waitForCompletion) {
+                    SendMessageW(hWnd, GetQuotaCleanupMessage(), 0, 0);
+                } else {
+                    DWORD_PTR ignored = 0;
+                    SendMessageTimeoutW(
+                        hWnd, GetQuotaCleanupMessage(), 0, 0,
+                        SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_NOTIMEOUTIFNOTHUNG,
+                        2000, &ignored);
+                }
+                removed = !FindUiState(hWnd);
+            }
+        } else {
+            HWND ownerWindow = nullptr;
+            EnumThreadWindows(ownerThreadId,
+                [](HWND candidate, LPARAM param) CALLBACK -> BOOL {
+                    *reinterpret_cast<HWND*>(param) = candidate;
+                    return FALSE;
+                }, reinterpret_cast<LPARAM>(&ownerWindow));
+            if (ownerWindow) {
+                removed = RunFromWindowThread(ownerWindow, [](void* param) -> bool {
+                    ReleaseQuotaUiState(static_cast<HWND>(param));
+                    return true;
+                }, hWnd, waitForCompletion ? INFINITE : 2000);
+            }
+        }
+        if (!removed || FindUiState(hWnd)) {
+            Wh_Log(L"RemoveQuotaGrid marshal failed");
+        }
     }
-    g_uiInstances.erase(std::remove_if(g_uiInstances.begin(), g_uiInstances.end(),
-        [](const auto& state) { return !state->hWnd || !IsWindow(state->hWnd); }),
-        g_uiInstances.end());
-    g_uiInjected.store(!g_uiInstances.empty(), std::memory_order_release);
 }
 
 static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
@@ -4376,6 +4501,18 @@ void Wh_ModUninit() {
     g_fetchThreadStarted.store(false, std::memory_order_release);
 
     RemoveAllQuotaGrids(true);
+
+    // A taskbar thread that terminated without window teardown has no owner thread left for its
+    // XAML releases. Leak those unreachable states rather than release them under loader lock.
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        if (!g_uiInstances.empty()) {
+            Wh_Log(L"Leaking %zu orphaned UI state(s) after owner thread exit",
+                   g_uiInstances.size());
+            for (auto& state : g_uiInstances) state.release();
+            g_uiInstances.clear();
+        }
+    }
 
     if (g_stopEvent) CloseHandle(g_stopEvent);
     if (g_refreshEvent) CloseHandle(g_refreshEvent);
