@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         0.11.2
+// @version         0.12.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -32,6 +32,7 @@ for Refresh all, provider actions, and a checkbox list to show/hide individual a
 stop updating and are left to go stale; the choice persists across restarts (at least
 one account always stays visible).
 Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
+Optional pace ticks compare quota usage with elapsed time in each reset window.
 Stale errors can mark labels/tooltips with `!`.
 
 Optionally fires a Windows notification when an account first crosses the red threshold
@@ -112,6 +113,9 @@ Have a suggestion or found a bug?
   $options:
     - used: Used
     - remaining: Remaining
+- showPaceTicks: true
+  $name: Show pace ticks
+  $description: 'Default: true. Marks elapsed time in each quota window so usage can be compared with its reset-window pace. Remaining mode marks time remaining.'
 - showLabels: true
   $name: Show labels
   $description: 'Default: true'
@@ -269,6 +273,7 @@ struct Settings {
     int redThreshold = 90;
     bool showLabels = true;
     bool labelOnLeft = true;
+    bool showPaceTicks = true;
     bool showPercentText = false;
     bool showCodexSparkInTooltip = false;
     bool colorblindMode = false;
@@ -276,9 +281,13 @@ struct Settings {
     bool enableNotifications = true;
 };
 
+static constexpr ULONGLONG kFiveHourWindowMs = 5ULL * 60 * 60 * 1000;
+static constexpr ULONGLONG kWeeklyWindowMs = 7ULL * 24 * 60 * 60 * 1000;
+
 struct WindowUsage {
     double pct = -1;
     ULONGLONG resetUnixMs = 0;
+    ULONGLONG windowDurationMs = 0;
 };
 
 struct AccountData {
@@ -297,6 +306,8 @@ struct AccountData {
 struct AppliedState {
     int fillPx[2] = {-1, -1};
     uint32_t fillColor[2] = {0, 0};
+    int pacePx[2] = {-1, -1};
+    int paceVisible[2] = {-1, -1};
     std::wstring tip;
     std::wstring percentText;
     std::wstring labelText;
@@ -326,6 +337,7 @@ struct AccountUiRefs {
     DispatcherTimer manualToolTipTimer{nullptr};
     winrt::event_token manualToolTipTimerToken{};
     std::array<Border, 2> fills{Border{nullptr}, Border{nullptr}};
+    std::array<Border, 2> paceTicks{Border{nullptr}, Border{nullptr}};
     TextBlock percent{nullptr};
     TextBlock label{nullptr};
     POINT toolTipOpenCursor{};
@@ -345,6 +357,8 @@ struct QuotaUiInstance {
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<AccountUiRefs> accountRefs;
     std::vector<AppliedState> applied;
+    DispatcherTimer paceTimer{nullptr};
+    winrt::event_token paceTimerToken{};
     // Per-account show/hide toggle items, paired with their account index, for cross-instance
     // IsChecked sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
     std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
@@ -575,9 +589,9 @@ static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowTh
 static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, bool hasError) {
     constexpr double maxWidth = 460;
     auto muted = SolidColorBrush(winrt::Windows::UI::Color{255, 0xD6, 0xD6, 0xD6});
-    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
+    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xC0, 0x26, 0xFF});
     auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xA8, 0xD8, 0xFF});
-    auto creditLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
+    auto creditLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
     auto duration = SolidColorBrush(winrt::Windows::UI::Color{255, 0xB7, 0xE4, 0xA3});
     auto accent = SolidColorBrush(hasError ?
         winrt::Windows::UI::Color{255, 0xFF, 0xB4, 0xA9} :
@@ -1930,10 +1944,12 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
         if (auto fh = GetObj(usage, L"five_hour")) {
             d->win5h.pct = GetNum(fh, L"utilization");
             d->win5h.resetUnixMs = ParseIso8601Ms(GetStr(fh, L"resets_at"));
+            d->win5h.windowDurationMs = kFiveHourWindowMs;
         }
         if (auto sd = GetObj(usage, L"seven_day")) {
             d->winWeek.pct = GetNum(sd, L"utilization");
             d->winWeek.resetUnixMs = ParseIso8601Ms(GetStr(sd, L"resets_at"));
+            d->winWeek.windowDurationMs = kWeeklyWindowMs;
         }
 
         d->plan.clear();
@@ -2014,6 +2030,11 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
             if (pct < 0) return;
             target->pct = pct;
             target->resetUnixMs = resetUnixMs(window);
+            target->windowDurationMs = target == &d->winWeek ? kWeeklyWindowMs : kFiveHourWindowMs;
+            if (std::isfinite(windowSeconds) && windowSeconds > 0 &&
+                windowSeconds <= 366.0 * 24 * 60 * 60) {
+                target->windowDurationMs = (ULONGLONG)(windowSeconds * 1000);
+            }
         };
 
         applyWindow(GetObj(rl, L"primary_window"), &d->win5h);
@@ -2433,9 +2454,11 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 if (is5h) {
                     d->win5h.pct = usedPct;
                     d->win5h.resetUnixMs = resetMs;
+                    d->win5h.windowDurationMs = kFiveHourWindowMs;
                 } else {
                     d->winWeek.pct = usedPct;
                     d->winWeek.resetUnixMs = resetMs;
+                    d->winWeek.windowDurationMs = kWeeklyWindowMs;
                 }
                 parsed = true;
             }
@@ -3340,6 +3363,14 @@ static void EraseUiState(HWND hWnd) {
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
+    try {
+        if (state.paceTimer) state.paceTimer.Stop();
+    } catch (...) {}
+    try {
+        if (state.paceTimer) state.paceTimer.Tick(state.paceTimerToken);
+    } catch (...) {}
+    state.paceTimer = nullptr;
+
     for (auto& refs : state.accountRefs) {
         refs.hasToolTipOpenCursor = false;
         refs.reopenToolTipOnMove = false;
@@ -3388,7 +3419,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         std::vector<AccountConfig> accounts;
         int barLength, barThickness, labelFontSize, accountMargin, labelGap, barGap, rightMargin;
-        bool showLabels, labelOnLeft, showPercentText;
+        bool showLabels, labelOnLeft, showPaceTicks, showPercentText;
         BarLayout barLayout;
         ClickAction clickAction;
         {
@@ -3405,6 +3436,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             rightMargin = g_settings.rightMargin;
             showLabels = g_settings.showLabels;
             labelOnLeft = g_settings.labelOnLeft;
+            showPaceTicks = g_settings.showPaceTicks;
             showPercentText = g_settings.showPercentText;
         }
         state.accountRefs.clear();
@@ -3494,7 +3526,34 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 fill.Name(name);
                 refs.fills[w] = fill;
 
-                track.Child(fill);
+                Grid trackContent;
+                trackContent.Children().Append(fill);
+
+                if (showPaceTicks) {
+                    Border paceTick;
+                    paceTick.Width(verticalBars ? barThickness : 4);
+                    paceTick.Height(verticalBars ? 4 : barThickness);
+                    paceTick.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center :
+                                                                  HorizontalAlignment::Left);
+                    paceTick.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom :
+                                                              VerticalAlignment::Center);
+                    paceTick.Background(SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
+                    paceTick.Visibility(Visibility::Collapsed);
+                    paceTick.IsHitTestVisible(false);
+
+                    Border paceCore;
+                    paceCore.Width(verticalBars ? barThickness : 2);
+                    paceCore.Height(verticalBars ? 2 : barThickness);
+                    paceCore.HorizontalAlignment(HorizontalAlignment::Center);
+                    paceCore.VerticalAlignment(VerticalAlignment::Center);
+                    paceCore.Background(SolidColorBrush(
+                        winrt::Windows::UI::Color{0xFF, 0xC0, 0x26, 0xFF}));
+                    paceTick.Child(paceCore);
+                    refs.paceTicks[w] = paceTick;
+                    trackContent.Children().Append(paceTick);
+                }
+
+                track.Child(trackContent);
                 bars.Children().Append(track);
             }
 
@@ -3784,6 +3843,22 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
 
         root.Children().Append(panel);
+        if (showPaceTicks) {
+            DispatcherTimer paceTimer;
+            paceTimer.Interval(std::chrono::minutes(1));
+            auto paceTimerToken = paceTimer.Tick(
+                [hWnd = state.hWnd](winrt::Windows::Foundation::IInspectable const&,
+                                     winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (uiState && uiState->quotaGrid) UpdateQuotaUi(*uiState);
+                    } catch (...) {}
+                });
+            state.paceTimer = paceTimer;
+            state.paceTimerToken = paceTimerToken;
+            paceTimer.Start();
+        }
         return root;
     } catch (...) {
         ClearQuotaEventState(state);
@@ -3796,8 +3871,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (!state.quotaGrid) return;
 
     std::vector<AccountConfig> accounts;
-    int intervalMin, barLength, yellowThreshold, orangeThreshold, redThreshold;
-    bool showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
+    int intervalMin, barLength, barThickness, yellowThreshold, orangeThreshold, redThreshold;
+    bool showPaceTicks, showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
     BarLayout barLayout;
     BarMode barMode;
     ClickAction clickAction;
@@ -3809,9 +3884,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         barLayout = g_settings.barLayout;
         barMode = g_settings.barMode;
         barLength = g_settings.barLength;
+        barThickness = g_settings.barThickness;
         yellowThreshold = g_settings.yellowThreshold;
         orangeThreshold = g_settings.orangeThreshold;
         redThreshold = g_settings.redThreshold;
+        showPaceTicks = g_settings.showPaceTicks;
         showPercentText = g_settings.showPercentText;
         showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
         colorblindMode = g_settings.colorblindMode;
@@ -3876,6 +3953,43 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                     ap.fillPx[w] = px;
                     ap.fillColor[w] = cv;
+                }
+
+                bool paceVisible = showPaceTicks && !stale && wu.pct >= 0 &&
+                                   wu.resetUnixMs > wu.windowDurationMs &&
+                                   wu.windowDurationMs > 0 &&
+                                   now >= wu.resetUnixMs - wu.windowDurationMs;
+                int pacePx = 0;
+                if (paceVisible) {
+                    double remainingFraction =
+                        ((double)wu.resetUnixMs - (double)now) / wu.windowDurationMs;
+                    double pacePct = barMode == BarMode::Remaining ? remainingFraction * 100.0 :
+                                                                     (1.0 - remainingFraction) * 100.0;
+                    pacePct = std::clamp(pacePct, 0.0, 100.0);
+
+                    constexpr double paceThickness = 4.0;
+                    double radius = std::clamp(std::max(1.0, barThickness / 2.0),
+                                               paceThickness / 2.0,
+                                               (barLength - paceThickness) / 2.0);
+                    double center = std::clamp(barLength * pacePct / 100.0,
+                                               radius, barLength - radius);
+                    pacePx = (int)std::lround(center - paceThickness / 2.0);
+                }
+
+                int paceVisibleInt = paceVisible ? 1 : 0;
+                if (paceVisibleInt != ap.paceVisible[w]) {
+                    if (ui.paceTicks[w]) {
+                        ui.paceTicks[w].Visibility(paceVisible ? Visibility::Visible :
+                                                                Visibility::Collapsed);
+                    }
+                    ap.paceVisible[w] = paceVisibleInt;
+                }
+                if (paceVisible && pacePx != ap.pacePx[w]) {
+                    if (ui.paceTicks[w]) {
+                        ui.paceTicks[w].Margin(verticalBars ? Thickness{0, 0, 0, (double)pacePx} :
+                                                               Thickness{(double)pacePx, 0, 0, 0});
+                    }
+                    ap.pacePx[w] = pacePx;
                 }
             }
 
@@ -4503,6 +4617,7 @@ static void LoadSettings() {
     s.redThreshold = std::clamp(redThreshold, s.orangeThreshold, 100);
     s.showLabels = getBoolSetting(L"showLabels", true);
     s.labelOnLeft = getBoolSetting(L"labelOnLeft", true);
+    s.showPaceTicks = getBoolSetting(L"showPaceTicks", true);
     s.showPercentText = getBoolSetting(L"showPercentText", false);
     s.showCodexSparkInTooltip = getBoolSetting(L"showCodexSparkInTooltip", false);
     s.colorblindMode = getBoolSetting(L"colorblindMode", false);
