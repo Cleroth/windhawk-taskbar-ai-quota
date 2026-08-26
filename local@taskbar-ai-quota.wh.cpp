@@ -2952,10 +2952,24 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
         Payload(WindowThreadProc proc, void* param) : proc(proc), param(param) {}
     };
     using PayloadRef = std::shared_ptr<Payload>;
+    static std::mutex pendingPayloadsMutex;
+    static std::vector<std::pair<UINT_PTR, PayloadRef>> pendingPayloads;
+    static std::atomic<UINT_PTR> nextPayloadId{1};
+
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
     if (!tid) return false;
     if (tid == GetCurrentThreadId()) {
         return proc(param);
+    }
+
+    PayloadRef pay = std::make_shared<Payload>(proc, param);
+    UINT_PTR payloadId;
+    do {
+        payloadId = nextPayloadId.fetch_add(1, std::memory_order_relaxed);
+    } while (!payloadId);
+    {
+        std::lock_guard<std::mutex> lk(pendingPayloadsMutex);
+        pendingPayloads.push_back({payloadId, pay});
     }
 
     HHOOK hook = SetWindowsHookExW(
@@ -2965,37 +2979,54 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
                 auto* cwp = reinterpret_cast<const CWPSTRUCT*>(l);
                 static const UINT kM = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == kM) {
-                    std::unique_ptr<PayloadRef> holder(reinterpret_cast<PayloadRef*>(cwp->lParam));
-                    PayloadRef p = *holder;
-                    p->result.store(p->proc(p->param), std::memory_order_release);
-                    p->ran.store(true, std::memory_order_release);
+                    PayloadRef p;
+                    {
+                        std::lock_guard<std::mutex> lk(pendingPayloadsMutex);
+                        auto it = std::find_if(
+                            pendingPayloads.begin(), pendingPayloads.end(),
+                            [id = (UINT_PTR)cwp->wParam](const auto& entry) {
+                                return entry.first == id;
+                            });
+                        if (it != pendingPayloads.end()) {
+                            p = std::move(it->second);
+                            pendingPayloads.erase(it);
+                        }
+                    }
+                    // Multiple concurrent marshals install hooks in the same chain. Only the
+                    // first hook that claims this ID may execute and release its payload.
+                    if (p) {
+                        p->result.store(p->proc(p->param), std::memory_order_release);
+                        p->ran.store(true, std::memory_order_release);
+                    }
                 }
             }
             return CallNextHookEx(nullptr, code, w, l);
         }, nullptr, tid);
-    if (!hook) return false;
+    if (!hook) {
+        std::lock_guard<std::mutex> lk(pendingPayloadsMutex);
+        std::erase_if(pendingPayloads,
+                      [payloadId](const auto& entry) { return entry.first == payloadId; });
+        return false;
+    }
 
-    PayloadRef pay = std::make_shared<Payload>(proc, param);
-    auto* holder = new PayloadRef(pay);
     bool sent = true;
     if (timeoutMs == INFINITE) {
-        SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(holder));
+        SendMessageW(hWnd, kMsg, payloadId, 0);
     } else {
         DWORD_PTR ignored = 0;
         // Avoid worker/UI deadlocks during unload if the target thread stops pumping messages.
-        sent = SendMessageTimeoutW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(holder),
+        sent = SendMessageTimeoutW(hWnd, kMsg, payloadId, 0,
                                    SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_NOTIMEOUTIFNOTHUNG,
                                    timeoutMs, &ignored) != 0;
     }
 
     bool ran = pay->ran.load(std::memory_order_acquire);
     bool result = sent && ran && pay->result.load(std::memory_order_acquire);
-    if (!sent) {
-        UnhookWindowsHookEx(hook);
-        // The target thread may still consume holder after a timeout; the hook owns it now.
-        return false;
+    if (!ran) {
+        std::lock_guard<std::mutex> lk(pendingPayloadsMutex);
+        std::erase_if(pendingPayloads,
+                      [payloadId](const auto& entry) { return entry.first == payloadId; });
     }
-    if (!ran) delete holder;
     UnhookWindowsHookEx(hook);
     return result;
 }
