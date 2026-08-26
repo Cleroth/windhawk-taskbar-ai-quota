@@ -366,6 +366,7 @@ static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
 static HANDLE g_fetchThread = nullptr;
 static HANDLE g_retryThread = nullptr;
+static std::mutex g_retryThreadMutex;
 static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
 static std::mutex g_httpHandlesMutex;
 static std::vector<HINTERNET> g_httpHandles;
@@ -4229,19 +4230,24 @@ static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
 }
 
 static void StartRetryInject() {
-    if (g_unloading) return;
+    DWORD err;
+    {
+        // Serialize callers from taskbar hooks, settings changes, initialization, and unload.
+        std::lock_guard<std::mutex> lk(g_retryThreadMutex);
+        if (g_unloading) return;
 
-    if (g_retryThread) {
-        DWORD state = WaitForSingleObject(g_retryThread, 0);
-        if (state == WAIT_TIMEOUT) return;
-        CloseHandle(g_retryThread);
-        g_retryThread = nullptr;
+        if (g_retryThread) {
+            DWORD state = WaitForSingleObject(g_retryThread, 0);
+            if (state == WAIT_TIMEOUT) return;
+            CloseHandle(g_retryThread);
+            g_retryThread = nullptr;
+        }
+
+        g_retryThread = CreateThread(nullptr, 0, RetryInjectThreadProc, nullptr, 0, nullptr);
+        if (g_retryThread) return;
+        err = GetLastError();
     }
 
-    g_retryThread = CreateThread(nullptr, 0, RetryInjectThreadProc, nullptr, 0, nullptr);
-    if (g_retryThread) return;
-
-    DWORD err = GetLastError();
     Wh_Log(L"CreateThread RetryInjectThreadProc failed: %lu", err);
 
     bool anyInjected = false;
@@ -4518,10 +4524,15 @@ void Wh_ModUninit() {
     }
     g_loginInProgress.store(false);
 
-    if (g_retryThread) {
-        WaitForSingleObject(g_retryThread, INFINITE);
-        CloseHandle(g_retryThread);
+    HANDLE retryThread = nullptr;
+    {
+        std::lock_guard<std::mutex> lk(g_retryThreadMutex);
+        retryThread = g_retryThread;
         g_retryThread = nullptr;
+    }
+    if (retryThread) {
+        WaitForSingleObject(retryThread, INFINITE);
+        CloseHandle(retryThread);
     }
 
     if (g_fetchThread) {
