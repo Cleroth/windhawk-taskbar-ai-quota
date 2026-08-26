@@ -1351,6 +1351,12 @@ static std::wstring BuildOpenAiAuthorizeUrl(int port, const std::string& challen
     return Utf8ToWide(url);
 }
 
+enum class TokenEndpointResult {
+    Success,
+    Rejected,
+    TransientFailure,
+};
+
 static std::wstring ParseOAuthError(const std::string& body) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
@@ -1405,30 +1411,40 @@ static bool ParseTokenResponse(const std::string& body, bool anthropic, StoredTo
     }
 }
 
-static bool PostTokenEndpoint(bool anthropic, const std::wstring& contentType,
-                              const std::string& body, StoredToken* tok, std::wstring* err) {
+static TokenEndpointResult PostTokenEndpoint(bool anthropic, const std::wstring& contentType,
+                                              const std::string& body, StoredToken* tok,
+                                              std::wstring* err, int* retryAfterSec = nullptr) {
+    if (retryAfterSec) *retryAfterSec = 0;
     std::wstring headers = L"Content-Type: " + contentType + L"\r\nAccept: application/json\r\n";
     PCWSTR host = anthropic ? kAnthropicTokenHost : kOpenAiTokenHost;
     PCWSTR path = anthropic ? kAnthropicTokenPath : kOpenAiTokenPath;
     HttpResult r = HttpRequest(L"POST", host, path, kOAuthUserAgent, headers, body);
     if (!r.ok) {
         *err = L"network error";
-        return false;
+        return TokenEndpointResult::TransientFailure;
     }
     if (r.status < 200 || r.status >= 300) {
+        if (retryAfterSec) *retryAfterSec = r.retryAfterSec;
         std::wstring detail = ParseOAuthError(r.body);
         *err = detail.empty() ? (L"HTTP " + std::to_wstring(r.status)) : detail;
-        return false;
+        bool rejected = r.status >= 400 && r.status < 500 && r.status != 408 &&
+                        r.status != 429;
+        return rejected ? TokenEndpointResult::Rejected
+                        : TokenEndpointResult::TransientFailure;
     }
-    return ParseTokenResponse(r.body, anthropic, tok, err);
+    return ParseTokenResponse(r.body, anthropic, tok, err)
+               ? TokenEndpointResult::Success
+               : TokenEndpointResult::TransientFailure;
 }
 
 // grant_type=refresh_token. Anthropic sends JSON; OpenAI sends JSON too (its auth-code
 // exchange is the form-encoded one). Rotated refresh tokens come back in the response.
-static bool RefreshToken(const std::wstring& provider, StoredToken* tok, std::wstring* err) {
+static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToken* tok,
+                                        std::wstring* err, int* retryAfterSec) {
+    if (retryAfterSec) *retryAfterSec = 0;
     if (tok->refreshToken.empty()) {
         *err = L"no refresh token";
-        return false;
+        return TokenEndpointResult::Rejected;
     }
     bool anthropic = provider == L"anthropic";
     std::string body;
@@ -1442,9 +1458,9 @@ static bool RefreshToken(const std::wstring& provider, StoredToken* tok, std::ws
         body = WideToUtf8(std::wstring(obj.Stringify().c_str()));
     } catch (...) {
         *err = L"internal error";
-        return false;
+        return TokenEndpointResult::TransientFailure;
     }
-    return PostTokenEndpoint(anthropic, L"application/json", body, tok, err);
+    return PostTokenEndpoint(anthropic, L"application/json", body, tok, err, retryAfterSec);
 }
 
 /**********************************************/
@@ -1723,7 +1739,8 @@ static void DoAnthropicLogin(const LoginRequest& req) {
 
     StoredToken tok;
     std::wstring err;
-    if (PostTokenEndpoint(/*anthropic*/ true, L"application/json", body, &tok, &err)) {
+    if (PostTokenEndpoint(/*anthropic*/ true, L"application/json", body, &tok, &err) ==
+        TokenEndpointResult::Success) {
         TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
         if (saved == TokenSaveResult::Stale) {
             Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
@@ -1782,7 +1799,7 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     StoredToken tok;
     std::wstring err;
     if (PostTokenEndpoint(/*anthropic*/ false, L"application/x-www-form-urlencoded", formBody,
-                          &tok, &err)) {
+                          &tok, &err) == TokenEndpointResult::Success) {
         TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
         if (saved == TokenSaveResult::Stale) {
             Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
@@ -2550,7 +2567,10 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     // Refresh just before expiry so a request rarely races the token going stale.
     if (tok.expiresMs && tok.expiresMs < NowUnixMs() + 60000) {
         std::wstring refreshErr;
-        if (RefreshToken(acc.provider, &tok, &refreshErr)) {
+        int refreshRetryAfter = 0;
+        TokenEndpointResult refreshResult =
+            RefreshToken(acc.provider, &tok, &refreshErr, &refreshRetryAfter);
+        if (refreshResult == TokenEndpointResult::Success) {
             TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
             if (saved == TokenSaveResult::Stale) {
                 d->stale = true;
@@ -2565,8 +2585,14 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
             }
         } else {
             d->stale = true;
-            d->needsLogin = true;
-            d->error = L"session expired - click to sign in";
+            if (refreshResult == TokenEndpointResult::Rejected) {
+                d->needsLogin = true;
+                d->error = L"session expired - click to sign in";
+            } else {
+                d->error = L"token refresh failed";
+                if (!refreshErr.empty()) d->error += L": " + refreshErr;
+                *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
+            }
             return;
         }
     }
@@ -2592,7 +2618,10 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     // Reactive refresh: the access token may have been revoked or expired early.
     if (r.ok && r.status == 401 && !tok.refreshToken.empty()) {
         std::wstring refreshErr;
-        if (RefreshToken(acc.provider, &tok, &refreshErr)) {
+        int refreshRetryAfter = 0;
+        TokenEndpointResult refreshResult =
+            RefreshToken(acc.provider, &tok, &refreshErr, &refreshRetryAfter);
+        if (refreshResult == TokenEndpointResult::Success) {
             TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
             if (saved == TokenSaveResult::Saved) {
                 r = requestUsage(tok);
@@ -2606,6 +2635,12 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                 d->error = L"could not save refreshed token";
                 return;
             }
+        } else if (refreshResult == TokenEndpointResult::TransientFailure) {
+            d->stale = true;
+            d->error = L"token refresh failed";
+            if (!refreshErr.empty()) d->error += L": " + refreshErr;
+            *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
+            return;
         }
     }
 
