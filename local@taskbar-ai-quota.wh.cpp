@@ -1073,6 +1073,15 @@ static std::mutex g_authMutex;
 static std::mutex g_authEpochMutex;
 static std::vector<std::pair<uint64_t, ULONGLONG>> g_authEpochs;
 
+struct AuthRenameRedirect {
+    uint64_t sourceIdentity;
+    ULONGLONG sourceEpoch;
+    uint64_t destinationIdentity;
+    ULONGLONG destinationEpoch;
+};
+
+static std::vector<AuthRenameRedirect> g_authRenameRedirects;
+
 enum class TokenSaveResult {
     Saved,
     Stale,
@@ -1136,52 +1145,77 @@ static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
     return Wh_SetStringValue(TokenStorageKey(idHash).c_str(), Utf8ToWide(b64).c_str());
 }
 
-static void ClearStoredToken(uint64_t idHash) {
+static bool ClearStoredToken(uint64_t idHash) {
     std::lock_guard<std::mutex> lk(g_authMutex);
-    Wh_SetStringValue(TokenStorageKey(idHash).c_str(), L"");
+    std::wstring key = TokenStorageKey(idHash);
+    Wh_DeleteValue(key.c_str());
+    std::vector<wchar_t> stored(16384);
+    Wh_GetStringValue(key.c_str(), stored.data(), stored.size());
+    return !stored[0];
 }
 
 static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
-                                                const StoredToken& t) {
+                                                const StoredToken& t,
+                                                uint64_t* savedIdentity = nullptr) {
+    if (savedIdentity) *savedIdentity = 0;
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
-    if (AuthEpochLocked(idHash) != authEpoch) return TokenSaveResult::Stale;
-    return SaveStoredToken(idHash, t) ? TokenSaveResult::Saved : TokenSaveResult::Failed;
+    uint64_t destinationIdentity = idHash;
+    ULONGLONG destinationEpoch = authEpoch;
+    // Exact epochs let saves follow renames but stop at sign-out or any other invalidating bump.
+    for (int hop = 0; AuthEpochLocked(destinationIdentity) != destinationEpoch; hop++) {
+        if (hop >= 32) return TokenSaveResult::Stale;
+        auto redirect = std::find_if(
+            g_authRenameRedirects.begin(), g_authRenameRedirects.end(),
+            [&](const AuthRenameRedirect& candidate) {
+                return candidate.sourceIdentity == destinationIdentity &&
+                       candidate.sourceEpoch == destinationEpoch;
+            });
+        if (redirect == g_authRenameRedirects.end()) return TokenSaveResult::Stale;
+        destinationIdentity = redirect->destinationIdentity;
+        destinationEpoch = redirect->destinationEpoch;
+    }
+    if (!SaveStoredToken(destinationIdentity, t)) return TokenSaveResult::Failed;
+    if (savedIdentity) *savedIdentity = destinationIdentity;
+    return TokenSaveResult::Saved;
 }
 
-static void ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
-    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+static void BumpAuthEpochLocked(uint64_t idHash) {
     for (auto& [hash, epoch] : g_authEpochs) {
         if (hash == idHash) {
             epoch++;
-            ClearStoredToken(idHash);
             return;
         }
     }
     g_authEpochs.push_back({idHash, 1});
-    ClearStoredToken(idHash);
 }
 
-static bool MoveStoredTokenForRename(uint64_t oldHash, uint64_t newHash) {
-    if (oldHash == newHash) return true;
-    std::lock_guard<std::mutex> epochLock(g_authEpochMutex);
+static bool ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    bool cleared = ClearStoredToken(idHash);
+    BumpAuthEpochLocked(idHash);
+    return cleared;
+}
+
+enum class TokenCopyResult {
+    SourceMissing,
+    Copied,
+    DestinationOccupied,
+    Failed,
+};
+
+static TokenCopyResult CopyStoredTokenForRename(uint64_t oldHash, uint64_t newHash) {
     std::lock_guard<std::mutex> authLock(g_authMutex);
 
     std::vector<wchar_t> oldValue(16384);
     std::vector<wchar_t> newValue(16384);
     Wh_GetStringValue(TokenStorageKey(oldHash).c_str(), oldValue.data(), oldValue.size());
+    if (!oldValue[0]) return TokenCopyResult::SourceMissing;
     Wh_GetStringValue(TokenStorageKey(newHash).c_str(), newValue.data(), newValue.size());
-    if (!oldValue[0] || newValue[0]) return false;
-    if (!Wh_SetStringValue(TokenStorageKey(newHash).c_str(), oldValue.data())) return false;
-    Wh_SetStringValue(TokenStorageKey(oldHash).c_str(), L"");
-
-    for (auto& [hash, epoch] : g_authEpochs) {
-        if (hash == oldHash) {
-            epoch++;
-            return true;
-        }
+    if (newValue[0]) return TokenCopyResult::DestinationOccupied;
+    if (!Wh_SetStringValue(TokenStorageKey(newHash).c_str(), oldValue.data())) {
+        return TokenCopyResult::Failed;
     }
-    g_authEpochs.push_back({oldHash, 1});
-    return true;
+    return TokenCopyResult::Copied;
 }
 
 /**********************************************/
@@ -1958,19 +1992,20 @@ static void StartLoginByIdentity(uint64_t identityHash) {
     }
 }
 
-static void SignOutAccountByIdentity(uint64_t identityHash) {
-    if (g_unloading) return;
+static bool SignOutAccountByIdentity(uint64_t identityHash) {
+    if (g_unloading) return false;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         auto it = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
             [&](const AccountConfig& account) {
                 return AccountIdentityHash(account) == identityHash;
             });
-        if (it == g_settings.accounts.end() || it->provider == L"antigravity") return;
+        if (it == g_settings.accounts.end() || it->provider == L"antigravity") return false;
     }
-    ClearStoredTokenAndBumpAuthEpoch(identityHash);
+    bool cleared = ClearStoredTokenAndBumpAuthEpoch(identityHash);
     RefreshQuotaByIdentity(identityHash);  // Re-fetch so the column flips to "not signed in".
     NotifySettingsWindowChanged();
+    return cleared;
 }
 
 /**********************************************/
@@ -2655,7 +2690,9 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         TokenEndpointResult refreshResult =
             RefreshToken(acc.provider, &tok, &refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
-            TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
+            uint64_t savedIdentity = 0;
+            TokenSaveResult saved =
+                SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved == TokenSaveResult::Stale) {
                 d->stale = true;
                 d->needsLogin = true;
@@ -2667,6 +2704,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                 d->error = L"could not save refreshed token";
                 return;
             }
+            if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
         } else {
             d->stale = true;
             if (refreshResult == TokenEndpointResult::Rejected) {
@@ -2706,8 +2744,11 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         TokenEndpointResult refreshResult =
             RefreshToken(acc.provider, &tok, &refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
-            TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
+            uint64_t savedIdentity = 0;
+            TokenSaveResult saved =
+                SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved == TokenSaveResult::Saved) {
+                if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
                 r = requestUsage(tok);
             } else if (saved == TokenSaveResult::Stale) {
                 d->stale = true;
@@ -2888,9 +2929,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         if (settingsChanged) {
             lastLoggedErrorStates.assign(accounts.size(), {});
 
-            // A settings-generation bump cancels in-flight publication, but provider-directed
-            // Retry-After and normal poll deadlines still apply. Remap both by stable account
-            // identity so autosaving appearance settings never causes another provider request.
+            // Remap provider-directed Retry-After and normal poll deadlines by stable account
+            // identity so settings changes don't cause another request for unchanged accounts.
             auto oldIdentityHashes = std::move(retryIdentityHashes);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
@@ -3031,9 +3071,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 fetchedOk[i] = true;
             }
         }
-        if (!enableNotifications && g_notifyWnd) RemoveNotifyIcon();
-
         bool published = false;
+        bool generationRaced = false;
+        std::vector<AccountConfig> currentAccounts;
+        std::vector<AccountData> previousCurrentResults;
+        std::vector<AccountData> remappedResults;
+        std::vector<bool> remappedFetchedOk;
+        int notificationRedThreshold = redThreshold;
+        bool notificationsEnabled = enableNotifications;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             if (settingsGeneration == g_settingsGeneration) {
@@ -3042,8 +3087,37 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     g_data = results;
                     published = true;
                 }
+            } else {
+                generationRaced = true;
+                currentAccounts = g_settings.accounts;
+                notificationRedThreshold = g_settings.redThreshold;
+                notificationsEnabled = g_settings.enableNotifications;
+
+                std::lock_guard<std::mutex> lk2(g_dataMutex);
+                previousCurrentResults.resize(currentAccounts.size());
+                for (size_t i = 0; i < currentAccounts.size() && i < g_data.size(); i++) {
+                    previousCurrentResults[i] = g_data[i];
+                }
+                remappedResults = previousCurrentResults;
+                remappedFetchedOk.assign(currentAccounts.size(), false);
+                std::vector<bool> oldResultUsed(results.size(), false);
+                for (size_t i = 0; i < currentAccounts.size(); i++) {
+                    for (size_t j = 0; j < accounts.size() && j < results.size(); j++) {
+                        if (!oldResultUsed[j] &&
+                            AccountIdentityHash(accounts[j]) ==
+                                AccountIdentityHash(currentAccounts[i])) {
+                            remappedResults[i] = results[j];
+                            remappedFetchedOk[i] = fetchedOk[j];
+                            oldResultUsed[j] = true;
+                            break;
+                        }
+                    }
+                }
+                g_data = remappedResults;
+                published = true;
             }
         }
+        if (!notificationsEnabled && g_notifyWnd) RemoveNotifyIcon();
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
             if (refreshGeneration == g_refreshGeneration.load()) {
@@ -3054,33 +3128,52 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         if (published) {
             // Fire one toast per upward crossing of the red threshold; re-arm when
-            // usage drops back below. Notification side effects happen only after the
-            // matching settings generation publishes, avoiding stale in-flight toasts.
-            for (size_t i = 0; i < accounts.size(); i++) {
-                if (!fetchedOk[i]) continue;
+            // usage drops back below. A generation-raced result uses current settings and
+            // current pre-publication data so settings edits alone cannot cause a toast.
+            const auto& publishedAccounts = generationRaced ? currentAccounts : accounts;
+            const auto& publishedResults = generationRaced ? remappedResults : results;
+            const auto& publishedFetchedOk = generationRaced ? remappedFetchedOk : fetchedOk;
+            for (size_t i = 0; i < publishedAccounts.size(); i++) {
+                if (!publishedFetchedOk[i]) continue;
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                    &results[i].win5h, &results[i].winWeek, &results[i].extraUsage};
+                    &publishedResults[i].win5h, &publishedResults[i].winWeek,
+                    &publishedResults[i].extraUsage};
+                const std::array<const WindowUsage*, kQuotaBarCount> previousUsage = {
+                    generationRaced ? &previousCurrentResults[i].win5h : nullptr,
+                    generationRaced ? &previousCurrentResults[i].winWeek : nullptr,
+                    generationRaced ? &previousCurrentResults[i].extraUsage : nullptr};
                 for (int w = 0; w < kQuotaBarCount; w++) {
-                    if (!accounts[i].showBars[w]) continue;
+                    if (!publishedAccounts[i].showBars[w]) continue;
                     const WindowUsage& wu = *usage[w];
-                    int& st = redState[i][w];
                     if (wu.pct < 0) continue;
-                    if (wu.pct >= redThreshold) {
-                        if (st == 0 && enableNotifications) {
-                            std::wstring providerName = ProviderDisplayName(accounts[i].provider);
-                            wchar_t title[96];
-                            swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
-                                     w == kFiveHourBar ? L"5h" :
-                                     w == kWeeklyBar ? L"weekly" : L"monthly extra", wu.pct);
-                            std::wstring body = providerName;
-                            if (w != kExtraUsageBar || wu.resetUnixMs) {
-                                body += L" - resets " + FormatReset(wu.resetUnixMs);
-                            }
-                            FireThresholdNotification(title, body);
-                        }
-                        st = 1;
+                    bool shouldNotify = false;
+                    if (generationRaced) {
+                        const WindowUsage& previous = *previousUsage[w];
+                        shouldNotify = previous.pct >= 0 &&
+                                       previous.pct < notificationRedThreshold &&
+                                       wu.pct >= notificationRedThreshold &&
+                                       notificationsEnabled;
                     } else {
-                        st = 0;
+                        int& st = redState[i][w];
+                        if (wu.pct >= notificationRedThreshold) {
+                            shouldNotify = st == 0 && notificationsEnabled;
+                            st = 1;
+                        } else {
+                            st = 0;
+                        }
+                    }
+                    if (shouldNotify) {
+                        std::wstring providerName =
+                            ProviderDisplayName(publishedAccounts[i].provider);
+                        wchar_t title[96];
+                        swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
+                                 w == kFiveHourBar ? L"5h" :
+                                 w == kWeeklyBar ? L"weekly" : L"monthly extra", wu.pct);
+                        std::wstring body = providerName;
+                        if (w != kExtraUsageBar || wu.resetUnixMs) {
+                            body += L" - resets " + FormatReset(wu.resetUnixMs);
+                        }
+                        FireThresholdNotification(title, body);
                     }
                 }
             }
@@ -3999,7 +4092,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 auto signOutToken = signOutItem.Click(
                     [authIdentity](winrt::Windows::Foundation::IInspectable const&,
                                    RoutedEventArgs const&) {
-                        SignOutAccountByIdentity(authIdentity);
+                        if (!SignOutAccountByIdentity(authIdentity)) OpenSettingsWindow();
                     });
                 state.menuItemClickHandlers.push_back({signOutItem, signOutToken});
                 signOutSub.Items().Append(signOutItem);
@@ -4828,9 +4921,7 @@ static void NormalizeSettings(Settings* s) {
             a.provider != L"antigravity") {
             continue;
         }
-        size_t first = a.label.find_first_not_of(L" \t\r\n");
-        size_t last = a.label.find_last_not_of(L" \t\r\n");
-        a.label = first == std::wstring::npos ? L"" : a.label.substr(first, last - first + 1);
+        // Labels are stable identities; only the native editor trims deliberate edits.
         if (a.label.empty()) {
             a.label = a.provider == L"anthropic" ? L"A" :
                       a.provider == L"openai" ? L"O" : L"G";
@@ -5056,9 +5147,20 @@ static bool LoadLegacySettings(Settings* out) {
         Wh_FreeStringSetting(text);
         return value;
     };
+    wchar_t hiddenBuf[4096] = {};
+    Wh_GetStringValue(L"hiddenAccounts", hiddenBuf, ARRAYSIZE(hiddenBuf));
+    std::vector<wchar_t> tokenBuf(16384);
+    Wh_GetStringValue(TokenStorageKey(AccountIdentityHash({L"anthropic", L"A"})).c_str(),
+                      tokenBuf.data(), tokenBuf.size());
+    bool foundDefaultToken = tokenBuf[0] != L'\0';
+    tokenBuf[0] = L'\0';
+    Wh_GetStringValue(TokenStorageKey(AccountIdentityHash({L"openai", L"O"})).c_str(),
+                      tokenBuf.data(), tokenBuf.size());
+    foundDefaultToken = foundDefaultToken || tokenBuf[0] != L'\0';
+
     bool found = !getIndexedText(L"accounts[%d].provider", 0).empty() ||
-                 !getText(L"taskbarMonitorMode").empty() ||
-                 !getText(L"barLength").empty();
+                  !getText(L"taskbarMonitorMode").empty() ||
+                  !getText(L"barLength").empty() || hiddenBuf[0] || foundDefaultToken;
     if (!found) return false;
 
     Settings s;
@@ -5094,8 +5196,6 @@ static bool LoadLegacySettings(Settings* out) {
         s.accounts.push_back({L"openai", L"O"});
     }
 
-    wchar_t hiddenBuf[4096] = {};
-    Wh_GetStringValue(L"hiddenAccounts", hiddenBuf, ARRAYSIZE(hiddenBuf));
     std::vector<uint64_t> hiddenHashes;
     for (std::wstring rest = hiddenBuf; !rest.empty();) {
         size_t end = rest.find(L';');
@@ -6459,36 +6559,85 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
         return;
     }
 
+    uint64_t newIdentity = AccountIdentityHash(newAccount);
+    bool sameProviderRename = identityChanged && oldAccount.provider == newAccount.provider &&
+                              oldAccount.provider != L"antigravity";
+    TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
+    bool oldTokenCleared = true;
+    ULONGLONG oldAuthEpoch = 0;
+    ULONGLONG newAuthEpoch = 0;
+    std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
+    if (sameProviderRename) {
+        // Block epoch-gated saves only across the local copy/settings/delete transaction.
+        authEpochLock.lock();
+        oldAuthEpoch = AuthEpochLocked(oldIdentity);
+        newAuthEpoch = AuthEpochLocked(newIdentity);
+        tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
+        if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
+            tokenCopyResult == TokenCopyResult::Failed) {
+            authEpochLock.unlock();
+            configLock.unlock();
+            MessageBoxW(
+                state.hWnd,
+                tokenCopyResult == TokenCopyResult::DestinationOccupied ?
+                    L"The renamed account identity already has a retained sign-in. To replace it, "
+                    L"add an account with that provider and label, then remove it and delete its "
+                    L"stored sign-in. The account was not changed." :
+                    L"The stored sign-in could not be copied. The account was not changed.",
+                L"Account", MB_OK | MB_ICONERROR);
+            return;
+        }
+    }
+
     // Visibility can be toggled from a taskbar menu while the account editor is open.
     newAccount.hidden = settings.accounts[index].hidden;
     settings.accounts[index] = newAccount;
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
     if (applyResult == SettingsApplyResult::Failed) {
+        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
+                                  ClearStoredToken(newIdentity);
+        if (authEpochLock.owns_lock()) authEpochLock.unlock();
         configLock.unlock();
-        MessageBoxW(state.hWnd, L"Could not save the account.", L"Account",
-                    MB_OK | MB_ICONERROR);
+        MessageBoxW(
+            state.hWnd,
+            copiedTokenCleared ?
+                L"Could not save the account." :
+                L"Could not save the account. The copied sign-in remains under the attempted "
+                L"new identity. To delete it, add an account with the attempted provider and "
+                L"label, then remove it and choose to delete its stored sign-in.",
+            L"Account", MB_OK | MB_ICONERROR);
         return;
     }
+    if (sameProviderRename) {
+        oldTokenCleared = ClearStoredToken(oldIdentity);
+        BumpAuthEpochLocked(oldIdentity);
+        g_authRenameRedirects.push_back(
+            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
+        authEpochLock.unlock();
+    }
     configLock.unlock();
-    if (identityChanged && oldAccount.provider == newAccount.provider &&
-        oldAccount.provider != L"antigravity") {
-        StoredToken oldToken;
-        bool hadOldToken = LoadStoredToken(oldIdentity, &oldToken);
-        bool moved = MoveStoredTokenForRename(oldIdentity, AccountIdentityHash(newAccount));
-        StoredToken newToken;
-        if (hadOldToken && !moved &&
-            !LoadStoredToken(AccountIdentityHash(newAccount), &newToken)) {
-            MessageBoxW(state.hWnd,
-                        L"The stored sign-in could not be moved. Sign in to the renamed account again.",
-                        L"Account", MB_OK | MB_ICONWARNING);
-        }
-    } else if (clearOldToken) {
-        ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
+    bool providerTokenCleared = true;
+    if (clearOldToken) {
+        providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
     }
     if (applyResult == SettingsApplyResult::Changed) {
         // Every bar already exists in the XAML tree; visibility and spacing update in place.
         if (onlyBarSelectionChanged) PostUiUpdate();
         else FinishSettingsApply();
+    }
+    if (!oldTokenCleared) {
+        MessageBoxW(
+            state.hWnd,
+            L"The account was renamed, but a duplicate stored sign-in remains under the old "
+            L"identity. To delete it, re-add an account with the old provider and label, then "
+            L"remove it and choose to delete its stored sign-in.",
+            L"Account", MB_OK | MB_ICONWARNING);
+    } else if (!providerTokenCleared) {
+        MessageBoxW(
+            state.hWnd,
+            L"The provider was changed, but the old sign-in remains retained. To recover or "
+            L"delete it, re-add an account with the old provider and label.",
+            L"Account", MB_OK | MB_ICONWARNING);
     }
     NotifySettingsWindowChanged();
     RefreshSettingsControls(state);
@@ -6550,16 +6699,31 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
         RefreshSettingsControls(state);
         return;
     }
+    if (deleteToken && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
+        configLock.unlock();
+        MessageBoxW(state.hWnd,
+                    L"The stored sign-in could not be deleted, so the account was not removed.",
+                    L"Account", MB_OK | MB_ICONERROR);
+        return;
+    }
     settings.accounts.erase(settings.accounts.begin() + index);
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
     if (applyResult == SettingsApplyResult::Failed) {
         configLock.unlock();
-        MessageBoxW(state.hWnd, L"Could not remove the account.", L"Account",
+        if (deleteToken) {
+            RefreshQuotaByIdentity(identity);
+            NotifySettingsWindowChanged();
+        }
+        MessageBoxW(state.hWnd,
+                    deleteToken ?
+                        L"The stored sign-in was deleted, but settings could not be saved. The "
+                        L"account remains configured but signed out." :
+                        L"Could not remove the account.",
+                    L"Account",
                     MB_OK | MB_ICONERROR);
         return;
     }
     configLock.unlock();
-    if (deleteToken) ClearStoredTokenAndBumpAuthEpoch(identity);
     if (applyResult == SettingsApplyResult::Changed) FinishSettingsApply();
     RefreshSettingsControls(state);
 }
@@ -6967,7 +7131,13 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 case kAccountSignOut:
                     if (HIWORD(wParam) == BN_CLICKED) {
                         if (uint64_t identity = SelectedAccountIdentity(*state)) {
-                            SignOutAccountByIdentity(identity);
+                            if (!SignOutAccountByIdentity(identity)) {
+                                MessageBoxW(
+                                    state->hWnd,
+                                    L"The stored sign-in could not be deleted and remains "
+                                    L"retained for this account.",
+                                    L"Account", MB_OK | MB_ICONERROR);
+                            }
                         }
                     }
                     return 0;

@@ -94,11 +94,13 @@ first, then reads/updates XAML. Never resolve XAML refs on the fetch or login th
 
 # Concurrency rules
 
-- Lock order is `g_configEditMutex` before `g_settingsMutex` before `g_dataMutex`. Never take them
-  in the reverse order. Release `g_configEditMutex` before marshaling to taskbar UI threads or
-  showing user-paced dialogs.
-  `g_authMutex` (token store) is independent and only held inside `LoadStoredToken`/
-  `SaveStoredToken`/`ClearStoredToken`; don't call other locked code while holding it.
+- Lock order is `g_configEditMutex` before `g_authEpochMutex` before `g_settingsMutex` before
+  `g_dataMutex`. Never take them in the reverse order. Release `g_configEditMutex` before
+  marshaling to taskbar UI threads or showing user-paced dialogs.
+  `g_authMutex` is a leaf used only by token-store operations, including raw rename copies; never
+  acquire another lock while holding it. Hold `g_authEpochMutex` only for short local auth/settings
+  transactions, never across network I/O, dialogs, notifications, UI marshaling, or
+  `FinishSettingsApply`.
 - `g_settingsGeneration` gates published data; `g_refreshGeneration` drives manual single-account
   refresh. Code that publishes to `g_data` must re-check the generation under lock (existing
   pattern in the publish block).
