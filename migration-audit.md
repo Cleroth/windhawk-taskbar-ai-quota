@@ -216,54 +216,58 @@ Accepted by design. `PostUiUpdate` sources are human-, auth-, or poll-paced, and
 
 References: `local@taskbar-ai-quota.wh.cpp:2769-2780`, `3047-3088`.
 
-### [ ] Late account-edit dialogs can lose their owner
+### [x] Late account-edit dialogs can lose their owner
 
-Account editing rechecks the selected identity after its modal editor closes, but several later warning and error dialogs do not recheck whether the main settings window survived an unload-triggered `WM_CLOSE`. `MessageBoxW` tolerates a dead owner in practice, but the dialogs can become desktop-owned or appear with incorrect foreground behavior.
+Account editing rechecks the selected identity after its modal editor closes, but several later warning and error dialogs do not recheck unload state. The normal modal-close path preserves the owner; the residual dead-owner path requires MessageBox hook installation failure during teardown. Guarding the wrapper and accepted editor returns avoids late dialogs and settings work in both cases.
 
 References: `local@taskbar-ai-quota.wh.cpp:6401-6484`, `7124-7127`.
 
-### [ ] Stale settings-window handle survives destruction in the window state
+### [x] Stale settings-window handle survives destruction in the window state
 
 `WM_DESTROY` deletes visuals and clears the global handle but leaves `state.hWnd` set. When unload posts `WM_CLOSE` while a modal dialog is pumping messages, callers resume after the dialog against a dead window. `CommitScalarSettings` guards with a control-existence check; trailing `RefreshSettingsControls` calls do not, and `ListView_GetNextItem` on the destroyed list returns 0 instead of -1, so "no selection" acts like row 0 selected - `UpdateAccountButtons` then decrypts the token store for an account the user never selected. Currently wasted work only, since every other operation no-ops on invalid windows.
 
 References: `local@taskbar-ai-quota.wh.cpp:5703-5712`, `5729-5753`, `5979-5981`, `7128-7139`.
 
-### [ ] Ordinary close can re-commit garbage during child destruction
+### [x] Ordinary close can re-commit garbage during child destruction
 
-`WM_CLOSE` commits scalar settings and then destroys the window (7124-7127). An `EN_KILLFOCUS` delivered while children are being destroyed re-enters `CommitScalarSettings` through the catch-all (7008-7013); the only staleness gate is control existence for one combo (5981), so later-created combos can already be gone while that one remains, and failed `SendDlgItemMessageW` calls return 0 - mapping label position to Hidden (6013-6016), bar layout to Stacked (5999), or poll preset index 0 (6031-6036) - and the wrong values overwrite the correct commit and autosave. Unload-triggered closes are protected by the `g_unloading` bail (5980); ordinary user closes are exposed. Whether edits notify during destruction is unproven; a closing flag set after the final commit is cheap hardening.
+Not reproducible after the settings-state handle fix. Win32 sends parent `WM_DESTROY` before destroying children; that handler clears `state.hWnd`, so any later `EN_KILLFOCUS` commit bails before reading controls. A focus-loss notification before `WM_DESTROY` sees the complete control tree and produces `Unchanged`.
 
 References: `local@taskbar-ai-quota.wh.cpp:5979-6046`, `7008-7013`, `7124-7127`.
 
-### [ ] Visibility toggles touch XAML while holding configuration locks
+### [x] Visibility toggles touch XAML while holding configuration locks
 
 The taskbar-thread toggle handler calls `toggle.IsChecked(...)` with `g_configEditMutex` held (and `g_settingsMutex` in the same region), contrary to the documented rule to release it before taskbar-UI work. Safe today only because the mod subscribes to `Click`; adding a `Checked`/`Unchecked` handler that takes either mutex would self-deadlock a shell thread on a non-recursive lock.
 
 References: `local@taskbar-ai-quota.wh.cpp:793-875`.
 
-### [ ] Persisted state includes dead or redundant writes
+### [x] Persisted state includes dead or redundant writes
 
-Both visibility-toggle paths still maintain `hiddenAccounts`, but only the one-time legacy importer reads it, so ongoing writes are dead data; each load failure also rewrites `settings_v1_invalid` with identical content. Harmless, but deletion would avoid implying the legacy storage channel is still live.
+Accepted. The `hiddenAccounts` mirror is redundant for 1.0 but preserves ordinary visibility toggles when downgrading to a published pre-1.0 build. Rewriting `settings_v1_invalid` keeps the backup aligned with the latest unreadable blob; compare-before-write would add storage reads only in a rare error path.
 
 References: `local@taskbar-ai-quota.wh.cpp:851-868`, `5038-5041`, `6622-6631`.
 
 ## Compatibility Decision
 
-### [ ] Decide whether migration must preserve all-disabled bar selections
+### [x] Decide whether migration must preserve all-disabled bar selections
 
 Legacy settings can disable all three quota bars. Normalization silently enables the 5-hour bar, changing display and threshold-notification behavior. This matches the new editor invariant, but it is not a behavior-preserving migration.
 
+Decision: keep the one-bar editor invariant and enable the 5-hour bar during migration.
+
 References: `local@taskbar-ai-quota.wh.cpp:4838-4841`, `5087-5090`.
 
-### [ ] Decide whether an unavailable specific monitor should fall back
+### [x] Decide whether an unavailable specific monitor should fall back
 
 Specific-monitor mode returns no taskbar windows when the saved positional target is unavailable. Bars remain absent after the retry series until a topology or settings event occurs; the settings UI explicitly shows the target as unavailable. Decide whether this should remain strict targeting or temporarily fall back to the primary monitor.
+
+Decision: keep strict targeting. Show no bars on another monitor while the selected position is unavailable; topology recovery restores them automatically.
 
 References: `local@taskbar-ai-quota.wh.cpp:3289-3294`, `4671-4733`, `5912-5917`.
 
 ## Confirmed Clean Areas
 
 - Legacy scalar setting names and options are mapped.
-- Canonical non-empty account labels preserve ordering, hidden state, bar selection, and token identity within the 64-account limit.
+- Canonical non-empty account labels preserve ordering, hidden state, token identity, and bar selection except for the intentional all-disabled-to-5-hour normalization.
 - Normalized settings round-trip through JSON serialization and deserialization.
 - Removing Windhawk settings metadata does not prevent reading persisted legacy values.
 - Missing-storage migration retries after a save failure; invalid versioned JSON is backed up.
