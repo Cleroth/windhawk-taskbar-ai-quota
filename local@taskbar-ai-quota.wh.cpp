@@ -440,6 +440,9 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
                                     int redThreshold, ULONGLONG now,
                                     std::vector<AccountConfig>* accounts,
                                     std::vector<AccountData>* data) {
+    static constexpr std::array<const wchar_t*, 4> kLabels = {
+        L"OAI", L"CC 1", L"CC 2", L"Go",
+    };
     const std::array<double, 4> percentages = {
         yellowThreshold / 2.0,
         50.0,
@@ -453,7 +456,7 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
         30ULL * 24 * 60 * 60 * 1000,
     };
     static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
-        0.2, 0.4, 0.6, 0.8,
+        0.35, 0.5, 0.6, 0.8,
     };
 
     accounts->clear();
@@ -465,7 +468,7 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
     for (size_t i = 0; i < percentages.size(); i++) {
         AccountConfig account;
         account.provider = L"anthropic";
-        account.label = L"TEST " + std::to_wstring(i + 1);
+        account.label = kLabels[i];
         account.showBars.fill(false);
         for (size_t w = 0; w <= i; w++) account.showBars[w] = true;
         accounts->push_back(std::move(account));
