@@ -174,45 +174,45 @@ Per the Windhawk API contract, `Wh_GetStringValue` returns an empty string when 
 
 References: `local@taskbar-ai-quota.wh.cpp:5033-5044`, `5018-5024`, `5207-5217`.
 
-### [ ] Anthropic extra-usage bars never show pace ticks
+### [x] Anthropic extra-usage bars never show pace ticks
 
 The parser stores the extra-usage percentage and reset time but never sets `windowDurationMs`. Pace-tick visibility requires a positive duration, so the extra-usage tick is permanently hidden. This behavior predates `5f064ad`, but remains a correctness gap in the audited result.
 
 References: `local@taskbar-ai-quota.wh.cpp:2007-2013`, `4195-4204`.
 
-### [ ] Bar-selection-only changes can miss an injection request
+### [x] Bar-selection-only changes can miss an injection request
 
-Changing only an account's selected bars calls `PostUiUpdate` rather than the rebuild path. `PostUiUpdate` returns immediately while `g_uiInjected` is false, so an edit during startup or a rebuild window schedules neither repaint nor injection. The persisted selection appears only when another event eventually injects or updates the UI.
+Changing only an account's selected bars calls `PostUiUpdate` rather than the rebuild path. Startup and active rebuild windows already have an injection pending, but after a retry series exhausts and parks with `g_uiInjected` false, the edit schedules neither repaint nor a fresh injection series.
 
 References: `local@taskbar-ai-quota.wh.cpp:2769-2780`, `6488-6492`.
 
-### [ ] Settle budget exhaustion drops a requested rebuild
+### [x] Settle budget exhaustion drops a requested rebuild
 
-The retry thread consumes `g_rebuildQuotaUiBeforeInject` with an exchange before settling (4678-4681). During the 2 second settle every wakeup - including each drained posted message - costs one attempt against the fixed 600 budget (4678, 4684-4692); exhausting the budget before the settle deadline exits without removing the grids and with the flag already cleared. The later inject pass keeps surviving grids (4429-4434), so stale-layout bars persist until the next display or taskbar event. Requires more than 600 wakeups in 2 seconds (message storm), so unlikely; consume-before-act is the fragile pattern.
+The retry thread consumes `g_rebuildQuotaUiBeforeInject` with an exchange before settling (4678-4681). During the 2 second settle every message or timeout wake costs one attempt against the fixed 600 budget (4678, 4684-4692); exhausting the budget before the settle deadline exits without removing the grids and with the flag already cleared. The later inject pass keeps surviving grids (4429-4434), so stale-layout bars persist until the next display or taskbar event. Requires more than 600 wakeups in 2 seconds (message storm), so unlikely; consume-before-act is the fragile pattern.
 
 References: `local@taskbar-ai-quota.wh.cpp:4677-4696`, `4429-4434`.
 
-### [ ] Removal marshal timeout leaves stale-settings bars
+### [x] Removal marshal timeout leaves stale-settings bars
 
 Settings applies remove grids via non-forced `RemoveAllQuotaGrids`, whose cross-thread marshals time out at 2 seconds and only log failure (4584-4627), while `InjectQuotaGrid` keeps any window whose grid survived (4429-4434). An apply issued while taskbar threads are busy can therefore leave bars rendered from the previous settings until a later event forces removal. The retry semantics predate this commit; autosave now fires applies far more often, raising exposure.
 
 References: `local@taskbar-ai-quota.wh.cpp:5194-5197`, `4584-4627`, `4429-4434`.
 
-### [ ] A stale sign-in request can leave settings controls temporarily disabled
+### [x] A stale sign-in request can leave settings controls temporarily disabled
 
 `StartLoginByIdentity` claims `g_loginInProgress` before confirming that the selected identity still exists. The missing-account path clears the flag without notifying the settings window. If that window refreshes during the brief claimed interval, it can retain disabled account actions until another refresh occurs.
 
 References: `local@taskbar-ai-quota.wh.cpp:1903-1934`, `5725-5753`.
 
-### [ ] Legal layout values can exceed taskbar bounds
+### [x] Legal layout values can exceed taskbar bounds
 
-The injected column has no aggregate width cap. Long labels, many accounts, a 1,000-pixel bar length, and 100-pixel margins can crowd or clip neighboring tray content. Extreme stacked-layout thickness and gaps can likewise exceed the taskbar frame height. The exact visual failure depends on taskbar XAML arrange and clipping behavior.
+The injected column has no aggregate width cap. Long labels, many accounts, large bars, and margins can crowd or clip neighboring tray content. Verified as visual-only: all consumers are bounded non-negative XAML dimensions/margins, and no native geometry or hook math depends on them. Aggregate auto-fit is intentionally omitted to avoid shell layout feedback loops.
 
 References: `local@taskbar-ai-quota.wh.cpp:3541-3610`, `3632-3708`, `4148-4164`, `4495-4505`.
 
-### [ ] UI update bursts are not coalesced
+### [x] UI update bursts are not coalesced
 
-Each `PostUiUpdate` synchronously fans out a full update to every eligible taskbar. Bursts from fetch publication, visibility changes, and settings actions can run redundant XAML passes instead of collapsing into one latest-state update. The result is correct but can add taskbar-thread latency.
+Accepted by design. `PostUiUpdate` sources are human-, auth-, or poll-paced, and `UpdateQuotaUi` already delta-applies XAML properties. Coalescing would add cross-thread lifetime/race machinery and could delay the intentional refreshing-state paint before fetch completion.
 
 References: `local@taskbar-ai-quota.wh.cpp:2769-2780`, `3047-3088`.
 
