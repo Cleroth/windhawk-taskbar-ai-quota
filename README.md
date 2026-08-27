@@ -8,7 +8,7 @@ Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ## What It Shows
 
-Each configured account gets one compact taskbar column. Choose its 5-hour, weekly, and Anthropic monthly extra-usage bars independently; selected bars auto-hide when the provider does not return that quota.
+Each configured account gets one compact taskbar column. Choose its 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage bars independently; selected bars auto-hide when the provider does not return that quota.
 
 - stacked layout: selected bars stack horizontally and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
@@ -42,7 +42,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - provider (Anthropic, OpenAI, or Google Antigravity) per account
 - account labels
 - account ordering and taskbar visibility
-- per-account 5-hour, weekly, and Anthropic monthly extra-usage bar selection
+- per-account 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage bar selection
 - bar length, thickness, and layout
 - bar mode: used (fills as quota is consumed) or remaining (fills with quota left, tooltips show "X% remaining")
 - pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining), with a configurable color

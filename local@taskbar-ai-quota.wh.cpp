@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.0.0
+// @version         1.1.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -26,8 +26,8 @@ Each account gets one compact column:
 - stacked layout: selected quota bars stack horizontally and fill left-to-right
 - vertical layout: selected quota bars sit side-by-side and fill bottom-up
 
-Choose 5-hour, weekly, and Anthropic monthly extra-usage bars per account. Selected
-bars auto-hide when the provider doesn't return that quota.
+Choose 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage
+bars per account. Selected bars auto-hide when the provider doesn't return that quota.
 
 Hover for exact percentages and reset times. Click a column to refresh that account
 or open its provider dashboard, depending on settings and provider support. Right-click
@@ -136,6 +136,7 @@ namespace wuxi = winrt::Windows::UI::Xaml::Input;
 enum QuotaBarIndex {
     kFiveHourBar,
     kWeeklyBar,
+    kFableWeeklyBar,
     kExtraUsageBar,
     kQuotaBarCount,
 };
@@ -143,7 +144,7 @@ enum QuotaBarIndex {
 struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
-    std::array<bool, kQuotaBarCount> showBars{true, true, false};
+    std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
     bool hidden = false;  // Runtime show/hide toggle (right-click menu), persisted in mod storage.
 
     bool operator==(const AccountConfig&) const = default;
@@ -220,6 +221,7 @@ struct WindowUsage {
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
+    WindowUsage fableWeek;
     WindowUsage extraUsage;
     std::wstring plan;
     std::wstring codexSparkLines;
@@ -232,10 +234,10 @@ struct AccountData {
 };
 
 struct AppliedState {
-    std::array<int, kQuotaBarCount> fillPx{-1, -1, -1};
-    std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0};
-    std::array<int, kQuotaBarCount> pacePx{-1, -1, -1};
-    std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1};
+    std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1};
+    std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
+    std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
     std::wstring tip;
     std::wstring percentText;
     std::wstring labelText;
@@ -266,9 +268,12 @@ struct AccountUiRefs {
     winrt::event_token toolTipOpenedToken{};
     DispatcherTimer manualToolTipTimer{nullptr};
     winrt::event_token manualToolTipTimerToken{};
-    std::array<Border, kQuotaBarCount> tracks{Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<Border, kQuotaBarCount> fills{Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<Border, kQuotaBarCount> paceTicks{Border{nullptr}, Border{nullptr}, Border{nullptr}};
+    std::array<Border, kQuotaBarCount> tracks{
+        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
+    std::array<Border, kQuotaBarCount> fills{
+        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
+    std::array<Border, kQuotaBarCount> paceTicks{
+        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     TextBlock percent{nullptr};
     TextBlock label{nullptr};
     POINT toolTipOpenCursor{};
@@ -2036,6 +2041,54 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
             d->winWeek.resetUnixMs = ParseIso8601Ms(GetStr(sd, L"resets_at"));
             d->winWeek.windowDurationMs = kWeeklyWindowMs;
         }
+        if (auto fable = GetObj(usage, L"seven_day_fable")) {
+            double utilization = GetNum(fable, L"utilization");
+            if (std::isfinite(utilization) && utilization >= 0) {
+                d->fableWeek.pct = utilization;
+                d->fableWeek.resetUnixMs = ParseIso8601Ms(GetStr(fable, L"resets_at"));
+                d->fableWeek.windowDurationMs = kWeeklyWindowMs;
+            }
+        }
+        if (d->fableWeek.pct < 0 && usage.HasKey(L"limits")) {
+            auto limits = usage.GetNamedValue(L"limits");
+            if (limits.ValueType() == JsonValueType::Array) {
+                bool selectedActive = false;
+                for (const auto& value : limits.GetArray()) {
+                    if (value.ValueType() != JsonValueType::Object) continue;
+                    JsonObject limit = value.GetObject();
+                    if (GetStr(limit, L"kind") != L"weekly_scoped" &&
+                        GetStr(limit, L"group") != L"weekly") {
+                        continue;
+                    }
+
+                    auto scope = GetObj(limit, L"scope");
+                    auto model = GetObj(scope, L"model");
+                    std::wstring modelName = GetStr(model, L"display_name");
+                    // Match the model family token so versioned names such as Fable 5.1 keep working.
+                    std::transform(modelName.begin(), modelName.end(), modelName.begin(),
+                                   [](wchar_t ch) { return (wchar_t)towlower(ch); });
+                    size_t fablePos = modelName.find(L"fable");
+                    bool isFable = fablePos != std::wstring::npos &&
+                                    (fablePos == 0 || !iswalpha(modelName[fablePos - 1])) &&
+                                    (fablePos + 5 == modelName.size() ||
+                                     !iswalpha(modelName[fablePos + 5]));
+                    if (!isFable) continue;
+
+                    double percent = GetNum(limit, L"percent");
+                    if (!std::isfinite(percent) || percent < 0) continue;
+                    bool active = GetBool(limit, L"is_active");
+                    if (d->fableWeek.pct >= 0 && !active && selectedActive) continue;
+                    if (d->fableWeek.pct >= 0 && active == selectedActive &&
+                        percent <= d->fableWeek.pct) {
+                        continue;
+                    }
+                    d->fableWeek.pct = percent;
+                    d->fableWeek.resetUnixMs = ParseIso8601Ms(GetStr(limit, L"resets_at"));
+                    d->fableWeek.windowDurationMs = kWeeklyWindowMs;
+                    selectedActive = active;
+                }
+            }
+        }
 
         d->plan.clear();
         d->extraLines.clear();
@@ -2088,7 +2141,8 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
                 }
             }
         }
-        bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->extraUsage.pct >= 0;
+        bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||
+                      d->extraUsage.pct >= 0;
         if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
         return parsed;
     } catch (...) {
@@ -3011,10 +3065,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         if (settingsChanged || redState.size() != accounts.size()) {
             redState.assign(accounts.size(),
-                            std::array<int, kQuotaBarCount>{-1, -1, -1});
+                            std::array<int, kQuotaBarCount>{-1, -1, -1, -1});
             for (size_t i = 0; i < accounts.size(); i++) {
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                    &results[i].win5h, &results[i].winWeek, &results[i].extraUsage};
+                    &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
+                    &results[i].extraUsage};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (usage[w]->pct >= 0) {
                         redState[i][w] = usage[w]->pct >= redThreshold ? 1 : 0;
@@ -3178,10 +3233,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 if (!publishedFetchedOk[i]) continue;
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &publishedResults[i].win5h, &publishedResults[i].winWeek,
-                    &publishedResults[i].extraUsage};
+                    &publishedResults[i].fableWeek, &publishedResults[i].extraUsage};
                 const std::array<const WindowUsage*, kQuotaBarCount> previousUsage = {
                     generationRaced ? &previousCurrentResults[i].win5h : nullptr,
                     generationRaced ? &previousCurrentResults[i].winWeek : nullptr,
+                    generationRaced ? &previousCurrentResults[i].fableWeek : nullptr,
                     generationRaced ? &previousCurrentResults[i].extraUsage : nullptr};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (!publishedAccounts[i].showBars[w]) continue;
@@ -3209,9 +3265,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         wchar_t title[96];
                         swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
                                  w == kFiveHourBar ? L"5h" :
-                                 w == kWeeklyBar ? L"weekly" : L"monthly extra", wu.pct);
+                                 w == kWeeklyBar ? L"weekly" :
+                                 w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra",
+                                 wu.pct);
                         std::wstring body = providerName;
-                        if (w != kExtraUsageBar || wu.resetUnixMs) {
+                        if ((w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs) {
                             body += L" - resets " + FormatReset(wu.resetUnixMs);
                         }
                         FireThresholdNotification(title, body);
@@ -4264,7 +4322,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
 
             const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                &d.win5h, &d.winWeek, &d.extraUsage};
+                &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage};
             int barMask = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (accounts[i].showBars[w] && (d.lastSuccessMs == 0 || usage[w]->pct >= 0)) {
@@ -4391,6 +4449,14 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 swprintf(line, ARRAYSIZE(line), L"\nweek: %.0f%%%s | resets %s", displayPct(d.winWeek.pct),
                          remainingSuffix, FormatReset(d.winWeek.resetUnixMs).c_str());
                 tip += line;
+            }
+            if (d.fableWeek.pct >= 0) {
+                swprintf(line, ARRAYSIZE(line), L"\nFable week: %.0f%%%s",
+                         displayPct(d.fableWeek.pct), remainingSuffix);
+                tip += line;
+                if (d.fableWeek.resetUnixMs) {
+                    tip += L" | resets " + FormatReset(d.fableWeek.resetUnixMs);
+                }
             }
             if (d.extraUsage.pct >= 0) {
                 if (barMode == BarMode::Remaining) {
@@ -4985,8 +5051,12 @@ static void NormalizeSettings(Settings* s) {
             a.label = a.provider == L"anthropic" ? L"A" :
                       a.provider == L"openai" ? L"O" : L"G";
         }
-        if (a.provider != L"anthropic") a.showBars[kExtraUsageBar] = false;
+        if (a.provider != L"anthropic") {
+            a.showBars[kFableWeeklyBar] = false;
+            a.showBars[kExtraUsageBar] = false;
+        }
         if (!a.showBars[kFiveHourBar] && !a.showBars[kWeeklyBar] &&
+            !a.showBars[kFableWeeklyBar] &&
             !a.showBars[kExtraUsageBar]) {
             a.showBars[kFiveHourBar] = true;
         }
@@ -5033,6 +5103,7 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"label", JsonValue::CreateStringValue(winrt::hstring(a.label)));
             account.SetNamedValue(L"fiveHour", JsonValue::CreateBooleanValue(a.showBars[kFiveHourBar]));
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
+            account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
             accounts.Append(account.as<IJsonValue>());
@@ -5103,6 +5174,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                 };
                 a.showBars[kFiveHourBar] = getBoolDefault(L"fiveHour", true);
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
+                a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
                 a.hidden = getBoolDefault(L"hidden", false);
                 s.accounts.push_back(std::move(a));
@@ -5497,6 +5569,7 @@ enum SettingsControlId {
     kAccountLabel,
     kAccountFiveHour,
     kAccountWeekly,
+    kAccountFableWeekly,
     kAccountExtraUsage,
     kAccountProviderLabel,
     kAccountLabelLabel,
@@ -6081,6 +6154,9 @@ static void RefreshAccountList(SettingsWindowState& state) {
         std::wstring bars;
         if (accounts[i].showBars[kFiveHourBar]) bars += L"5h";
         if (accounts[i].showBars[kWeeklyBar]) bars += bars.empty() ? L"Week" : L", Week";
+        if (accounts[i].showBars[kFableWeeklyBar]) {
+            bars += bars.empty() ? L"Fable" : L", Fable";
+        }
         if (accounts[i].showBars[kExtraUsageBar]) bars += bars.empty() ? L"Extra" : L", Extra";
         ListView_SetItemText(state.accountList, (int)i, 2, const_cast<PWSTR>(bars.c_str()));
         std::wstring visible = accounts[i].hidden ? L"No" : L"Yes";
@@ -6369,9 +6445,11 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
                  sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
+    SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
                  sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    int buttonY = std::max(sc(202), height - sc(46));
+    SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
+                 sc(16), sc(188), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+    int buttonY = std::max(sc(232), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr,
@@ -6403,7 +6481,9 @@ static void RecreateAccountEditorVisuals(HWND hWnd, AccountEditorState& state) {
 static void UpdateAccountEditorProvider(HWND hWnd) {
     bool anthropic = SendDlgItemMessageW(hWnd, kAccountProvider,
                                          CB_GETCURSEL, 0, 0) == 0;
+    HWND fableWeekly = GetDlgItem(hWnd, kAccountFableWeekly);
     HWND extraUsage = GetDlgItem(hWnd, kAccountExtraUsage);
+    EnableWindow(fableWeekly, anthropic);
     EnableWindow(extraUsage, anthropic);
 }
 
@@ -6462,25 +6542,32 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                            sc(16), sc(128), sc(180), sc(24), hWnd,
                                            reinterpret_cast<HMENU>(kAccountWeekly),
                                            GetModuleHandleW(nullptr), nullptr);
+            HWND fable = CreateWindowExW(0, L"BUTTON", L"Show Fable weekly bar",
+                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                                          sc(16), sc(158), sc(220), sc(24), hWnd,
+                                          reinterpret_cast<HMENU>(kAccountFableWeekly),
+                                          GetModuleHandleW(nullptr), nullptr);
             HWND extra = CreateWindowExW(0, L"BUTTON", L"Show monthly extra-usage bar",
                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                          sc(16), sc(158), sc(260), sc(24), hWnd,
+                                          sc(16), sc(188), sc(260), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountExtraUsage),
                                           GetModuleHandleW(nullptr), nullptr);
             SendMessageW(fiveHour, BM_SETCHECK,
                          state->account.showBars[kFiveHourBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(weekly, BM_SETCHECK,
                          state->account.showBars[kWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageW(fable, BM_SETCHECK,
+                         state->account.showBars[kFableWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(extra, BM_SETCHECK,
                          state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
 
             HWND ok = CreateWindowExW(0, L"BUTTON", L"OK",
                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-                                      sc(204), sc(202), sc(80), sc(30), hWnd,
+                                      sc(204), sc(232), sc(80), sc(30), hWnd,
                                       reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
             HWND cancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                          sc(290), sc(202), sc(80), sc(30), hWnd,
+                                          sc(290), sc(232), sc(80), sc(30), hWnd,
                                           reinterpret_cast<HMENU>(IDCANCEL), GetModuleHandleW(nullptr), nullptr);
             (void)providerLabel;
             (void)labelLabel;
@@ -6521,11 +6608,15 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                     IsDlgButtonChecked(hWnd, kAccountFiveHour) == BST_CHECKED;
                 state->account.showBars[kWeeklyBar] =
                     IsDlgButtonChecked(hWnd, kAccountWeekly) == BST_CHECKED;
+                state->account.showBars[kFableWeeklyBar] =
+                    state->account.provider == L"anthropic" &&
+                    IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
                 state->account.showBars[kExtraUsageBar] =
                     state->account.provider == L"anthropic" &&
                     IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
                 if (!state->account.showBars[kFiveHourBar] &&
                     !state->account.showBars[kWeeklyBar] &&
+                    !state->account.showBars[kFableWeeklyBar] &&
                     !state->account.showBars[kExtraUsageBar]) {
                     SettingsMessageBoxW(hWnd, L"Select at least one quota bar.", L"Account",
                                 MB_OK | MB_ICONWARNING);
@@ -6627,7 +6718,7 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
     UINT dpi = WindowDpi(owner);
     int width = ScaleForDpi(404, dpi);
-    int height = ScaleForDpi(284, dpi);
+    int height = ScaleForDpi(314, dpi);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitorInfo);
     width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
@@ -7149,7 +7240,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             ListView_SetExtendedListViewStyle(state->accountList,
                                               LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
             const PCWSTR headers[] = {L"Label", L"Provider", L"Bars", L"Visible", L"Sign-in"};
-            const int widths[] = {90, 150, 120, 70, 120};
+            const int widths[] = {90, 150, 160, 70, 120};
             for (int i = 0; i < 5; i++) {
                 LVCOLUMNW column{};
                 column.mask = LVCF_TEXT | LVCF_WIDTH;
