@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.4.0
+// @version         1.5.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -34,8 +34,10 @@ or open its provider dashboard, depending on settings and provider support. Righ
 for Settings, Refresh all, provider actions, and a checkbox list to show/hide individual accounts. Hidden accounts
 stop updating and are left to go stale; the choice persists across restarts (at least
 one account always stays visible).
-Bars can show compact quota labels (`5h`, `7d`, `Fa`, `Ex`) and use configurable
-green/yellow/orange/red thresholds, with a colorblind palette option.
+Bars can show quota labels (`5h`, `7d`, `Fa`, `Ex`) and percentage text with adaptive,
+left, center, or right alignment. Adaptive text moves from right to left at the yellow
+threshold; left-aligned yellow and orange text turns black for contrast. Colors use
+configurable green/yellow/orange/red thresholds, with a colorblind palette option.
 Optional pace ticks compare quota usage with elapsed time in each reset window and have
 caret, full-line, edge-notch, and dot styles with a configurable color.
 Stale errors can mark labels/tooltips with `!`.
@@ -176,6 +178,13 @@ enum class BarMode {
     Remaining,
 };
 
+enum class PercentTextAlignment {
+    Adaptive,
+    Left,
+    Center,
+    Right,
+};
+
 enum class LabelPosition {
     Hidden,
     Left,
@@ -218,6 +227,7 @@ struct Settings {
     COLORREF paceTickColor = kDefaultPaceTickColor;
     bool showBarLabels = false;
     bool showPercentText = false;
+    PercentTextAlignment percentTextAlignment = PercentTextAlignment::Adaptive;
     bool showCodexSparkInTooltip = false;
     bool colorblindMode = false;
     bool showStaleWarning = true;
@@ -255,6 +265,8 @@ struct AppliedState {
     std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
     std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1};
     std::wstring tip;
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
@@ -3795,6 +3807,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
         COLORREF paceTickColor;
         BarLayout barLayout;
+        PercentTextAlignment percentTextAlignment;
         PaceTickStyle paceTickStyle;
         LabelPosition labelPosition;
         ClickAction clickAction;
@@ -3817,6 +3830,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             paceTickColor = g_settings.paceTickColor;
             showBarLabels = g_settings.showBarLabels;
             showPercentText = g_settings.showPercentText;
+            percentTextAlignment = g_settings.percentTextAlignment;
             yellowThreshold = g_settings.yellowThreshold;
             orangeThreshold = g_settings.orangeThreshold;
             redThreshold = g_settings.redThreshold;
@@ -4093,9 +4107,20 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     percent.Width(verticalBars ?
                         std::max((double)barThickness, percentFontSize * 4.0) :
                         (double)barLength);
-                    percent.HorizontalAlignment(HorizontalAlignment::Center);
                     percent.VerticalAlignment(VerticalAlignment::Center);
-                    percent.TextAlignment(TextAlignment::Center);
+                    if (percentTextAlignment == PercentTextAlignment::Left) {
+                        percent.HorizontalAlignment(HorizontalAlignment::Left);
+                        percent.TextAlignment(TextAlignment::Left);
+                        percent.Padding({2, 0, 0, 0});
+                    } else if (percentTextAlignment == PercentTextAlignment::Center) {
+                        percent.HorizontalAlignment(HorizontalAlignment::Center);
+                        percent.TextAlignment(TextAlignment::Center);
+                    } else {
+                        // Adaptive starts on the unfilled right side.
+                        percent.HorizontalAlignment(HorizontalAlignment::Right);
+                        percent.TextAlignment(TextAlignment::Right);
+                        percent.Padding({0, 0, 2, 0});
+                    }
                     percent.Foreground(SolidColorBrush(
                         winrt::Windows::UI::Color{255, 255, 255, 255}));
                     percent.Opacity(0.9);
@@ -4470,6 +4495,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool showPaceTicks, showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
     BarLayout barLayout;
     BarMode barMode;
+    PercentTextAlignment percentTextAlignment;
     PaceTickStyle paceTickStyle;
     ClickAction clickAction;
     {
@@ -4488,6 +4514,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         showPaceTicks = g_settings.showPaceTicks;
         paceTickStyle = g_settings.paceTickStyle;
         showPercentText = g_settings.showPercentText;
+        percentTextAlignment = g_settings.percentTextAlignment;
         showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
         colorblindMode = g_settings.colorblindMode;
         showStaleWarning = g_settings.showStaleWarning;
@@ -4647,6 +4674,44 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
 
                 if (showPercentText) {
+                    PercentTextAlignment appliedAlignment =
+                        percentTextAlignment == PercentTextAlignment::Adaptive ?
+                            (dispPct >= yellowThreshold ? PercentTextAlignment::Left :
+                                                         PercentTextAlignment::Right) :
+                            percentTextAlignment;
+                    if ((int)appliedAlignment != ap.percentAlignments[w]) {
+                        if (ui.percents[w]) {
+                            if (appliedAlignment == PercentTextAlignment::Left) {
+                                ui.percents[w].HorizontalAlignment(HorizontalAlignment::Left);
+                                ui.percents[w].TextAlignment(TextAlignment::Left);
+                                ui.percents[w].Padding({2, 0, 0, 0});
+                            } else if (appliedAlignment == PercentTextAlignment::Center) {
+                                ui.percents[w].HorizontalAlignment(HorizontalAlignment::Center);
+                                ui.percents[w].TextAlignment(TextAlignment::Center);
+                                ui.percents[w].Padding({0, 0, 0, 0});
+                            } else {
+                                ui.percents[w].HorizontalAlignment(HorizontalAlignment::Right);
+                                ui.percents[w].TextAlignment(TextAlignment::Right);
+                                ui.percents[w].Padding({0, 0, 2, 0});
+                            }
+                        }
+                        ap.percentAlignments[w] = (int)appliedAlignment;
+                    }
+
+                    bool yellowOrOrange = !stale && wu.pct >= 0 &&
+                        ((wu.pct >= yellowThreshold && wu.pct < orangeThreshold) ||
+                         (wu.pct >= orangeThreshold && wu.pct < redThreshold));
+                    int darkText = appliedAlignment == PercentTextAlignment::Left &&
+                                   yellowOrOrange ? 1 : 0;
+                    if (darkText != ap.percentDark[w]) {
+                        if (ui.percents[w]) {
+                            ui.percents[w].Foreground(SolidColorBrush(darkText ?
+                                winrt::Windows::UI::Color{255, 0, 0, 0} :
+                                winrt::Windows::UI::Color{255, 255, 255, 255}));
+                        }
+                        ap.percentDark[w] = darkText;
+                    }
+
                     std::wstring percentText;
                     if (wu.pct >= 0) {
                         wchar_t text[16];
@@ -5306,6 +5371,10 @@ static void NormalizeSettings(Settings* s) {
         s->paceTickStyle > PaceTickStyle::Dot) {
         s->paceTickStyle = PaceTickStyle::Caret;
     }
+    if (s->percentTextAlignment < PercentTextAlignment::Adaptive ||
+        s->percentTextAlignment > PercentTextAlignment::Right) {
+        s->percentTextAlignment = PercentTextAlignment::Adaptive;
+    }
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
@@ -5365,6 +5434,10 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"barGap", s.barGap);
         setNumber(L"rightMargin", s.rightMargin);
         setBool(L"showPercentText", s.showPercentText);
+        setString(L"percentTextAlignment",
+                  s.percentTextAlignment == PercentTextAlignment::Left ? L"left" :
+                  s.percentTextAlignment == PercentTextAlignment::Center ? L"center" :
+                  s.percentTextAlignment == PercentTextAlignment::Right ? L"right" : L"adaptive");
         setBool(L"showBarLabels", s.showBarLabels);
         setBool(L"showCodexSpark", s.showCodexSparkInTooltip);
         setNumber(L"yellowThreshold", s.yellowThreshold);
@@ -5455,6 +5528,11 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         s.barGap = (int)GetNum(root, L"barGap", 2);
         s.rightMargin = (int)GetNum(root, L"rightMargin", 4);
         s.showPercentText = getBoolDefault(L"showPercentText", false);
+        std::wstring percentTextAlignment = GetStr(root, L"percentTextAlignment");
+        s.percentTextAlignment = percentTextAlignment == L"left" ? PercentTextAlignment::Left :
+                                 percentTextAlignment == L"center" ? PercentTextAlignment::Center :
+                                 percentTextAlignment == L"right" ? PercentTextAlignment::Right :
+                                                                    PercentTextAlignment::Adaptive;
         s.showBarLabels = getBoolDefault(L"showBarLabels", false);
         s.showCodexSparkInTooltip = getBoolDefault(L"showCodexSpark", false);
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
@@ -5798,6 +5876,7 @@ enum SettingsControlId {
     kPaceTickColor,
     kShowBarLabels,
     kShowPercentText,
+    kPercentTextAlignment,
     kShowCodexSpark,
     kColorblindMode,
     kShowStaleWarning,
@@ -6625,10 +6704,13 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
                          (LRESULT)LabelPosition::Hidden;
     EnableSettingsRow(state, kLabelFontSize, labelsVisible);
     EnableSettingsRow(state, kLabelGap, labelsVisible);
-    bool compactTextVisible =
+    bool barTextVisible =
         SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED ||
         SendDlgItemMessageW(state.hWnd, kShowPercentText, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    EnableSettingsRow(state, kPercentFontSize, compactTextVisible);
+    EnableSettingsRow(state, kPercentFontSize, barTextVisible);
+    EnableSettingsRow(
+        state, kPercentTextAlignment,
+        SendDlgItemMessageW(state.hWnd, kShowPercentText, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
                                                 BM_GETCHECK, 0, 0) == BST_CHECKED;
     EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
@@ -6702,6 +6784,8 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
                         (int)s.paceTickStyle, 0);
     setCheck(kShowBarLabels, s.showBarLabels);
     setCheck(kShowPercentText, s.showPercentText);
+    SendDlgItemMessageW(state.hWnd, kPercentTextAlignment, CB_SETCURSEL,
+                        (int)s.percentTextAlignment, 0);
     setCheck(kShowCodexSpark, s.showCodexSparkInTooltip);
     setCheck(kColorblindMode, s.colorblindMode);
     setCheck(kShowStaleWarning, s.showStaleWarning);
@@ -6785,6 +6869,11 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     }
     s.showBarLabels = isChecked(kShowBarLabels);
     s.showPercentText = isChecked(kShowPercentText);
+    int percentTextAlignment = (int)SendDlgItemMessageW(
+        state.hWnd, kPercentTextAlignment, CB_GETCURSEL, 0, 0);
+    s.percentTextAlignment =
+        percentTextAlignment >= 0 && percentTextAlignment <= (int)PercentTextAlignment::Right ?
+            (PercentTextAlignment)percentTextAlignment : PercentTextAlignment::Adaptive;
     s.showCodexSparkInTooltip = isChecked(kShowCodexSpark);
     s.colorblindMode = isChecked(kColorblindMode);
     s.showStaleWarning = isChecked(kShowStaleWarning);
@@ -7537,6 +7626,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.paceTickColor = defaults.paceTickColor;
         settings.showBarLabels = defaults.showBarLabels;
         settings.showPercentText = defaults.showPercentText;
+        settings.percentTextAlignment = defaults.percentTextAlignment;
         settings.showCodexSparkInTooltip = defaults.showCodexSparkInTooltip;
         settings.colorblindMode = defaults.colorblindMode;
         settings.showStaleWarning = defaults.showStaleWarning;
@@ -7646,7 +7736,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                           2, 50, true);
             AddNumericRow(*state, 1, L"Label font size (px)", kLabelFontSize,
                           6, 24, true);
-            AddNumericRow(*state, 1, L"Compact text size (px)", kPercentFontSize,
+            AddNumericRow(*state, 1, L"Bar text size (px)", kPercentFontSize,
                           6, 24, true);
             AddNumericRow(*state, 1, L"Account margin (px)", kAccountMargin, 0, 500);
             AddNumericRow(*state, 1, L"Label gap (px)", kLabelGap, 0, 500);
@@ -7667,9 +7757,13 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             SetWindowTextW(paceTickColor, L"Choose...");
             state->rows[2].back().preview = CreateSettingsControl(
                 *state, 2, L"STATIC", L"", WS_VISIBLE | SS_OWNERDRAW, 0, -1);
-            AddSettingsCheck(*state, 2, L"Show compact bar labels (5h, 7d, Fa, Ex)",
+            AddSettingsCheck(*state, 2, L"Show bar labels (5h, 7d, Fa, Ex)",
                              kShowBarLabels);
-            AddSettingsCheck(*state, 2, L"Show compact percent text", kShowPercentText);
+            AddSettingsCheck(*state, 2, L"Show percentage text", kShowPercentText);
+            HWND percentTextAlignment = AddSettingsRow(
+                *state, 2, L"Percentage text alignment", L"COMBOBOX",
+                CBS_DROPDOWNLIST, 0, kPercentTextAlignment);
+            AddComboItems(percentTextAlignment, {L"Adaptive", L"Left", L"Center", L"Right"});
             AddSettingsCheck(*state, 2, L"Show Codex Spark in tooltips", kShowCodexSpark);
             AddSettingsCheck(*state, 2, L"Use colorblind palette", kColorblindMode);
             AddSettingsCheck(*state, 2, L"Mark stale data with !", kShowStaleWarning);
