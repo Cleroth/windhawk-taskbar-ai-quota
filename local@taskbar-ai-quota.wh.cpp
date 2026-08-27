@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.2
+// @version         1.5.3
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -5912,6 +5912,9 @@ enum SettingsControlId {
     kVisualTestModeLayout = 2350,
     kVisualTestModeDisplay,
 
+    kSettingsRowsPrevious = 2360,
+    kSettingsRowsNext,
+
     kAccountProvider = 2400,
     kAccountLabel,
     kAccountFiveHour,
@@ -5937,6 +5940,9 @@ struct SettingsWindowState {
     HWND hWnd = nullptr;
     std::array<HWND, 4> pageButtons{};
     HWND resetPageButton = nullptr;
+    HWND previousRowsButton = nullptr;
+    HWND rowsPageLabel = nullptr;
+    HWND nextRowsButton = nullptr;
     HWND accountList = nullptr;
     HWND toolTip = nullptr;
     HWND colorDialog = nullptr;
@@ -5946,10 +5952,12 @@ struct SettingsWindowState {
     HBRUSH backgroundBrush = nullptr;
     HBRUSH inputBrush = nullptr;
     int currentPage = 0;
-    int scrollY = 0;
+    std::array<int, 4> rowSubpages{};
+    int lockedWindowHeight = 0;
     UINT dpi = 96;
     bool dark = false;
     bool updating = false;
+    bool inSizeMove = false;
     std::array<COLORREF, 16> customColors{};
 };
 
@@ -6333,7 +6341,7 @@ static void AddSettingsToolTip(SettingsWindowState& state, int id, PCWSTR text) 
 
 static void ShowSettingsPage(SettingsWindowState& state, int page) {
     state.currentPage = std::clamp(page, 0, 3);
-    state.scrollY = 0;
+    state.rowSubpages[state.currentPage] = 0;
     const PCWSTR resetLabels[] = {L"", L"Reset Layout to defaults...",
                                   L"Reset Display to defaults...",
                                   L"Reset Behavior to defaults..."};
@@ -6350,6 +6358,60 @@ static void ShowSettingsPage(SettingsWindowState& state, int page) {
                              (i == state.currentPage ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
         }
     }
+}
+
+static void FitSettingsWindowToContent(SettingsWindowState& state,
+                                       bool reposition = true) {
+    if (!state.hWnd || IsIconic(state.hWnd) || IsZoomed(state.hWnd)) return;
+
+    // Grow from live row counts; constrained work areas paginate in the layout pass.
+    size_t maximumRows = 0;
+    for (int page = 1; page < 4; page++) {
+        maximumRows = std::max(maximumRows, state.rows[page].size());
+    }
+    int desiredClientHeight = ScaleForDpi(62, state.dpi) +
+                              (int)maximumRows * ScaleForDpi(37, state.dpi) +
+                              ScaleForDpi(28, state.dpi) + ScaleForDpi(12, state.dpi);
+
+    RECT windowRect{};
+    GetWindowRect(state.hWnd, &windowRect);
+    RECT adjustedRect{0, 0, ScaleForDpi(700, state.dpi), desiredClientHeight};
+    DWORD style = (DWORD)GetWindowLongPtrW(state.hWnd, GWL_STYLE);
+    DWORD exStyle = (DWORD)GetWindowLongPtrW(state.hWnd, GWL_EXSTYLE);
+    using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi"));
+    int desiredWindowHeight;
+    if (adjustWindowRectExForDpi &&
+        adjustWindowRectExForDpi(&adjustedRect, style, FALSE, exStyle, state.dpi)) {
+        desiredWindowHeight = adjustedRect.bottom - adjustedRect.top;
+    } else {
+        RECT client{};
+        GetClientRect(state.hWnd, &client);
+        desiredWindowHeight = desiredClientHeight +
+                              (windowRect.bottom - windowRect.top) - client.bottom;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(state.hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{sizeof(monitorInfo)};
+    GetMonitorInfoW(monitor, &monitorInfo);
+    int workWidth = monitorInfo.rcWork.right - monitorInfo.rcWork.left;
+    int workHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
+    int width = std::min((int)(windowRect.right - windowRect.left), workWidth);
+    int height = std::min(desiredWindowHeight, workHeight);
+    int centerX = windowRect.left + (windowRect.right - windowRect.left) / 2;
+    int centerY = windowRect.top + (windowRect.bottom - windowRect.top) / 2;
+    int x = std::clamp(centerX - width / 2, (int)monitorInfo.rcWork.left,
+                       (int)monitorInfo.rcWork.right - width);
+    int y = std::clamp(centerY - height / 2, (int)monitorInfo.rcWork.top,
+                       (int)monitorInfo.rcWork.bottom - height);
+    state.lockedWindowHeight = height;
+    if (!reposition && width == windowRect.right - windowRect.left &&
+        height == windowRect.bottom - windowRect.top) {
+        return;
+    }
+    SetWindowPos(state.hWnd, nullptr, x, y, width, height,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 static void LayoutSettingsWindow(SettingsWindowState& state) {
@@ -6375,25 +6437,8 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
 
     int viewportTop = ScaleForDpi(52, state.dpi);
     int viewportBottom = height - margin;
-    int visibleHeight = std::max(1, viewportBottom - viewportTop);
     int settingsRowHeight = ScaleForDpi(37, state.dpi);
     int resetButtonHeight = ScaleForDpi(28, state.dpi);
-    int contentHeight = visibleHeight;
-    if (state.currentPage != 0) {
-        // Use the reset button's actual bottom so added rows scroll only when needed.
-        int contentBottom = ScaleForDpi(62, state.dpi) +
-                            (int)state.rows[state.currentPage].size() * settingsRowHeight +
-                            resetButtonHeight;
-        contentHeight = std::max(visibleHeight, contentBottom - viewportTop);
-    }
-    int maxScroll = std::max(0, contentHeight - visibleHeight);
-    state.scrollY = std::clamp(state.scrollY, 0, maxScroll);
-    SCROLLINFO scrollInfo{sizeof(scrollInfo), SIF_RANGE | SIF_PAGE | SIF_POS};
-    scrollInfo.nMin = 0;
-    scrollInfo.nMax = contentHeight - 1;
-    scrollInfo.nPage = visibleHeight;
-    scrollInfo.nPos = state.scrollY;
-    SetScrollInfo(state.hWnd, SB_VERT, &scrollInfo, TRUE);
 
     if (state.accountList) {
         int x = ScaleForDpi(26, state.dpi);
@@ -6450,19 +6495,46 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
     }
 
     setVisible(state.resetPageButton, false);
+    setVisible(state.previousRowsButton, false);
+    setVisible(state.rowsPageLabel, false);
+    setVisible(state.nextRowsButton, false);
     for (int page = 1; page < 4; page++) {
-        int y = ScaleForDpi(62, state.dpi) -
-                (page == state.currentPage ? state.scrollY : 0);
+        int firstRow = 0;
+        int lastRow = (int)state.rows[page].size();
+        int subpageCount = 1;
+        int rowsPerSubpage = std::max(
+            1, (viewportBottom - ScaleForDpi(62, state.dpi) - resetButtonHeight) /
+                   settingsRowHeight);
+        if (page == state.currentPage) {
+            subpageCount = std::max(
+                1, ((int)state.rows[page].size() + rowsPerSubpage - 1) / rowsPerSubpage);
+            state.rowSubpages[page] = std::clamp(state.rowSubpages[page], 0,
+                                                 subpageCount - 1);
+            firstRow = state.rowSubpages[page] * rowsPerSubpage;
+            lastRow = std::min((int)state.rows[page].size(), firstRow + rowsPerSubpage);
+        }
+        int y = ScaleForDpi(62, state.dpi);
         int labelX = ScaleForDpi(28, state.dpi);
         int controlX = width < ScaleForDpi(620, state.dpi) ?
                            std::max(labelX + ScaleForDpi(120, state.dpi), width * 44 / 100) :
                            ScaleForDpi(300, state.dpi);
         int controlWidth = std::max(ScaleForDpi(100, state.dpi),
                                     width - controlX - ScaleForDpi(24, state.dpi));
-        for (const auto& row : state.rows[page]) {
+        for (int rowIndex = 0; rowIndex < (int)state.rows[page].size(); rowIndex++) {
+            const auto& row = state.rows[page][rowIndex];
+            bool rowOnSubpage = page == state.currentPage && rowIndex >= firstRow &&
+                                rowIndex < lastRow;
+            if (!rowOnSubpage) {
+                if (row.label) setVisible(row.label, false);
+                setVisible(row.control, false);
+                if (row.slider) setVisible(row.slider, false);
+                if (row.spin) setVisible(row.spin, false);
+                if (row.preview) setVisible(row.preview, false);
+                continue;
+            }
             bool sliderFits = row.slider && controlWidth >= ScaleForDpi(200, state.dpi);
-            bool rowVisible = page == state.currentPage && y >= viewportTop &&
-                              y + ScaleForDpi(26, state.dpi) <= viewportBottom;
+            bool rowVisible = y >= viewportTop &&
+                               y + ScaleForDpi(26, state.dpi) <= viewportBottom;
             if (row.label) {
                 int labelRight = controlX - ScaleForDpi(12, state.dpi);
                 if (row.preview) labelRight -= ScaleForDpi(28, state.dpi);
@@ -6522,6 +6594,39 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
                          width - labelX - buttonWidth, buttonY,
                          buttonWidth, resetButtonHeight, positionFlags);
             setVisible(state.resetPageButton, buttonVisible);
+            if (subpageCount > 1) {
+                int gap = ScaleForDpi(6, state.dpi);
+                int navigationButtonWidth = ScaleForDpi(72, state.dpi);
+                int pageLabelWidth = ScaleForDpi(48, state.dpi);
+                int previousX = labelX;
+                int labelPositionX = previousX + navigationButtonWidth + gap;
+                int nextX = labelPositionX + pageLabelWidth + gap;
+                SetWindowPos(state.previousRowsButton, nullptr,
+                             previousX, buttonY, navigationButtonWidth,
+                             resetButtonHeight, positionFlags);
+                SetWindowPos(state.rowsPageLabel, nullptr,
+                             labelPositionX, buttonY, pageLabelWidth,
+                             resetButtonHeight, positionFlags);
+                SetWindowPos(state.nextRowsButton, nullptr,
+                             nextX, buttonY, navigationButtonWidth,
+                             resetButtonHeight, positionFlags);
+                wchar_t pageText[32];
+                swprintf(pageText, ARRAYSIZE(pageText), L"%d / %d",
+                         state.rowSubpages[page] + 1, subpageCount);
+                SetWindowTextW(state.rowsPageLabel, pageText);
+                bool previousEnabled = state.rowSubpages[page] > 0;
+                bool nextEnabled = state.rowSubpages[page] + 1 < subpageCount;
+                if (!previousEnabled && GetFocus() == state.previousRowsButton) {
+                    SetFocus(state.nextRowsButton);
+                } else if (!nextEnabled && GetFocus() == state.nextRowsButton) {
+                    SetFocus(state.previousRowsButton);
+                }
+                EnableWindow(state.previousRowsButton, previousEnabled);
+                EnableWindow(state.nextRowsButton, nextEnabled);
+                setVisible(state.previousRowsButton, buttonVisible);
+                setVisible(state.rowsPageLabel, buttonVisible);
+                setVisible(state.nextRowsButton, buttonVisible);
+            }
         }
     }
     for (HWND pageButton : state.pageButtons) {
@@ -7806,6 +7911,19 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 0, 0, 1, 1, hWnd,
                 reinterpret_cast<HMENU>((INT_PTR)kResetPage),
                 GetModuleHandleW(nullptr), nullptr);
+            state->previousRowsButton = CreateWindowExW(
+                0, L"BUTTON", L"Previous", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
+                0, 0, 1, 1, hWnd,
+                reinterpret_cast<HMENU>((INT_PTR)kSettingsRowsPrevious),
+                GetModuleHandleW(nullptr), nullptr);
+            state->rowsPageLabel = CreateWindowExW(
+                0, L"STATIC", L"", WS_CHILD | SS_CENTER | SS_CENTERIMAGE,
+                0, 0, 1, 1, hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+            state->nextRowsButton = CreateWindowExW(
+                0, L"BUTTON", L"Next", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
+                0, 0, 1, 1, hWnd,
+                reinterpret_cast<HMENU>((INT_PTR)kSettingsRowsNext),
+                GetModuleHandleW(nullptr), nullptr);
 
             state->toolTip = CreateWindowExW(
                 WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
@@ -7972,6 +8090,18 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 case kResetPage:
                     if (HIWORD(wParam) == BN_CLICKED) ResetCurrentSettingsPage(*state);
                     return 0;
+                case kSettingsRowsPrevious:
+                    if (HIWORD(wParam) == BN_CLICKED && state->currentPage > 0) {
+                        state->rowSubpages[state->currentPage]--;
+                        LayoutSettingsWindow(*state);
+                    }
+                    return 0;
+                case kSettingsRowsNext:
+                    if (HIWORD(wParam) == BN_CLICKED && state->currentPage > 0) {
+                        state->rowSubpages[state->currentPage]++;
+                        LayoutSettingsWindow(*state);
+                    }
+                    return 0;
                 case kVisualTestModeLayout:
                 case kVisualTestModeDisplay:
                     if (HIWORD(wParam) == BN_CLICKED) {
@@ -8022,25 +8152,6 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
         case WM_SIZE:
             if (state) LayoutSettingsWindow(*state);
             return 0;
-        case WM_VSCROLL:
-            if (state) {
-                if (lParam) return 0;
-                SCROLLINFO info{sizeof(info), SIF_ALL};
-                GetScrollInfo(hWnd, SB_VERT, &info);
-                int position = state->scrollY;
-                switch (LOWORD(wParam)) {
-                    case SB_LINEUP: position -= ScaleForDpi(24, state->dpi); break;
-                    case SB_LINEDOWN: position += ScaleForDpi(24, state->dpi); break;
-                    case SB_PAGEUP: position -= (int)info.nPage; break;
-                    case SB_PAGEDOWN: position += (int)info.nPage; break;
-                    case SB_THUMBTRACK: position = info.nTrackPos; break;
-                    case SB_TOP: position = info.nMin; break;
-                    case SB_BOTTOM: position = info.nMax; break;
-                }
-                state->scrollY = position;
-                LayoutSettingsWindow(*state);
-            }
-            return 0;
         case WM_TIMER:
             if (state && wParam == kSettingsAutosaveTimer) {
                 KillTimer(hWnd, kSettingsAutosaveTimer);
@@ -8048,13 +8159,6 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 return 0;
             }
             break;
-        case WM_MOUSEWHEEL:
-            if (state) {
-                state->scrollY -= GET_WHEEL_DELTA_WPARAM(wParam) /
-                                  WHEEL_DELTA * ScaleForDpi(72, state->dpi);
-                LayoutSettingsWindow(*state);
-            }
-            return 0;
         case WM_GETMINMAXINFO: {
             auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
             UINT dpi = state ? state->dpi : 96;
@@ -8063,12 +8167,22 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             int workWidth = (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left);
             int workHeight = (int)(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
             info->ptMinTrackSize.x = std::min(ScaleForDpi(500, dpi), workWidth);
-            info->ptMinTrackSize.y = std::min(ScaleForDpi(400, dpi), workHeight);
+            if (state && state->lockedWindowHeight > 0) {
+                int lockedHeight = std::min(state->lockedWindowHeight, workHeight);
+                info->ptMinTrackSize.y = lockedHeight;
+                info->ptMaxTrackSize.y = lockedHeight;
+            } else {
+                info->ptMinTrackSize.y = std::min(ScaleForDpi(400, dpi), workHeight);
+            }
             return 0;
         }
+        case WM_ENTERSIZEMOVE:
+            if (state) state->inSizeMove = true;
+            return 0;
         case WM_DPICHANGED:
             if (state) {
                 state->dpi = HIWORD(wParam);
+                state->lockedWindowHeight = 0;
                 auto* suggested = reinterpret_cast<RECT*>(lParam);
                 SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
                              suggested->right - suggested->left,
@@ -8079,10 +8193,19 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0,
                                  ScaleForDpi(360, state->dpi));
                 }
+                if (!state->inSizeMove) FitSettingsWindowToContent(*state);
                 LayoutSettingsWindow(*state);
             }
             return 0;
         case WM_SETTINGCHANGE:
+            if (state) {
+                RecreateSettingsVisuals(*state);
+                if (wParam == SPI_SETWORKAREA) {
+                    FitSettingsWindowToContent(*state);
+                    LayoutSettingsWindow(*state);
+                }
+            }
+            return 0;
         case WM_THEMECHANGED:
         case WM_SYSCOLORCHANGE:
             if (state) RecreateSettingsVisuals(*state);
@@ -8099,6 +8222,15 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 state->updating = false;
                 UpdateDependentSettingsControls(*state);
                 StartRetryInject(true);
+                FitSettingsWindowToContent(*state);
+                LayoutSettingsWindow(*state);
+            }
+            return 0;
+        case WM_EXITSIZEMOVE:
+            if (state) {
+                state->inSizeMove = false;
+                FitSettingsWindowToContent(*state, false);
+                LayoutSettingsWindow(*state);
             }
             return 0;
         case kExitVisualTestMessage:
@@ -8246,16 +8378,19 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         }
     }
     int width = ScaleForDpi(700, dpi);
-    int height = ScaleForDpi(560, dpi);
+    int height = ScaleForDpi(400, dpi);
     width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
     height = std::min(height, (int)(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top));
     int x = monitorInfo.rcWork.left + (monitorInfo.rcWork.right - monitorInfo.rcWork.left - width) / 2;
     int y = monitorInfo.rcWork.top + (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - height) / 2;
     HWND window = CreateWindowExW(WS_EX_APPWINDOW, kSettingsWindowClass,
                                   L"Taskbar AI Quota Bars - Settings",
-                                  WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VSCROLL,
+                                  (WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX) |
+                                      WS_CLIPCHILDREN,
                                   x, y, width, height, nullptr, nullptr, instance, &state);
     if (window) {
+        FitSettingsWindowToContent(state);
+        LayoutSettingsWindow(state);
         g_settingsWindow.store(window);
         if (g_unloading || g_settingsWindowCancelRequested) {
             PostMessageW(window, WM_CLOSE, 0, 0);
