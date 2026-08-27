@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.2.2
+// @version         1.2.3
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -5804,6 +5804,13 @@ static UINT WindowDpi(HWND hWnd) {
 }
 
 static bool IsWindowsDarkMode() {
+    HIGHCONTRASTW highContrast{sizeof(highContrast)};
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast),
+                              &highContrast, 0) &&
+        (highContrast.dwFlags & HCF_HIGHCONTRASTON)) {
+        return false;
+    }
+
     DWORD light = 1;
     DWORD size = sizeof(light);
     RegGetValueW(HKEY_CURRENT_USER,
@@ -5820,11 +5827,23 @@ static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
         auto setWindowTheme = reinterpret_cast<SetWindowTheme_t>(
             GetProcAddress(uxTheme, "SetWindowTheme"));
         if (setWindowTheme) {
+            struct ThemeContext {
+                SetWindowTheme_t setWindowTheme;
+                bool dark;
+            } context{setWindowTheme, dark};
             EnumChildWindows(hWnd, [](HWND child, LPARAM param) -> BOOL {
-                auto fn = reinterpret_cast<SetWindowTheme_t>(param);
-                fn(child, IsWindowsDarkMode() ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+                auto* context = reinterpret_cast<ThemeContext*>(param);
+                wchar_t className[32] = {};
+                GetClassNameW(child, className, ARRAYSIZE(className));
+                PCWSTR theme = context->dark ? L"DarkMode_Explorer" : L"Explorer";
+                if (context->dark && _wcsicmp(className, L"ComboBox") == 0) {
+                    theme = L"DarkMode_CFD";
+                } else if (context->dark && _wcsicmp(className, WC_HEADERW) == 0) {
+                    theme = L"DarkMode_ItemsView";
+                }
+                context->setWindowTheme(child, theme, nullptr);
                 return TRUE;
-            }, reinterpret_cast<LPARAM>(setWindowTheme));
+            }, reinterpret_cast<LPARAM>(&context));
         }
     }
 
@@ -5868,23 +5887,86 @@ static void RecreateSettingsVisuals(SettingsWindowState& state) {
                               state.dark ? RGB(235, 235, 235) : GetSysColor(COLOR_WINDOWTEXT));
     }
     ApplyNativeWindowTheme(state.hWnd, state.dark);
-    if (state.accountList) {
-        HMODULE uxTheme = GetModuleHandleW(L"uxtheme.dll");
-        if (uxTheme) {
-            using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-            auto setWindowTheme = reinterpret_cast<SetWindowTheme_t>(
-                GetProcAddress(uxTheme, "SetWindowTheme"));
-            if (setWindowTheme) {
-                setWindowTheme(state.accountList,
-                               state.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
-                if (HWND header = ListView_GetHeader(state.accountList)) {
-                    setWindowTheme(header,
-                                   state.dark ? L"DarkMode_ItemsView" : L"Explorer", nullptr);
+    RedrawWindow(state.hWnd, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+static LRESULT CALLBACK AccountListSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                                LPARAM lParam, UINT_PTR subclassId,
+                                                DWORD_PTR referenceData) {
+    auto* state = reinterpret_cast<SettingsWindowState*>(referenceData);
+    if (message == WM_NOTIFY && state && state->dark) {
+        auto* header = reinterpret_cast<NMHDR*>(lParam);
+        if (header->hwndFrom == ListView_GetHeader(hWnd) &&
+            header->code == NM_CUSTOMDRAW) {
+            auto* draw = reinterpret_cast<NMCUSTOMDRAW*>(lParam);
+            if (draw->dwDrawStage == CDDS_PREPAINT) {
+                RECT client{};
+                GetClientRect(header->hwndFrom, &client);
+                FillRect(draw->hdc, &client, state->inputBrush);
+                return CDRF_NOTIFYITEMDRAW;
+            }
+            if (draw->dwDrawStage == CDDS_ITEMPREPAINT) {
+                int savedDc = SaveDC(draw->hdc);
+                if (draw->uItemState & (CDIS_HOT | CDIS_SELECTED)) {
+                    SetDCBrushColor(draw->hdc, RGB(62, 62, 62));
+                    FillRect(draw->hdc, &draw->rc,
+                             reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+                } else {
+                    FillRect(draw->hdc, &draw->rc, state->inputBrush);
                 }
+
+                wchar_t text[256] = {};
+                HDITEMW item{};
+                item.mask = HDI_TEXT | HDI_FORMAT;
+                item.pszText = text;
+                item.cchTextMax = ARRAYSIZE(text);
+                Header_GetItem(header->hwndFrom, (int)draw->dwItemSpec, &item);
+
+                SetBkMode(draw->hdc, TRANSPARENT);
+                SetTextColor(draw->hdc, RGB(235, 235, 235));
+                if (HFONT font = reinterpret_cast<HFONT>(
+                        SendMessageW(header->hwndFrom, WM_GETFONT, 0, 0))) {
+                    SelectObject(draw->hdc, font);
+                }
+                RECT textRect = draw->rc;
+                int padding = ScaleForDpi(6, state->dpi);
+                textRect.left += padding;
+                textRect.right -= padding;
+                UINT format = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
+                format |= (item.fmt & HDF_RIGHT) ? DT_RIGHT :
+                          (item.fmt & HDF_CENTER) ? DT_CENTER : DT_LEFT;
+                DrawTextW(draw->hdc, text, -1, &textRect, format);
+
+                SetDCPenColor(draw->hdc, RGB(75, 75, 75));
+                SelectObject(draw->hdc, GetStockObject(DC_PEN));
+                MoveToEx(draw->hdc, draw->rc.right - 1, draw->rc.top, nullptr);
+                LineTo(draw->hdc, draw->rc.right - 1, draw->rc.bottom);
+                MoveToEx(draw->hdc, draw->rc.left, draw->rc.bottom - 1, nullptr);
+                LineTo(draw->hdc, draw->rc.right, draw->rc.bottom - 1);
+                if (savedDc) RestoreDC(draw->hdc, savedDc);
+                return CDRF_SKIPDEFAULT;
             }
         }
+    } else if (message == WM_NCDESTROY) {
+        RemoveWindowSubclass(hWnd, AccountListSubclassProc, subclassId);
     }
-    InvalidateRect(state.hWnd, nullptr, TRUE);
+    return DefSubclassProc(hWnd, message, wParam, lParam);
+}
+
+static LRESULT CALLBACK SettingsNoEraseSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                                    LPARAM lParam, UINT_PTR subclassId,
+                                                    DWORD_PTR referenceData) {
+    if (message == WM_ERASEBKGND) {
+        auto* state = reinterpret_cast<SettingsWindowState*>(referenceData);
+        if (state && state->dark) {
+            // Preserve the previous frame until the native dark paint pass replaces it.
+            return 1;
+        }
+    } else if (message == WM_NCDESTROY) {
+        RemoveWindowSubclass(hWnd, SettingsNoEraseSubclassProc, subclassId);
+    }
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
 static HWND CreateSettingsControl(SettingsWindowState& state, int page, PCWSTR className,
@@ -5921,12 +6003,22 @@ static HWND AddNumericRow(SettingsWindowState& state, int page, PCWSTR labelText
     row.spin = CreateSettingsControl(
         state, page, UPDOWN_CLASSW, L"",
         WS_VISIBLE | UDS_ARROWKEYS | UDS_SETBUDDYINT | UDS_NOTHOUSANDS, 0, -1);
+    if (row.spin &&
+        !SetWindowSubclass(row.spin, SettingsNoEraseSubclassProc, 0,
+                           reinterpret_cast<DWORD_PTR>(&state))) {
+        Wh_Log(L"Could not subclass settings spin control");
+    }
     SendMessageW(row.spin, UDM_SETBUDDY, reinterpret_cast<WPARAM>(edit), 0);
     SendMessageW(row.spin, UDM_SETRANGE32, minimum, maximum);
     if (addSlider) {
         row.slider = CreateSettingsControl(
             state, page, TRACKBAR_CLASSW, L"",
             WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS, 0, -1);
+        if (row.slider &&
+            !SetWindowSubclass(row.slider, SettingsNoEraseSubclassProc, 0,
+                               reinterpret_cast<DWORD_PTR>(&state))) {
+            Wh_Log(L"Could not subclass settings slider");
+        }
         int trackMaximum = sliderMaximum >= minimum ? sliderMaximum : maximum;
         SendMessageW(row.slider, TBM_SETRANGE, TRUE, MAKELPARAM(minimum, trackMaximum));
         SendMessageW(row.slider, TBM_SETPAGESIZE, 0,
@@ -5995,7 +6087,10 @@ static void ShowSettingsPage(SettingsWindowState& state, int page) {
     }
     for (int i = 0; i < 4; i++) {
         for (HWND control : state.pageControls[i]) {
-            ShowWindow(control, i == state.currentPage ? SW_SHOW : SW_HIDE);
+            SetWindowPos(control, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                             SWP_NOREDRAW |
+                             (i == state.currentPage ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
         }
     }
 }
@@ -6006,13 +6101,19 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
     int width = client.right;
     int height = client.bottom;
     int margin = ScaleForDpi(12, state.dpi);
+    constexpr UINT positionFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW;
+    auto setVisible = [&](HWND control, bool visible) {
+        SetWindowPos(control, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | positionFlags |
+                         (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+    };
     int pageButtonWidth = std::max(1, (width - margin * 2) / 4);
     for (int i = 0; i < 4; i++) {
         int x = margin + i * pageButtonWidth;
         int buttonWidth = i == 3 ? std::max(1, width - margin - x) : pageButtonWidth;
         SetWindowPos(state.pageButtons[i], nullptr, x, margin,
                      buttonWidth, ScaleForDpi(32, state.dpi),
-                     SWP_NOZORDER | SWP_NOACTIVATE);
+                     positionFlags);
     }
 
     int viewportTop = ScaleForDpi(52, state.dpi);
@@ -6048,10 +6149,10 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
         int listTop = std::max(y, viewportTop);
         int listBottom = std::min(buttonY - ScaleForDpi(10, state.dpi), viewportBottom);
         SetWindowPos(state.accountList, nullptr, x, listTop, width - x * 2,
-                     std::max(1, listBottom - listTop), SWP_NOZORDER | SWP_NOACTIVATE);
-        ShowWindow(state.accountList,
-                   state.currentPage == 0 && listBottom - listTop >= ScaleForDpi(30, state.dpi) ?
-                       SW_SHOW : SW_HIDE);
+                     std::max(1, listBottom - listTop), positionFlags);
+        setVisible(state.accountList,
+                   state.currentPage == 0 &&
+                       listBottom - listTop >= ScaleForDpi(30, state.dpi));
         const int columnWidths[] = {90, 150, 120, 70, 120};
         int desiredColumnsWidth = ScaleForDpi(550, state.dpi);
         int availableColumnsWidth = width - x * 2 - ScaleForDpi(4, state.dpi);
@@ -6084,14 +6185,14 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
             HWND button = GetDlgItem(state.hWnd, ids[i]);
             int rowY = buttonY + buttonRow * (buttonHeight + gap);
             SetWindowPos(button, nullptr, buttonX, rowY,
-                         buttonWidth, buttonHeight, SWP_NOZORDER | SWP_NOACTIVATE);
-            ShowWindow(button, state.currentPage == 0 && rowY >= viewportTop &&
-                                   rowY + buttonHeight <= viewportBottom ? SW_SHOW : SW_HIDE);
+                         buttonWidth, buttonHeight, positionFlags);
+            setVisible(button, state.currentPage == 0 && rowY >= viewportTop &&
+                                   rowY + buttonHeight <= viewportBottom);
             if (!compactButtons) normalButtonX += buttonWidth + gap;
         }
     }
 
-    ShowWindow(state.resetPageButton, SW_HIDE);
+    setVisible(state.resetPageButton, false);
     for (int page = 1; page < 4; page++) {
         int y = ScaleForDpi(62, state.dpi) -
                 (page == state.currentPage ? state.scrollY : 0);
@@ -6110,13 +6211,13 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
                 if (row.preview) labelRight -= ScaleForDpi(28, state.dpi);
                 SetWindowPos(row.label, nullptr, labelX, y + ScaleForDpi(4, state.dpi),
                              std::max(1, labelRight - labelX),
-                             ScaleForDpi(22, state.dpi), SWP_NOZORDER | SWP_NOACTIVATE);
+                             ScaleForDpi(22, state.dpi), positionFlags);
                 if (row.preview) {
                     SetWindowPos(row.preview, nullptr,
                                  controlX - ScaleForDpi(24, state.dpi),
                                  y + ScaleForDpi(4, state.dpi),
                                  ScaleForDpi(18, state.dpi), ScaleForDpi(18, state.dpi),
-                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                                 positionFlags);
                 }
                 if (row.spin) {
                     int spinWidth = ScaleForDpi(18, state.dpi);
@@ -6127,13 +6228,13 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
                                                    controlWidth - editWidth - spinWidth -
                                                        ScaleForDpi(12, state.dpi));
                         SetWindowPos(row.slider, nullptr, controlX, y, sliderWidth,
-                                     ScaleForDpi(28, state.dpi), SWP_NOZORDER | SWP_NOACTIVATE);
+                                     ScaleForDpi(28, state.dpi), positionFlags);
                         editX += sliderWidth + ScaleForDpi(8, state.dpi);
                     }
                     SetWindowPos(row.control, nullptr, editX, y, editWidth,
-                                 ScaleForDpi(26, state.dpi), SWP_NOZORDER | SWP_NOACTIVATE);
+                                 ScaleForDpi(26, state.dpi), positionFlags);
                     SetWindowPos(row.spin, nullptr, editX + editWidth, y, spinWidth,
-                                 ScaleForDpi(26, state.dpi), SWP_NOZORDER | SWP_NOACTIVATE);
+                                 ScaleForDpi(26, state.dpi), positionFlags);
                 } else {
                     wchar_t className[32] = {};
                     GetClassNameW(row.control, className, ARRAYSIZE(className));
@@ -6141,17 +6242,17 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
                                             ScaleForDpi(220, state.dpi) :
                                             ScaleForDpi(26, state.dpi);
                     SetWindowPos(row.control, nullptr, controlX, y, controlWidth, controlHeight,
-                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                                 positionFlags);
                 }
-                ShowWindow(row.label, rowVisible ? SW_SHOW : SW_HIDE);
+                setVisible(row.label, rowVisible);
             } else {
                 SetWindowPos(row.control, nullptr, labelX, y, width - labelX * 2,
-                             ScaleForDpi(26, state.dpi), SWP_NOZORDER | SWP_NOACTIVATE);
+                             ScaleForDpi(26, state.dpi), positionFlags);
             }
-            ShowWindow(row.control, rowVisible ? SW_SHOW : SW_HIDE);
-            if (row.slider) ShowWindow(row.slider, rowVisible && sliderFits ? SW_SHOW : SW_HIDE);
-            if (row.spin) ShowWindow(row.spin, rowVisible ? SW_SHOW : SW_HIDE);
-            if (row.preview) ShowWindow(row.preview, rowVisible ? SW_SHOW : SW_HIDE);
+            setVisible(row.control, rowVisible);
+            if (row.slider) setVisible(row.slider, rowVisible && sliderFits);
+            if (row.spin) setVisible(row.spin, rowVisible);
+            if (row.preview) setVisible(row.preview, rowVisible);
             y += settingsRowHeight;
         }
         if (page == state.currentPage) {
@@ -6162,14 +6263,16 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
                                  buttonY + resetButtonHeight <= viewportBottom;
             SetWindowPos(state.resetPageButton, nullptr,
                          width - labelX - buttonWidth, buttonY,
-                         buttonWidth, resetButtonHeight, SWP_NOZORDER | SWP_NOACTIVATE);
-            ShowWindow(state.resetPageButton, buttonVisible ? SW_SHOW : SW_HIDE);
+                         buttonWidth, resetButtonHeight, positionFlags);
+            setVisible(state.resetPageButton, buttonVisible);
         }
     }
     for (HWND pageButton : state.pageButtons) {
         SetWindowPos(pageButton, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
     }
+    RedrawWindow(state.hWnd, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
 static int SelectedAccountIndex(const SettingsWindowState& state) {
@@ -6589,7 +6692,8 @@ static void RecreateAccountEditorVisuals(HWND hWnd, AccountEditorState& state) {
         return TRUE;
     }, reinterpret_cast<LPARAM>(state.font));
     ApplyNativeWindowTheme(hWnd, state.dark);
-    InvalidateRect(hWnd, nullptr, TRUE);
+    RedrawWindow(hWnd, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 static void UpdateAccountEditorProvider(HWND hWnd) {
@@ -6624,7 +6728,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                                   sc(16), sc(18), sc(100), sc(22), hWnd,
                                                   reinterpret_cast<HMENU>(kAccountProviderLabel),
                                                   GetModuleHandleW(nullptr), nullptr);
-            HWND provider = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", L"",
+            HWND provider = CreateWindowExW(0, L"COMBOBOX", L"",
                                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
                                              sc(130), sc(14), sc(240), sc(220), hWnd,
                                              reinterpret_cast<HMENU>(kAccountProvider),
@@ -7322,6 +7426,10 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 WS_EX_CLIENTEDGE, kAccountList);
             ListView_SetExtendedListViewStyle(state->accountList,
                                               LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+            if (!SetWindowSubclass(state->accountList, AccountListSubclassProc, 0,
+                                   reinterpret_cast<DWORD_PTR>(state))) {
+                Wh_Log(L"Could not subclass settings account list");
+            }
             const PCWSTR headers[] = {L"Label", L"Provider", L"Bars", L"Visible", L"Sign-in"};
             const int widths[] = {90, 150, 160, 70, 120};
             for (int i = 0; i < 5; i++) {
