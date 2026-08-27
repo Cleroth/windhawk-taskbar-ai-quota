@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.2.1
+// @version         1.2.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -5625,7 +5625,6 @@ enum SettingsControlId {
     kAccountSignIn,
     kAccountSignOut,
     kResetPage,
-    kResetAll,
 
     kMonitorMode = 2100,
     kMonitorNumber,
@@ -5986,6 +5985,10 @@ static void AddSettingsToolTip(SettingsWindowState& state, int id, PCWSTR text) 
 static void ShowSettingsPage(SettingsWindowState& state, int page) {
     state.currentPage = std::clamp(page, 0, 3);
     state.scrollY = 0;
+    const PCWSTR resetLabels[] = {L"", L"Reset Layout to defaults...",
+                                  L"Reset Display to defaults...",
+                                  L"Reset Behavior to defaults..."};
+    SetWindowTextW(state.resetPageButton, resetLabels[state.currentPage]);
     for (int i = 0; i < 4; i++) {
         SendMessageW(state.pageButtons[i], BM_SETCHECK,
                      i == state.currentPage ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -6003,27 +6006,28 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
     int width = client.right;
     int height = client.bottom;
     int margin = ScaleForDpi(12, state.dpi);
-    int resetWidth = std::min(ScaleForDpi(92, state.dpi),
-                              std::max(ScaleForDpi(64, state.dpi), width / 5));
-    int headerGap = ScaleForDpi(8, state.dpi);
-    int pageButtonWidth = std::max(ScaleForDpi(50, state.dpi),
-                                   (width - margin * 2 - resetWidth - headerGap) / 4);
+    int pageButtonWidth = std::max(1, (width - margin * 2) / 4);
     for (int i = 0; i < 4; i++) {
-        SetWindowPos(state.pageButtons[i], nullptr, margin + i * pageButtonWidth, margin,
-                     pageButtonWidth, ScaleForDpi(32, state.dpi),
+        int x = margin + i * pageButtonWidth;
+        int buttonWidth = i == 3 ? std::max(1, width - margin - x) : pageButtonWidth;
+        SetWindowPos(state.pageButtons[i], nullptr, x, margin,
+                     buttonWidth, ScaleForDpi(32, state.dpi),
                      SWP_NOZORDER | SWP_NOACTIVATE);
     }
-    SetWindowPos(state.resetPageButton, nullptr, width - margin - resetWidth, margin,
-                 resetWidth, ScaleForDpi(32, state.dpi), SWP_NOZORDER | SWP_NOACTIVATE);
-    ShowWindow(state.resetPageButton, state.currentPage == 0 ? SW_HIDE : SW_SHOW);
 
     int viewportTop = ScaleForDpi(52, state.dpi);
     int viewportBottom = height - margin;
     int visibleHeight = std::max(1, viewportBottom - viewportTop);
-    int contentHeight = state.currentPage == 0 ? visibleHeight :
-                        std::max(visibleHeight,
-                            ScaleForDpi(62 + (int)state.rows[state.currentPage].size() * 38 + 20,
-                                        state.dpi) - viewportTop);
+    int settingsRowHeight = ScaleForDpi(37, state.dpi);
+    int resetButtonHeight = ScaleForDpi(28, state.dpi);
+    int contentHeight = visibleHeight;
+    if (state.currentPage != 0) {
+        // Use the reset button's actual bottom so added rows scroll only when needed.
+        int contentBottom = ScaleForDpi(62, state.dpi) +
+                            (int)state.rows[state.currentPage].size() * settingsRowHeight +
+                            resetButtonHeight;
+        contentHeight = std::max(visibleHeight, contentBottom - viewportTop);
+    }
     int maxScroll = std::max(0, contentHeight - visibleHeight);
     state.scrollY = std::clamp(state.scrollY, 0, maxScroll);
     SCROLLINFO scrollInfo{sizeof(scrollInfo), SIF_RANGE | SIF_PAGE | SIF_POS};
@@ -6087,10 +6091,10 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
         }
     }
 
+    ShowWindow(state.resetPageButton, SW_HIDE);
     for (int page = 1; page < 4; page++) {
         int y = ScaleForDpi(62, state.dpi) -
                 (page == state.currentPage ? state.scrollY : 0);
-        int rowHeight = ScaleForDpi(38, state.dpi);
         int labelX = ScaleForDpi(28, state.dpi);
         int controlX = width < ScaleForDpi(620, state.dpi) ?
                            std::max(labelX + ScaleForDpi(120, state.dpi), width * 44 / 100) :
@@ -6148,15 +6152,24 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
             if (row.slider) ShowWindow(row.slider, rowVisible && sliderFits ? SW_SHOW : SW_HIDE);
             if (row.spin) ShowWindow(row.spin, rowVisible ? SW_SHOW : SW_HIDE);
             if (row.preview) ShowWindow(row.preview, rowVisible ? SW_SHOW : SW_HIDE);
-            y += rowHeight;
+            y += settingsRowHeight;
+        }
+        if (page == state.currentPage) {
+            int buttonWidth = std::max(
+                1, std::min(width - labelX * 2, ScaleForDpi(200, state.dpi)));
+            int buttonY = y;
+            bool buttonVisible = buttonY >= viewportTop &&
+                                 buttonY + resetButtonHeight <= viewportBottom;
+            SetWindowPos(state.resetPageButton, nullptr,
+                         width - labelX - buttonWidth, buttonY,
+                         buttonWidth, resetButtonHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+            ShowWindow(state.resetPageButton, buttonVisible ? SW_SHOW : SW_HIDE);
         }
     }
     for (HWND pageButton : state.pageButtons) {
         SetWindowPos(pageButton, HWND_TOP, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
-    SetWindowPos(state.resetPageButton, HWND_TOP, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
 static int SelectedAccountIndex(const SettingsWindowState& state) {
@@ -7271,32 +7284,6 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
     RefreshSettingsControls(state);
 }
 
-static void ResetAllNonAccountSettings(SettingsWindowState& state) {
-    if (SettingsMessageBoxW(state.hWnd,
-                    L"Reset all layout, display, and behavior settings?\n\n"
-                    L"Accounts and stored sign-ins will be preserved.",
-                    L"Reset all settings", MB_YESNO | MB_ICONQUESTION) != IDYES ||
-        g_unloading || !IsWindow(state.hWnd)) {
-        return;
-    }
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings.accounts = g_settings.accounts;
-    }
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not reset settings.", L"Reset all settings",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
-    RefreshSettingsControls(state);
-}
-
 static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                            WPARAM wParam, LPARAM lParam) {
     auto* state = reinterpret_cast<SettingsWindowState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
@@ -7329,12 +7316,6 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     reinterpret_cast<HMENU>((INT_PTR)pageIds[i]),
                     GetModuleHandleW(nullptr), nullptr);
             }
-            state->resetPageButton = CreateWindowExW(
-                0, L"BUTTON", L"Reset page",
-                WS_CHILD | WS_TABSTOP, 0, 0, 1, 1, hWnd,
-                reinterpret_cast<HMENU>((INT_PTR)kResetPage),
-                GetModuleHandleW(nullptr), nullptr);
-
             state->accountList = CreateSettingsControl(
                 *state, 0, WC_LISTVIEWW, L"",
                 WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
@@ -7421,10 +7402,11 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             AddNumericRow(*state, 3, L"Custom interval (minutes)",
                           kPollMinutes, 2, 1440);
             AddSettingsCheck(*state, 3, L"Show threshold notifications", kEnableNotifications);
-            HWND resetAll = CreateSettingsControl(
-                *state, 3, L"BUTTON", L"Reset all appearance and behavior",
-                WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 0, kResetAll);
-            state->rows[3].push_back({nullptr, resetAll});
+            state->resetPageButton = CreateWindowExW(
+                0, L"BUTTON", L"", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
+                0, 0, 1, 1, hWnd,
+                reinterpret_cast<HMENU>((INT_PTR)kResetPage),
+                GetModuleHandleW(nullptr), nullptr);
 
             state->toolTip = CreateWindowExW(
                 WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
@@ -7584,9 +7566,6 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     return 0;
                 case kResetPage:
                     if (HIWORD(wParam) == BN_CLICKED) ResetCurrentSettingsPage(*state);
-                    return 0;
-                case kResetAll:
-                    if (HIWORD(wParam) == BN_CLICKED) ResetAllNonAccountSettings(*state);
                     return 0;
                 case kPaceTickColor:
                     if (HIWORD(wParam) == BN_CLICKED) {

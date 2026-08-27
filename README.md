@@ -58,7 +58,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - colorblind palette
 - stale-warning marker
 
-Bounded visual sizes use sliders with precise numeric spinner controls. Other numeric settings use spinners. Concise hover help explains polling, pace ticks, Codex Spark, and stale warnings. Each non-account page can be reset independently, or all appearance and behavior settings can be reset together, without removing accounts or credentials.
+Bounded visual sizes use sliders with precise numeric spinner controls. Other numeric settings use spinners. Concise hover help explains polling, pace ticks, Codex Spark, and stale warnings. Each non-account page can be reset independently without removing accounts or credentials.
 
 ## Security Notes
 
