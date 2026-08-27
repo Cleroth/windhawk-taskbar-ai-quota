@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.0
+// @version         1.5.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -34,8 +34,9 @@ or open its provider dashboard, depending on settings and provider support. Righ
 for Settings, Refresh all, provider actions, and a checkbox list to show/hide individual accounts. Hidden accounts
 stop updating and are left to go stale; the choice persists across restarts (at least
 one account always stays visible).
-Bars can show quota labels (`5h`, `7d`, `Fa`, `Ex`) and percentage text with adaptive,
-left, center, or right alignment. Adaptive text moves from right to left at the yellow
+Bars can show quota labels (`5h`, `7d`, `Fa`, `Ex`) to the left of each bar and
+percentage text with adaptive, left, center, or right alignment. Adaptive text moves
+from right to left at the yellow
 threshold; left-aligned yellow and orange text turns black for contrast. Colors use
 configurable green/yellow/orange/red thresholds, with a colorblind palette option.
 Optional pace ticks compare quota usage with elapsed time in each reset window and have
@@ -4065,39 +4066,39 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     trackContent.Children().Append(paceTick);
                 }
 
-                if (showBarLabels) {
-                    static constexpr PCWSTR kBarLabels[kQuotaBarCount] = {
-                        L"5h", L"7d", L"Fa", L"Ex"};
-                    TextBlock barLabel;
-                    barLabel.Text(kBarLabels[w]);
-                    barLabel.FontSize(std::min((double)percentFontSize,
-                                               std::max(5.0, barThickness - 2.0)));
-                    barLabel.Foreground(SolidColorBrush(
-                        winrt::Windows::UI::Color{255, 255, 255, 255}));
-                    barLabel.Opacity(0.9);
-                    barLabel.IsHitTestVisible(false);
-                    barLabel.TextAlignment(TextAlignment::Center);
-                    barLabel.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center :
-                                                                HorizontalAlignment::Left);
-                    barLabel.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom :
-                                                              VerticalAlignment::Center);
-                    barLabel.Margin(verticalBars ? Thickness{0, 0, 0, 3} :
-                                                   Thickness{3, -1, 0, 0});
-                    if (verticalBars) {
-                        RotateTransform rotation;
-                        rotation.Angle(-90);
-                        barLabel.RenderTransform(rotation);
-                        barLabel.RenderTransformOrigin({0.5f, 0.5f});
-                    }
-                    trackContent.Children().Append(barLabel);
-                }
-
                 track.Child(trackContent);
 
                 Grid barItem;
-                barItem.Width(verticalBars ? barThickness : barLength);
+                double compactLabelFontSize = percentFontSize;
                 barItem.Height(verticalBars ? barLength : barThickness);
                 barItem.HorizontalAlignment(HorizontalAlignment::Center);
+
+                if (showBarLabels) {
+                    static constexpr PCWSTR kBarLabels[kQuotaBarCount] = {
+                        L"5h", L"7d", L"Fa", L"Ex"};
+                    ColumnDefinition labelColumn;
+                    labelColumn.Width({std::ceil(compactLabelFontSize * 1.4) + 3.0,
+                                       GridUnitType::Pixel});
+                    ColumnDefinition trackColumn;
+                    trackColumn.Width({(double)(verticalBars ? barThickness : barLength),
+                                       GridUnitType::Pixel});
+                    barItem.ColumnDefinitions().Append(labelColumn);
+                    barItem.ColumnDefinitions().Append(trackColumn);
+
+                    TextBlock barLabel;
+                    barLabel.Text(kBarLabels[w]);
+                    barLabel.FontSize(compactLabelFontSize);
+                    barLabel.Opacity(0.8);
+                    barLabel.IsHitTestVisible(false);
+                    barLabel.TextAlignment(TextAlignment::Right);
+                    barLabel.VerticalAlignment(VerticalAlignment::Center);
+                    barLabel.Margin({0, -1, 3, 0});
+                    barItem.Children().Append(barLabel);
+                    Grid::SetColumn(track, 1);
+                } else {
+                    barItem.Width(verticalBars ? barThickness : barLength);
+                }
+
                 barItem.Children().Append(track);
                 refs.barItems[w] = barItem;
 
@@ -4131,6 +4132,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d_%d", (int)i, w);
                     percent.Name(name);
                     refs.percents[w] = percent;
+                    if (showBarLabels) Grid::SetColumn(percent, 1);
                     barItem.Children().Append(percent);
                 }
 
