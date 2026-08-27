@@ -58,6 +58,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - threshold notifications (toast when an account crosses the red threshold)
 - colorblind palette
 - stale-warning marker
+- temporary threshold-spanning test accounts for previewing current taskbar visuals
 
 Bounded visual sizes use sliders with precise numeric spinner controls. Other numeric settings use spinners. Concise hover help explains polling, pace ticks, Codex Spark, and stale warnings. Each non-account page can be reset independently without removing accounts or credentials.
 

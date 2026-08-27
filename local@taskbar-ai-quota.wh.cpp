@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.3.1
+// @version         1.4.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -49,6 +49,8 @@ On a fresh install, click the **AI +** taskbar tile to open the native settings 
 and add an account. Settings autosave without re-querying providers unless an account
 identity actually changes. Accounts can be reordered and shown or hidden there; visual
 sizes use sliders with precise numeric controls, and labels can sit on any side of the bars.
+The Layout and Display pages can temporarily preview threshold-spanning test accounts on the taskbar
+without changing configured accounts or live quota data.
 
 A column that needs auth shows "click to sign in"; left-click it (or use **Sign in** in
 the right-click menu):
@@ -305,6 +307,7 @@ struct QuotaUiInstance {
     DWORD ownerThreadId = 0;
     bool windowSubclassed = false;
     ULONGLONG buildSettingsGeneration = 0;
+    bool buildVisualTestMode = false;
     Grid quotaGrid{nullptr};
     Grid injectionParent{nullptr};
     ColumnDefinition quotaColumnDefinition{nullptr};
@@ -332,6 +335,7 @@ static std::atomic<uint64_t> g_refreshAccountIdentity{0};
 static std::atomic<ULONGLONG> g_refreshGeneration{0};
 static std::mutex g_refreshMutex;
 static std::atomic<bool> g_uiInjected{false};
+static std::atomic<bool> g_visualTestMode{false};
 static std::atomic<bool> g_settingsLoadError{false};
 static std::atomic<bool> g_fetchThreadStarted{false};
 static HANDLE g_stopEvent = nullptr;
@@ -363,6 +367,7 @@ static const wchar_t* kRootName = L"AiQuota_Root";
 static constexpr ULONGLONG kFileTimeUnixEpochOffsetMs = 11644473600000ULL;
 static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
+static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
 static constexpr UINT_PTR kSettingsAutosaveTimer = 1;
 
 using WindowThreadProc = bool (*)(void*);
@@ -380,6 +385,7 @@ static QuotaUiInstance* FindUiState(HWND hWnd);
 static void UpdateQuotaUi(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
+static void SetVisualTestMode(bool enabled);
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
                             uint64_t newIdentity = 0);
@@ -415,6 +421,59 @@ static ULONGLONG NowUnixMs() {
     GetSystemTimeAsFileTime(&ft);
     ULONGLONG t = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
     return t / 10000 - kFileTimeUnixEpochOffsetMs;
+}
+
+static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
+                                    int redThreshold, ULONGLONG now,
+                                    std::vector<AccountConfig>* accounts,
+                                    std::vector<AccountData>* data) {
+    const std::array<double, 4> percentages = {
+        yellowThreshold / 2.0,
+        50.0,
+        orangeThreshold + (redThreshold - orangeThreshold) / 2.0,
+        redThreshold + (100 - redThreshold) / 2.0,
+    };
+    static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
+        kFiveHourWindowMs,
+        kWeeklyWindowMs,
+        kWeeklyWindowMs,
+        30ULL * 24 * 60 * 60 * 1000,
+    };
+    static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
+        0.2, 0.4, 0.6, 0.8,
+    };
+
+    accounts->clear();
+    accounts->reserve(percentages.size());
+    if (data) {
+        data->clear();
+        data->reserve(percentages.size());
+    }
+    for (size_t i = 0; i < percentages.size(); i++) {
+        AccountConfig account;
+        account.provider = L"anthropic";
+        account.label = L"TEST " + std::to_wstring(i + 1);
+        account.showBars.fill(false);
+        for (size_t w = 0; w <= i; w++) account.showBars[w] = true;
+        accounts->push_back(std::move(account));
+
+        if (!data) continue;
+        AccountData accountData;
+        std::array<WindowUsage*, kQuotaBarCount> usage = {
+            &accountData.win5h, &accountData.winWeek,
+            &accountData.fableWeek, &accountData.extraUsage,
+        };
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            usage[w]->pct = percentages[i];
+            usage[w]->windowDurationMs = kDurations[w];
+            usage[w]->resetUnixMs = now +
+                (ULONGLONG)std::lround(kDurations[w] * kRemainingFractions[w]);
+        }
+        accountData.plan = L"Visual test";
+        accountData.lastSuccessMs = now;
+        accountData.stale = false;
+        data->push_back(std::move(accountData));
+    }
 }
 
 static std::wstring Utf8ToWide(const std::string& s) {
@@ -3731,7 +3790,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         std::vector<AccountConfig> accounts;
         int barLength, barThickness, labelFontSize, percentFontSize;
         int accountMargin, labelGap, rightMargin;
+        int yellowThreshold, orangeThreshold, redThreshold;
         bool showPaceTicks, showBarLabels, showPercentText;
+        bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
         COLORREF paceTickColor;
         BarLayout barLayout;
         PaceTickStyle paceTickStyle;
@@ -3756,6 +3817,14 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             paceTickColor = g_settings.paceTickColor;
             showBarLabels = g_settings.showBarLabels;
             showPercentText = g_settings.showPercentText;
+            yellowThreshold = g_settings.yellowThreshold;
+            orangeThreshold = g_settings.orangeThreshold;
+            redThreshold = g_settings.redThreshold;
+        }
+        state.buildVisualTestMode = visualTestMode;
+        if (visualTestMode) {
+            BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
+                                    NowUnixMs(), &accounts, nullptr);
         }
         state.accountRefs.clear();
         Grid root;
@@ -4113,13 +4182,18 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 });
             refs.manualToolTipTimer = manualToolTipTimer;
             refs.manualToolTipTimerToken = manualToolTipTimerToken;
-            bool hasDashboard = accounts[i].provider != L"antigravity";
+            bool hasDashboard = !visualTestMode && accounts[i].provider != L"antigravity";
             auto tappedToken = tappedElement.Tapped(
                 [statePtr, accountIndex, accountIdentity, clickAction, hasDashboard,
-                 manualToolTipHoverDelay](
+                  manualToolTipHoverDelay, visualTestMode](
                     winrt::Windows::Foundation::IInspectable const&,
                     wuxi::TappedRoutedEventArgs const& e) {
                     if (g_unloading || !statePtr->quotaGrid) {
+                        e.Handled(true);
+                        return;
+                    }
+                    if (visualTestMode) {
+                        OpenSettingsWindow();
                         e.Handled(true);
                         return;
                     }
@@ -4242,14 +4316,34 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                                              pointerCanceledToken});
 
             MenuFlyout menu;
-            MenuFlyoutItem refreshAllItem;
-            refreshAllItem.Text(L"Refresh all");
-            auto refreshAllToken = refreshAllItem.Click(
-                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
-                    QueueRefresh(0);
-                });
-            state.menuItemClickHandlers.push_back({refreshAllItem, refreshAllToken});
-            menu.Items().Append(refreshAllItem);
+            if (visualTestMode) {
+                MenuFlyoutItem exitTestItem;
+                exitTestItem.Text(L"Exit visual test");
+                auto exitTestToken = exitTestItem.Click(
+                    [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                        HWND settingsWindow = g_settingsWindow.load();
+                        if (settingsWindow &&
+                            PostMessageW(settingsWindow, kExitVisualTestMessage, 0, 0)) {
+                            return;
+                        }
+
+                        // Avoid tearing down this grid while its XAML Click handler is running.
+                        if (g_visualTestMode.exchange(false, std::memory_order_acq_rel)) {
+                            StartRetryInject(true);
+                        }
+                    });
+                state.menuItemClickHandlers.push_back({exitTestItem, exitTestToken});
+                menu.Items().Append(exitTestItem);
+            } else {
+                MenuFlyoutItem refreshAllItem;
+                refreshAllItem.Text(L"Refresh all");
+                auto refreshAllToken = refreshAllItem.Click(
+                    [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                        QueueRefresh(0);
+                    });
+                state.menuItemClickHandlers.push_back({refreshAllItem, refreshAllToken});
+                menu.Items().Append(refreshAllItem);
+            }
 
             if (hasDashboard) {
                 MenuFlyoutItem dashboardItem;
@@ -4263,60 +4357,65 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 menu.Items().Append(dashboardItem);
             }
 
-            // Per-account show/hide checkboxes (checked = visible). Every column carries the same
-            // list; toggling flips global state, persists, and re-syncs all instances via UpdateQuotaUi.
-            menu.Items().Append(MenuFlyoutSeparator{});
-            for (size_t k = 0; k < accounts.size(); k++) {
-                ToggleMenuFlyoutItem toggle;
-                toggle.Text(accounts[k].label + L" - " + ProviderDisplayName(accounts[k].provider));
-                toggle.IsChecked(!accounts[k].hidden);
-                int toggleIndex = (int)k;
-                uint64_t toggleIdentity = AccountIdentityHash(accounts[k]);
-                auto toggleToken = toggle.Click(
-                    [toggleIdentity](winrt::Windows::Foundation::IInspectable const& sender,
-                                  RoutedEventArgs const&) {
-                        ToggleAccountVisibility(toggleIdentity, sender);
-                    });
-                state.menuItemClickHandlers.push_back({toggle, toggleToken});
-                state.accountToggleItems.push_back({toggleIndex, toggle});
-                menu.Items().Append(toggle);
+            if (!visualTestMode) {
+                // Per-account show/hide checkboxes (checked = visible). Every column carries the
+                // same list; toggling flips global state, persists, and re-syncs all instances.
+                menu.Items().Append(MenuFlyoutSeparator{});
+                for (size_t k = 0; k < accounts.size(); k++) {
+                    ToggleMenuFlyoutItem toggle;
+                    toggle.Text(accounts[k].label + L" - " +
+                                ProviderDisplayName(accounts[k].provider));
+                    toggle.IsChecked(!accounts[k].hidden);
+                    int toggleIndex = (int)k;
+                    uint64_t toggleIdentity = AccountIdentityHash(accounts[k]);
+                    auto toggleToken = toggle.Click(
+                        [toggleIdentity](winrt::Windows::Foundation::IInspectable const& sender,
+                                         RoutedEventArgs const&) {
+                            ToggleAccountVisibility(toggleIdentity, sender);
+                        });
+                    state.menuItemClickHandlers.push_back({toggle, toggleToken});
+                    state.accountToggleItems.push_back({toggleIndex, toggle});
+                    menu.Items().Append(toggle);
+                }
             }
 
             // Sign in / Sign out submenus drive the mod's own OAuth per account.
-            MenuFlyoutSubItem signInSub;
-            signInSub.Text(L"Sign in");
-            MenuFlyoutSubItem signOutSub;
-            signOutSub.Text(L"Sign out");
-            for (size_t k = 0; k < accounts.size(); k++) {
-                if (accounts[k].provider == L"antigravity") continue;
-                std::wstring name = accounts[k].label + L" - " +
-                                    ProviderDisplayName(accounts[k].provider);
-                uint64_t authIdentity = AccountIdentityHash(accounts[k]);
+            if (!visualTestMode) {
+                MenuFlyoutSubItem signInSub;
+                signInSub.Text(L"Sign in");
+                MenuFlyoutSubItem signOutSub;
+                signOutSub.Text(L"Sign out");
+                for (size_t k = 0; k < accounts.size(); k++) {
+                    if (accounts[k].provider == L"antigravity") continue;
+                    std::wstring name = accounts[k].label + L" - " +
+                                        ProviderDisplayName(accounts[k].provider);
+                    uint64_t authIdentity = AccountIdentityHash(accounts[k]);
 
-                MenuFlyoutItem signInItem;
-                signInItem.Text(name);
-                auto signInToken = signInItem.Click(
-                    [authIdentity](winrt::Windows::Foundation::IInspectable const&,
-                                   RoutedEventArgs const&) {
-                        StartLoginByIdentity(authIdentity);
-                    });
-                state.menuItemClickHandlers.push_back({signInItem, signInToken});
-                signInSub.Items().Append(signInItem);
+                    MenuFlyoutItem signInItem;
+                    signInItem.Text(name);
+                    auto signInToken = signInItem.Click(
+                        [authIdentity](winrt::Windows::Foundation::IInspectable const&,
+                                       RoutedEventArgs const&) {
+                            StartLoginByIdentity(authIdentity);
+                        });
+                    state.menuItemClickHandlers.push_back({signInItem, signInToken});
+                    signInSub.Items().Append(signInItem);
 
-                MenuFlyoutItem signOutItem;
-                signOutItem.Text(name);
-                auto signOutToken = signOutItem.Click(
-                    [authIdentity](winrt::Windows::Foundation::IInspectable const&,
-                                   RoutedEventArgs const&) {
-                        if (!SignOutAccountByIdentity(authIdentity)) OpenSettingsWindow();
-                    });
-                state.menuItemClickHandlers.push_back({signOutItem, signOutToken});
-                signOutSub.Items().Append(signOutItem);
-            }
-            if (signInSub.Items().Size() > 0) {
-                menu.Items().Append(MenuFlyoutSeparator{});
-                menu.Items().Append(signInSub);
-                menu.Items().Append(signOutSub);
+                    MenuFlyoutItem signOutItem;
+                    signOutItem.Text(name);
+                    auto signOutToken = signOutItem.Click(
+                        [authIdentity](winrt::Windows::Foundation::IInspectable const&,
+                                       RoutedEventArgs const&) {
+                            if (!SignOutAccountByIdentity(authIdentity)) OpenSettingsWindow();
+                        });
+                    state.menuItemClickHandlers.push_back({signOutItem, signOutToken});
+                    signOutSub.Items().Append(signOutItem);
+                }
+                if (signInSub.Items().Size() > 0) {
+                    menu.Items().Append(MenuFlyoutSeparator{});
+                    menu.Items().Append(signInSub);
+                    menu.Items().Append(signOutSub);
+                }
             }
 
             menu.Items().Append(MenuFlyoutSeparator{});
@@ -4363,6 +4462,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (!state.quotaGrid) return;
 
+    bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
+    if (state.buildVisualTestMode != visualTestMode) return;
+
     std::vector<AccountConfig> accounts;
     int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
     bool showPaceTicks, showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
@@ -4391,8 +4493,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         showStaleWarning = g_settings.showStaleWarning;
     }
 
+    ULONGLONG now = NowUnixMs();
     std::vector<AccountData> data;
-    {
+    if (visualTestMode) {
+        BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
+                                now, &accounts, &data);
+    } else {
         std::lock_guard<std::mutex> lk(g_dataMutex);
         data = g_data;
     }
@@ -4400,7 +4506,6 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (state.accountRefs.size() != data.size()) return;
     if (state.applied.size() != data.size()) state.applied.assign(data.size(), {});
 
-    ULONGLONG now = NowUnixMs();
     bool refreshing;
     uint64_t refreshAccountIdentity;
     {
@@ -4435,7 +4540,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                       (ULONGLONG)intervalMin) * 2 * 60000;
             bool stale = d.stale || d.lastSuccessMs == 0 || now - d.lastSuccessMs > staleAfterMs;
             bool warn = showStaleWarning && stale && !d.error.empty();
-            bool accountRefreshing = refreshing &&
+            bool accountRefreshing = !visualTestMode && refreshing &&
                 (!refreshAccountIdentity ||
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
 
@@ -4626,7 +4731,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
             }
             tip += L"\n" + FormatUpdated(d.lastSuccessMs, stale);
-            tip += accountRefreshing ? L" - refreshing..." :
+            tip += visualTestMode ? L" - visual test; click to open settings" :
+                   accountRefreshing ? L" - refreshing..." :
                    d.needsLogin ? L" - click to sign in" :
                    clickAction == ClickAction::OpenDashboard && accounts[i].provider != L"antigravity"
                        ? L" - click to open dashboard" :
@@ -4752,7 +4858,9 @@ static bool InjectQuotaGrid(HWND hWnd) {
             settingsGeneration = g_settingsGeneration;
         }
         if (existingState->quotaGrid &&
-            existingState->buildSettingsGeneration == settingsGeneration) {
+            existingState->buildSettingsGeneration == settingsGeneration &&
+            existingState->buildVisualTestMode ==
+                g_visualTestMode.load(std::memory_order_acquire)) {
             return true;
         }
     }
@@ -5614,6 +5722,14 @@ static void FinishSettingsApply(bool wakeFetch = true) {
     if (wakeFetch && g_refreshEvent) SetEvent(g_refreshEvent);
 }
 
+static void SetVisualTestMode(bool enabled) {
+    bool previous = g_visualTestMode.exchange(enabled, std::memory_order_acq_rel);
+    if (previous == enabled || g_unloading) return;
+
+    FinishSettingsApply(false);
+    NotifySettingsWindowChanged();
+}
+
 static void LoadSettings() {
     bool apartmentInitialized = false;
     try {
@@ -5693,6 +5809,9 @@ enum SettingsControlId {
     kPollPreset,
     kPollMinutes,
     kEnableNotifications,
+
+    kVisualTestModeLayout = 2350,
+    kVisualTestModeDisplay,
 
     kAccountProvider = 2400,
     kAccountLabel,
@@ -6573,6 +6692,9 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
         SendDlgItemMessageW(state.hWnd, id, BM_SETCHECK,
                             checked ? BST_CHECKED : BST_UNCHECKED, 0);
     };
+    bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
+    setCheck(kVisualTestModeLayout, visualTestMode);
+    setCheck(kVisualTestModeDisplay, visualTestMode);
     SendDlgItemMessageW(state.hWnd, kLabelPosition, CB_SETCURSEL,
                         (int)s.labelPosition, 0);
     setCheck(kShowPaceTicks, s.showPaceTicks);
@@ -7505,6 +7627,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             CreateSettingsControl(*state, 0, L"BUTTON", L"Sign out",
                                   WS_VISIBLE | WS_TABSTOP, 0, kAccountSignOut);
 
+            AddSettingsCheck(*state, 1, L"Preview test data", kVisualTestModeLayout);
             HWND monitorMode = AddSettingsRow(*state, 1, L"Taskbar monitors",
                                                L"COMBOBOX", CBS_DROPDOWNLIST, 0, kMonitorMode);
             AddComboItems(monitorMode, {L"Primary monitor only", L"All monitors",
@@ -7530,6 +7653,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             AddNumericRow(*state, 1, L"Bar gap (px)", kBarGap, 0, 500);
             AddNumericRow(*state, 1, L"Right tray gap (px)", kRightMargin, 0, 500);
 
+            AddSettingsCheck(*state, 2, L"Preview test data", kVisualTestModeDisplay);
             HWND labelPosition = AddSettingsRow(*state, 2, L"Label position", L"COMBOBOX",
                                                 CBS_DROPDOWNLIST, 0, kLabelPosition);
             AddComboItems(labelPosition, {L"Hidden", L"Left", L"Top", L"Right", L"Bottom"});
@@ -7577,6 +7701,12 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             if (state->toolTip) {
                 SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0,
                              ScaleForDpi(360, state->dpi));
+                AddSettingsToolTip(
+                    *state, kVisualTestModeLayout,
+                    L"Temporarily replaces taskbar accounts with synthetic percentages while this settings window is open.");
+                AddSettingsToolTip(
+                    *state, kVisualTestModeDisplay,
+                    L"Temporarily replaces taskbar accounts with synthetic percentages while this settings window is open.");
                 AddSettingsToolTip(
                     *state, kShowPaceTicks,
                     L"Marks elapsed time in each quota reset window so usage can be compared with its expected pace.");
@@ -7728,6 +7858,14 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 case kResetPage:
                     if (HIWORD(wParam) == BN_CLICKED) ResetCurrentSettingsPage(*state);
                     return 0;
+                case kVisualTestModeLayout:
+                case kVisualTestModeDisplay:
+                    if (HIWORD(wParam) == BN_CLICKED) {
+                        SetVisualTestMode(
+                            SendMessageW(reinterpret_cast<HWND>(lParam), BM_GETCHECK,
+                                         0, 0) == BST_CHECKED);
+                    }
+                    return 0;
                 case kPaceTickColor:
                     if (HIWORD(wParam) == BN_CLICKED) {
                         SettingsRow* row = FindSettingsRow(
@@ -7849,8 +7987,18 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 StartRetryInject(true);
             }
             return 0;
+        case kExitVisualTestMessage:
+            SetVisualTestMode(false);
+            return 0;
         case kSettingsRefreshMessage:
-            if (state) RefreshAccountList(*state);
+            if (state) {
+                bool enabled = g_visualTestMode.load(std::memory_order_acquire);
+                SendDlgItemMessageW(hWnd, kVisualTestModeLayout, BM_SETCHECK,
+                                    enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendDlgItemMessageW(hWnd, kVisualTestModeDisplay, BM_SETCHECK,
+                                    enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+                RefreshAccountList(*state);
+            }
             return 0;
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLORBTN:
@@ -7891,6 +8039,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 return 0;
             }
             if (state && !g_unloading) CommitScalarSettings(*state, false);
+            SetVisualTestMode(false);
             DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
@@ -8009,6 +8158,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         }
         if (IsWindow(window)) DestroyWindow(window);
     }
+    SetVisualTestMode(false);
     g_settingsWindow.store(nullptr);
     UnregisterClassW(kAccountEditorClass, instance);
     UnregisterClassW(kSettingsWindowClass, instance);
