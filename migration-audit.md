@@ -70,13 +70,13 @@ Unload waits indefinitely for the settings thread after posting `WM_CLOSE` only 
 
 References: `local@taskbar-ai-quota.wh.cpp:6413-6425`, `6511-6525`, `6640-6644`, `6694-6698`, `7373-7386`.
 
-### [ ] Specific monitor selection is not stable across topology changes
+### [x] Specific monitor selection is not stable across topology changes
 
 The persisted monitor number is a position in a newly enumerated, primary-first taskbar list rather than a stable display identity. Reordering, unplugging, or reconnecting displays can silently move quota bars to a different physical monitor. The one-based settings, combo data, and runtime filter are internally consistent; the problem is identity instability rather than an off-by-one error.
 
 References: `local@taskbar-ai-quota.wh.cpp:3216-3273`, `3289-3294`, `5896-5918`.
 
-### [ ] Slider keyboard input and window close commit synchronously
+### [x] Slider keyboard input and window close commit synchronously
 
 Spin-button edits defer commits to the 250 ms autosave timer, but slider line/page/track-end actions call `CommitScalarSettings` immediately on every key or click repeat, and `WM_CLOSE` commits before destroying the window. Any effective change tears down and re-injects the quota UI on every taskbar, so holding a slider arrow key or closing the window with a pending edit can stall repeatedly for the cross-thread marshal duration per event.
 
@@ -84,49 +84,49 @@ References: `local@taskbar-ai-quota.wh.cpp:6874-6879`, `6919-6925`, `7124-7127`.
 
 ## Low
 
-### [ ] Empty-label legacy accounts lose hidden state
+### [x] Empty-label legacy accounts lose hidden state
 
 The legacy hidden-account hash is checked while the imported label is still empty. Normalization later changes it to the provider default (`A`, `O`, or `G`), so the old hash does not match and the account becomes visible.
 
 References: `local@taskbar-ai-quota.wh.cpp:4834-4836`, `5074-5109`.
 
-### [ ] Migration truncates legacy accounts after index 63
+### [x] Migration truncates legacy accounts after index 63
 
 The parent version read accounts until the first missing provider. Migration stops after 64 entries and permanently persists the truncated list, orphaning later account configuration and tokens.
 
 References: `local@taskbar-ai-quota.wh.cpp:5065-5091`.
 
-### [ ] Unknown provider strings drop legacy accounts instead of defaulting
+### [x] Unknown provider strings drop legacy accounts instead of defaulting
 
 The legacy loader treated any unrecognized provider string as `anthropic`. Migration skips unrecognized providers instead, permanently dropping such accounts and orphaning their tokens. Only reachable through registry values outside the original dropdown choices.
 
 References: `local@taskbar-ai-quota.wh.cpp:5066-5078`.
 
-### [ ] Clamp ceilings tightened versus legacy values
+### [x] Clamp ceilings tightened versus legacy values
 
 Legacy clamps bounded only below: bar length `std::max(x, 10)` and margins/gaps `std::max(x, 0)` with no upper bounds. Normalization now caps bar length at 1000 and margins/gaps at 100 (4857-4863), and legacy import normalizes immediately (5151), so oversized legacy values are silently shrunk at migration time and the truncated values persist. Other clamps match the old ones exactly.
 
 References: `local@taskbar-ai-quota.wh.cpp:4857-4863`, `5151`.
 
-### [ ] Renames discard the column's cached quota data
+### [x] Renames discard the column's cached quota data
 
-`PublishSettings` preserves `g_data` only where account identities match, and a label rename always mints a new identity while the token move happens only afterwards. The rebuilt column renders empty/uninitialized for roughly one fetch cycle even though data existed. Self-heals via the fetch wake in `FinishSettingsApply`, but is visible on every rename.
+`PublishSettings` preserves `g_data` only where account identities match, and a label rename always mints a new identity while the token move happens only afterwards. The rebuilt column renders empty/uninitialized for one woken fetch round trip even though data existed. Self-heals via the fetch wake in `FinishSettingsApply`, but is visible on every rename.
 
 References: `local@taskbar-ai-quota.wh.cpp:5156-5174`, `6473-6492`.
 
-### [ ] Typed out-of-range numeric values map inconsistently
+### [x] Typed out-of-range numeric values map inconsistently
 
 The up-down controls do not clamp manually typed text before `EN_KILLFOCUS`. Normalization interprets non-positive values as missing defaults instead of clamping them to the control minimum. For example, bar length `0` becomes `100`, while `1` becomes `10`; custom polling `0` becomes the 10-minute preset.
 
 References: `local@taskbar-ai-quota.wh.cpp:4854-4859`, `5830-5835`, `5979-6046`.
 
-### [ ] Bar-length slider and spinner disagree above 300 pixels
+### [x] Bar-length slider and spinner disagree above 300 pixels
 
 The bar-length row registers a spin range of 10-1000 but limits its companion slider to 10-300. Typed values above 300 persist correctly, then the first slider interaction silently snaps the stored value back into the slider range while the spinner keeps accepting 1000.
 
 References: `local@taskbar-ai-quota.wh.cpp:5468-5476`, `6792-6793`.
 
-### [ ] Trackbar mouse-wheel input defers the autosave commit
+### [x] Trackbar mouse-wheel input defers the autosave commit
 
 Mouse wheel over a slider sends `TB_THUMBPOSITION`, which syncs the companion spin control (6916-6918) but is absent from the commit list (6919-6924). The change persists only on the next unrelated commit trigger or window close instead of on the wheel gesture like every other trackbar input.
 

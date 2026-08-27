@@ -358,7 +358,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
 static bool SaveOwnedSettings(const Settings& settings);
-static void PublishSettings(Settings settings);
+static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
+                            uint64_t newIdentity = 0);
 
 static void NotifySettingsWindowChanged() {
     if (HWND hWnd = g_settingsWindow.load()) {
@@ -4951,13 +4952,13 @@ static void NormalizeSettings(Settings* s) {
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
-    s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 1000);
+    s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 4096);
     s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 20);
     s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
-    s->accountMargin = std::clamp(s->accountMargin, 0, 100);
-    s->labelGap = std::clamp(s->labelGap, 0, 100);
-    s->barGap = std::clamp(s->barGap, 0, 100);
-    s->rightMargin = std::clamp(s->rightMargin, 0, 100);
+    s->accountMargin = std::clamp(s->accountMargin, 0, 500);
+    s->labelGap = std::clamp(s->labelGap, 0, 500);
+    s->barGap = std::clamp(s->barGap, 0, 500);
+    s->rightMargin = std::clamp(s->rightMargin, 0, 500);
     if (s->labelPosition < LabelPosition::Hidden ||
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
@@ -5170,10 +5171,14 @@ static bool LoadLegacySettings(Settings* out) {
     if (!found) return false;
 
     Settings s;
+    bool reachedLegacyAccountLimit = true;
     for (int i = 0; i < 64; i++) {
         std::wstring providerSetting = getIndexedText(L"accounts[%d].provider", i);
         std::wstring label = getIndexedText(L"accounts[%d].label", i);
-        if (providerSetting.empty() && label.empty()) break;
+        if (providerSetting.empty() && label.empty()) {
+            reachedLegacyAccountLimit = false;
+            break;
+        }
         if (providerSetting.empty()) {
             Wh_Log(L"Ignoring incomplete legacy account at index %d", i);
             continue;
@@ -5182,9 +5187,12 @@ static bool LoadLegacySettings(Settings* out) {
         AccountConfig a;
         if (providerSetting.find(L"antigravity") != std::wstring::npos) a.provider = L"antigravity";
         else if (providerSetting.find(L"openai") != std::wstring::npos) a.provider = L"openai";
-        else if (providerSetting.find(L"anthropic") != std::wstring::npos) a.provider = L"anthropic";
-        else continue;
+        else a.provider = L"anthropic";
         a.label = std::move(label);
+        if (a.label.empty()) {
+            a.label = a.provider == L"anthropic" ? L"A" :
+                      a.provider == L"openai" ? L"O" : L"G";
+        }
         auto getBool = [&](PCWSTR name, bool defaultValue) {
             std::wstring value = getIndexedText(name, i);
             if (value.empty()) return defaultValue;
@@ -5196,6 +5204,11 @@ static bool LoadLegacySettings(Settings* out) {
         a.showBars[kWeeklyBar] = getBool(L"accounts[%d].showWeeklyBar", true);
         a.showBars[kExtraUsageBar] = getBool(L"accounts[%d].showExtraUsageBar", false);
         s.accounts.push_back(std::move(a));
+    }
+    if (reachedLegacyAccountLimit &&
+        (!getIndexedText(L"accounts[%d].provider", 64).empty() ||
+         !getIndexedText(L"accounts[%d].label", 64).empty())) {
+        Wh_Log(L"Ignoring legacy accounts after the 64-account migration limit");
     }
     if (s.accounts.empty()) {
         s.accounts.push_back({L"anthropic", L"A"});
@@ -5254,12 +5267,27 @@ static bool LoadLegacySettings(Settings* out) {
     s.enableNotifications = getBool(L"enableNotifications", true);
     s.colorblindMode = getBool(L"colorblindMode", false);
     s.showStaleWarning = getBool(L"showStaleWarning", true);
+    int oldBarLength = s.barLength;
+    int oldAccountMargin = s.accountMargin;
+    int oldLabelGap = s.labelGap;
+    int oldBarGap = s.barGap;
+    int oldRightMargin = s.rightMargin;
     NormalizeSettings(&s);
+    auto logCeilingClamp = [](PCWSTR name, int oldValue, int newValue) {
+        if (oldValue > newValue) {
+            Wh_Log(L"Clamped legacy %s from %d to %d", name, oldValue, newValue);
+        }
+    };
+    logCeilingClamp(L"barLength", oldBarLength, s.barLength);
+    logCeilingClamp(L"accountMargin", oldAccountMargin, s.accountMargin);
+    logCeilingClamp(L"labelGap", oldLabelGap, s.labelGap);
+    logCeilingClamp(L"barGap", oldBarGap, s.barGap);
+    logCeilingClamp(L"rightMargin", oldRightMargin, s.rightMargin);
     *out = std::move(s);
     return true;
 }
 
-static void PublishSettings(Settings s) {
+static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdentity) {
     std::lock_guard<std::mutex> lk(g_settingsMutex);
     std::lock_guard<std::mutex> lk2(g_dataMutex);
     std::vector<AccountData> newData(s.accounts.size());
@@ -5267,8 +5295,13 @@ static void PublishSettings(Settings s) {
     for (size_t i = 0; i < s.accounts.size(); i++) {
         for (size_t j = 0; j < g_settings.accounts.size() && j < g_data.size(); j++) {
             if (oldDataUsed[j]) continue;
-            if (AccountIdentityHash(g_settings.accounts[j]) == AccountIdentityHash(s.accounts[i])) {
+            uint64_t oldHash = AccountIdentityHash(g_settings.accounts[j]);
+            uint64_t newHash = AccountIdentityHash(s.accounts[i]);
+            bool renamedAccount = oldIdentity != newIdentity &&
+                                  oldHash == oldIdentity && newHash == newIdentity;
+            if (oldHash == newHash || renamedAccount) {
                 newData[i] = g_data[j];
+                if (renamedAccount) newData[i].retryDeadlineMs = 0;
                 oldDataUsed[j] = true;
                 break;
             }
@@ -5285,7 +5318,8 @@ enum class SettingsApplyResult {
     Changed,
 };
 
-static SettingsApplyResult ApplyOwnedSettings(Settings s) {
+static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity = 0,
+                                              uint64_t newIdentity = 0) {
     NormalizeSettings(&s);
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -5293,7 +5327,7 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s) {
     }
     if (!SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
     g_settingsLoadError = false;
-    PublishSettings(std::move(s));
+    PublishSettings(std::move(s), oldIdentity, newIdentity);
     return SettingsApplyResult::Changed;
 }
 
@@ -6164,6 +6198,13 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         s = g_settings;
     }
+    auto getBoundedInt = [&](int id, int fallback) {
+        int value = GetControlInt(state.hWnd, id, fallback);
+        if (SettingsRow* row = FindSettingsRow(state, GetDlgItem(state.hWnd, id))) {
+            value = std::clamp(value, row->minimum, row->maximum);
+        }
+        return value;
+    };
     int selection = (int)SendDlgItemMessageW(state.hWnd, kMonitorMode, CB_GETCURSEL, 0, 0);
     s.taskbarMonitorMode = selection == 1 ? TaskbarMonitorMode::All :
                            selection == 2 ? TaskbarMonitorMode::Specific :
@@ -6178,13 +6219,13 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
                           BarLayout::Vertical : BarLayout::Stacked;
     s.barMode = SendDlgItemMessageW(state.hWnd, kBarMode, CB_GETCURSEL, 0, 0) == 1 ?
                         BarMode::Remaining : BarMode::Used;
-    s.barLength = GetControlInt(state.hWnd, kBarLength, s.barLength);
-    s.barThickness = GetControlInt(state.hWnd, kBarThickness, s.barThickness);
-    s.labelFontSize = GetControlInt(state.hWnd, kLabelFontSize, s.labelFontSize);
-    s.accountMargin = GetControlInt(state.hWnd, kAccountMargin, s.accountMargin);
-    s.labelGap = GetControlInt(state.hWnd, kLabelGap, s.labelGap);
-    s.barGap = GetControlInt(state.hWnd, kBarGap, s.barGap);
-    s.rightMargin = GetControlInt(state.hWnd, kRightMargin, s.rightMargin);
+    s.barLength = getBoundedInt(kBarLength, s.barLength);
+    s.barThickness = getBoundedInt(kBarThickness, s.barThickness);
+    s.labelFontSize = getBoundedInt(kLabelFontSize, s.labelFontSize);
+    s.accountMargin = getBoundedInt(kAccountMargin, s.accountMargin);
+    s.labelGap = getBoundedInt(kLabelGap, s.labelGap);
+    s.barGap = getBoundedInt(kBarGap, s.barGap);
+    s.rightMargin = getBoundedInt(kRightMargin, s.rightMargin);
     auto isChecked = [&](int id) {
         return SendDlgItemMessageW(state.hWnd, id, BM_GETCHECK, 0, 0) == BST_CHECKED;
     };
@@ -6201,9 +6242,9 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     s.showCodexSparkInTooltip = isChecked(kShowCodexSpark);
     s.colorblindMode = isChecked(kColorblindMode);
     s.showStaleWarning = isChecked(kShowStaleWarning);
-    s.yellowThreshold = GetControlInt(state.hWnd, kYellowThreshold, s.yellowThreshold);
-    s.orangeThreshold = GetControlInt(state.hWnd, kOrangeThreshold, s.orangeThreshold);
-    s.redThreshold = GetControlInt(state.hWnd, kRedThreshold, s.redThreshold);
+    s.yellowThreshold = getBoundedInt(kYellowThreshold, s.yellowThreshold);
+    s.orangeThreshold = getBoundedInt(kOrangeThreshold, s.orangeThreshold);
+    s.redThreshold = getBoundedInt(kRedThreshold, s.redThreshold);
     s.clickAction = SendDlgItemMessageW(state.hWnd, kClickAction, CB_GETCURSEL, 0, 0) == 1 ?
                             ClickAction::OpenDashboard : ClickAction::Refresh;
     const int pollPresets[] = {2, 5, 10, 15, 30, 60};
@@ -6211,7 +6252,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
                                                    CB_GETCURSEL, 0, 0);
     s.pollMinutes = pollPresetIndex >= 0 && pollPresetIndex < (int)ARRAYSIZE(pollPresets) ?
                         pollPresets[pollPresetIndex] :
-                        GetControlInt(state.hWnd, kPollMinutes, s.pollMinutes);
+                        getBoundedInt(kPollMinutes, s.pollMinutes);
     s.enableNotifications = isChecked(kEnableNotifications);
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(s));
     configLock.unlock();
@@ -6638,7 +6679,9 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     }
 
     uint64_t newIdentity = AccountIdentityHash(newAccount);
-    bool sameProviderRename = identityChanged && oldAccount.provider == newAccount.provider &&
+    bool sameProviderIdentityChange = identityChanged &&
+                                      oldAccount.provider == newAccount.provider;
+    bool sameProviderRename = sameProviderIdentityChange &&
                               oldAccount.provider != L"antigravity";
     TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
     bool oldTokenCleared = true;
@@ -6670,7 +6713,9 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     // Visibility can be toggled from a taskbar menu while the account editor is open.
     newAccount.hidden = settings.accounts[index].hidden;
     settings.accounts[index] = newAccount;
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
+    SettingsApplyResult applyResult = ApplyOwnedSettings(
+        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
+        sameProviderIdentityChange ? newIdentity : 0);
     if (applyResult == SettingsApplyResult::Failed) {
         bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
                                   ClearStoredToken(newIdentity);
@@ -7041,15 +7086,15 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                        CBS_DROPDOWNLIST, 0, kBarMode);
             AddComboItems(mode, {L"Used", L"Remaining"});
             AddNumericRow(*state, 1, L"Bar length (px)", kBarLength,
-                          10, 1000, true, 300);
+                          10, 4096, true);
             AddNumericRow(*state, 1, L"Bar thickness (px)", kBarThickness,
                           2, 20, true);
             AddNumericRow(*state, 1, L"Label font size (px)", kLabelFontSize,
                           6, 24, true);
-            AddNumericRow(*state, 1, L"Account margin (px)", kAccountMargin, 0, 100);
-            AddNumericRow(*state, 1, L"Label gap (px)", kLabelGap, 0, 100);
-            AddNumericRow(*state, 1, L"Bar gap (px)", kBarGap, 0, 100);
-            AddNumericRow(*state, 1, L"Right tray gap (px)", kRightMargin, 0, 100);
+            AddNumericRow(*state, 1, L"Account margin (px)", kAccountMargin, 0, 500);
+            AddNumericRow(*state, 1, L"Label gap (px)", kLabelGap, 0, 500);
+            AddNumericRow(*state, 1, L"Bar gap (px)", kBarGap, 0, 500);
+            AddNumericRow(*state, 1, L"Right tray gap (px)", kRightMargin, 0, 500);
 
             HWND labelPosition = AddSettingsRow(*state, 2, L"Label position", L"COMBOBOX",
                                                 CBS_DROPDOWNLIST, 0, kLabelPosition);
@@ -7168,10 +7213,13 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     SetControlInt(*state, id, value);
                     state->updating = false;
                     int action = LOWORD(wParam);
-                    if (action == TB_ENDTRACK || action == TB_LINEUP ||
-                        action == TB_LINEDOWN || action == TB_PAGEUP ||
-                        action == TB_PAGEDOWN || action == TB_TOP || action == TB_BOTTOM) {
+                    if (action == TB_ENDTRACK) {
                         CommitScalarSettings(*state);
+                    } else if (action == TB_LINEUP || action == TB_LINEDOWN ||
+                               action == TB_PAGEUP || action == TB_PAGEDOWN ||
+                               action == TB_TOP || action == TB_BOTTOM ||
+                               action == TB_THUMBPOSITION) {
+                        SetTimer(hWnd, kSettingsAutosaveTimer, 250, nullptr);
                     }
                     return 0;
                 }
