@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.2.4
+// @version         1.3.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -34,7 +34,8 @@ or open its provider dashboard, depending on settings and provider support. Righ
 for Settings, Refresh all, provider actions, and a checkbox list to show/hide individual accounts. Hidden accounts
 stop updating and are left to go stale; the choice persists across restarts (at least
 one account always stays visible).
-Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
+Bars can show compact quota labels (`5h`, `7d`, `Fa`, `Ex`) and use configurable
+green/yellow/orange/red thresholds, with a colorblind palette option.
 Optional pace ticks compare quota usage with elapsed time in each reset window and have
 caret, full-line, edge-notch, and dot styles with a configurable color.
 Stale errors can mark labels/tooltips with `!`.
@@ -213,6 +214,7 @@ struct Settings {
     bool showPaceTicks = true;
     PaceTickStyle paceTickStyle = PaceTickStyle::Caret;
     COLORREF paceTickColor = kDefaultPaceTickColor;
+    bool showBarLabels = false;
     bool showPercentText = false;
     bool showCodexSparkInTooltip = false;
     bool colorblindMode = false;
@@ -3726,7 +3728,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         std::vector<AccountConfig> accounts;
         int barLength, barThickness, labelFontSize, percentFontSize;
         int accountMargin, labelGap, barGap, rightMargin;
-        bool showPaceTicks, showPercentText;
+        bool showPaceTicks, showBarLabels, showPercentText;
         COLORREF paceTickColor;
         BarLayout barLayout;
         PaceTickStyle paceTickStyle;
@@ -3750,6 +3752,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             showPaceTicks = g_settings.showPaceTicks;
             paceTickStyle = g_settings.paceTickStyle;
             paceTickColor = g_settings.paceTickColor;
+            showBarLabels = g_settings.showBarLabels;
             showPercentText = g_settings.showPercentText;
         }
         state.accountRefs.clear();
@@ -3975,6 +3978,33 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     }
                     refs.paceTicks[w] = paceTick;
                     trackContent.Children().Append(paceTick);
+                }
+
+                if (showBarLabels) {
+                    static constexpr PCWSTR kBarLabels[kQuotaBarCount] = {
+                        L"5h", L"7d", L"Fa", L"Ex"};
+                    TextBlock barLabel;
+                    barLabel.Text(kBarLabels[w]);
+                    barLabel.FontSize(std::min((double)percentFontSize,
+                                               std::max(5.0, barThickness - 2.0)));
+                    barLabel.Foreground(SolidColorBrush(
+                        winrt::Windows::UI::Color{255, 255, 255, 255}));
+                    barLabel.Opacity(0.9);
+                    barLabel.IsHitTestVisible(false);
+                    barLabel.TextAlignment(TextAlignment::Center);
+                    barLabel.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center :
+                                                                HorizontalAlignment::Left);
+                    barLabel.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom :
+                                                              VerticalAlignment::Center);
+                    barLabel.Margin(verticalBars ? Thickness{0, 0, 0, 3} :
+                                                   Thickness{3, -1, 0, 0});
+                    if (verticalBars) {
+                        RotateTransform rotation;
+                        rotation.Angle(-90);
+                        barLabel.RenderTransform(rotation);
+                        barLabel.RenderTransformOrigin({0.5f, 0.5f});
+                    }
+                    trackContent.Children().Append(barLabel);
                 }
 
                 track.Child(trackContent);
@@ -5232,6 +5262,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"barGap", s.barGap);
         setNumber(L"rightMargin", s.rightMargin);
         setBool(L"showPercentText", s.showPercentText);
+        setBool(L"showBarLabels", s.showBarLabels);
         setBool(L"showCodexSpark", s.showCodexSparkInTooltip);
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
@@ -5321,6 +5352,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         s.barGap = (int)GetNum(root, L"barGap", 2);
         s.rightMargin = (int)GetNum(root, L"rightMargin", 4);
         s.showPercentText = getBoolDefault(L"showPercentText", false);
+        s.showBarLabels = getBoolDefault(L"showBarLabels", false);
         s.showCodexSparkInTooltip = getBoolDefault(L"showCodexSpark", false);
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
@@ -5653,6 +5685,7 @@ enum SettingsControlId {
     kShowPaceTicks,
     kPaceTickStyle,
     kPaceTickColor,
+    kShowBarLabels,
     kShowPercentText,
     kShowCodexSpark,
     kColorblindMode,
@@ -6478,9 +6511,10 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
                          (LRESULT)LabelPosition::Hidden;
     EnableSettingsRow(state, kLabelFontSize, labelsVisible);
     EnableSettingsRow(state, kLabelGap, labelsVisible);
-    EnableSettingsRow(state, kPercentFontSize,
-                      SendDlgItemMessageW(state.hWnd, kShowPercentText,
-                                          BM_GETCHECK, 0, 0) == BST_CHECKED);
+    bool compactTextVisible =
+        SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED ||
+        SendDlgItemMessageW(state.hWnd, kShowPercentText, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    EnableSettingsRow(state, kPercentFontSize, compactTextVisible);
     bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
                                                 BM_GETCHECK, 0, 0) == BST_CHECKED;
     EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
@@ -6549,6 +6583,7 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     setCheck(kShowPaceTicks, s.showPaceTicks);
     SendDlgItemMessageW(state.hWnd, kPaceTickStyle, CB_SETCURSEL,
                         (int)s.paceTickStyle, 0);
+    setCheck(kShowBarLabels, s.showBarLabels);
     setCheck(kShowPercentText, s.showPercentText);
     setCheck(kShowCodexSpark, s.showCodexSparkInTooltip);
     setCheck(kColorblindMode, s.colorblindMode);
@@ -6631,6 +6666,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
             state, GetDlgItem(state.hWnd, kPaceTickColor))) {
         s.paceTickColor = row->previewColor;
     }
+    s.showBarLabels = isChecked(kShowBarLabels);
     s.showPercentText = isChecked(kShowPercentText);
     s.showCodexSparkInTooltip = isChecked(kShowCodexSpark);
     s.colorblindMode = isChecked(kColorblindMode);
@@ -7382,6 +7418,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.showPaceTicks = defaults.showPaceTicks;
         settings.paceTickStyle = defaults.paceTickStyle;
         settings.paceTickColor = defaults.paceTickColor;
+        settings.showBarLabels = defaults.showBarLabels;
         settings.showPercentText = defaults.showPercentText;
         settings.showCodexSparkInTooltip = defaults.showCodexSparkInTooltip;
         settings.colorblindMode = defaults.colorblindMode;
@@ -7491,7 +7528,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                           2, 50, true);
             AddNumericRow(*state, 1, L"Label font size (px)", kLabelFontSize,
                           6, 24, true);
-            AddNumericRow(*state, 1, L"Percentage text size (px)", kPercentFontSize,
+            AddNumericRow(*state, 1, L"Compact text size (px)", kPercentFontSize,
                           6, 24, true);
             AddNumericRow(*state, 1, L"Account margin (px)", kAccountMargin, 0, 500);
             AddNumericRow(*state, 1, L"Label gap (px)", kLabelGap, 0, 500);
@@ -7511,6 +7548,8 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             SetWindowTextW(paceTickColor, L"Choose...");
             state->rows[2].back().preview = CreateSettingsControl(
                 *state, 2, L"STATIC", L"", WS_VISIBLE | SS_OWNERDRAW, 0, -1);
+            AddSettingsCheck(*state, 2, L"Show compact bar labels (5h, 7d, Fa, Ex)",
+                             kShowBarLabels);
             AddSettingsCheck(*state, 2, L"Show compact percent text", kShowPercentText);
             AddSettingsCheck(*state, 2, L"Show Codex Spark in tooltips", kShowCodexSpark);
             AddSettingsCheck(*state, 2, L"Use colorblind palette", kColorblindMode);
