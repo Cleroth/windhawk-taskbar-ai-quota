@@ -15,7 +15,7 @@ Each configured account gets one compact taskbar column. Choose its 5-hour, week
 
 Hover for exact percentages and reset times. Click a column to refresh that account or open its provider dashboard, depending on settings and provider support. Right-click a column for Settings, Refresh all, provider actions, and show/hide toggles.
 
-Bars use configurable green/yellow/orange/red thresholds, with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window and have a configurable color. Stale errors can mark labels and tooltips with `!`.
+Bars use configurable green/yellow/orange/red thresholds, with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window and have caret, full-line, edge-notch, and dot styles with a configurable color. Stale errors can mark labels and tooltips with `!`.
 
 It can also fire a Windows notification when an account first crosses the red threshold on a selected bar, so you don't have to keep glancing at the bars. The notification re-arms once usage drops back below the threshold.
 
@@ -45,7 +45,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - per-account 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage bar selection
 - bar length, thickness, and layout
 - bar mode: used (fills as quota is consumed) or remaining (fills with quota left, tooltips show "X% remaining")
-- pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining), with a configurable color
+- pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles and a configurable color
 - label position: hidden, left, top, right, or bottom
 - label font size
 - account, label, bar, and tray spacing

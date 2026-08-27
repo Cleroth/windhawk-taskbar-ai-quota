@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.1.0
+// @version         1.2.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -35,8 +35,8 @@ for Settings, Refresh all, provider actions, and a checkbox list to show/hide in
 stop updating and are left to go stale; the choice persists across restarts (at least
 one account always stays visible).
 Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
-Optional pace ticks compare quota usage with elapsed time in each reset window and have a
-configurable color.
+Optional pace ticks compare quota usage with elapsed time in each reset window and have
+caret, full-line, edge-notch, and dot styles with a configurable color.
 Stale errors can mark labels/tooltips with `!`.
 
 Optionally fires a Windows notification when an account first crosses the red threshold
@@ -104,6 +104,7 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
 
 #include <algorithm>
 #include <array>
@@ -128,6 +129,7 @@ using namespace winrt::Windows::UI::Xaml::Media;
 namespace wuxcp = winrt::Windows::UI::Xaml::Controls::Primitives;
 namespace wuxd = winrt::Windows::UI::Xaml::Documents;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
+namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 /**********************************************/
 //  Settings and State
@@ -179,6 +181,15 @@ enum class LabelPosition {
     Bottom,
 };
 
+enum class PaceTickStyle {
+    Caret,
+    Line,
+    Notch,
+    Dot,
+};
+
+static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
+
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
@@ -199,7 +210,8 @@ struct Settings {
     int redThreshold = 90;
     LabelPosition labelPosition = LabelPosition::Left;
     bool showPaceTicks = true;
-    COLORREF paceTickColor = RGB(0xC0, 0x26, 0xFF);
+    PaceTickStyle paceTickStyle = PaceTickStyle::Caret;
+    COLORREF paceTickColor = kDefaultPaceTickColor;
     bool showPercentText = false;
     bool showCodexSparkInTooltip = false;
     bool colorblindMode = false;
@@ -565,7 +577,9 @@ static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowTh
 static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, bool hasError) {
     constexpr double maxWidth = 460;
     auto muted = SolidColorBrush(winrt::Windows::UI::Color{255, 0xD6, 0xD6, 0xD6});
-    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xC0, 0x26, 0xFF});
+    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{
+        255, GetRValue(kDefaultPaceTickColor), GetGValue(kDefaultPaceTickColor),
+        GetBValue(kDefaultPaceTickColor)});
     auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xA8, 0xD8, 0xFF});
     auto creditLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
     auto duration = SolidColorBrush(winrt::Windows::UI::Color{255, 0xB7, 0xE4, 0xA3});
@@ -634,6 +648,11 @@ static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, 
             } else if (line.rfind(L"week:", 0) == 0) {
                 labelBrush = quotaLabel;
                 labelEnd = 5;
+                labelBold = true;
+                quotaLine = true;
+            } else if (line.rfind(L"Fable week:", 0) == 0) {
+                labelBrush = quotaLabel;
+                labelEnd = 11;
                 labelBold = true;
                 quotaLine = true;
             } else if (line.rfind(L"error:", 0) == 0) {
@@ -3710,6 +3729,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         bool showPaceTicks, showPercentText;
         COLORREF paceTickColor;
         BarLayout barLayout;
+        PaceTickStyle paceTickStyle;
         LabelPosition labelPosition;
         ClickAction clickAction;
         {
@@ -3727,6 +3747,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             rightMargin = g_settings.rightMargin;
             labelPosition = g_settings.labelPosition;
             showPaceTicks = g_settings.showPaceTicks;
+            paceTickStyle = g_settings.paceTickStyle;
             paceTickColor = g_settings.paceTickColor;
             showPercentText = g_settings.showPercentText;
         }
@@ -3872,27 +3893,85 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 trackContent.Children().Append(fill);
 
                 if (showPaceTicks) {
+                    double paceCrossSize = barThickness;
+                    double paceLength = paceTickStyle == PaceTickStyle::Caret ? 5 : 4;
+                    if (paceTickStyle == PaceTickStyle::Notch) {
+                        paceCrossSize = std::max(2.0, std::ceil(barThickness * 0.6));
+                    } else if (paceTickStyle == PaceTickStyle::Dot) {
+                        paceCrossSize = 4;
+                    }
+
                     Border paceTick;
-                    paceTick.Width(verticalBars ? barThickness : 4);
-                    paceTick.Height(verticalBars ? 4 : barThickness);
-                    paceTick.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center :
-                                                                  HorizontalAlignment::Left);
-                    paceTick.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom :
-                                                              VerticalAlignment::Center);
-                    paceTick.Background(SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
+                    paceTick.Width(verticalBars ? paceCrossSize : paceLength);
+                    paceTick.Height(verticalBars ? paceLength : paceCrossSize);
+                    paceTick.HorizontalAlignment(
+                        verticalBars ? (paceTickStyle == PaceTickStyle::Notch ?
+                                            HorizontalAlignment::Left : HorizontalAlignment::Center) :
+                                       HorizontalAlignment::Left);
+                    paceTick.VerticalAlignment(
+                        verticalBars ? VerticalAlignment::Bottom :
+                                       (paceTickStyle == PaceTickStyle::Notch ?
+                                            VerticalAlignment::Top : VerticalAlignment::Center));
                     paceTick.Visibility(Visibility::Collapsed);
                     paceTick.IsHitTestVisible(false);
 
-                    Border paceCore;
-                    paceCore.Width(verticalBars ? barThickness : 2);
-                    paceCore.Height(verticalBars ? 2 : barThickness);
-                    paceCore.HorizontalAlignment(HorizontalAlignment::Center);
-                    paceCore.VerticalAlignment(VerticalAlignment::Center);
-                    paceCore.Background(SolidColorBrush(
-                        winrt::Windows::UI::Color{0xFF, GetRValue(paceTickColor),
-                                                 GetGValue(paceTickColor),
-                                                 GetBValue(paceTickColor)}));
-                    paceTick.Child(paceCore);
+                    auto tickColor = winrt::Windows::UI::Color{
+                        0xFF, GetRValue(paceTickColor), GetGValue(paceTickColor),
+                        GetBValue(paceTickColor)};
+                    if (paceTickStyle == PaceTickStyle::Caret) {
+                        Grid caretShape;
+                        auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
+                        for (int layer = 0; layer < 2; layer++) {
+                            bool core = layer == 1;
+                            double capInset = core ? 1 : 0;
+                            double stemInset = core ? 2 : 1;
+                            double capDepth = std::min(core ? 1.0 : 2.0,
+                                                       paceCrossSize / 2.0);
+                            wuxs::Polygon part;
+                            auto addPoint = [&](double along, double cross) {
+                                part.Points().Append(verticalBars ?
+                                    winrt::Windows::Foundation::Point{
+                                        (float)cross, (float)along} :
+                                    winrt::Windows::Foundation::Point{
+                                        (float)along, (float)cross});
+                            };
+                            addPoint(capInset, 0);
+                            addPoint(paceLength - capInset, 0);
+                            addPoint(paceLength - capInset, capDepth);
+                            addPoint(paceLength - stemInset, capDepth);
+                            addPoint(paceLength - stemInset, paceCrossSize - capDepth);
+                            addPoint(paceLength - capInset, paceCrossSize - capDepth);
+                            addPoint(paceLength - capInset, paceCrossSize);
+                            addPoint(capInset, paceCrossSize);
+                            addPoint(capInset, paceCrossSize - capDepth);
+                            addPoint(stemInset, paceCrossSize - capDepth);
+                            addPoint(stemInset, capDepth);
+                            addPoint(capInset, capDepth);
+                            part.Fill(SolidColorBrush(core ? tickColor : haloColor));
+                            caretShape.Children().Append(part);
+                        }
+                        paceTick.Child(caretShape);
+                    } else {
+                        paceTick.Background(
+                            SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
+                        if (paceTickStyle == PaceTickStyle::Dot) {
+                            paceTick.CornerRadius({2, 2, 2, 2});
+                        }
+
+                        Border paceCore;
+                        double paceCoreCrossSize =
+                            paceTickStyle == PaceTickStyle::Dot ? 3 : paceCrossSize;
+                        double paceCoreLength = paceTickStyle == PaceTickStyle::Dot ? 3 : 2;
+                        paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
+                        paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
+                        paceCore.HorizontalAlignment(HorizontalAlignment::Center);
+                        paceCore.VerticalAlignment(VerticalAlignment::Center);
+                        if (paceTickStyle == PaceTickStyle::Dot) {
+                            paceCore.CornerRadius({1.5, 1.5, 1.5, 1.5});
+                        }
+                        paceCore.Background(SolidColorBrush(tickColor));
+                        paceTick.Child(paceCore);
+                    }
                     refs.paceTicks[w] = paceTick;
                     trackContent.Children().Append(paceTick);
                 }
@@ -4252,6 +4331,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool showPaceTicks, showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
     BarLayout barLayout;
     BarMode barMode;
+    PaceTickStyle paceTickStyle;
     ClickAction clickAction;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -4267,6 +4347,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         orangeThreshold = g_settings.orangeThreshold;
         redThreshold = g_settings.redThreshold;
         showPaceTicks = g_settings.showPaceTicks;
+        paceTickStyle = g_settings.paceTickStyle;
         showPercentText = g_settings.showPercentText;
         showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
         colorblindMode = g_settings.colorblindMode;
@@ -4404,7 +4485,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                                      (1.0 - remainingFraction) * 100.0;
                     pacePct = std::clamp(pacePct, 0.0, 100.0);
 
-                    constexpr double paceThickness = 4.0;
+                    double paceThickness = paceTickStyle == PaceTickStyle::Caret ? 5.0 : 4.0;
                     double radius = std::clamp(std::max(1.0, barThickness / 2.0),
                                                paceThickness / 2.0,
                                                (barLength - paceThickness) / 2.0);
@@ -5086,6 +5167,10 @@ static void NormalizeSettings(Settings* s) {
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
     }
+    if (s->paceTickStyle < PaceTickStyle::Caret ||
+        s->paceTickStyle > PaceTickStyle::Dot) {
+        s->paceTickStyle = PaceTickStyle::Caret;
+    }
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
@@ -5129,6 +5214,9 @@ static std::wstring SerializeSettings(const Settings& s) {
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" : L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setBool(L"showPaceTicks", s.showPaceTicks);
+        setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
+                                    s.paceTickStyle == PaceTickStyle::Notch ? L"notch" :
+                                    s.paceTickStyle == PaceTickStyle::Dot ? L"dot" : L"caret");
         setNumber(L"paceTickColor", (int)s.paceTickColor);
         setString(L"labelPosition",
                   s.labelPosition == LabelPosition::Hidden ? L"hidden" :
@@ -5201,10 +5289,14 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
-        double paceTickColor = GetNum(root, L"paceTickColor", RGB(0xC0, 0x26, 0xFF));
+        std::wstring paceTickStyle = GetStr(root, L"paceTickStyle");
+        s.paceTickStyle = paceTickStyle == L"line" ? PaceTickStyle::Line :
+                          paceTickStyle == L"notch" ? PaceTickStyle::Notch :
+                          paceTickStyle == L"dot" ? PaceTickStyle::Dot : PaceTickStyle::Caret;
+        double paceTickColor = GetNum(root, L"paceTickColor", kDefaultPaceTickColor);
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?
-                              (COLORREF)paceTickColor : RGB(0xC0, 0x26, 0xFF);
+                              (COLORREF)paceTickColor : kDefaultPaceTickColor;
         std::wstring labelPosition = GetStr(root, L"labelPosition");
         if (labelPosition == L"hidden") s.labelPosition = LabelPosition::Hidden;
         else if (labelPosition == L"top") s.labelPosition = LabelPosition::Top;
@@ -5551,6 +5643,7 @@ enum SettingsControlId {
 
     kLabelPosition = 2200,
     kShowPaceTicks,
+    kPaceTickStyle,
     kPaceTickColor,
     kShowPercentText,
     kShowCodexSpark,
@@ -6260,6 +6353,10 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
                          (LRESULT)LabelPosition::Hidden;
     EnableSettingsRow(state, kLabelFontSize, labelsVisible);
     EnableSettingsRow(state, kLabelGap, labelsVisible);
+    bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
+                                                BM_GETCHECK, 0, 0) == BST_CHECKED;
+    EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
+    EnableSettingsRow(state, kPaceTickColor, paceTicksVisible);
     EnableSettingsRow(state, kPollMinutes,
                       SendDlgItemMessageW(state.hWnd, kPollPreset,
                                           CB_GETCURSEL, 0, 0) == 6);
@@ -6321,6 +6418,8 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     SendDlgItemMessageW(state.hWnd, kLabelPosition, CB_SETCURSEL,
                         (int)s.labelPosition, 0);
     setCheck(kShowPaceTicks, s.showPaceTicks);
+    SendDlgItemMessageW(state.hWnd, kPaceTickStyle, CB_SETCURSEL,
+                        (int)s.paceTickStyle, 0);
     setCheck(kShowPercentText, s.showPercentText);
     setCheck(kShowCodexSpark, s.showCodexSparkInTooltip);
     setCheck(kColorblindMode, s.colorblindMode);
@@ -6394,6 +6493,10 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     s.labelPosition = labelPosition >= 0 && labelPosition <= (int)LabelPosition::Bottom ?
                           (LabelPosition)labelPosition : LabelPosition::Left;
     s.showPaceTicks = isChecked(kShowPaceTicks);
+    int paceTickStyle = (int)SendDlgItemMessageW(state.hWnd, kPaceTickStyle,
+                                                 CB_GETCURSEL, 0, 0);
+    s.paceTickStyle = paceTickStyle >= 0 && paceTickStyle <= (int)PaceTickStyle::Dot ?
+                          (PaceTickStyle)paceTickStyle : PaceTickStyle::Caret;
     if (SettingsRow* row = FindSettingsRow(
             state, GetDlgItem(state.hWnd, kPaceTickColor))) {
         s.paceTickColor = row->previewColor;
@@ -7145,6 +7248,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
     } else if (page == 2) {
         settings.labelPosition = defaults.labelPosition;
         settings.showPaceTicks = defaults.showPaceTicks;
+        settings.paceTickStyle = defaults.paceTickStyle;
         settings.paceTickColor = defaults.paceTickColor;
         settings.showPercentText = defaults.showPercentText;
         settings.showCodexSparkInTooltip = defaults.showCodexSparkInTooltip;
@@ -7292,6 +7396,10 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                                 CBS_DROPDOWNLIST, 0, kLabelPosition);
             AddComboItems(labelPosition, {L"Hidden", L"Left", L"Top", L"Right", L"Bottom"});
             AddSettingsCheck(*state, 2, L"Show quota pace ticks", kShowPaceTicks);
+            HWND paceTickStyle = AddSettingsRow(*state, 2, L"Pace tick style", L"COMBOBOX",
+                                                CBS_DROPDOWNLIST, 0, kPaceTickStyle);
+            AddComboItems(paceTickStyle,
+                          {L"Caret", L"Full line", L"Edge notch", L"Dot"});
             HWND paceTickColor = AddSettingsRow(*state, 2, L"Pace tick color", L"BUTTON",
                                                 BS_PUSHBUTTON, 0, kPaceTickColor);
             SetWindowTextW(paceTickColor, L"Choose...");
@@ -7331,6 +7439,9 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 AddSettingsToolTip(
                     *state, kShowPaceTicks,
                     L"Marks elapsed time in each quota reset window so usage can be compared with its expected pace.");
+                AddSettingsToolTip(
+                    *state, kPaceTickStyle,
+                    L"Draws each pace marker as a thin caret, a full-width line, an edge notch, or a centered dot.");
                 AddSettingsToolTip(
                     *state, kShowCodexSpark,
                     L"Adds Codex Spark plan and rate-limit details to OpenAI account tooltips.");
