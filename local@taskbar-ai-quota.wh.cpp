@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.1
+// @version         1.5.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -318,6 +318,7 @@ struct AccountUiRefs {
 struct QuotaUiInstance {
     HWND hWnd = nullptr;
     DWORD ownerThreadId = 0;
+    double rasterizationScale = 1.0;
     bool windowSubclassed = false;
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
@@ -3803,6 +3804,7 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
 
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
+        double physicalPixelDip = 1.0 / state.rasterizationScale;
         std::vector<AccountConfig> accounts;
         int barLength, barThickness, labelFontSize, percentFontSize;
         int accountMargin, labelGap, rightMargin;
@@ -3987,11 +3989,12 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 if (showPaceTicks) {
                     double paceCrossSize = barThickness;
-                    double paceLength = paceTickStyle == PaceTickStyle::Caret ? 5 : 4;
+                    double paceLength = (paceTickStyle == PaceTickStyle::Caret ? 5 : 4) *
+                                        physicalPixelDip;
                     if (paceTickStyle == PaceTickStyle::Notch) {
                         paceCrossSize = std::max(2.0, std::ceil(barThickness * 0.6));
                     } else if (paceTickStyle == PaceTickStyle::Dot) {
-                        paceCrossSize = 4;
+                        paceCrossSize = 4 * physicalPixelDip;
                     }
 
                     Border paceTick;
@@ -4016,9 +4019,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
                         for (int layer = 0; layer < 2; layer++) {
                             bool core = layer == 1;
-                            double capInset = core ? 1 : 0;
-                            double stemInset = core ? 2 : 1;
-                            double capDepth = std::min(core ? 1.0 : 2.0,
+                            double capInset = (core ? 1 : 0) * physicalPixelDip;
+                            double stemInset = (core ? 2 : 1) * physicalPixelDip;
+                            double capDepth = std::min((core ? 1.0 : 2.0) * physicalPixelDip,
                                                        paceCrossSize / 2.0);
                             wuxs::Polygon part;
                             auto addPoint = [&](double along, double cross) {
@@ -4048,19 +4051,23 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         paceTick.Background(
                             SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
                         if (paceTickStyle == PaceTickStyle::Dot) {
-                            paceTick.CornerRadius({2, 2, 2, 2});
+                            double radius = 2 * physicalPixelDip;
+                            paceTick.CornerRadius({radius, radius, radius, radius});
                         }
 
                         Border paceCore;
                         double paceCoreCrossSize =
-                            paceTickStyle == PaceTickStyle::Dot ? 3 : paceCrossSize;
-                        double paceCoreLength = paceTickStyle == PaceTickStyle::Dot ? 3 : 2;
+                            paceTickStyle == PaceTickStyle::Dot ?
+                                3 * physicalPixelDip : paceCrossSize;
+                        double paceCoreLength = (paceTickStyle == PaceTickStyle::Dot ? 3 : 2) *
+                                                physicalPixelDip;
                         paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
                         paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
                         paceCore.HorizontalAlignment(HorizontalAlignment::Center);
                         paceCore.VerticalAlignment(VerticalAlignment::Center);
                         if (paceTickStyle == PaceTickStyle::Dot) {
-                            paceCore.CornerRadius({1.5, 1.5, 1.5, 1.5});
+                            double radius = 1.5 * physicalPixelDip;
+                            paceCore.CornerRadius({radius, radius, radius, radius});
                         }
                         paceCore.Background(SolidColorBrush(tickColor));
                         paceTick.Child(paceCore);
@@ -4115,7 +4122,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     if (percentTextAlignment == PercentTextAlignment::Left) {
                         percent.HorizontalAlignment(HorizontalAlignment::Left);
                         percent.TextAlignment(TextAlignment::Left);
-                        percent.Padding({2, 0, 0, 0});
                     } else if (percentTextAlignment == PercentTextAlignment::Center) {
                         percent.HorizontalAlignment(HorizontalAlignment::Center);
                         percent.TextAlignment(TextAlignment::Center);
@@ -4123,13 +4129,16 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         // Adaptive starts on the unfilled right side.
                         percent.HorizontalAlignment(HorizontalAlignment::Right);
                         percent.TextAlignment(TextAlignment::Right);
-                        percent.Padding({0, 0, 2, 0});
                     }
                     percent.Foreground(SolidColorBrush(
                         winrt::Windows::UI::Color{255, 255, 255, 255}));
                     percent.Opacity(0.9);
                     percent.IsHitTestVisible(false);
                     TranslateTransform translation;
+                    translation.X(percentTextAlignment == PercentTextAlignment::Left ?
+                                      4 * physicalPixelDip :
+                                  percentTextAlignment == PercentTextAlignment::Center ?
+                                      0 : -4 * physicalPixelDip);
                     translation.Y(-1);
                     percent.RenderTransform(translation);
                     swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d_%d", (int)i, w);
@@ -4501,7 +4510,6 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     BarLayout barLayout;
     BarMode barMode;
     PercentTextAlignment percentTextAlignment;
-    PaceTickStyle paceTickStyle;
     ClickAction clickAction;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -4517,7 +4525,6 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         orangeThreshold = g_settings.orangeThreshold;
         redThreshold = g_settings.redThreshold;
         showPaceTicks = g_settings.showPaceTicks;
-        paceTickStyle = g_settings.paceTickStyle;
         showPercentText = g_settings.showPercentText;
         percentTextAlignment = g_settings.percentTextAlignment;
         showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
@@ -4546,6 +4553,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         refreshAccountIdentity = g_refreshAccountIdentity.load();
     }
     bool verticalBars = barLayout == BarLayout::Vertical;
+    double physicalPixelDip = 1.0 / state.rasterizationScale;
     // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged.
     auto displayPct = [&](double pct) {
         return barMode == BarMode::Remaining && pct >= 0 ? std::clamp(100.0 - pct, 0.0, 100.0) : pct;
@@ -4653,7 +4661,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                                      (1.0 - remainingFraction) * 100.0;
                     pacePct = std::clamp(pacePct, 0.0, 100.0);
 
-                    double paceThickness = paceTickStyle == PaceTickStyle::Caret ? 5.0 : 4.0;
+                    double paceThickness = verticalBars ? ui.paceTicks[w].Height() :
+                                                          ui.paceTicks[w].Width();
                     double radius = std::clamp(std::max(1.0, barThickness / 2.0),
                                                paceThickness / 2.0,
                                                (barLength - paceThickness) / 2.0);
@@ -4689,15 +4698,19 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                             if (appliedAlignment == PercentTextAlignment::Left) {
                                 ui.percents[w].HorizontalAlignment(HorizontalAlignment::Left);
                                 ui.percents[w].TextAlignment(TextAlignment::Left);
-                                ui.percents[w].Padding({2, 0, 0, 0});
                             } else if (appliedAlignment == PercentTextAlignment::Center) {
                                 ui.percents[w].HorizontalAlignment(HorizontalAlignment::Center);
                                 ui.percents[w].TextAlignment(TextAlignment::Center);
-                                ui.percents[w].Padding({0, 0, 0, 0});
                             } else {
                                 ui.percents[w].HorizontalAlignment(HorizontalAlignment::Right);
                                 ui.percents[w].TextAlignment(TextAlignment::Right);
-                                ui.percents[w].Padding({0, 0, 2, 0});
+                            }
+                            if (auto translation = ui.percents[w].RenderTransform()
+                                                       .try_as<TranslateTransform>()) {
+                                translation.X(appliedAlignment == PercentTextAlignment::Left ?
+                                                  4 * physicalPixelDip :
+                                              appliedAlignment == PercentTextAlignment::Center ?
+                                                  0 : -4 * physicalPixelDip);
                             }
                         }
                         ap.percentAlignments[w] = (int)appliedAlignment;
@@ -4986,6 +4999,8 @@ static bool InjectQuotaGrid(HWND hWnd) {
             RemoveQuotaGridFromState(*state);
         }
         state->injectionParent = trayGrid;
+        double rasterizationScale = xamlRoot.RasterizationScale();
+        state->rasterizationScale = rasterizationScale > 0 ? rasterizationScale : 1.0;
         Grid quota = BuildQuotaGrid(*state);
         if (!quota) {
             RemoveQuotaGridFromState(*state);
