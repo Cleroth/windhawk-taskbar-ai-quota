@@ -47,7 +47,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - bar mode: used (fills as quota is consumed) or remaining (fills with quota left, tooltips show "X% remaining")
 - pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles and a configurable color
 - label position: hidden, left, top, right, or bottom
-- label font size
+- label font size and percentage text size
 - account, label, bar, and tray spacing
 - compact percent text
 - click action: refresh account or open provider dashboard (Antigravity always refreshes)

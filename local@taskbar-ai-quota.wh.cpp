@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.2.3
+// @version         1.2.4
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -201,6 +201,7 @@ struct Settings {
     int barLength = 100;
     int barThickness = 8;
     int labelFontSize = 11;
+    int percentFontSize = 9;
     int accountMargin = 3;
     int labelGap = 3;
     int barGap = 2;
@@ -3723,7 +3724,8 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         std::vector<AccountConfig> accounts;
-        int barLength, barThickness, labelFontSize, accountMargin, labelGap, barGap, rightMargin;
+        int barLength, barThickness, labelFontSize, percentFontSize;
+        int accountMargin, labelGap, barGap, rightMargin;
         bool showPaceTicks, showPercentText;
         COLORREF paceTickColor;
         BarLayout barLayout;
@@ -3739,6 +3741,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             barLength = g_settings.barLength;
             barThickness = g_settings.barThickness;
             labelFontSize = g_settings.labelFontSize;
+            percentFontSize = g_settings.percentFontSize;
             accountMargin = g_settings.accountMargin;
             labelGap = g_settings.labelGap;
             barGap = g_settings.barGap;
@@ -3989,7 +3992,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 refs.barArea = overlay.as<FrameworkElement>();
 
                 TextBlock percent;
-                percent.FontSize(std::max(8, labelFontSize - 2));
+                percent.FontSize(percentFontSize);
                 percent.HorizontalAlignment(HorizontalAlignment::Center);
                 percent.VerticalAlignment(VerticalAlignment::Center);
                 percent.TextAlignment(TextAlignment::Center);
@@ -5154,9 +5157,10 @@ static void NormalizeSettings(Settings* s) {
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
-    s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 4096);
-    s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 20);
+    s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
+    s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 50);
     s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
+    s->percentFontSize = std::clamp(s->percentFontSize > 0 ? s->percentFontSize : 9, 6, 24);
     s->accountMargin = std::clamp(s->accountMargin, 0, 500);
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
@@ -5222,6 +5226,7 @@ static std::wstring SerializeSettings(const Settings& s) {
                   s.labelPosition == LabelPosition::Right ? L"right" :
                   s.labelPosition == LabelPosition::Bottom ? L"bottom" : L"left");
         setNumber(L"labelFontSize", s.labelFontSize);
+        setNumber(L"percentFontSize", s.percentFontSize);
         setNumber(L"accountMargin", s.accountMargin);
         setNumber(L"labelGap", s.labelGap);
         setNumber(L"barGap", s.barGap);
@@ -5308,6 +5313,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                               labelOnLeft ? LabelPosition::Left : LabelPosition::Top;
         }
         s.labelFontSize = (int)GetNum(root, L"labelFontSize", 11);
+        s.percentFontSize = (int)GetNum(
+            root, L"percentFontSize",
+            std::max(8, std::clamp(s.labelFontSize > 0 ? s.labelFontSize : 11, 6, 24) - 2));
         s.accountMargin = (int)GetNum(root, L"accountMargin", 3);
         s.labelGap = (int)GetNum(root, L"labelGap", 3);
         s.barGap = (int)GetNum(root, L"barGap", 2);
@@ -5495,6 +5503,8 @@ static bool LoadLegacySettings(Settings* out) {
     s.labelPosition = !getBool(L"showLabels", true) ? LabelPosition::Hidden :
                       getBool(L"labelOnLeft", true) ? LabelPosition::Left : LabelPosition::Top;
     s.labelFontSize = getInt(L"labelFontSize", 11);
+    s.percentFontSize = std::max(
+        8, std::clamp(s.labelFontSize > 0 ? s.labelFontSize : 11, 6, 24) - 2);
     s.accountMargin = getInt(L"accountMargin", 3);
     s.labelGap = getInt(L"labelGap", 3);
     s.barGap = getInt(L"barGap", 2);
@@ -5633,6 +5643,7 @@ enum SettingsControlId {
     kBarLength,
     kBarThickness,
     kLabelFontSize,
+    kPercentFontSize,
     kAccountMargin,
     kLabelGap,
     kBarGap,
@@ -6467,6 +6478,9 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
                          (LRESULT)LabelPosition::Hidden;
     EnableSettingsRow(state, kLabelFontSize, labelsVisible);
     EnableSettingsRow(state, kLabelGap, labelsVisible);
+    EnableSettingsRow(state, kPercentFontSize,
+                      SendDlgItemMessageW(state.hWnd, kShowPercentText,
+                                          BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
                                                 BM_GETCHECK, 0, 0) == BST_CHECKED;
     EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
@@ -6520,6 +6534,7 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     SetControlInt(state, kBarLength, s.barLength);
     SetControlInt(state, kBarThickness, s.barThickness);
     SetControlInt(state, kLabelFontSize, s.labelFontSize);
+    SetControlInt(state, kPercentFontSize, s.percentFontSize);
     SetControlInt(state, kAccountMargin, s.accountMargin);
     SetControlInt(state, kLabelGap, s.labelGap);
     SetControlInt(state, kBarGap, s.barGap);
@@ -6595,6 +6610,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     s.barLength = getBoundedInt(kBarLength, s.barLength);
     s.barThickness = getBoundedInt(kBarThickness, s.barThickness);
     s.labelFontSize = getBoundedInt(kLabelFontSize, s.labelFontSize);
+    s.percentFontSize = getBoundedInt(kPercentFontSize, s.percentFontSize);
     s.accountMargin = getBoundedInt(kAccountMargin, s.accountMargin);
     s.labelGap = getBoundedInt(kLabelGap, s.labelGap);
     s.barGap = getBoundedInt(kBarGap, s.barGap);
@@ -7356,6 +7372,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.barLength = defaults.barLength;
         settings.barThickness = defaults.barThickness;
         settings.labelFontSize = defaults.labelFontSize;
+        settings.percentFontSize = defaults.percentFontSize;
         settings.accountMargin = defaults.accountMargin;
         settings.labelGap = defaults.labelGap;
         settings.barGap = defaults.barGap;
@@ -7469,10 +7486,12 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                        CBS_DROPDOWNLIST, 0, kBarMode);
             AddComboItems(mode, {L"Used", L"Remaining"});
             AddNumericRow(*state, 1, L"Bar length (px)", kBarLength,
-                          10, 4096, true);
+                          10, 500, true);
             AddNumericRow(*state, 1, L"Bar thickness (px)", kBarThickness,
-                          2, 20, true);
+                          2, 50, true);
             AddNumericRow(*state, 1, L"Label font size (px)", kLabelFontSize,
+                          6, 24, true);
+            AddNumericRow(*state, 1, L"Percentage text size (px)", kPercentFontSize,
                           6, 24, true);
             AddNumericRow(*state, 1, L"Account margin (px)", kAccountMargin, 0, 500);
             AddNumericRow(*state, 1, L"Label gap (px)", kLabelGap, 0, 500);
