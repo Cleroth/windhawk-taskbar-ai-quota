@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.3.0
+// @version         1.3.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -254,7 +254,7 @@ struct AppliedState {
     std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
     std::wstring tip;
-    std::wstring percentText;
+    std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
     double labelOpacity = -1;
     double columnOpacity = -1;
@@ -285,11 +285,14 @@ struct AccountUiRefs {
     winrt::event_token manualToolTipTimerToken{};
     std::array<Border, kQuotaBarCount> tracks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
+    std::array<Grid, kQuotaBarCount> barItems{
+        Grid{nullptr}, Grid{nullptr}, Grid{nullptr}, Grid{nullptr}};
     std::array<Border, kQuotaBarCount> fills{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<Border, kQuotaBarCount> paceTicks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    TextBlock percent{nullptr};
+    std::array<TextBlock, kQuotaBarCount> percents{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
     POINT toolTipOpenCursor{};
     bool hasToolTipOpenCursor = false;
@@ -3727,7 +3730,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         std::vector<AccountConfig> accounts;
         int barLength, barThickness, labelFontSize, percentFontSize;
-        int accountMargin, labelGap, barGap, rightMargin;
+        int accountMargin, labelGap, rightMargin;
         bool showPaceTicks, showBarLabels, showPercentText;
         COLORREF paceTickColor;
         BarLayout barLayout;
@@ -3746,7 +3749,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             percentFontSize = g_settings.percentFontSize;
             accountMargin = g_settings.accountMargin;
             labelGap = g_settings.labelGap;
-            barGap = g_settings.barGap;
             rightMargin = g_settings.rightMargin;
             labelPosition = g_settings.labelPosition;
             showPaceTicks = g_settings.showPaceTicks;
@@ -4008,37 +4010,41 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
 
                 track.Child(trackContent);
-                bars.Children().Append(track);
+
+                Grid barItem;
+                barItem.Width(verticalBars ? barThickness : barLength);
+                barItem.Height(verticalBars ? barLength : barThickness);
+                barItem.HorizontalAlignment(HorizontalAlignment::Center);
+                barItem.Children().Append(track);
+                refs.barItems[w] = barItem;
+
+                if (showPercentText) {
+                    TextBlock percent;
+                    percent.FontSize(percentFontSize);
+                    percent.Width(verticalBars ?
+                        std::max((double)barThickness, percentFontSize * 4.0) :
+                        (double)barLength);
+                    percent.HorizontalAlignment(HorizontalAlignment::Center);
+                    percent.VerticalAlignment(VerticalAlignment::Center);
+                    percent.TextAlignment(TextAlignment::Center);
+                    percent.Foreground(SolidColorBrush(
+                        winrt::Windows::UI::Color{255, 255, 255, 255}));
+                    percent.Opacity(0.9);
+                    percent.IsHitTestVisible(false);
+                    TranslateTransform translation;
+                    translation.Y(-1);
+                    percent.RenderTransform(translation);
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d_%d", (int)i, w);
+                    percent.Name(name);
+                    refs.percents[w] = percent;
+                    barItem.Children().Append(percent);
+                }
+
+                bars.Children().Append(barItem);
             }
 
-            if (showPercentText) {
-                Grid overlay;
-                overlay.Width(verticalBars ? barThickness * kQuotaBarCount +
-                                                 barGap * (kQuotaBarCount - 1) :
-                                             barLength);
-                if (verticalBars) overlay.Height(barLength);
-                overlay.VerticalAlignment(VerticalAlignment::Center);
-                overlay.Children().Append(bars);
-                refs.barArea = overlay.as<FrameworkElement>();
-
-                TextBlock percent;
-                percent.FontSize(percentFontSize);
-                percent.HorizontalAlignment(HorizontalAlignment::Center);
-                percent.VerticalAlignment(VerticalAlignment::Center);
-                percent.TextAlignment(TextAlignment::Center);
-                percent.Foreground(SolidColorBrush(winrt::Windows::UI::Color{255, 255, 255, 255}));
-                percent.Opacity(0.9);
-                percent.IsHitTestVisible(false);
-                swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d", (int)i);
-                percent.Name(name);
-                refs.percent = percent;
-                overlay.Children().Append(percent);
-
-                col.Children().Append(overlay);
-            } else {
-                refs.barArea = bars.as<FrameworkElement>();
-                col.Children().Append(bars);
-            }
+            refs.barArea = bars.as<FrameworkElement>();
+            col.Children().Append(bars);
             if (label && !labelBeforeBars) col.Children().Append(label);
 
             ToolTip toolTip;
@@ -4451,13 +4457,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 double halfBarGap = barGap / 2.0;
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     bool barVisible = (barMask & (1 << w)) != 0;
-                    if (ui.tracks[w]) {
-                        ui.tracks[w].Visibility(barVisible ? Visibility::Visible :
-                                                            Visibility::Collapsed);
+                    if (ui.barItems[w]) {
+                        ui.barItems[w].Visibility(barVisible ? Visibility::Visible :
+                                                              Visibility::Collapsed);
                         if (barVisible) {
                             bool first = visiblePosition == 0;
                             bool last = visiblePosition == visibleCount - 1;
-                            ui.tracks[w].Margin(verticalBars ?
+                            ui.barItems[w].Margin(verticalBars ?
                                 Thickness{first ? 0.0 : halfBarGap, 0,
                                           last ? 0.0 : halfBarGap, 0} :
                                 Thickness{0, first ? 1.0 : halfBarGap, 0,
@@ -4469,12 +4475,6 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 if (ui.barArea) {
                     ui.barArea.Visibility(visibleCount ? Visibility::Visible :
                                                          Visibility::Collapsed);
-                    if (showPercentText) {
-                        ui.barArea.Width(verticalBars ?
-                            barThickness * visibleCount +
-                                barGap * std::max(visibleCount - 1, 0) :
-                            barLength);
-                    }
                 }
                 if (ui.column) {
                     // Preserve a small context-menu target if every selected quota is unavailable.
@@ -4539,6 +4539,19 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                                Thickness{(double)pacePx, 0, 0, 0});
                     }
                     ap.pacePx[w] = pacePx;
+                }
+
+                if (showPercentText) {
+                    std::wstring percentText;
+                    if (wu.pct >= 0) {
+                        wchar_t text[16];
+                        swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
+                        percentText = text;
+                    }
+                    if (percentText != ap.percentTexts[w]) {
+                        if (ui.percents[w]) ui.percents[w].Text(percentText);
+                        ap.percentTexts[w] = std::move(percentText);
+                    }
                 }
             }
 
@@ -4618,24 +4631,6 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                    clickAction == ClickAction::OpenDashboard && accounts[i].provider != L"antigravity"
                        ? L" - click to open dashboard" :
                    L" - click to refresh";
-
-            if (showPercentText) {
-                std::wstring percentText;
-                int percentCount = 0;
-                for (int w = 0; w < kQuotaBarCount; w++) {
-                    if (!(barMask & (1 << w)) || usage[w]->pct < 0) continue;
-                    wchar_t text[16];
-                    swprintf(text, ARRAYSIZE(text), L"%.0f", displayPct(usage[w]->pct));
-                    if (!percentText.empty()) percentText += L"/";
-                    percentText += text;
-                    percentCount++;
-                }
-                if (percentCount == 1) percentText += L"%";
-                if (percentText != ap.percentText) {
-                    if (ui.percent) ui.percent.Text(percentText);
-                    ap.percentText = percentText;
-                }
-            }
 
             if (tip != ap.tip) {
                 // Keep the attached ToolTip object alive so an in-place refresh doesn't reset
