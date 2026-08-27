@@ -304,7 +304,6 @@ static std::mutex g_dataMutex;
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_refreshing{false};
-static std::atomic<int> g_refreshAccountIndex{-1};
 static std::atomic<uint64_t> g_refreshAccountIdentity{0};
 static std::atomic<ULONGLONG> g_refreshGeneration{0};
 static std::mutex g_refreshMutex;
@@ -736,13 +735,12 @@ static PCWSTR ProviderDisplayName(const std::wstring& provider) {
     return L"Google Antigravity";
 }
 
-static void QueueRefresh(uint64_t identityHash, int accountIndex) {
+static void QueueRefresh(uint64_t identityHash) {
     if (g_unloading) return;
 
     if (!g_fetchThreadStarted.load(std::memory_order_acquire)) {
         std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
         g_refreshing = false;
-        g_refreshAccountIndex = -1;
         g_refreshAccountIdentity = 0;
         PostUiUpdate();
         return;
@@ -751,7 +749,6 @@ static void QueueRefresh(uint64_t identityHash, int accountIndex) {
     {
         std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
         g_refreshing = true;
-        g_refreshAccountIndex = accountIndex;
         g_refreshAccountIdentity = identityHash;
         g_refreshGeneration++;
     }
@@ -760,17 +757,17 @@ static void QueueRefresh(uint64_t identityHash, int accountIndex) {
 }
 
 static void RefreshQuotaByIdentity(uint64_t identityHash) {
-    int accountIndex = -1;
+    bool found = false;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
-        for (size_t i = 0; i < g_settings.accounts.size(); i++) {
-            if (AccountIdentityHash(g_settings.accounts[i]) == identityHash) {
-                accountIndex = (int)i;
+        for (const auto& account : g_settings.accounts) {
+            if (AccountIdentityHash(account) == identityHash) {
+                found = true;
                 break;
             }
         }
     }
-    if (accountIndex >= 0) QueueRefresh(identityHash, accountIndex);
+    if (found) QueueRefresh(identityHash);
 }
 
 static void OpenDashboardForIdentity(uint64_t identityHash) {
@@ -3129,7 +3126,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
             if (refreshGeneration == g_refreshGeneration.load()) {
                 g_refreshing = false;
-                g_refreshAccountIndex = -1;
                 g_refreshAccountIdentity = 0;
             }
         }
@@ -4037,7 +4033,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             refreshAllItem.Text(L"Refresh all");
             auto refreshAllToken = refreshAllItem.Click(
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
-                    QueueRefresh(0, -1);
+                    QueueRefresh(0);
                 });
             state.menuItemClickHandlers.push_back({refreshAllItem, refreshAllToken});
             menu.Items().Append(refreshAllItem);
@@ -4190,8 +4186,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (state.applied.size() != data.size()) state.applied.assign(data.size(), {});
 
     ULONGLONG now = NowUnixMs();
-    bool refreshing = g_refreshing.load();
-    int refreshAccountIndex = g_refreshAccountIndex.load();
+    bool refreshing;
+    uint64_t refreshAccountIdentity;
+    {
+        std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
+        refreshing = g_refreshing.load();
+        refreshAccountIdentity = g_refreshAccountIdentity.load();
+    }
     bool verticalBars = barLayout == BarLayout::Vertical;
     // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged.
     auto displayPct = [&](double pct) {
@@ -4219,7 +4220,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                       (ULONGLONG)intervalMin) * 2 * 60000;
             bool stale = d.stale || d.lastSuccessMs == 0 || now - d.lastSuccessMs > staleAfterMs;
             bool warn = showStaleWarning && stale && !d.error.empty();
-            bool accountRefreshing = refreshing && (refreshAccountIndex < 0 || refreshAccountIndex == (int)i);
+            bool accountRefreshing = refreshing &&
+                (!refreshAccountIdentity ||
+                 AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
 
             const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                 &d.win5h, &d.winWeek, &d.extraUsage};
@@ -4919,6 +4922,7 @@ static bool HookTaskbarDllSymbols() {
 /**********************************************/
 
 static constexpr PCWSTR kSettingsStorageKey = L"settings_v1";
+static constexpr PCWSTR kSettingsLengthStorageKey = L"settings_v1_len";
 static constexpr int kSettingsStorageVersion = 1;
 
 static void NormalizeSettings(Settings* s) {
@@ -4933,6 +4937,7 @@ static void NormalizeSettings(Settings* s) {
             a.label = a.provider == L"anthropic" ? L"A" :
                       a.provider == L"openai" ? L"O" : L"G";
         }
+        if (a.provider != L"anthropic") a.showBars[kExtraUsageBar] = false;
         if (!a.showBars[kFiveHourBar] && !a.showBars[kWeeklyBar] &&
             !a.showBars[kExtraUsageBar]) {
             a.showBars[kFiveHourBar] = true;
@@ -5119,25 +5124,50 @@ static bool SaveOwnedSettings(const Settings& settings) {
         Wh_Log(L"Settings save failed: serialization or size limit");
         return false;
     }
-    return Wh_SetStringValue(kSettingsStorageKey, json.c_str()) != FALSE;
+    if (!Wh_SetStringValue(kSettingsStorageKey, json.c_str())) return false;
+    if (!Wh_SetIntValue(kSettingsLengthStorageKey, (int)json.size())) {
+        Wh_Log(L"Settings length sentinel save failed");
+    }
+    return true;
 }
 
 enum class OwnedSettingsLoadResult {
     Missing,
     Loaded,
     Invalid,
+    Unreadable,
 };
 
 static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out) {
     std::vector<wchar_t> buf(65536);
-    if (!Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size()) || !buf[0]) {
-        return OwnedSettingsLoadResult::Missing;
+    size_t copied = Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size());
+    if (!copied || !buf[0]) {
+        int storedLength = Wh_GetIntValue(kSettingsLengthStorageKey, 0);
+        if (storedLength <= 0) return OwnedSettingsLoadResult::Missing;
+        if (storedLength >= 1024 * 1024) {
+            Wh_Log(L"Settings load failed: stored length is unreasonable");
+            return OwnedSettingsLoadResult::Unreadable;
+        }
+        constexpr size_t kMaximumReadChars = 1024 * 1024;
+        size_t nextBufferChars = std::max(buf.size() * 2, (size_t)storedLength + 1);
+        while (nextBufferChars <= kMaximumReadChars) {
+            buf.assign(nextBufferChars, L'\0');
+            copied = Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size());
+            if (copied && buf[0]) break;
+            if (nextBufferChars == kMaximumReadChars) break;
+            nextBufferChars = std::min(nextBufferChars * 2, kMaximumReadChars);
+        }
+        if (!copied || !buf[0]) {
+            Wh_Log(L"Settings load failed: stored configuration is unreadable");
+            return OwnedSettingsLoadResult::Unreadable;
+        }
     }
     if (!DeserializeSettings(buf.data(), out)) {
         Wh_Log(L"Settings load failed: invalid stored configuration");
         Wh_SetStringValue(L"settings_v1_invalid", buf.data());
         return OwnedSettingsLoadResult::Invalid;
     }
+    Wh_SetIntValue(kSettingsLengthStorageKey, (int)copied);
     return OwnedSettingsLoadResult::Loaded;
 }
 
@@ -5355,9 +5385,10 @@ static void LoadSettings() {
             if (imported) Wh_Log(L"Imported legacy Windhawk settings");
             else Wh_Log(L"Initialized empty mod-owned settings");
         }
-    } else if (loadResult == OwnedSettingsLoadResult::Invalid) {
-        // Keep the invalid/future blob intact. The setup tile opens with safe defaults and the
-        // first deliberate edit creates a new valid configuration; the backup remains available.
+    } else if (loadResult == OwnedSettingsLoadResult::Invalid ||
+               loadResult == OwnedSettingsLoadResult::Unreadable) {
+        // Keep the invalid/future/unreadable blob intact. The setup tile opens with safe
+        // defaults; readable invalid blobs were also backed up above.
         s = Settings{};
         g_settingsLoadError = true;
     }
@@ -5456,6 +5487,7 @@ struct SettingsWindowState {
 
 struct AccountEditorState {
     AccountConfig account;
+    uint64_t originalIdentity = 0;
     HWND edit = nullptr;
     HFONT font = nullptr;
     HBRUSH backgroundBrush = nullptr;
@@ -6321,7 +6353,15 @@ static void UpdateAccountEditorProvider(HWND hWnd) {
                                          CB_GETCURSEL, 0, 0) == 0;
     HWND extraUsage = GetDlgItem(hWnd, kAccountExtraUsage);
     EnableWindow(extraUsage, anthropic);
-    if (!anthropic) SendMessageW(extraUsage, BM_SETCHECK, BST_UNCHECKED, 0);
+}
+
+static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
+                                const AccountConfig& account) {
+    for (const auto& existing : settings.accounts) {
+        if (ignoredIdentity && AccountIdentityHash(existing) == ignoredIdentity) continue;
+        if (existing.provider == account.provider && existing.label == account.label) return true;
+    }
+    return false;
 }
 
 static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
@@ -6430,12 +6470,26 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.showBars[kWeeklyBar] =
                     IsDlgButtonChecked(hWnd, kAccountWeekly) == BST_CHECKED;
                 state->account.showBars[kExtraUsageBar] =
+                    state->account.provider == L"anthropic" &&
                     IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
                 if (!state->account.showBars[kFiveHourBar] &&
                     !state->account.showBars[kWeeklyBar] &&
                     !state->account.showBars[kExtraUsageBar]) {
                     SettingsMessageBoxW(hWnd, L"Select at least one quota bar.", L"Account",
                                 MB_OK | MB_ICONWARNING);
+                    return 0;
+                }
+                bool duplicate;
+                {
+                    std::lock_guard<std::mutex> lk(g_settingsMutex);
+                    duplicate = HasDuplicateAccount(g_settings, state->originalIdentity,
+                                                    state->account);
+                }
+                if (duplicate) {
+                    SettingsMessageBoxW(hWnd,
+                                        L"That provider and label are already configured.",
+                                        L"Account", MB_OK | MB_ICONWARNING);
+                    SetFocus(state->edit);
                     return 0;
                 }
                 state->accepted = true;
@@ -6518,6 +6572,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
 static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     AccountEditorState state;
     state.account = *account;
+    state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
     UINT dpi = WindowDpi(owner);
     int width = ScaleForDpi(404, dpi);
     int height = ScaleForDpi(284, dpi);
@@ -6562,25 +6617,13 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     return state.accepted;
 }
 
-static bool HasDuplicateAccount(const Settings& settings, int ignoredIndex,
-                                const AccountConfig& account) {
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if ((int)i == ignoredIndex) continue;
-        if (settings.accounts[i].provider == account.provider &&
-            settings.accounts[i].label == account.label) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
     AccountConfig account{L"anthropic", L"A"};
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         for (int suffix = 1;; suffix++) {
             account.label = suffix == 1 ? L"A" : L"A" + std::to_wstring(suffix);
-            if (!HasDuplicateAccount(g_settings, -1, account)) break;
+            if (!HasDuplicateAccount(g_settings, 0, account)) break;
         }
     }
     if (!ShowAccountEditor(state.hWnd, &account, true)) return;
@@ -6590,7 +6633,7 @@ static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         settings = g_settings;
     }
-    if (HasDuplicateAccount(settings, -1, account)) {
+    if (HasDuplicateAccount(settings, 0, account)) {
         configLock.unlock();
         SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
                     L"Account", MB_OK | MB_ICONWARNING);
@@ -6671,7 +6714,7 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
         RefreshSettingsControls(state);
         return;
     }
-    if (HasDuplicateAccount(settings, index, newAccount)) {
+    if (HasDuplicateAccount(settings, oldIdentity, newAccount)) {
         configLock.unlock();
         SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
                     L"Account", MB_OK | MB_ICONWARNING);
@@ -7179,7 +7222,8 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 if (reinterpret_cast<NMHDR*>(lParam)->code == LVN_ITEMCHANGED) {
                     UpdateAccountButtons(*state);
                 } else if (reinterpret_cast<NMHDR*>(lParam)->code == NM_DBLCLK) {
-                    EditAccountFromSettingsWindow(*state);
+                    PostMessageW(hWnd, WM_COMMAND,
+                                 MAKEWPARAM(kAccountEdit, BN_CLICKED), 0);
                 }
             }
             break;
@@ -7241,7 +7285,11 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     if (HIWORD(wParam) == BN_CLICKED) AddAccountFromSettingsWindow(*state);
                     return 0;
                 case kAccountEdit:
-                    if (HIWORD(wParam) == BN_CLICKED) EditAccountFromSettingsWindow(*state);
+                    if (HIWORD(wParam) == BN_CLICKED && IsWindowEnabled(hWnd) &&
+                        IsWindowEnabled(GetDlgItem(hWnd, kAccountEdit)) &&
+                        !g_loginInProgress.load()) {
+                        EditAccountFromSettingsWindow(*state);
+                    }
                     return 0;
                 case kAccountRemove:
                     if (HIWORD(wParam) == BN_CLICKED) RemoveAccountFromSettingsWindow(*state);
@@ -7597,7 +7645,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     g_unloading = false;
     g_refreshing = false;
-    g_refreshAccountIndex = -1;
     g_refreshAccountIdentity = 0;
     g_refreshGeneration = 0;
     g_uiInjected.store(false, std::memory_order_release);

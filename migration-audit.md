@@ -132,43 +132,43 @@ Mouse wheel over a slider sends `TB_THUMBPOSITION`, which syncs the companion sp
 
 References: `local@taskbar-ai-quota.wh.cpp:6909-6925`.
 
-### [ ] Account editor forgets the extra-usage selection across provider switches
+### [x] Account editor forgets the extra-usage selection across provider switches
 
 `UpdateAccountEditorProvider` unchecks the Anthropic monthly extra-usage box whenever the provider combo leaves anthropic and never restores it when switching back (6100-6106), so an Anthropic account whose editor is opened, switched away, and switched back loses its bar selection unless re-checked before saving.
 
 References: `local@taskbar-ai-quota.wh.cpp:6100-6106`.
 
-### [ ] Duplicate-account rejection destroys the editor
+### [x] Duplicate-account rejection destroys the editor
 
 The account editor accepts and closes before the parent validates provider/label uniqueness. A duplicate warning appears only after all form edits have been discarded.
 
 References: `local@taskbar-ai-quota.wh.cpp:6190-6224`, `6374-6378`, `6455-6459`.
 
-### [ ] Double-click bypasses disabled account editing during sign-in
+### [x] Double-click bypasses disabled account editing during sign-in
 
 The Edit button is disabled while a login is active, but list double-click invokes editing unconditionally. Bar-only edits can save through the disabled state; identity edits close the editor and are then rejected, losing the changes.
 
 References: `local@taskbar-ai-quota.wh.cpp:5729-5731`, `6407-6410`, `6882-6886`.
 
-### [ ] Double-click edits nest modal loops inside the ListView notification
+### [x] Double-click edits nest modal loops inside the ListView notification
 
 The `NM_DBLCLK` handler invokes account editing directly. While the ListView's own double-click handling is still on the stack, this enters the editor's modal message loop and later rebuilds the list via `ListView_DeleteAllItems`; a posted refresh during the loop can destroy items concurrently with deferred notifications. Posting a self-directed edit command would sequence identically without re-entering the control.
 
 References: `local@taskbar-ai-quota.wh.cpp:5771`, `6324-6337`, `6882-6887`, `7097-7099`.
 
-### [ ] Reordering during refresh highlights the wrong account
+### [x] Reordering during refresh highlights the wrong account
 
 The fetch thread resolves the requested stable identity against the new order, but the UI refresh indicator continues using the index captured before reordering. The correct account is fetched while another account appears to be refreshing.
 
 References: `local@taskbar-ai-quota.wh.cpp:732-750`, `2944-2956`, `4092-4122`.
 
-### [ ] Account growth can exceed the owned-settings storage limit
+### [x] Account growth can exceed the owned-settings storage limit
 
-The native editor has no account-count limit, while `SaveOwnedSettings` rejects serialized JSON at 65,535 characters. Enough accounts make every later autosave fail until accounts are removed, leaving the controls unable to persist otherwise valid edits.
+Native edits fail closed because `SaveOwnedSettings` runs before publication: an oversized add or edit is rejected and the last savable configuration remains active. Only a contrived legacy import containing roughly 64 KiB of label text can publish an unsavable in-memory configuration; `settings_v1` remains missing and the legacy source is retained. Accepted without an arbitrary account-count cap.
 
 References: `local@taskbar-ai-quota.wh.cpp:5018-5024`, `6358-6390`.
 
-### [ ] Spurious Missing read overwrites owned settings without backup
+### [x] Spurious Missing read overwrites owned settings without backup
 
 Per the Windhawk API contract, `Wh_GetStringValue` returns an empty string when the buffer is too small or on error - indistinguishable from the value not existing. A stored blob of 64Ki or more characters (or a transient storage read failure) therefore reports Missing, and `LoadSettings` runs legacy import and saves its result to `settings_v1`, destroying the real configuration with no `settings_v1_invalid` backup. Unreachable today because saves are capped below 65,535 characters, but any future cap raise plus downgrade triggers silent loss. The Invalid path handles this correctly by preserving and backing up.
 
