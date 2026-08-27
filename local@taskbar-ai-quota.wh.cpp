@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.3
+// @version         1.5.4
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -28,6 +28,7 @@ Each account gets one compact column:
 
 Choose 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage
 bars per account. Selected bars auto-hide when the provider doesn't return that quota.
+Antigravity bars show its Gemini pool; Claude/GPT pool limits appear in the tooltip.
 
 Hover for exact percentages and reset times. Click a column to refresh that account
 or open its provider dashboard, depending on settings and provider support. Right-click
@@ -62,10 +63,13 @@ the right-click menu):
 - **OpenAI**: a browser opens to chatgpt.com; the redirect is caught automatically on
   `localhost:1455`.
 - **Google Antigravity**: no separate sign-in is needed. Add an Antigravity account in
-  Settings, then keep the signed-in Antigravity app running with a workspace open.
+  Settings, then keep the signed-in Antigravity app or CLI running. Older IDE builds
+  also need an open workspace.
 
 For Anthropic and OpenAI, the mod refreshes the access token itself. Tokens are stored
 encrypted (Windows DPAPI). Use **Sign out** to remove a stored token.
+Older Antigravity servers that don't expose pooled quota can show only their current
+limiting quota; weekly stays unavailable and pace ticks are disabled for that fallback.
 
 ## Suggestions & bugs
 
@@ -251,6 +255,8 @@ struct AccountData {
     WindowUsage winWeek;
     WindowUsage fableWeek;
     WindowUsage extraUsage;
+    WindowUsage antigravityThirdParty5h;
+    WindowUsage antigravityThirdPartyWeek;
     std::wstring plan;
     std::wstring codexSparkLines;
     std::wstring extraLines;
@@ -2384,10 +2390,17 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
 //  Google Antigravity Local Discovery
 /**********************************************/
 
+enum class AntigravityQuotaSource {
+    Summary,
+    UserStatus,
+};
+
 struct AntigravityServerInfo {
     int port = 0;
     bool secure = true;
     std::wstring csrfToken;
+    AntigravityQuotaSource quotaSource = AntigravityQuotaSource::Summary;
+    ULONGLONG discoveredMs = 0;
 };
 
 static AntigravityServerInfo g_antigravityCachedInfo;
@@ -2469,7 +2482,7 @@ static std::wstring GetProcessCommandLine(DWORD pid) {
     return result;
 }
 
-// Find all TCP listeners owned by a language-server process. The explicit command-line
+// Find all TCP listeners owned by an Antigravity process. The explicit command-line
 // ports are preferred, but current and older builds don't expose the same flags.
 static std::vector<int> FindAntigravityListeningPorts(DWORD pid) {
     std::vector<int> ports;
@@ -2501,9 +2514,14 @@ static std::vector<int> FindAntigravityListeningPorts(DWORD pid) {
 
 static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR csrfToken,
                                    DWORD timeoutMs);
+static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d,
+                                         std::wstring* error);
+static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
+                                       std::wstring* error);
 
-static bool DiscoverAntigravityServer(AntigravityServerInfo* info) {
+static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundServer = nullptr) {
     *info = {};
+    if (foundServer) *foundServer = false;
     if (g_unloading) return false;
 
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -2511,8 +2529,12 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info) {
 
     struct Candidate {
         DWORD pid;
-        std::wstring csrfToken;
-        std::vector<int> explicitPorts;
+        std::wstring mainCsrfToken;
+        std::wstring extensionCsrfToken;
+        std::vector<int> explicitMainPorts;
+        int extensionPort = 0;
+        bool cli = false;
+        bool richQuotaLikely = false;
     };
     std::vector<Candidate> candidates;
     PROCESSENTRY32W pe{};
@@ -2526,8 +2548,14 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info) {
     if (Process32FirstW(snap, &pe)) {
         do {
             if (g_unloading) break;
-            if (_wcsicmp(pe.szExeFile, L"language_server.exe") != 0 &&
-                _wcsicmp(pe.szExeFile, L"language_server_windows_x64.exe") != 0) {
+            std::wstring exeName = pe.szExeFile;
+            std::transform(exeName.begin(), exeName.end(), exeName.begin(),
+                           [](wchar_t ch) { return (wchar_t)towlower(ch); });
+            bool cli = exeName == L"agy.exe" || exeName == L"antigravity-cli.exe" ||
+                       exeName == L"antigravity_cli.exe";
+            bool languageServer = exeName.rfind(L"language_server", 0) == 0 ||
+                                  exeName == L"language-server.exe";
+            if (!cli && !languageServer) {
                 continue;
             }
             DWORD processSessionId = 0;
@@ -2541,29 +2569,64 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info) {
             std::wstring lowerCmdLine = cmdLine;
             std::transform(lowerCmdLine.begin(), lowerCmdLine.end(), lowerCmdLine.begin(),
                            [](wchar_t ch) { return (wchar_t)towlower(ch); });
-            if (lowerCmdLine.find(L"antigravity") == std::wstring::npos) continue;
-
-            std::wstring csrf;
-            for (PCWSTR flag : std::array<PCWSTR, 4>{
-                     L"csrf_token", L"extension_server_csrf_token",
-                     L"csrf-token", L"extension-server-csrf-token"}) {
-                csrf = ParseCmdLineFlag(cmdLine, flag);
-                if (!csrf.empty()) break;
+            if (languageServer &&
+                (lowerCmdLine.find(L"antigravity-cli") != std::wstring::npos ||
+                 lowerCmdLine.find(L"antigravity_cli") != std::wstring::npos)) {
+                cli = true;
             }
-            if (csrf.empty() || csrf.find_first_of(L"\r\n") != std::wstring::npos) continue;
+            if (!cli && lowerCmdLine.find(L"antigravity") == std::wstring::npos) continue;
 
-            Candidate candidate{pe.th32ProcessID, std::move(csrf), {}};
-            for (PCWSTR flag : std::array<PCWSTR, 5>{
-                     L"https_server_port", L"server_port", L"extension_server_port",
-                     L"https-server-port", L"extension-server-port"}) {
+            std::wstring mainCsrf;
+            for (PCWSTR flag : std::array<PCWSTR, 2>{L"csrf_token", L"csrf-token"}) {
+                mainCsrf = ParseCmdLineFlag(cmdLine, flag);
+                if (!mainCsrf.empty()) break;
+            }
+            std::wstring extensionCsrf;
+            for (PCWSTR flag : std::array<PCWSTR, 2>{
+                     L"extension_server_csrf_token", L"extension-server-csrf-token"}) {
+                extensionCsrf = ParseCmdLineFlag(cmdLine, flag);
+                if (!extensionCsrf.empty()) break;
+            }
+            if ((!mainCsrf.empty() && mainCsrf.find_first_of(L"\r\n") != std::wstring::npos) ||
+                (!extensionCsrf.empty() &&
+                 extensionCsrf.find_first_of(L"\r\n") != std::wstring::npos)) {
+                continue;
+            }
+            if (!cli && mainCsrf.empty() && extensionCsrf.empty()) continue;
+
+            Candidate candidate;
+            candidate.pid = pe.th32ProcessID;
+            candidate.mainCsrfToken = std::move(mainCsrf);
+            candidate.extensionCsrfToken = std::move(extensionCsrf);
+            candidate.cli = cli;
+            bool ide = lowerCmdLine.find(L"antigravity-ide") != std::wstring::npos ||
+                       lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||
+                       lowerCmdLine.find(L"\\extensions\\antigravity\\") != std::wstring::npos ||
+                       lowerCmdLine.find(L"/extensions/antigravity/") != std::wstring::npos;
+            candidate.richQuotaLikely = cli || !ide;
+            for (PCWSTR flag : std::array<PCWSTR, 4>{
+                     L"https_server_port", L"server_port",
+                     L"https-server-port", L"server-port"}) {
                 std::wstring value = ParseCmdLineFlag(cmdLine, flag);
                 if (value.empty()) continue;
                 wchar_t* end = nullptr;
                 unsigned long port = wcstoul(value.c_str(), &end, 10);
                 if (end && !*end && port > 0 && port <= 65535 &&
-                    std::find(candidate.explicitPorts.begin(), candidate.explicitPorts.end(),
-                              (int)port) == candidate.explicitPorts.end()) {
-                    candidate.explicitPorts.push_back((int)port);
+                    std::find(candidate.explicitMainPorts.begin(),
+                              candidate.explicitMainPorts.end(), (int)port) ==
+                        candidate.explicitMainPorts.end()) {
+                    candidate.explicitMainPorts.push_back((int)port);
+                }
+            }
+            for (PCWSTR flag : std::array<PCWSTR, 2>{
+                     L"extension_server_port", L"extension-server-port"}) {
+                std::wstring value = ParseCmdLineFlag(cmdLine, flag);
+                if (value.empty()) continue;
+                wchar_t* end = nullptr;
+                unsigned long port = wcstoul(value.c_str(), &end, 10);
+                if (end && !*end && port > 0 && port <= 65535) {
+                    candidate.extensionPort = (int)port;
+                    break;
                 }
             }
             candidates.push_back(std::move(candidate));
@@ -2571,28 +2634,88 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info) {
     }
     CloseHandle(snap);
 
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [](const Candidate& a, const Candidate& b) {
+                         return a.richQuotaLikely && !b.richQuotaLikely;
+                     });
+
+    AntigravityServerInfo legacyInfo;
     for (auto& candidate : candidates) {
         if (g_unloading) return false;
-        std::vector<int> ports = candidate.explicitPorts;
-        for (int port : FindAntigravityListeningPorts(candidate.pid)) {
-            if (std::find(ports.begin(), ports.end(), port) == ports.end()) ports.push_back(port);
+        if (!candidate.richQuotaLikely && legacyInfo.port > 0) {
+            *info = std::move(legacyInfo);
+            return true;
         }
 
-        for (int port : ports) {
-            for (bool secure : {true, false}) {
-                if (g_unloading) return false;
-                HttpResult probe = HttpRequestLocal(
-                    port, secure,
-                    L"/exa.language_server_pb.LanguageServerService/GetWorkspaceInfos",
-                    candidate.csrfToken.c_str(), 1500);
-                if (probe.ok && probe.status == 200) {
-                    info->port = port;
-                    info->secure = secure;
-                    info->csrfToken = std::move(candidate.csrfToken);
+        struct Endpoint {
+            int port;
+            bool secure;
+            const std::wstring* csrfToken;
+        };
+        std::vector<Endpoint> endpoints;
+        std::vector<int> ports = candidate.explicitMainPorts;
+        ports.erase(std::remove(ports.begin(), ports.end(), candidate.extensionPort),
+                    ports.end());
+        for (int port : FindAntigravityListeningPorts(candidate.pid)) {
+            if (port == candidate.extensionPort) continue;
+            if (std::find(ports.begin(), ports.end(), port) == ports.end()) ports.push_back(port);
+        }
+        if (candidate.cli || !candidate.mainCsrfToken.empty()) {
+            for (int port : ports) {
+                endpoints.push_back({port, true, &candidate.mainCsrfToken});
+                endpoints.push_back({port, false, &candidate.mainCsrfToken});
+            }
+        }
+        if (candidate.extensionPort > 0 && !candidate.extensionCsrfToken.empty()) {
+            endpoints.push_back(
+                {candidate.extensionPort, false, &candidate.extensionCsrfToken});
+        }
+
+        for (const auto& endpoint : endpoints) {
+            if (g_unloading) return false;
+            HttpResult quota = HttpRequestLocal(
+                endpoint.port, endpoint.secure,
+                L"/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary",
+                endpoint.csrfToken->c_str(), 1500);
+            if (!quota.ok) continue;
+            if (foundServer) *foundServer = true;
+
+            AccountData probeData;
+            if (quota.status == 200 &&
+                ParseAntigravityQuotaSummary(quota.body, &probeData, nullptr)) {
+                info->port = endpoint.port;
+                info->secure = endpoint.secure;
+                info->csrfToken = *endpoint.csrfToken;
+                info->quotaSource = AntigravityQuotaSource::Summary;
+                return true;
+            }
+
+            HttpResult status = HttpRequestLocal(
+                endpoint.port, endpoint.secure,
+                L"/exa.language_server_pb.LanguageServerService/GetUserStatus",
+                endpoint.csrfToken->c_str(), 1500);
+            if (!status.ok) continue;
+            if (foundServer) *foundServer = true;
+            probeData = {};
+            if (status.status == 200 &&
+                ParseAntigravityUserStatus(status.body, &probeData, nullptr) &&
+                (probeData.win5h.pct >= 0 || probeData.winWeek.pct >= 0 ||
+                 probeData.antigravityThirdParty5h.pct >= 0 ||
+                 probeData.antigravityThirdPartyWeek.pct >= 0)) {
+                legacyInfo.port = endpoint.port;
+                legacyInfo.secure = endpoint.secure;
+                legacyInfo.csrfToken = *endpoint.csrfToken;
+                legacyInfo.quotaSource = AntigravityQuotaSource::UserStatus;
+                if (!candidate.richQuotaLikely) {
+                    *info = std::move(legacyInfo);
                     return true;
                 }
             }
         }
+    }
+    if (legacyInfo.port > 0) {
+        *info = std::move(legacyInfo);
+        return true;
     }
     return false;
 }
@@ -2689,13 +2812,20 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 
         auto groups = groupsVal.GetArray();
         bool parsed = false;
+        auto endsWith = [](const std::wstring& value, PCWSTR suffix) {
+            size_t suffixLength = wcslen(suffix);
+            return value.size() >= suffixLength &&
+                   value.compare(value.size() - suffixLength, suffixLength, suffix) == 0;
+        };
         for (uint32_t i = 0; i < groups.Size(); ++i) {
             if (groups.GetAt(i).ValueType() != JsonValueType::Object) continue;
             auto grp = groups.GetAt(i).GetObject();
             std::wstring dispName = GetStr(grp, L"displayName");
             std::transform(dispName.begin(), dispName.end(), dispName.begin(),
                            [](wchar_t ch) { return (wchar_t)towlower(ch); });
-            bool geminiGroup = dispName == L"gemini models";
+            bool geminiGroup = dispName.find(L"gemini") != std::wstring::npos;
+            bool thirdPartyGroup = dispName.find(L"claude") != std::wstring::npos ||
+                                   dispName.find(L"gpt") != std::wstring::npos;
 
             if (!grp.HasKey(L"buckets")) continue;
             auto bucketsVal = grp.GetNamedValue(L"buckets");
@@ -2705,13 +2835,36 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
             for (uint32_t j = 0; j < buckets.Size(); ++j) {
                 if (buckets.GetAt(j).ValueType() != JsonValueType::Object) continue;
                 auto bucket = buckets.GetAt(j).GetObject();
+                if (GetBool(bucket, L"disabled")) continue;
                 std::wstring bucketId = GetStr(bucket, L"bucketId");
                 std::wstring window = GetStr(bucket, L"window");
-                bool is5h = bucketId == L"gemini-5h" ||
-                            (bucketId.empty() && geminiGroup && window == L"5h");
-                bool isWeekly = bucketId == L"gemini-weekly" ||
-                                (bucketId.empty() && geminiGroup && window == L"weekly");
-                if (!is5h && !isWeekly) continue;
+                std::transform(bucketId.begin(), bucketId.end(), bucketId.begin(),
+                               [](wchar_t ch) { return (wchar_t)towlower(ch); });
+                std::transform(window.begin(), window.end(), window.begin(),
+                               [](wchar_t ch) { return (wchar_t)towlower(ch); });
+                bool isWeekly = window == L"weekly" || endsWith(bucketId, L"-weekly");
+                bool is5h = window == L"5h" || endsWith(bucketId, L"-5h");
+                bool is3h = window == L"3h" || endsWith(bucketId, L"-3h");
+                bool isHourly = window == L"hourly" || window == L"1h" ||
+                                endsWith(bucketId, L"-hourly") ||
+                                endsWith(bucketId, L"-1h");
+                bool isSession = window == L"session" || endsWith(bucketId, L"-session");
+                bool isShort = is5h || is3h || isHourly || isSession;
+                if (isWeekly) isShort = false;
+                if (!isShort && !isWeekly) continue;
+
+                bool geminiBucket = bucketId.rfind(L"gemini-", 0) == 0 ||
+                                     (bucketId.rfind(L"3p-", 0) != 0 && geminiGroup);
+                bool thirdPartyBucket = bucketId.rfind(L"3p-", 0) == 0 ||
+                                         (!geminiBucket && thirdPartyGroup);
+                WindowUsage* target = nullptr;
+                if (geminiBucket) {
+                    target = isShort ? &d->win5h : &d->winWeek;
+                } else if (thirdPartyBucket) {
+                    target = isShort ? &d->antigravityThirdParty5h :
+                                       &d->antigravityThirdPartyWeek;
+                }
+                if (!target) continue;
 
                 double remaining = GetNum(bucket, L"remainingFraction", -1);
                 std::wstring resetTimeStr = GetStr(bucket, L"resetTime");
@@ -2726,14 +2879,14 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 
                 ULONGLONG resetMs = ParseIso8601Ms(resetTimeStr);
                 double usedPct = std::clamp((1.0 - remaining) * 100.0, 0.0, 100.0);
-                if (is5h) {
-                    d->win5h.pct = usedPct;
-                    d->win5h.resetUnixMs = resetMs;
-                    d->win5h.windowDurationMs = kFiveHourWindowMs;
-                } else {
-                    d->winWeek.pct = usedPct;
-                    d->winWeek.resetUnixMs = resetMs;
-                    d->winWeek.windowDurationMs = kWeeklyWindowMs;
+                // Duplicate rows can occur during model rollouts; keep the limiting pool.
+                if (target->pct < usedPct) {
+                    target->pct = usedPct;
+                    target->resetUnixMs = resetMs;
+                    target->windowDurationMs = isWeekly ? kWeeklyWindowMs :
+                                               is5h ? kFiveHourWindowMs :
+                                               is3h ? 3ULL * 60 * 60 * 1000 :
+                                               isHourly ? 60ULL * 60 * 1000 : 0;
                 }
                 parsed = true;
             }
@@ -2749,8 +2902,11 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
     }
 }
 
-static bool ParseAntigravityPlanName(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
+                                       std::wstring* error) {
     try {
+        bool hasSummaryGeminiShort = d->win5h.pct >= 0;
+        bool hasSummaryThirdPartyShort = d->antigravityThirdParty5h.pct >= 0;
         auto root = JsonObject::Parse(Utf8ToWide(body));
         JsonObject payload = root;
         if (auto response = GetObj(root, L"response")) payload = response;
@@ -2759,17 +2915,78 @@ static bool ParseAntigravityPlanName(const std::string& body, AccountData* d, st
             if (error) *error = L"no userStatus object";
             return false;
         }
-        if (auto tier = GetObj(userStatus, L"userTier")) {
-            d->plan = GetStr(tier, L"name");
-        }
-        if (d->plan.empty()) {
+        std::wstring plan;
+        auto tier = GetObj(userStatus, L"userTier");
+        if (tier) plan = GetStr(tier, L"name");
+        auto planInfo = GetObj(payload, L"planInfo");
+        if (!planInfo) {
             if (auto planStatus = GetObj(userStatus, L"planStatus")) {
-                if (auto planInfo = GetObj(planStatus, L"planInfo")) {
-                    d->plan = GetStr(planInfo, L"planName");
+                planInfo = GetObj(planStatus, L"planInfo");
+            }
+        }
+        if (plan.empty()) plan = GetStr(planInfo, L"planDisplayName");
+        if (plan.empty()) plan = GetStr(planInfo, L"planName");
+        if (plan.empty()) plan = GetStr(planInfo, L"displayName");
+        if (plan.empty()) plan = GetStr(planInfo, L"productName");
+        if (plan.empty()) plan = GetStr(planInfo, L"planShortName");
+        if (plan.empty()) plan = GetStr(tier, L"description");
+        if (plan.rfind(L"Google AI ", 0) == 0) plan.erase(0, 10);
+        if (!plan.empty()) d->plan = std::move(plan);
+
+        auto configData = GetObj(userStatus, L"cascadeModelConfigData");
+        if (configData && configData.HasKey(L"clientModelConfigs")) {
+            auto configsValue = configData.GetNamedValue(L"clientModelConfigs");
+            if (configsValue.ValueType() == JsonValueType::Array) {
+                auto configs = configsValue.GetArray();
+                for (uint32_t i = 0; i < configs.Size(); i++) {
+                    if (configs.GetAt(i).ValueType() != JsonValueType::Object) continue;
+                    auto config = configs.GetAt(i).GetObject();
+                    auto quota = GetObj(config, L"quotaInfo");
+                    if (!quota) continue;
+
+                    std::wstring identity = GetStr(config, L"label");
+                    if (auto modelOrAlias = GetObj(config, L"modelOrAlias")) {
+                        identity += L" " + GetStr(modelOrAlias, L"model");
+                    }
+                    std::transform(identity.begin(), identity.end(), identity.begin(),
+                                   [](wchar_t ch) { return (wchar_t)towlower(ch); });
+                    if (identity.find(L"lite") != std::wstring::npos ||
+                        identity.find(L"autocomplete") != std::wstring::npos ||
+                        identity.find(L"image") != std::wstring::npos) {
+                        continue;
+                    }
+
+                    WindowUsage* target = nullptr;
+                    if (identity.find(L"gemini") != std::wstring::npos) {
+                        target = &d->win5h;
+                    } else if (identity.find(L"claude") != std::wstring::npos ||
+                               identity.find(L"gpt") != std::wstring::npos ||
+                               identity.find(L"openai") != std::wstring::npos) {
+                        target = &d->antigravityThirdParty5h;
+                    }
+                    if (!target || (target == &d->win5h && hasSummaryGeminiShort) ||
+                        (target == &d->antigravityThirdParty5h &&
+                         hasSummaryThirdPartyShort)) {
+                        continue;
+                    }
+
+                    std::wstring resetTime = GetStr(quota, L"resetTime");
+                    double remaining = GetNum(quota, L"remainingFraction", -1);
+                    // QuotaInfo.remaining_fraction is an implicit-presence proto3 scalar:
+                    // an exhausted zero is omitted while reset_time remains populated.
+                    if (remaining < 0 && !resetTime.empty()) remaining = 0;
+                    if (!std::isfinite(remaining) || remaining < 0 || remaining > 1) continue;
+
+                    double usedPct = std::clamp((1.0 - remaining) * 100.0, 0.0, 100.0);
+                    if (target->pct < usedPct) {
+                        target->pct = usedPct;
+                        target->resetUnixMs = ParseIso8601Ms(resetTime);
+                        // Legacy model quota can mirror either limiting cadence.
+                        target->windowDurationMs = 0;
+                    }
                 }
             }
         }
-        if (d->plan.rfind(L"Google AI ", 0) == 0) d->plan.erase(0, 10);
         return true;
     } catch (...) {
         if (error) *error = L"failed to parse user status JSON";
@@ -2785,69 +3002,148 @@ static void FetchAntigravityAccount(AccountData* d) {
 
     AntigravityServerInfo info;
     bool useCached = false;
-    if (g_antigravityCachedInfo.port > 0 && !g_antigravityCachedInfo.csrfToken.empty()) {
+    if (g_antigravityCachedInfo.port > 0) {
         info = g_antigravityCachedInfo;
         useCached = true;
+        ULONGLONG now = NowUnixMs();
+        if (info.quotaSource == AntigravityQuotaSource::UserStatus &&
+            (info.discoveredMs == 0 || now < info.discoveredMs ||
+             now - info.discoveredMs >= 5ULL * 60 * 1000)) {
+            AntigravityServerInfo refreshedInfo;
+            if (DiscoverAntigravityServer(&refreshedInfo)) {
+                refreshedInfo.discoveredMs = now;
+                info = std::move(refreshedInfo);
+                g_antigravityCachedInfo = info;
+            } else if (!g_unloading) {
+                info.discoveredMs = now;
+                g_antigravityCachedInfo = info;
+            }
+        }
     }
 
     if (!useCached) {
-        if (!DiscoverAntigravityServer(&info)) {
+        bool foundServer = false;
+        if (!DiscoverAntigravityServer(&info, &foundServer)) {
             if (g_unloading) return;
             d->stale = true;
-            d->error = L"Antigravity not running";
+            d->error = foundServer ? L"Antigravity quota unavailable" :
+                                     L"Antigravity not running";
             return;
         }
+        info.discoveredMs = NowUnixMs();
         g_antigravityCachedInfo = info;
     }
 
-    HttpResult r = HttpRequestLocal(info.port, info.secure,
-        L"/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary",
-        info.csrfToken.c_str(), 5000);
+    auto fetchFromServer = [&](const AntigravityServerInfo& server, AccountData* fresh,
+                               HttpResult* summaryResult, HttpResult* statusResult,
+                               bool* summaryParsed, std::wstring* parseError) {
+        *fresh = {};
+        fresh->plan = d->plan;
+        *summaryResult = {};
+        *statusResult = {};
+        *summaryParsed = false;
+        parseError->clear();
 
-    if (useCached && (!r.ok || r.status != 200) && !g_unloading) {
-        g_antigravityCachedInfo = {};
-        if (DiscoverAntigravityServer(&info)) {
-            g_antigravityCachedInfo = info;
-            r = HttpRequestLocal(info.port, info.secure,
+        if (server.quotaSource == AntigravityQuotaSource::Summary) {
+            *summaryResult = HttpRequestLocal(
+                server.port, server.secure,
                 L"/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary",
-                info.csrfToken.c_str(), 5000);
+                server.csrfToken.c_str(), 5000);
+            if (summaryResult->ok && summaryResult->status == 200) {
+                *summaryParsed =
+                    ParseAntigravityQuotaSummary(summaryResult->body, fresh, parseError);
+            }
+        }
+        if (g_unloading) return false;
+
+        *statusResult = HttpRequestLocal(
+            server.port, server.secure,
+            L"/exa.language_server_pb.LanguageServerService/GetUserStatus",
+            server.csrfToken.c_str(), 5000);
+        if (statusResult->ok && statusResult->status == 200) {
+            std::wstring statusError;
+            if (!ParseAntigravityUserStatus(statusResult->body, fresh, &statusError) &&
+                parseError->empty()) {
+                *parseError = std::move(statusError);
+            }
+        }
+
+        bool parsed = fresh->win5h.pct >= 0 || fresh->winWeek.pct >= 0 ||
+                      fresh->antigravityThirdParty5h.pct >= 0 ||
+                      fresh->antigravityThirdPartyWeek.pct >= 0;
+        if (!parsed && parseError->empty()) {
+            *parseError = L"no usable Antigravity quota in response";
+        }
+        return parsed;
+    };
+
+    AccountData fresh;
+    HttpResult summaryResult;
+    HttpResult statusResult;
+    bool summaryParsed = false;
+    std::wstring parseError;
+    bool fetched = fetchFromServer(info, &fresh, &summaryResult, &statusResult,
+                                   &summaryParsed, &parseError);
+
+    auto authenticationFailed = [](const HttpResult& result) {
+        return result.ok && (result.status == 401 || result.status == 403);
+    };
+    auto endpointIsInvalid = [&](const AntigravityServerInfo& server) {
+        return server.quotaSource == AntigravityQuotaSource::Summary ?
+            ((!summaryResult.ok && !statusResult.ok) ||
+             authenticationFailed(summaryResult) || authenticationFailed(statusResult)) :
+            (!statusResult.ok || authenticationFailed(statusResult));
+    };
+    bool endpointInvalid = endpointIsInvalid(info);
+    if (useCached && !fetched && endpointInvalid && !g_unloading) {
+        g_antigravityCachedInfo = {};
+        bool foundServer = false;
+        if (DiscoverAntigravityServer(&info, &foundServer)) {
+            info.discoveredMs = NowUnixMs();
+            g_antigravityCachedInfo = info;
+            fetched = fetchFromServer(info, &fresh, &summaryResult, &statusResult,
+                                      &summaryParsed, &parseError);
+            endpointInvalid = endpointIsInvalid(info);
         } else {
             if (g_unloading) return;
             d->stale = true;
-            d->error = L"Antigravity not running";
+            d->error = foundServer ? L"Antigravity quota unavailable" :
+                                     L"Antigravity not running";
             return;
         }
     }
     if (g_unloading) return;
 
-    if (!r.ok) {
+    if (!fetched) {
         d->stale = true;
-        d->error = L"network error (language server)";
-        g_antigravityCachedInfo = {};
-        return;
-    }
-    if (r.status != 200) {
-        d->stale = true;
-        d->error = L"HTTP " + std::to_wstring(r.status) + L" from language server";
-        g_antigravityCachedInfo = {};
+        bool networkError = info.quotaSource == AntigravityQuotaSource::Summary ?
+                                !summaryResult.ok && !statusResult.ok :
+                                !statusResult.ok;
+        if (networkError) {
+            d->error = L"network error (language server)";
+        } else if (info.quotaSource == AntigravityQuotaSource::Summary &&
+                   summaryResult.ok && summaryResult.status != 200) {
+            d->error = L"HTTP " + std::to_wstring(summaryResult.status) +
+                       L" from language server";
+        } else if (statusResult.ok && statusResult.status != 200) {
+            d->error = L"HTTP " + std::to_wstring(statusResult.status) +
+                       L" from language server";
+        } else {
+            d->error = parseError.empty() ? L"unexpected response" : parseError;
+        }
+        if (endpointInvalid) g_antigravityCachedInfo = {};
         return;
     }
 
-    AccountData fresh;
-    std::wstring parseError;
-    if (!ParseAntigravityQuotaSummary(r.body, &fresh, &parseError)) {
-        d->stale = true;
-        d->error = parseError.empty() ? L"unexpected response" : parseError;
-        return;
+    bool summaryUnsupported = summaryResult.ok &&
+        ((summaryResult.status == 200 && !summaryParsed) ||
+         summaryResult.status == 404 || summaryResult.status == 405 ||
+         summaryResult.status == 501);
+    if (info.quotaSource == AntigravityQuotaSource::Summary && summaryUnsupported) {
+        info.quotaSource = AntigravityQuotaSource::UserStatus;
+        info.discoveredMs = NowUnixMs();
     }
-
-    HttpResult rStatus = HttpRequestLocal(info.port, info.secure,
-        L"/exa.language_server_pb.LanguageServerService/GetUserStatus",
-        info.csrfToken.c_str(), 5000);
-    if (rStatus.ok && rStatus.status == 200) {
-        ParseAntigravityPlanName(rStatus.body, &fresh, nullptr);
-    }
-
+    g_antigravityCachedInfo = info;
     fresh.stale = false;
     fresh.lastSuccessMs = NowUnixMs();
     *d = std::move(fresh);
@@ -3362,11 +3658,23 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         std::wstring providerName =
                             ProviderDisplayName(publishedAccounts[i].provider);
                         wchar_t title[96];
+                        PCWSTR quotaName =
+                            w == kFiveHourBar ? L"5h" :
+                            w == kWeeklyBar ? L"weekly" :
+                            w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra";
+                        if (publishedAccounts[i].provider == L"antigravity") {
+                            if (w == kFiveHourBar) {
+                                ULONGLONG duration = publishedResults[i].win5h.windowDurationMs;
+                                quotaName = duration == 3ULL * 60 * 60 * 1000 ? L"Gemini 3h" :
+                                            duration == 60ULL * 60 * 1000 ? L"Gemini 1h" :
+                                            duration == 0 ? L"Gemini current limit" :
+                                                            L"Gemini 5h";
+                            } else if (w == kWeeklyBar) {
+                                quotaName = L"Gemini weekly";
+                            }
+                        }
                         swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
-                                 w == kFiveHourBar ? L"5h" :
-                                 w == kWeeklyBar ? L"weekly" :
-                                 w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra",
-                                 wu.pct);
+                                 quotaName, wu.pct);
                         std::wstring body = providerName;
                         if ((w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs) {
                             body += L" - resets " + FormatReset(wu.resetUnixMs);
@@ -4754,13 +5062,45 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
             wchar_t line[160];
             if (d.win5h.pct >= 0) {
-                swprintf(line, ARRAYSIZE(line), L"\n5h: %.0f%%%s | resets %s", displayPct(d.win5h.pct),
+                PCWSTR label = L"5h";
+                if (accounts[i].provider == L"antigravity") {
+                    label = d.win5h.windowDurationMs == 3ULL * 60 * 60 * 1000 ? L"Gemini 3h" :
+                            d.win5h.windowDurationMs == 60ULL * 60 * 1000 ? L"Gemini 1h" :
+                            d.win5h.windowDurationMs == 0 ?
+                                L"Gemini current limit" : L"Gemini 5h";
+                }
+                swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
+                         displayPct(d.win5h.pct),
                          remainingSuffix, FormatReset(d.win5h.resetUnixMs).c_str());
                 tip += line;
             }
             if (d.winWeek.pct >= 0) {
-                swprintf(line, ARRAYSIZE(line), L"\nweek: %.0f%%%s | resets %s", displayPct(d.winWeek.pct),
+                PCWSTR label = accounts[i].provider == L"antigravity" ? L"Gemini week" : L"week";
+                swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
+                         displayPct(d.winWeek.pct),
                          remainingSuffix, FormatReset(d.winWeek.resetUnixMs).c_str());
+                tip += line;
+            }
+            if (accounts[i].provider == L"antigravity" &&
+                d.antigravityThirdParty5h.pct >= 0) {
+                PCWSTR label =
+                    d.antigravityThirdParty5h.windowDurationMs == 3ULL * 60 * 60 * 1000 ?
+                        L"Claude/GPT 3h" :
+                    d.antigravityThirdParty5h.windowDurationMs == 60ULL * 60 * 1000 ?
+                        L"Claude/GPT 1h" :
+                    d.antigravityThirdParty5h.windowDurationMs == 0 ?
+                        L"Claude/GPT current limit" : L"Claude/GPT 5h";
+                swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
+                         displayPct(d.antigravityThirdParty5h.pct), remainingSuffix,
+                         FormatReset(d.antigravityThirdParty5h.resetUnixMs).c_str());
+                tip += line;
+            }
+            if (accounts[i].provider == L"antigravity" &&
+                d.antigravityThirdPartyWeek.pct >= 0) {
+                swprintf(line, ARRAYSIZE(line),
+                         L"\nClaude/GPT week: %.0f%%%s | resets %s",
+                         displayPct(d.antigravityThirdPartyWeek.pct), remainingSuffix,
+                         FormatReset(d.antigravityThirdPartyWeek.resetUnixMs).c_str());
                 tip += line;
             }
             if (d.fableWeek.pct >= 0) {
@@ -6734,7 +7074,7 @@ static void RefreshAccountList(SettingsWindowState& state) {
         if (loginInProgress && AccountIdentityHash(accounts[i]) == loginIdentity) {
             status = L"Signing in...";
         } else if (accounts[i].provider == L"antigravity") {
-            status = L"Uses app session";
+            status = L"Uses local session";
         } else {
             StoredToken token;
             status = LoadStoredToken(AccountIdentityHash(accounts[i]), &token) ?
@@ -7953,7 +8293,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     L"Adds ! when quota data is stale because a refresh failed or is overdue.");
                 AddSettingsToolTip(
                     *state, kPollPreset,
-                    L"How often Anthropic and OpenAI are polled. Antigravity always polls its local app once per minute.");
+                    L"How often Anthropic and OpenAI are polled. Antigravity always polls its local session once per minute.");
                 AddSettingsToolTip(
                     *state, kPollMinutes,
                     L"Custom cloud polling interval from 2 to 1440 minutes.");

@@ -8,7 +8,7 @@ Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ## What It Shows
 
-Each configured account gets one compact taskbar column. Choose its 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage bars independently; selected bars auto-hide when the provider does not return that quota.
+Each configured account gets one compact taskbar column. Choose its 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage bars independently; selected bars auto-hide when the provider does not return that quota. Antigravity bars show its Gemini pool; Claude/GPT pool limits appear in the tooltip.
 
 - stacked layout: selected bars stack horizontally and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
@@ -23,7 +23,7 @@ It can also fire a Windows notification when an account first crosses the red th
 
 Install the Windhawk mod from `local@taskbar-ai-quota.wh.cpp`. On a fresh install, click the **AI +** taskbar tile to open the native settings window and add an account. Existing Windhawk settings are imported once when upgrading. Settings autosave without re-querying providers unless an account identity changes.
 
-Configure a provider, unique label, and visible quota bars for each account. Sign in to Anthropic/OpenAI from the settings window or a quota column's right-click menu. Antigravity reads quota from its running app.
+Configure a provider, unique label, and visible quota bars for each account. Sign in to Anthropic/OpenAI from the settings window or a quota column's right-click menu. Antigravity reads quota from its running app or CLI session.
 
 ## Signing In
 
@@ -31,9 +31,11 @@ The mod runs its own OAuth sign-in and refreshes the access token itself, so the
 
 - **Anthropic**: a browser opens to claude.ai. After you approve, the page shows a code like `abc...#xyz...`; paste it into the prompt the mod shows.
 - **OpenAI**: a browser opens to chatgpt.com; the mod catches the redirect on `localhost:1455` (falling back to `1457`) automatically, so there's nothing to paste. If the Codex CLI is signing in at the same time the port may be busy - close it and retry.
-- **Google Antigravity**: no separate mod sign-in is needed. Sign in to Antigravity, open a workspace, and keep the app running so the mod can query its local language server.
+- **Google Antigravity**: no separate mod sign-in is needed. Keep the signed-in Antigravity app or CLI running so the mod can query its local language server. Older IDE builds also need an open workspace.
 
 Use **Sign out** in the same menu to delete an Anthropic/OpenAI stored token. Renaming a label preserves its stored sign-in when possible. Removing an account asks whether to retain or delete it.
+
+Older Antigravity servers that do not expose pooled quota can show only their current limiting quota. Weekly stays unavailable and pace ticks are disabled for that fallback.
 
 ## Settings
 
@@ -68,13 +70,13 @@ For Anthropic and OpenAI, the mod owns its OAuth credentials end to end: it sign
 
 The mod never reads or writes the OpenCode, Claude Code, or Codex credential files. Refresh tokens are used only against the provider token endpoints and are never sent as bearer tokens to the quota endpoints.
 
-Signing in uses the public OAuth clients of the official CLIs (Claude Code for Anthropic, Codex for OpenAI) with PKCE. Antigravity uses only its authenticated loopback language server and stores no Google token.
+Signing in uses the public OAuth clients of the official CLIs (Claude Code for Anthropic, Codex for OpenAI) with PKCE. Antigravity uses only its signed-in loopback language server and stores no Google token.
 
 ## Limitations
 
 - Windows 11 taskbar only.
 - Specific displays use detected taskbar order: `Display 1` is primary and later entries are secondary taskbars.
 - Anthropic/OpenAI require signing in once from the right-click menu.
-- Antigravity requires its signed-in app to remain running with a workspace open.
+- Antigravity requires a signed-in app or CLI session to remain running; older IDE builds also need an open workspace.
 - OpenAI sign-in needs `localhost:1455` (or `1457`) free for the browser redirect.
 - Anthropic access tokens are short-lived but the mod refreshes them automatically; you only re-sign-in if the refresh token is revoked.
