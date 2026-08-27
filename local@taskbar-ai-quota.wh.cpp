@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.2.0
+// @version         1.2.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -577,15 +577,13 @@ static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowTh
 static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, bool hasError) {
     constexpr double maxWidth = 460;
     auto muted = SolidColorBrush(winrt::Windows::UI::Color{255, 0xD6, 0xD6, 0xD6});
-    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{
-        255, GetRValue(kDefaultPaceTickColor), GetGValue(kDefaultPaceTickColor),
-        GetBValue(kDefaultPaceTickColor)});
-    auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xA8, 0xD8, 0xFF});
+    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0x9A, 0xBE, 0xFF});
+    auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
     auto creditLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
     auto duration = SolidColorBrush(winrt::Windows::UI::Color{255, 0xB7, 0xE4, 0xA3});
     auto accent = SolidColorBrush(hasError ?
         winrt::Windows::UI::Color{255, 0xFF, 0xB4, 0xA9} :
-        winrt::Windows::UI::Color{255, 0x8A, 0xD1, 0xFF});
+        winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
     auto border = SolidColorBrush(hasError ?
         winrt::Windows::UI::Color{0xB8, 0xD1, 0x34, 0x38} :
         winrt::Windows::UI::Color{0x72, 0x8A, 0xD1, 0xFF});
