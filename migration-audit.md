@@ -52,19 +52,19 @@ Token clearing ignores `Wh_SetStringValue` failure. Account removal and provider
 
 References: `local@taskbar-ai-quota.wh.cpp:1139-1175`, `6485-6486`, `6553-6563`.
 
-### [ ] Cross-thread settings activation can stall the taskbar
+### [x] Cross-thread settings activation can stall the taskbar
 
 A taskbar thread synchronously calls `ShowWindow(SW_RESTORE)` on the settings-thread-owned window. At the same time, the settings thread can synchronously marshal quota UI removal to that taskbar thread. The timeout and fallback path can freeze the taskbar for several seconds.
 
 References: `local@taskbar-ai-quota.wh.cpp:4592-4607`, `5194-5197`, `7249-7255`.
 
-### [ ] Unload can destroy the settings window beneath the color picker
+### [x] Unload can destroy the settings window beneath the color picker
 
 `ChooseColorW` runs a modal message pump on the settings thread. Unload posts `WM_CLOSE` to the owner settings window, whose handler immediately destroys it, then waits for the thread indefinitely. The common dialog can therefore continue with a destroyed owner and return into code holding dead window handles. Other blocking settings flows have explicit unload handling; the color picker does not.
 
 References: `local@taskbar-ai-quota.wh.cpp:6980-6995`, `7124-7127`, `7373-7386`.
 
-### [ ] User-paced settings dialogs can block unload indefinitely
+### [x] User-paced settings dialogs can block unload indefinitely
 
 Unload waits indefinitely for the settings thread after posting `WM_CLOSE` only to the main settings window. If that thread is inside a synchronous `MessageBoxW`, unload cannot complete until the user dismisses the dialog. This is not a lock deadlock, but it can stall mod update or removal indefinitely.
 

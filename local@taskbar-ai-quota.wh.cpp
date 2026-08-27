@@ -376,6 +376,12 @@ static UINT GetQuotaCleanupMessage() {
     return message;
 }
 
+static UINT GetSettingsActivateMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_ActivateSettings_" WH_MOD_ID);
+    return message;
+}
+
 /**********************************************/
 //  Helpers
 /**********************************************/
@@ -5400,6 +5406,7 @@ struct SettingsWindowState {
     HWND resetPageButton = nullptr;
     HWND accountList = nullptr;
     HWND toolTip = nullptr;
+    HWND colorDialog = nullptr;
     std::array<std::vector<HWND>, 4> pageControls;
     std::array<std::vector<SettingsRow>, 4> rows;
     HFONT font = nullptr;
@@ -5427,6 +5434,77 @@ struct AccountEditorState {
 
 static constexpr PCWSTR kSettingsWindowClass = L"AiQuotaSettings_" WH_MOD_ID;
 static constexpr PCWSTR kAccountEditorClass = L"AiQuotaAccountEditor_" WH_MOD_ID;
+
+struct SettingsMessageBoxContext {
+    SettingsMessageBoxContext* previous = nullptr;
+    HWND hWnd = nullptr;
+    int forcedResult = IDCANCEL;
+    bool forced = false;
+};
+
+static thread_local SettingsMessageBoxContext* g_settingsMessageBoxContext = nullptr;
+
+static LRESULT CALLBACK SettingsMessageBoxCbtProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HCBT_ACTIVATE && g_settingsMessageBoxContext &&
+        !g_settingsMessageBoxContext->hWnd) {
+        HWND hWnd = reinterpret_cast<HWND>(wParam);
+        wchar_t className[16] = {};
+        if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+            wcscmp(className, L"#32770") == 0) {
+            g_settingsMessageBoxContext->hWnd = hWnd;
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+// Only settings-thread callers participate in owner-close handling.
+static int SettingsMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT type) {
+    SettingsMessageBoxContext context;
+    context.previous = g_settingsMessageBoxContext;
+    switch (type & MB_TYPEMASK) {
+        case MB_OK:
+            context.forcedResult = IDOK;
+            break;
+        case MB_ABORTRETRYIGNORE:
+            context.forcedResult = IDABORT;
+            break;
+        case MB_YESNO:
+            context.forcedResult = IDNO;
+            break;
+        case MB_OKCANCEL:
+        case MB_YESNOCANCEL:
+        case MB_RETRYCANCEL:
+        case MB_CANCELTRYCONTINUE:
+            context.forcedResult = IDCANCEL;
+            break;
+    }
+
+    g_settingsMessageBoxContext = &context;
+    HHOOK hook = SetWindowsHookExW(WH_CBT, SettingsMessageBoxCbtProc, nullptr,
+                                   GetCurrentThreadId());
+    if (!hook) {
+        Wh_Log(L"Could not install settings MessageBox hook: %lu", GetLastError());
+    }
+
+    int result = MessageBoxW(hWnd, text, caption, type);
+    if (hook) {
+        if (!UnhookWindowsHookEx(hook)) {
+            Wh_Log(L"Could not remove settings MessageBox hook: %lu", GetLastError());
+        }
+    }
+    g_settingsMessageBoxContext = context.previous;
+    return context.forced ? context.forcedResult : result;
+}
+
+static UINT_PTR CALLBACK SettingsColorHookProc(HWND hWnd, UINT message,
+                                               WPARAM, LPARAM lParam) {
+    if (message == WM_INITDIALOG) {
+        auto* chooser = reinterpret_cast<CHOOSECOLORW*>(lParam);
+        auto* state = reinterpret_cast<SettingsWindowState*>(chooser->lCustData);
+        if (state) state->colorDialog = hWnd;
+    }
+    return FALSE;
+}
 
 static int ScaleForDpi(int value, UINT dpi) {
     return MulDiv(value, (int)dpi, 96);
@@ -6138,7 +6216,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(s));
     configLock.unlock();
     if (applyResult == SettingsApplyResult::Failed) {
-        MessageBoxW(state.hWnd, L"Could not save settings.", L"Taskbar AI Quota Bars",
+        SettingsMessageBoxW(state.hWnd, L"Could not save settings.", L"Taskbar AI Quota Bars",
                     MB_OK | MB_ICONERROR);
     } else if (applyResult == SettingsApplyResult::Changed) {
         FinishSettingsApply();
@@ -6296,7 +6374,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 size_t last = label.find_last_not_of(L" \t\r\n");
                 label = first == std::wstring::npos ? L"" : label.substr(first, last - first + 1);
                 if (label.empty()) {
-                    MessageBoxW(hWnd, L"Enter an account label.", L"Account",
+                    SettingsMessageBoxW(hWnd, L"Enter an account label.", L"Account",
                                 MB_OK | MB_ICONWARNING);
                     SetFocus(state->edit);
                     return 0;
@@ -6315,7 +6393,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 if (!state->account.showBars[kFiveHourBar] &&
                     !state->account.showBars[kWeeklyBar] &&
                     !state->account.showBars[kExtraUsageBar]) {
-                    MessageBoxW(hWnd, L"Select at least one quota bar.", L"Account",
+                    SettingsMessageBoxW(hWnd, L"Select at least one quota bar.", L"Account",
                                 MB_OK | MB_ICONWARNING);
                     return 0;
                 }
@@ -6473,7 +6551,7 @@ static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
     }
     if (HasDuplicateAccount(settings, -1, account)) {
         configLock.unlock();
-        MessageBoxW(state.hWnd, L"That provider and label are already configured.",
+        SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
                     L"Account", MB_OK | MB_ICONWARNING);
         return;
     }
@@ -6481,7 +6559,7 @@ static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
     if (applyResult == SettingsApplyResult::Failed) {
-        MessageBoxW(state.hWnd, L"Could not save the account.", L"Account",
+        SettingsMessageBoxW(state.hWnd, L"Could not save the account.", L"Account",
                     MB_OK | MB_ICONERROR);
     } else if (applyResult == SettingsApplyResult::Changed) {
         FinishSettingsApply();
@@ -6505,7 +6583,7 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
                                    oldAccount.label == newAccount.label &&
                                    oldAccount.showBars != newAccount.showBars;
     if (identityChanged && g_loginInProgress.load()) {
-        MessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
+        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -6514,7 +6592,7 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
         oldAccount.provider != L"antigravity") {
         StoredToken token;
         if (LoadStoredToken(AccountIdentityHash(oldAccount), &token)) {
-            int result = MessageBoxW(
+            int result = SettingsMessageBoxW(
                 state.hWnd,
                 L"Changing provider creates a new account identity.\n\n"
                 L"Yes: delete the old stored sign-in\nNo: keep it for later\nCancel: discard this edit",
@@ -6528,7 +6606,7 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     if (identityChanged && g_loginInProgress.load()) {
         configLock.unlock();
-        MessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
+        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -6547,14 +6625,14 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     }
     if (index < 0) {
         configLock.unlock();
-        MessageBoxW(state.hWnd, L"The account was changed from another taskbar window.",
+        SettingsMessageBoxW(state.hWnd, L"The account was changed from another taskbar window.",
                     L"Account", MB_OK | MB_ICONWARNING);
         RefreshSettingsControls(state);
         return;
     }
     if (HasDuplicateAccount(settings, index, newAccount)) {
         configLock.unlock();
-        MessageBoxW(state.hWnd, L"That provider and label are already configured.",
+        SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
                     L"Account", MB_OK | MB_ICONWARNING);
         return;
     }
@@ -6577,7 +6655,7 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
             tokenCopyResult == TokenCopyResult::Failed) {
             authEpochLock.unlock();
             configLock.unlock();
-            MessageBoxW(
+            SettingsMessageBoxW(
                 state.hWnd,
                 tokenCopyResult == TokenCopyResult::DestinationOccupied ?
                     L"The renamed account identity already has a retained sign-in. To replace it, "
@@ -6598,7 +6676,7 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
                                   ClearStoredToken(newIdentity);
         if (authEpochLock.owns_lock()) authEpochLock.unlock();
         configLock.unlock();
-        MessageBoxW(
+        SettingsMessageBoxW(
             state.hWnd,
             copiedTokenCleared ?
                 L"Could not save the account." :
@@ -6626,14 +6704,14 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
         else FinishSettingsApply();
     }
     if (!oldTokenCleared) {
-        MessageBoxW(
+        SettingsMessageBoxW(
             state.hWnd,
             L"The account was renamed, but a duplicate stored sign-in remains under the old "
             L"identity. To delete it, re-add an account with the old provider and label, then "
             L"remove it and choose to delete its stored sign-in.",
             L"Account", MB_OK | MB_ICONWARNING);
     } else if (!providerTokenCleared) {
-        MessageBoxW(
+        SettingsMessageBoxW(
             state.hWnd,
             L"The provider was changed, but the old sign-in remains retained. To recover or "
             L"delete it, re-add an account with the old provider and label.",
@@ -6652,17 +6730,17 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
         account = g_settings.accounts[index];
     }
     if (g_loginInProgress.load()) {
-        MessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
+        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
         return;
     }
     bool deleteToken = false;
     if (account.provider == L"antigravity") {
-        int result = MessageBoxW(state.hWnd, L"Remove this account?", L"Remove account",
+        int result = SettingsMessageBoxW(state.hWnd, L"Remove this account?", L"Remove account",
                                  MB_YESNO | MB_ICONQUESTION);
         if (result != IDYES || g_unloading || !IsWindow(state.hWnd)) return;
     } else {
-        int result = MessageBoxW(
+        int result = SettingsMessageBoxW(
             state.hWnd,
             L"Remove this account?\n\n"
             L"Yes: remove it and delete its stored sign-in\n"
@@ -6677,7 +6755,7 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     if (g_loginInProgress.load()) {
         configLock.unlock();
-        MessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
+        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -6701,7 +6779,7 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
     }
     if (deleteToken && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
         configLock.unlock();
-        MessageBoxW(state.hWnd,
+        SettingsMessageBoxW(state.hWnd,
                     L"The stored sign-in could not be deleted, so the account was not removed.",
                     L"Account", MB_OK | MB_ICONERROR);
         return;
@@ -6714,7 +6792,7 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
             RefreshQuotaByIdentity(identity);
             NotifySettingsWindowChanged();
         }
-        MessageBoxW(state.hWnd,
+        SettingsMessageBoxW(state.hWnd,
                     deleteToken ?
                         L"The stored sign-in was deleted, but settings could not be saved. The "
                         L"account remains configured but signed out." :
@@ -6751,7 +6829,7 @@ static void MoveAccountFromSettingsWindow(SettingsWindowState& state, int direct
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
     if (applyResult == SettingsApplyResult::Failed) {
-        MessageBoxW(state.hWnd, L"Could not reorder the account.", L"Account",
+        SettingsMessageBoxW(state.hWnd, L"Could not reorder the account.", L"Account",
                     MB_OK | MB_ICONERROR);
     } else if (applyResult == SettingsApplyResult::Changed) {
         FinishSettingsApply();
@@ -6780,7 +6858,7 @@ static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
     SettingsApplyResult applyResult = ApplyOwnedSettings(settings);
     configLock.unlock();
     if (applyResult == SettingsApplyResult::Failed) {
-        MessageBoxW(state.hWnd, L"Could not update account visibility.", L"Account",
+        SettingsMessageBoxW(state.hWnd, L"Could not update account visibility.", L"Account",
                     MB_OK | MB_ICONERROR);
     } else if (applyResult == SettingsApplyResult::Changed) {
         std::wstring hashes;
@@ -6801,7 +6879,7 @@ static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
 static void ResetCurrentSettingsPage(SettingsWindowState& state) {
     int page = state.currentPage;
     if (page <= 0 || page >= 4) return;
-    if (MessageBoxW(state.hWnd,
+    if (SettingsMessageBoxW(state.hWnd,
                     L"Reset every setting on this page to its default value?",
                     L"Reset settings", MB_YESNO | MB_ICONQUESTION) != IDYES ||
         g_unloading || !IsWindow(state.hWnd)) {
@@ -6846,7 +6924,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
     if (applyResult == SettingsApplyResult::Failed) {
-        MessageBoxW(state.hWnd, L"Could not reset settings.", L"Reset settings",
+        SettingsMessageBoxW(state.hWnd, L"Could not reset settings.", L"Reset settings",
                     MB_OK | MB_ICONERROR);
     } else if (applyResult == SettingsApplyResult::Changed) {
         FinishSettingsApply();
@@ -6855,7 +6933,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
 }
 
 static void ResetAllNonAccountSettings(SettingsWindowState& state) {
-    if (MessageBoxW(state.hWnd,
+    if (SettingsMessageBoxW(state.hWnd,
                     L"Reset all layout, display, and behavior settings?\n\n"
                     L"Accounts and stored sign-ins will be preserved.",
                     L"Reset all settings", MB_YESNO | MB_ICONQUESTION) != IDYES ||
@@ -6872,7 +6950,7 @@ static void ResetAllNonAccountSettings(SettingsWindowState& state) {
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
     if (applyResult == SettingsApplyResult::Failed) {
-        MessageBoxW(state.hWnd, L"Could not reset settings.", L"Reset all settings",
+        SettingsMessageBoxW(state.hWnd, L"Could not reset settings.", L"Reset all settings",
                     MB_OK | MB_ICONERROR);
     } else if (applyResult == SettingsApplyResult::Changed) {
         FinishSettingsApply();
@@ -6883,6 +6961,15 @@ static void ResetAllNonAccountSettings(SettingsWindowState& state) {
 static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                            WPARAM wParam, LPARAM lParam) {
     auto* state = reinterpret_cast<SettingsWindowState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+    if (UINT activateMessage = GetSettingsActivateMessage();
+        activateMessage && message == activateMessage) {
+        if (!g_unloading) {
+            if (IsIconic(hWnd)) ShowWindow(hWnd, SW_RESTORE);
+            HWND target = GetLastActivePopup(hWnd);
+            SetForegroundWindow(IsWindow(target) ? target : hWnd);
+        }
+        return 0;
+    }
     switch (message) {
         case WM_CREATE: {
             auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
@@ -7132,7 +7219,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     if (HIWORD(wParam) == BN_CLICKED) {
                         if (uint64_t identity = SelectedAccountIdentity(*state)) {
                             if (!SignOutAccountByIdentity(identity)) {
-                                MessageBoxW(
+                                SettingsMessageBoxW(
                                     state->hWnd,
                                     L"The stored sign-in could not be deleted and remains "
                                     L"retained for this account.",
@@ -7157,8 +7244,12 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                         chooser.hwndOwner = hWnd;
                         chooser.rgbResult = row->previewColor;
                         chooser.lpCustColors = state->customColors.data();
-                        chooser.Flags = CC_FULLOPEN | CC_RGBINIT;
-                        if (ChooseColorW(&chooser)) {
+                        chooser.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
+                        chooser.lCustData = reinterpret_cast<LPARAM>(state);
+                        chooser.lpfnHook = SettingsColorHookProc;
+                        bool accepted = ChooseColorW(&chooser);
+                        state->colorDialog = nullptr;
+                        if (accepted) {
                             row->previewColor = chooser.rgbResult;
                             if (row->preview) InvalidateRect(row->preview, nullptr, TRUE);
                             CommitScalarSettings(*state);
@@ -7292,6 +7383,19 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             }
             break;
         case WM_CLOSE:
+            if (state && state->colorDialog) {
+                PostMessageW(state->colorDialog, WM_COMMAND, IDCANCEL, 0);
+                PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                return 0;
+            }
+            if (g_settingsMessageBoxContext &&
+                IsWindow(g_settingsMessageBoxContext->hWnd)) {
+                g_settingsMessageBoxContext->forced = true;
+                PostMessageW(g_settingsMessageBoxContext->hWnd, WM_COMMAND,
+                             g_settingsMessageBoxContext->forcedResult, 0);
+                PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                return 0;
+            }
             if (state && !g_unloading) CommitScalarSettings(*state, false);
             DestroyWindow(hWnd);
             return 0;
@@ -7420,8 +7524,9 @@ static void OpenSettingsWindow() {
     if (g_unloading) return;
     std::lock_guard<std::mutex> lock(g_settingsWindowMutex);
     if (HWND window = g_settingsWindow.load(); window && IsWindow(window)) {
-        ShowWindow(window, SW_RESTORE);
-        SetForegroundWindow(window);
+        if (UINT message = GetSettingsActivateMessage()) {
+            PostMessageW(window, message, 0, 0);
+        }
         return;
     }
     if (g_settingsWindowThread) {
