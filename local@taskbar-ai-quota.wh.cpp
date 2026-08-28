@@ -15,61 +15,33 @@
 /*
 # Taskbar AI Quota Bars
 
-Shows Anthropic Claude, OpenAI/Codex, and Google Antigravity AI agent and LLM
-subscription quota usage as compact bars on the Windows 11 taskbar, next to the system tray.
-Can show on the primary taskbar only, all taskbars, or one specific monitor.
+A Windows 11 taskbar mod that shows subscription quota bars next to the system tray.
 
-![Taskbar AI Quota Bars](https://i.imgur.com/LD0K31E.png)
-![Taskbar AI Quota Bars Detail](https://i.imgur.com/H7agnz2.png)
+Supported providers and quotas:
 
-Each account gets one compact column:
-- stacked layout: selected quota bars stack horizontally and fill left-to-right
-- vertical layout: selected quota bars sit side-by-side and fill bottom-up
+- **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
+- **OpenAI/Codex:** 5-hour and weekly
+- **Google Antigravity:** Gemini pool
 
-Choose 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage
-bars per account. Selected bars auto-hide when the provider doesn't return that quota.
-Antigravity bars show its Gemini pool; Claude/GPT pool limits appear in the tooltip.
+Optional notifications warn when usage crosses the configured red threshold.
 
-Hover for exact percentages and reset times. Click a column to refresh that account
-or open its provider dashboard, depending on settings and provider support. Right-click
-for Settings, Refresh all, provider actions, and a checkbox list to show/hide individual accounts. Hidden accounts
-stop updating and are left to go stale; the choice persists across restarts (at least
-one account always stays visible).
-Bars can show quota labels (`5h`, `7d`, `Fa`, `Ex`) to the left of each bar and
-percentage text with adaptive, left, center, or right alignment. Adaptive text moves
-from right to left at the yellow
-threshold; left-aligned yellow and orange text turns black for contrast. Colors use
-configurable green/yellow/orange/red thresholds, with a colorblind palette option.
-Optional pace ticks compare quota usage with elapsed time in each reset window and have
-caret, full-line, edge-notch, and dot styles with a configurable color.
-Stale errors can mark labels/tooltips with `!`.
+![Quota tooltip](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss1.png)
 
-Optionally fires a Windows notification when an account first crosses the red threshold
-on a selected bar, so you don't have to keep glancing at the bars.
+![Compact taskbar bars](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss2.png)
 
-## Signing in
+![Threshold notification](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss3.png)
 
-On a fresh install, click the **AI +** taskbar tile to open the native settings window
-and add an account. Settings autosave without re-querying providers unless an account
-identity actually changes. Accounts can be reordered and shown or hidden there; visual
-sizes use sliders with precise numeric controls, and labels can sit on any side of the bars.
-The Layout and Display pages can temporarily preview threshold-spanning test accounts on the taskbar
-without changing configured accounts or live quota data.
+## Setup
 
-A column that needs auth shows "click to sign in"; left-click it (or use **Sign in** in
-the right-click menu):
-- **Anthropic**: a browser opens to claude.ai; after you authorize, paste the code shown
-  on the page into the prompt.
-- **OpenAI**: a browser opens to chatgpt.com; the redirect is caught automatically on
-  `localhost:1455`.
-- **Google Antigravity**: no separate sign-in is needed. Add an Antigravity account in
-  Settings, then keep the signed-in Antigravity app or CLI running. Older IDE builds
-  also need an open workspace.
+Open the native Settings window from the taskbar to add accounts. Anthropic and OpenAI
+use browser sign-in; tokens are encrypted locally with Windows DPAPI. Antigravity uses
+its signed-in local app or CLI session, which must remain running.
 
-For Anthropic and OpenAI, the mod refreshes the access token itself. Tokens are stored
-encrypted (Windows DPAPI). Use **Sign out** to remove a stored token.
-Older Antigravity servers that don't expose pooled quota can show only their current
-limiting quota; weekly stays unavailable and pace ticks are disabled for that fallback.
+## Settings
+
+- **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
+- **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
+- **Taskbar behavior:** Choose displays, click actions, polling, and alerts.
 
 ## Suggestions & bugs
 
