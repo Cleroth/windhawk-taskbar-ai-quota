@@ -52,7 +52,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - account-label and compact-text font sizes
 - account, label, bar, and tray spacing
 - compact bar labels (`5h`, `7d`, `Fa`, `Ex`), hidden by default
-- compact percent text
+- percentage text: never show, show on hover (default), or always show
 - click action: refresh account or open provider dashboard (Antigravity always refreshes)
 - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
 - taskbar monitor mode: primary, all, or a detected display with its resolution
