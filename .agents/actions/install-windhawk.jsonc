@@ -1,0 +1,15 @@
+{
+  "label": "Install Windhawk",
+  "icon": "deploy",
+  "elevated": true,
+  "exec": {
+    "executable": "pwsh",
+    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "install-windhawk.ps1"],
+    "cwd": ".",
+  },
+  "appearance": {
+    "text": "\n\ninstall",
+    "textSize": 11,
+    "layout": "label"
+  },
+}
