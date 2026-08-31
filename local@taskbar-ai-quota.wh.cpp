@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
-// @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.8
+// @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, GitHub Copilot, and Google Antigravity on the Windows 11 taskbar
+// @version         1.5.11
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -21,6 +21,7 @@ Supported providers and quotas:
 
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
 - **OpenAI/Codex:** 5-hour and weekly
+- **GitHub Copilot:** AI credits or premium requests, chat, and completion quotas
 - **Google Antigravity:** Gemini pool
 
 Optional notifications warn when usage crosses the configured red threshold.
@@ -34,7 +35,8 @@ Optional notifications warn when usage crosses the configured red threshold.
 ## Setup
 
 Open the native Settings window from the taskbar to add accounts. Anthropic and OpenAI
-use browser sign-in; tokens are encrypted locally with Windows DPAPI. Antigravity uses
+use browser sign-in; GitHub Copilot uses GitHub device sign-in. Tokens are encrypted
+locally with Windows DPAPI. Antigravity uses
 its signed-in local app or CLI session, which must remain running.
 
 ## Settings
@@ -42,6 +44,16 @@ its signed-in local app or CLI session, which must remain running.
 - **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
 - **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
 - **Taskbar behavior:** Choose displays, click actions, polling, and alerts.
+
+The optional **Use GitHub CLI for organization billing** setting is in **Accounts → Edit**
+for each GitHub Copilot account and is separate from Copilot sign-in. It uses the installed
+`gh` CLI and its existing login to read current-month
+organization billing totals; organization administrator access is required. It is off by
+default and does not read or copy the CLI token. Existing Copilot accounts inherit the
+previous global setting when upgrading.
+
+GitHub documents device sign-in, but its personal Copilot quota endpoint is internal
+and may change without notice.
 
 ## Suggestions & bugs
 
@@ -128,10 +140,11 @@ enum QuotaBarIndex {
 };
 
 struct AccountConfig {
-    std::wstring provider;  // "anthropic", "openai", or "antigravity".
+    std::wstring provider;  // "anthropic", "openai", "github-copilot", or "antigravity".
     std::wstring label;
     std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
     bool hidden = false;  // Runtime show/hide toggle (right-click menu), persisted in mod storage.
+    bool useGitHubCliForOrganizationBilling = false;
 
     bool operator==(const AccountConfig&) const = default;
 };
@@ -228,6 +241,8 @@ struct WindowUsage {
     double pct = -1;
     ULONGLONG resetUnixMs = 0;
     ULONGLONG windowDurationMs = 0;
+    std::wstring detail;
+    bool unlimited = false;
 };
 
 struct AccountData {
@@ -237,6 +252,8 @@ struct AccountData {
     WindowUsage extraUsage;
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;
+    std::array<std::wstring, kQuotaBarCount> windowLabels{
+        L"5h", L"week", L"Fable week", L"extra usage"};
     std::wstring plan;
     std::wstring codexSparkLines;
     std::wstring extraLines;
@@ -295,6 +312,7 @@ struct AccountUiRefs {
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<TextBlock, 2> copilotBarLabels{TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
     POINT toolTipOpenCursor{};
     bool hasToolTipOpenCursor = false;
@@ -725,6 +743,19 @@ static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, 
                 labelEnd = 11;
                 labelBold = true;
                 quotaLine = true;
+            } else if (line.rfind(L"premium:", 0) == 0 ||
+                       line.rfind(L"AI credits:", 0) == 0 ||
+                       line.rfind(L"chat:", 0) == 0 ||
+                       line.rfind(L"completions:", 0) == 0 ||
+                       line.rfind(L"overage:", 0) == 0) {
+                labelBrush = quotaLabel;
+                labelEnd = line.find(L':') + 1;
+                labelBold = true;
+                quotaLine = true;
+            } else if (line.rfind(L"organization:", 0) == 0) {
+                labelBrush = creditLabel;
+                labelEnd = 13;
+                labelBold = true;
             } else if (line.rfind(L"error:", 0) == 0) {
                 labelBrush = accent;
                 labelEnd = 6;
@@ -827,6 +858,7 @@ static void OpenUrl(PCWSTR url) {
 static PCWSTR ProviderDisplayName(const std::wstring& provider) {
     if (provider == L"anthropic") return L"Anthropic";
     if (provider == L"openai") return L"OpenAI";
+    if (provider == L"github-copilot") return L"GitHub Copilot";
     return L"Google Antigravity";
 }
 
@@ -883,8 +915,9 @@ static void OpenDashboardForIdentity(uint64_t identityHash) {
     if (provider == L"antigravity") {
         RefreshQuotaByIdentity(identityHash);
     } else {
-        OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage"
-                                         : L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
+        OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage" :
+                provider == L"github-copilot" ? L"https://github.com/settings/copilot" :
+                L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
     }
 }
 
@@ -1474,6 +1507,11 @@ static constexpr PCWSTR kOpenAiTokenHost = L"auth.openai.com";
 static constexpr PCWSTR kOpenAiTokenPath = L"/oauth/token";
 static constexpr PCWSTR kOpenAiScope =
     L"openid profile email offline_access api.connectors.read api.connectors.invoke";
+// Public client used by GitHub Copilot's device authorization flow.
+static constexpr PCWSTR kGitHubCopilotClientId = L"Iv1.b507a08c87ecfe98";
+static constexpr PCWSTR kGitHubDeviceHost = L"github.com";
+static constexpr PCWSTR kGitHubDeviceCodePath = L"/login/device/code";
+static constexpr PCWSTR kGitHubAccessTokenPath = L"/login/oauth/access_token";
 static constexpr PCWSTR kOAuthUserAgent = L"taskbar-ai-quota/0.1";
 
 static std::string UrlEncode(const std::string& s) {
@@ -1635,7 +1673,7 @@ static TokenEndpointResult PostTokenEndpoint(bool anthropic, const std::wstring&
 static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToken* tok,
                                         std::wstring* err, int* retryAfterSec) {
     if (retryAfterSec) *retryAfterSec = 0;
-    if (tok->refreshToken.empty()) {
+    if (provider == L"github-copilot" || tok->refreshToken.empty()) {
         *err = L"no refresh token";
         return TokenEndpointResult::Rejected;
     }
@@ -1671,7 +1709,7 @@ static std::atomic<bool> g_loginInProgress{false};
 static std::atomic<uint64_t> g_loginAccountIdentity{0};
 static HANDLE g_loginThread = nullptr;
 static std::mutex g_loginThreadMutex;  // Guards g_loginThread handoff vs. the unload join.
-static std::atomic<HWND> g_loginWnd{nullptr};        // Anthropic paste dialog window.
+static std::atomic<HWND> g_loginWnd{nullptr};        // Anthropic paste or GitHub device dialog.
 static std::atomic<SOCKET> g_loginSocket{INVALID_SOCKET};  // OpenAI loopback listener.
 
 // Small modal-style input window so the Anthropic flow can collect the pasted code#state.
@@ -1857,6 +1895,295 @@ static std::wstring ShowLoginInputDialog(const std::wstring& title, const std::w
     // Unregister so a later mod reload can't reuse a class pointing at this now-unloaded WndProc.
     UnregisterClassW(kClass, hInst);
     return st.ok ? st.result : std::wstring();
+}
+
+struct GitHubDeviceAuthorization {
+    std::wstring deviceCode;
+    std::wstring userCode;
+    std::wstring verificationUri;
+    int expiresInSec = 0;
+    int intervalSec = 5;
+};
+
+struct GitHubDeviceDialogState {
+    std::wstring userCode;
+    std::wstring verificationUri;
+    HWND status = nullptr;
+    bool done = false;
+    bool cancelled = false;
+};
+
+static bool CopyTextToClipboard(HWND owner, const std::wstring& text) {
+    if (!OpenClipboard(owner)) return false;
+    EmptyClipboard();
+    SIZE_T bytes = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    bool copied = false;
+    if (memory) {
+        if (void* dst = GlobalLock(memory)) {
+            memcpy(dst, text.c_str(), bytes);
+            GlobalUnlock(memory);
+            if (SetClipboardData(CF_UNICODETEXT, memory)) {
+                copied = true;
+                memory = nullptr;  // The clipboard owns it now.
+            }
+        }
+        if (memory) GlobalFree(memory);
+    }
+    CloseClipboard();
+    return copied;
+}
+
+static LRESULT CALLBACK GitHubDeviceDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_CREATE: {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            auto* st = reinterpret_cast<GitHubDeviceDialogState*>(cs->lpCreateParams);
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(st));
+            HINSTANCE hInst = GetModuleHandleW(nullptr);
+            HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            HWND instructions = CreateWindowExW(
+                0, L"STATIC",
+                L"Use this one-time code on GitHub to authorize Taskbar AI Quota Bars:",
+                WS_CHILD | WS_VISIBLE | SS_LEFT, 16, 14, 458, 32, hWnd, (HMENU)200, hInst,
+                nullptr);
+            HWND code = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"EDIT", st ? st->userCode.c_str() : L"",
+                WS_CHILD | WS_VISIBLE | ES_CENTER | ES_READONLY,
+                16, 50, 458, 30, hWnd, (HMENU)201, hInst, nullptr);
+            HWND status = CreateWindowExW(
+                0, L"STATIC", L"Waiting for you to authorize this device...",
+                WS_CHILD | WS_VISIBLE | SS_CENTER, 16, 88, 458, 32, hWnd, (HMENU)202, hInst,
+                nullptr);
+            HWND open = CreateWindowExW(
+                0, L"BUTTON", L"Sign in to GitHub",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                238, 128, 146, 32, hWnd, (HMENU)IDOK, hInst, nullptr);
+            HWND cancel = CreateWindowExW(
+                0, L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                390, 128, 84, 32, hWnd, (HMENU)IDCANCEL, hInst, nullptr);
+            for (HWND child : {instructions, code, status, open, cancel}) {
+                SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
+            }
+            if (st) st->status = status;
+            SetFocus(open);
+            return 0;
+        }
+        case WM_COMMAND: {
+            auto* st = reinterpret_cast<GitHubDeviceDialogState*>(
+                GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+            WORD id = LOWORD(wParam);
+            if (id == IDOK && st) {
+                bool copied = CopyTextToClipboard(hWnd, st->userCode);
+                OpenUrl(st->verificationUri.empty() ? L"https://github.com/login/device"
+                                                    : st->verificationUri.c_str());
+                if (st->status) {
+                    SetWindowTextW(st->status,
+                                   copied ? L"Code copied. Paste it into GitHub when asked."
+                                          : L"Enter the code above into GitHub when asked.");
+                }
+                return 0;
+            }
+            if (id == IDCANCEL) {
+                if (st) st->cancelled = true;
+                DestroyWindow(hWnd);
+                return 0;
+            }
+            break;
+        }
+        case WM_CLOSE: {
+            auto* st = reinterpret_cast<GitHubDeviceDialogState*>(
+                GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+            if (st) st->cancelled = true;
+            DestroyWindow(hWnd);
+            return 0;
+        }
+        case WM_DESTROY: {
+            auto* st = reinterpret_cast<GitHubDeviceDialogState*>(
+                GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+            if (st) st->done = true;
+            PostQuitMessage(0);
+            return 0;
+        }
+    }
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+static bool RequestGitHubDeviceAuthorization(GitHubDeviceAuthorization* auth,
+                                             std::wstring* err) {
+    std::string body = "client_id=" + UrlEncode(WideToUtf8(kGitHubCopilotClientId)) +
+                       "&scope=read%3Auser";
+    HttpResult r = HttpRequest(
+        L"POST", kGitHubDeviceHost, kGitHubDeviceCodePath, kOAuthUserAgent,
+        L"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
+        body);
+    if (!r.ok) {
+        *err = L"network error requesting device code";
+        return false;
+    }
+    if (r.status < 200 || r.status >= 300) {
+        std::wstring detail = ParseOAuthError(r.body);
+        *err = detail.empty() ? L"GitHub HTTP " + std::to_wstring(r.status) : detail;
+        return false;
+    }
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(r.body));
+        auth->deviceCode = GetStr(root, L"device_code");
+        auth->userCode = GetStr(root, L"user_code");
+        auth->verificationUri = GetStr(root, L"verification_uri");
+        auth->expiresInSec = (int)GetNum(root, L"expires_in", 900);
+        auth->intervalSec = (int)GetNum(root, L"interval", 5);
+        auth->intervalSec = std::clamp(auth->intervalSec, 1, 60);
+        if (auth->deviceCode.empty() || auth->userCode.empty()) {
+            *err = L"GitHub returned an invalid device code";
+            return false;
+        }
+        if (auth->verificationUri.empty()) {
+            auth->verificationUri = L"https://github.com/login/device";
+        }
+        return true;
+    } catch (...) {
+        *err = L"invalid GitHub device-code response";
+        return false;
+    }
+}
+
+enum class GitHubDevicePollResult {
+    Pending,
+    SlowDown,
+    Retry,
+    Success,
+    TerminalError,
+};
+
+static GitHubDevicePollResult PollGitHubDeviceAuthorization(
+    const GitHubDeviceAuthorization& auth, StoredToken* token, std::wstring* err) {
+    std::string body = "client_id=" + UrlEncode(WideToUtf8(kGitHubCopilotClientId)) +
+                       "&device_code=" + UrlEncode(WideToUtf8(auth.deviceCode)) +
+                       "&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code";
+    HttpResult r = HttpRequest(
+        L"POST", kGitHubDeviceHost, kGitHubAccessTokenPath, kOAuthUserAgent,
+        L"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
+        body);
+    if (!r.ok) {
+        *err = L"Network error; retrying...";
+        return GitHubDevicePollResult::Retry;
+    }
+
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(r.body));
+        std::wstring accessToken = GetStr(root, L"access_token");
+        if (r.status >= 200 && r.status < 300 && !accessToken.empty()) {
+            token->accessToken = std::move(accessToken);
+            token->refreshToken.clear();
+            token->accountId.clear();
+            token->expiresMs = 0;
+            return GitHubDevicePollResult::Success;
+        }
+
+        std::wstring oauthError = GetStr(root, L"error");
+        if (oauthError == L"authorization_pending") return GitHubDevicePollResult::Pending;
+        if (oauthError == L"slow_down") return GitHubDevicePollResult::SlowDown;
+        std::wstring detail = GetStr(root, L"error_description");
+        *err = !detail.empty() ? detail
+                               : !oauthError.empty() ? oauthError
+                                                     : L"GitHub HTTP " + std::to_wstring(r.status);
+        return GitHubDevicePollResult::TerminalError;
+    } catch (...) {
+        *err = L"invalid GitHub authorization response";
+        return GitHubDevicePollResult::TerminalError;
+    }
+}
+
+// Shows the device code while polling on the same login thread. The short message-pump waits
+// keep the native dialog responsive; WinHTTP handles remain tracked so unload can cancel a poll.
+static bool ShowGitHubDeviceDialogAndPoll(const std::wstring& title,
+                                          const GitHubDeviceAuthorization& auth,
+                                          StoredToken* token, std::wstring* err) {
+    static PCWSTR kClass = L"AiQuotaGitHubDeviceDlg_" WH_MOD_ID;
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    WNDCLASSEXW wc{};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = GitHubDeviceDlgProc;
+    wc.hInstance = hInst;
+    wc.lpszClassName = kClass;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    RegisterClassExW(&wc);
+
+    GitHubDeviceDialogState st{auth.userCode, auth.verificationUri};
+    int w = 506, h = 210;
+    int x = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
+    int y = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
+    HWND wnd = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_DLGMODALFRAME, kClass, title.c_str(),
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        x, y, w, h, nullptr, nullptr, hInst, &st);
+    if (!wnd) {
+        *err = L"could not create GitHub sign-in window";
+        UnregisterClassW(kClass, hInst);
+        return false;
+    }
+    g_loginWnd.store(wnd);
+
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG deadline = now + (ULONGLONG)std::max(auth.expiresInSec, 1) * 1000;
+    int intervalSec = auth.intervalSec;
+    ULONGLONG nextPoll = now + (ULONGLONG)intervalSec * 1000;
+    bool success = false;
+    MSG msg;
+    while (!g_unloading && !st.done) {
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                st.done = true;
+                break;
+            }
+            if (!IsDialogMessageW(wnd, &msg)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        if (st.done || g_unloading) break;
+
+        now = GetTickCount64();
+        if (now >= deadline) {
+            *err = L"GitHub device code expired";
+            break;
+        }
+        if (now >= nextPoll) {
+            std::wstring pollError;
+            GitHubDevicePollResult result =
+                PollGitHubDeviceAuthorization(auth, token, &pollError);
+            if (result == GitHubDevicePollResult::Success) {
+                success = true;
+                break;
+            }
+            if (result == GitHubDevicePollResult::TerminalError) {
+                *err = pollError;
+                break;
+            }
+            if (result == GitHubDevicePollResult::SlowDown) intervalSec += 5;
+            if (st.status) {
+                SetWindowTextW(st.status,
+                    result == GitHubDevicePollResult::Retry
+                        ? pollError.c_str()
+                        : L"Waiting for you to authorize this device...");
+            }
+            nextPoll = GetTickCount64() + (ULONGLONG)intervalSec * 1000;
+        }
+
+        ULONGLONG beforeWait = GetTickCount64();
+        DWORD waitMs = beforeWait >= nextPoll
+                           ? 0
+                           : (DWORD)std::min<ULONGLONG>(250, nextPoll - beforeWait);
+        MsgWaitForMultipleObjectsEx(0, nullptr, waitMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+    }
+
+    g_loginWnd.store(nullptr);
+    if (IsWindow(wnd)) DestroyWindow(wnd);
+    UnregisterClassW(kClass, hInst);
+    if (!success && st.cancelled && err->empty()) *err = L"cancelled";
+    return success;
 }
 
 static bool StartLoopback(SOCKET* outSock, int* outPort) {
@@ -2089,6 +2416,37 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     }
 }
 
+static void DoGitHubCopilotLogin(const LoginRequest& req) {
+    GitHubDeviceAuthorization auth;
+    std::wstring err;
+    if (!RequestGitHubDeviceAuthorization(&auth, &err)) {
+        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), err.c_str());
+        return;
+    }
+
+    StoredToken tok;
+    std::wstring title = L"Sign in: " + req.label + L" (GitHub Copilot)";
+    if (!ShowGitHubDeviceDialogAndPoll(title, auth, &tok, &err)) {
+        if (!g_unloading && err != L"cancelled") {
+            Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), err.c_str());
+        }
+        return;
+    }
+    if (g_unloading) return;
+
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    if (saved == TokenSaveResult::Stale) {
+        Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
+        return;
+    }
+    if (saved != TokenSaveResult::Saved) {
+        Wh_Log(L"Sign-in [%s] failed: could not save token", req.label.c_str());
+        return;
+    }
+    RefreshQuotaByIdentity(req.idHash);
+    Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
+}
+
 static DWORD WINAPI LoginThreadProc(LPVOID param) {
     std::unique_ptr<LoginRequest> req(reinterpret_cast<LoginRequest*>(param));
     using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
@@ -2106,6 +2464,7 @@ static DWORD WINAPI LoginThreadProc(LPVOID param) {
         if (!g_unloading) {
             if (req->provider == L"anthropic") DoAnthropicLogin(*req);
             else if (req->provider == L"openai") DoOpenAiLogin(*req);
+            else if (req->provider == L"github-copilot") DoGitHubCopilotLogin(*req);
         }
     } catch (...) {
         Wh_Log(L"Sign-in: exception");
@@ -2130,7 +2489,8 @@ static void StartLoginByIdentity(uint64_t identityHash) {
                 return AccountIdentityHash(candidate) == identityHash;
             });
         if (it == g_settings.accounts.end() ||
-            (it->provider != L"anthropic" && it->provider != L"openai")) return;
+            (it->provider != L"anthropic" && it->provider != L"openai" &&
+             it->provider != L"github-copilot")) return;
         account = *it;
     }
     bool expected = false;
@@ -2446,6 +2806,476 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
         return false;
     }
+}
+
+static std::wstring FormatGitHubCopilotQuota(const WindowUsage& usage,
+                                             const std::wstring& label,
+                                             bool remaining = false) {
+    if (usage.pct < 0) return {};
+    std::wstring line = label + L": ";
+    if (usage.unlimited) {
+        line += L"unlimited";
+    } else {
+        wchar_t percent[64];
+        swprintf(percent, ARRAYSIZE(percent), L"%.0f%%%ls",
+                 remaining ? 100.0 - usage.pct : usage.pct,
+                 remaining ? L" remaining" : L" used");
+        line += percent;
+        if (!usage.detail.empty()) line += L" | " + usage.detail;
+    }
+    if (usage.resetUnixMs) line += L" | resets " + FormatReset(usage.resetUnixMs);
+    return line;
+}
+
+static bool ParseGitHubCopilotUsage(const std::string& body, AccountData* d,
+                                    std::wstring* error) {
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(body));
+        auto snapshots = GetObj(root, L"quota_snapshots");
+        if (!snapshots) {
+            // Older/free Copilot responses expose remaining and monthly totals as two flat
+            // objects instead of quota_snapshots.
+            auto remaining = GetObj(root, L"limited_user_quotas");
+            auto totals = GetObj(root, L"monthly_quotas");
+            if (!remaining || !totals) {
+                if (error) *error = L"unexpected response format (no quota snapshots)";
+                return false;
+            }
+
+            std::wstring resetText = GetStr(root, L"limited_user_reset_date");
+            if (!resetText.empty() && resetText.find(L'T') == std::wstring::npos) {
+                resetText += L"T00:00:00Z";
+            }
+            ULONGLONG resetMs = ParseIso8601Ms(resetText);
+            d->windowLabels = {L"chat", L"completions"};
+            d->plan = GetStr(root, L"copilot_plan");
+            d->codexSparkLines.clear();
+            d->extraLines.clear();
+
+            auto applyLegacy = [&](PCWSTR name, WindowUsage* usage) -> bool {
+                double total = GetNum(totals, name, -1);
+                double left = GetNum(remaining, name, -1);
+                if (total <= 0 || left < 0) return false;
+                double used = std::max(0.0, total - left);
+                usage->pct = std::clamp(used * 100 / total, 0.0, 100.0);
+                usage->resetUnixMs = resetMs;
+                wchar_t detail[80];
+                swprintf(detail, ARRAYSIZE(detail), L"%.0f / %.0f used", used, total);
+                usage->detail = detail;
+                return true;
+            };
+            bool chat = applyLegacy(L"chat", &d->win5h);
+            bool completions = applyLegacy(L"completions", &d->winWeek);
+            if (!chat && !completions && error) {
+                *error = L"unexpected response format (no usable Copilot quota)";
+            }
+            return chat || completions;
+        }
+
+        std::wstring resetText = GetStr(root, L"quota_reset_date_utc");
+        if (resetText.empty()) resetText = GetStr(root, L"quota_reset_date");
+        if (!resetText.empty() && resetText.find(L'T') == std::wstring::npos) {
+            resetText += L"T00:00:00Z";
+        }
+        ULONGLONG resetMs = ParseIso8601Ms(resetText);
+
+        auto parseSnapshot = [&](PCWSTR name, WindowUsage* usage) -> bool {
+            auto snapshot = GetObj(snapshots, name);
+            if (!snapshot) return false;
+
+            bool unlimited = GetBool(snapshot, L"unlimited");
+            double entitlement = GetNum(snapshot, L"entitlement", -1);
+            double remaining = GetNum(snapshot, L"remaining", -1);
+            if (remaining < 0) remaining = GetNum(snapshot, L"quota_remaining", -1);
+            double used = GetNum(snapshot, L"used", -1);
+            if (used < 0 && entitlement >= 0 && remaining >= 0) {
+                used = std::max(0.0, entitlement - remaining);
+            }
+
+            double pct = -1;
+            if (unlimited) {
+                pct = 0;
+            } else {
+                double percentRemaining = GetNum(snapshot, L"percent_remaining", -1);
+                if (percentRemaining >= 0) pct = 100 - percentRemaining;
+                else if (entitlement > 0 && used >= 0) pct = used * 100 / entitlement;
+                else if (entitlement == 0 && remaining == 0) pct = 100;
+            }
+            if (pct < 0) return false;
+
+            usage->pct = std::clamp(pct, 0.0, 100.0);
+            usage->resetUnixMs = resetMs;
+            usage->unlimited = unlimited;
+            if (!unlimited && used >= 0 && entitlement >= 0) {
+                wchar_t counts[80];
+                swprintf(counts, ARRAYSIZE(counts), L"%.0f / %.0f used", used, entitlement);
+                usage->detail = counts;
+            } else if (!unlimited && remaining >= 0) {
+                wchar_t counts[80];
+                swprintf(counts, ARRAYSIZE(counts), L"%.0f remaining", remaining);
+                usage->detail = counts;
+            }
+            return true;
+        };
+
+        bool tokenBasedBilling = GetBool(root, L"token_based_billing");
+        d->windowLabels = {tokenBasedBilling ? L"AI credits" : L"premium", L"chat"};
+        d->plan = GetStr(root, L"copilot_plan");
+        d->codexSparkLines.clear();
+        d->extraLines.clear();
+
+        bool premium = parseSnapshot(L"premium_interactions", &d->win5h);
+        bool chat = parseSnapshot(L"chat", &d->winWeek);
+        WindowUsage completionsUsage;
+        bool completions = parseSnapshot(L"completions", &completionsUsage);
+
+        // Some plans omit chat quota but still report completions; keep both bars useful.
+        if (!chat && completions) {
+            d->winWeek = completionsUsage;
+            d->windowLabels[1] = L"completions";
+        }
+
+        // Completions is a third category, so keep it as one extra tooltip row unless it was
+        // promoted to the second bar. Details for the two bars are rendered inline.
+        if (completions && d->windowLabels[1] != L"completions") {
+            d->extraLines = FormatGitHubCopilotQuota(completionsUsage, L"completions");
+        }
+
+        // overage_count belongs to the legacy premium-request accounting path. GitHub leaves it
+        // at zero for token-based AI-credit billing even when organization netQuantity is
+        // positive, so don't present it as authoritative for current AI-credit plans.
+        if (auto premiumSnapshot = GetObj(snapshots, L"premium_interactions");
+            !tokenBasedBilling && premiumSnapshot &&
+            GetBool(premiumSnapshot, L"overage_permitted")) {
+            double overageCount = GetNum(premiumSnapshot, L"overage_count", 0);
+            wchar_t line[80];
+            swprintf(line, ARRAYSIZE(line), L"overage: %.0f requests",
+                     std::max(0.0, overageCount));
+            if (!d->extraLines.empty()) d->extraLines += L"\n";
+            d->extraLines += line;
+        }
+
+        bool parsed = premium || chat || completions;
+        if (!parsed && error) {
+            *error = L"unexpected response format (no usable Copilot quota)";
+        }
+        return parsed;
+    } catch (...) {
+        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        return false;
+    }
+}
+
+static void AppendExtraLine(AccountData* d, const std::wstring& line) {
+    if (!d || line.empty()) return;
+    if (!d->extraLines.empty()) d->extraLines += L"\n";
+    d->extraLines += line;
+}
+
+static bool IsValidGitHubLogin(const std::wstring& login) {
+    if (login.empty() || login.size() > 100) return false;
+    for (wchar_t ch : login) {
+        if (!((ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') ||
+              (ch >= L'0' && ch <= L'9') || ch == L'-')) {
+            return false;
+        }
+    }
+    return login.front() != L'-' && login.back() != L'-';
+}
+
+static std::wstring GetFirstGitHubCopilotOrganization(const std::string& body) {
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(body));
+        if (root.HasKey(L"organization_login_list")) {
+            auto value = root.GetNamedValue(L"organization_login_list");
+            if (value.ValueType() == JsonValueType::Array) {
+                auto organizations = value.GetArray();
+                for (uint32_t i = 0; i < organizations.Size(); i++) {
+                    auto item = organizations.GetAt(i);
+                    if (item.ValueType() != JsonValueType::String) continue;
+                    std::wstring login = item.GetString().c_str();
+                    if (IsValidGitHubLogin(login)) return login;
+                }
+            }
+        }
+
+        if (root.HasKey(L"organization_list")) {
+            auto value = root.GetNamedValue(L"organization_list");
+            if (value.ValueType() == JsonValueType::Array) {
+                auto organizations = value.GetArray();
+                for (uint32_t i = 0; i < organizations.Size(); i++) {
+                    auto item = organizations.GetAt(i);
+                    if (item.ValueType() != JsonValueType::Object) continue;
+                    std::wstring login = GetStr(item.GetObject(), L"login");
+                    if (IsValidGitHubLogin(login)) return login;
+                }
+            }
+        }
+    } catch (...) {
+    }
+    return {};
+}
+
+static bool IsRegularFile(const std::wstring& path) {
+    DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static std::wstring GetEnvironmentPath(PCWSTR name) {
+    std::vector<wchar_t> buffer(32768);
+    DWORD length = GetEnvironmentVariableW(name, buffer.data(), (DWORD)buffer.size());
+    if (!length || length >= buffer.size()) return {};
+    return std::wstring(buffer.data(), length);
+}
+
+static std::wstring FindGitHubCliPath() {
+    std::vector<std::wstring> candidates;
+    if (std::wstring programFiles = GetEnvironmentPath(L"ProgramFiles");
+        !programFiles.empty()) {
+        candidates.push_back(programFiles + L"\\GitHub CLI\\gh.exe");
+    }
+    if (std::wstring localAppData = GetEnvironmentPath(L"LOCALAPPDATA");
+        !localAppData.empty()) {
+        candidates.push_back(localAppData + L"\\Programs\\GitHub CLI\\gh.exe");
+        candidates.push_back(localAppData + L"\\Microsoft\\WinGet\\Links\\gh.exe");
+    }
+    for (const auto& candidate : candidates) {
+        if (IsRegularFile(candidate)) return candidate;
+    }
+
+    std::vector<wchar_t> path(32768);
+    DWORD length = SearchPathW(nullptr, L"gh.exe", nullptr, (DWORD)path.size(),
+                               path.data(), nullptr);
+    if (length && length < path.size() && IsRegularFile(path.data())) {
+        return std::wstring(path.data(), length);
+    }
+    return {};
+}
+
+// Quote one argument according to CommandLineToArgvW's backslash/quote rules.
+static std::wstring QuoteProcessArgument(const std::wstring& argument) {
+    std::wstring result = L"\"";
+    size_t backslashes = 0;
+    for (wchar_t ch : argument) {
+        if (ch == L'\\') {
+            backslashes++;
+            continue;
+        }
+        if (ch == L'\"') {
+            result.append(backslashes * 2 + 1, L'\\');
+            result.push_back(ch);
+        } else {
+            result.append(backslashes, L'\\');
+            result.push_back(ch);
+        }
+        backslashes = 0;
+    }
+    result.append(backslashes * 2, L'\\');
+    result.push_back(L'\"');
+    return result;
+}
+
+static bool RunGitHubCliBillingQuery(const std::wstring& organization,
+                                     double* discountAmount, double* netAmount,
+                                     std::wstring* error) {
+    if (g_unloading || !discountAmount || !netAmount) return false;
+
+    std::wstring ghPath = FindGitHubCliPath();
+    if (ghPath.empty()) {
+        if (error) *error = L"gh not found";
+        return false;
+    }
+
+    std::wstring apiPath = L"/organizations/" + organization +
+                           L"/settings/billing/ai_credit/usage";
+    std::vector<std::wstring> arguments{
+        ghPath,
+        L"api",
+        apiPath,
+        L"--hostname",
+        L"github.com",
+        L"--header",
+        L"X-GitHub-Api-Version: 2026-03-10",
+        L"--jq",
+        L"{discountAmount: ([.usageItems[]? | (.discountAmount // 0)] | add // 0), netAmount: ([.usageItems[]? | (.netAmount // 0)] | add // 0)}",
+    };
+    std::wstring commandLine;
+    for (const auto& argument : arguments) {
+        if (!commandLine.empty()) commandLine.push_back(L' ');
+        commandLine += QuoteProcessArgument(argument);
+    }
+    std::vector<wchar_t> mutableCommandLine(commandLine.begin(), commandLine.end());
+    mutableCommandLine.push_back(L'\0');
+
+    SECURITY_ATTRIBUTES securityAttributes{};
+    securityAttributes.nLength = sizeof(securityAttributes);
+    securityAttributes.bInheritHandle = TRUE;
+
+    HANDLE outputRead = nullptr;
+    HANDLE outputWrite = nullptr;
+    if (!CreatePipe(&outputRead, &outputWrite, &securityAttributes, 0) ||
+        !SetHandleInformation(outputRead, HANDLE_FLAG_INHERIT, 0)) {
+        if (outputRead) CloseHandle(outputRead);
+        if (outputWrite) CloseHandle(outputWrite);
+        if (error) *error = L"could not create gh output pipe";
+        return false;
+    }
+
+    HANDLE nullInput = CreateFileW(L"NUL", GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, &securityAttributes, OPEN_EXISTING, 0, nullptr);
+    HANDLE nullOutput = CreateFileW(L"NUL", GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, &securityAttributes, OPEN_EXISTING, 0, nullptr);
+    if (nullInput == INVALID_HANDLE_VALUE || nullOutput == INVALID_HANDLE_VALUE) {
+        if (nullInput != INVALID_HANDLE_VALUE) CloseHandle(nullInput);
+        if (nullOutput != INVALID_HANDLE_VALUE) CloseHandle(nullOutput);
+        CloseHandle(outputRead);
+        CloseHandle(outputWrite);
+        if (error) *error = L"could not prepare gh process";
+        return false;
+    }
+
+    STARTUPINFOEXW startup{};
+    startup.StartupInfo.cb = sizeof(startup);
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    startup.StartupInfo.wShowWindow = SW_HIDE;
+    startup.StartupInfo.hStdInput = nullInput;
+    startup.StartupInfo.hStdOutput = outputWrite;
+    startup.StartupInfo.hStdError = nullOutput;
+
+    SIZE_T attributeListSize = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeListSize);
+    std::vector<BYTE> attributeListStorage(attributeListSize);
+    startup.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+        attributeListStorage.data());
+    bool attributeListInitialized = InitializeProcThreadAttributeList(
+        startup.lpAttributeList, 1, 0, &attributeListSize) != FALSE;
+    bool attributeListReady = attributeListInitialized;
+    HANDLE inheritedHandles[] = {nullInput, outputWrite, nullOutput};
+    if (attributeListReady) {
+        attributeListReady = UpdateProcThreadAttribute(
+            startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            inheritedHandles, sizeof(inheritedHandles), nullptr, nullptr) != FALSE;
+    }
+
+    PROCESS_INFORMATION process{};
+    BOOL created = FALSE;
+    if (attributeListReady) {
+        created = CreateProcessW(
+            ghPath.c_str(), mutableCommandLine.data(), nullptr, nullptr, TRUE,
+            CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
+            &startup.StartupInfo, &process);
+    }
+    if (attributeListInitialized) {
+        DeleteProcThreadAttributeList(startup.lpAttributeList);
+    }
+    CloseHandle(nullInput);
+    CloseHandle(nullOutput);
+    CloseHandle(outputWrite);
+
+    if (!created) {
+        CloseHandle(outputRead);
+        if (error) *error = L"could not start gh";
+        return false;
+    }
+
+    constexpr size_t kMaxOutputBytes = 256 * 1024;
+    std::string output;
+    bool outputTooLarge = false;
+    auto drainOutput = [&]() {
+        for (;;) {
+            DWORD available = 0;
+            if (!PeekNamedPipe(outputRead, nullptr, 0, nullptr, &available, nullptr) ||
+                available == 0) {
+                break;
+            }
+            if (output.size() + available > kMaxOutputBytes) {
+                outputTooLarge = true;
+                break;
+            }
+            char buffer[4096];
+            DWORD read = 0;
+            DWORD requested = std::min<DWORD>(available, sizeof(buffer));
+            if (!ReadFile(outputRead, buffer, requested, &read, nullptr) || !read) break;
+            output.append(buffer, read);
+        }
+    };
+
+    ULONGLONG startedAt = GetTickCount64();
+    bool cancelled = false;
+    for (;;) {
+        drainOutput();
+        DWORD wait = WaitForSingleObject(process.hProcess, 50);
+        if (wait == WAIT_OBJECT_0) break;
+        if (wait == WAIT_FAILED || g_unloading || outputTooLarge ||
+            GetTickCount64() - startedAt >= 20000) {
+            cancelled = true;
+            TerminateProcess(process.hProcess, ERROR_CANCELLED);
+            WaitForSingleObject(process.hProcess, 1000);
+            break;
+        }
+    }
+    drainOutput();
+
+    DWORD exitCode = ERROR_CANCELLED;
+    GetExitCodeProcess(process.hProcess, &exitCode);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    CloseHandle(outputRead);
+
+    if (cancelled || exitCode != 0) {
+        Wh_Log(L"GitHub CLI organization billing query failed for %s (exit %lu)",
+               organization.c_str(), exitCode);
+        if (error) {
+            *error = outputTooLarge ? L"gh output was too large"
+                                    : L"gh request failed";
+        }
+        return false;
+    }
+
+    try {
+        auto result = JsonObject::Parse(Utf8ToWide(output));
+        double discount = GetNum(result, L"discountAmount", -1);
+        double net = GetNum(result, L"netAmount", -1);
+        if (!std::isfinite(discount) || !std::isfinite(net) ||
+            discount < 0 || net < 0) {
+            if (error) *error = L"invalid gh billing response";
+            return false;
+        }
+        *discountAmount = discount;
+        *netAmount = net;
+        return true;
+    } catch (...) {
+        if (error) *error = L"invalid gh billing response";
+        return false;
+    }
+}
+
+static void AppendGitHubCliOrganizationBilling(const std::string& copilotBody,
+                                               AccountData* d) {
+    if (g_unloading || !d) return;
+
+    std::wstring organization = GetFirstGitHubCopilotOrganization(copilotBody);
+    if (organization.empty()) {
+        AppendExtraLine(d, L"organization: unavailable (not reported by Copilot)");
+        return;
+    }
+
+    double discountAmount = 0;
+    double netAmount = 0;
+    std::wstring error;
+    if (!RunGitHubCliBillingQuery(organization, &discountAmount, &netAmount, &error)) {
+        if (!g_unloading) {
+            AppendExtraLine(d, L"organization: unavailable (" + error + L")");
+        }
+        return;
+    }
+
+    wchar_t line[200];
+    swprintf(line, ARRAYSIZE(line),
+             L"organization: %ls | $%.2f covered | $%.2f billable",
+             organization.c_str(), discountAmount, netAmount);
+    AppendExtraLine(d, line);
 }
 
 /**********************************************/
@@ -3280,6 +4110,13 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
             return HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/usage",
                                L"claude-code/2.1.0", headers);
         }
+        if (acc.provider == L"github-copilot") {
+            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+                                   L"\r\nAccept: application/json"
+                                   L"\r\nX-GitHub-Api-Version: 2022-11-28\r\n";
+            return HttpRequest(L"GET", L"api.github.com", L"/copilot_internal/user",
+                               kOAuthUserAgent, headers);
+        }
         std::wstring headers = L"Authorization: Bearer " + t.accessToken +
                                L"\r\nOrigin: https://chatgpt.com"
                                L"\r\nReferer: https://chatgpt.com/"
@@ -3339,6 +4176,11 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
         return;
     }
+    if (r.status == 403 && acc.provider == L"github-copilot") {
+        d->stale = true;
+        d->error = L"Copilot subscription or quota access unavailable";
+        return;
+    }
     if (r.status != 200) {
         d->stale = true;
         d->error = L"HTTP " + std::to_wstring(r.status);
@@ -3347,12 +4189,18 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
 
     AccountData fresh;
     std::wstring parseError;
-    bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError)
-                                               : ParseOpenAiUsage(r.body, &fresh, &parseError);
+    bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
+                  acc.provider == L"github-copilot" ? ParseGitHubCopilotUsage(r.body, &fresh, &parseError) :
+                  ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
         d->error = parseError.empty() ? L"unexpected response format" : parseError;
         return;
+    }
+
+    if (acc.provider == L"github-copilot" &&
+        acc.useGitHubCliForOrganizationBilling) {
+        AppendGitHubCliOrganizationBilling(r.body, &fresh);
     }
 
     fresh.stale = false;
@@ -3733,6 +4581,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             w == kFiveHourBar ? L"5h" :
                             w == kWeeklyBar ? L"weekly" :
                             w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra";
+                        if (publishedAccounts[i].provider == L"github-copilot") {
+                            quotaName = publishedResults[i].windowLabels[w].c_str();
+                        }
                         if (publishedAccounts[i].provider == L"antigravity") {
                             if (w == kFiveHourBar) {
                                 ULONGLONG duration = publishedResults[i].win5h.windowDurationMs;
@@ -4500,6 +5351,10 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                     TextBlock barLabel;
                     barLabel.Text(kBarLabels[w]);
+                    if (accounts[i].provider == L"github-copilot" && w < 2) {
+                        barLabel.Text(w == 0 ? L"Cp" : L"Ch");
+                        refs.copilotBarLabels[w] = barLabel;
+                    }
                     barLabel.FontSize(compactLabelFontSize);
                     barLabel.Opacity(0.8);
                     barLabel.IsHitTestVisible(false);
@@ -5065,6 +5920,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
             for (int w = 0; w < kQuotaBarCount; w++) {
                 const WindowUsage& wu = *usage[w];
+                if (accounts[i].provider == L"github-copilot" && w < 2 &&
+                    ui.copilotBarLabels[w]) {
+                    const auto& label = d.windowLabels[w];
+                    ui.copilotBarLabels[w].Text(label == L"AI credits" ? L"AI" :
+                        label == L"premium" ? L"Pr" : label == L"completions" ? L"Co" :
+                        label == L"chat" ? L"Ch" : w == 0 ? L"Cp" : L"Ch");
+                }
                 double dispPct = displayPct(wu.pct);
                 int px = dispPct > 0 ? std::clamp((int)std::lround(barLength * dispPct / 100.0), 2, barLength) : 0;
                 // Color stays keyed to actual usage so depleting quota still reds out.
@@ -5165,7 +6027,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
 
                     std::wstring percentText;
-                    if (wu.pct >= 0) {
+                    if (wu.unlimited) {
+                        percentText = L"\u221E";
+                    } else if (wu.pct >= 0) {
                         wchar_t text[16];
                         swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
                         percentText = text;
@@ -5187,7 +6051,15 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 tip += L" (" + d.plan + L")";
             }
             wchar_t line[160];
-            if (d.win5h.pct >= 0) {
+            if (accounts[i].provider == L"github-copilot") {
+                for (int w = 0; w < 2; w++) {
+                    std::wstring quota = FormatGitHubCopilotQuota(
+                        w == 0 ? d.win5h : d.winWeek, d.windowLabels[w],
+                        barMode == BarMode::Remaining);
+                    if (!quota.empty()) tip += L"\n" + quota;
+                }
+            }
+            if (accounts[i].provider != L"github-copilot" && d.win5h.pct >= 0) {
                 PCWSTR label = L"5h";
                 if (accounts[i].provider == L"antigravity") {
                     label = d.win5h.windowDurationMs == 3ULL * 60 * 60 * 1000 ? L"Gemini 3h" :
@@ -5200,7 +6072,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                          remainingSuffix, FormatReset(d.win5h.resetUnixMs).c_str());
                 tip += line;
             }
-            if (d.winWeek.pct >= 0) {
+            if (accounts[i].provider != L"github-copilot" && d.winWeek.pct >= 0) {
                 PCWSTR label = accounts[i].provider == L"antigravity" ? L"Gemini week" : L"week";
                 swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
                          displayPct(d.winWeek.pct),
@@ -5813,17 +6685,21 @@ static void NormalizeSettings(Settings* s) {
     std::vector<AccountConfig> accounts;
     for (auto& a : s->accounts) {
         if (a.provider != L"anthropic" && a.provider != L"openai" &&
-            a.provider != L"antigravity") {
+            a.provider != L"github-copilot" && a.provider != L"antigravity") {
             continue;
         }
         // Labels are stable identities; only the native editor trims deliberate edits.
         if (a.label.empty()) {
             a.label = a.provider == L"anthropic" ? L"A" :
-                      a.provider == L"openai" ? L"O" : L"G";
+                      a.provider == L"openai" ? L"O" :
+                      a.provider == L"github-copilot" ? L"C" : L"G";
         }
         if (a.provider != L"anthropic") {
             a.showBars[kFableWeeklyBar] = false;
             a.showBars[kExtraUsageBar] = false;
+        }
+        if (a.provider != L"github-copilot") {
+            a.useGitHubCliForOrganizationBilling = false;
         }
         if (!a.showBars[kFiveHourBar] && !a.showBars[kWeeklyBar] &&
             !a.showBars[kFableWeeklyBar] &&
@@ -5889,6 +6765,10 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
+            if (a.provider == L"github-copilot") {
+                account.SetNamedValue(L"useGitHubCliForOrganizationBilling",
+                                     JsonValue::CreateBooleanValue(a.useGitHubCliForOrganizationBilling));
+            }
             accounts.Append(account.as<IJsonValue>());
         }
         root.SetNamedValue(L"accounts", accounts.as<IJsonValue>());
@@ -5953,6 +6833,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         JsonObject root = JsonObject::Parse(json);
         if ((int)GetNum(root, L"version", 0) != kSettingsStorageVersion) return false;
         Settings s;
+        // Before 1.5.11 this was global; explicit account values take precedence.
+        bool legacyGitHubCliBilling = GetBool(root, L"useGitHubCliForOrganizationBilling");
         if (root.HasKey(L"accounts") &&
             root.GetNamedValue(L"accounts").ValueType() == JsonValueType::Array) {
             for (const auto& value : root.GetNamedArray(L"accounts")) {
@@ -5971,6 +6853,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                 a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
                 a.hidden = getBoolDefault(L"hidden", false);
+                a.useGitHubCliForOrganizationBilling = a.provider == L"github-copilot" &&
+                    getBoolDefault(L"useGitHubCliForOrganizationBilling", legacyGitHubCliBilling);
                 s.accounts.push_back(std::move(a));
             }
         }
@@ -6155,12 +7039,14 @@ static bool LoadLegacySettings(Settings* out) {
 
         AccountConfig a;
         if (providerSetting.find(L"antigravity") != std::wstring::npos) a.provider = L"antigravity";
+        else if (providerSetting.find(L"github-copilot") != std::wstring::npos) a.provider = L"github-copilot";
         else if (providerSetting.find(L"openai") != std::wstring::npos) a.provider = L"openai";
         else a.provider = L"anthropic";
         a.label = std::move(label);
         if (a.label.empty()) {
             a.label = a.provider == L"anthropic" ? L"A" :
-                      a.provider == L"openai" ? L"O" : L"G";
+                      a.provider == L"openai" ? L"O" :
+                      a.provider == L"github-copilot" ? L"C" : L"G";
         }
         auto getBool = [&](PCWSTR name, bool defaultValue) {
             std::wstring value = getIndexedText(name, i);
@@ -6233,6 +7119,11 @@ static bool LoadLegacySettings(Settings* out) {
     s.percentTextVisibility = getBool(L"showPercentText", false) ?
                                   PercentTextVisibility::Always : PercentTextVisibility::Never;
     s.showCodexSparkInTooltip = getBool(L"showCodexSparkInTooltip", false);
+    bool legacyGitHubCliBilling = getBool(L"useGitHubCliForOrganizationBilling", false);
+    for (auto& a : s.accounts) {
+        a.useGitHubCliForOrganizationBilling =
+            a.provider == L"github-copilot" && legacyGitHubCliBilling;
+    }
     s.yellowThreshold = getInt(L"yellowThreshold", 50);
     s.orangeThreshold = getInt(L"orangeThreshold", 75);
     s.redThreshold = getInt(L"redThreshold", 90);
@@ -6412,6 +7303,7 @@ enum SettingsControlId {
     kAccountExtraUsage,
     kAccountProviderLabel,
     kAccountLabelLabel,
+    kAccountGitHubCliBilling,
 };
 
 struct SettingsRow {
@@ -7216,8 +8108,12 @@ static void RefreshAccountList(SettingsWindowState& state) {
         ListView_SetItemText(state.accountList, (int)i, 1,
                              const_cast<PWSTR>(ProviderDisplayName(accounts[i].provider)));
         std::wstring bars;
-        if (accounts[i].showBars[kFiveHourBar]) bars += L"5h";
-        if (accounts[i].showBars[kWeeklyBar]) bars += bars.empty() ? L"Week" : L", Week";
+        bool copilot = accounts[i].provider == L"github-copilot";
+        if (accounts[i].showBars[kFiveHourBar]) bars += copilot ? L"Main quota" : L"5h";
+        if (accounts[i].showBars[kWeeklyBar]) {
+            if (!bars.empty()) bars += L", ";
+            bars += copilot ? L"Chat/completions" : L"Week";
+        }
         if (accounts[i].showBars[kFableWeeklyBar]) {
             bars += bars.empty() ? L"Fable" : L", Fable";
         }
@@ -7551,6 +8447,8 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
                  sc(16), sc(188), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountGitHubCliBilling), nullptr,
+                 sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     int buttonY = std::max(sc(232), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
@@ -7584,10 +8482,21 @@ static void RecreateAccountEditorVisuals(HWND hWnd, AccountEditorState& state) {
 static void UpdateAccountEditorProvider(HWND hWnd) {
     bool anthropic = SendDlgItemMessageW(hWnd, kAccountProvider,
                                          CB_GETCURSEL, 0, 0) == 0;
+    bool copilot = SendDlgItemMessageW(hWnd, kAccountProvider,
+                                       CB_GETCURSEL, 0, 0) == 3;
+    SetWindowTextW(GetDlgItem(hWnd, kAccountFiveHour),
+                   copilot ? L"Show main quota bar" : L"Show 5-hour bar");
+    SetWindowTextW(GetDlgItem(hWnd, kAccountWeekly),
+                   copilot ? L"Show chat/completions" : L"Show weekly bar");
     HWND fableWeekly = GetDlgItem(hWnd, kAccountFableWeekly);
     HWND extraUsage = GetDlgItem(hWnd, kAccountExtraUsage);
+    HWND githubCliBilling = GetDlgItem(hWnd, kAccountGitHubCliBilling);
+    ShowWindow(fableWeekly, anthropic ? SW_SHOW : SW_HIDE);
+    ShowWindow(extraUsage, anthropic ? SW_SHOW : SW_HIDE);
     EnableWindow(fableWeekly, anthropic);
     EnableWindow(extraUsage, anthropic);
+    ShowWindow(githubCliBilling, copilot ? SW_SHOW : SW_HIDE);
+    EnableWindow(githubCliBilling, copilot);
 }
 
 static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
@@ -7619,9 +8528,10 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                              reinterpret_cast<HMENU>(kAccountProvider),
                                              GetModuleHandleW(nullptr), nullptr);
             AddComboItems(provider, {L"Anthropic (Claude)", L"OpenAI (ChatGPT/Codex)",
-                                     L"Google Antigravity"});
+                                     L"Google Antigravity", L"GitHub Copilot"});
             int providerIndex = state->account.provider == L"openai" ? 1 :
-                                state->account.provider == L"antigravity" ? 2 : 0;
+                                state->account.provider == L"antigravity" ? 2 :
+                                state->account.provider == L"github-copilot" ? 3 : 0;
             SendMessageW(provider, CB_SETCURSEL, providerIndex, 0);
 
             HWND labelLabel = CreateWindowExW(0, L"STATIC", L"Label", WS_CHILD | WS_VISIBLE,
@@ -7655,6 +8565,14 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                           sc(16), sc(188), sc(260), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountExtraUsage),
                                           GetModuleHandleW(nullptr), nullptr);
+            HWND githubCliBilling = CreateWindowExW(
+                0, L"BUTTON", L"Use GitHub CLI for organization billing",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                sc(16), sc(158), sc(354), sc(24), hWnd,
+                reinterpret_cast<HMENU>(kAccountGitHubCliBilling),
+                GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(githubCliBilling, BM_SETCHECK,
+                         state->account.useGitHubCliForOrganizationBilling ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(fiveHour, BM_SETCHECK,
                          state->account.showBars[kFiveHourBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(weekly, BM_SETCHECK,
@@ -7705,7 +8623,8 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider,
                                                               CB_GETCURSEL, 0, 0);
                 state->account.provider = providerIndex == 1 ? L"openai" :
-                                          providerIndex == 2 ? L"antigravity" : L"anthropic";
+                                          providerIndex == 2 ? L"antigravity" :
+                                          providerIndex == 3 ? L"github-copilot" : L"anthropic";
                 state->account.label = std::move(label);
                 state->account.showBars[kFiveHourBar] =
                     IsDlgButtonChecked(hWnd, kAccountFiveHour) == BST_CHECKED;
@@ -7717,6 +8636,9 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.showBars[kExtraUsageBar] =
                     state->account.provider == L"anthropic" &&
                     IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
+                state->account.useGitHubCliForOrganizationBilling =
+                    state->account.provider == L"github-copilot" &&
+                    IsDlgButtonChecked(hWnd, kAccountGitHubCliBilling) == BST_CHECKED;
                 if (!state->account.showBars[kFiveHourBar] &&
                     !state->account.showBars[kWeeklyBar] &&
                     !state->account.showBars[kFableWeeklyBar] &&
@@ -7913,6 +8835,8 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
     bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
                                    oldAccount.label == newAccount.label &&
+                                   oldAccount.useGitHubCliForOrganizationBilling ==
+                                       newAccount.useGitHubCliForOrganizationBilling &&
                                    oldAccount.showBars != newAccount.showBars;
     if (identityChanged && g_loginInProgress.load()) {
         SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
@@ -8459,7 +9383,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     L"Adds ! when quota data is stale because a refresh failed or is overdue.");
                 AddSettingsToolTip(
                     *state, kPollPreset,
-                    L"How often Anthropic and OpenAI are polled. Antigravity always polls its local session once per minute.");
+                    L"How often Anthropic, OpenAI, and GitHub Copilot are polled. Antigravity always polls its local session once per minute.");
                 AddSettingsToolTip(
                     *state, kPollMinutes,
                     L"Custom cloud polling interval from 2 to 1440 minutes.");
