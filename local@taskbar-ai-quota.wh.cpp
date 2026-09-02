@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.8
+// @version         1.5.9
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -240,6 +240,7 @@ struct AccountData {
     std::wstring plan;
     std::wstring codexSparkLines;
     std::wstring extraLines;
+    std::wstring extraUsageSpend;  // "$used / $limit spent" for the tooltip; empty if unknown.
     std::wstring error;
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
@@ -477,6 +478,9 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
                 (ULONGLONG)std::lround(kDurations[w] * kRemainingFractions[w]);
         }
         accountData.plan = L"Visual test";
+        wchar_t spend[64];
+        swprintf(spend, ARRAYSIZE(spend), L"$%.2f / $50.00 spent", percentages[i] / 2.0);
+        accountData.extraUsageSpend = spend;
         accountData.lastSuccessMs = now;
         accountData.stale = false;
         data->push_back(std::move(accountData));
@@ -2265,9 +2269,24 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
             d->extraLines += line;
         }
         if (auto eu = GetObj(usage, L"extra_usage"); eu && GetBool(eu, L"is_enabled")) {
+            // monthly_limit/used_credits are cents; a null limit means unlimited. utilization is
+            // null until the first spend of the cycle, so gate the bar on the limit instead and
+            // treat the missing value as 0% or the bar would vanish every month start.
+            double limitCents = GetNum(eu, L"monthly_limit");
+            double usedCents = GetNum(eu, L"used_credits");
             double utilization = GetNum(eu, L"utilization");
-            if (std::isfinite(utilization) && utilization >= 0) {
+            if (limitCents < 0) {
+                if (!d->extraLines.empty()) d->extraLines += L"\n";
+                d->extraLines += L"extra usage: unlimited";
+            } else if (limitCents > 0) {
+                if (!std::isfinite(utilization) || utilization < 0) {
+                    utilization = usedCents > 0 ? usedCents * 100.0 / limitCents : 0;
+                }
                 d->extraUsage.pct = utilization;
+                wchar_t spend[64];
+                swprintf(spend, ARRAYSIZE(spend), L"$%.2f / $%.2f spent",
+                         std::max(usedCents, 0.0) / 100.0, limitCents / 100.0);
+                d->extraUsageSpend = spend;
                 d->extraUsage.resetUnixMs = ParseIso8601Ms(GetStr(eu, L"resets_at"));
                 if (d->extraUsage.resetUnixMs) {
                     // The API omits the cycle start. Derive the previous monthly billing
@@ -5246,6 +5265,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                              displayPct(d.extraUsage.pct));
                 }
                 tip += line;
+                if (!d.extraUsageSpend.empty()) tip += L" (" + d.extraUsageSpend + L")";
                 if (d.extraUsage.resetUnixMs) {
                     tip += L" | resets " + FormatReset(d.extraUsage.resetUnixMs);
                 }
