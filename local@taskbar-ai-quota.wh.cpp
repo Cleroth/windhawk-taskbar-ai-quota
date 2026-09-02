@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.5.9
+// @version         1.6.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -20,7 +20,7 @@ A Windows 11 taskbar mod that shows subscription quota bars next to the system t
 Supported providers and quotas:
 
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
-- **OpenAI/Codex:** 5-hour and weekly
+- **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
 - **Google Antigravity:** Gemini pool
 
 Optional notifications warn when usage crosses the configured red threshold.
@@ -131,6 +131,9 @@ struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
     std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
+    // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
+    // used-percent bar in the extra-usage slot. 0 disables the bar.
+    int creditsMax = 0;
     bool hidden = false;  // Runtime show/hide toggle (right-click menu), persisted in mod storage.
 
     bool operator==(const AccountConfig&) const = default;
@@ -240,7 +243,13 @@ struct AccountData {
     std::wstring plan;
     std::wstring codexSparkLines;
     std::wstring extraLines;
-    std::wstring extraUsageSpend;  // "$used / $limit spent" for the tooltip; empty if unknown.
+    // Tooltip detail for the extra-usage slot: "$used / $limit spent" (Anthropic) or
+    // "balance left of max" (OpenAI credits); empty if unknown.
+    std::wstring extraUsageSpend;
+    // OpenAI prepaid credits; balance is -1 when the API reports none or hides it.
+    bool hasCredits = false;
+    bool creditsUnlimited = false;
+    double creditsBalance = -1;
     std::wstring error;
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
@@ -2445,20 +2454,32 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
             }
         }
 
-        if (auto cr = GetObj(usage, L"credits"); cr && GetBool(cr, L"has_credits")) {
+        // credits: {has_credits, unlimited, balance: string|null}. The tooltip formats this
+        // on the UI thread since the display depends on the account's credits max. The
+        // balance is read even when has_credits is false so a depleted "0" still yields a
+        // full bar instead of hiding it.
+        if (auto cr = GetObj(usage, L"credits")) {
+            d->hasCredits = GetBool(cr, L"has_credits");
+            d->creditsUnlimited = GetBool(cr, L"unlimited");
             double balance = GetNum(cr, L"balance", -1);
             if (balance < 0) {
+                // Only a fully numeric string counts; a formatted "$2.50" must not become 0.
                 std::wstring s = GetStr(cr, L"balance");
-                if (!s.empty()) balance = wcstod(s.c_str(), nullptr);
+                size_t first = s.find_first_not_of(L" \t");
+                if (first != std::wstring::npos) {
+                    wchar_t* end = nullptr;
+                    balance = wcstod(s.c_str() + first, &end);
+                    if (end == s.c_str() + first ||
+                        s.find_first_not_of(L" \t", end - s.c_str()) != std::wstring::npos) {
+                        balance = -1;
+                    }
+                }
             }
-            if (balance >= 0) {
-                wchar_t line[64];
-                swprintf(line, ARRAYSIZE(line), L"credits: %.2f", balance);
-                if (!d->extraLines.empty()) d->extraLines += L"\n";
-                d->extraLines += line;
-            }
+            if (std::isfinite(balance) && balance >= 0) d->creditsBalance = balance;
         }
-        bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0;
+        // A credits-only payload (no rate-limit windows) is still usable data.
+        bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->creditsBalance >= 0 ||
+                      d->creditsUnlimited;
         if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
         return parsed;
     } catch (...) {
@@ -3234,6 +3255,24 @@ static void FetchAntigravityAccount(AccountData* d) {
 //  Fetch Thread
 /**********************************************/
 
+// OpenAI has no server-side credits ceiling, so a user-set max turns the prepaid balance
+// into a used-percent bar in the extra-usage slot; thresholds, percent text, and
+// notifications then apply unchanged. No reset window, so pace ticks stay hidden. Runs on
+// fresh fetch results and again from PublishSettings, because settings changes do not
+// re-poll and the bar must follow a new max immediately.
+static void ApplyCreditsMax(const AccountConfig& acc, AccountData* d) {
+    if (acc.provider != L"openai") return;
+    d->extraUsage = {};
+    d->extraUsageSpend.clear();
+    if (acc.creditsMax <= 0 || d->creditsUnlimited || d->creditsBalance < 0) return;
+    d->extraUsage.pct =
+        std::clamp(100.0 * (1.0 - d->creditsBalance / acc.creditsMax), 0.0, 100.0);
+    // State the balance explicitly so the number reads the same in used and remaining modes.
+    wchar_t spend[64];
+    swprintf(spend, ARRAYSIZE(spend), L"%.0f left of %d", d->creditsBalance, acc.creditsMax);
+    d->extraUsageSpend = spend;
+}
+
 static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec) {
     d->error.clear();
     d->retryDeadlineMs = 0;
@@ -3374,6 +3413,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         return;
     }
 
+    ApplyCreditsMax(acc, &fresh);
     fresh.stale = false;
     fresh.lastSuccessMs = NowUnixMs();
     *d = std::move(fresh);
@@ -3689,6 +3729,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             AccountIdentityHash(accounts[j]) ==
                                 AccountIdentityHash(currentAccounts[i])) {
                             remappedResults[i] = results[j];
+                            // The fetch used the old settings; a changed credits max must
+                            // not publish a stale percentage.
+                            ApplyCreditsMax(currentAccounts[i], &remappedResults[i]);
                             remappedFetchedOk[i] = fetchedOk[j];
                             oldResultUsed[j] = true;
                             break;
@@ -3762,6 +3805,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             } else if (w == kWeeklyBar) {
                                 quotaName = L"Gemini weekly";
                             }
+                        } else if (publishedAccounts[i].provider == L"openai" &&
+                                   w == kExtraUsageBar) {
+                            quotaName = L"credits";
                         }
                         swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
                                  quotaName, wu.pct);
@@ -4518,7 +4564,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     barItem.ColumnDefinitions().Append(trackColumn);
 
                     TextBlock barLabel;
-                    barLabel.Text(kBarLabels[w]);
+                    barLabel.Text(w == kExtraUsageBar && accounts[i].provider == L"openai" ?
+                                      L"Cr" : kBarLabels[w]);
                     barLabel.FontSize(compactLabelFontSize);
                     barLabel.Opacity(0.8);
                     barLabel.IsHitTestVisible(false);
@@ -5256,19 +5303,28 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     tip += L" | resets " + FormatReset(d.fableWeek.resetUnixMs);
                 }
             }
+            bool openAiAccount = accounts[i].provider == L"openai";
             if (d.extraUsage.pct >= 0) {
-                if (barMode == BarMode::Remaining) {
-                    swprintf(line, ARRAYSIZE(line), L"\nextra usage: %.1f%% remaining this month",
-                             displayPct(d.extraUsage.pct));
-                } else {
-                    swprintf(line, ARRAYSIZE(line), L"\nextra usage: %.1f%% monthly",
-                             displayPct(d.extraUsage.pct));
-                }
+                // The slot holds Anthropic monthly extra usage or OpenAI credits vs. the
+                // user's max.
+                PCWSTR label = openAiAccount ? L"credits" : L"extra usage";
+                PCWSTR suffix = barMode == BarMode::Remaining ?
+                    (openAiAccount ? L" remaining" : L" remaining this month") :
+                    (openAiAccount ? L" used" : L" monthly");
+                swprintf(line, ARRAYSIZE(line), L"\n%s: %.1f%%%s", label,
+                         displayPct(d.extraUsage.pct), suffix);
                 tip += line;
                 if (!d.extraUsageSpend.empty()) tip += L" (" + d.extraUsageSpend + L")";
                 if (d.extraUsage.resetUnixMs) {
                     tip += L" | resets " + FormatReset(d.extraUsage.resetUnixMs);
                 }
+            } else if (openAiAccount && d.creditsUnlimited) {
+                tip += L"\ncredits: unlimited";
+            } else if (openAiAccount && d.creditsBalance >= 0) {
+                swprintf(line, ARRAYSIZE(line), L"\ncredits: %.0f", d.creditsBalance);
+                tip += line;
+            } else if (openAiAccount && d.hasCredits) {
+                tip += L"\ncredits: available";
             }
             if (showCodexSparkInTooltip && accounts[i].provider == L"openai" && !d.codexSparkLines.empty()) {
                 tip += L"\n" + d.codexSparkLines;
@@ -5841,8 +5897,11 @@ static void NormalizeSettings(Settings* s) {
             a.label = a.provider == L"anthropic" ? L"A" :
                       a.provider == L"openai" ? L"O" : L"G";
         }
-        if (a.provider != L"anthropic") {
-            a.showBars[kFableWeeklyBar] = false;
+        if (a.provider != L"anthropic") a.showBars[kFableWeeklyBar] = false;
+        if (a.provider != L"openai") a.creditsMax = 0;
+        a.creditsMax = std::max(a.creditsMax, 0);
+        // The extra-usage slot is Anthropic monthly extra usage or OpenAI credits vs. max.
+        if (a.provider == L"antigravity" || (a.provider == L"openai" && a.creditsMax == 0)) {
             a.showBars[kExtraUsageBar] = false;
         }
         if (!a.showBars[kFiveHourBar] && !a.showBars[kWeeklyBar] &&
@@ -5908,6 +5967,7 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
+            account.SetNamedValue(L"creditsMax", JsonValue::CreateNumberValue(a.creditsMax));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
             accounts.Append(account.as<IJsonValue>());
         }
@@ -5990,6 +6050,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
                 a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
+                a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
                 s.accounts.push_back(std::move(a));
             }
@@ -6294,6 +6355,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
             if (oldHash == newHash || renamedAccount) {
                 newData[i] = g_data[j];
                 if (renamedAccount) newData[i].retryDeadlineMs = 0;
+                ApplyCreditsMax(s.accounts[i], &newData[i]);
                 oldDataUsed[j] = true;
                 break;
             }
@@ -6432,6 +6494,7 @@ enum SettingsControlId {
     kAccountExtraUsage,
     kAccountProviderLabel,
     kAccountLabelLabel,
+    kAccountCreditsMax,
 };
 
 struct SettingsRow {
@@ -7241,7 +7304,11 @@ static void RefreshAccountList(SettingsWindowState& state) {
         if (accounts[i].showBars[kFableWeeklyBar]) {
             bars += bars.empty() ? L"Fable" : L", Fable";
         }
-        if (accounts[i].showBars[kExtraUsageBar]) bars += bars.empty() ? L"Extra" : L", Extra";
+        if (accounts[i].showBars[kExtraUsageBar]) {
+            PCWSTR name = accounts[i].provider == L"openai" ? L"Credits" : L"Extra";
+            if (!bars.empty()) bars += L", ";
+            bars += name;
+        }
         ListView_SetItemText(state.accountList, (int)i, 2, const_cast<PWSTR>(bars.c_str()));
         std::wstring visible = accounts[i].hidden ? L"No" : L"Yes";
         ListView_SetItemText(state.accountList, (int)i, 3, visible.data());
@@ -7569,8 +7636,13 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
                  sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+    // For OpenAI the 4th checkbox reads "Show credits bar, max:" and the max edit follows it.
+    bool openai = SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0) == 1;
     SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
-                 sc(16), sc(188), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(188), openai ? sc(164) : width - sc(32), sc(24),
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
+                 sc(180), sc(188), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     int buttonY = std::max(sc(232), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
@@ -7602,12 +7674,16 @@ static void RecreateAccountEditorVisuals(HWND hWnd, AccountEditorState& state) {
 }
 
 static void UpdateAccountEditorProvider(HWND hWnd) {
-    bool anthropic = SendDlgItemMessageW(hWnd, kAccountProvider,
-                                         CB_GETCURSEL, 0, 0) == 0;
+    int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
+    bool anthropic = providerIndex == 0;
+    bool openai = providerIndex == 1;
     HWND fableWeekly = GetDlgItem(hWnd, kAccountFableWeekly);
     HWND extraUsage = GetDlgItem(hWnd, kAccountExtraUsage);
     EnableWindow(fableWeekly, anthropic);
-    EnableWindow(extraUsage, anthropic);
+    EnableWindow(extraUsage, anthropic || openai);
+    SetWindowTextW(extraUsage, openai ? L"Show credits bar, max:" :
+                                        L"Show monthly extra-usage bar");
+    ShowWindow(GetDlgItem(hWnd, kAccountCreditsMax), openai ? SW_SHOW : SW_HIDE);
 }
 
 static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
@@ -7683,6 +7759,15 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                          state->account.showBars[kFableWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(extra, BM_SETCHECK,
                          state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            // Shown only for OpenAI; UpdateAccountEditorProvider toggles visibility.
+            std::wstring creditsMaxText = state->account.creditsMax > 0 ?
+                std::to_wstring(state->account.creditsMax) : L"";
+            HWND creditsMax = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", creditsMaxText.c_str(),
+                                               WS_CHILD | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL,
+                                               sc(180), sc(188), sc(80), sc(24), hWnd,
+                                               reinterpret_cast<HMENU>(kAccountCreditsMax),
+                                               GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(creditsMax, EM_SETLIMITTEXT, 9, 0);
 
             HWND ok = CreateWindowExW(0, L"BUTTON", L"OK",
                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
@@ -7706,6 +7791,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             if (!state) break;
             if (LOWORD(wParam) == kAccountProvider && HIWORD(wParam) == CBN_SELCHANGE) {
                 UpdateAccountEditorProvider(hWnd);
+                LayoutAccountEditor(hWnd, *state);
                 return 0;
             }
             if (LOWORD(wParam) == IDOK) {
@@ -7734,9 +7820,19 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.showBars[kFableWeeklyBar] =
                     state->account.provider == L"anthropic" &&
                     IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                bool openai = state->account.provider == L"openai";
                 state->account.showBars[kExtraUsageBar] =
-                    state->account.provider == L"anthropic" &&
+                    (state->account.provider == L"anthropic" || openai) &&
                     IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
+                state->account.creditsMax =
+                    openai ? (int)GetDlgItemInt(hWnd, kAccountCreditsMax, nullptr, FALSE) : 0;
+                if (openai && state->account.showBars[kExtraUsageBar] &&
+                    state->account.creditsMax <= 0) {
+                    SettingsMessageBoxW(hWnd, L"Enter the credits max for the credits bar.",
+                                        L"Account", MB_OK | MB_ICONWARNING);
+                    SetFocus(GetDlgItem(hWnd, kAccountCreditsMax));
+                    return 0;
+                }
                 if (!state->account.showBars[kFiveHourBar] &&
                     !state->account.showBars[kWeeklyBar] &&
                     !state->account.showBars[kFableWeeklyBar] &&

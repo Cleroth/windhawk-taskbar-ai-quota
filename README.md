@@ -9,14 +9,14 @@ Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ## What It Shows
 
-Each visible account gets one compact taskbar column. Choose among the provider's supported bars: 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra usage. Antigravity maps available short-window and weekly Gemini pools to its bars; Claude/GPT pool limits appear in the tooltip. Selected bars auto-hide when the provider does not return that quota.
+Each visible account gets one compact taskbar column. Choose among the provider's supported bars: 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra usage, and OpenAI prepaid credits measured against a max you set (the API reports only the balance). Antigravity maps available short-window and weekly Gemini pools to its bars; Claude/GPT pool limits appear in the tooltip. Selected bars auto-hide when the provider does not return that quota.
 
 - stacked layout: horizontal bars stack vertically and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
 
 Hover for percentages, reset times, plan and provider details, errors, and retry countdowns. Click a column to refresh that account or open its provider dashboard, depending on settings and provider support. Right-click a column for Settings, Refresh all, provider actions, and show/hide toggles. Hidden accounts are not polled, and the last visible account cannot be hidden.
 
-Bars can show compact quota labels (`5h`, `7d`, `Fa`, `Ex`) and percentage text with never, hover, or always visibility plus adaptive, left, center, or right alignment. They use configurable green/yellow/orange/red thresholds, with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window and have caret, full-line, edge-notch, and dot styles with a configurable color. Stale errors can mark labels and tooltips with `!`.
+Bars can show compact quota labels (`5h`, `7d`, `Fa`, `Ex`, `Cr`) and percentage text with never, hover, or always visibility plus adaptive, left, center, or right alignment. They use configurable green/yellow/orange/red thresholds, with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window and have caret, full-line, edge-notch, and dot styles with a configurable color. Stale errors can mark labels and tooltips with `!`.
 
 It can also fire a Windows notification when an account first crosses the red threshold on a selected bar, so you don't have to keep glancing at the bars. The notification re-arms once usage drops back below the threshold.
 
@@ -45,14 +45,15 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - provider (Anthropic, OpenAI, or Google Antigravity) per account
 - account labels
 - account ordering and taskbar visibility
-- per-account 5-hour, weekly, Anthropic Fable weekly, and Anthropic monthly extra-usage bar selection
+- per-account 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra-usage, and OpenAI credits bar selection
+- OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
 - bar length, thickness, and layout
 - bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"); threshold colors always represent consumed quota
 - pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles and a configurable color
 - label position: hidden, left, top, right, or bottom
 - account-label and bar-text font sizes
 - account, label, bar, and tray spacing
-- compact bar labels (`5h`, `7d`, `Fa`, `Ex`), hidden by default
+- compact bar labels (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default
 - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
 - optional Codex Spark details in OpenAI tooltips, hidden by default
 - click action: refresh account or open provider dashboard (Antigravity always refreshes)
