@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.6.0
+// @version         1.6.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -216,6 +216,8 @@ struct Settings {
     bool showBarLabels = false;
     PercentTextVisibility percentTextVisibility = PercentTextVisibility::Hover;
     PercentTextAlignment percentTextAlignment = PercentTextAlignment::Adaptive;
+    // Extra-usage/credits bars show the amount ($ or credits) instead of a percentage.
+    bool showExtraBarAmounts = false;
     bool showCodexSparkInTooltip = false;
     bool colorblindMode = false;
     bool showStaleWarning = true;
@@ -243,9 +245,11 @@ struct AccountData {
     std::wstring plan;
     std::wstring codexSparkLines;
     std::wstring extraLines;
-    // Tooltip detail for the extra-usage slot: "$used / $limit spent" (Anthropic) or
-    // "balance left of max" (OpenAI credits); empty if unknown.
-    std::wstring extraUsageSpend;
+    // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI);
+    // -1 when unknown. Left = limit - used. Used may go negative if a credits balance
+    // exceeds the configured max.
+    double extraUsedAmount = -1;
+    double extraLimitAmount = -1;
     // OpenAI prepaid credits; balance is -1 when the API reports none or hides it.
     bool hasCredits = false;
     bool creditsUnlimited = false;
@@ -487,9 +491,8 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
                 (ULONGLONG)std::lround(kDurations[w] * kRemainingFractions[w]);
         }
         accountData.plan = L"Visual test";
-        wchar_t spend[64];
-        swprintf(spend, ARRAYSIZE(spend), L"$%.2f / $50.00 spent", percentages[i] / 2.0);
-        accountData.extraUsageSpend = spend;
+        accountData.extraUsedAmount = percentages[i] / 2.0;
+        accountData.extraLimitAmount = 50.0;
         accountData.lastSuccessMs = now;
         accountData.stale = false;
         data->push_back(std::move(accountData));
@@ -2292,10 +2295,8 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
                     utilization = usedCents > 0 ? usedCents * 100.0 / limitCents : 0;
                 }
                 d->extraUsage.pct = utilization;
-                wchar_t spend[64];
-                swprintf(spend, ARRAYSIZE(spend), L"$%.2f / $%.2f spent",
-                         std::max(usedCents, 0.0) / 100.0, limitCents / 100.0);
-                d->extraUsageSpend = spend;
+                d->extraUsedAmount = std::max(usedCents, 0.0) / 100.0;
+                d->extraLimitAmount = limitCents / 100.0;
                 d->extraUsage.resetUnixMs = ParseIso8601Ms(GetStr(eu, L"resets_at"));
                 if (d->extraUsage.resetUnixMs) {
                     // The API omits the cycle start. Derive the previous monthly billing
@@ -3263,14 +3264,13 @@ static void FetchAntigravityAccount(AccountData* d) {
 static void ApplyCreditsMax(const AccountConfig& acc, AccountData* d) {
     if (acc.provider != L"openai") return;
     d->extraUsage = {};
-    d->extraUsageSpend.clear();
+    d->extraUsedAmount = -1;
+    d->extraLimitAmount = -1;
     if (acc.creditsMax <= 0 || d->creditsUnlimited || d->creditsBalance < 0) return;
     d->extraUsage.pct =
         std::clamp(100.0 * (1.0 - d->creditsBalance / acc.creditsMax), 0.0, 100.0);
-    // State the balance explicitly so the number reads the same in used and remaining modes.
-    wchar_t spend[64];
-    swprintf(spend, ARRAYSIZE(spend), L"%.0f left of %d", d->creditsBalance, acc.creditsMax);
-    d->extraUsageSpend = spend;
+    d->extraUsedAmount = acc.creditsMax - d->creditsBalance;
+    d->extraLimitAmount = acc.creditsMax;
 }
 
 static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec) {
@@ -5004,7 +5004,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
-    bool showPaceTicks, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
+    bool showPaceTicks, showExtraBarAmounts, showCodexSparkInTooltip, colorblindMode,
+         showStaleWarning;
     BarLayout barLayout;
     BarMode barMode;
     PercentTextVisibility percentTextVisibility;
@@ -5026,6 +5027,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         showPaceTicks = g_settings.showPaceTicks;
         percentTextVisibility = g_settings.percentTextVisibility;
         percentTextAlignment = g_settings.percentTextAlignment;
+        showExtraBarAmounts = g_settings.showExtraBarAmounts;
         showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
         colorblindMode = g_settings.colorblindMode;
         showStaleWarning = g_settings.showStaleWarning;
@@ -5232,8 +5234,20 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
                     std::wstring percentText;
                     if (wu.pct >= 0) {
-                        wchar_t text[16];
-                        swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
+                        wchar_t text[24];
+                        if (w == kExtraUsageBar && showExtraBarAmounts &&
+                            d.extraLimitAmount >= 0) {
+                            // Amount follows the bar mode: spent in used mode, left in
+                            // remaining mode. Dollars for Anthropic, credits for OpenAI.
+                            double amount = barMode == BarMode::Remaining ?
+                                d.extraLimitAmount - d.extraUsedAmount : d.extraUsedAmount;
+                            amount = std::max(amount, 0.0);
+                            swprintf(text, ARRAYSIZE(text),
+                                     accounts[i].provider == L"openai" ? L"%.0f" : L"$%.2f",
+                                     amount);
+                        } else {
+                            swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
+                        }
                         percentText = text;
                     }
                     if (percentText != ap.percentTexts[w]) {
@@ -5304,7 +5318,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
             }
             bool openAiAccount = accounts[i].provider == L"openai";
-            if (d.extraUsage.pct >= 0) {
+            // The credits percentage is only meaningful relative to the user's max, so with
+            // the credits bar unchecked the tooltip falls back to the plain balance.
+            if (d.extraUsage.pct >= 0 &&
+                (!openAiAccount || accounts[i].showBars[kExtraUsageBar])) {
                 // The slot holds Anthropic monthly extra usage or OpenAI credits vs. the
                 // user's max.
                 PCWSTR label = openAiAccount ? L"credits" : L"extra usage";
@@ -5314,7 +5331,18 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 swprintf(line, ARRAYSIZE(line), L"\n%s: %.1f%%%s", label,
                          displayPct(d.extraUsage.pct), suffix);
                 tip += line;
-                if (!d.extraUsageSpend.empty()) tip += L" (" + d.extraUsageSpend + L")";
+                if (d.extraLimitAmount >= 0) {
+                    // Credits state the balance explicitly so the number reads the same in
+                    // used and remaining modes.
+                    if (openAiAccount) {
+                        swprintf(line, ARRAYSIZE(line), L" (%.0f left of %.0f)",
+                                 d.extraLimitAmount - d.extraUsedAmount, d.extraLimitAmount);
+                    } else {
+                        swprintf(line, ARRAYSIZE(line), L" ($%.2f / $%.2f spent)",
+                                 d.extraUsedAmount, d.extraLimitAmount);
+                    }
+                    tip += line;
+                }
                 if (d.extraUsage.resetUnixMs) {
                     tip += L" | resets " + FormatReset(d.extraUsage.resetUnixMs);
                 }
@@ -6015,6 +6043,7 @@ static std::wstring SerializeSettings(const Settings& s) {
                   s.percentTextAlignment == PercentTextAlignment::Center ? L"center" :
                   s.percentTextAlignment == PercentTextAlignment::Right ? L"right" : L"adaptive");
         setBool(L"showBarLabels", s.showBarLabels);
+        setBool(L"extraBarAmounts", s.showExtraBarAmounts);
         setBool(L"showCodexSpark", s.showCodexSparkInTooltip);
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
@@ -6123,6 +6152,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                                  percentTextAlignment == L"right" ? PercentTextAlignment::Right :
                                                                     PercentTextAlignment::Adaptive;
         s.showBarLabels = getBoolDefault(L"showBarLabels", false);
+        s.showExtraBarAmounts = getBoolDefault(L"extraBarAmounts", false);
         s.showCodexSparkInTooltip = getBoolDefault(L"showCodexSpark", false);
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
@@ -6474,6 +6504,7 @@ enum SettingsControlId {
     kYellowThreshold,
     kOrangeThreshold,
     kRedThreshold,
+    kShowExtraBarAmounts,
 
     kClickAction = 2300,
     kPollPreset,
@@ -7419,6 +7450,8 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
     EnableSettingsRow(state, kPercentFontSize, barTextVisible);
     EnableSettingsRow(state, kPercentTextAlignment,
                       percentTextVisibility > (LRESULT)PercentTextVisibility::Never);
+    EnableSettingsRow(state, kShowExtraBarAmounts,
+                      percentTextVisibility > (LRESULT)PercentTextVisibility::Never);
     bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
                                                 BM_GETCHECK, 0, 0) == BST_CHECKED;
     EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
@@ -7495,6 +7528,7 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
                         (int)s.percentTextVisibility, 0);
     SendDlgItemMessageW(state.hWnd, kPercentTextAlignment, CB_SETCURSEL,
                         (int)s.percentTextAlignment, 0);
+    setCheck(kShowExtraBarAmounts, s.showExtraBarAmounts);
     setCheck(kShowCodexSpark, s.showCodexSparkInTooltip);
     setCheck(kColorblindMode, s.colorblindMode);
     setCheck(kShowStaleWarning, s.showStaleWarning);
@@ -7588,6 +7622,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     s.percentTextAlignment =
         percentTextAlignment >= 0 && percentTextAlignment <= (int)PercentTextAlignment::Right ?
             (PercentTextAlignment)percentTextAlignment : PercentTextAlignment::Adaptive;
+    s.showExtraBarAmounts = isChecked(kShowExtraBarAmounts);
     s.showCodexSparkInTooltip = isChecked(kShowCodexSpark);
     s.colorblindMode = isChecked(kColorblindMode);
     s.showStaleWarning = isChecked(kShowStaleWarning);
@@ -8370,6 +8405,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.showBarLabels = defaults.showBarLabels;
         settings.percentTextVisibility = defaults.percentTextVisibility;
         settings.percentTextAlignment = defaults.percentTextAlignment;
+        settings.showExtraBarAmounts = defaults.showExtraBarAmounts;
         settings.showCodexSparkInTooltip = defaults.showCodexSparkInTooltip;
         settings.colorblindMode = defaults.colorblindMode;
         settings.showStaleWarning = defaults.showStaleWarning;
@@ -8511,6 +8547,8 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 *state, 2, L"Percentage text alignment", L"COMBOBOX",
                 CBS_DROPDOWNLIST, 0, kPercentTextAlignment);
             AddComboItems(percentTextAlignment, {L"Adaptive", L"Left", L"Center", L"Right"});
+            AddSettingsCheck(*state, 2, L"Show amounts on extra/credits bars",
+                             kShowExtraBarAmounts);
             AddSettingsCheck(*state, 2, L"Show Codex Spark in tooltips", kShowCodexSpark);
             AddSettingsCheck(*state, 2, L"Use colorblind palette", kColorblindMode);
             AddSettingsCheck(*state, 2, L"Mark stale data with !", kShowStaleWarning);
@@ -8567,6 +8605,9 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 AddSettingsToolTip(
                     *state, kPaceTickStyle,
                     L"Draws each pace marker as a thin caret, a full-width line, an edge notch, or a centered dot.");
+                AddSettingsToolTip(
+                    *state, kShowExtraBarAmounts,
+                    L"Replaces the percentage on Anthropic extra-usage and OpenAI credits bars with the dollar or credit amount: spent in used mode, left in remaining mode.");
                 AddSettingsToolTip(
                     *state, kShowCodexSpark,
                     L"Adds Codex Spark plan and rate-limit details to OpenAI account tooltips.");

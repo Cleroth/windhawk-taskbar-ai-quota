@@ -55,6 +55,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - account, label, bar, and tray spacing
 - compact bar labels (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default
 - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
+- amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI) instead of a percentage, following the bar mode
 - optional Codex Spark details in OpenAI tooltips, hidden by default
 - click action: refresh account or open provider dashboard (Antigravity always refreshes)
 - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
