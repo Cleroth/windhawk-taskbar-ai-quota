@@ -56,7 +56,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - compact bar labels (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default
 - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
 - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI) instead of a percentage, following the bar mode
-- optional Codex Spark details in OpenAI tooltips, hidden by default
+- optional additional OpenAI rate limits in tooltips (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - click action: refresh account or open provider dashboard (Antigravity always refreshes)
 - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
 - taskbar monitor mode: primary, all, or a detected display with its resolution
@@ -66,7 +66,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - stale-warning marker
 - temporary threshold-spanning test accounts for previewing current taskbar visuals
 
-Bar dimensions and font sizes use sliders with precise numeric spinner controls. Spacing, thresholds, and custom polling use spinners. Concise hover help explains polling, pace ticks, Codex Spark, and stale warnings. Each non-account page can be reset independently without removing accounts or credentials.
+Bar dimensions and font sizes use sliders with precise numeric spinner controls. Spacing, thresholds, and custom polling use spinners. Concise hover help explains polling, pace ticks, additional OpenAI rate limits, and stale warnings. Each non-account page can be reset independently without removing accounts or credentials.
 
 ## Security Notes
 

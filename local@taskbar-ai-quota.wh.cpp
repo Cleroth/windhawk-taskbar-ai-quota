@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.6.1
+// @version         1.6.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -218,7 +218,8 @@ struct Settings {
     PercentTextAlignment percentTextAlignment = PercentTextAlignment::Adaptive;
     // Extra-usage/credits bars show the amount ($ or credits) instead of a percentage.
     bool showExtraBarAmounts = false;
-    bool showCodexSparkInTooltip = false;
+    // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
+    bool showOpenAiExtraLimits = false;
     bool colorblindMode = false;
     bool showStaleWarning = true;
     bool enableNotifications = true;
@@ -243,7 +244,7 @@ struct AccountData {
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;
     std::wstring plan;
-    std::wstring codexSparkLines;
+    std::wstring openAiExtraLimitLines;
     std::wstring extraLines;
     // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI);
     // -1 when unknown. Left = limit - used. Used may go negative if a credits balance
@@ -2419,29 +2420,25 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         applyWindow(GetObj(rl, L"weekly_limit"), &d->winWeek);
 
         d->plan = GetStr(usage, L"plan_type");
-        d->codexSparkLines.clear();
+        d->openAiExtraLimitLines.clear();
         d->extraLines.clear();
+        // Every additional_rate_limits entry (Codex Spark, hidden model lanes such as
+        // gpt-reserve, ...) is an opt-in tooltip line; only the primary windows drive bars.
         int extraLimitLineCount = 0;
         auto addLimitLine = [&](JsonObject const& item) {
             auto itemRl = GetObj(item, L"rate_limit");
             auto pw = GetObj(itemRl, L"primary_window");
             auto sw = GetObj(itemRl, L"secondary_window");
             std::wstring name = GetStr(item, L"limit_name");
-            if (name.empty() || (!pw && !sw)) return;
-            bool isCodexSpark = name.find(L"Codex-Spark") != std::wstring::npos ||
-                                 name.find(L"Codex Spark") != std::wstring::npos ||
-                                 name.find(L"codex-spark") != std::wstring::npos ||
-                                 name.find(L"codex spark") != std::wstring::npos;
-            if (!isCodexSpark && extraLimitLineCount >= 3) return;
+            if (name.empty() || (!pw && !sw) || extraLimitLineCount >= 6) return;
 
             wchar_t line[128];
             swprintf(line, ARRAYSIZE(line), L"%s: 5h %.0f%% | wk %.0f%%",
                      name.c_str(), GetNum(pw, L"used_percent", 0),
                      GetNum(sw, L"used_percent", 0));
-            std::wstring& target = isCodexSpark ? d->codexSparkLines : d->extraLines;
-            if (!target.empty()) target += L"\n";
-            target += line;
-            if (!isCodexSpark) extraLimitLineCount++;
+            if (!d->openAiExtraLimitLines.empty()) d->openAiExtraLimitLines += L"\n";
+            d->openAiExtraLimitLines += line;
+            extraLimitLineCount++;
         };
         if (usage.HasKey(L"additional_rate_limits")) {
             auto limits = usage.GetNamedValue(L"additional_rate_limits");
@@ -5004,7 +5001,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
-    bool showPaceTicks, showExtraBarAmounts, showCodexSparkInTooltip, colorblindMode,
+    bool showPaceTicks, showExtraBarAmounts, showOpenAiExtraLimits, colorblindMode,
          showStaleWarning;
     BarLayout barLayout;
     BarMode barMode;
@@ -5028,7 +5025,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         percentTextVisibility = g_settings.percentTextVisibility;
         percentTextAlignment = g_settings.percentTextAlignment;
         showExtraBarAmounts = g_settings.showExtraBarAmounts;
-        showCodexSparkInTooltip = g_settings.showCodexSparkInTooltip;
+        showOpenAiExtraLimits = g_settings.showOpenAiExtraLimits;
         colorblindMode = g_settings.colorblindMode;
         showStaleWarning = g_settings.showStaleWarning;
         if (!visualTestMode) {
@@ -5262,7 +5259,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             bool planIsSpark = d.plan.find(L"Spark") != std::wstring::npos ||
                                d.plan.find(L"spark") != std::wstring::npos;
             bool hideSparkPlan = accounts[i].provider == L"openai" && planIsSpark &&
-                                 !showCodexSparkInTooltip;
+                                 !showOpenAiExtraLimits;
             if (!d.plan.empty() && !hideSparkPlan) {
                 tip += L" (" + d.plan + L")";
             }
@@ -5354,8 +5351,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             } else if (openAiAccount && d.hasCredits) {
                 tip += L"\ncredits: available";
             }
-            if (showCodexSparkInTooltip && accounts[i].provider == L"openai" && !d.codexSparkLines.empty()) {
-                tip += L"\n" + d.codexSparkLines;
+            if (showOpenAiExtraLimits && accounts[i].provider == L"openai" && !d.openAiExtraLimitLines.empty()) {
+                tip += L"\n" + d.openAiExtraLimitLines;
             }
             if (!d.extraLines.empty()) tip += L"\n" + d.extraLines;
             if (!d.error.empty()) {
@@ -6044,7 +6041,7 @@ static std::wstring SerializeSettings(const Settings& s) {
                   s.percentTextAlignment == PercentTextAlignment::Right ? L"right" : L"adaptive");
         setBool(L"showBarLabels", s.showBarLabels);
         setBool(L"extraBarAmounts", s.showExtraBarAmounts);
-        setBool(L"showCodexSpark", s.showCodexSparkInTooltip);
+        setBool(L"openAiExtraLimits", s.showOpenAiExtraLimits);
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -6153,7 +6150,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                                                                     PercentTextAlignment::Adaptive;
         s.showBarLabels = getBoolDefault(L"showBarLabels", false);
         s.showExtraBarAmounts = getBoolDefault(L"extraBarAmounts", false);
-        s.showCodexSparkInTooltip = getBoolDefault(L"showCodexSpark", false);
+        // "showCodexSpark" is the pre-1.6.2 key for the same toggle.
+        s.showOpenAiExtraLimits = getBoolDefault(L"openAiExtraLimits",
+                                                 getBoolDefault(L"showCodexSpark", false));
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);
@@ -6343,7 +6342,7 @@ static bool LoadLegacySettings(Settings* out) {
     s.rightMargin = getInt(L"rightMargin", 4);
     s.percentTextVisibility = getBool(L"showPercentText", false) ?
                                   PercentTextVisibility::Always : PercentTextVisibility::Never;
-    s.showCodexSparkInTooltip = getBool(L"showCodexSparkInTooltip", false);
+    s.showOpenAiExtraLimits = getBool(L"showCodexSparkInTooltip", false);
     s.yellowThreshold = getInt(L"yellowThreshold", 50);
     s.orangeThreshold = getInt(L"orangeThreshold", 75);
     s.redThreshold = getInt(L"redThreshold", 90);
@@ -6498,7 +6497,7 @@ enum SettingsControlId {
     kShowBarLabels,
     kPercentTextVisibility,
     kPercentTextAlignment,
-    kShowCodexSpark,
+    kShowOpenAiExtraLimits,
     kColorblindMode,
     kShowStaleWarning,
     kYellowThreshold,
@@ -7529,7 +7528,7 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     SendDlgItemMessageW(state.hWnd, kPercentTextAlignment, CB_SETCURSEL,
                         (int)s.percentTextAlignment, 0);
     setCheck(kShowExtraBarAmounts, s.showExtraBarAmounts);
-    setCheck(kShowCodexSpark, s.showCodexSparkInTooltip);
+    setCheck(kShowOpenAiExtraLimits, s.showOpenAiExtraLimits);
     setCheck(kColorblindMode, s.colorblindMode);
     setCheck(kShowStaleWarning, s.showStaleWarning);
     SetControlInt(state, kYellowThreshold, s.yellowThreshold);
@@ -7623,7 +7622,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
         percentTextAlignment >= 0 && percentTextAlignment <= (int)PercentTextAlignment::Right ?
             (PercentTextAlignment)percentTextAlignment : PercentTextAlignment::Adaptive;
     s.showExtraBarAmounts = isChecked(kShowExtraBarAmounts);
-    s.showCodexSparkInTooltip = isChecked(kShowCodexSpark);
+    s.showOpenAiExtraLimits = isChecked(kShowOpenAiExtraLimits);
     s.colorblindMode = isChecked(kColorblindMode);
     s.showStaleWarning = isChecked(kShowStaleWarning);
     s.yellowThreshold = getBoundedInt(kYellowThreshold, s.yellowThreshold);
@@ -8406,7 +8405,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.percentTextVisibility = defaults.percentTextVisibility;
         settings.percentTextAlignment = defaults.percentTextAlignment;
         settings.showExtraBarAmounts = defaults.showExtraBarAmounts;
-        settings.showCodexSparkInTooltip = defaults.showCodexSparkInTooltip;
+        settings.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
         settings.colorblindMode = defaults.colorblindMode;
         settings.showStaleWarning = defaults.showStaleWarning;
         settings.yellowThreshold = defaults.yellowThreshold;
@@ -8549,7 +8548,8 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             AddComboItems(percentTextAlignment, {L"Adaptive", L"Left", L"Center", L"Right"});
             AddSettingsCheck(*state, 2, L"Show amounts on extra/credits bars",
                              kShowExtraBarAmounts);
-            AddSettingsCheck(*state, 2, L"Show Codex Spark in tooltips", kShowCodexSpark);
+            AddSettingsCheck(*state, 2, L"Show additional OpenAI rate limits",
+                             kShowOpenAiExtraLimits);
             AddSettingsCheck(*state, 2, L"Use colorblind palette", kColorblindMode);
             AddSettingsCheck(*state, 2, L"Mark stale data with !", kShowStaleWarning);
             AddThresholdRow(*state, L"Yellow threshold (%)", kYellowThreshold);
@@ -8609,8 +8609,8 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     *state, kShowExtraBarAmounts,
                     L"Replaces the percentage on Anthropic extra-usage and OpenAI credits bars with the dollar or credit amount: spent in used mode, left in remaining mode.");
                 AddSettingsToolTip(
-                    *state, kShowCodexSpark,
-                    L"Adds Codex Spark plan and rate-limit details to OpenAI account tooltips.");
+                    *state, kShowOpenAiExtraLimits,
+                    L"Adds every extra OpenAI rate limit (Codex Spark, hidden model lanes such as gpt-reserve) and the Spark plan name to OpenAI account tooltips.");
                 AddSettingsToolTip(
                     *state, kShowStaleWarning,
                     L"Adds ! when quota data is stale because a refresh failed or is overdue.");
