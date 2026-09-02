@@ -1,0 +1,14 @@
+{
+  "label": "PR Review Status",
+  "icon": "check",
+  "exec": {
+    "executable": "pwsh",
+    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "pr-review-status.ps1"],
+    "cwd": ".",
+  },
+  "appearance": {
+    "text": "PR\nstatus",
+    "textSize": 11,
+    "backgroundColor": "#29475f"
+  },
+}
