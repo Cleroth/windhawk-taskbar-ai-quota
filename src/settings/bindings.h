@@ -55,9 +55,15 @@ static void UpdateAccountButtons(SettingsWindowState& state) {
 
 static void RefreshAccountList(SettingsWindowState& state) {
     std::vector<AccountConfig> accounts;
+    bool historyEnabled;
+    bool skipHiddenPolling;
+    bool historyIdsPendingSave;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         accounts = g_settings.accounts;
+        historyEnabled = g_settings.historyEnabled;
+        skipHiddenPolling = g_settings.skipHiddenPolling;
+        historyIdsPendingSave = g_historyIdsPendingSave.load();
     }
     uint64_t selectedIdentity = 0;
     int selected = SelectedAccountIndex(state);
@@ -108,6 +114,13 @@ static void RefreshAccountList(SettingsWindowState& state) {
                          L"Signed in" : L"Not signed in";
         }
         ListView_SetItemText(state.accountList, (int)i, 4, const_cast<PWSTR>(status.c_str()));
+        PCWSTR recorded = !accounts[i].recordHistory ? L"No" :
+                          !historyEnabled ? L"User off" :
+                          historyIdsPendingSave ? L"Pending save" :
+                          !accounts[i].historyId ? L"Unavailable" :
+                          accounts[i].hidden && skipHiddenPolling ? L"Paused" :
+                          g_historyStorageError ? L"Storage error" : L"Yes";
+        ListView_SetItemText(state.accountList, (int)i, 5, const_cast<PWSTR>(recorded));
     }
     if (restoredSelection >= 0) {
         ListView_SetItemState(state.accountList, restoredSelection, LVIS_SELECTED | LVIS_FOCUSED,
@@ -213,6 +226,9 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
     EnableSettingsRow(state, kPollMinutes,
                       SendDlgItemMessageW(state.hWnd, kPollPreset,
                                           CB_GETCURSEL, 0, 0) == 6);
+    EnableSettingsRow(state, kHistoryRetentionDays,
+                      SendDlgItemMessageW(state.hWnd, kHistoryEnabled,
+                                          BM_GETCHECK, 0, 0) == BST_CHECKED);
 }
 
 static void PopulateMonitorCombo(SettingsWindowState& state, int selectedMonitorNumber) {
@@ -303,6 +319,9 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     SendDlgItemMessageW(state.hWnd, kPollPreset, CB_SETCURSEL, pollPresetIndex, 0);
     SetControlInt(state, kPollMinutes, s.pollMinutes);
     setCheck(kEnableNotifications, s.enableNotifications);
+    setCheck(kHistoryEnabled, s.historyEnabled);
+    SetControlInt(state, kHistoryRetentionDays, s.historyRetentionDays);
+    setCheck(kSkipHiddenPolling, s.skipHiddenPolling);
     RefreshColorPreviews(state, s);
     state.updating = false;
     UpdateDependentSettingsControls(state);
@@ -392,6 +411,9 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
                         pollPresets[pollPresetIndex] :
                         getBoundedInt(kPollMinutes, s.pollMinutes);
     s.enableNotifications = isChecked(kEnableNotifications);
+    s.historyEnabled = isChecked(kHistoryEnabled);
+    s.historyRetentionDays = getBoundedInt(kHistoryRetentionDays, s.historyRetentionDays);
+    s.skipHiddenPolling = isChecked(kSkipHiddenPolling);
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(s));
     configLock.unlock();
     if (applyResult == SettingsApplyResult::Failed) {

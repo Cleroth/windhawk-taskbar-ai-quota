@@ -161,7 +161,23 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
     std::vector<std::array<int, kQuotaBarCount>> redState;
     ULONGLONG lastLoggedSettingsGeneration = 0;
+    const uint64_t historySession = NowUnixMs();
     while (!g_unloading) {
+        const bool historyOwner = IsHistoryOwnerProcess();
+        if (historyOwner && g_historyIdsPendingSave) {
+            // Init can run before the shell creates its taskbar. Persist the exact IDs
+            // under the normal edit lock before any sample uses them, without history IO.
+            std::lock_guard configLock(g_configEditMutex);
+            Settings pending;
+            {
+                std::lock_guard settingsLock(g_settingsMutex);
+                pending = g_settings;
+            }
+            if (SaveOwnedSettings(pending)) {
+                g_historyIdsPendingSave = false;
+                NotifySettingsWindowChanged();
+            }
+        }
         ULONGLONG refreshGeneration;
         uint64_t refreshAccountIdentity;
         bool refreshRequested;
@@ -173,16 +189,24 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         std::vector<AccountConfig> accounts;
         int intervalMin, redThreshold;
-        bool enableNotifications;
-        ULONGLONG settingsGeneration;
+        bool enableNotifications, historyEnabled, skipHiddenPolling;
+        int historyRetentionDays;
+        ULONGLONG settingsGeneration, historyContinuityGeneration;
+        const uint64_t historyEpoch = g_historyEpoch.load();
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
             intervalMin = g_settings.pollMinutes;
             redThreshold = g_settings.redThreshold;
             enableNotifications = g_settings.enableNotifications;
+            historyEnabled = g_settings.historyEnabled && historyOwner && !g_historyIdsPendingSave;
+            historyRetentionDays = g_settings.historyRetentionDays;
+            skipHiddenPolling = g_settings.skipHiddenPolling;
             settingsGeneration = g_settingsGeneration;
+            historyContinuityGeneration = g_historyContinuityGeneration;
         }
+        ULONGLONG nextHistoryMaintenanceMs = historyOwner && historyEnabled
+            ? MaintainHistory(historyRetentionDays, true) : 0;
         bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
                                lastLoggedErrorStates.size() != accounts.size();
         if (settingsChanged) {
@@ -255,14 +279,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool refreshSingleAccount = manualRefresh && refreshAccountIndex >= 0 &&
                                     refreshAccountIndex < (int)accounts.size();
         std::vector<bool> fetchedOk(accounts.size(), false);
+        std::vector<HistorySample> historyBatch;
         ULONGLONG nextRetryMs = 0;
         ULONGLONG nextPollMs = 0;
         bool anyError = false;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
-            // Hidden accounts are never fetched (poll or Refresh all); results[i] keeps the
-            // prior g_data[i] value and goes stale via the lastSuccessMs/interval check.
-            if (accounts[i].hidden) continue;
+            // Hiding still stops polling by default. The explicit history exception never
+            // polls an unrecorded hidden account, including during Refresh all.
+            if (accounts[i].hidden && (skipHiddenPolling || !historyEnabled ||
+                                        !accounts[i].recordHistory)) continue;
             if (refreshSingleAccount && (int)i != refreshAccountIndex) {
                 if (retryDeadlineMs[i] > nowMs &&
                     (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs)) {
@@ -291,6 +317,39 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
 
             int retryAfter = 0;
             FetchAccount(accounts[i], &results[i], &retryAfter);
+            if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId) {
+                HistorySample sample;
+                sample.accountId = accounts[i].historyId;
+                sample.timeMs = NowUnixMs();
+                sample.intervalMs = (accounts[i].provider == L"antigravity" ? 1ULL :
+                                     (ULONGLONG)intervalMin) * 60000;
+                // A settings pause/resume or poll-rate change must not bridge an interval
+                // where recording was disabled, even if it was shorter than two polls.
+                sample.session = historySession ^ (historyContinuityGeneration * 0x9e3779b97f4a7c15ULL);
+                sample.provider = accounts[i].provider == L"anthropic" ? 1 :
+                                  accounts[i].provider == L"openai" ? 2 : 3;
+                sample.failed = !results[i].error.empty() || results[i].stale ||
+                                results[i].needsLogin;
+                if (!sample.failed) {
+                    const std::array<const WindowUsage*, 6> windows = {
+                        &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
+                        &results[i].extraUsage, &results[i].antigravityThirdParty5h,
+                        &results[i].antigravityThirdPartyWeek};
+                    for (size_t m = 0; m < windows.size(); ++m) {
+                        // OpenAI's user-chosen credit ceiling is not a historical quota.
+                        if (m == 3 && sample.provider != 1) continue;
+                        sample.meters[m] = {windows[m]->pct, windows[m]->resetUnixMs,
+                                            windows[m]->windowDurationMs};
+                    }
+                    if (sample.provider == 1) {
+                        sample.meters[6] = {results[i].extraUsedAmount,
+                                           results[i].extraUsage.resetUnixMs, 0};
+                    } else if (sample.provider == 2 && !results[i].creditsUnlimited) {
+                        sample.meters[7].value = results[i].creditsBalance;
+                    }
+                }
+                historyBatch.push_back(sample);
+            }
             if (retryAfter > 0) {
                 nextPollDeadlineMs[i] = 0;
                 retryDeadlineMs[i] = NowUnixMs() + (ULONGLONG)retryAfter * 1000;
@@ -380,6 +439,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 published = true;
             }
         }
+        // Admission is fenced against settings edits and Clear history. Never store a
+        // carried-forward result or let a settings refresh manufacture a sample.
+        AppendHistory(historyBatch, historyEpoch, settingsGeneration, historyRetentionDays);
         if (!notificationsEnabled && g_notifyWnd) RemoveNotifyIcon();
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
@@ -396,7 +458,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             const auto& publishedResults = generationRaced ? remappedResults : results;
             const auto& publishedFetchedOk = generationRaced ? remappedFetchedOk : fetchedOk;
             for (size_t i = 0; i < publishedAccounts.size(); i++) {
-                if (!publishedFetchedOk[i]) continue;
+                if (!publishedFetchedOk[i] || publishedAccounts[i].hidden) continue;
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &publishedResults[i].win5h, &publishedResults[i].winWeek,
                     &publishedResults[i].fableWeek, &publishedResults[i].extraUsage};
@@ -470,6 +532,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             waitMs = 0;
         } else if (nextPollMs > nowMs) {
             waitMs = (DWORD)std::min<ULONGLONG>(waitMs, nextPollMs - nowMs);
+        }
+        // Local retention must wake independently of slow provider polling. Existing
+        // per-account deadlines still prevent this wake from issuing early requests.
+        if (nextHistoryMaintenanceMs) {
+            waitMs = (DWORD)std::min<ULONGLONG>(waitMs,
+                nextHistoryMaintenanceMs > nowMs ? nextHistoryMaintenanceMs - nowMs : 0);
         }
 
         HANDLE handles[2] = {g_stopEvent, g_refreshEvent};

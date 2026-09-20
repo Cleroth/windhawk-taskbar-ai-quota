@@ -2,13 +2,13 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.6.5
+// @version         2.0.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -42,6 +42,30 @@ its signed-in local app or CLI session, which must remain running.
 - **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
 - **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
 - **Taskbar behavior:** Choose displays, click actions, polling, and alerts.
+- **Usage history:** Opt in to local recording, set retention (90 days by default), and
+  choose recording per account independently of taskbar visibility. Opt-in is per Windows user.
+  Hidden accounts stop
+  polling unless you disable **Do not poll hidden accounts** and enable their recording.
+
+## Usage history
+
+Open **Usage history...** from the taskbar context menu or Settings > Behavior. Compare raw
+quota timelines on one graph with color-coded account lines, overlay the preceding week,
+view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samples;
+history starts at opt-in, with no backfill.
+All accounts defaults to Weekly over the past 24 hours; choose Short-term for short quotas.
+Weekly follows each Anthropic account's taskbar weekly selections. All meters is available
+for all accounts or a single account (its default), including weeklies hidden on the taskbar.
+Percentages, USD, and credits use separate axes. Connected samples use lines only; dots keep
+isolated readings visible.
+Percentages from different accounts or overlapping windows are not added together.
+
+History follows the configured entry: use a new entry for a different login. Data stays under
+`%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>` with your user-folder permissions, without tokens or
+labels. It is not encrypted and survives mod removal. Retention and a roughly 60 MB size cap
+prune old samples; **Clear all history...** removes recordings without changing sign-ins.
+See the [usage history guide](https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history)
+for recording rules, export, and verification.
 
 ## Suggestions & bugs
 
@@ -62,6 +86,7 @@ Have a suggestion or found a bug?
 #include <windows.h>
 #include <winternl.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #include <winhttp.h>
@@ -91,10 +116,15 @@ Have a suggestion or found a bug?
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
+#include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cwctype>
+#include <deque>
 #include <initializer_list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -119,6 +149,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 // order. generate-mod.ps1 inlines them into the published single-file mod.
 
 #include "core/model.h"
+
+#include "history/types.h"
 
 #include "taskbar/ui-types.h"
 
@@ -145,6 +177,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "providers/openai.h"
 
 #include "providers/antigravity.h"
+
+#include "history/journal.h"
 
 #include "fetch/notifications.h"
 
@@ -178,6 +212,16 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "settings/window.h"
 
+#include "history/window-state.h"
+
+#include "history/view-model.h"
+
+#include "history/export.h"
+
+#include "history/paint.h"
+
+#include "history/window.h"
+
 static HANDLE g_fetchThread = nullptr;
 static void* g_mtaUsageCookie = nullptr;
 static HRESULT (WINAPI* g_coDecrementMTAUsage)(void*) = nullptr;
@@ -194,6 +238,7 @@ BOOL Wh_ModInit() {
     g_loginInProgress.store(false);
     g_loginAccountIdentity.store(0);
     g_settingsWindowCancelRequested = false;
+    g_historyWindowCancelRequested = false;
     g_winsockStarted = false;
 
     // C++/WinRT caches agile activation factories process-wide. Keep the MTA alive so a
@@ -281,6 +326,7 @@ void Wh_ModUninit() {
     g_uiInjected.store(false, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent);
     CloseActiveHttpHandles();
+    CloseHistoryWindow();
 
     g_settingsWindowCancelRequested = true;
     HANDLE settingsWindowThread = nullptr;
@@ -331,6 +377,22 @@ void Wh_ModUninit() {
         g_fetchThread = nullptr;
     }
     g_fetchThreadStarted.store(false, std::memory_order_release);
+
+    // Both journal clients have exited. No process-wide destructor needs to flush
+    // history, and another Explorer session can safely take ownership now.
+    {
+        std::lock_guard lock(g_historyMutex);
+        g_historyOwnership.close();
+        g_historySamples.clear();
+        g_historyPath.clear();
+        SetHistoryStatus({});
+        g_historyLoaded = false;
+        g_historyWritable = true;
+        g_historyDirty = false;
+        g_historyCapped = false;
+        g_historyMaintenanceMs = 0;
+        g_historyWriteRetryMs = 0;
+    }
 
     // All worker threads that can issue finite taskbar marshals are joined. These synchronous
     // cleanup sends are the final per-UI-thread lifetime barrier before the DLL can unload.

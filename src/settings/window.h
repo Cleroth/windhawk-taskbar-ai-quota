@@ -55,6 +55,9 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.clickAction = defaults.clickAction;
         settings.pollMinutes = defaults.pollMinutes;
         settings.enableNotifications = defaults.enableNotifications;
+        settings.historyEnabled = defaults.historyEnabled;
+        settings.historyRetentionDays = defaults.historyRetentionDays;
+        settings.skipHiddenPolling = defaults.skipHiddenPolling;
     }
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
@@ -109,9 +112,9 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                    reinterpret_cast<DWORD_PTR>(state))) {
                 Wh_Log(L"Could not subclass settings account list");
             }
-            const PCWSTR headers[] = {L"Label", L"Provider", L"Bars", L"Visible", L"Sign-in"};
-            const int widths[] = {90, 150, 160, 70, 120};
-            for (int i = 0; i < 5; i++) {
+            const PCWSTR headers[] = {L"Label", L"Provider", L"Bars", L"Visible", L"Sign-in", L"Recorded"};
+            const int widths[] = {80, 135, 110, 55, 125, 100};
+            for (int i = 0; i < (int)ARRAYSIZE(headers); i++) {
                 LVCOLUMNW column{};
                 column.mask = LVCF_TEXT | LVCF_WIDTH;
                 column.pszText = const_cast<PWSTR>(headers[i]);
@@ -206,6 +209,12 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             AddNumericRow(*state, 3, L"Custom interval (minutes)",
                           kPollMinutes, 2, 1440);
             AddSettingsCheck(*state, 3, L"Show threshold notifications", kEnableNotifications);
+            AddSettingsCheck(*state, 3, L"Enable local history", kHistoryEnabled);
+            AddNumericRow(*state, 3, L"Retention (days)", kHistoryRetentionDays, 1, 3650);
+            AddSettingsCheck(*state, 3, L"Do not poll hidden accounts", kSkipHiddenPolling);
+            HWND historyButton = AddSettingsRow(*state, 3, L"Local usage history", L"BUTTON",
+                                                 BS_PUSHBUTTON, 0, kOpenHistoryWindow);
+            SetWindowTextW(historyButton, L"Usage history...");
             state->resetPageButton = CreateWindowExW(
                 0, L"BUTTON", L"", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
                 0, 0, 1, 1, hWnd,
@@ -260,6 +269,29 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 AddSettingsToolTip(
                     *state, kPollMinutes,
                     L"Custom cloud polling interval from 2 to 1440 minutes.");
+                AddSettingsToolTip(
+                    *state, kHistoryEnabled,
+                    L"Opt in for this Windows user only; off by default. Disabling recording keeps saved history. "
+                    L"Account recording choices, retention, and hidden-account polling settings are shared "
+                    L"across Windows users. Do not poll hidden accounts takes priority for hidden accounts.");
+                AddSettingsToolTip(
+                    *state, kHistoryRetentionDays,
+                    L"Shared across Windows users. Keep local usage history for 1 to 3650 days. Reducing this permanently prunes older "
+                    L"samples at hourly maintenance during recording or viewer refresh. The roughly 60 MB cap can shorten retention.");
+                AddSettingsToolTip(
+                    *state, kSkipHiddenPolling,
+                    L"Shared across Windows users. Skip polling hidden accounts, even if Record history is checked. Turn this off "
+                    L"to allow hidden accounts to keep recording when local history is enabled.");
+                AddSettingsToolTip(
+                    *state, kOpenHistoryWindow,
+                    L"View saved local usage history, including while recording is disabled.");
+                AddSettingsToolTip(
+                    *state, kAccountList,
+                    L"Recorded shows whether history recording is enabled, not whether a poll succeeded. "
+                    L"Storage error means recording is not being saved; open Usage history for details. "
+                    L"User off requires this Windows user's Enable local history in Behavior; Paused means the hidden "
+                    L"account is skipped by Do not poll hidden accounts. Pending save blocks recording "
+                    L"until stable history IDs are saved by the taskbar's Explorer process.");
             }
 
             RecreateSettingsVisuals(*state);
@@ -393,6 +425,12 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 case kResetPage:
                     if (HIWORD(wParam) == BN_CLICKED) ResetCurrentSettingsPage(*state);
                     return 0;
+                case kOpenHistoryWindow:
+                    if (HIWORD(wParam) == BN_CLICKED && !g_unloading) {
+                        CommitScalarSettings(*state);
+                        if (!g_unloading && !g_settingsWindowCancelRequested) OpenHistoryWindow();
+                    }
+                    return 0;
                 case kSettingsRowsPrevious:
                     if (HIWORD(wParam) == BN_CLICKED && state->currentPage > 0) {
                         state->rowSubpages[state->currentPage]--;
@@ -447,7 +485,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             }
             if ((HIWORD(wParam) == CBN_SELCHANGE || HIWORD(wParam) == BN_CLICKED ||
                  HIWORD(wParam) == EN_KILLFOCUS) && LOWORD(wParam) >= kMonitorMode &&
-                LOWORD(wParam) <= kEnableNotifications) {
+                LOWORD(wParam) <= kSkipHiddenPolling) {
                 CommitScalarSettings(*state);
                 return 0;
             }
@@ -539,8 +577,24 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
         case kExitVisualTestMessage:
             SetVisualTestMode(false);
             return 0;
+        case kHistoryConsentChangedMessage:
         case kSettingsRefreshMessage:
             if (state) {
+                if (message == kHistoryConsentChangedMessage) {
+                    bool historyEnabled;
+                    {
+                        std::lock_guard lock(g_settingsMutex);
+                        historyEnabled = g_settings.historyEnabled;
+                    }
+                    // Only synchronize the externally changed toggle; don't overwrite
+                    // unrelated edits in an already-open settings window.
+                    bool updating = state->updating;
+                    state->updating = true;
+                    SendDlgItemMessageW(hWnd, kHistoryEnabled, BM_SETCHECK,
+                                        historyEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
+                    UpdateDependentSettingsControls(*state);
+                    state->updating = updating;
+                }
                 bool enabled = g_visualTestMode.load(std::memory_order_acquire);
                 SendDlgItemMessageW(hWnd, kVisualTestModeLayout, BM_SETCHECK,
                                     enabled ? BST_CHECKED : BST_UNCHECKED, 0);

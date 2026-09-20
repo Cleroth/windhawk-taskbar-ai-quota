@@ -124,6 +124,8 @@ Single `.wh.cpp` injected into `explorer.exe`. Execution domains:
 - **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the native Win32 settings
   window and account editor. It persists autosaved configuration to mod LocalStorage and requests
   taskbar UI rebuilds, but must NEVER touch XAML directly.
+- **History thread**: owns the native history window, graph caches, and export/confirmation
+  dialogs. No XAML. Cancel tracked modal dialogs and join this worker before unloading.
 - **Taskbar UI threads**: all XAML lives here. One `QuotaUiInstance` per taskbar window in
   `g_uiInstances`.
 
@@ -153,6 +155,9 @@ first, then reads/updates XAML. Never resolve XAML refs on the fetch or login th
   target claims it, wait for completion. Never add a timeout that lets the DLL unload while a
   worker, hook, subclass, or XAML callback can still execute mod code.
 - Check `g_unloading` in loops and before slow/marshaled work.
+- `g_historyMutex` is an independent leaf: never hold settings/auth/UI locks across journal
+  operations, or acquire them from inside history operations. Clear invalidates in-flight batches
+  with `g_historyEpoch`; settings publication updates the history admission generation.
 
 # Stability invariants (runs inside explorer.exe)
 
@@ -163,7 +168,7 @@ A crash takes down the shell. Keep it defensive:
   `[[clang::no_destroy]]`, nullable storage, owner-thread cleanup, and explicit reset during
   controlled unload. `Wh_ModUninit` isn't guaranteed to run during process shutdown, so a normal
   global destructor must never release XAML.
-- Unload must stay clean: set `g_unloading`, signal `g_stopEvent`, close+join the settings window,
+- Unload must stay clean: set `g_unloading`, signal `g_stopEvent`, close+join history and settings,
   unblock+join the login thread, join the fetch/retry threads, remove injected UI, delete the tray
   icon, `WSACleanup`.
 
@@ -186,6 +191,12 @@ when extending auth handling:
   quota endpoint.
 - The token store is keyed by `AccountIdentityHash` (provider+label). Keep that stable or sign-ins
   get orphaned.
+- Usage history belongs in per-user LocalAppData, not Windhawk's machine-shared writable storage.
+  Recording consent is a separate HKCU setting, never a field in machine-shared `settings_v1`.
+  Keep the journal size/read bounds, checksum validation, atomic compaction, and exclusive writer
+  handle. Only the shell process records; pending history IDs must be saved before recording.
+  History IDs are separate from auth identities and follow configured entries, not verified logins.
+  Recording/storage/export behavior and verification live in README > Usage history.
 
 # Conventions
 

@@ -24,10 +24,11 @@ static std::atomic<HWND> g_settingsWindow{nullptr};
 
 static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
 static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
+static constexpr UINT kHistoryConsentChangedMessage = WM_APP + 22;
 
-static void NotifySettingsWindowChanged() {
+static void NotifySettingsWindowChanged(bool historyConsentChanged = false) {
     if (HWND hWnd = g_settingsWindow.load()) {
-        PostMessageW(hWnd, kSettingsRefreshMessage, 0, 0);
+        PostMessageW(hWnd, historyConsentChanged ? kHistoryConsentChangedMessage : kSettingsRefreshMessage, 0, 0);
     }
 }
 

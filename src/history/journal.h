@@ -1,0 +1,376 @@
+// Local usage-history journal and its recording consent. Takes no UI or auth locks.
+
+struct HistoryFileHeader {
+    uint64_t magic = 0x3154534948514941ULL;  // AIQHIST1
+    uint32_t version = 1;
+    uint32_t recordBytes = sizeof(HistorySample);
+};
+static constexpr size_t kHistoryMaxSamples = 250000;  // ~60 MB, independent of retention.
+static constexpr ULONGLONG kHistoryTimestampLimitMs = 100000000000000ULL;
+static constexpr ULONGLONG kHistoryMaxWindowMs = 3650 * kHistoryDayMs;
+static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
+static std::deque<HistorySample> g_historySamples;
+static std::wstring g_historyPath;
+static std::wstring g_historyStatus;
+static bool g_historyLoaded = false;
+static bool g_historyWritable = true;
+static bool g_historyDirty = false;
+static bool g_historyCapped = false;
+static ULONGLONG g_historyMaintenanceMs = 0;
+static ULONGLONG g_historyWriteRetryMs = 0;
+static winrt::file_handle g_historyOwnership;
+
+static void SetHistoryStatus(std::wstring message) {
+    g_historyStatus = std::move(message);
+    bool error = !g_historyStatus.empty();
+    if (g_historyStorageError.exchange(error) != error) NotifySettingsWindowChanged();
+}
+
+static bool IsHistoryOwnerProcess() {
+    DWORD shellProcessId = 0;
+    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        GetWindowThreadProcessId(taskbar, &shellProcessId);
+    }
+    return shellProcessId && shellProcessId == GetCurrentProcessId();
+}
+
+static uint64_t HistoryChecksum(const HistorySample& sample) {
+    uint64_t hash = 1469598103934665603ULL;
+    const auto* bytes = reinterpret_cast<const unsigned char*>(&sample);
+    for (size_t i = 0; i < offsetof(HistorySample, checksum); ++i) {
+        hash = (hash ^ bytes[i]) * 1099511628211ULL;
+    }
+    return hash;
+}
+
+// Callers hold only g_historyMutex. An invalid format is preserved until explicit Clear.
+static void LoadHistoryLocked(bool create = false) {
+    if (g_historyLoaded) return;
+    g_historyLoaded = true;
+    g_historyWritable = true;
+    SetHistoryStatus({});
+    PWSTR localAppData = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &localAppData))) {
+        g_historyWritable = false;
+        SetHistoryStatus(L"History storage is unavailable.");
+        return;
+    }
+    std::wstring directory = localAppData;
+    CoTaskMemFree(localAppData);
+    // Windhawk's writable mod directory is shared across Windows users. Work-pattern
+    // history belongs under the current user's profile, with its inherited private ACL.
+    directory += L"\\TaskbarAIQuota";
+    g_historyPath = directory + L"\\" WH_MOD_ID L"\\usage-history-v1.bin";
+    if (!create && GetFileAttributesW(g_historyPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+            g_historyLoaded = false;
+            return;  // A read-only visit before opt-in must not create a directory or lock.
+        }
+    }
+    if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
+        g_historyWritable = false;
+        SetHistoryStatus(L"Cannot create the local history directory.");
+        return;
+    }
+    directory += L"\\" WH_MOD_ID;
+    if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
+        g_historyWritable = false;
+        SetHistoryStatus(L"Cannot create the local history directory.");
+        return;
+    }
+    g_historyPath = directory;
+    g_historyPath += L"\\usage-history-v1.bin";
+    // Separate Explorer processes, reloads, or sessions must never compact each other's
+    // journal. The OS releases this exclusive ownership handle even after a shell crash.
+    std::wstring lockPath = directory + L"\\history.lock";
+    g_historyOwnership.attach(CreateFileW(lockPath.c_str(), GENERIC_READ | GENERIC_WRITE,
+        0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (!g_historyOwnership) {
+        g_historyLoaded = false;  // Retry after an overlapping Explorer session exits.
+        g_historyWritable = false;
+        SetHistoryStatus(L"History storage is in use by another Explorer session, or is inaccessible.");
+        return;
+    }
+    winrt::file_handle file{CreateFileW(g_historyPath.c_str(), GENERIC_READ,
+        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (!file) {
+        if (GetLastError() != ERROR_FILE_NOT_FOUND) {
+            g_historyWritable = false;
+            SetHistoryStatus(L"Cannot read history. Check storage permissions, then reopen the mod.");
+        }
+        return;
+    }
+    HistoryFileHeader header;
+    LARGE_INTEGER size{};
+    DWORD read = 0;
+    if (!GetFileSizeEx(file.get(), &size)) {
+        g_historyWritable = false;
+        SetHistoryStatus(L"Cannot read the history file size.");
+        return;
+    }
+    if (size.QuadPart == 0) {
+        g_historyDirty = true;  // Crash between first file creation and header write.
+        return;
+    }
+    if (size.QuadPart < (LONGLONG)sizeof(header) ||
+        !ReadFile(file.get(), &header, sizeof(header), &read, nullptr) ||
+        read != sizeof(header) || header.magic != HistoryFileHeader{}.magic ||
+        header.version != 1 || header.recordBytes != sizeof(HistorySample)) {
+        g_historyWritable = false;
+        SetHistoryStatus(L"Unsupported or damaged history file. Clear history to start again.");
+        return;
+    }
+    size_t count = (size_t)((size.QuadPart - sizeof(header)) / sizeof(HistorySample));
+    // A crash may leave only a partial final record. Retain complete checksummed samples.
+    g_historyDirty = (size.QuadPart - sizeof(header)) % sizeof(HistorySample) != 0;
+    if (count > kHistoryMaxSamples) {
+        LARGE_INTEGER offset;
+        offset.QuadPart = sizeof(header) + (count - kHistoryMaxSamples) * sizeof(HistorySample);
+        if (!SetFilePointerEx(file.get(), offset, nullptr, FILE_BEGIN)) {
+            g_historyWritable = false;
+            SetHistoryStatus(L"Cannot seek in history file.");
+            return;
+        }
+        count = kHistoryMaxSamples;
+        g_historyDirty = g_historyCapped = true;
+    }
+    std::array<HistorySample, 256> batch;
+    while (count && !g_unloading) {
+        size_t n = std::min(count, batch.size());
+        DWORD bytes = (DWORD)(n * sizeof(HistorySample));
+        if (!ReadFile(file.get(), batch.data(), bytes, &read, nullptr) || read != bytes) {
+            g_historyWritable = false;
+            SetHistoryStatus(L"History read failed. Loaded samples remain available for export.");
+            return;
+        }
+        for (size_t i = 0; i < n; ++i) {
+            const auto& sample = batch[i];
+            bool valid = sample.checksum == HistoryChecksum(sample) && sample.accountId &&
+                         sample.timeMs && sample.timeMs < kHistoryTimestampLimitMs &&
+                         sample.intervalMs > 0 && sample.intervalMs <= kHistoryDayMs &&
+                         sample.provider >= 1 && sample.provider <= 3 && sample.failed <= 1;
+            for (const auto& meter : sample.meters) {
+                valid = valid && std::isfinite(meter.value) && meter.value >= -1 &&
+                        meter.value <= 1e12 && meter.resetMs < kHistoryTimestampLimitMs &&
+                        meter.durationMs <= kHistoryMaxWindowMs;
+            }
+            if (!valid) {
+                // Stop at corruption rather than connecting graphs across unknown records.
+                // A lone torn last record is recoverable; interior corruption needs consent.
+                if (count == n && i + 1 == n) {
+                    g_historyDirty = true;
+                    return;
+                }
+                g_historyWritable = false;
+                SetHistoryStatus(L"Damaged history record. Export readable samples or clear history.");
+                return;
+            }
+            g_historySamples.push_back(sample);
+        }
+        count -= n;
+    }
+}
+
+static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples) {
+    if (g_historyPath.empty() || !g_historyOwnership) return false;
+    std::wstring temporary = g_historyPath + L".tmp";
+    winrt::file_handle file{CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr,
+        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (!file) {
+        SetHistoryStatus(L"Cannot write history. Check disk space and storage permissions.");
+        g_historyWriteRetryMs = NowUnixMs() + 3600000;
+        return false;
+    }
+    HistoryFileHeader header;
+    DWORD written = 0;
+    bool ok = WriteFile(file.get(), &header, sizeof(header), &written, nullptr) &&
+              written == sizeof(header);
+    std::array<HistorySample, 256> batch;
+    auto it = samples.begin();
+    while (ok && it != samples.end()) {
+        size_t n = 0;
+        while (n < batch.size() && it != samples.end()) batch[n++] = *it++;
+        DWORD bytes = (DWORD)(n * sizeof(HistorySample));
+        ok = WriteFile(file.get(), batch.data(), bytes, &written, nullptr) && written == bytes;
+    }
+    ok = ok && FlushFileBuffers(file.get());
+    file.close();
+    if (ok) {
+        ok = MoveFileExW(temporary.c_str(), g_historyPath.c_str(),
+                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    }
+    if (!ok) {
+        DeleteFileW(temporary.c_str());
+        SetHistoryStatus(L"History write failed; the previous journal was kept.");
+        g_historyWriteRetryMs = NowUnixMs() + 3600000;
+        return false;
+    }
+    g_historyDirty = false;
+    g_historyWriteRetryMs = 0;
+    SetHistoryStatus({});
+    return true;
+}
+
+static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
+    try {
+        std::lock_guard lock(g_historyMutex);
+        LoadHistoryLocked(create);
+        ULONGLONG now = NowUnixMs();
+        // Retention edits use the regular hourly cadence too: autosave must not prune
+        // immediately while someone is still adjusting a numeric field.
+        if (g_historyMaintenanceMs && g_historyMaintenanceMs <= now &&
+            now - g_historyMaintenanceMs < kHistoryMaintenanceIntervalMs) {
+            return g_historyMaintenanceMs + kHistoryMaintenanceIntervalMs;
+        }
+        g_historyMaintenanceMs = now;
+        ULONGLONG age = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
+        ULONGLONG cutoff = now > age ? now - age : 0;
+        auto previousSize = g_historySamples.size();
+        std::erase_if(g_historySamples, [cutoff](const auto& sample) {
+            return sample.timeMs < cutoff;
+        });
+        if (g_historySamples.size() != previousSize) g_historyDirty = true;
+        if (g_historyDirty && g_historyWritable && !g_unloading && now >= g_historyWriteRetryMs) {
+            RewriteHistoryLocked(g_historySamples);
+        }
+        return now + kHistoryMaintenanceIntervalMs;
+    } catch (...) {
+        Wh_Log(L"History maintenance failed");
+        return NowUnixMs() + kHistoryMaintenanceIntervalMs;
+    }
+}
+
+static void AppendHistory(const std::vector<HistorySample>& samples,
+                          uint64_t epoch, ULONGLONG generation, int retentionDays) {
+    if (samples.empty() || g_unloading) return;
+    try {
+        std::lock_guard lock(g_historyMutex);
+        // This is the admission point. A later settings change doesn't retract samples
+        // already admitted; Clear holds the same lock and invalidates pre-clear fetches.
+        if (epoch != g_historyEpoch.load() || generation != g_historySettingsGeneration.load()) return;
+        LoadHistoryLocked(true);
+        if (!g_historyWritable || g_historyPath.empty()) return;
+        ULONGLONG now = NowUnixMs();
+        ULONGLONG age = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
+        std::vector<HistorySample> admitted;
+        for (auto sample : samples) {
+            if ((now > age && sample.timeMs < now - age) ||
+                (!g_historySamples.empty() && sample.timeMs < g_historySamples.back().timeMs)) {
+                continue;  // Never turn a backwards system-clock adjustment into negative time.
+            }
+            if (sample.failed) {
+                auto previous = std::find_if(g_historySamples.rbegin(), g_historySamples.rend(),
+                    [&](const HistorySample& entry) { return entry.accountId == sample.accountId; });
+                // One marker breaks continuity for an entire outage; failed retries add
+                // no measurements and must not fill the journal with an unchanged error.
+                if (previous != g_historySamples.rend() && previous->failed &&
+                    previous->session == sample.session) continue;
+            }
+            for (auto& meter : sample.meters) {
+                if (!std::isfinite(meter.value) || meter.value < 0 || meter.value > 1e12) {
+                    meter.value = -1;
+                }
+                // Persist only metadata the reader accepts; bad provider fields mean
+                // unknown timing, not a checksummed record that poisons the journal.
+                if (meter.resetMs >= kHistoryTimestampLimitMs) meter.resetMs = 0;
+                if (meter.durationMs > kHistoryMaxWindowMs) meter.durationMs = 0;
+            }
+            sample.checksum = HistoryChecksum(sample);
+            g_historySamples.push_back(sample);
+            admitted.push_back(sample);
+        }
+        if (admitted.empty()) return;
+        if (g_historySamples.size() > kHistoryMaxSamples) {
+            // Amortize compaction instead of rewriting a full journal every new sample.
+            while (g_historySamples.size() > kHistoryMaxSamples * 9 / 10) {
+                g_historySamples.pop_front();
+            }
+            g_historyDirty = g_historyCapped = true;
+        }
+        if (g_historyDirty) {
+            if (now >= g_historyWriteRetryMs) RewriteHistoryLocked(g_historySamples);
+            return;
+        }
+        winrt::file_handle file{CreateFileW(g_historyPath.c_str(), FILE_APPEND_DATA | FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
+        LARGE_INTEGER size{};
+        DWORD written = 0;
+        bool ok = file && GetFileSizeEx(file.get(), &size);
+        if (ok && size.QuadPart == 0) {
+            HistoryFileHeader header;
+            ok = WriteFile(file.get(), &header, sizeof(header), &written, nullptr) &&
+                 written == sizeof(header);
+        }
+        DWORD bytes = (DWORD)(admitted.size() * sizeof(HistorySample));
+        if (ok) ok = WriteFile(file.get(), admitted.data(), bytes, &written, nullptr) && written == bytes;
+        if (!ok) {
+            // Retain admitted samples in memory; next append repairs a possible torn tail.
+            g_historyDirty = true;
+            g_historyWriteRetryMs = now + 3600000;
+            SetHistoryStatus(L"History is not being saved to disk. Check disk space and permissions.");
+        } else {
+            SetHistoryStatus({});
+        }
+    } catch (...) {
+        Wh_Log(L"History append failed");
+    }
+}
+
+static HistorySnapshot ReadHistorySnapshot(ULONGLONG fromMs) {
+    std::lock_guard lock(g_historyMutex);
+    LoadHistoryLocked();
+    HistorySnapshot snapshot;
+    snapshot.status = g_historyStatus;
+    if (g_historyCapped) snapshot.status += L" Storage cap reached; oldest samples were pruned.";
+    for (const auto& sample : g_historySamples) {
+        if (sample.timeMs >= fromMs) snapshot.samples.push_back(sample);
+    }
+    return snapshot;
+}
+
+static bool ClearHistory(std::wstring* error) {
+    std::lock_guard lock(g_historyMutex);
+    LoadHistoryLocked();
+    ++g_historyEpoch;
+    if (!g_historyLoaded && g_historyWritable && !g_historyOwnership && !g_historyPath.empty()) {
+        g_historySamples.clear();
+        return true;  // Nothing has ever been recorded; Clear is an idempotent no-op.
+    }
+    if (!RewriteHistoryLocked({})) {
+        if (error) *error = g_historyStatus.empty() ? L"History storage is unavailable." : g_historyStatus;
+        return false;
+    }
+    g_historySamples.clear();
+    g_historyWritable = true;
+    g_historyCapped = false;
+    return true;
+}
+
+static constexpr PCWSTR kHistoryConsentRegistryKey =
+    L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
+
+// Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared.
+static bool ReadHistoryConsent() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    return RegGetValueW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, L"RecordHistory",
+                        RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS &&
+           size == sizeof(value) && value == 1;
+}
+
+static bool WriteHistoryConsent(bool enabled) {
+    HKEY key = nullptr;
+    LSTATUS result = enabled ?
+        RegCreateKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, nullptr, 0,
+                        KEY_SET_VALUE, nullptr, &key, nullptr) :
+        RegOpenKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, KEY_SET_VALUE, &key);
+    // Disabling an absent entry must not create a registry key.
+    if (!enabled && (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND)) return true;
+    if (result != ERROR_SUCCESS) return false;
+    DWORD value = enabled ? 1 : 0;
+    result = RegSetValueExW(key, L"RecordHistory", 0, REG_DWORD,
+                          reinterpret_cast<const BYTE*>(&value), sizeof(value));
+    RegCloseKey(key);
+    return result == ERROR_SUCCESS;
+}

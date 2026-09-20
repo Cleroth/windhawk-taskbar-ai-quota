@@ -330,12 +330,12 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
         setVisible(state.accountList,
                    state.currentPage == 0 &&
                        listBottom - listTop >= ScaleForDpi(30, state.dpi));
-        const int columnWidths[] = {90, 150, 120, 70, 120};
-        int desiredColumnsWidth = ScaleForDpi(550, state.dpi);
+        const int columnWidths[] = {80, 135, 110, 55, 125, 100};
+        int desiredColumnsWidth = ScaleForDpi(605, state.dpi);
         int availableColumnsWidth = width - x * 2 - ScaleForDpi(4, state.dpi);
         double columnScale = desiredColumnsWidth > availableColumnsWidth ?
                                  (double)availableColumnsWidth / desiredColumnsWidth : 1.0;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < (int)ARRAYSIZE(columnWidths); i++) {
             ListView_SetColumnWidth(state.accountList, i,
                                     std::max(ScaleForDpi(48, state.dpi),
                                              (int)(ScaleForDpi(columnWidths[i], state.dpi) *

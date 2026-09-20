@@ -54,6 +54,10 @@ enum SettingsControlId {
     kPollPreset,
     kPollMinutes,
     kEnableNotifications,
+    kHistoryEnabled,
+    kHistoryRetentionDays,
+    kSkipHiddenPolling,
+    kOpenHistoryWindow,
 
     kVisualTestModeLayout = 2350,
     kVisualTestModeDisplay,
@@ -70,6 +74,8 @@ enum SettingsControlId {
     kAccountProviderLabel,
     kAccountLabelLabel,
     kAccountCreditsMax,
+    kAccountRecordHistory,
+    kAccountHistoryIdentityNote,
 };
 
 struct SettingsRow {
@@ -112,6 +118,7 @@ struct AccountEditorState {
     AccountConfig account;
     uint64_t originalIdentity = 0;
     HWND edit = nullptr;
+    HWND toolTip = nullptr;
     HFONT font = nullptr;
     HBRUSH backgroundBrush = nullptr;
     HBRUSH inputBrush = nullptr;

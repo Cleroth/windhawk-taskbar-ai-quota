@@ -4,7 +4,8 @@ static constexpr PCWSTR kSettingsStorageKey = L"settings_v1";
 static constexpr PCWSTR kSettingsLengthStorageKey = L"settings_v1_len";
 static constexpr int kSettingsStorageVersion = 1;
 
-static void NormalizeSettings(Settings* s) {
+// Returns whether history IDs need saving before recording can begin.
+static bool NormalizeSettings(Settings* s) {
     std::vector<AccountConfig> accounts;
     for (auto& a : s->accounts) {
         if (a.provider != L"anthropic" && a.provider != L"openai" &&
@@ -36,11 +37,38 @@ static void NormalizeSettings(Settings* s) {
     }
     s->accounts = std::move(accounts);
 
+    bool historyIdsChanged = false;
+    for (size_t i = 0; i < s->accounts.size(); i++) {
+        auto& account = s->accounts[i];
+        bool duplicateId = account.historyId && std::any_of(
+            s->accounts.begin(), s->accounts.begin() + i,
+            [&](const AccountConfig& previous) { return previous.historyId == account.historyId; });
+        if (account.historyId && !duplicateId) continue;
+        historyIdsChanged = true;
+        account.historyId = 0;
+        // Check every existing ID, including later accounts, to keep their histories stable.
+        for (int attempt = 0; attempt < 32; attempt++) {
+            uint64_t id = 0;
+            if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&id), sizeof(id),
+                                BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0) break;
+            if (id && std::none_of(s->accounts.begin(), s->accounts.end(),
+                                  [id](const AccountConfig& a) { return a.historyId == id; })) {
+                account.historyId = id;
+                break;
+            }
+        }
+        if (!account.historyId) {
+            Wh_Log(L"History disabled: could not generate a unique account ID");
+            s->historyEnabled = false;
+        }
+    }
+
     if (!s->accounts.empty() && std::all_of(s->accounts.begin(), s->accounts.end(),
                                             [](const AccountConfig& a) { return a.hidden; })) {
         s->accounts[0].hidden = false;
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
+    s->historyRetentionDays = std::clamp(s->historyRetentionDays, 1, 3650);
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
@@ -71,6 +99,7 @@ static void NormalizeSettings(Settings* s) {
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
     s->paceTickColor &= 0x00FFFFFF;
+    return historyIdsChanged;
 }
 
 static std::wstring SerializeSettings(const Settings& s) {
@@ -88,6 +117,12 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
             account.SetNamedValue(L"creditsMax", JsonValue::CreateNumberValue(a.creditsMax));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
+            account.SetNamedValue(L"recordHistory", JsonValue::CreateBooleanValue(a.recordHistory));
+            // JSON numbers cannot round-trip all 64 bits of a history identity.
+            wchar_t historyId[17];
+            swprintf(historyId, ARRAYSIZE(historyId), L"%016llx",
+                     (unsigned long long)a.historyId);
+            account.SetNamedValue(L"historyId", JsonValue::CreateStringValue(historyId));
             accounts.Append(account.as<IJsonValue>());
         }
         root.SetNamedValue(L"accounts", accounts.as<IJsonValue>());
@@ -106,6 +141,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"monitorNumber", s.taskbarMonitorNumber);
         setString(L"clickAction", s.clickAction == ClickAction::OpenDashboard ? L"dashboard" : L"refresh");
         setNumber(L"pollMinutes", s.pollMinutes);
+        setNumber(L"historyRetentionDays", s.historyRetentionDays);
+        setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" : L"stacked");
@@ -148,11 +185,14 @@ static std::wstring SerializeSettings(const Settings& s) {
     }
 }
 
-static bool DeserializeSettings(const std::wstring& json, Settings* out) {
+static bool DeserializeSettings(const std::wstring& json, Settings* out,
+                                 bool* historyIdsChanged) {
     try {
         JsonObject root = JsonObject::Parse(json);
         if ((int)GetNum(root, L"version", 0) != kSettingsStorageVersion) return false;
         Settings s;
+        // Shared JSON never grants or revokes the caller's per-user consent.
+        s.historyEnabled = out->historyEnabled;
         if (root.HasKey(L"accounts") &&
             root.GetNamedValue(L"accounts").ValueType() == JsonValueType::Array) {
             for (const auto& value : root.GetNamedArray(L"accounts")) {
@@ -172,6 +212,12 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
+                a.recordHistory = getBoolDefault(L"recordHistory", true);
+                std::wstring historyId = GetStr(obj, L"historyId");
+                if (historyId.size() == 16 &&
+                    historyId.find_first_not_of(L"0123456789abcdefABCDEF") == std::wstring::npos) {
+                    a.historyId = wcstoull(historyId.c_str(), nullptr, 16);
+                }
                 s.accounts.push_back(std::move(a));
             }
         }
@@ -189,6 +235,10 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         s.clickAction = GetStr(root, L"clickAction") == L"dashboard" ?
                             ClickAction::OpenDashboard : ClickAction::Refresh;
         s.pollMinutes = (int)GetNum(root, L"pollMinutes", 10);
+        double retentionDays = GetNum(root, L"historyRetentionDays", 90);
+        s.historyRetentionDays = std::isfinite(retentionDays) ?
+                                     (int)std::clamp(retentionDays, 1.0, 3650.0) : 90;
+        s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
         s.barLayout = GetStr(root, L"barLayout") == L"vertical" ?
@@ -253,7 +303,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         s.enableNotifications = getBoolDefault(L"notifications", true);
         s.colorblindMode = getBoolDefault(L"colorblind", false);
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
-        NormalizeSettings(&s);
+        *historyIdsChanged = NormalizeSettings(&s);
         *out = std::move(s);
         return true;
     } catch (...) {
@@ -281,7 +331,7 @@ enum class OwnedSettingsLoadResult {
     Unreadable,
 };
 
-static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out) {
+static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out, bool* historyIdsChanged) {
     std::vector<wchar_t> buf(65536);
     size_t copied = Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size());
     if (!copied || !buf[0]) {
@@ -305,7 +355,7 @@ static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out) {
             return OwnedSettingsLoadResult::Unreadable;
         }
     }
-    if (!DeserializeSettings(buf.data(), out)) {
+    if (!DeserializeSettings(buf.data(), out, historyIdsChanged)) {
         Wh_Log(L"Settings load failed: invalid stored configuration");
         Wh_SetStringValue(L"settings_v1_invalid", buf.data());
         return OwnedSettingsLoadResult::Invalid;
@@ -466,6 +516,19 @@ static bool LoadLegacySettings(Settings* out) {
 static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdentity) {
     std::lock_guard<std::mutex> lk(g_settingsMutex);
     std::lock_guard<std::mutex> lk2(g_dataMutex);
+    bool historyBoundary = s.historyEnabled != g_settings.historyEnabled ||
+                           s.skipHiddenPolling != g_settings.skipHiddenPolling ||
+                           s.pollMinutes != g_settings.pollMinutes;
+    for (const auto& account : s.accounts) {
+        auto previous = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
+            [&](const AccountConfig& old) { return account.historyId && old.historyId == account.historyId; });
+        if (previous != g_settings.accounts.end() &&
+            (account.recordHistory != previous->recordHistory || account.hidden != previous->hidden)) {
+            historyBoundary = true;
+        }
+    }
+    // Appearance edits/renames don't break graphs; recording and polling changes do.
+    if (historyBoundary) ++g_historyContinuityGeneration;
     std::vector<AccountData> newData(s.accounts.size());
     std::vector<bool> oldDataUsed(g_data.size(), false);
     for (size_t i = 0; i < s.accounts.size(); i++) {
@@ -486,6 +549,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
     }
     g_settings = std::move(s);
     g_settingsGeneration++;
+    g_historySettingsGeneration.store(g_settingsGeneration);
     g_data = std::move(newData);
 }
 
@@ -497,13 +561,33 @@ enum class SettingsApplyResult {
 
 static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity = 0,
                                               uint64_t newIdentity = 0) {
-    NormalizeSettings(&s);
+    Settings previous;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
-        if (s == g_settings) return SettingsApplyResult::Unchanged;
+        previous = g_settings;
     }
-    if (!SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
-    g_settingsLoadError = false;
+    const bool consentChanged = s.historyEnabled != previous.historyEnabled;
+    const bool requestedHistoryEnabled = s.historyEnabled;
+    NormalizeSettings(&s);
+    // An ID-generation failure may disable runtime recording, but is not a consent edit.
+    if (consentChanged && s.historyEnabled != requestedHistoryEnabled) return SettingsApplyResult::Failed;
+    if (s == previous) return SettingsApplyResult::Unchanged;
+    Settings sharedPrevious = previous;
+    sharedPrevious.historyEnabled = s.historyEnabled;
+    const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || g_settingsLoadError;
+    if (saveShared && !SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
+    // Save shared changes first: a failed shared save must never grant consent. Consent-only
+    // edits leave shared JSON untouched. Registry calls are short and take no history locks.
+    if (consentChanged && !WriteHistoryConsent(s.historyEnabled)) {
+        if (saveShared && !SaveOwnedSettings(previous)) {
+            Wh_Log(L"Consent save failed and shared settings rollback failed; runtime settings unchanged");
+        }
+        return SettingsApplyResult::Failed;
+    }
+    if (saveShared) {
+        g_historyIdsPendingSave = false;
+        g_settingsLoadError = false;
+    }
     PublishSettings(std::move(s), oldIdentity, newIdentity);
     return SettingsApplyResult::Changed;
 }
@@ -530,21 +614,43 @@ static void LoadSettings() {
     } catch (...) {}
 
     Settings s;
+    const bool historyConsent = ReadHistoryConsent();
+    s.historyEnabled = historyConsent;
     g_settingsLoadError = false;
-    OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s);
+    g_historyIdsPendingSave = false;
+    bool historyIdsChanged = false;
+    OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s, &historyIdsChanged);
     if (loadResult == OwnedSettingsLoadResult::Missing) {
         bool imported = LoadLegacySettings(&s);
         if (!imported) s = Settings{};
+        s.historyEnabled = historyConsent;
         NormalizeSettings(&s);
         if (SaveOwnedSettings(s)) {
             if (imported) Wh_Log(L"Imported legacy Windhawk settings");
             else Wh_Log(L"Initialized empty mod-owned settings");
+        } else {
+            s.historyEnabled = false;
+            g_historyIdsPendingSave = !s.accounts.empty();
+            Wh_Log(L"Settings initialization save failed; history disabled");
+        }
+    } else if (loadResult == OwnedSettingsLoadResult::Loaded && historyIdsChanged) {
+        // Other Explorer processes must not race to persist independently generated IDs.
+        // Startup can precede Shell_TrayWnd: retain IDs and opt-in, but fence recording until
+        // the shell fetch thread saves them. Failed saves leave the same fence in place.
+        g_historyIdsPendingSave = true;
+        if (IsHistoryOwnerProcess()) {
+            if (SaveOwnedSettings(s)) {
+                g_historyIdsPendingSave = false;
+            } else {
+                Wh_Log(L"History ID migration save failed; recording deferred");
+            }
         }
     } else if (loadResult == OwnedSettingsLoadResult::Invalid ||
                loadResult == OwnedSettingsLoadResult::Unreadable) {
         // Keep the invalid/future/unreadable blob intact. The setup tile opens with safe
         // defaults; readable invalid blobs were also backed up above.
         s = Settings{};
+        s.historyEnabled = historyConsent;
         g_settingsLoadError = true;
     }
     PublishSettings(std::move(s));

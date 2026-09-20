@@ -86,7 +86,12 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
             double utilization = GetNum(eu, L"utilization");
             bool limitIsNull = eu.HasKey(L"monthly_limit") &&
                                eu.GetNamedValue(L"monthly_limit").ValueType() == JsonValueType::Null;
+            d->extraUsage.resetUnixMs = ParseIso8601Ms(GetStr(eu, L"resets_at"));
             if (limitIsNull) {
+                // Reported spending is usable history even without a percentage ceiling.
+                if (std::isfinite(usedCents) && usedCents >= 0) {
+                    d->extraUsedAmount = usedCents / 100.0;
+                }
                 if (!d->extraLines.empty()) d->extraLines += L"\n";
                 d->extraLines += L"extra usage: unlimited";
             } else if (limitCents > 0) {
@@ -98,7 +103,6 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
                 d->extraUsage.pct = utilization;
                 d->extraUsedAmount = std::max(usedCents, 0.0) / 100.0;
                 d->extraLimitAmount = limitCents / 100.0;
-                d->extraUsage.resetUnixMs = ParseIso8601Ms(GetStr(eu, L"resets_at"));
                 if (d->extraUsage.resetUnixMs) {
                     // The API omits the cycle start. Derive the previous monthly billing
                     // boundary from its authoritative next-reset timestamp.
@@ -139,7 +143,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
             }
         }
         bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||
-                      d->extraUsage.pct >= 0;
+                      d->extraUsage.pct >= 0 || d->extraUsedAmount >= 0;
         if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
         return parsed;
     } catch (...) {

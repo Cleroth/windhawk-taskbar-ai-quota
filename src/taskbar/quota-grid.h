@@ -147,6 +147,15 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     OpenSettingsWindow();
                 });
             state.menuItemClickHandlers.push_back({settingsItem, settingsToken});
+
+            MenuFlyoutItem historyItem;
+            historyItem.Text(L"Usage history...");
+            auto historyToken = historyItem.Click(
+                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                    OpenHistoryWindow();
+                });
+            state.menuItemClickHandlers.push_back({historyItem, historyToken});
+            menu.Items().Append(historyItem);
             menu.Items().Append(settingsItem);
             setupElement.ContextFlyout(menu);
 
@@ -751,6 +760,15 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     OpenSettingsWindow();
                 });
             state.menuItemClickHandlers.push_back({settingsItem, settingsToken});
+
+            MenuFlyoutItem historyItem;
+            historyItem.Text(L"Usage history...");
+            auto historyToken = historyItem.Click(
+                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                    OpenHistoryWindow();
+                });
+            state.menuItemClickHandlers.push_back({historyItem, historyToken});
+            menu.Items().Append(historyItem);
             menu.Items().Append(settingsItem);
 
             tappedElement.ContextFlyout(menu);

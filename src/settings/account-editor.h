@@ -29,7 +29,11 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
                  sc(180), sc(188), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    int buttonY = std::max(sc(232), height - sc(46));
+    SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
+                 sc(16), sc(218), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
+                 sc(16), sc(246), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    int buttonY = std::max(sc(306), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr,
@@ -155,6 +159,38 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                                GetModuleHandleW(nullptr), nullptr);
             SendMessageW(creditsMax, EM_SETLIMITTEXT, 9, 0);
 
+            HWND recordHistory = CreateWindowExW(
+                0, L"BUTTON", L"Record history", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                sc(16), sc(218), sc(260), sc(24), hWnd,
+                reinterpret_cast<HMENU>(kAccountRecordHistory), GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(recordHistory, BM_SETCHECK,
+                         state->account.recordHistory ? BST_CHECKED : BST_UNCHECKED, 0);
+            CreateWindowExW(0, L"STATIC",
+                L"History follows this entry, even after signing in again. "
+                L"Use a new entry for a different login.",
+                WS_CHILD | WS_VISIBLE | SS_LEFT, 0, 0, 0, 0, hWnd,
+                reinterpret_cast<HMENU>(kAccountHistoryIdentityNote),
+                GetModuleHandleW(nullptr), nullptr);
+            state->toolTip = CreateWindowExW(
+                WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
+                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+            if (state->toolTip && recordHistory) {
+                SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0, sc(360));
+                TOOLINFOW info{};
+                info.cbSize = sizeof(info);
+                info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+                info.hwnd = hWnd;
+                info.uId = reinterpret_cast<UINT_PTR>(recordHistory);
+                info.lpszText = const_cast<PWSTR>(
+                    L"This account preference is shared across Windows users. Records only when "
+                    L"Enable local history is on for the current Windows user in Behavior. "
+                    L"Do not poll hidden accounts overrides this checkbox: hidden accounts are not "
+                    L"polled or recorded while that option is on. History follows this configured "
+                    L"account, not the signed-in login. Use a new account entry for a different login.");
+                SendMessageW(state->toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&info));
+            }
+
             HWND ok = CreateWindowExW(0, L"BUTTON", L"OK",
                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
                                       sc(204), sc(232), sc(80), sc(30), hWnd,
@@ -199,6 +235,8 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.provider = providerIndex == 1 ? L"openai" :
                                           providerIndex == 2 ? L"antigravity" : L"anthropic";
                 state->account.label = std::move(label);
+                state->account.recordHistory =
+                    IsDlgButtonChecked(hWnd, kAccountRecordHistory) == BST_CHECKED;
                 state->account.showBars[kFiveHourBar] =
                     IsDlgButtonChecked(hWnd, kAccountFiveHour) == BST_CHECKED;
                 state->account.showBars[kWeeklyBar] =
@@ -323,7 +361,7 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
     UINT dpi = WindowDpi(owner);
     int width = ScaleForDpi(404, dpi);
-    int height = ScaleForDpi(314, dpi);
+    int height = ScaleForDpi(388, dpi);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitorInfo);
     width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
@@ -415,6 +453,9 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
     bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
                                    oldAccount.label == newAccount.label &&
+                                   oldAccount.creditsMax == newAccount.creditsMax &&
+                                   oldAccount.recordHistory == newAccount.recordHistory &&
+                                   oldAccount.historyId == newAccount.historyId &&
                                    oldAccount.showBars != newAccount.showBars;
     if (identityChanged && g_loginInProgress.load()) {
         SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
@@ -505,6 +546,9 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
 
     // Visibility can be toggled from a taskbar menu while the account editor is open.
     newAccount.hidden = settings.accounts[index].hidden;
+    // Renames retain history; switching providers starts a new series during normalization.
+    newAccount.historyId = oldAccount.provider == newAccount.provider ?
+                               settings.accounts[index].historyId : 0;
     settings.accounts[index] = newAccount;
     SettingsApplyResult applyResult = ApplyOwnedSettings(
         std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,

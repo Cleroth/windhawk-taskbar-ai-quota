@@ -16,6 +16,8 @@ struct AccountConfig {
     // used-percent bar in the extra-usage slot. 0 disables the bar.
     int creditsMax = 0;
     bool hidden = false;  // Runtime show/hide toggle (right-click menu), persisted in mod storage.
+    bool recordHistory = true;  // Still requires the global history opt-in.
+    uint64_t historyId = 0;  // Independent of the provider+label auth identity.
 
     bool operator==(const AccountConfig&) const = default;
 };
@@ -79,6 +81,9 @@ struct Settings {
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
+    bool historyEnabled = false;
+    int historyRetentionDays = 90;
+    bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;
     int labelFontSize = 11;
