@@ -7,3 +7,5 @@
 .vs/
 Debug/
 Release/
+/tests/history/.out/
+/tests/history/__pycache__/

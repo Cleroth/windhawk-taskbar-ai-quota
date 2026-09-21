@@ -212,9 +212,14 @@ when extending auth handling:
 
 # Testing
 
-No automated tests. Verify with the `-fsyntax-only` clang check above, then a Windhawk runtime
-load into `explorer.exe`. The global `msbuild`/`vstest.console` guidance does not apply to this
-repo.
+Run `check-mod.ps1` for syntax/metadata and `python tests/history/run.py` for isolated history
+regressions and native-control probes (`--capture` saves rendered images). The suite uses bundled
+clang, not `msbuild`/`vstest.console`; its owning guide is [tests/history/AGENTS.md](tests/history/AGENTS.md).
+A full integration check still requires Windhawk loading the mod into `explorer.exe`.
+
+When changed native-control behavior is hidden by stubs, verify the assumed API/message contract
+with an isolated real-control probe under relevant, verified host contexts. Report caller-logic,
+native-contract, and Explorer integration results separately; a stub pass does not verify native behavior.
 
 For changes to persisted settings or identity keys, runtime-test an upgrade from the current
 catalog version with non-default accounts, visibility, configuration, and existing sign-ins.
