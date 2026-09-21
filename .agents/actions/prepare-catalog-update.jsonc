@@ -1,6 +1,6 @@
 {
   "label": "Prepare Catalog Update",
-  "icon": "deploy",
+  "icon": "none",
   "exec": {
     "executable": "pwsh",
     "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "catalog-update.ps1"],
@@ -8,7 +8,7 @@
   },
   "appearance": {
     "text": "catalog\nprep",
-    "textSize": 11,
+    "textSize": 9,
     "backgroundColor": "#3d315b"
   },
 }

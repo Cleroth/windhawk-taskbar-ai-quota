@@ -8,8 +8,8 @@
     "cwd": ".",
   },
   "appearance": {
-    "text": "\n\ninstall",
-    "textSize": 11,
-    "layout": "label"
+    "text": "install",
+    "height": 34,
+    "layout": "below"
   },
 }

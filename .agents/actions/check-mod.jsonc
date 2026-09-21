@@ -1,6 +1,6 @@
 {
   "label": "Check Windhawk Mod",
-  "icon": "check",
+  "icon": "none",
   "exec": {
     "executable": "pwsh",
     "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "check-mod.ps1"],
@@ -8,7 +8,7 @@
   },
   "appearance": {
     "text": "mod\ncheck",
-    "textSize": 11,
+    "textSize": 10,
     "backgroundColor": "#244a35"
   },
 }
