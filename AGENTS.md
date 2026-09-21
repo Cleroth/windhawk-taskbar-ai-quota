@@ -76,6 +76,12 @@ body**, not the branch's individual commit messages. Use
 put AI-review responses, design rationale, and minor-fix details in PR comments. There is no
 `@changelog` metadata field or in-file changelog section.
 
+Write the body as short, plain hyphen bullets starting with Add, Fix, or Improve, describing
+user-visible changes.
+No headings, implementation details, API-field explanations, or long parentheticals. For example:
+`- Fix quota bars not appearing on newer Windows 11 taskbars.` Add a brief `Note:` after the list
+only when users need migration or compatibility information.
+
 The catalog file is a copy of the generated `local@taskbar-ai-quota.wh.cpp` with the `local@`
 filename prefix stripped. Keep the metadata (incl. `@github`/`@license`) in sync in
 `src/taskbar-ai-quota.cpp`.
