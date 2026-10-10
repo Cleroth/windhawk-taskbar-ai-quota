@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.0.0
+// @version         2.0.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -344,8 +344,8 @@ void Wh_ModUninit() {
     }
     g_settingsWindow.store(nullptr);
 
-    // Unblock an in-flight sign-in: close the paste dialog and/or the loopback listener so the
-    // login thread falls out of its message/accept loop, then join it. The lock pairs with
+    // Unblock an in-flight sign-in: close the sign-in window and the loopback listener so the
+    // login thread falls out of its message loop, then join it. The lock pairs with
     // StartLogin (g_unloading is already set) so a concurrent click can't spawn a thread we miss.
     {
         std::lock_guard<std::mutex> lk(g_loginThreadMutex);

@@ -123,8 +123,9 @@ Single `.wh.cpp` injected into `explorer.exe`. Execution domains:
 - **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff, token refresh,
   and owns the tray notify icon. It must NEVER touch XAML.
 - **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`): runs an
-  OAuth sign-in - opens the browser, then either shows the Anthropic paste window (`g_loginWnd`,
-  with its own message loop) or runs the OpenAI loopback listener (`g_loginSocket`). It does
+  OAuth sign-in - shows the sign-in window (`g_loginWnd`, own message loop) offering the authorize
+  link to copy or open; never launch a browser unprompted. Anthropic pastes the code there; the
+  OpenAI loopback listener (`g_loginSocket`) notifies that window via `WSAAsyncSelect`. It does
   network + token storage but must NEVER touch XAML. Spawned from a taskbar UI thread by
   `StartLogin`.
 - **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the native Win32 settings
@@ -153,8 +154,8 @@ first, then reads/updates XAML. Never resolve XAML refs on the fetch or login th
   pattern in the publish block).
 - In-flight WinHTTP handles are tracked (`TrackHttpHandle`) so `Wh_ModUninit` can cancel them via
   `CloseActiveHttpHandles`. New network code must follow this or unload can hang.
-- A sign-in can block on a window message loop (Anthropic) or `select`/`accept` (OpenAI). Unload
-  unblocks it by posting `WM_CLOSE` to `g_loginWnd` and closing `g_loginSocket`, then joins
+- A sign-in blocks on the sign-in window's message loop with no timeout. Unload unblocks it by
+  posting `WM_CLOSE` to `g_loginWnd` and closing `g_loginSocket`, then joins
   `g_loginThread`. Keep this path intact when changing the login flow.
 - Preserve the teardown lifetime barrier: join every worker that can issue finite marshals before
   `RemoveAllQuotaGrids(true)`. A finite marshal may discard only an unclaimed payload; once the
