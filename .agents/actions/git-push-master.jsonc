@@ -1,0 +1,16 @@
+{
+	"label": "Git Push Master",
+	"icon": "none",
+	"order": -1,
+	"reveal": "always",
+	"exec": {
+		"executable": "./git_push_master.bat",
+		"args": [],
+		"cwd": ".agents"
+	},
+	"appearance": {
+		"text": "Push",
+		"height": 22,
+		"textColor": "#8599c7"
+	}
+}

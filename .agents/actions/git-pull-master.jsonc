@@ -1,0 +1,16 @@
+{
+	"label": "Git Pull Master",
+	"icon": "none",
+	"order": -2,
+	"reveal": "always",
+	"exec": {
+		"executable": "./git_pull_master.bat",
+		"args": [],
+		"cwd": ".agents"
+	},
+	"appearance": {
+		"text": "Pull",
+		"height": 22,
+		"textColor": "#8599c7"
+	}
+}
