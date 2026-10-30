@@ -86,6 +86,10 @@ Signing in uses the public OAuth clients of the official CLIs (Claude Code for A
 - OpenAI sign-in needs `localhost:1455` (or `1457`) free for the browser redirect.
 - Anthropic and OpenAI sessions refresh automatically; sign in again if a stored session is missing, invalid, or revoked.
 
+## Building from source
+
+Windhawk and its catalog take a single file, so the source lives in `src/` as fragments of one translation unit, included in order by `src/taskbar-ai-quota.cpp`. `pwsh generate-mod.ps1` combines them into the committed `local@taskbar-ai-quota.wh.cpp`; edit `src/` rather than that generated file, regenerate, then run `pwsh install-windhawk.ps1` to install it locally. Edits made in Windhawk's mod editor need to be ported back into `src/`.
+
 ## Suggestions & Bugs
 
 Have a suggestion or found a bug? [Open an issue](https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new).

@@ -1,0 +1,14 @@
+{
+  "label": "Generate Windhawk Mod",
+  "icon": "build",
+  "exec": {
+    "executable": "pwsh",
+    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "generate-mod.ps1"],
+    "cwd": ".",
+  },
+  "appearance": {
+    "text": "mod\ngen",
+    "textSize": 11,
+    "backgroundColor": "#4a3f24"
+  },
+}

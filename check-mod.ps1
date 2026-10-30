@@ -14,6 +14,15 @@ if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
 if ((Split-Path -Leaf $Source) -ne 'local@taskbar-ai-quota.wh.cpp') {
     throw "Unexpected source filename: $Source"
 }
+
+$sourcePath = (Resolve-Path -LiteralPath $Source).Path
+if ($sourcePath -ieq (Join-Path $PSScriptRoot 'local@taskbar-ai-quota.wh.cpp')) {
+    & (Join-Path $PSScriptRoot 'generate-mod.ps1') -Check
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The generated mod is stale or src/ is invalid; run generate-mod.ps1'
+    }
+}
+
 if (-not (Test-Path -LiteralPath $Compiler -PathType Leaf)) {
     throw "Windhawk compiler not found: $Compiler"
 }
@@ -21,7 +30,6 @@ if (-not (Test-Path -LiteralPath $IncludeDirectory -PathType Container)) {
     throw "Windhawk include directory not found: $IncludeDirectory"
 }
 
-$sourcePath = (Resolve-Path -LiteralPath $Source).Path
 $sourceText = [System.IO.File]::ReadAllText($sourcePath)
 $expectedMetadata = [ordered]@{
     id = 'taskbar-ai-quota'

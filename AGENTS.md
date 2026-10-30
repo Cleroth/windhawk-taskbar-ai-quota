@@ -1,8 +1,26 @@
 # Building
 
-This is a single-file Windhawk mod (`local@taskbar-ai-quota.wh.cpp`). There is no
-`.sln`/`.vcxproj`. Do NOT use `msbuild`. Windhawk compiles the `.wh.cpp` itself with its
+Windhawk loads the mod as one file, `local@taskbar-ai-quota.wh.cpp`, generated from `src/`. There
+is no `.sln`/`.vcxproj`. Do NOT use `msbuild`. Windhawk compiles the `.wh.cpp` itself with its
 bundled clang when the mod is loaded.
+
+## Source layout
+
+- `src/` is the source of truth. The root `local@taskbar-ai-quota.wh.cpp` is generated and
+  committed; never edit it directly. Edit `src/`, then run `pwsh generate-mod.ps1`.
+  `generate-mod.ps1 -Check` verifies freshness without writing; `check-mod.ps1` and
+  `install-windhawk.ps1` run it for the root file.
+- Edits made in Windhawk's editor, or PRs against the root file, must be ported into `src/`. Each
+  fragment starts after a `// src/<path>` marker line in the generated file.
+- `src/taskbar-ai-quota.cpp` is the entry: mod metadata and readme, system includes, the fragment
+  includes, and the `Wh_Mod*` callbacks. Fragments form one translation unit, and the entry's
+  include order is declaration order.
+- Fragments contain no local includes. Every file under `src/` except the entry must be included
+  exactly once; the generator fails otherwise. Put forward declarations for calls into a later
+  fragment in `src/core/forward.h`. Keep file-scope functions and globals `static`.
+- `src/` files are UTF-8 without BOM, LF, and end with exactly one newline.
+- `pwsh generate-mod.ps1 -Locate <line>` maps a line number from Windhawk compile errors or logs
+  back to `src/<file>:<line>`.
 
 ## Local compile / syntax check
 
@@ -35,9 +53,10 @@ lookups/fallbacks with direct calls.
 
 ## Install / runtime test
 
-`pwsh install-windhawk.ps1` copies the mod into `C:\ProgramData\Windhawk\ModsSource`. A full
-runtime test requires Windhawk loading the mod into `explorer.exe`; it can't be tested from a
-plain compile.
+`pwsh install-windhawk.ps1` copies the mod into `C:\ProgramData\Windhawk\ModsSource`. It refuses
+to overwrite an installed copy that changed since its last install (e.g. edited in Windhawk's
+editor); port those edits into `src/`, or pass `-Force` to discard them. A full runtime test
+requires Windhawk loading the mod into `explorer.exe`; it can't be tested from a plain compile.
 
 # Publishing to the windhawk-mods catalog
 
@@ -57,13 +76,14 @@ body**, not the branch's individual commit messages. Use
 put AI-review responses, design rationale, and minor-fix details in PR comments. There is no
 `@changelog` metadata field or in-file changelog section.
 
-This repo's `local@taskbar-ai-quota.wh.cpp` is the source of truth; the catalog file is a copy with
-the `local@` filename prefix stripped. Keep the metadata (incl. `@github`/`@license`) in sync here.
+The catalog file is a copy of the generated `local@taskbar-ai-quota.wh.cpp` with the `local@`
+filename prefix stripped. Keep the metadata (incl. `@github`/`@license`) in sync in
+`src/taskbar-ai-quota.cpp`.
 
 ## Workflow (gh, authed as Cleroth)
 
 ```pwsh
-# pre-flight: clang -fsyntax-only check above must exit 0 first
+# pre-flight: check-mod.ps1 (freshness + clang check) must pass first
 $dest = "$env:TEMP\windhawk-mods"
 gh repo sync Cleroth/windhawk-mods --source ramensoftware/windhawk-mods --branch main
 git clone --single-branch --branch main https://github.com/Cleroth/windhawk-mods.git $dest
@@ -77,7 +97,8 @@ gh pr create -R ramensoftware/windhawk-mods -B main -H Cleroth:<branch>
 
 ## Release helpers
 
-- `pwsh check-mod.ps1` runs the canonical bundled-clang check and validates source metadata.
+- `pwsh check-mod.ps1` checks freshness, runs the canonical bundled-clang check, and validates
+  source metadata.
 - `pwsh catalog-update.ps1` prepares a persistent catalog worktree without committing, pushing,
   or editing PR text. `-Verify` checks the current worktree without changing it.
 - `pwsh pr-review-status.ps1` reports checks and whether the latest AI review matches the PR head.

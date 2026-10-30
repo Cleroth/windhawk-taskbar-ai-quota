@@ -115,9 +115,11 @@ namespace wuxd = winrt::Windows::UI::Xaml::Documents;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
-/**********************************************/
-//  Settings and State
-/**********************************************/
+// Unity build: the fragments below form one translation unit, included in dependency
+// order. generate-mod.ps1 inlines them into the published single-file mod.
+
+// src/core/model.h
+// Account configuration, settings, and fetched quota data shared by every domain.
 
 enum QuotaBarIndex {
     kFiveHourBar,
@@ -262,6 +264,22 @@ struct AccountData {
     bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
 
+// Stable identity used to preserve g_data across settings reloads, persist the show/hide
+// toggle, and key the encrypted token store. FNV-1a over provider+label; relabeling an
+// account therefore points it at a fresh (unsigned-in) identity.
+static uint64_t AccountIdentityHash(const AccountConfig& a) {
+    std::wstring id = a.provider + L"\n" + a.label;
+    uint64_t h = 1469598103934665603ull;
+    for (const auto* p = reinterpret_cast<const unsigned char*>(id.data());
+         p != reinterpret_cast<const unsigned char*>(id.data() + id.size()); ++p) {
+        h = (h ^ *p) * 1099511628211ull;
+    }
+    return h;
+}
+
+// src/taskbar/ui-types.h
+// Per-taskbar XAML UI instances and the registry that owns them.
+
 struct AppliedState {
     std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1};
     std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
@@ -338,6 +356,40 @@ struct QuotaUiInstance {
     std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
 };
 
+[[clang::no_destroy]] static std::optional<
+    std::vector<std::unique_ptr<QuotaUiInstance>>> g_uiInstances{std::in_place};
+static std::mutex g_uiInstancesMutex;
+
+static const wchar_t* kRootName = L"AiQuota_Root";
+
+using WindowThreadProc = bool (*)(void*);
+struct TaskbarDisplayInfo {
+    HWND hWnd = nullptr;
+    bool primary = false;
+    int monitorNumber = 0;
+    RECT rect{};
+};
+
+// src/core/forward.h
+// Forward declarations for calls that reach a later fragment.
+
+static int ScaleForDpi(int value, UINT dpi);
+static UINT WindowDpi(HWND hWnd);
+static void UpdateQuotaUi(QuotaUiInstance& state);
+static void PostUiUpdate();
+static void OpenSettingsWindow();
+static bool SaveOwnedSettings(const Settings& settings);
+static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
+                            uint64_t newIdentity = 0);
+
+static void StartRetryInject(bool removeExisting = false);
+static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                                  LPARAM lParam, DWORD_PTR refData);
+
+// src/core/state.h
+// Shared runtime state, lifecycle signals, and cross-thread requests to the fetch thread
+// and settings window.
+
 static Settings g_settings;
 static std::mutex g_settingsMutex;
 static std::mutex g_configEditMutex;
@@ -356,148 +408,65 @@ static std::atomic<bool> g_settingsLoadError{false};
 static std::atomic<bool> g_fetchThreadStarted{false};
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
-static HANDLE g_injectEvent = nullptr;
-static HANDLE g_fetchThread = nullptr;
-static HANDLE g_retryThread = nullptr;
-static std::mutex g_retryThreadMutex;
-static std::atomic<bool> g_rebuildQuotaUiBeforeInject{false};
-static void* g_mtaUsageCookie = nullptr;
-static HRESULT (WINAPI* g_coDecrementMTAUsage)(void*) = nullptr;
-static bool g_winsockStarted = false;
-static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
-static std::mutex g_httpHandlesMutex;
-static std::vector<HINTERNET> g_httpHandles;
 
-static HANDLE g_settingsWindowThread = nullptr;
-static std::mutex g_settingsWindowMutex;
 static std::atomic<HWND> g_settingsWindow{nullptr};
-static std::atomic<bool> g_settingsWindowCancelRequested{false};
 
-// Fetch-thread-owned: hidden message-only window that owns the mod's tray icon.
-static HWND g_notifyWnd = nullptr;
-
-[[clang::no_destroy]] static std::optional<
-    std::vector<std::unique_ptr<QuotaUiInstance>>> g_uiInstances{std::in_place};
-static std::mutex g_uiInstancesMutex;
-
-static const wchar_t* kRootName = L"AiQuota_Root";
-static constexpr ULONGLONG kFileTimeUnixEpochOffsetMs = 11644473600000ULL;
-static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
 static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
-static constexpr UINT_PTR kSettingsAutosaveTimer = 1;
-
-using WindowThreadProc = bool (*)(void*);
-struct TaskbarDisplayInfo {
-    HWND hWnd = nullptr;
-    bool primary = false;
-    int monitorNumber = 0;
-    RECT rect{};
-};
-
-static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, DWORD timeoutMs = 2000);
-static int ScaleForDpi(int value, UINT dpi);
-static UINT WindowDpi(HWND hWnd);
-static std::vector<TaskbarDisplayInfo> FindCurrentProcessTaskbarDisplays();
-static std::vector<HWND> FindCurrentProcessTaskbarWnds();
-static QuotaUiInstance* FindUiState(HWND hWnd);
-static void UpdateQuotaUi(QuotaUiInstance& state);
-static void PostUiUpdate();
-static void OpenSettingsWindow();
-static void SetVisualTestMode(bool enabled);
-static bool SaveOwnedSettings(const Settings& settings);
-static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
-                            uint64_t newIdentity = 0);
 
 static void NotifySettingsWindowChanged() {
     if (HWND hWnd = g_settingsWindow.load()) {
         PostMessageW(hWnd, kSettingsRefreshMessage, 0, 0);
     }
 }
-static void RemoveQuotaGrid(HWND hWnd);
-static void ReleaseQuotaUiState(HWND hWnd);
-static void StartRetryInject(bool removeExisting = false);
-static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
-                                                  LPARAM lParam, DWORD_PTR refData);
 
-static UINT GetQuotaCleanupMessage() {
-    static const UINT message = RegisterWindowMessageW(L"Windhawk_CleanupQuotaUi_" WH_MOD_ID);
-    return message;
+static void QueueRefresh(uint64_t identityHash) {
+    if (g_unloading) return;
+
+    if (!g_fetchThreadStarted.load(std::memory_order_acquire)) {
+        {
+            std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
+            g_refreshing = false;
+            g_refreshAccountIdentity = 0;
+        }
+        PostUiUpdate();
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
+        g_refreshing = true;
+        g_refreshAccountIdentity = identityHash;
+        g_refreshGeneration++;
+    }
+    PostUiUpdate();
+    if (g_refreshEvent) SetEvent(g_refreshEvent);
 }
 
-static UINT GetSettingsActivateMessage() {
-    static const UINT message =
-        RegisterWindowMessageW(L"Windhawk_ActivateSettings_" WH_MOD_ID);
-    return message;
+static void RefreshQuotaByIdentity(uint64_t identityHash) {
+    bool found = false;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        for (const auto& account : g_settings.accounts) {
+            if (AccountIdentityHash(account) == identityHash) {
+                found = true;
+                break;
+            }
+        }
+    }
+    if (found) QueueRefresh(identityHash);
 }
 
-/**********************************************/
-//  Helpers
-/**********************************************/
+// src/core/helpers.h
+// Time, text-conversion, display-name, and shell helpers.
+
+static constexpr ULONGLONG kFileTimeUnixEpochOffsetMs = 11644473600000ULL;
 
 static ULONGLONG NowUnixMs() {
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
     ULONGLONG t = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
     return t / 10000 - kFileTimeUnixEpochOffsetMs;
-}
-
-static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
-                                    int redThreshold, ULONGLONG now,
-                                    std::vector<AccountConfig>* accounts,
-                                    std::vector<AccountData>* data) {
-    static constexpr std::array<const wchar_t*, 4> kLabels = {
-        L"OAI", L"CC 1", L"CC 2", L"Go",
-    };
-    const std::array<double, 4> percentages = {
-        yellowThreshold / 2.0,
-        50.0,
-        orangeThreshold + (redThreshold - orangeThreshold) / 2.0,
-        redThreshold + (100 - redThreshold) / 2.0,
-    };
-    static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
-        kFiveHourWindowMs,
-        kWeeklyWindowMs,
-        kWeeklyWindowMs,
-        30ULL * 24 * 60 * 60 * 1000,
-    };
-    static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
-        0.35, 0.5, 0.6, 0.8,
-    };
-
-    accounts->clear();
-    accounts->reserve(percentages.size());
-    if (data) {
-        data->clear();
-        data->reserve(percentages.size());
-    }
-    for (size_t i = 0; i < percentages.size(); i++) {
-        AccountConfig account;
-        account.provider = L"anthropic";
-        account.label = kLabels[i];
-        account.showBars.fill(false);
-        for (size_t w = 0; w <= i; w++) account.showBars[w] = true;
-        accounts->push_back(std::move(account));
-
-        if (!data) continue;
-        AccountData accountData;
-        std::array<WindowUsage*, kQuotaBarCount> usage = {
-            &accountData.win5h, &accountData.winWeek,
-            &accountData.fableWeek, &accountData.extraUsage,
-        };
-        for (int w = 0; w < kQuotaBarCount; w++) {
-            usage[w]->pct = percentages[i];
-            usage[w]->windowDurationMs = kDurations[w];
-            usage[w]->resetUnixMs = now +
-                (ULONGLONG)std::lround(kDurations[w] * kRemainingFractions[w]);
-        }
-        accountData.plan = L"Visual test";
-        accountData.extraUsedAmount = percentages[i] / 2.0;
-        accountData.extraLimitAmount = 50.0;
-        accountData.lastSuccessMs = now;
-        accountData.stale = false;
-        data->push_back(std::move(accountData));
-    }
 }
 
 static std::wstring Utf8ToWide(const std::string& s) {
@@ -516,19 +485,6 @@ static std::string WideToUtf8(const std::wstring& s) {
     std::string out(n, 0);
     WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), out.data(), n, nullptr, nullptr);
     return out;
-}
-
-// Stable identity used to preserve g_data across settings reloads, persist the show/hide
-// toggle, and key the encrypted token store. FNV-1a over provider+label; relabeling an
-// account therefore points it at a fresh (unsigned-in) identity.
-static uint64_t AccountIdentityHash(const AccountConfig& a) {
-    std::wstring id = a.provider + L"\n" + a.label;
-    uint64_t h = 1469598103934665603ull;
-    for (const auto* p = reinterpret_cast<const unsigned char*>(id.data());
-         p != reinterpret_cast<const unsigned char*>(id.data() + id.size()); ++p) {
-        h = (h ^ *p) * 1099511628211ull;
-    }
-    return h;
 }
 
 static ULONGLONG ParseIso8601Ms(const std::wstring& s) {
@@ -645,197 +601,6 @@ static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
     return std::wstring(L"updated: ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
 }
 
-static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
-                                            int orangeThreshold, int redThreshold,
-                                            bool colorblindMode) {
-    if (stale || pct < 0) return {255, 0x9E, 0x9E, 0x9E};
-
-    if (colorblindMode) {
-        if (pct >= redThreshold) return {255, 0xD5, 0x5E, 0x00};
-        if (pct >= orangeThreshold) return {255, 0xE6, 0x9F, 0x00};
-        if (pct >= yellowThreshold) return {255, 0x56, 0xB4, 0xE9};
-        return {255, 0x00, 0x72, 0xB2};
-    }
-
-    if (pct >= redThreshold) return {255, 0xE5, 0x39, 0x35};
-    if (pct >= orangeThreshold) return {255, 0xFB, 0x8C, 0x00};
-    if (pct >= yellowThreshold) return {255, 0xFD, 0xD8, 0x35};
-    return {255, 0x43, 0xA0, 0x47};
-}
-
-static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, bool hasError) {
-    constexpr double maxWidth = 460;
-    auto muted = SolidColorBrush(winrt::Windows::UI::Color{255, 0xD6, 0xD6, 0xD6});
-    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0x9A, 0xBE, 0xFF});
-    auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
-    auto creditLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
-    auto duration = SolidColorBrush(winrt::Windows::UI::Color{255, 0xB7, 0xE4, 0xA3});
-    auto accent = SolidColorBrush(hasError ?
-        winrt::Windows::UI::Color{255, 0xFF, 0xB4, 0xA9} :
-        winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
-    auto border = SolidColorBrush(hasError ?
-        winrt::Windows::UI::Color{0xB8, 0xD1, 0x34, 0x38} :
-        winrt::Windows::UI::Color{0x72, 0x8A, 0xD1, 0xFF});
-
-    size_t firstBreak = tip.find(L'\n');
-    std::wstring title = firstBreak == std::wstring::npos ? tip : tip.substr(0, firstBreak);
-    std::wstring body = firstBreak == std::wstring::npos ? L"" : tip.substr(firstBreak + 1);
-
-    TextBlock titleBlock;
-    titleBlock.Text(winrt::hstring(title));
-    titleBlock.FontSize(12.5);
-    titleBlock.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-    titleBlock.Foreground(accent);
-    titleBlock.TextWrapping(TextWrapping::Wrap);
-    titleBlock.MaxWidth(maxWidth);
-    titleBlock.IsHitTestVisible(false);
-
-    StackPanel content;
-    content.Orientation(Orientation::Vertical);
-    content.MaxWidth(maxWidth);
-    content.IsHitTestVisible(false);
-    content.Children().Append(titleBlock);
-
-    if (!body.empty()) {
-        auto appendRun = [](TextBlock const& textBlock, std::wstring const& text,
-                            Brush const& brush, bool bold = false) {
-            if (text.empty()) return;
-            wuxd::Run run;
-            run.Text(winrt::hstring(text));
-            run.Foreground(brush);
-            if (bold) run.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            textBlock.Inlines().Append(run);
-        };
-
-        bool firstLine = true;
-        for (size_t pos = 0; pos <= body.size();) {
-            size_t next = body.find(L'\n', pos);
-            std::wstring line = next == std::wstring::npos ? body.substr(pos) : body.substr(pos, next - pos);
-
-            TextBlock lineBlock;
-            lineBlock.FontSize(12);
-            lineBlock.LineHeight(16);
-            lineBlock.TextWrapping(TextWrapping::Wrap);
-            lineBlock.MaxWidth(maxWidth);
-            lineBlock.Margin(firstLine ? Thickness{0, 4, 0, 0} : Thickness{0, 1, 0, 0});
-            lineBlock.IsHitTestVisible(false);
-
-            Brush labelBrush = muted;
-            size_t labelEnd = std::wstring::npos;
-            size_t highlightStart = std::wstring::npos;
-            size_t highlightEnd = std::wstring::npos;
-            bool labelBold = false;
-            bool quotaLine = false;
-            bool errorLine = false;
-            if (line.rfind(L"5h:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 3;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"week:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 5;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"Fable week:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 11;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"error:", 0) == 0) {
-                labelBrush = accent;
-                labelEnd = 6;
-                labelBold = true;
-                errorLine = true;
-            } else if (line.rfind(L"credits:", 0) == 0) {
-                labelBrush = creditLabel;
-                labelEnd = 8;
-                highlightStart = line.find_first_not_of(L" ", labelEnd);
-                if (highlightStart != std::wstring::npos) {
-                    highlightEnd = highlightStart;
-                    while (highlightEnd < line.size()) {
-                        wchar_t ch = line[highlightEnd];
-                        if ((ch < L'0' || ch > L'9') && ch != L'.') break;
-                        highlightEnd++;
-                    }
-                }
-                labelBold = true;
-            } else if (line.rfind(L"extra usage:", 0) == 0) {
-                labelBrush = creditLabel;
-                labelEnd = 12;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"updated:", 0) == 0) {
-                labelBrush = infoLabel;
-                labelEnd = 8;
-                highlightStart = line.find(L"no data yet", labelEnd);
-                if (highlightStart != std::wstring::npos) highlightEnd = highlightStart + 11;
-                labelBold = true;
-            }
-
-            size_t textStart = 0;
-            if (labelEnd != std::wstring::npos) {
-                appendRun(lineBlock, line.substr(0, labelEnd), labelBrush, labelBold);
-                textStart = labelEnd;
-            }
-
-            if (errorLine) {
-                appendRun(lineBlock, line.substr(textStart), accent);
-                content.Children().Append(lineBlock);
-                firstLine = false;
-                if (next == std::wstring::npos) break;
-                pos = next + 1;
-                continue;
-            }
-
-            size_t cursor = textStart;
-            if (quotaLine) {
-                size_t percentEnd = line.find(L"%", cursor);
-                if (percentEnd != std::wstring::npos) {
-                    size_t percentStart = percentEnd;
-                    while (percentStart > cursor) {
-                        wchar_t ch = line[percentStart - 1];
-                        if ((ch < L'0' || ch > L'9') && ch != L'.') break;
-                        percentStart--;
-                    }
-                    appendRun(lineBlock, line.substr(cursor, percentStart - cursor), muted);
-                    appendRun(lineBlock, line.substr(percentStart, percentEnd + 1 - percentStart), duration, true);
-                    cursor = percentEnd + 1;
-                }
-            }
-
-            size_t inPos = line.find(L"in ", cursor);
-            if (inPos != std::wstring::npos) {
-                size_t durationStart = inPos + 3;
-                size_t durationEnd = line.find(L" (", durationStart);
-                size_t dashEnd = line.find(L" - ", durationStart);
-                if (dashEnd != std::wstring::npos && (durationEnd == std::wstring::npos || dashEnd < durationEnd)) {
-                    durationEnd = dashEnd;
-                }
-                if (durationEnd == std::wstring::npos) durationEnd = line.size();
-
-                appendRun(lineBlock, line.substr(cursor, durationStart - cursor), muted);
-                appendRun(lineBlock, line.substr(durationStart, durationEnd - durationStart), duration, true);
-                appendRun(lineBlock, line.substr(durationEnd), muted);
-            } else if (highlightStart != std::wstring::npos && highlightStart < highlightEnd) {
-                appendRun(lineBlock, line.substr(cursor, highlightStart - cursor), muted);
-                appendRun(lineBlock, line.substr(highlightStart, highlightEnd - highlightStart), duration, true);
-                appendRun(lineBlock, line.substr(highlightEnd), muted);
-            } else {
-                appendRun(lineBlock, line.substr(cursor), muted);
-            }
-
-            content.Children().Append(lineBlock);
-            firstLine = false;
-            if (next == std::wstring::npos) break;
-            pos = next + 1;
-        }
-    }
-
-    toolTip.BorderBrush(border);
-    toolTip.Content(content);
-}
-
 static void OpenUrl(PCWSTR url) {
     if (g_unloading || !url || !*url) return;
     ShellExecuteW(nullptr, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
@@ -847,163 +612,8 @@ static PCWSTR ProviderDisplayName(const std::wstring& provider) {
     return L"Google Antigravity";
 }
 
-static void QueueRefresh(uint64_t identityHash) {
-    if (g_unloading) return;
-
-    if (!g_fetchThreadStarted.load(std::memory_order_acquire)) {
-        {
-            std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-            g_refreshing = false;
-            g_refreshAccountIdentity = 0;
-        }
-        PostUiUpdate();
-        return;
-    }
-
-    {
-        std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-        g_refreshing = true;
-        g_refreshAccountIdentity = identityHash;
-        g_refreshGeneration++;
-    }
-    PostUiUpdate();
-    if (g_refreshEvent) SetEvent(g_refreshEvent);
-}
-
-static void RefreshQuotaByIdentity(uint64_t identityHash) {
-    bool found = false;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        for (const auto& account : g_settings.accounts) {
-            if (AccountIdentityHash(account) == identityHash) {
-                found = true;
-                break;
-            }
-        }
-    }
-    if (found) QueueRefresh(identityHash);
-}
-
-static void OpenDashboardForIdentity(uint64_t identityHash) {
-    std::wstring provider;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        for (const auto& account : g_settings.accounts) {
-            if (AccountIdentityHash(account) == identityHash) {
-                provider = account.provider;
-                break;
-            }
-        }
-    }
-    if (provider.empty()) return;
-
-    if (provider == L"antigravity") {
-        RefreshQuotaByIdentity(identityHash);
-    } else {
-        OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage"
-                                         : L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
-    }
-}
-
-// Right-click menu: flip an account's show/hide state, keep at least one visible, persist the
-// hidden-set to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
-// taskbar UI thread (menu click); `sender` is the clicked ToggleMenuFlyoutItem (already flipped).
-static void ToggleAccountVisibility(uint64_t identityHash,
-                                    winrt::Windows::Foundation::IInspectable const& sender) {
-    if (g_unloading) return;
-    auto toggle = sender.try_as<ToggleMenuFlyoutItem>();
-    bool clickedVisible = toggle && toggle.IsChecked();
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-
-    std::wstring hashes;
-    Settings settingsSnapshot;
-    bool refreshNow = false;
-    bool oldHidden = false;
-    bool rejectedLastVisible = false;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        int accountIndex = -1;
-        for (size_t i = 0; i < g_settings.accounts.size(); i++) {
-            if (AccountIdentityHash(g_settings.accounts[i]) == identityHash) {
-                accountIndex = (int)i;
-                break;
-            }
-        }
-        if (accountIndex < 0) return;
-        oldHidden = g_settings.accounts[accountIndex].hidden;
-        bool wantVisible = toggle ? clickedVisible : oldHidden;
-
-        // Refuse to hide the last visible account: there'd be no bar left to right-click.
-        if (!wantVisible && !g_settings.accounts[accountIndex].hidden) {
-            int visibleCount = 0;
-            for (const auto& a : g_settings.accounts) {
-                if (!a.hidden) visibleCount++;
-            }
-            if (visibleCount <= 1) {
-                rejectedLastVisible = true;
-            }
-        }
-        if (!rejectedLastVisible) {
-            bool newHidden = !wantVisible;
-            settingsSnapshot = g_settings;
-            settingsSnapshot.accounts[accountIndex].hidden = newHidden;
-            if (newHidden != oldHidden) {
-                if (!newHidden) {
-                    // Showing: keep the existing (possibly stale) data and only re-query if it has
-                    // already gone stale, matching the UI's grey-out threshold. This stops repeated
-                    // hide/show from triggering fetches and hitting provider rate limits.
-                    ULONGLONG staleIntervalMin =
-                        settingsSnapshot.accounts[accountIndex].provider == L"antigravity"
-                            ? 1
-                            : (ULONGLONG)settingsSnapshot.pollMinutes;
-                    ULONGLONG now = NowUnixMs();
-                    std::lock_guard<std::mutex> lk2(g_dataMutex);
-                    if (accountIndex >= (int)g_data.size()) {
-                        refreshNow = true;
-                    } else {
-                        const AccountData& d = g_data[accountIndex];
-                        refreshNow = d.stale || d.lastSuccessMs == 0 ||
-                                     now - d.lastSuccessMs > staleIntervalMin * 2 * 60000;
-                    }
-                }
-            }
-
-            wchar_t buf[24];
-            for (const auto& a : settingsSnapshot.accounts) {
-                if (!a.hidden) continue;
-                if (!hashes.empty()) hashes += L";";
-                swprintf(buf, ARRAYSIZE(buf), L"%016llx",
-                         (unsigned long long)AccountIdentityHash(a));
-                hashes += buf;
-            }
-        }
-    }
-    if (rejectedLastVisible) {
-        configLock.unlock();
-        if (toggle) toggle.IsChecked(true);
-        return;
-    }
-
-    if (!SaveOwnedSettings(settingsSnapshot)) {
-        configLock.unlock();
-        if (toggle) toggle.IsChecked(!oldHidden);
-        Wh_Log(L"Could not persist account visibility");
-        NotifySettingsWindowChanged();
-        return;
-    }
-    PublishSettings(settingsSnapshot);
-    Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
-    // RefreshQuota re-queries only this account (and posts the UI); otherwise just repaint so the
-    // column collapses/reappears with its existing data without any network request.
-    configLock.unlock();
-    NotifySettingsWindowChanged();
-    if (refreshNow) RefreshQuotaByIdentity(identityHash);
-    else PostUiUpdate();
-}
-
-/**********************************************/
-//  JSON Helpers
-/**********************************************/
+// src/core/json.h
+// Null-tolerant JSON accessors and error-body summaries.
 
 static JsonObject GetObj(JsonObject const& o, PCWSTR name) {
     if (!o || !o.HasKey(name)) return nullptr;
@@ -1054,9 +664,8 @@ static std::wstring DescribeJsonBody(const std::string& body) {
     }
 }
 
-/**********************************************/
-//  Crypto and Encoding
-/**********************************************/
+// src/core/crypto.h
+// Base64, SHA-256, JWT payload decoding, and DPAPI token encryption.
 
 static std::string Base64Encode(const BYTE* data, size_t len) {
     if (!len) return {};
@@ -1183,9 +792,140 @@ static std::string DpapiUnprotect(const std::string& b64) {
     return plain;
 }
 
-/**********************************************/
-//  Token Store
-/**********************************************/
+// src/net/http.h
+// WinHTTP requests with handle tracking so unload can cancel in-flight calls.
+
+static std::mutex g_httpHandlesMutex;
+static std::vector<HINTERNET> g_httpHandles;
+
+struct HttpResult {
+    bool ok = false;
+    int status = 0;
+    int retryAfterSec = 0;
+    std::string body;
+};
+
+static bool TrackHttpHandle(HINTERNET h) {
+    if (!h) return false;
+    std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
+    if (g_unloading) {
+        WinHttpCloseHandle(h);
+        return false;
+    }
+    g_httpHandles.push_back(h);
+    return true;
+}
+
+static bool UntrackHttpHandle(HINTERNET h) {
+    std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
+    auto it = std::find(g_httpHandles.begin(), g_httpHandles.end(), h);
+    if (it == g_httpHandles.end()) return false;
+    g_httpHandles.erase(it);
+    return true;
+}
+
+static void CloseActiveHttpHandles() {
+    std::vector<HINTERNET> handles;
+    {
+        std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
+        handles.swap(g_httpHandles);
+    }
+    for (auto it = handles.rbegin(); it != handles.rend(); ++it) WinHttpCloseHandle(*it);
+}
+
+static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR userAgent,
+                              const std::wstring& headers, const std::string& body = {}) {
+    HttpResult res;
+    HINTERNET ses = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
+                                0);
+    if (ses && !TrackHttpHandle(ses)) ses = nullptr;
+    HINTERNET con = nullptr;
+    HINTERNET req = nullptr;
+
+    if (ses && !g_unloading) {
+        WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
+        con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+        if (con && !TrackHttpHandle(con)) con = nullptr;
+        req = con ? WinHttpOpenRequest(con, method, path, nullptr,
+                                        WINHTTP_NO_REFERER,
+                                        WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                        WINHTTP_FLAG_SECURE)
+                  : nullptr;
+        if (req && !TrackHttpHandle(req)) req = nullptr;
+    }
+
+    if (!g_unloading && req &&
+        WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
+                           body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
+                           (DWORD)body.size(), (DWORD)body.size(), 0) &&
+        WinHttpReceiveResponse(req, nullptr)) {
+        DWORD status = 0, sz = sizeof(status);
+        WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
+                            WINHTTP_NO_HEADER_INDEX);
+        res.status = (int)status;
+
+        wchar_t ra[128]{};
+        DWORD raSz = sizeof(ra);
+        if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER,
+                                WINHTTP_HEADER_NAME_BY_INDEX, ra, &raSz,
+                                WINHTTP_NO_HEADER_INDEX)) {
+            res.retryAfterSec = _wtoi(ra);
+            if (res.retryAfterSec <= 0) {
+                SYSTEMTIME st{};
+                FILETIME ft{};
+                if (WinHttpTimeToSystemTime(ra, &st) && SystemTimeToFileTime(&st, &ft)) {
+                    ULONGLONG t = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+                    ULONGLONG fileMs = t / 10000;
+                    if (fileMs > kFileTimeUnixEpochOffsetMs) {
+                        ULONGLONG retryUnixMs = fileMs - kFileTimeUnixEpochOffsetMs;
+                        ULONGLONG now = NowUnixMs();
+                        if (retryUnixMs > now) {
+                            ULONGLONG deltaSec = (retryUnixMs - now + 999) / 1000;
+                            res.retryAfterSec = (int)std::min(deltaSec, 24ULL * 60 * 60);
+                        }
+                    }
+                }
+            }
+        }
+
+        bool bodyOk = true;
+        for (;;) {
+            DWORD available = 0;
+            if (!WinHttpQueryDataAvailable(req, &available)) {
+                bodyOk = false;
+                break;
+            }
+            if (!available) break;
+
+            size_t prev = res.body.size();
+            constexpr size_t kMaxResponseBytes = 4 * 1024 * 1024;
+            if (available > kMaxResponseBytes - prev) {
+                bodyOk = false;
+                break;
+            }
+            res.body.resize(prev + available);
+            DWORD read = 0;
+            if (!WinHttpReadData(req, res.body.data() + prev, available, &read)) {
+                res.body.resize(prev);
+                bodyOk = false;
+                break;
+            }
+            res.body.resize(prev + read);
+            if (!read) break;
+        }
+        res.ok = bodyOk;
+    }
+
+    if (req && UntrackHttpHandle(req)) WinHttpCloseHandle(req);
+    if (con && UntrackHttpHandle(con)) WinHttpCloseHandle(con);
+    if (ses && UntrackHttpHandle(ses)) WinHttpCloseHandle(ses);
+    return res;
+}
+
+// src/auth/token-store.h
+// DPAPI-encrypted per-account token storage, auth epochs, and rename redirects.
 
 // Per-account OAuth credentials, owned entirely by the mod (the CLI credential files are
 // never touched). Persisted DPAPI-encrypted in Windhawk mod storage, keyed by identity hash.
@@ -1345,139 +1085,8 @@ static TokenCopyResult CopyStoredTokenForRename(uint64_t oldHash, uint64_t newHa
     return TokenCopyResult::Copied;
 }
 
-/**********************************************/
-//  HTTP
-/**********************************************/
-
-struct HttpResult {
-    bool ok = false;
-    int status = 0;
-    int retryAfterSec = 0;
-    std::string body;
-};
-
-static bool TrackHttpHandle(HINTERNET h) {
-    if (!h) return false;
-    std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
-    if (g_unloading) {
-        WinHttpCloseHandle(h);
-        return false;
-    }
-    g_httpHandles.push_back(h);
-    return true;
-}
-
-static bool UntrackHttpHandle(HINTERNET h) {
-    std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
-    auto it = std::find(g_httpHandles.begin(), g_httpHandles.end(), h);
-    if (it == g_httpHandles.end()) return false;
-    g_httpHandles.erase(it);
-    return true;
-}
-
-static void CloseActiveHttpHandles() {
-    std::vector<HINTERNET> handles;
-    {
-        std::lock_guard<std::mutex> lk(g_httpHandlesMutex);
-        handles.swap(g_httpHandles);
-    }
-    for (auto it = handles.rbegin(); it != handles.rend(); ++it) WinHttpCloseHandle(*it);
-}
-
-static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR userAgent,
-                              const std::wstring& headers, const std::string& body = {}) {
-    HttpResult res;
-    HINTERNET ses = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
-                                0);
-    if (ses && !TrackHttpHandle(ses)) ses = nullptr;
-    HINTERNET con = nullptr;
-    HINTERNET req = nullptr;
-
-    if (ses && !g_unloading) {
-        WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
-        con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-        if (con && !TrackHttpHandle(con)) con = nullptr;
-        req = con ? WinHttpOpenRequest(con, method, path, nullptr,
-                                        WINHTTP_NO_REFERER,
-                                        WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                        WINHTTP_FLAG_SECURE)
-                  : nullptr;
-        if (req && !TrackHttpHandle(req)) req = nullptr;
-    }
-
-    if (!g_unloading && req &&
-        WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
-                           body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
-                           (DWORD)body.size(), (DWORD)body.size(), 0) &&
-        WinHttpReceiveResponse(req, nullptr)) {
-        DWORD status = 0, sz = sizeof(status);
-        WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                            WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
-                            WINHTTP_NO_HEADER_INDEX);
-        res.status = (int)status;
-
-        wchar_t ra[128]{};
-        DWORD raSz = sizeof(ra);
-        if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER,
-                                WINHTTP_HEADER_NAME_BY_INDEX, ra, &raSz,
-                                WINHTTP_NO_HEADER_INDEX)) {
-            res.retryAfterSec = _wtoi(ra);
-            if (res.retryAfterSec <= 0) {
-                SYSTEMTIME st{};
-                FILETIME ft{};
-                if (WinHttpTimeToSystemTime(ra, &st) && SystemTimeToFileTime(&st, &ft)) {
-                    ULONGLONG t = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-                    ULONGLONG fileMs = t / 10000;
-                    if (fileMs > kFileTimeUnixEpochOffsetMs) {
-                        ULONGLONG retryUnixMs = fileMs - kFileTimeUnixEpochOffsetMs;
-                        ULONGLONG now = NowUnixMs();
-                        if (retryUnixMs > now) {
-                            ULONGLONG deltaSec = (retryUnixMs - now + 999) / 1000;
-                            res.retryAfterSec = (int)std::min(deltaSec, 24ULL * 60 * 60);
-                        }
-                    }
-                }
-            }
-        }
-
-        bool bodyOk = true;
-        for (;;) {
-            DWORD available = 0;
-            if (!WinHttpQueryDataAvailable(req, &available)) {
-                bodyOk = false;
-                break;
-            }
-            if (!available) break;
-
-            size_t prev = res.body.size();
-            constexpr size_t kMaxResponseBytes = 4 * 1024 * 1024;
-            if (available > kMaxResponseBytes - prev) {
-                bodyOk = false;
-                break;
-            }
-            res.body.resize(prev + available);
-            DWORD read = 0;
-            if (!WinHttpReadData(req, res.body.data() + prev, available, &read)) {
-                res.body.resize(prev);
-                bodyOk = false;
-                break;
-            }
-            res.body.resize(prev + read);
-            if (!read) break;
-        }
-        res.ok = bodyOk;
-    }
-
-    if (req && UntrackHttpHandle(req)) WinHttpCloseHandle(req);
-    if (con && UntrackHttpHandle(con)) WinHttpCloseHandle(con);
-    if (ses && UntrackHttpHandle(ses)) WinHttpCloseHandle(ses);
-    return res;
-}
-
-/**********************************************/
-//  OAuth
-/**********************************************/
+// src/auth/oauth.h
+// OAuth client constants, authorize URLs, and token-endpoint exchange and refresh.
 
 // Public OAuth clients used by the official CLIs; the mod runs the same flows so a sign-in
 // here is independent of (and never touches) OpenCode/Claude Code/Codex credential files.
@@ -1673,9 +1282,8 @@ static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToke
     return PostTokenEndpoint(anthropic, L"application/json", body, tok, err, retryAfterSec);
 }
 
-/**********************************************/
-//  Login
-/**********************************************/
+// src/auth/login.h
+// Sign-in thread: the sign-in window, OpenAI loopback listener, and code exchange.
 
 struct LoginRequest {
     std::wstring provider;
@@ -2202,9 +1810,8 @@ static bool SignOutAccountByIdentity(uint64_t identityHash) {
     return cleared;
 }
 
-/**********************************************/
-//  Usage Parsers
-/**********************************************/
+// src/providers/anthropic.h
+// Anthropic usage response parsing.
 
 static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::wstring* error) {
     try {
@@ -2354,6 +1961,11 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
     }
 }
 
+// src/providers/openai.h
+// OpenAI usage response parsing and the user-set credits ceiling.
+
+static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
+
 static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstring* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
@@ -2496,9 +2108,25 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
     }
 }
 
-/**********************************************/
-//  Google Antigravity Local Discovery
-/**********************************************/
+// OpenAI has no server-side credits ceiling, so a user-set max turns the prepaid balance
+// into a used-percent bar in the extra-usage slot; thresholds, percent text, and
+// notifications then apply unchanged. No reset window, so pace ticks stay hidden. Runs on
+// fresh fetch results and again from PublishSettings, because settings changes do not
+// re-poll and the bar must follow a new max immediately.
+static void ApplyCreditsMax(const AccountConfig& acc, AccountData* d) {
+    if (acc.provider != L"openai") return;
+    d->extraUsage = {};
+    d->extraUsedAmount = -1;
+    d->extraLimitAmount = -1;
+    if (acc.creditsMax <= 0 || d->creditsUnlimited || d->creditsBalance < 0) return;
+    d->extraUsage.pct =
+        std::clamp(100.0 * (1.0 - d->creditsBalance / acc.creditsMax), 0.0, 100.0);
+    d->extraUsedAmount = acc.creditsMax - d->creditsBalance;
+    d->extraLimitAmount = acc.creditsMax;
+}
+
+// src/providers/antigravity.h
+// Google Antigravity local language-server discovery and quota queries.
 
 enum class AntigravityQuotaSource {
     Summary,
@@ -3259,26 +2887,85 @@ static void FetchAntigravityAccount(AccountData* d) {
     *d = std::move(fresh);
 }
 
-/**********************************************/
-//  Fetch Thread
-/**********************************************/
+// src/fetch/notifications.h
+// Fetch-thread tray icon and threshold notifications.
 
-// OpenAI has no server-side credits ceiling, so a user-set max turns the prepaid balance
-// into a used-percent bar in the extra-usage slot; thresholds, percent text, and
-// notifications then apply unchanged. No reset window, so pace ticks stay hidden. Runs on
-// fresh fetch results and again from PublishSettings, because settings changes do not
-// re-poll and the bar must follow a new max immediately.
-static void ApplyCreditsMax(const AccountConfig& acc, AccountData* d) {
-    if (acc.provider != L"openai") return;
-    d->extraUsage = {};
-    d->extraUsedAmount = -1;
-    d->extraLimitAmount = -1;
-    if (acc.creditsMax <= 0 || d->creditsUnlimited || d->creditsBalance < 0) return;
-    d->extraUsage.pct =
-        std::clamp(100.0 * (1.0 - d->creditsBalance / acc.creditsMax), 0.0, 100.0);
-    d->extraUsedAmount = acc.creditsMax - d->creditsBalance;
-    d->extraLimitAmount = acc.creditsMax;
+// Fetch-thread-owned: hidden message-only window that owns the mod's tray icon.
+static HWND g_notifyWnd = nullptr;
+
+static const UINT kNotifyIconId = 1;
+static PCWSTR kNotifyClassName = L"AiQuotaNotify_" WH_MOD_ID;
+
+// Fetch-thread only. Drops the tray icon, window, and class created on demand.
+static void RemoveNotifyIcon() {
+    if (!g_notifyWnd) return;
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_notifyWnd;
+    nid.uID = kNotifyIconId;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+    DestroyWindow(g_notifyWnd);
+    g_notifyWnd = nullptr;
+    UnregisterClassW(kNotifyClassName, GetModuleHandleW(nullptr));
 }
+
+// Fetch-thread only. Lazily creates a hidden message-only window owning one tray
+// icon, then shows a balloon (rendered as a toast on Win11, kept in notify center).
+static void FireThresholdNotification(const std::wstring& title, const std::wstring& body) {
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    auto addNotifyIcon = [](HWND hWnd) {
+        NOTIFYICONDATAW nid{};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = hWnd;
+        nid.uID = kNotifyIconId;
+        nid.uFlags = NIF_ICON | NIF_STATE;
+        nid.dwState = NIS_HIDDEN;
+        nid.dwStateMask = NIS_HIDDEN;
+        nid.hIcon = LoadIconW(nullptr, IDI_WARNING);
+        return Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    };
+    if (!g_notifyWnd) {
+        WNDCLASSEXW wc{};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = DefWindowProcW;
+        wc.hInstance = hInst;
+        wc.lpszClassName = kNotifyClassName;
+        RegisterClassExW(&wc);  // ERROR_CLASS_ALREADY_EXISTS is fine; CreateWindow reuses it.
+
+        g_notifyWnd = CreateWindowExW(0, kNotifyClassName, L"", 0, 0, 0, 0, 0,
+                                      HWND_MESSAGE, nullptr, hInst, nullptr);
+        if (!g_notifyWnd) {
+            Wh_Log(L"Notify window creation failed: %lu", GetLastError());
+            return;
+        }
+
+        if (!addNotifyIcon(g_notifyWnd)) {
+            Wh_Log(L"Shell_NotifyIcon NIM_ADD failed");
+            DestroyWindow(g_notifyWnd);
+            g_notifyWnd = nullptr;
+            return;
+        }
+    }
+
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_notifyWnd;
+    nid.uID = kNotifyIconId;
+    nid.uFlags = NIF_INFO;
+    nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
+    wcsncpy_s(nid.szInfoTitle, title.c_str(), _TRUNCATE);
+    wcsncpy_s(nid.szInfo, body.c_str(), _TRUNCATE);
+    if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+        // Explorer can recreate the notification area without restarting this process.
+        addNotifyIcon(g_notifyWnd);
+        if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+            Wh_Log(L"Shell_NotifyIcon NIM_MODIFY failed");
+        }
+    }
+}
+
+// src/fetch/fetch-thread.h
+// Per-account usage fetch and the polling loop that publishes results and history.
 
 static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec) {
     d->error.clear();
@@ -3424,95 +3111,6 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     fresh.stale = false;
     fresh.lastSuccessMs = NowUnixMs();
     *d = std::move(fresh);
-}
-
-static void PostUiUpdate() {
-    // Never resolve XAML refs on the fetch thread; marshal first.
-    if (g_unloading || !g_uiInjected.load(std::memory_order_acquire)) return;
-
-    for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
-        RunFromWindowThread(hWnd, [](void* param) -> bool {
-            HWND hWnd = static_cast<HWND>(param);
-            auto* state = FindUiState(hWnd);
-            if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
-            return true;
-        }, hWnd);
-    }
-}
-
-/**********************************************/
-//  Threshold Notifications
-/**********************************************/
-
-static const UINT kNotifyIconId = 1;
-static PCWSTR kNotifyClassName = L"AiQuotaNotify_" WH_MOD_ID;
-
-// Fetch-thread only. Drops the tray icon, window, and class created on demand.
-static void RemoveNotifyIcon() {
-    if (!g_notifyWnd) return;
-    NOTIFYICONDATAW nid{};
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = g_notifyWnd;
-    nid.uID = kNotifyIconId;
-    Shell_NotifyIconW(NIM_DELETE, &nid);
-    DestroyWindow(g_notifyWnd);
-    g_notifyWnd = nullptr;
-    UnregisterClassW(kNotifyClassName, GetModuleHandleW(nullptr));
-}
-
-// Fetch-thread only. Lazily creates a hidden message-only window owning one tray
-// icon, then shows a balloon (rendered as a toast on Win11, kept in notify center).
-static void FireThresholdNotification(const std::wstring& title, const std::wstring& body) {
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
-    auto addNotifyIcon = [](HWND hWnd) {
-        NOTIFYICONDATAW nid{};
-        nid.cbSize = sizeof(nid);
-        nid.hWnd = hWnd;
-        nid.uID = kNotifyIconId;
-        nid.uFlags = NIF_ICON | NIF_STATE;
-        nid.dwState = NIS_HIDDEN;
-        nid.dwStateMask = NIS_HIDDEN;
-        nid.hIcon = LoadIconW(nullptr, IDI_WARNING);
-        return Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
-    };
-    if (!g_notifyWnd) {
-        WNDCLASSEXW wc{};
-        wc.cbSize = sizeof(wc);
-        wc.lpfnWndProc = DefWindowProcW;
-        wc.hInstance = hInst;
-        wc.lpszClassName = kNotifyClassName;
-        RegisterClassExW(&wc);  // ERROR_CLASS_ALREADY_EXISTS is fine; CreateWindow reuses it.
-
-        g_notifyWnd = CreateWindowExW(0, kNotifyClassName, L"", 0, 0, 0, 0, 0,
-                                      HWND_MESSAGE, nullptr, hInst, nullptr);
-        if (!g_notifyWnd) {
-            Wh_Log(L"Notify window creation failed: %lu", GetLastError());
-            return;
-        }
-
-        if (!addNotifyIcon(g_notifyWnd)) {
-            Wh_Log(L"Shell_NotifyIcon NIM_ADD failed");
-            DestroyWindow(g_notifyWnd);
-            g_notifyWnd = nullptr;
-            return;
-        }
-    }
-
-    NOTIFYICONDATAW nid{};
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = g_notifyWnd;
-    nid.uID = kNotifyIconId;
-    nid.uFlags = NIF_INFO;
-    nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
-    wcsncpy_s(nid.szInfoTitle, title.c_str(), _TRUNCATE);
-    wcsncpy_s(nid.szInfo, body.c_str(), _TRUNCATE);
-    if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
-        // Explorer can recreate the notification area without restarting this process.
-        addNotifyIcon(g_notifyWnd);
-        if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
-            Wh_Log(L"Shell_NotifyIcon NIM_MODIFY failed");
-        }
-    }
 }
 
 static DWORD WINAPI FetchThreadProc(LPVOID) {
@@ -3849,21 +3447,26 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     return 0;
 }
 
-/**********************************************/
-//  Taskbar XAML Access
-/**********************************************/
+// src/taskbar/marshal.h
+// Taskbar window discovery, UI instance lookup, and marshaling onto taskbar UI threads.
 
-using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
-using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
-using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
-using Std_Ref_Decref_t = void(WINAPI*)(void*);
+static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, DWORD timeoutMs = 2000);
+static std::vector<HWND> FindCurrentProcessTaskbarWnds();
+static QuotaUiInstance* FindUiState(HWND hWnd);
 
-static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
-static CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original = nullptr;
-static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
-static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
-static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
-static void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
+static void PostUiUpdate() {
+    // Never resolve XAML refs on the fetch thread; marshal first.
+    if (g_unloading || !g_uiInjected.load(std::memory_order_acquire)) return;
+
+    for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
+        RunFromWindowThread(hWnd, [](void* param) -> bool {
+            HWND hWnd = static_cast<HWND>(param);
+            auto* state = FindUiState(hWnd);
+            if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
+            return true;
+        }, hWnd);
+    }
+}
 
 static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, DWORD timeoutMs) {
     static const UINT kMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
@@ -4062,6 +3665,114 @@ static std::vector<HWND> FindCurrentProcessTaskbarWnds() {
     return result;
 }
 
+// Registry access is locked, while state contents remain owner-UI-thread-only. Raw pointers stay
+// valid after lookup because only that owner thread can erase its state.
+static QuotaUiInstance* FindUiState(HWND hWnd) {
+    std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+    if (!g_uiInstances) return nullptr;
+    for (auto& state : *g_uiInstances) {
+        if (state->hWnd == hWnd) return state.get();
+    }
+    return nullptr;
+}
+
+static void EraseUiState(HWND hWnd) {
+    std::unique_ptr<QuotaUiInstance> removed;
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        if (!g_uiInstances) return;
+        auto it = std::find_if(g_uiInstances->begin(), g_uiInstances->end(),
+            [hWnd](const auto& state) { return state->hWnd == hWnd; });
+        if (it == g_uiInstances->end()) return;
+        if ((*it)->ownerThreadId != GetCurrentThreadId()) {
+            Wh_Log(L"Refusing to destroy UI state from a non-owner thread");
+            return;
+        }
+
+        removed = std::move(*it);
+        g_uiInstances->erase(it);
+        g_uiInjected.store(!g_unloading && !g_uiInstances->empty(),
+                           std::memory_order_release);
+    }
+
+    if (removed->windowSubclassed && removed->hWnd && IsWindow(removed->hWnd)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            removed->hWnd, TaskbarWindowSubclassProc);
+        removed->windowSubclassed = false;
+    }
+    removed.reset();
+}
+
+static void ClearQuotaEventState(QuotaUiInstance& state) {
+    // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
+    try {
+        if (state.paceTimer) state.paceTimer.Stop();
+    } catch (...) {}
+    try {
+        if (state.paceTimer) state.paceTimer.Tick(state.paceTimerToken);
+    } catch (...) {}
+    state.paceTimer = nullptr;
+
+    for (auto& refs : state.accountRefs) {
+        refs.hasToolTipOpenCursor = false;
+        refs.reopenToolTipOnMove = false;
+        refs.manualToolTipOpen = false;
+        try {
+            if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
+        } catch (...) {}
+        try {
+            if (refs.manualToolTipTimer) {
+                refs.manualToolTipTimer.Tick(refs.manualToolTipTimerToken);
+            }
+        } catch (...) {}
+        try {
+            if (refs.toolTip) refs.toolTip.Opened(refs.toolTipOpenedToken);
+        } catch (...) {}
+        try {
+            if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
+        } catch (...) {}
+    }
+
+    for (auto& handler : state.pointerHandlers) {
+        if (!handler.element) continue;
+
+        try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
+        try { handler.element.PointerEntered(handler.pointerEnteredToken); } catch (...) {}
+        try { handler.element.PointerMoved(handler.pointerMovedToken); } catch (...) {}
+        try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
+        try { handler.element.PointerCaptureLost(handler.pointerCaptureLostToken); } catch (...) {}
+        try { handler.element.PointerCanceled(handler.pointerCanceledToken); } catch (...) {}
+        try { handler.element.ContextFlyout(nullptr); } catch (...) {}
+        try {
+            ToolTipService::SetToolTip(handler.element, winrt::Windows::Foundation::IInspectable{nullptr});
+        } catch (...) {}
+    }
+    state.pointerHandlers.clear();
+
+    for (auto& handler : state.menuItemClickHandlers) {
+        if (!handler.item) continue;
+        try { handler.item.Click(handler.token); } catch (...) {}
+    }
+    state.menuItemClickHandlers.clear();
+    state.accountToggleItems.clear();
+    state.accountRefs.clear();
+}
+
+// src/taskbar/xaml-access.h
+// Private taskbar.dll symbols and access to the taskbar XAML tree. Version-fragile.
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
+using Std_Ref_Decref_t = void(WINAPI*)(void*);
+
+static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
+static CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original = nullptr;
+static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
+static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
+static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+static void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
+
 static HRESULT TryGetTaskbarElementAbi(HWND hTaskbarWnd, void** result) {
     *result = nullptr;
     void* taskbarHostSharedPtr[2]{};
@@ -4179,101 +3890,379 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
     return nullptr;
 }
 
-/**********************************************/
-//  UI
-/**********************************************/
+// src/taskbar/tooltip.h
+// Quota colors and the per-account tooltip.
 
-// Registry access is locked, while state contents remain owner-UI-thread-only. Raw pointers stay
-// valid after lookup because only that owner thread can erase its state.
-static QuotaUiInstance* FindUiState(HWND hWnd) {
-    std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
-    if (!g_uiInstances) return nullptr;
-    for (auto& state : *g_uiInstances) {
-        if (state->hWnd == hWnd) return state.get();
+static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
+                                            int orangeThreshold, int redThreshold,
+                                            bool colorblindMode) {
+    if (stale || pct < 0) return {255, 0x9E, 0x9E, 0x9E};
+
+    if (colorblindMode) {
+        if (pct >= redThreshold) return {255, 0xD5, 0x5E, 0x00};
+        if (pct >= orangeThreshold) return {255, 0xE6, 0x9F, 0x00};
+        if (pct >= yellowThreshold) return {255, 0x56, 0xB4, 0xE9};
+        return {255, 0x00, 0x72, 0xB2};
     }
-    return nullptr;
+
+    if (pct >= redThreshold) return {255, 0xE5, 0x39, 0x35};
+    if (pct >= orangeThreshold) return {255, 0xFB, 0x8C, 0x00};
+    if (pct >= yellowThreshold) return {255, 0xFD, 0xD8, 0x35};
+    return {255, 0x43, 0xA0, 0x47};
 }
 
-static void EraseUiState(HWND hWnd) {
-    std::unique_ptr<QuotaUiInstance> removed;
-    {
-        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
-        if (!g_uiInstances) return;
-        auto it = std::find_if(g_uiInstances->begin(), g_uiInstances->end(),
-            [hWnd](const auto& state) { return state->hWnd == hWnd; });
-        if (it == g_uiInstances->end()) return;
-        if ((*it)->ownerThreadId != GetCurrentThreadId()) {
-            Wh_Log(L"Refusing to destroy UI state from a non-owner thread");
-            return;
-        }
+static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, bool hasError) {
+    constexpr double maxWidth = 460;
+    auto muted = SolidColorBrush(winrt::Windows::UI::Color{255, 0xD6, 0xD6, 0xD6});
+    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0x9A, 0xBE, 0xFF});
+    auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
+    auto creditLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
+    auto duration = SolidColorBrush(winrt::Windows::UI::Color{255, 0xB7, 0xE4, 0xA3});
+    auto accent = SolidColorBrush(hasError ?
+        winrt::Windows::UI::Color{255, 0xFF, 0xB4, 0xA9} :
+        winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
+    auto border = SolidColorBrush(hasError ?
+        winrt::Windows::UI::Color{0xB8, 0xD1, 0x34, 0x38} :
+        winrt::Windows::UI::Color{0x72, 0x8A, 0xD1, 0xFF});
 
-        removed = std::move(*it);
-        g_uiInstances->erase(it);
-        g_uiInjected.store(!g_unloading && !g_uiInstances->empty(),
-                           std::memory_order_release);
-    }
+    size_t firstBreak = tip.find(L'\n');
+    std::wstring title = firstBreak == std::wstring::npos ? tip : tip.substr(0, firstBreak);
+    std::wstring body = firstBreak == std::wstring::npos ? L"" : tip.substr(firstBreak + 1);
 
-    if (removed->windowSubclassed && removed->hWnd && IsWindow(removed->hWnd)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            removed->hWnd, TaskbarWindowSubclassProc);
-        removed->windowSubclassed = false;
-    }
-    removed.reset();
-}
+    TextBlock titleBlock;
+    titleBlock.Text(winrt::hstring(title));
+    titleBlock.FontSize(12.5);
+    titleBlock.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    titleBlock.Foreground(accent);
+    titleBlock.TextWrapping(TextWrapping::Wrap);
+    titleBlock.MaxWidth(maxWidth);
+    titleBlock.IsHitTestVisible(false);
 
-static void ClearQuotaEventState(QuotaUiInstance& state) {
-    // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
-    try {
-        if (state.paceTimer) state.paceTimer.Stop();
-    } catch (...) {}
-    try {
-        if (state.paceTimer) state.paceTimer.Tick(state.paceTimerToken);
-    } catch (...) {}
-    state.paceTimer = nullptr;
+    StackPanel content;
+    content.Orientation(Orientation::Vertical);
+    content.MaxWidth(maxWidth);
+    content.IsHitTestVisible(false);
+    content.Children().Append(titleBlock);
 
-    for (auto& refs : state.accountRefs) {
-        refs.hasToolTipOpenCursor = false;
-        refs.reopenToolTipOnMove = false;
-        refs.manualToolTipOpen = false;
-        try {
-            if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
-        } catch (...) {}
-        try {
-            if (refs.manualToolTipTimer) {
-                refs.manualToolTipTimer.Tick(refs.manualToolTipTimerToken);
+    if (!body.empty()) {
+        auto appendRun = [](TextBlock const& textBlock, std::wstring const& text,
+                            Brush const& brush, bool bold = false) {
+            if (text.empty()) return;
+            wuxd::Run run;
+            run.Text(winrt::hstring(text));
+            run.Foreground(brush);
+            if (bold) run.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            textBlock.Inlines().Append(run);
+        };
+
+        bool firstLine = true;
+        for (size_t pos = 0; pos <= body.size();) {
+            size_t next = body.find(L'\n', pos);
+            std::wstring line = next == std::wstring::npos ? body.substr(pos) : body.substr(pos, next - pos);
+
+            TextBlock lineBlock;
+            lineBlock.FontSize(12);
+            lineBlock.LineHeight(16);
+            lineBlock.TextWrapping(TextWrapping::Wrap);
+            lineBlock.MaxWidth(maxWidth);
+            lineBlock.Margin(firstLine ? Thickness{0, 4, 0, 0} : Thickness{0, 1, 0, 0});
+            lineBlock.IsHitTestVisible(false);
+
+            Brush labelBrush = muted;
+            size_t labelEnd = std::wstring::npos;
+            size_t highlightStart = std::wstring::npos;
+            size_t highlightEnd = std::wstring::npos;
+            bool labelBold = false;
+            bool quotaLine = false;
+            bool errorLine = false;
+            if (line.rfind(L"5h:", 0) == 0) {
+                labelBrush = quotaLabel;
+                labelEnd = 3;
+                labelBold = true;
+                quotaLine = true;
+            } else if (line.rfind(L"week:", 0) == 0) {
+                labelBrush = quotaLabel;
+                labelEnd = 5;
+                labelBold = true;
+                quotaLine = true;
+            } else if (line.rfind(L"Fable week:", 0) == 0) {
+                labelBrush = quotaLabel;
+                labelEnd = 11;
+                labelBold = true;
+                quotaLine = true;
+            } else if (line.rfind(L"error:", 0) == 0) {
+                labelBrush = accent;
+                labelEnd = 6;
+                labelBold = true;
+                errorLine = true;
+            } else if (line.rfind(L"credits:", 0) == 0) {
+                labelBrush = creditLabel;
+                labelEnd = 8;
+                highlightStart = line.find_first_not_of(L" ", labelEnd);
+                if (highlightStart != std::wstring::npos) {
+                    highlightEnd = highlightStart;
+                    while (highlightEnd < line.size()) {
+                        wchar_t ch = line[highlightEnd];
+                        if ((ch < L'0' || ch > L'9') && ch != L'.') break;
+                        highlightEnd++;
+                    }
+                }
+                labelBold = true;
+            } else if (line.rfind(L"extra usage:", 0) == 0) {
+                labelBrush = creditLabel;
+                labelEnd = 12;
+                labelBold = true;
+                quotaLine = true;
+            } else if (line.rfind(L"updated:", 0) == 0) {
+                labelBrush = infoLabel;
+                labelEnd = 8;
+                highlightStart = line.find(L"no data yet", labelEnd);
+                if (highlightStart != std::wstring::npos) highlightEnd = highlightStart + 11;
+                labelBold = true;
             }
-        } catch (...) {}
-        try {
-            if (refs.toolTip) refs.toolTip.Opened(refs.toolTipOpenedToken);
-        } catch (...) {}
-        try {
-            if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
-        } catch (...) {}
+
+            size_t textStart = 0;
+            if (labelEnd != std::wstring::npos) {
+                appendRun(lineBlock, line.substr(0, labelEnd), labelBrush, labelBold);
+                textStart = labelEnd;
+            }
+
+            if (errorLine) {
+                appendRun(lineBlock, line.substr(textStart), accent);
+                content.Children().Append(lineBlock);
+                firstLine = false;
+                if (next == std::wstring::npos) break;
+                pos = next + 1;
+                continue;
+            }
+
+            size_t cursor = textStart;
+            if (quotaLine) {
+                size_t percentEnd = line.find(L"%", cursor);
+                if (percentEnd != std::wstring::npos) {
+                    size_t percentStart = percentEnd;
+                    while (percentStart > cursor) {
+                        wchar_t ch = line[percentStart - 1];
+                        if ((ch < L'0' || ch > L'9') && ch != L'.') break;
+                        percentStart--;
+                    }
+                    appendRun(lineBlock, line.substr(cursor, percentStart - cursor), muted);
+                    appendRun(lineBlock, line.substr(percentStart, percentEnd + 1 - percentStart), duration, true);
+                    cursor = percentEnd + 1;
+                }
+            }
+
+            size_t inPos = line.find(L"in ", cursor);
+            if (inPos != std::wstring::npos) {
+                size_t durationStart = inPos + 3;
+                size_t durationEnd = line.find(L" (", durationStart);
+                size_t dashEnd = line.find(L" - ", durationStart);
+                if (dashEnd != std::wstring::npos && (durationEnd == std::wstring::npos || dashEnd < durationEnd)) {
+                    durationEnd = dashEnd;
+                }
+                if (durationEnd == std::wstring::npos) durationEnd = line.size();
+
+                appendRun(lineBlock, line.substr(cursor, durationStart - cursor), muted);
+                appendRun(lineBlock, line.substr(durationStart, durationEnd - durationStart), duration, true);
+                appendRun(lineBlock, line.substr(durationEnd), muted);
+            } else if (highlightStart != std::wstring::npos && highlightStart < highlightEnd) {
+                appendRun(lineBlock, line.substr(cursor, highlightStart - cursor), muted);
+                appendRun(lineBlock, line.substr(highlightStart, highlightEnd - highlightStart), duration, true);
+                appendRun(lineBlock, line.substr(highlightEnd), muted);
+            } else {
+                appendRun(lineBlock, line.substr(cursor), muted);
+            }
+
+            content.Children().Append(lineBlock);
+            firstLine = false;
+            if (next == std::wstring::npos) break;
+            pos = next + 1;
+        }
     }
 
-    for (auto& handler : state.pointerHandlers) {
-        if (!handler.element) continue;
+    toolTip.BorderBrush(border);
+    toolTip.Content(content);
+}
 
-        try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
-        try { handler.element.PointerEntered(handler.pointerEnteredToken); } catch (...) {}
-        try { handler.element.PointerMoved(handler.pointerMovedToken); } catch (...) {}
-        try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
-        try { handler.element.PointerCaptureLost(handler.pointerCaptureLostToken); } catch (...) {}
-        try { handler.element.PointerCanceled(handler.pointerCanceledToken); } catch (...) {}
-        try { handler.element.ContextFlyout(nullptr); } catch (...) {}
-        try {
-            ToolTipService::SetToolTip(handler.element, winrt::Windows::Foundation::IInspectable{nullptr});
-        } catch (...) {}
-    }
-    state.pointerHandlers.clear();
+// src/taskbar/actions.h
+// Click and context-menu actions on the taskbar bars.
 
-    for (auto& handler : state.menuItemClickHandlers) {
-        if (!handler.item) continue;
-        try { handler.item.Click(handler.token); } catch (...) {}
+static void OpenDashboardForIdentity(uint64_t identityHash) {
+    std::wstring provider;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        for (const auto& account : g_settings.accounts) {
+            if (AccountIdentityHash(account) == identityHash) {
+                provider = account.provider;
+                break;
+            }
+        }
     }
-    state.menuItemClickHandlers.clear();
-    state.accountToggleItems.clear();
-    state.accountRefs.clear();
+    if (provider.empty()) return;
+
+    if (provider == L"antigravity") {
+        RefreshQuotaByIdentity(identityHash);
+    } else {
+        OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage"
+                                         : L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
+    }
+}
+
+// Right-click menu: flip an account's show/hide state, keep at least one visible, persist the
+// hidden-set to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
+// taskbar UI thread (menu click); `sender` is the clicked ToggleMenuFlyoutItem (already flipped).
+static void ToggleAccountVisibility(uint64_t identityHash,
+                                    winrt::Windows::Foundation::IInspectable const& sender) {
+    if (g_unloading) return;
+    auto toggle = sender.try_as<ToggleMenuFlyoutItem>();
+    bool clickedVisible = toggle && toggle.IsChecked();
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+
+    std::wstring hashes;
+    Settings settingsSnapshot;
+    bool refreshNow = false;
+    bool oldHidden = false;
+    bool rejectedLastVisible = false;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        int accountIndex = -1;
+        for (size_t i = 0; i < g_settings.accounts.size(); i++) {
+            if (AccountIdentityHash(g_settings.accounts[i]) == identityHash) {
+                accountIndex = (int)i;
+                break;
+            }
+        }
+        if (accountIndex < 0) return;
+        oldHidden = g_settings.accounts[accountIndex].hidden;
+        bool wantVisible = toggle ? clickedVisible : oldHidden;
+
+        // Refuse to hide the last visible account: there'd be no bar left to right-click.
+        if (!wantVisible && !g_settings.accounts[accountIndex].hidden) {
+            int visibleCount = 0;
+            for (const auto& a : g_settings.accounts) {
+                if (!a.hidden) visibleCount++;
+            }
+            if (visibleCount <= 1) {
+                rejectedLastVisible = true;
+            }
+        }
+        if (!rejectedLastVisible) {
+            bool newHidden = !wantVisible;
+            settingsSnapshot = g_settings;
+            settingsSnapshot.accounts[accountIndex].hidden = newHidden;
+            if (newHidden != oldHidden) {
+                if (!newHidden) {
+                    // Showing: keep the existing (possibly stale) data and only re-query if it has
+                    // already gone stale, matching the UI's grey-out threshold. This stops repeated
+                    // hide/show from triggering fetches and hitting provider rate limits.
+                    ULONGLONG staleIntervalMin =
+                        settingsSnapshot.accounts[accountIndex].provider == L"antigravity"
+                            ? 1
+                            : (ULONGLONG)settingsSnapshot.pollMinutes;
+                    ULONGLONG now = NowUnixMs();
+                    std::lock_guard<std::mutex> lk2(g_dataMutex);
+                    if (accountIndex >= (int)g_data.size()) {
+                        refreshNow = true;
+                    } else {
+                        const AccountData& d = g_data[accountIndex];
+                        refreshNow = d.stale || d.lastSuccessMs == 0 ||
+                                     now - d.lastSuccessMs > staleIntervalMin * 2 * 60000;
+                    }
+                }
+            }
+
+            wchar_t buf[24];
+            for (const auto& a : settingsSnapshot.accounts) {
+                if (!a.hidden) continue;
+                if (!hashes.empty()) hashes += L";";
+                swprintf(buf, ARRAYSIZE(buf), L"%016llx",
+                         (unsigned long long)AccountIdentityHash(a));
+                hashes += buf;
+            }
+        }
+    }
+    if (rejectedLastVisible) {
+        configLock.unlock();
+        if (toggle) toggle.IsChecked(true);
+        return;
+    }
+
+    if (!SaveOwnedSettings(settingsSnapshot)) {
+        configLock.unlock();
+        if (toggle) toggle.IsChecked(!oldHidden);
+        Wh_Log(L"Could not persist account visibility");
+        NotifySettingsWindowChanged();
+        return;
+    }
+    PublishSettings(settingsSnapshot);
+    Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
+    // RefreshQuota re-queries only this account (and posts the UI); otherwise just repaint so the
+    // column collapses/reappears with its existing data without any network request.
+    configLock.unlock();
+    NotifySettingsWindowChanged();
+    if (refreshNow) RefreshQuotaByIdentity(identityHash);
+    else PostUiUpdate();
+}
+
+// src/taskbar/quota-grid.h
+// Builds the per-taskbar quota grid, including visual-test sample data.
+
+static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
+                                    int redThreshold, ULONGLONG now,
+                                    std::vector<AccountConfig>* accounts,
+                                    std::vector<AccountData>* data) {
+    static constexpr std::array<const wchar_t*, 4> kLabels = {
+        L"OAI", L"CC 1", L"CC 2", L"Go",
+    };
+    const std::array<double, 4> percentages = {
+        yellowThreshold / 2.0,
+        50.0,
+        orangeThreshold + (redThreshold - orangeThreshold) / 2.0,
+        redThreshold + (100 - redThreshold) / 2.0,
+    };
+    static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
+        kFiveHourWindowMs,
+        kWeeklyWindowMs,
+        kWeeklyWindowMs,
+        30ULL * 24 * 60 * 60 * 1000,
+    };
+    static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
+        0.35, 0.5, 0.6, 0.8,
+    };
+
+    accounts->clear();
+    accounts->reserve(percentages.size());
+    if (data) {
+        data->clear();
+        data->reserve(percentages.size());
+    }
+    for (size_t i = 0; i < percentages.size(); i++) {
+        AccountConfig account;
+        account.provider = L"anthropic";
+        account.label = kLabels[i];
+        account.showBars.fill(false);
+        for (size_t w = 0; w <= i; w++) account.showBars[w] = true;
+        accounts->push_back(std::move(account));
+
+        if (!data) continue;
+        AccountData accountData;
+        std::array<WindowUsage*, kQuotaBarCount> usage = {
+            &accountData.win5h, &accountData.winWeek,
+            &accountData.fableWeek, &accountData.extraUsage,
+        };
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            usage[w]->pct = percentages[i];
+            usage[w]->windowDurationMs = kDurations[w];
+            usage[w]->resetUnixMs = now +
+                (ULONGLONG)std::lround(kDurations[w] * kRemainingFractions[w]);
+        }
+        accountData.plan = L"Visual test";
+        accountData.extraUsedAmount = percentages[i] / 2.0;
+        accountData.extraLimitAmount = 50.0;
+        accountData.lastSuccessMs = now;
+        accountData.stale = false;
+        data->push_back(std::move(accountData));
+    }
 }
 
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
@@ -5002,6 +4991,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     }
 }
 
+// src/taskbar/quota-update.h
+// Applies settings and fetched data to an existing quota grid.
+
 static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (!state.quotaGrid) return;
 
@@ -5433,6 +5425,20 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     } catch (...) {
         Wh_Log(L"UpdateQuotaUi: exception");
     }
+}
+
+// src/taskbar/inject.h
+// Injects and removes quota grids, retries injection, and hooks taskbar startup.
+
+static HANDLE g_injectEvent = nullptr;
+static HANDLE g_retryThread = nullptr;
+static std::mutex g_retryThreadMutex;
+static std::atomic<bool> g_rebuildQuotaUiBeforeInject{false};
+static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
+
+static UINT GetQuotaCleanupMessage() {
+    static const UINT message = RegisterWindowMessageW(L"Windhawk_CleanupQuotaUi_" WH_MOD_ID);
+    return message;
 }
 
 static void RemoveQuotaChildren(Panel const& targetPanel, QuotaUiInstance& state) {
@@ -5894,10 +5900,6 @@ static void StartRetryInject(bool removeExisting) {
     }
 }
 
-/**********************************************/
-//  Hooks
-/**********************************************/
-
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
 static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
 
@@ -5925,9 +5927,8 @@ static bool HookTaskbarDllSymbols() {
     return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
-/**********************************************/
-//  Settings
-/**********************************************/
+// src/settings/storage.h
+// Settings persistence: normalize, serialize, load, legacy import, publish, and apply.
 
 static constexpr PCWSTR kSettingsStorageKey = L"settings_v1";
 static constexpr PCWSTR kSettingsLengthStorageKey = L"settings_v1_len";
@@ -6480,9 +6481,14 @@ static void LoadSettings() {
     if (apartmentInitialized) winrt::uninit_apartment();
 }
 
-/**********************************************/
-//  Native Settings Window
-/**********************************************/
+// src/settings/window-state.h
+// Settings window thread state, control IDs, and window/editor state.
+
+static HANDLE g_settingsWindowThread = nullptr;
+static std::mutex g_settingsWindowMutex;
+static std::atomic<bool> g_settingsWindowCancelRequested{false};
+
+static constexpr UINT_PTR kSettingsAutosaveTimer = 1;
 
 enum SettingsControlId {
     kSettingsPageAccounts = 1996,
@@ -6601,6 +6607,10 @@ struct AccountEditorState {
 
 static constexpr PCWSTR kSettingsWindowClass = L"AiQuotaSettings_" WH_MOD_ID;
 static constexpr PCWSTR kAccountEditorClass = L"AiQuotaAccountEditor_" WH_MOD_ID;
+
+// src/settings/native.h
+// Native window helpers shared with the history window: themed message boxes and color
+// dialogs, DPI scaling, and dark mode.
 
 struct SettingsMessageBoxContext {
     SettingsMessageBoxContext* previous = nullptr;
@@ -6755,6 +6765,9 @@ static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
         }
     }
 }
+
+// src/settings/controls.h
+// Settings window control creation, pages, and layout.
 
 static void RecreateSettingsVisuals(SettingsWindowState& state) {
     state.dark = IsWindowsDarkMode();
@@ -7268,6 +7281,9 @@ static void LayoutSettingsWindow(SettingsWindowState& state) {
                  RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
+// src/settings/bindings.h
+// Two-way sync between the settings controls and the edited settings.
+
 static int SelectedAccountIndex(const SettingsWindowState& state) {
     if (!state.accountList) return -1;
     return ListView_GetNextItem(state.accountList, -1, LVNI_SELECTED);
@@ -7670,6 +7686,9 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     }
     if (refreshControls) RefreshSettingsControls(state);
 }
+
+// src/settings/account-editor.h
+// Account editor dialog and the add, edit, remove, reorder, and hide account commands.
 
 static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
     auto sc = [&](int value) { return ScaleForDpi(value, state.dpi); };
@@ -8387,6 +8406,15 @@ static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
         FinishSettingsApply();
     }
     RefreshSettingsControls(state);
+}
+
+// src/settings/window.h
+// Settings window procedure, thread, and activation.
+
+static UINT GetSettingsActivateMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_ActivateSettings_" WH_MOD_ID);
+    return message;
 }
 
 static void ResetCurrentSettingsPage(SettingsWindowState& state) {
@@ -9124,9 +9152,10 @@ static void OpenSettingsWindow() {
     if (!g_settingsWindowThread) Wh_Log(L"Could not create settings window thread");
 }
 
-/**********************************************/
-//  Lifecycle
-/**********************************************/
+static HANDLE g_fetchThread = nullptr;
+static void* g_mtaUsageCookie = nullptr;
+static HRESULT (WINAPI* g_coDecrementMTAUsage)(void*) = nullptr;
+static bool g_winsockStarted = false;
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
