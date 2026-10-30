@@ -9,7 +9,8 @@ bundled clang when the mod is loaded.
 - `src/` is the source of truth. The root `local@taskbar-ai-quota.wh.cpp` is generated and
   committed; never edit it directly. Edit `src/`, then run `pwsh generate-mod.ps1`.
   `generate-mod.ps1 -Check` verifies freshness without writing; `check-mod.ps1` and
-  `install-windhawk.ps1` run it for the root file.
+  `install-windhawk.ps1` run it for the root file. `.ignore` hides the root file from searches;
+  read it by path when you need the generated output.
 - Edits made in Windhawk's editor, or PRs against the root file, must be ported into `src/`. Each
   fragment starts after a `// src/<path>` marker line in the generated file.
 - `src/taskbar-ai-quota.cpp` is the entry: mod metadata and readme, system includes, the fragment
