@@ -96,7 +96,7 @@ struct Settings {
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
-    bool historyEnabled = false;
+    bool historyEnabled = true;
     int historyRetentionDays = 90;
     bool skipHiddenPolling = true;
     int barLength = 100;

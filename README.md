@@ -61,7 +61,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - optional additional OpenAI rate limits in account details (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - show details on hover: resting the pointer on a column opens its details flyout (on by default); clicking always opens it
 - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
-- opt-in local history, retention in days (90 by default, configurable from 1 to 3650), and per-account recording
+- local history (on by default, per Windows user), retention in days (90 by default, configurable from 1 to 3650), and per-account recording
 - do not poll hidden accounts (on by default; overrides per-account history recording)
 - taskbar monitor mode: primary, all, or a detected display with its resolution
 - color thresholds with palette-matched previews
@@ -74,10 +74,12 @@ Bar and ring dimensions and font sizes use sliders with precise numeric spinner 
 
 ## Usage history
 
-Click **Enable recording** in the history window's disabled banner, or use
-**Settings > Behavior > Enable local history**. This opts in the current Windows user without
-changing per-account recording selections or hidden-account rules. Account recording defaults on;
-change **Record history** in an account editor to exclude it. Recording starts with the next poll.
+Recording is on by default. Turn it off or back on with **Settings > Behavior > Enable local
+history**, or click **Enable recording** in the history window's disabled banner. The choice
+applies to the current Windows user without changing per-account recording selections or
+hidden-account rules. Account recording defaults on; change **Record history** in an account
+editor to exclude it. Recording starts with the next poll. The details flyout's burn-up charts
+use these recordings.
 Use **Usage history...** from the taskbar context menu or Behavior page to open the native viewer.
 It reads local samples, not provider APIs. **Refresh / F5** updates the displayed snapshot.
 **Info...** explains line styles, statistics, recording rules, and export behavior. Recording
@@ -151,9 +153,9 @@ timestamps, provider and opaque IDs—not tokens, labels, prompts, or raw respon
 encrypted: processes running as you can read it. It survives mod removal; use Clear first if
 you want to remove recorded usage. Local and catalog mod IDs use separate histories.
 
-The recording opt-in is stored per user in
-`HKCU\Software\Windhawk\TaskbarAIQuota\<mod ID>\RecordHistory`; another Windows user's opt-in
-cannot enable yours. Other settings, including per-account selection and retention, follow
+The recording choice is stored per user in
+`HKCU\Software\Windhawk\TaskbarAIQuota\<mod ID>\RecordHistory` (missing means on, `0` means off);
+another Windows user's choice cannot change yours. Other settings, including per-account selection and retention, follow
 Windhawk's existing machine-shared configuration. Opening an empty viewer does not create files.
 
 Retention defaults to **90 days**. Hourly maintenance prunes older samples while recording or

@@ -358,23 +358,21 @@ static bool ClearHistory(std::wstring* error) {
 static constexpr PCWSTR kHistoryConsentRegistryKey =
     L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
 
-// Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared.
+// Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared. Recording is on
+// until this user turns it off, which stores 0.
 static bool ReadHistoryConsent() {
     DWORD value = 0;
     DWORD size = sizeof(value);
-    return RegGetValueW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, L"RecordHistory",
-                        RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS &&
-           size == sizeof(value) && value == 1;
+    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, L"RecordHistory",
+                                  RRF_RT_REG_DWORD, nullptr, &value, &size);
+    if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) return true;
+    return result == ERROR_SUCCESS && size == sizeof(value) && value == 1;
 }
 
 static bool WriteHistoryConsent(bool enabled) {
     HKEY key = nullptr;
-    LSTATUS result = enabled ?
-        RegCreateKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, nullptr, 0,
-                        KEY_SET_VALUE, nullptr, &key, nullptr) :
-        RegOpenKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, KEY_SET_VALUE, &key);
-    // Disabling an absent entry must not create a registry key.
-    if (!enabled && (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND)) return true;
+    LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, nullptr, 0,
+                                     KEY_SET_VALUE, nullptr, &key, nullptr);
     if (result != ERROR_SUCCESS) return false;
     DWORD value = enabled ? 1 : 0;
     result = RegSetValueExW(key, L"RecordHistory", 0, REG_DWORD,

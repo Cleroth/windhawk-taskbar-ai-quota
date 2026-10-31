@@ -280,7 +280,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     L"Custom cloud polling interval from 2 to 1440 minutes.");
                 AddSettingsToolTip(
                     *state, kHistoryEnabled,
-                    L"Opt in for this Windows user only; off by default. Disabling recording keeps saved history. "
+                    L"On by default; applies to this Windows user only. Disabling recording keeps saved history. "
                     L"Account recording choices, retention, and hidden-account polling settings are shared "
                     L"across Windows users. Do not poll hidden accounts takes priority for hidden accounts.");
                 AddSettingsToolTip(

@@ -45,8 +45,8 @@ its signed-in local app or CLI session, which must remain running.
 - **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
 - **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
 - **Taskbar behavior:** Choose displays, hover details, polling, and alerts.
-- **Usage history:** Opt in to local recording, set retention (90 days by default), and
-  choose recording per account independently of taskbar visibility. Opt-in is per Windows user.
+- **Usage history:** Local recording is on by default per Windows user; set retention (90 days
+  by default) and choose recording per account independently of taskbar visibility.
   Hidden accounts stop
   polling unless you disable **Do not poll hidden accounts** and enable their recording.
 
@@ -55,7 +55,7 @@ its signed-in local app or CLI session, which must remain running.
 Open **Usage history...** from the taskbar context menu or Settings > Behavior. Compare raw
 quota timelines on one graph with color-coded account lines, overlay the preceding week,
 view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samples;
-history starts at opt-in, with no backfill.
+history starts when recording starts, with no backfill.
 All accounts defaults to Weekly over the past 24 hours; choose Short-term for short quotas.
 Weekly follows each Anthropic account's taskbar weekly selections. All meters is available
 for all accounts or a single account (its default), including weeklies hidden on the taskbar.
@@ -253,7 +253,7 @@ struct Settings {
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
-    bool historyEnabled = false;
+    bool historyEnabled = true;
     int historyRetentionDays = 90;
     bool skipHiddenPolling = true;
     int barLength = 100;
@@ -3653,23 +3653,21 @@ static bool ClearHistory(std::wstring* error) {
 static constexpr PCWSTR kHistoryConsentRegistryKey =
     L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
 
-// Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared.
+// Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared. Recording is on
+// until this user turns it off, which stores 0.
 static bool ReadHistoryConsent() {
     DWORD value = 0;
     DWORD size = sizeof(value);
-    return RegGetValueW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, L"RecordHistory",
-                        RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS &&
-           size == sizeof(value) && value == 1;
+    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, L"RecordHistory",
+                                  RRF_RT_REG_DWORD, nullptr, &value, &size);
+    if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) return true;
+    return result == ERROR_SUCCESS && size == sizeof(value) && value == 1;
 }
 
 static bool WriteHistoryConsent(bool enabled) {
     HKEY key = nullptr;
-    LSTATUS result = enabled ?
-        RegCreateKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, nullptr, 0,
-                        KEY_SET_VALUE, nullptr, &key, nullptr) :
-        RegOpenKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, KEY_SET_VALUE, &key);
-    // Disabling an absent entry must not create a registry key.
-    if (!enabled && (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND)) return true;
+    LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, nullptr, 0,
+                                     KEY_SET_VALUE, nullptr, &key, nullptr);
     if (result != ERROR_SUCCESS) return false;
     DWORD value = enabled ? 1 : 0;
     result = RegSetValueExW(key, L"RecordHistory", 0, REG_DWORD,
@@ -12253,7 +12251,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     L"Custom cloud polling interval from 2 to 1440 minutes.");
                 AddSettingsToolTip(
                     *state, kHistoryEnabled,
-                    L"Opt in for this Windows user only; off by default. Disabling recording keeps saved history. "
+                    L"On by default; applies to this Windows user only. Disabling recording keeps saved history. "
                     L"Account recording choices, retention, and hidden-account polling settings are shared "
                     L"across Windows users. Do not poll hidden accounts takes priority for hidden accounts.");
                 AddSettingsToolTip(
@@ -14420,8 +14418,9 @@ static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wPar
                                 L"estimated within those intervals, never across gaps or beyond the last sample. Dates are local. "
                                 L"Week comparison uses two elapsed seven-day periods; daylight saving can shift local clock times.\r\n\r\n"
                                 L"Recording and export\r\n"
-                                L"Enable recording using the banner or Settings. This opts in the current Windows user; "
-                                L"per-account selections and hidden-account rules still apply. Recording starts with the next poll. "
+                                L"Recording is on by default. When it is off, enable it using the banner or Settings; the choice applies to "
+                                L"the current Windows user only, and per-account selections and hidden-account rules still apply. "
+                                L"Recording starts with the next poll. "
                                 L"Pending recording waits for account history IDs to be saved. "
                                 L"No data can also mean an unsupported meter, failed polls, or expired history. Nothing is backfilled. "
                                 L"Refresh / F5 reads local history only. CSV includes all supported meters for the selected accounts and range "

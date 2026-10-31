@@ -42,8 +42,8 @@ its signed-in local app or CLI session, which must remain running.
 - **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
 - **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
 - **Taskbar behavior:** Choose displays, hover details, polling, and alerts.
-- **Usage history:** Opt in to local recording, set retention (90 days by default), and
-  choose recording per account independently of taskbar visibility. Opt-in is per Windows user.
+- **Usage history:** Local recording is on by default per Windows user; set retention (90 days
+  by default) and choose recording per account independently of taskbar visibility.
   Hidden accounts stop
   polling unless you disable **Do not poll hidden accounts** and enable their recording.
 
@@ -52,7 +52,7 @@ its signed-in local app or CLI session, which must remain running.
 Open **Usage history...** from the taskbar context menu or Settings > Behavior. Compare raw
 quota timelines on one graph with color-coded account lines, overlay the preceding week,
 view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samples;
-history starts at opt-in, with no backfill.
+history starts when recording starts, with no backfill.
 All accounts defaults to Weekly over the past 24 hours; choose Short-term for short quotas.
 Weekly follows each Anthropic account's taskbar weekly selections. All meters is available
 for all accounts or a single account (its default), including weeklies hidden on the taskbar.
