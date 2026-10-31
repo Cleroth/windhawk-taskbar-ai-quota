@@ -7,8 +7,9 @@
 // (ui/text-box.h) showing `text`, centered without spin buttons when align is center;
 // SpinButton: its up/down buttons (not tab stops). Option: one row of the dropdown popup.
 // Slider: action.value within [minimum, maximum]. Swatch: a color choice, action.value =
-// 0xBBGGRR, selected = current. Gallery: a choice card named `text` with a client-drawn
-// thumbnail. Preview: a client-drawn strip that pans sideways (not a tab stop).
+// 0xBBGGRR, selected = current; without an action kind, a color dot. Gallery: a choice card
+// named `text` with a client-drawn thumbnail. Preview: a client-drawn strip that pans sideways
+// (not a tab stop).
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
     Slider, Swatch, Gallery, Preview
@@ -245,12 +246,13 @@ static float UiAddSection(std::vector<UiItem>& items, uint32_t& id, float x, flo
     return y + 28;
 }
 
-// Settings card (mockup .scard): optional leading glyph, a title, a description and a trailing
-// slot of `trailing` size (or a trailing glyph), vertically centered. With an action the whole
-// card is one interactive item. A disabled card dims its title and may say why (mockup
+// Settings card (mockup .scard): optional leading glyph or color dot, a title, a description and
+// a trailing slot of `trailing` size (or a trailing glyph), vertically centered. With an action
+// the whole card is one interactive item. A disabled card dims its title and may say why (mockup
 // .reason); an error line reports an invalid or unsaved value.
 struct UiCardSpec {
     std::wstring glyph;
+    std::optional<COLORREF> dot;  // Mockup .dotsw: a 14 DIP circle, 0xBBGGRR
     std::wstring title;
     std::vector<UiRun> description;
     D2D1_SIZE_F trailing{};
@@ -267,12 +269,13 @@ struct UiCardLayout {
 
 static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, float x,
                               float y, float width, const UiCardSpec& spec) {
-    constexpr float kBorder = 1, kPadX = 18, kPadY = 12, kGap = 16, kLeadWidth = 22;
+    constexpr float kBorder = 1, kPadX = 18, kPadY = 12, kGap = 16, kLeadWidth = 22, kDot = 14;
     constexpr float kDescriptionMax = 470;
     D2D1_SIZE_F trailing = spec.trailing;
     if (!spec.trailingGlyph.empty()) trailing = {12, 12};
     float left = x + kBorder + kPadX, right = x + width - kBorder - kPadX;
-    float textLeft = left + (spec.glyph.empty() ? 0 : kLeadWidth + kGap);
+    float lead = !spec.glyph.empty() ? kLeadWidth : spec.dot ? kDot : 0;
+    float textLeft = left + (lead > 0 ? lead + kGap : 0);
     float textRight = right - (trailing.width > 0 ? trailing.width + kGap : 0);
     float textWidth = std::max(textRight - textLeft, 40.0f);
 
@@ -323,6 +326,15 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
         lead.iconSize = 18;
         lead.rect = {left, center - 10, left + kLeadWidth, center + 10};
         items.push_back(std::move(lead));
+    } else if (spec.dot) {
+        // A swatch without an action: drawn, never a target.
+        UiItem dot;
+        dot.id = id++;
+        dot.kind = UiItemKind::Swatch;
+        dot.rect = {left, center - kDot / 2, left + kDot, center + kDot / 2};
+        dot.action.value = int(*spec.dot);
+        dot.enabled = spec.enabled;
+        items.push_back(std::move(dot));
     }
     UiItem title;
     title.id = id++;

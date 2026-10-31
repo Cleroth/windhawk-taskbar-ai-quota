@@ -1,6 +1,6 @@
-// Settings preview: the taskbar strip under the Layout title and the tile style gallery's
-// thumbnails, drawn from the shared meter model (taskbar/meter-model.h) with the visual test
-// accounts at 1:1 DIPs. Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h,
+// Settings preview: the taskbar strip under the Layout and Display titles and the tile style
+// gallery's thumbnails, drawn from the shared meter model (taskbar/meter-model.h) with the
+// visual test accounts at 1:1 DIPs. Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h,
 // quota-update.h) as draw operations; painting takes an explicit target and theme.
 //
 // Units: the strip is as tall as the primary taskbar in DIPs (converted with that taskbar's

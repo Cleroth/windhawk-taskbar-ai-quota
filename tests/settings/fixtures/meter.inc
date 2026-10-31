@@ -545,13 +545,17 @@ static void RunSnapshotTests() {
         CHECK_NEAR(data[0].extraLimitAmount, 1000); CHECK_NEAR(data[0].creditsBalance, 875);
         CHECK(data[0].win5h.resetUnixMs == kNow + 6300000); CHECK(data[0].win5h.windowDurationMs == kFiveHours);
         CHECK_NEAR(data[1].win5h.pct, 82.5); CHECK_NEAR(data[1].winWeek.pct, 25);
-        CHECK_NEAR(data[2].winWeek.pct, 95); CHECK_NEAR(data[2].fableWeek.pct, 62.5);
+        CHECK_NEAR(data[2].winWeek.pct, 110); CHECK_NEAR(data[2].fableWeek.pct, 62.5);
         CHECK_NEAR(data[2].extraUsedAmount, 12.5); CHECK_NEAR(data[2].extraLimitAmount, 50);
         CHECK(data[2].winWeek.resetUnixMs == kNow + 241920000);
         CHECK_NEAR(data[3].antigravityThirdParty5h.pct, 62.5);
-        for (const AccountData& d : data) {
-            CHECK(d.lastSuccessMs == kNow); CHECK(!d.stale); CHECK(d.plan == L"Visual test");
+        for (size_t i = 0; i < data.size(); i++) {
+            CHECK(data[i].plan == L"Visual test");
+            CHECK(data[i].stale == (i == 3));
+            CHECK(data[i].error.empty() == (i != 3));
+            CHECK(data[i].lastSuccessMs == (i == 3 ? kNow - 10 * kMinute : kNow));
         }
+        CHECK(data[3].error == L"Antigravity not running");
         std::vector<AccountConfig> only;
         BuildVisualTestSnapshot(Display(), &only, nullptr);
         CHECK(only.size() == 4);
@@ -559,7 +563,38 @@ static void RunSnapshotTests() {
             s.yellowThreshold = 80; s.orangeThreshold = 60; s.redThreshold = 70;
         })), &accounts, &data);
         CHECK_NEAR(data[0].win5h.pct, 40); CHECK_NEAR(data[0].winWeek.pct, 80);
-        CHECK_NEAR(data[2].winWeek.pct, 90);
+        CHECK_NEAR(data[2].winWeek.pct, 110);
+    });
+
+    Run("visual test snapshot: one stale account with its mark, one quota past 100%, at any time", [] {
+        // Built at the time it's drawn: a day or a month later the same accounts are stale.
+        for (ULONGLONG now : {kNow, kNow + 24 * 60 * kMinute, kNow + 30ULL * 24 * 60 * kMinute}) {
+            for (int poll : {2, 1440}) {
+                MeterDisplay display = MeterDisplayFor(With([&](Settings& s) { s.pollMinutes = poll; }), now, 1, 48);
+                std::vector<AccountConfig> accounts;
+                std::vector<AccountData> data;
+                BuildVisualTestSnapshot(display, &accounts, &data);
+                for (size_t i = 0; i < data.size(); i++) {
+                    AccountMeters meters = AccountMeterState(display, BarLayout::Stacked, accounts[i], data[i], 0, 0);
+                    CHECK(meters.stale == (i == 3) && meters.warn == (i == 3));
+                }
+            }
+        }
+        MeterDisplay display = Display();
+        std::vector<AccountConfig> accounts;
+        std::vector<AccountData> data;
+        BuildVisualTestSnapshot(display, &accounts, &data);
+        AccountMeters go = AccountMeterState(display, BarLayout::Stacked, accounts[3], data[3], 0, 0);
+        CHECK(go.labelText == L"Go!" && go.quotas[0].color == 0xFF9E9E9E && !go.quotas[0].paceVisible);
+        MeterDisplay unmarked = Display(With([](Settings& s) { s.showStaleWarning = false; }));
+        go = AccountMeterState(unmarked, BarLayout::Stacked, accounts[3], data[3], 0, 0);
+        CHECK(go.stale && !go.warn && go.labelText == L"Go");
+        // CC 2's weekly quota: red past 100% when used, an empty 0% when remaining.
+        AccountMeters cc2 = AccountMeterState(display, BarLayout::Stacked, accounts[2], data[2], 0, 0);
+        CHECK(cc2.quotas[1].text == L"110%" && cc2.quotas[1].fillPx == 100 && cc2.quotas[1].color == 0xFFE53935);
+        MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
+        cc2 = AccountMeterState(remaining, BarLayout::Stacked, accounts[2], data[2], 0, 0);
+        CHECK(cc2.quotas[1].text == L"0%" && cc2.quotas[1].fillPx == 0 && cc2.quotas[1].color == 0xFFE53935);
     });
 }
 

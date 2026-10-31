@@ -194,14 +194,16 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
 static void BuildVisualTestSnapshot(const MeterDisplay& display,
                                     std::vector<AccountConfig>* accounts,
                                     std::vector<AccountData>* data) {
-    // One value per usage color band.
+    // One value per usage color band. Red is past the quota whatever the thresholds: used text
+    // above 100%, remaining mode clamped to 0.
     const double green = display.yellowThreshold / 2.0;
     const double yellow = (display.yellowThreshold + display.orangeThreshold) / 2.0;
     const double orange = (display.orangeThreshold + display.redThreshold) / 2.0;
-    const double red = (display.redThreshold + 100) / 2.0;
+    const double red = 110;
     const ULONGLONG now = display.now;
     // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
     // share a provider so tiles show number badges. A negative value is a quota not reported.
+    // Antigravity is stale, with an error.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
@@ -263,16 +265,20 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
             accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
             accountData.extraLimitAmount = 50.0;
         }
+        accountData.plan = L"Visual test";
+        accountData.lastSuccessMs = now;
+        accountData.stale = false;
         if (account.provider == L"antigravity") {
-            // Claude/GPT pools appear only in the details flyout.
+            // Claude/GPT pools appear only in the details flyout. A failed refresh keeps the
+            // last success, as the fetch thread does; ten minutes before now, it stays stale.
             accountData.antigravityThirdParty5h = {
                 yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
             accountData.antigravityThirdPartyWeek = {
                 green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
+            accountData.lastSuccessMs = now - 10 * 60000;
+            accountData.stale = true;
+            accountData.error = L"Antigravity not running";
         }
-        accountData.plan = L"Visual test";
-        accountData.lastSuccessMs = now;
-        accountData.stale = false;
         data->push_back(std::move(accountData));
     }
 }

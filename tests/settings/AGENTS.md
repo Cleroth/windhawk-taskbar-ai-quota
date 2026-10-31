@@ -39,16 +39,22 @@ regenerates.
   and the render projection get their own fixtures. `fixtures/layout.inc`: slider input, the
   Layout fields and reset group, the projection the preview reads, the preview strip model
   (`settings/preview.h`: column geometry, hover, pace marks, overflow, extreme settings), the
-  Layout page per tile style and the pinned/unpinned preview header.
+  Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
+  Display fields and reset group (with every scalar setting in exactly one page reset), threshold
+  ordering in the projection and after a save (the test store's `normalize` hook), the Display
+  page per tile style and what its settings change in the preview strip.
 - `render`: the same executable with `--render-dir` paints the settings client area (1000 x 820
   DIP, the mockups' window without its caption) into WIC bitmaps: About, Behavior, History, Layout
-  (every tile style; stacked and ring at every DPI) and a placeholder page at 96/144/192 DPI in
-  light, dark and high contrast (Aquatic colors), plus interaction-state sheets
-  (`render-states-*`, `render-controls-*`, `render-history-off-*`, `render-layout-states-*`), the
-  preview's overflow, scrolled and unpinned (`render-layout-overflow-*`, `-unpinned-*`), preview
-  strip sheets with one captioned row per layout and option (`render-preview-sheet-*`, 1:1 at
-  100/125/150%) and the dropdown popup's rows (`render-popup-*`). Client-drawn previews use the
-  production painter. PNGs for review, no pixel goldens.
+  (every tile style; stacked and ring at every DPI), Display (segmented ring, as its mockup) and a
+  placeholder page at 96/144/192 DPI in light, dark and high contrast (Aquatic colors), plus
+  interaction-state sheets (`render-states-*`, `render-controls-*`, `render-history-off-*`,
+  `render-layout-states-*`, `render-display-states-*`), Display at the mockup's full height
+  (`render-display-full-*`, `render-display-bars-*`), the preview's overflow, scrolled and
+  unpinned (`render-layout-overflow-*`, `-unpinned-*`), preview strip sheets with one captioned
+  row per layout and option (`render-preview-sheet-*`) or per Display option
+  (`render-display-preview-sheet-*`; 1:1 at 100/125/150%) and the dropdown popup's rows
+  (`render-popup-*`). Client-drawn previews use the production painter. PNGs for review, no pixel
+  goldens.
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
   (`ui/system-theme.h`, `surface.h`, `popup.h`, `text-box.h`, `host.h`, `color-dialog.h`) and a
   stub client form

@@ -1,6 +1,6 @@
-// Settings window shell: navigation pane, pinned page header (with the Layout preview) and page
-// content, built from an explicit view snapshot (settings/view.h; approved mockups: nav and
-// header of layout-v2.png). Pure. Pages not rebuilt yet show a placeholder card.
+// Settings window shell: navigation pane, pinned page header (with the Layout and Display
+// preview) and page content, built from an explicit view snapshot (settings/view.h; approved
+// mockups: nav and header of layout-v2.png). Pure. Pages not rebuilt yet show a placeholder card.
 
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
@@ -41,11 +41,12 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     frame.main.push_back(std::move(title));
 
     // Running ids are unique per page; interactive controls take fixed ones (settings/view.h).
-    // On Layout the preview card is pinned under the title, 12 DIP above the viewport, unless
-    // the viewport would get too short (UiUnpinHeader): then it scrolls at the content's top.
+    // On Layout and Display the preview card is pinned under the title, 12 DIP above the
+    // viewport, unless the viewport would get too short (UiUnpinHeader): then it scrolls at the
+    // content's top.
     uint32_t id = uint32_t(page + 1) << 12;
     float header = kSettingsHeaderHeight, contentTop = 0;
-    if (SettingsUiPage(page) == SettingsUiPage::Layout) {
+    if (SettingsUiPage(page) == SettingsUiPage::Layout || SettingsUiPage(page) == SettingsUiPage::Display) {
         std::vector<UiItem> preview;
         float height = SettingsAddPreviewCard(g, view, preview, id, 0, 0, std::max(width, 1.0f));
         bool unpinned = UiUnpinHeader(client.height, kSettingsHeaderHeight, height + 12);
@@ -73,6 +74,9 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             break;
         case SettingsUiPage::Layout:
             bottom = SettingsUiBuildLayout(g, view, frame.content, id, left, contentTop, width);
+            break;
+        case SettingsUiPage::Display:
+            bottom = SettingsUiBuildDisplay(g, view, frame.content, id, left, contentTop, width);
             break;
         default: {
             UiCardSpec spec;

@@ -34,10 +34,22 @@ enum class SettingsField : uint8_t {
     PaceTickColor,    // 0xBBGGRR
     AccountMargin,
     RightMargin,      // Tray gap
+    // Display
+    BarMode,                // A BarMode
+    PercentTextVisibility,  // A PercentTextVisibility
+    PercentTextAlignment,   // A PercentTextAlignment
+    ShowExtraBarAmounts,
+    ColorblindMode,
+    YellowThreshold,
+    OrangeThreshold,
+    RedThreshold,
+    ShowStaleWarning,
+    ShowOpenAiExtraLimits,
     // Operation groups: page resets
     ResetBehavior,
     ResetHistory,
     ResetLayout,
+    ResetDisplay,
     // Window commands, never drafts or commits
     OpenHistory,
     OpenHistoryFolder,
@@ -64,6 +76,9 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::LabelGap:
         case SettingsField::AccountMargin:
         case SettingsField::RightMargin: return SettingsNumberRange{0, 500};
+        case SettingsField::YellowThreshold:
+        case SettingsField::OrangeThreshold:
+        case SettingsField::RedThreshold: return SettingsNumberRange{0, 100};
         default: return std::nullopt;
     }
 }
@@ -85,6 +100,12 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::PercentFontSize, SettingsField::ShowPaceTicks,
                     SettingsField::PaceTickStyle, SettingsField::PaceTickColor,
                     SettingsField::AccountMargin, SettingsField::RightMargin};
+        case SettingsField::ResetDisplay:
+            return {SettingsField::BarMode,          SettingsField::PercentTextVisibility,
+                    SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts,
+                    SettingsField::ColorblindMode,   SettingsField::YellowThreshold,
+                    SettingsField::OrangeThreshold,  SettingsField::RedThreshold,
+                    SettingsField::ShowStaleWarning, SettingsField::ShowOpenAiExtraLimits};
         default: return {};
     }
 }
@@ -117,6 +138,16 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
         case SettingsField::AccountMargin: return s.accountMargin;
         case SettingsField::RightMargin: return s.rightMargin;
+        case SettingsField::BarMode: return int(s.barMode);
+        case SettingsField::PercentTextVisibility: return int(s.percentTextVisibility);
+        case SettingsField::PercentTextAlignment: return int(s.percentTextAlignment);
+        case SettingsField::ShowExtraBarAmounts: return s.showExtraBarAmounts;
+        case SettingsField::ColorblindMode: return s.colorblindMode;
+        case SettingsField::YellowThreshold: return s.yellowThreshold;
+        case SettingsField::OrangeThreshold: return s.orangeThreshold;
+        case SettingsField::RedThreshold: return s.redThreshold;
+        case SettingsField::ShowStaleWarning: return s.showStaleWarning;
+        case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
         default: return 0;
     }
 }
@@ -165,6 +196,36 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
         case SettingsField::RightMargin: s.rightMargin = value; break;
+        case SettingsField::BarMode:
+            s.barMode = BarMode(std::clamp(value, int(BarMode::Used), int(BarMode::Remaining)));
+            break;
+        case SettingsField::PercentTextVisibility:
+            s.percentTextVisibility = PercentTextVisibility(std::clamp(
+                value, int(PercentTextVisibility::Never), int(PercentTextVisibility::Always)));
+            break;
+        case SettingsField::PercentTextAlignment:
+            s.percentTextAlignment = PercentTextAlignment(std::clamp(
+                value, int(PercentTextAlignment::Adaptive), int(PercentTextAlignment::Right)));
+            break;
+        case SettingsField::ShowExtraBarAmounts: s.showExtraBarAmounts = value != 0; break;
+        case SettingsField::ColorblindMode: s.colorblindMode = value != 0; break;
+        case SettingsField::YellowThreshold: s.yellowThreshold = value; break;
+        case SettingsField::OrangeThreshold: s.orangeThreshold = value; break;
+        case SettingsField::RedThreshold: s.redThreshold = value; break;
+        case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
+        case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
+        case SettingsField::ResetDisplay:
+            s.barMode = defaults.barMode;
+            s.percentTextVisibility = defaults.percentTextVisibility;
+            s.percentTextAlignment = defaults.percentTextAlignment;
+            s.showExtraBarAmounts = defaults.showExtraBarAmounts;
+            s.colorblindMode = defaults.colorblindMode;
+            s.yellowThreshold = defaults.yellowThreshold;
+            s.orangeThreshold = defaults.orangeThreshold;
+            s.redThreshold = defaults.redThreshold;
+            s.showStaleWarning = defaults.showStaleWarning;
+            s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
+            break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
             s.barLength = defaults.barLength;
@@ -333,12 +394,16 @@ struct SettingsEdits {
     // Baseline and statuses only: drafts, requests and text boxes stay as they are.
     void Reload() { baseline = store->Load(); }
 
-    // What builders and previews see: the baseline with each draft's desired value.
+    // What builders and previews see: the baseline with each draft's desired value. Thresholds
+    // stay ordered as saving orders them (settings/storage.h): each at least the one before, so
+    // an unordered draft shows what it will save.
     Settings Projection() const {
         Settings s = baseline.settings;
         for (const SettingsDraft& draft : drafts) {
             if (!draft.key) SettingsAssign(s, draft.field, draft.value);
         }
+        s.orangeThreshold = std::max(s.orangeThreshold, s.yellowThreshold);
+        s.redThreshold = std::max(s.redThreshold, s.orangeThreshold);
         return s;
     }
 

@@ -150,12 +150,14 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
     return view;
 }
 
-// Preview strips at 1:1, one row per variant with its caption: every layout, percent text
-// modes and alignments, quota keys, bar modes, amounts, colorblind colors, pace styles and
-// colors, label positions, extreme sizes, overflow (scrolled and not), hover, and a 32 DIP
-// taskbar. Each strip is a Preview item painted by the production painter.
+// Preview strips at 1:1, one row per variant with its caption. Layout sheet: every layout,
+// percent text modes and alignments, quota keys, bar modes, amounts, colorblind colors, pace
+// styles and colors, label positions, extreme sizes, overflow (scrolled and not), hover, and a
+// 32 DIP taskbar. Display sheet: percentage text never/hover/always, each alignment, bar modes
+// (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
+// unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
-                               const UiThemeInput& theme, UINT dpi) {
+                               const UiThemeInput& theme, UINT dpi, bool display = false) {
     struct Row {
         const wchar_t* caption;
         std::function<void(Settings&)> edit;
@@ -164,7 +166,54 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         float scroll = 0;
     };
     auto always = [](Settings& s) { s.percentTextVisibility = PercentTextVisibility::Always; };
-    const Row rows[] = {
+    auto thresholds = [](Settings& s, int yellow, int orange, int red) {
+        s.yellowThreshold = yellow;
+        s.orangeThreshold = orange;
+        s.redThreshold = red;
+    };
+    const std::vector<Row> displayRows = {
+        {L"Defaults (hover)", [](Settings&) {}},
+        {L"Hover CC 2", [](Settings&) {}, 2},
+        {L"Never, hover CC 2", [](Settings& s) { s.percentTextVisibility = PercentTextVisibility::Never; }, 2},
+        {L"Always, adaptive", always},
+        {L"Always, left", [&](Settings& s) { always(s); s.percentTextAlignment = PercentTextAlignment::Left; }},
+        {L"Always, center", [&](Settings& s) { always(s); s.percentTextAlignment = PercentTextAlignment::Center; }},
+        {L"Always, right", [&](Settings& s) { always(s); s.percentTextAlignment = PercentTextAlignment::Right; }},
+        {L"Remaining, adaptive", [&](Settings& s) { always(s); s.barMode = BarMode::Remaining; }},
+        {L"Remaining, hover CC 2", [](Settings& s) { s.barMode = BarMode::Remaining; }, 2},
+        {L"Amounts, used", [&](Settings& s) { always(s); s.showExtraBarAmounts = true; }},
+        {L"Amounts, remaining",
+         [&](Settings& s) { always(s); s.showExtraBarAmounts = true; s.barMode = BarMode::Remaining; }},
+        {L"Colorblind", [&](Settings& s) { always(s); s.colorblindMode = true; }},
+        {L"Colorblind, remaining",
+         [&](Settings& s) { always(s); s.colorblindMode = true; s.barMode = BarMode::Remaining; }},
+        {L"Stale marker off", [&](Settings& s) { always(s); s.showStaleWarning = false; }},
+        {L"Thresholds 20 / 40 / 60", [&](Settings& s) { always(s); thresholds(s, 20, 40, 60); }},
+        {L"Unordered 80 / 30 / 20", [&](Settings& s) { always(s); thresholds(s, 80, 30, 20); }},
+        {L"Thresholds 0 / 0 / 0", [&](Settings& s) { always(s); thresholds(s, 0, 0, 0); }},
+        {L"Thresholds 100 / 100 / 100", [&](Settings& s) { always(s); thresholds(s, 100, 100, 100); }},
+        {L"Vertical, colorblind",
+         [&](Settings& s) { always(s); s.barLayout = BarLayout::Vertical; s.colorblindMode = true; }},
+        {L"Vertical, remaining, amounts",
+         [&](Settings& s) {
+             always(s);
+             s.barLayout = BarLayout::Vertical;
+             s.barMode = BarMode::Remaining;
+             s.showExtraBarAmounts = true;
+         }},
+        {L"Ring", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; }},
+        {L"Ring, stale marker off",
+         [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.showStaleWarning = false; }},
+        {L"Ring, colorblind", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.colorblindMode = true; }},
+        {L"Ring, remaining", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.barMode = BarMode::Remaining; }},
+        {L"Concentric, 20 / 40 / 60",
+         [&](Settings& s) { s.barLayout = BarLayout::ConcentricRings; thresholds(s, 20, 40, 60); }},
+        {L"Logo + bars, colorblind", [](Settings& s) { s.barLayout = BarLayout::LogoBars; s.colorblindMode = true; }},
+        {L"Headline, colorblind",
+         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.colorblindMode = true; }},
+        {L"Headline, remaining", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.barMode = BarMode::Remaining; }},
+    };
+    const std::vector<Row> layoutRows = {
         {L"Stacked bars", [](Settings&) {}},
         {L"Hover CC 2", [](Settings&) {}, 2},
         {L"Percent always, adaptive", always},
@@ -209,7 +258,11 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Headline, remaining",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.barMode = BarMode::Remaining; }},
     };
-    constexpr float kCaption = 170, kStrip = 680, kRowGap = 12;
+    // The Layout sheet's strips are the window's 680 DIPs; the Display sheet's fit four columns of
+    // stacked bars, so every value shows.
+    const std::vector<Row>& rows = display ? displayRows : layoutRows;
+    constexpr float kCaption = 170, kRowGap = 12;
+    const float kStrip = display ? 800 : 680;
     float height = kRowGap;
     for (const Row& row : rows) height += float(row.taskbar) + kRowGap;
     winrt::com_ptr<IWICBitmap> bitmap = RenderBitmap(wic, {kCaption + kStrip + kRowGap, height}, dpi);
@@ -293,7 +346,66 @@ static void RunRenders(const std::wstring& directory) {
                         CHECK(UiFindItem(frame, SettingsControlId(SettingsField::PreviewScroll)));
                     });
                 }
+                // Display with the segmented ring, as the mockup: its bar-only rows disabled.
+                std::string display = std::string("render-display-") + theme.name + "-" + std::to_string(dpi) + ".png";
+                Run(display, [&] {
+                    SettingsView view = LayoutView(BarLayout::SegmentedRing, dpi);
+                    view.page = SettingsUiPage::Display;
+                    UiFrame frame;
+                    SettingsUiBuildFrame(g, view, client, frame);
+                    UiPaintState state;
+                    state.focus = {3};
+                    RenderFrame(g, wic.get(), path(display), frame, view, client, dpi, theme.input, state, 0, false);
+                    CHECK(!Control(frame, SettingsField::PercentTextVisibility).enabled);
+                });
             }
+
+            // Display at the mockup's full height (1000 x 1298 window, 40 DIP caption): the
+            // segmented ring as in the mockup; stacked bars with percentages always, remaining
+            // mode and the colorblind palette; then the states sheet: percentage text off (its
+            // dependent rows disabled), an unordered red threshold typed (box editing, slider and
+            // preview ordered), a hovered toggle.
+            std::string full = std::string("render-display-full-") + theme.name + "-144.png";
+            Run(full, [&] {
+                const D2D1_SIZE_F tall{1000, 1258};
+                SettingsView view = LayoutView(BarLayout::SegmentedRing, 144);
+                view.page = SettingsUiPage::Display;
+                UiFrame frame;
+                SettingsUiBuildFrame(g, view, tall, frame);
+                UiPaintState state;
+                state.focus = {3};
+                RenderFrame(g, wic.get(), path(full), frame, view, tall, 144, theme.input, state, 0, false);
+
+                view = LayoutView(BarLayout::Stacked, 144);
+                view.page = SettingsUiPage::Display;
+                view.settings.percentTextVisibility = PercentTextVisibility::Always;
+                view.settings.barMode = BarMode::Remaining;
+                view.settings.colorblindMode = true;
+                frame = {};
+                SettingsUiBuildFrame(g, view, tall, frame);
+                std::string bars = std::string("render-display-bars-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(bars), frame, view, tall, 144, theme.input, state, 0, false);
+
+                TestStore store;
+                store.settings.percentTextVisibility = PercentTextVisibility::Never;
+                SettingsEdits edits(store);
+                edits.Reload();
+                edits.SetText(0, SettingsField::RedThreshold, L"60");
+                view = LayoutView(BarLayout::Stacked, 144);
+                view.page = SettingsUiPage::Display;
+                view.settings = edits.Projection();
+                view.drafts = edits.drafts;
+                frame = {};
+                SettingsUiBuildFrame(g, view, tall, frame);
+                state = {};
+                state.focus = {SettingsControlId(SettingsField::RedThreshold)};
+                state.editing = SettingsControlId(SettingsField::RedThreshold);
+                state.hot = {SettingsControlId(SettingsField::ShowStaleWarning)};
+                std::string states = std::string("render-display-states-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(states), frame, view, tall, 144, theme.input, state, 0, false);
+                CHECK(Control(frame, SettingsField::RedThreshold).text == L"60" &&
+                      Control(frame, SettingsField::RedThreshold, 1).action.value == 75);
+            });
 
             // Layout states at 144 DPI. Ring: the taskbar showing the sample (switch on), the
             // pointer on the second preview tile, a gallery card hovered, a slider dragged, the
@@ -365,11 +477,14 @@ static void RunRenders(const std::wstring& directory) {
             // others.
             for (UINT dpi : {96u, 120u, 144u}) {
                 if (dpi != 120 && std::string(theme.name) != "dark") continue;
-                std::string sheet = std::string("render-preview-sheet-") + theme.name + "-" + std::to_string(dpi) + ".png";
-                Run(sheet, [&] {
-                    RenderPreviewSheet(g, wic.get(), path(sheet), theme.input, dpi);
-                    CHECK(true);
-                });
+                for (bool display : {false, true}) {
+                    std::string sheet = std::string(display ? "render-display-preview-sheet-" : "render-preview-sheet-") +
+                                        theme.name + "-" + std::to_string(dpi) + ".png";
+                    Run(sheet, [&] {
+                        RenderPreviewSheet(g, wic.get(), path(sheet), theme.input, dpi, display);
+                        CHECK(true);
+                    });
+                }
             }
 
             // Controls in their states at 144 DPI: the Behavior page with Custom chosen, an

@@ -5703,14 +5703,16 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
 static void BuildVisualTestSnapshot(const MeterDisplay& display,
                                     std::vector<AccountConfig>* accounts,
                                     std::vector<AccountData>* data) {
-    // One value per usage color band.
+    // One value per usage color band. Red is past the quota whatever the thresholds: used text
+    // above 100%, remaining mode clamped to 0.
     const double green = display.yellowThreshold / 2.0;
     const double yellow = (display.yellowThreshold + display.orangeThreshold) / 2.0;
     const double orange = (display.orangeThreshold + display.redThreshold) / 2.0;
-    const double red = (display.redThreshold + 100) / 2.0;
+    const double red = 110;
     const ULONGLONG now = display.now;
     // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
     // share a provider so tiles show number badges. A negative value is a quota not reported.
+    // Antigravity is stale, with an error.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
@@ -5772,16 +5774,20 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
             accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
             accountData.extraLimitAmount = 50.0;
         }
+        accountData.plan = L"Visual test";
+        accountData.lastSuccessMs = now;
+        accountData.stale = false;
         if (account.provider == L"antigravity") {
-            // Claude/GPT pools appear only in the details flyout.
+            // Claude/GPT pools appear only in the details flyout. A failed refresh keeps the
+            // last success, as the fetch thread does; ten minutes before now, it stays stale.
             accountData.antigravityThirdParty5h = {
                 yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
             accountData.antigravityThirdPartyWeek = {
                 green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
+            accountData.lastSuccessMs = now - 10 * 60000;
+            accountData.stale = true;
+            accountData.error = L"Antigravity not running";
         }
-        accountData.plan = L"Visual test";
-        accountData.lastSuccessMs = now;
-        accountData.stale = false;
         data->push_back(std::move(accountData));
     }
 }
@@ -10163,8 +10169,9 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // (ui/text-box.h) showing `text`, centered without spin buttons when align is center;
 // SpinButton: its up/down buttons (not tab stops). Option: one row of the dropdown popup.
 // Slider: action.value within [minimum, maximum]. Swatch: a color choice, action.value =
-// 0xBBGGRR, selected = current. Gallery: a choice card named `text` with a client-drawn
-// thumbnail. Preview: a client-drawn strip that pans sideways (not a tab stop).
+// 0xBBGGRR, selected = current; without an action kind, a color dot. Gallery: a choice card
+// named `text` with a client-drawn thumbnail. Preview: a client-drawn strip that pans sideways
+// (not a tab stop).
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
     Slider, Swatch, Gallery, Preview
@@ -10401,12 +10408,13 @@ static float UiAddSection(std::vector<UiItem>& items, uint32_t& id, float x, flo
     return y + 28;
 }
 
-// Settings card (mockup .scard): optional leading glyph, a title, a description and a trailing
-// slot of `trailing` size (or a trailing glyph), vertically centered. With an action the whole
-// card is one interactive item. A disabled card dims its title and may say why (mockup
+// Settings card (mockup .scard): optional leading glyph or color dot, a title, a description and
+// a trailing slot of `trailing` size (or a trailing glyph), vertically centered. With an action
+// the whole card is one interactive item. A disabled card dims its title and may say why (mockup
 // .reason); an error line reports an invalid or unsaved value.
 struct UiCardSpec {
     std::wstring glyph;
+    std::optional<COLORREF> dot;  // Mockup .dotsw: a 14 DIP circle, 0xBBGGRR
     std::wstring title;
     std::vector<UiRun> description;
     D2D1_SIZE_F trailing{};
@@ -10423,12 +10431,13 @@ struct UiCardLayout {
 
 static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, float x,
                               float y, float width, const UiCardSpec& spec) {
-    constexpr float kBorder = 1, kPadX = 18, kPadY = 12, kGap = 16, kLeadWidth = 22;
+    constexpr float kBorder = 1, kPadX = 18, kPadY = 12, kGap = 16, kLeadWidth = 22, kDot = 14;
     constexpr float kDescriptionMax = 470;
     D2D1_SIZE_F trailing = spec.trailing;
     if (!spec.trailingGlyph.empty()) trailing = {12, 12};
     float left = x + kBorder + kPadX, right = x + width - kBorder - kPadX;
-    float textLeft = left + (spec.glyph.empty() ? 0 : kLeadWidth + kGap);
+    float lead = !spec.glyph.empty() ? kLeadWidth : spec.dot ? kDot : 0;
+    float textLeft = left + (lead > 0 ? lead + kGap : 0);
     float textRight = right - (trailing.width > 0 ? trailing.width + kGap : 0);
     float textWidth = std::max(textRight - textLeft, 40.0f);
 
@@ -10479,6 +10488,15 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
         lead.iconSize = 18;
         lead.rect = {left, center - 10, left + kLeadWidth, center + 10};
         items.push_back(std::move(lead));
+    } else if (spec.dot) {
+        // A swatch without an action: drawn, never a target.
+        UiItem dot;
+        dot.id = id++;
+        dot.kind = UiItemKind::Swatch;
+        dot.rect = {left, center - kDot / 2, left + kDot, center + kDot / 2};
+        dot.action.value = int(*spec.dot);
+        dot.enabled = spec.enabled;
+        items.push_back(std::move(dot));
     }
     UiItem title;
     title.id = id++;
@@ -13998,10 +14016,22 @@ enum class SettingsField : uint8_t {
     PaceTickColor,    // 0xBBGGRR
     AccountMargin,
     RightMargin,      // Tray gap
+    // Display
+    BarMode,                // A BarMode
+    PercentTextVisibility,  // A PercentTextVisibility
+    PercentTextAlignment,   // A PercentTextAlignment
+    ShowExtraBarAmounts,
+    ColorblindMode,
+    YellowThreshold,
+    OrangeThreshold,
+    RedThreshold,
+    ShowStaleWarning,
+    ShowOpenAiExtraLimits,
     // Operation groups: page resets
     ResetBehavior,
     ResetHistory,
     ResetLayout,
+    ResetDisplay,
     // Window commands, never drafts or commits
     OpenHistory,
     OpenHistoryFolder,
@@ -14028,6 +14058,9 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::LabelGap:
         case SettingsField::AccountMargin:
         case SettingsField::RightMargin: return SettingsNumberRange{0, 500};
+        case SettingsField::YellowThreshold:
+        case SettingsField::OrangeThreshold:
+        case SettingsField::RedThreshold: return SettingsNumberRange{0, 100};
         default: return std::nullopt;
     }
 }
@@ -14049,6 +14082,12 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::PercentFontSize, SettingsField::ShowPaceTicks,
                     SettingsField::PaceTickStyle, SettingsField::PaceTickColor,
                     SettingsField::AccountMargin, SettingsField::RightMargin};
+        case SettingsField::ResetDisplay:
+            return {SettingsField::BarMode,          SettingsField::PercentTextVisibility,
+                    SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts,
+                    SettingsField::ColorblindMode,   SettingsField::YellowThreshold,
+                    SettingsField::OrangeThreshold,  SettingsField::RedThreshold,
+                    SettingsField::ShowStaleWarning, SettingsField::ShowOpenAiExtraLimits};
         default: return {};
     }
 }
@@ -14081,6 +14120,16 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
         case SettingsField::AccountMargin: return s.accountMargin;
         case SettingsField::RightMargin: return s.rightMargin;
+        case SettingsField::BarMode: return int(s.barMode);
+        case SettingsField::PercentTextVisibility: return int(s.percentTextVisibility);
+        case SettingsField::PercentTextAlignment: return int(s.percentTextAlignment);
+        case SettingsField::ShowExtraBarAmounts: return s.showExtraBarAmounts;
+        case SettingsField::ColorblindMode: return s.colorblindMode;
+        case SettingsField::YellowThreshold: return s.yellowThreshold;
+        case SettingsField::OrangeThreshold: return s.orangeThreshold;
+        case SettingsField::RedThreshold: return s.redThreshold;
+        case SettingsField::ShowStaleWarning: return s.showStaleWarning;
+        case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
         default: return 0;
     }
 }
@@ -14129,6 +14178,36 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
         case SettingsField::RightMargin: s.rightMargin = value; break;
+        case SettingsField::BarMode:
+            s.barMode = BarMode(std::clamp(value, int(BarMode::Used), int(BarMode::Remaining)));
+            break;
+        case SettingsField::PercentTextVisibility:
+            s.percentTextVisibility = PercentTextVisibility(std::clamp(
+                value, int(PercentTextVisibility::Never), int(PercentTextVisibility::Always)));
+            break;
+        case SettingsField::PercentTextAlignment:
+            s.percentTextAlignment = PercentTextAlignment(std::clamp(
+                value, int(PercentTextAlignment::Adaptive), int(PercentTextAlignment::Right)));
+            break;
+        case SettingsField::ShowExtraBarAmounts: s.showExtraBarAmounts = value != 0; break;
+        case SettingsField::ColorblindMode: s.colorblindMode = value != 0; break;
+        case SettingsField::YellowThreshold: s.yellowThreshold = value; break;
+        case SettingsField::OrangeThreshold: s.orangeThreshold = value; break;
+        case SettingsField::RedThreshold: s.redThreshold = value; break;
+        case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
+        case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
+        case SettingsField::ResetDisplay:
+            s.barMode = defaults.barMode;
+            s.percentTextVisibility = defaults.percentTextVisibility;
+            s.percentTextAlignment = defaults.percentTextAlignment;
+            s.showExtraBarAmounts = defaults.showExtraBarAmounts;
+            s.colorblindMode = defaults.colorblindMode;
+            s.yellowThreshold = defaults.yellowThreshold;
+            s.orangeThreshold = defaults.orangeThreshold;
+            s.redThreshold = defaults.redThreshold;
+            s.showStaleWarning = defaults.showStaleWarning;
+            s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
+            break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
             s.barLength = defaults.barLength;
@@ -14297,12 +14376,16 @@ struct SettingsEdits {
     // Baseline and statuses only: drafts, requests and text boxes stay as they are.
     void Reload() { baseline = store->Load(); }
 
-    // What builders and previews see: the baseline with each draft's desired value.
+    // What builders and previews see: the baseline with each draft's desired value. Thresholds
+    // stay ordered as saving orders them (settings/storage.h): each at least the one before, so
+    // an unordered draft shows what it will save.
     Settings Projection() const {
         Settings s = baseline.settings;
         for (const SettingsDraft& draft : drafts) {
             if (!draft.key) SettingsAssign(s, draft.field, draft.value);
         }
+        s.orangeThreshold = std::max(s.orangeThreshold, s.yellowThreshold);
+        s.redThreshold = std::max(s.redThreshold, s.orangeThreshold);
         return s;
     }
 
@@ -14705,9 +14788,9 @@ static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, ui
 }
 
 // src/settings/preview.h
-// Settings preview: the taskbar strip under the Layout title and the tile style gallery's
-// thumbnails, drawn from the shared meter model (taskbar/meter-model.h) with the visual test
-// accounts at 1:1 DIPs. Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h,
+// Settings preview: the taskbar strip under the Layout and Display titles and the tile style
+// gallery's thumbnails, drawn from the shared meter model (taskbar/meter-model.h) with the
+// visual test accounts at 1:1 DIPs. Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h,
 // quota-update.h) as draw operations; painting takes an explicit target and theme.
 //
 // Units: the strip is as tall as the primary taskbar in DIPs (converted with that taskbar's
@@ -16022,10 +16105,123 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
 }
 
+// src/settings/page-display.h
+// Settings > Display: what the meters show, their usage colors and thresholds, the stale marker
+// and the OpenAI details (approved mockup display.png). The preview card is in the shell's
+// pinned header (settings/preview.h). Pure builder.
+
+// Lays out the page from content y; returns the bottom of the last card.
+static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
+                                    uint32_t& id, float x, float y, float width) {
+    const Settings& s = view.settings;
+    const int style = std::clamp(int(s.barLayout), 0, int(std::size(kSettingsTileStyles)) - 1);
+
+    // Values: the bar mode applies to every style. Percentage text is the bars' own; its
+    // alignment and the amounts that replace it need it shown.
+    y = UiAddSection(items, id, x, y + 16, width, L"Values");
+    {
+        UiCardSpec spec;
+        spec.title = L"Bar mode";
+        spec.description = {{L"Used fills as quota is consumed; Remaining fills with what is left. Colors "
+                             L"always follow usage."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::BarMode, 200,
+                                    {{L"Used", int(BarMode::Used)}, {L"Remaining", int(BarMode::Remaining)}},
+                                    int(s.barMode));
+    }
+    const bool bars = !IsTileLayout(BarLayout(style));
+    const bool text = bars && s.percentTextVisibility != PercentTextVisibility::Never;
+    const std::wstring barsOnly =
+        L"Stacked and Vertical bars only. Current tile style: " + std::wstring(kSettingsTileStyles[style]) + L".";
+    {
+        UiCardSpec spec;
+        spec.title = L"Percentage text";
+        spec.description = {{L"Percentage on each bar: never, on hover, or always."}};
+        spec.enabled = bars;
+        if (!bars) spec.reason = barsOnly;
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextVisibility,
+                                    200,
+                                    {{L"Never show", int(PercentTextVisibility::Never)},
+                                     {L"Show on hover", int(PercentTextVisibility::Hover)},
+                                     {L"Always show", int(PercentTextVisibility::Always)}},
+                                    int(s.percentTextVisibility));
+    }
+    PCWSTR textOff = L"Show percentage text on hover or always to change this.";
+    {
+        UiCardSpec spec;
+        spec.title = L"Percentage alignment";
+        spec.description = {{L"Adaptive: right side, moving left once the bar reaches yellow."}};
+        spec.enabled = text;
+        if (!text) spec.reason = bars ? textOff : barsOnly;
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
+                                    200,
+                                    {{L"Adaptive", int(PercentTextAlignment::Adaptive)},
+                                     {L"Left", int(PercentTextAlignment::Left)},
+                                     {L"Center", int(PercentTextAlignment::Center)},
+                                     {L"Right", int(PercentTextAlignment::Right)}},
+                                    int(s.percentTextAlignment));
+    }
+    {
+        UiCardSpec spec;
+        spec.title = L"Amounts on extra usage and credits";
+        spec.description = {{L"$ or credits instead of % on Anthropic extra usage and OpenAI credits: spent in "
+                             L"Used mode, left in Remaining mode."}};
+        spec.enabled = text;
+        if (!text) spec.reason = bars ? textOff : barsOnly;
+        y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
+    }
+
+    // Usage colors. Each threshold's dot is its band's usage color (taskbar/meter-model.h) in the
+    // chosen palette, taken from thresholds 1, 2 and 3 so equal thresholds still show their own.
+    y = UiAddSection(items, id, x, y + 20, width, L"Usage colors");
+    {
+        UiCardSpec spec;
+        spec.title = L"Colorblind palette";
+        spec.description = {{L"Blue to vermilion instead of green to red."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ColorblindMode);
+    }
+    const std::tuple<SettingsField, PCWSTR, PCWSTR> thresholds[] = {
+        {SettingsField::YellowThreshold, L"Yellow from",
+         s.colorblindMode ? L"Usage below this is blue." : L"Usage below this is green."},
+        {SettingsField::OrangeThreshold, L"Orange from", L"Thresholds stay in order: yellow, orange, red."},
+        {SettingsField::RedThreshold, L"Red from", L"Also the level for threshold notifications."},
+    };
+    for (int i = 0; i < 3; i++) {
+        auto [field, title, description] = thresholds[i];
+        uint32_t color = UsageColor(i + 1, false, 1, 2, 3, s.colorblindMode);
+        UiCardSpec spec;
+        spec.dot = RGB(color >> 16 & 0xFF, color >> 8 & 0xFF, color & 0xFF);
+        spec.title = title;
+        spec.description = {{description}};
+        y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, field);
+    }
+
+    y = UiAddSection(items, id, x, y + 20, width, L"Status");
+    {
+        UiCardSpec spec;
+        spec.title = L"Mark stale data";
+        spec.description = {{L"Adds ! when a refresh failed or is overdue."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowStaleWarning);
+    }
+
+    y = UiAddSection(items, id, x, y + 20, width, L"Details flyout");
+    {
+        UiCardSpec spec;
+        spec.title = L"Additional OpenAI rate limits";
+        spec.description = {{L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in "
+                             L"OpenAI details."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowOpenAiExtraLimits);
+    }
+
+    UiCardSpec reset;
+    reset.title = L"Reset Display to defaults";
+    reset.description = {{L"Values, usage colors, stale marker and flyout details."}};
+    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay, L"Reset");
+}
+
 // src/settings/shell.h
-// Settings window shell: navigation pane, pinned page header (with the Layout preview) and page
-// content, built from an explicit view snapshot (settings/view.h; approved mockups: nav and
-// header of layout-v2.png). Pure. Pages not rebuilt yet show a placeholder card.
+// Settings window shell: navigation pane, pinned page header (with the Layout and Display
+// preview) and page content, built from an explicit view snapshot (settings/view.h; approved
+// mockups: nav and header of layout-v2.png). Pure. Pages not rebuilt yet show a placeholder card.
 
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
@@ -16066,11 +16262,12 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     frame.main.push_back(std::move(title));
 
     // Running ids are unique per page; interactive controls take fixed ones (settings/view.h).
-    // On Layout the preview card is pinned under the title, 12 DIP above the viewport, unless
-    // the viewport would get too short (UiUnpinHeader): then it scrolls at the content's top.
+    // On Layout and Display the preview card is pinned under the title, 12 DIP above the
+    // viewport, unless the viewport would get too short (UiUnpinHeader): then it scrolls at the
+    // content's top.
     uint32_t id = uint32_t(page + 1) << 12;
     float header = kSettingsHeaderHeight, contentTop = 0;
-    if (SettingsUiPage(page) == SettingsUiPage::Layout) {
+    if (SettingsUiPage(page) == SettingsUiPage::Layout || SettingsUiPage(page) == SettingsUiPage::Display) {
         std::vector<UiItem> preview;
         float height = SettingsAddPreviewCard(g, view, preview, id, 0, 0, std::max(width, 1.0f));
         bool unpinned = UiUnpinHeader(client.height, kSettingsHeaderHeight, height + 12);
@@ -16098,6 +16295,9 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             break;
         case SettingsUiPage::Layout:
             bottom = SettingsUiBuildLayout(g, view, frame.content, id, left, contentTop, width);
+            break;
+        case SettingsUiPage::Display:
+            bottom = SettingsUiBuildDisplay(g, view, frame.content, id, left, contentTop, width);
             break;
         default: {
             UiCardSpec spec;
@@ -16265,7 +16465,8 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                     case SettingsField::ResetBehavior:
                     case SettingsField::ResetHistory:
-                    case SettingsField::ResetLayout: {
+                    case SettingsField::ResetLayout:
+                    case SettingsField::ResetDisplay: {
                         std::wstring question =
                             field == SettingsField::ResetBehavior ?
                                 L"Reset Behavior to its defaults?\n\nShow on the primary display "
@@ -16275,6 +16476,11 @@ struct SettingsUiClient final : UiHostClient {
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
                                 L"on the left, 32 px rings, light grey caret pace markers and the "
                                 L"default spacing. Accounts are not changed." :
+                            field == SettingsField::ResetDisplay ?
+                                L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
+                                L"hover with adaptive alignment, no amounts, the standard palette with "
+                                L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
+                                L"additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user and history is kept for 90 days. Saved history stays.";
                         // Never shorten retention without saying so: pruning is shared and final.
@@ -16332,7 +16538,8 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                     }
                     default:
-                        // Toggles and the display dropdown: the desired value, committed now.
+                        // Toggles, dropdowns, gallery cards and swatches: the desired value,
+                        // committed now.
                         Report(host, edits.Commit(0, field, action.value));
                         break;
                 }

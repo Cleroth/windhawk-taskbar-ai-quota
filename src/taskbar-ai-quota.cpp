@@ -275,6 +275,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "settings/page-layout.h"
 
+#include "settings/page-display.h"
+
 #include "settings/shell.h"
 
 #include "settings/ui-window.h"

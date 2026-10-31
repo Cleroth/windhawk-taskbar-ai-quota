@@ -4,6 +4,7 @@
 #include "ui.inc"
 #include "edits.inc"
 #include "layout.inc"
+#include "display.inc"
 #include "render.inc"
 
 int main(int argc, char** argv) {
@@ -24,6 +25,7 @@ int main(int argc, char** argv) {
         RunEditTests();
         RunPageTests();
         RunLayoutTests();
+        RunDisplayPageTests();
     }
     std::cout << "RESULT " << passed << " passed, " << failed << " failed; " << assertions << " assertions\n";
     return failed ? 1 : 0;

@@ -150,7 +150,8 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                     case SettingsField::ResetBehavior:
                     case SettingsField::ResetHistory:
-                    case SettingsField::ResetLayout: {
+                    case SettingsField::ResetLayout:
+                    case SettingsField::ResetDisplay: {
                         std::wstring question =
                             field == SettingsField::ResetBehavior ?
                                 L"Reset Behavior to its defaults?\n\nShow on the primary display "
@@ -160,6 +161,11 @@ struct SettingsUiClient final : UiHostClient {
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
                                 L"on the left, 32 px rings, light grey caret pace markers and the "
                                 L"default spacing. Accounts are not changed." :
+                            field == SettingsField::ResetDisplay ?
+                                L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
+                                L"hover with adaptive alignment, no amounts, the standard palette with "
+                                L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
+                                L"additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user and history is kept for 90 days. Saved history stays.";
                         // Never shorten retention without saying so: pruning is shared and final.
@@ -217,7 +223,8 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                     }
                     default:
-                        // Toggles and the display dropdown: the desired value, committed now.
+                        // Toggles, dropdowns, gallery cards and swatches: the desired value,
+                        // committed now.
                         Report(host, edits.Commit(0, field, action.value));
                         break;
                 }

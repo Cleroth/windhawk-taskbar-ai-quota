@@ -9,6 +9,7 @@ struct TestStore final : SettingsStore {
     int failNext = 0;               // The next N applies fail
     int unloadAfter = -1;           // Unloading once this many applies ran
     int applies = 0;
+    std::function<void(Settings&)> normalize;  // What saving does after the assignment, if set
 
     SettingsBaseline Load() override {
         log.push_back(L"load");
@@ -23,6 +24,7 @@ struct TestStore final : SettingsStore {
         }
         Settings next = settings;
         SettingsAssign(next, field, value);
+        if (normalize) normalize(next);
         bool changed = !(next == settings);
         settings = std::move(next);
         return changed ? SettingsSaveResult::Changed : SettingsSaveResult::Unchanged;
