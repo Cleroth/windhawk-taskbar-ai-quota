@@ -183,6 +183,12 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "history/journal.h"
 
+#include "history/continuity.h"
+
+#include "history/burn-up.h"
+
+#include "history/burn-up-store.h"
+
 #include "fetch/notifications.h"
 
 #include "fetch/fetch-thread.h"

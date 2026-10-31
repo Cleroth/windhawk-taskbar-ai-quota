@@ -500,6 +500,11 @@ struct FlyoutTheme {
     Brush trackBorder{nullptr};
     Brush paceTick{nullptr};
     Brush paceHalo{nullptr};
+    // Burn-up charts: opaque card color around markers, guide lines (even pace, now) and the
+    // legend's projection sample.
+    Brush markerRing{nullptr};
+    Brush chartGuide{nullptr};
+    Brush chartKey{nullptr};
     Style buttonStyle{nullptr};
 };
 
@@ -513,6 +518,18 @@ enum FlyoutRowIndex {
     kFlyoutRowCount,
 };
 
+// A burn-up chart's drawn geometry in plot DIPs. It is the chart's update key: shapes are
+// regenerated only when it changes.
+struct FlyoutChartShape {
+    std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
+    std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
+    winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
+    winrt::Windows::Foundation::Point limit{-1.f, -1.f};  // Projection end; X < 0 without one.
+    uint32_t color = 0;
+
+    bool operator==(const FlyoutChartShape&) const = default;
+};
+
 struct FlyoutQuotaRow {
     // Separator, name/number cell and details cell share one grid row; they collapse together.
     FrameworkElement row{nullptr};
@@ -522,7 +539,8 @@ struct FlyoutQuotaRow {
     TextBlock number{nullptr};
     TextBlock unit{nullptr};
     FrameworkElement trend{nullptr};
-    // Holds the quota's visualization; the bar can be swapped for another visual.
+
+    // Bar: hatched track, usage fill and pace tick.
     Grid visual{nullptr};
     ColumnDefinition fillColumn{nullptr};
     ColumnDefinition emptyColumn{nullptr};
@@ -530,10 +548,21 @@ struct FlyoutQuotaRow {
     ColumnDefinition paceColumn{nullptr};
     ColumnDefinition paceRestColumn{nullptr};
     FrameworkElement paceTick{nullptr};
+    uint32_t fillColor = 0;
+
+    // Burn-up chart, shown instead of the bar while the row has a recorded curve.
+    FrameworkElement chart{nullptr};
+    wuxs::Path chartArea{nullptr};
+    wuxs::Path chartLines{nullptr};
+    wuxs::Path chartDots{nullptr};
+    wuxs::Line chartProjection{nullptr};
+    wuxs::Line chartNow{nullptr};
+    wuxs::Ellipse chartMarker{nullptr};
+    FlyoutChartShape chartShape;
+
     TextBlock amount{nullptr};
     TextBlock reset{nullptr};
     TextBlock projection{nullptr};
-    uint32_t fillColor = 0;
 };
 
 struct FlyoutButtonHandler {
@@ -558,6 +587,12 @@ struct FlyoutPopup {
     FrameworkElement planChip{nullptr};
     TextBlock plan{nullptr};
     std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;
+    // Quota grid columns: name/number and details. Charts give details a fixed width.
+    ColumnDefinition namesColumn{nullptr};
+    ColumnDefinition detailsColumn{nullptr};
+    // Chart legend, shown while a row shows a chart.
+    FrameworkElement legend{nullptr};
+    TextBlock legendSource{nullptr};
     FrameworkElement notes{nullptr};
     TextBlock extraLimits{nullptr};
     TextBlock extraLines{nullptr};
@@ -3229,6 +3264,11 @@ static constexpr ULONGLONG kHistoryTimestampLimitMs = 100000000000000ULL;
 static constexpr ULONGLONG kHistoryMaxWindowMs = 3650 * kHistoryDayMs;
 static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
 static std::deque<HistorySample> g_historySamples;
+// Let incremental readers (burn-up curves) mirror g_historySamples: they copy only samples
+// appended since their last copy while the revision is unchanged. The revision changes when
+// samples are loaded or evicted by the size cap; Clear changes g_historyEpoch.
+static uint64_t g_historyAppendCount = 0;
+static uint64_t g_historyRevision = 0;
 static std::wstring g_historyPath;
 static std::wstring g_historyStatus;
 static bool g_historyLoaded = false;
@@ -3266,6 +3306,7 @@ static uint64_t HistoryChecksum(const HistorySample& sample) {
 static void LoadHistoryLocked(bool create = false) {
     if (g_historyLoaded) return;
     g_historyLoaded = true;
+    ++g_historyRevision;
     g_historyWritable = true;
     SetHistoryStatus({});
     PWSTR localAppData = nullptr;
@@ -3497,6 +3538,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
             }
             sample.checksum = HistoryChecksum(sample);
             g_historySamples.push_back(sample);
+            ++g_historyAppendCount;
             admitted.push_back(sample);
         }
         if (admitted.empty()) return;
@@ -3505,6 +3547,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
             while (g_historySamples.size() > kHistoryMaxSamples * 9 / 10) {
                 g_historySamples.pop_front();
             }
+            ++g_historyRevision;
             g_historyDirty = g_historyCapped = true;
         }
         if (g_historyDirty) {
@@ -3592,6 +3635,449 @@ static bool WriteHistoryConsent(bool enabled) {
                           reinterpret_cast<const BYTE*>(&value), sizeof(value));
     RegCloseKey(key);
     return result == ERROR_SUCCESS;
+}
+
+// src/history/continuity.h
+// Reading continuity rules shared by the history window and the flyout's burn-up curves.
+
+// Reset endpoints jitter by up to this much between readings of one window.
+static constexpr ULONGLONG kHistoryResetToleranceMs = 120000;
+
+static bool HistoryHasValue(const HistorySample& sample, int meter) {
+    return !sample.failed && sample.meters[meter].value != -1 &&
+           std::isfinite(sample.meters[meter].value);
+}
+
+enum class HistoryBreak { None, Gap, Reset, Unavailable };
+
+// Whether two valid readings of a meter, b later than a, belong to one quota window,
+// regardless of how they were sampled.
+static HistoryBreak HistoryWindowConnection(const HistorySample& a, const HistorySample& b,
+                                            int meter) {
+    ULONGLONG gap = b.timeMs - a.timeMs;
+    const auto& av = a.meters[meter];
+    const auto& bv = b.meters[meter];
+    if (av.durationMs != bv.durationMs) return HistoryBreak::Reset;
+    if (!!av.resetMs != !!bv.resetMs) return HistoryBreak::Reset;
+    if (av.resetMs) {
+        // Reset endpoints can jitter. Never require exact equality; reject a boundary
+        // within two minutes of this interval or a material shift of the reset epoch.
+        constexpr ULONGLONG tolerance = kHistoryResetToleranceMs;
+        ULONGLONG shift = av.resetMs > bv.resetMs ? av.resetMs - bv.resetMs : bv.resetMs - av.resetMs;
+        ULONGLONG lower = a.timeMs > tolerance ? a.timeMs - tolerance : 0;
+        ULONGLONG upper = b.timeMs > ULLONG_MAX - tolerance ? ULLONG_MAX : b.timeMs + tolerance;
+        if ((av.resetMs >= lower && av.resetMs <= upper) ||
+            (bv.resetMs >= lower && bv.resetMs <= upper)) return HistoryBreak::Reset;
+        if (shift > tolerance) {
+            // OpenAI's unused window rolls a full duration ahead until first use anchors it.
+            // This is not a reset: the old deadline is still beyond this sampled interval.
+            // Keep real boundaries, other providers, backward shifts, and partial windows conservative.
+            if (a.provider == 2 && av.value == 0 && bv.value >= 0 && av.durationMs &&
+                av.resetMs > upper && bv.resetMs > upper && bv.resetMs > av.resetMs &&
+                (shift <= gap || shift - gap <= tolerance)) {
+                ULONGLONG remaining = av.resetMs - a.timeMs;
+                ULONGLONG error = remaining > av.durationMs ? remaining - av.durationMs : av.durationMs - remaining;
+                if (error <= tolerance) return HistoryBreak::None;
+            }
+            return HistoryBreak::Reset;
+        }
+    }
+    return HistoryBreak::None;
+}
+
+// Shared by rendering and integration: no extrapolation, including at range boundaries.
+static HistoryBreak HistoryConnection(const HistorySample& a, const HistorySample& b,
+                                      int meter) {
+    if (!HistoryHasValue(a, meter) || !HistoryHasValue(b, meter))
+        return HistoryBreak::Unavailable;
+    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
+        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
+        return HistoryBreak::Gap;
+    ULONGLONG gap = b.timeMs - a.timeMs;
+    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
+    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
+    if (gap / 2 + gap % 2 > polling) return HistoryBreak::Gap;
+    return HistoryWindowConnection(a, b, meter);
+}
+
+// src/history/burn-up.h
+// Current-window usage curves for the details flyout's burn-up chart: built from journal samples
+// with the history continuity rules and reduced for drawing. Pure; the published store and its
+// fetch/UI protocol are in burn-up-store.h.
+
+static constexpr int kBurnUpMeterCount = 6;  // History meters 0-5: percentages with windows.
+static constexpr size_t kBurnUpMaxPoints = 64;
+// Longest charted window; it bounds the fetch thread's journal scan. Anthropic's monthly extra
+// usage is the longest provider window.
+static constexpr ULONGLONG kBurnUpMaxWindowMs = 32 * kHistoryDayMs;
+
+struct BurnUpPoint {
+    ULONGLONG timeMs = 0;  // A recorded reading's time, never interpolated.
+    double used = 0;       // Used percentage as recorded; can exceed 100.
+    bool connect = false;  // Joined to the previous point; false starts a segment.
+};
+
+// One meter's recorded readings in the window of its newest reading, oldest first.
+struct BurnUpCurve {
+    ULONGLONG resetMs = 0;
+    ULONGLONG durationMs = 0;
+    std::vector<BurnUpPoint> points;  // Empty: no chart.
+};
+
+struct BurnUpAccountCurves {
+    uint64_t historyId = 0;
+    uint32_t provider = 0;  // As in HistorySample.
+    std::array<BurnUpCurve, kBurnUpMeterCount> meters;  // By history meter.
+};
+
+// Published curves and what they were built from.
+struct BurnUpStore {
+    uint64_t epoch = 0;        // g_historyEpoch when the journal was copied.
+    ULONGLONG generation = 0;  // g_burnUpPolicyGeneration of the settings snapshot.
+    std::vector<BurnUpAccountCurves> accounts;
+};
+
+// An account to rebuild and how far back its current windows reach (within retention).
+struct BurnUpRequest {
+    uint64_t historyId = 0;
+    uint32_t provider = 0;
+    ULONGLONG from = ULLONG_MAX;  // No window: nothing to copy.
+};
+
+// The fetch thread's copy of one account's journal samples from `from` on, in journal order.
+struct BurnUpAccountTail {
+    uint64_t historyId = 0;
+    ULONGLONG from = ULLONG_MAX;
+    std::deque<HistorySample> samples;
+};
+
+// Tails kept between rounds, and the journal state they mirror.
+struct BurnUpSampleCache {
+    uint64_t epoch = 0;     // g_historyEpoch,
+    uint64_t revision = 0;  // g_historyRevision
+    uint64_t appended = 0;  // and g_historyAppendCount at the last copy.
+    std::vector<BurnUpAccountTail> accounts;
+};
+
+// Copy step, run under g_historyMutex with the journal's epoch, revision and append count. A
+// requested tail gets only the samples appended since the last copy; it is refilled from its
+// scan start when it is new or must reach further back, on `rescan`, or when the journal changed
+// other than by appends (Clear, load, cap eviction), which also drops unrequested tails. Each
+// requested tail is then trimmed to its scan start, which also drops readings that retention
+// maintenance prunes from the journal.
+static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<HistorySample>& journal,
+                              uint64_t epoch, uint64_t revision, uint64_t appended,
+                              const std::vector<BurnUpRequest>& requests, bool rescan) {
+    uint64_t added = appended - cache.appended;
+    if (rescan || cache.epoch != epoch || cache.revision != revision ||
+        appended < cache.appended || added > journal.size()) {
+        cache.accounts.clear();
+        added = 0;
+    }
+    cache.epoch = epoch;
+    cache.revision = revision;
+    cache.appended = appended;
+    auto tailOf = [&](uint64_t historyId) {
+        return std::find_if(cache.accounts.begin(), cache.accounts.end(),
+                            [&](const BurnUpAccountTail& tail) { return tail.historyId == historyId; });
+    };
+    std::vector<uint64_t> refill;
+    ULONGLONG oldest = ULLONG_MAX;
+    for (const auto& request : requests) {
+        auto tail = tailOf(request.historyId);
+        if (tail != cache.accounts.end() && request.from >= tail->from) continue;
+        if (tail == cache.accounts.end()) {
+            tail = cache.accounts.insert(cache.accounts.end(), BurnUpAccountTail{request.historyId});
+        }
+        tail->from = request.from;
+        tail->samples.clear();
+        refill.push_back(request.historyId);
+        oldest = std::min(oldest, request.from);
+    }
+    auto refilled = [&](uint64_t historyId) {
+        return std::find(refill.begin(), refill.end(), historyId) != refill.end();
+    };
+    for (size_t i = journal.size() - added; i < journal.size(); ++i) {
+        auto tail = tailOf(journal[i].accountId);
+        if (tail != cache.accounts.end() && !refilled(tail->historyId)) tail->samples.push_back(journal[i]);
+    }
+    for (size_t i = journal.size(); i-- > 0 && journal[i].timeMs >= oldest && !g_unloading;) {
+        auto tail = tailOf(journal[i].accountId);
+        if (tail != cache.accounts.end() && refilled(tail->historyId) && journal[i].timeMs >= tail->from) {
+            tail->samples.push_front(journal[i]);
+        }
+    }
+    for (const auto& request : requests) {
+        auto tail = tailOf(request.historyId);
+        tail->from = request.from;
+        while (!tail->samples.empty() && tail->samples.front().timeMs < tail->from) tail->samples.pop_front();
+    }
+}
+
+// `samples` are one account's journal entries in journal order. The newest valid reading sets
+// the window; earlier readings join it under the history continuity rules, and across a
+// failure, gap or restart stay in it as a new segment only while the window is unchanged. A
+// reset, a reading before the window start or a clock rollback ends the curve. Nothing is
+// fabricated: the curve starts at the window's first recorded reading, not at a zero origin.
+static BurnUpCurve BuildBurnUpCurve(const std::deque<HistorySample>& samples, int meter) {
+    BurnUpCurve curve;
+    size_t newest = samples.size();
+    while (newest && !HistoryHasValue(samples[newest - 1], meter)) --newest;
+    if (!newest) return curve;
+    const HistorySample* later = &samples[--newest];
+    const HistoryValue& window = later->meters[meter];
+    if (!window.resetMs || !window.durationMs || window.durationMs > kBurnUpMaxWindowMs ||
+        window.durationMs > window.resetMs) return curve;
+    ULONGLONG start = window.resetMs - window.durationMs;
+    ULONGLONG earliest = start > kHistoryResetToleranceMs ? start - kHistoryResetToleranceMs : 0;
+    if (later->timeMs < earliest) return curve;
+    curve.resetMs = window.resetMs;
+    curve.durationMs = window.durationMs;
+    auto& points = curve.points;
+    points.push_back({later->timeMs, window.value, false});
+
+    // Walk back from the newest reading. `visited` keeps journal times strictly decreasing.
+    bool adjacent = true;
+    ULONGLONG visited = later->timeMs;
+    for (size_t i = newest; i-- > 0;) {
+        const HistorySample& sample = samples[i];
+        if (sample.timeMs >= visited || sample.timeMs < earliest) break;
+        visited = sample.timeMs;
+        if (!HistoryHasValue(sample, meter)) {
+            adjacent = false;
+            continue;
+        }
+        HistoryBreak link = adjacent ? HistoryConnection(sample, *later, meter) : HistoryBreak::Gap;
+        if (link == HistoryBreak::Reset ||
+            (link != HistoryBreak::None &&
+             HistoryWindowConnection(sample, *later, meter) != HistoryBreak::None)) break;
+        points.back().connect = link == HistoryBreak::None;
+        points.push_back({sample.timeMs, sample.meters[meter].value, false});
+        later = &sample;
+        adjacent = true;
+    }
+    std::reverse(points.begin(), points.end());
+
+    // Reduce for drawing: per time bucket and segment keep the first, lowest, highest and last
+    // readings, with fewer buckets until it fits, so every segment keeps its endpoints. Only
+    // when even that exceeds the cap do buckets span segments, dropping short ones; kept
+    // readings of different segments are never joined.
+    if (points.size() > kBurnUpMaxPoints) {
+        std::vector<size_t> segment(points.size(), 0);
+        for (size_t i = 1; i < points.size(); ++i) segment[i] = segment[i - 1] + !points[i].connect;
+        ULONGLONG from = points.front().timeMs, span = points.back().timeMs - from + 1;
+        auto reduce = [&](ULONGLONG buckets, bool acrossSegments) {
+            auto bucketOf = [&](size_t i) { return (points[i].timeMs - from) * buckets / span; };
+            std::vector<BurnUpPoint> reduced;
+            size_t previous = SIZE_MAX;
+            for (size_t begin = 0, end = 0; begin < points.size(); begin = end) {
+                size_t low = begin, high = begin;
+                for (ULONGLONG bucket = bucketOf(begin);
+                     end < points.size() && bucketOf(end) == bucket &&
+                     (acrossSegments || segment[end] == segment[begin]); ++end) {
+                    if (points[end].used < points[low].used) low = end;
+                    if (points[end].used > points[high].used) high = end;
+                }
+                std::array<size_t, 4> kept{begin, low, high, end - 1};
+                std::sort(kept.begin(), kept.end());
+                for (auto it = kept.begin(), last = std::unique(kept.begin(), kept.end()); it != last; ++it) {
+                    reduced.push_back({points[*it].timeMs, points[*it].used,
+                                       previous != SIZE_MAX && segment[*it] == segment[previous]});
+                    previous = *it;
+                }
+            }
+            return reduced;
+        };
+        std::vector<BurnUpPoint> reduced;
+        for (ULONGLONG buckets = kBurnUpMaxPoints / 4; ; buckets /= 2) {
+            reduced = reduce(buckets, false);
+            if (reduced.size() <= kBurnUpMaxPoints || buckets == 1) break;
+        }
+        if (reduced.size() > kBurnUpMaxPoints) reduced = reduce(kBurnUpMaxPoints / 4, true);
+        points = std::move(reduced);
+    }
+    return curve;
+}
+
+// The curve for a displayed reading: built under the current tags, for this account and
+// provider, in the reading's window (same duration, reset within the jitter tolerance).
+static const BurnUpCurve* FindBurnUpCurve(const BurnUpStore& store, uint64_t epoch,
+                                          ULONGLONG generation, uint64_t historyId,
+                                          uint32_t provider, int meter, ULONGLONG resetMs,
+                                          ULONGLONG durationMs) {
+    if (store.epoch != epoch || store.generation != generation || meter < 0 ||
+        meter >= kBurnUpMeterCount || !resetMs || !durationMs) return nullptr;
+    for (const auto& account : store.accounts) {
+        if (account.historyId != historyId) continue;
+        const BurnUpCurve& curve = account.meters[meter];
+        ULONGLONG shift = curve.resetMs > resetMs ? curve.resetMs - resetMs : resetMs - curve.resetMs;
+        if (account.provider != provider || curve.points.empty() || curve.durationMs != durationMs ||
+            shift > kHistoryResetToleranceMs) return nullptr;
+        return &curve;
+    }
+    return nullptr;
+}
+
+// Publication step, run under g_dataMutex. Rejects curves whose journal copy or settings
+// snapshot was superseded by Clear or a curve policy change. A partial rebuild replaces only its
+// accounts; accounts left without any curve are dropped.
+static bool PublishBurnUpCurves(BurnUpStore& store, std::vector<BurnUpAccountCurves> built,
+                                bool replaceAll, uint64_t epoch, ULONGLONG generation,
+                                uint64_t currentEpoch, ULONGLONG currentGeneration) {
+    if (epoch != currentEpoch || generation != currentGeneration) return false;
+    if (replaceAll || store.epoch != epoch || store.generation != generation) store.accounts.clear();
+    store.epoch = epoch;
+    store.generation = generation;
+    for (auto& account : built) {
+        std::erase_if(store.accounts, [&](const BurnUpAccountCurves& existing) {
+            return existing.historyId == account.historyId;
+        });
+        if (std::any_of(account.meters.begin(), account.meters.end(),
+                        [](const BurnUpCurve& curve) { return !curve.points.empty(); })) {
+            store.accounts.push_back(std::move(account));
+        }
+    }
+    return true;
+}
+
+// src/history/burn-up-store.h
+// Published burn-up curves: fetch-thread rebuilds, invalidation and the flyout's accessor.
+
+// Guarded by g_dataMutex. The fetch thread publishes curves; settings publication and Clear
+// history only reset the store.
+static BurnUpStore g_burnUpCurves;
+// Bumped with g_settingsMutex and g_dataMutex held when consent, retention or a history ID's
+// presence, provider or recording changes. Hiding and quota selection keep valid curves.
+static std::atomic<ULONGLONG> g_burnUpPolicyGeneration{0};
+// Asks the fetch thread to rebuild every recorded account from local history only.
+static std::atomic<bool> g_burnUpRebuildRequested{false};
+
+// Drops published curves and requests a full local rebuild. Caller holds g_dataMutex, then
+// updates the UI and wakes the fetch thread once it holds no locks.
+static void ResetBurnUpCurvesLocked() {
+    g_burnUpCurves = {};
+    g_burnUpRebuildRequested = true;
+}
+
+// Fetch thread only, after AppendHistory while this shell records. Under g_historyMutex the
+// flagged recorded accounts' tails in `cache` copy only what was appended since the last round
+// (a full scan of their current windows after an invalidation or journal change; never loading
+// the journal). Curves are built outside the lock and published unless Clear or a policy change
+// superseded the copy or `policyGeneration`'s settings snapshot. Returns whether the store was
+// published.
+static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<AccountConfig>& accounts,
+                                const std::vector<AccountData>& readings,
+                                const std::vector<bool>& rebuild, bool replaceAll,
+                                int retentionDays, ULONGLONG policyGeneration) {
+    try {
+        std::vector<BurnUpRequest> targets;
+        ULONGLONG now = NowUnixMs();
+        ULONGLONG retention = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
+        for (size_t i = 0; i < accounts.size() && i < readings.size() && i < rebuild.size(); i++) {
+            const AccountConfig& account = accounts[i];
+            if (!rebuild[i] || !account.recordHistory || !account.historyId) continue;
+            BurnUpRequest& target = targets.emplace_back();
+            target.historyId = account.historyId;
+            target.provider = account.provider == L"anthropic" ? 1 : account.provider == L"openai" ? 2 : 3;
+            // Back to the earliest start among the displayed windows, within retention.
+            const AccountData& data = readings[i];
+            for (const WindowUsage* usage : {&data.win5h, &data.winWeek, &data.fableWeek,
+                                             &data.extraUsage, &data.antigravityThirdParty5h,
+                                             &data.antigravityThirdPartyWeek}) {
+                ULONGLONG duration = usage->windowDurationMs;
+                if (usage->pct < 0 || !duration || duration > kBurnUpMaxWindowMs ||
+                    usage->resetUnixMs <= duration) continue;
+                ULONGLONG start = usage->resetUnixMs - duration;
+                target.from = std::min(target.from, start > kHistoryResetToleranceMs ?
+                                                        start - kHistoryResetToleranceMs : 0);
+            }
+            if (target.from != ULLONG_MAX) {
+                target.from = std::max(target.from, now > retention ? now - retention : 0);
+            }
+        }
+
+        uint64_t epoch;
+        {
+            std::lock_guard lock(g_historyMutex);
+            epoch = g_historyEpoch.load();
+            UpdateBurnUpTails(cache, g_historySamples, epoch, g_historyRevision,
+                              g_historyAppendCount, targets, replaceAll);
+        }
+        if (g_unloading) {
+            cache = {};  // A refill may have stopped part-way.
+            return false;
+        }
+
+        std::vector<BurnUpAccountCurves> built;
+        for (const auto& target : targets) {
+            if (g_unloading) return false;
+            auto tail = std::find_if(cache.accounts.begin(), cache.accounts.end(),
+                [&](const BurnUpAccountTail& candidate) { return candidate.historyId == target.historyId; });
+            BurnUpAccountCurves& curves = built.emplace_back();
+            curves.historyId = target.historyId;
+            curves.provider = target.provider;
+            for (int meter = 0; meter < kBurnUpMeterCount && tail != cache.accounts.end(); meter++) {
+                curves.meters[meter] = BuildBurnUpCurve(tail->samples, meter);
+            }
+        }
+        std::lock_guard<std::mutex> lock(g_dataMutex);
+        return !g_unloading &&
+               PublishBurnUpCurves(g_burnUpCurves, std::move(built), replaceAll, epoch,
+                                   policyGeneration, g_historyEpoch.load(),
+                                   g_burnUpPolicyGeneration.load());
+    } catch (...) {
+        Wh_Log(L"Burn-up curve rebuild failed");
+        cache = {};
+        return false;
+    }
+}
+
+// After Clear history (which changes the history epoch): drops published curves, updates the
+// UI and asks the fetch thread for a local rebuild, without a provider poll or deadline change.
+// Call holding no locks.
+static void InvalidateBurnUpCurves() {
+    {
+        std::lock_guard<std::mutex> lock(g_dataMutex);
+        ResetBurnUpCurvesLocked();
+    }
+    PostUiUpdate();
+    if (g_refreshEvent) SetEvent(g_refreshEvent);
+}
+
+// UI thread: copies the current-window curve for a flyout row's displayed reading. Nothing when
+// the row has no chart: no window (credits, unknown duration), an account this shell doesn't
+// actively record, curves from before Clear or a recording change, or another window than the
+// reading's. Takes g_settingsMutex then g_dataMutex; call it holding neither.
+static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyoutRow,
+                                                  const WindowUsage& reading) {
+    // The extra row's curve is Anthropic extra usage; OpenAI credits are not a windowed meter.
+    int meter = flyoutRow == kFlyoutFiveHourRow ? 0 : flyoutRow == kFlyoutWeeklyRow ? 1 :
+                flyoutRow == kFlyoutFableRow ? 2 : flyoutRow == kFlyoutExtraRow ? 3 :
+                flyoutRow == kFlyoutPoolShortRow ? 4 : flyoutRow == kFlyoutPoolWeeklyRow ? 5 : -1;
+    if (meter < 0 || !historyId || reading.pct < 0) return std::nullopt;
+    std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+    auto account = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
+        [&](const AccountConfig& candidate) { return candidate.historyId == historyId; });
+    if (!g_settings.historyEnabled || g_historyIdsPendingSave || account == g_settings.accounts.end() ||
+        !account->recordHistory || (account->hidden && g_settings.skipHiddenPolling)) {
+        return std::nullopt;
+    }
+    uint32_t provider = account->provider == L"anthropic" ? 1 : account->provider == L"openai" ? 2 : 3;
+    ULONGLONG retention = (ULONGLONG)std::clamp(g_settings.historyRetentionDays, 1, 3650) * kHistoryDayMs;
+    std::lock_guard<std::mutex> dataLock(g_dataMutex);
+    const BurnUpCurve* curve = FindBurnUpCurve(g_burnUpCurves, g_historyEpoch.load(),
+                                               g_burnUpPolicyGeneration.load(), historyId, provider,
+                                               meter, reading.resetUnixMs, reading.windowDurationMs);
+    if (!curve) return std::nullopt;
+    // Retention maintenance can prune readings between rebuilds; never chart them.
+    BurnUpCurve copy = *curve;
+    ULONGLONG now = NowUnixMs();
+    std::erase_if(copy.points, [&](const BurnUpPoint& point) {
+        return now > retention && point.timeMs < now - retention;
+    });
+    if (copy.points.empty()) return std::nullopt;
+    copy.points.front().connect = false;
+    return copy;
 }
 
 // src/fetch/notifications.h
@@ -3836,6 +4322,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<std::array<int, kQuotaBarCount>> redState;
     ULONGLONG lastLoggedSettingsGeneration = 0;
     const uint64_t historySession = NowUnixMs();
+    bool curvesRecording = false;  // Recording was active last round, so curves may be published.
+    BurnUpSampleCache curveSamples;  // Journal tails of recorded accounts, kept between rounds.
     while (!g_unloading) {
         const bool historyOwner = IsHistoryOwnerProcess();
         if (historyOwner && g_historyIdsPendingSave) {
@@ -3865,8 +4353,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         int intervalMin, redThreshold;
         bool enableNotifications, historyEnabled, skipHiddenPolling;
         int historyRetentionDays;
-        ULONGLONG settingsGeneration, historyContinuityGeneration;
+        ULONGLONG settingsGeneration, historyContinuityGeneration, curvePolicyGeneration;
         const uint64_t historyEpoch = g_historyEpoch.load();
+        // Taken before the snapshot: a later invalidation requests another rebuild and makes
+        // this round's curves stale.
+        bool rebuildAllCurves = g_burnUpRebuildRequested.exchange(false);
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
@@ -3878,6 +4369,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             skipHiddenPolling = g_settings.skipHiddenPolling;
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
+            curvePolicyGeneration = g_burnUpPolicyGeneration.load();
         }
         ULONGLONG nextHistoryMaintenanceMs = historyOwner && historyEnabled
             ? MaintainHistory(historyRetentionDays, true) : 0;
@@ -4116,6 +4608,31 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         // Admission is fenced against settings edits and Clear history. Never store a
         // carried-forward result or let a settings refresh manufacture a sample.
         AppendHistory(historyBatch, historyEpoch, settingsGeneration, historyRetentionDays);
+        // Flyout burn-up curves from local history: the accounts recorded this round, or every
+        // recorded account after an invalidation or once recording starts here.
+        bool curvesPublished = false;
+        if (historyEnabled) {
+            bool rebuildAll = rebuildAllCurves || !curvesRecording;
+            std::vector<bool> rebuild(accounts.size(), rebuildAll);
+            for (const auto& sample : historyBatch) {
+                for (size_t i = 0; i < accounts.size(); i++) {
+                    if (accounts[i].historyId == sample.accountId) rebuild[i] = true;
+                }
+            }
+            if (std::find(rebuild.begin(), rebuild.end(), true) != rebuild.end()) {
+                curvesPublished = RebuildBurnUpCurves(curveSamples, accounts, results, rebuild,
+                                                      rebuildAll, historyRetentionDays,
+                                                      curvePolicyGeneration);
+                if (rebuildAll && !curvesPublished) g_burnUpRebuildRequested = true;
+            }
+        } else if (curvesRecording) {
+            // No longer recording here: consent, history ownership or pending IDs.
+            curveSamples = {};
+            std::lock_guard<std::mutex> lk(g_dataMutex);
+            curvesPublished = !g_burnUpCurves.accounts.empty();
+            g_burnUpCurves = {};
+        }
+        curvesRecording = historyEnabled;
         if (!notificationsEnabled && g_notifyWnd) RemoveNotifyIcon();
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
@@ -4193,6 +4710,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     }
                 }
             }
+            PostUiUpdate();
+        } else if (curvesPublished) {
             PostUiUpdate();
         }
 
@@ -4705,6 +5224,18 @@ static Brush FlyoutBrush(winrt::Windows::UI::Color color) {
     }
 }
 
+// FlyoutBrush for chart shapes, mapped in absolute coordinates: a horizontal or vertical line
+// has an empty bounding box, which a bounding-box-relative gradient can't paint.
+static Brush FlyoutShapeBrush(winrt::Windows::UI::Color color) {
+    Brush brush = FlyoutBrush(color);
+    try {
+        if (auto gradient = brush.try_as<LinearGradientBrush>()) {
+            gradient.MappingMode(BrushMappingMode::Absolute);
+        }
+    } catch (...) {}
+    return brush;
+}
+
 // Quota fill: the usage color, lightened toward the top edge.
 static Brush FlyoutFillBrush(winrt::Windows::UI::Color color) {
     try {
@@ -4801,6 +5332,9 @@ static FlyoutTheme LoadFlyoutTheme() {
     theme.accent = FlyoutBrush(p.accent);
     theme.paceTick = FlyoutBrush(p.paceTick);
     theme.paceHalo = FlyoutBrush(p.paceHalo);
+    theme.markerRing = FlyoutBrush(p.cardSolid);
+    theme.chartGuide = FlyoutShapeBrush(p.mutedText);
+    theme.chartKey = FlyoutShapeBrush(p.text);
 
     theme.card = FlyoutBrush(p.cardSolid);
     if (acrylic) {
@@ -5794,6 +6328,21 @@ struct FlyoutDisplay {
     bool visualTestMode = false;
 };
 
+// Quota rows' details cell margins (DIP).
+static constexpr double kFlyoutDetailsLeft = 12;
+static constexpr double kFlyoutDetailsRight = 16;
+// Burn-up chart plot (DIP). Its fixed width lets updates compute geometry without a layout
+// pass; 0% and 100% sit inside the vertical inset so their strokes stay in the plot.
+static constexpr double kFlyoutChartWidth = 190;
+static constexpr double kFlyoutChartHeight = 40;
+static constexpr double kFlyoutChartInset = 2;
+
+// The reading each flyout row shows, by FlyoutRowIndex.
+static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(AccountData const& d) {
+    return {&d.win5h, &d.winWeek, &d.antigravityThirdParty5h, &d.antigravityThirdPartyWeek,
+            &d.fableWeek, &d.extraUsage};
+}
+
 // "1d 3h", "2h 15m", "4m 12s" or "45s".
 static std::wstring FormatShortDuration(ULONGLONG seconds) {
     ULONGLONG days = seconds / (24 * 60 * 60);
@@ -5853,6 +6402,26 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     };
     constexpr GridLength kAuto{0, GridUnitType::Auto};
     constexpr GridLength kStar{1, GridUnitType::Star};
+    // Even-pace and projection strokes, shared by the charts and their legend. Dash lengths are
+    // in stroke thicknesses.
+    auto dashes = [](double dash, double gap) {
+        DoubleCollection pattern;
+        pattern.Append(dash);
+        pattern.Append(gap);
+        return pattern;
+    };
+    auto paceStroke = [&](wuxs::Line const& line) {
+        line.Stroke(theme.chartGuide);
+        line.StrokeThickness(1);
+        line.StrokeDashArray(dashes(3, 3));
+    };
+    auto projectionStroke = [&](wuxs::Line const& line) {
+        line.StrokeThickness(1.4);
+        line.StrokeDashArray(dashes(1.5 / 1.4, 2.5 / 1.4));
+        line.StrokeDashCap(PenLineCap::Round);
+        line.StrokeStartLineCap(PenLineCap::Round);
+        line.StrokeEndLineCap(PenLineCap::Round);
+    };
 
     StackPanel content;
 
@@ -5926,8 +6495,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         {{{10.f, 5.f}, {14.5f, 5.f}, {14.5f, 9.5f}, {14.5f, 9.5f}}},
     }};
     Grid rowsGrid;
-    addColumn(rowsGrid, kAuto);
-    addColumn(rowsGrid, kStar);
+    popup.namesColumn = addColumn(rowsGrid, kAuto);
+    popup.detailsColumn = addColumn(rowsGrid, kStar);
     content.Children().Append(rowsGrid);
     int gridRow = 0;
     for (FlyoutQuotaRow& row : popup.rows) {
@@ -6001,7 +6570,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         rowsGrid.Children().Append(names);
 
         StackPanel details;
-        details.Margin({12, 11, 16, 9});
+        details.Margin({kFlyoutDetailsLeft, 11, kFlyoutDetailsRight, 9});
         details.VerticalAlignment(VerticalAlignment::Center);
         Grid::SetRow(details, gridRow);
         Grid::SetColumn(details, 1);
@@ -6053,6 +6622,69 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.visual.Children().Append(paceLayer);
         details.Children().Append(row.visual);
 
+        // Burn-up chart: card-tinted plot and the even-pace diagonal from the window start to
+        // the reset, under the recorded usage (area, segments, isolated readings), projection,
+        // now line and current point, whose geometry UpdateAccountFlyout sets.
+        Grid chart;
+        chart.Width(kFlyoutChartWidth);
+        chart.Height(kFlyoutChartHeight);
+        chart.HorizontalAlignment(HorizontalAlignment::Left);
+        chart.IsHitTestVisible(false);
+        // The plot clips the drawing to its rounded corners and the canvas to its bounds, so
+        // edge dots, the marker and fills never overhang. A high-contrast outline goes on top
+        // so it doesn't inset the drawing.
+        Border plot;
+        plot.CornerRadius({4, 4, 4, 4});
+        plot.Background(theme.chip);
+        chart.Children().Append(plot);
+        if (theme.highContrast) {
+            Border outline;
+            outline.CornerRadius({4, 4, 4, 4});
+            outline.BorderBrush(theme.trackBorder);
+            outline.BorderThickness({1, 1, 1, 1});
+            chart.Children().Append(outline);
+        }
+        Canvas canvas;
+        RectangleGeometry bounds;
+        bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
+        canvas.Clip(bounds);
+        wuxs::Line pace;
+        pace.X1(0);
+        pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
+        pace.X2(kFlyoutChartWidth);
+        pace.Y2(kFlyoutChartInset);
+        paceStroke(pace);
+        canvas.Children().Append(pace);
+        row.chartArea = wuxs::Path{};
+        canvas.Children().Append(row.chartArea);
+        row.chartLines = wuxs::Path{};
+        row.chartLines.StrokeThickness(1.6);
+        row.chartLines.StrokeLineJoin(PenLineJoin::Round);
+        row.chartLines.StrokeStartLineCap(PenLineCap::Round);
+        row.chartLines.StrokeEndLineCap(PenLineCap::Round);
+        canvas.Children().Append(row.chartLines);
+        row.chartDots = wuxs::Path{};
+        canvas.Children().Append(row.chartDots);
+        row.chartProjection = wuxs::Line{};
+        projectionStroke(row.chartProjection);
+        collapsed(row.chartProjection);
+        canvas.Children().Append(row.chartProjection);
+        row.chartNow = wuxs::Line{};
+        row.chartNow.Y2(kFlyoutChartHeight);
+        row.chartNow.Stroke(theme.chartGuide);
+        row.chartNow.StrokeThickness(1);
+        canvas.Children().Append(row.chartNow);
+        row.chartMarker = wuxs::Ellipse{};
+        row.chartMarker.Width(6);
+        row.chartMarker.Height(6);
+        row.chartMarker.Stroke(theme.markerRing);
+        row.chartMarker.StrokeThickness(1);
+        canvas.Children().Append(row.chartMarker);
+        plot.Child(canvas);
+        collapsed(chart);
+        details.Children().Append(chart);
+        row.chart = chart;
+
         row.amount = makeText(12, theme.secondaryText);
         row.amount.LineHeight(16);
         row.amount.Margin({0, 6, 0, 0});
@@ -6069,6 +6701,47 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         rowsGrid.Children().Append(details);
         gridRow++;
     }
+
+    // Chart legend: line keys, then the data source.
+    Grid legendGrid;
+    addColumn(legendGrid, kAuto);
+    addColumn(legendGrid, kStar);
+    StackPanel keys;
+    keys.Orientation(Orientation::Horizontal);
+    wuxs::Line paceKey;
+    paceStroke(paceKey);
+    wuxs::Line projectionKey;
+    projectionStroke(projectionKey);
+    projectionKey.Stroke(theme.chartKey);
+    for (auto [key, name] : {std::pair{paceKey, L"even pace"},
+                             std::pair{projectionKey, L"projection"}}) {
+        key.X1(1);
+        key.X2(15);
+        key.Y1(1);
+        key.Y2(1);
+        key.Width(16);
+        key.Height(2);
+        key.Margin({0, 0, 6, 0});
+        key.VerticalAlignment(VerticalAlignment::Center);
+        keys.Children().Append(key);
+        TextBlock label = makeText(11, theme.mutedText);
+        label.Text(name);
+        label.TextWrapping(TextWrapping::NoWrap);
+        label.Margin({0, 0, 14, 0});
+        keys.Children().Append(label);
+    }
+    legendGrid.Children().Append(keys);
+    popup.legendSource = makeText(11, theme.mutedText);
+    singleLine(popup.legendSource);
+    popup.legendSource.TextAlignment(TextAlignment::Right);
+    popup.legendSource.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetColumn(popup.legendSource, 1);
+    legendGrid.Children().Append(popup.legendSource);
+    Border legend = section(legendGrid);
+    legend.Padding({16, 6, 16, 9});
+    collapsed(legend);
+    popup.legend = legend;
+    content.Children().Append(legend);
 
     // Free-form lines: additional limits, provider notes, errors and prompts.
     StackPanel notes;
@@ -6172,8 +6845,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     return card;
 }
 
-static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& account,
-                                AccountData const& d, FlyoutDisplay const& display) {
+// `curves` holds each row's burn-up curve for its displayed reading (FlyoutRowReadings); rows
+// without one show the bar.
+static void UpdateAccountFlyout(
+    QuotaUiInstance& state, AccountConfig const& account, AccountData const& d,
+    FlyoutDisplay const& display,
+    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> const& curves) {
     FlyoutPopup& popup = state.flyout.popup;
     if (!popup.card) return;
     FlyoutTheme const& theme = popup.theme;
@@ -6205,25 +6882,24 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
         bool creditsAmount = openAi && !creditsBar &&
                              (d.creditsUnlimited || d.creditsBalance >= 0 || d.hasCredits);
         struct RowSource {
-            const WindowUsage* usage;
             std::wstring name;
             bool available;
         };
         const std::array<RowSource, kFlyoutRowCount> sources = {{
-            {&d.win5h, antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
+            {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
              d.win5h.pct >= 0},
-            {&d.winWeek, antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
-            {&d.antigravityThirdParty5h,
-             poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
+            {antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
+            {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
              antigravity && d.antigravityThirdParty5h.pct >= 0},
-            {&d.antigravityThirdPartyWeek, L"Claude/GPT weekly",
-             antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {&d.fableWeek, L"Fable weekly", d.fableWeek.pct >= 0},
-            {&d.extraUsage, openAi ? L"Credits" : L"Extra usage",
+            {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
+            {L"Fable weekly", d.fableWeek.pct >= 0},
+            {openAi ? L"Credits" : L"Extra usage",
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0},
         }};
+        const auto readings = FlyoutRowReadings(d);
 
         int visibleRows = 0;
+        bool anyChart = false;
         for (int r = 0; r < kFlyoutRowCount; r++) {
             FlyoutQuotaRow& row = popup.rows[r];
             const RowSource& source = sources[r];
@@ -6231,7 +6907,7 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             for (auto const& part : {row.row, row.labels, row.details}) show(part, source.available);
             if (!source.available) continue;
             visibleRows++;
-            const WindowUsage& wu = *source.usage;
+            const WindowUsage& wu = *readings[r];
             row.name.Text(source.name);
 
             if (r == kFlyoutExtraRow && creditsAmount) {
@@ -6243,6 +6919,7 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
                 row.unit.Foreground(theme.mutedText);
                 show(row.trend, false);
                 show(row.visual, false);
+                show(row.chart, false);
                 show(row.amount, false);
                 show(row.reset, false);
                 show(row.projection, false);
@@ -6256,7 +6933,6 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             row.unit.Text(remainingMode ? L"left" : L"used");
 
             // The bar follows the bar mode like the taskbar; its color tracks consumption.
-            show(row.visual, true);
             double fillPct = std::clamp(shownPct, 0.0, 100.0);
             row.fillColumn.Width({fillPct, GridUnitType::Star});
             row.emptyColumn.Width({100.0 - fillPct, GridUnitType::Star});
@@ -6292,14 +6968,114 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             show(row.trend, overPace);
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
             std::wstring projection;
+            double msToLimit = -1;
             if (overPace && wu.pct < 100) {
-                double msToLimit = elapsed * wu.windowDurationMs * (100.0 - wu.pct) / wu.pct;
+                msToLimit = elapsed * wu.windowDurationMs * (100.0 - wu.pct) / wu.pct;
                 ULONGLONG minutes =
                     std::max<ULONGLONG>(1, (ULONGLONG)std::ceil(msToLimit / 60000.0));
                 projection = L"At this pace: limit in ~" + FormatShortDuration(minutes * 60);
             }
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
+
+            // Burn-up chart in place of the bar: used % in either bar mode over the displayed
+            // reading's window, with the projection of the text above. Shapes are regenerated
+            // only when the drawn geometry changes.
+            const std::optional<BurnUpCurve>& curve = curves[r];
+            bool charted = row.chart && curve && !curve->points.empty() &&
+                           wu.windowDurationMs > 0 && wu.resetUnixMs > wu.windowDurationMs;
+            show(row.visual, !charted);
+            show(row.chart, charted);
+            if (charted) {
+                anyChart = true;
+                using winrt::Windows::Foundation::Point;
+                double start = (double)(wu.resetUnixMs - wu.windowDurationMs);
+                auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
+                auto xAt = [&](ULONGLONG timeMs) {
+                    return snap(std::clamp(((double)timeMs - start) / wu.windowDurationMs,
+                                           0.0, 1.0) * kFlyoutChartWidth);
+                };
+                auto yAt = [&](double used) {
+                    return snap(kFlyoutChartHeight - kFlyoutChartInset -
+                                (kFlyoutChartHeight - 2 * kFlyoutChartInset) *
+                                    std::clamp(used, 0.0, 100.0) / 100.0);
+                };
+                FlyoutChartShape shape;
+                const std::vector<BurnUpPoint>& points = curve->points;
+                for (size_t begin = 0, end; begin < points.size(); begin = end) {
+                    std::vector<Point> run{{xAt(points[begin].timeMs), yAt(points[begin].used)}};
+                    for (end = begin + 1; end < points.size() && points[end].connect; end++) {
+                        run.push_back({xAt(points[end].timeMs), yAt(points[end].used)});
+                    }
+                    if (run.size() == 1) shape.dots.push_back(run.front());
+                    else shape.lines.push_back(std::move(run));
+                }
+                // A rolled-back clock can put now before the newest reading.
+                ULONGLONG now = std::max(display.now, points.back().timeMs);
+                shape.now = {xAt(now), yAt(wu.pct)};
+                if (msToLimit >= 0) shape.limit = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
+                shape.color = colorValue;
+
+                FlyoutChartShape& drawn = row.chartShape;
+                if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
+                    // Each run is a stroked figure over a filled one closed to the plot bottom.
+                    PathGeometry area;
+                    PathGeometry lines;
+                    for (auto const& run : shape.lines) {
+                        PolyLineSegment outline;
+                        for (Point point : run) outline.Points().Append(point);
+                        outline.Points().Append({run.back().X, (float)kFlyoutChartHeight});
+                        PathFigure under;
+                        under.StartPoint({run.front().X, (float)kFlyoutChartHeight});
+                        under.IsClosed(true);
+                        under.Segments().Append(outline);
+                        area.Figures().Append(under);
+
+                        PolyLineSegment rest;
+                        for (size_t p = 1; p < run.size(); p++) rest.Points().Append(run[p]);
+                        PathFigure line;
+                        line.StartPoint(run.front());
+                        line.IsFilled(false);
+                        line.Segments().Append(rest);
+                        lines.Figures().Append(line);
+                    }
+                    GeometryGroup dots;
+                    dots.FillRule(FillRule::Nonzero);
+                    for (Point point : shape.dots) {
+                        EllipseGeometry dot;
+                        dot.Center(point);
+                        dot.RadiusX(2);
+                        dot.RadiusY(2);
+                        dots.Children().Append(dot);
+                    }
+                    row.chartArea.Data(area);
+                    row.chartLines.Data(lines);
+                    row.chartDots.Data(dots);
+                }
+                if (shape.now != drawn.now || shape.limit != drawn.limit) {
+                    row.chartNow.X1(shape.now.X);
+                    row.chartNow.X2(shape.now.X);
+                    Canvas::SetLeft(row.chartMarker, shape.now.X - 3.0);
+                    Canvas::SetTop(row.chartMarker, shape.now.Y - 3.0);
+                    bool projectionShown = shape.limit.X >= 0;
+                    show(row.chartProjection, projectionShown);
+                    if (projectionShown) {
+                        row.chartProjection.X1(shape.now.X);
+                        row.chartProjection.Y1(shape.now.Y);
+                        row.chartProjection.X2(shape.limit.X);
+                        row.chartProjection.Y2(shape.limit.Y);
+                    }
+                }
+                if (shape.color != drawn.color) {
+                    Brush usage = FlyoutShapeBrush(color);
+                    row.chartArea.Fill(FlyoutShapeBrush({0x47, color.R, color.G, color.B}));
+                    row.chartLines.Stroke(usage);
+                    row.chartDots.Fill(usage);
+                    row.chartProjection.Stroke(usage);
+                    row.chartMarker.Fill(usage);
+                }
+                drawn = std::move(shape);
+            }
 
             std::wstring amount;
             if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
@@ -6319,6 +7095,25 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
             row.reset.Text(reset);
             show(row.reset, !reset.empty());
+        }
+
+        // Charts plot used % in either bar mode; the legend says so when numbers show what is
+        // left.
+        show(popup.legend, anyChart);
+        if (anyChart) {
+            popup.legendSource.Text(display.barMode == BarMode::Remaining ?
+                                        L"% used, from local history" : L"from local history");
+        }
+        // With charts the details column fits the fixed-width chart and names take the rest;
+        // otherwise names fit their widest entry and bars take the rest.
+        if (popup.namesColumn && popup.detailsColumn &&
+            (popup.namesColumn.Width().GridUnitType == GridUnitType::Star) != anyChart) {
+            popup.namesColumn.Width(anyChart ? GridLength{1, GridUnitType::Star} :
+                                               GridLength{0, GridUnitType::Auto});
+            popup.detailsColumn.Width(anyChart ?
+                GridLength{kFlyoutDetailsLeft + kFlyoutChartWidth + kFlyoutDetailsRight,
+                           GridUnitType::Pixel} :
+                GridLength{1, GridUnitType::Star});
         }
 
         std::wstring extraLimits =
@@ -7751,10 +8546,51 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 if (AccountIdentityHash(accounts[i]) != flyout.accountIdentity) {
                     CloseAccountFlyout(state);
                 } else {
+                    // Burn-up curves per flyout row. The accessor takes the settings and data
+                    // locks, so none may be held here.
+                    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> curves;
+                    const auto readings = FlyoutRowReadings(d);
+                    for (int r = 0; r < kFlyoutRowCount; r++) {
+                        const WindowUsage& reading = *readings[r];
+                        if (!visualTestMode) {
+                            curves[r] = CopyBurnUpCurve(accounts[i].historyId, r, reading);
+                            continue;
+                        }
+                        // Visual test samples: readings from part-way into the window up to now,
+                        // ending at the reading, with a recording gap and an isolated reading.
+                        // The OpenAI sample has none, so its flyout keeps the no-history bars.
+                        if (accounts[i].provider == L"openai" || reading.pct < 0 ||
+                            !reading.windowDurationMs ||
+                            reading.resetUnixMs <= reading.windowDurationMs ||
+                            now <= reading.resetUnixMs - reading.windowDurationMs) {
+                            continue;
+                        }
+                        // Times as fractions of the window's elapsed span from its start, usage
+                        // as shares of the reading. Sample windows move with now, so the drawn
+                        // geometry stays put between ticks.
+                        static constexpr struct {
+                            double time, share;
+                            bool connect;
+                        } kSamples[] = {
+                            {0.15, 0.10, false}, {0.22, 0.18, true}, {0.30, 0.22, true},
+                            {0.38, 0.36, true}, {0.45, 0.40, true}, {0.55, 0.52, false},
+                            {0.68, 0.60, false}, {0.76, 0.66, true}, {0.84, 0.80, true},
+                            {0.92, 0.88, true}, {1.00, 1.00, true},
+                        };
+                        ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+                        BurnUpCurve& curve = curves[r].emplace(
+                            BurnUpCurve{reading.resetUnixMs, reading.windowDurationMs, {}});
+                        for (const auto& sample : kSamples) {
+                            curve.points.push_back(
+                                {start + (ULONGLONG)std::llround((now - start) * sample.time),
+                                 reading.pct * sample.share, sample.connect});
+                        }
+                    }
                     UpdateAccountFlyout(state, accounts[i], d,
                                         {now, barMode, yellowThreshold, orangeThreshold,
                                          redThreshold, colorblindMode, showOpenAiExtraLimits,
-                                         stale, warn, accountRefreshing, visualTestMode});
+                                         stale, warn, accountRefreshing, visualTestMode},
+                                        curves);
                 }
             }
 
@@ -8873,6 +9709,23 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
     }
     // Appearance edits/renames don't break graphs; recording and polling changes do.
     if (historyBoundary) ++g_historyContinuityGeneration;
+    // Burn-up curves follow what may be charted: consent, retention, and each history ID's
+    // presence, provider and recording. Callers then update the UI and wake the fetch thread
+    // after releasing their locks (FinishSettingsApply), which rebuilds them locally.
+    bool curvePolicyChanged = s.historyEnabled != g_settings.historyEnabled ||
+                              s.historyRetentionDays != g_settings.historyRetentionDays;
+    for (const auto& old : g_settings.accounts) {
+        auto current = std::find_if(s.accounts.begin(), s.accounts.end(),
+            [&](const AccountConfig& account) { return old.historyId && account.historyId == old.historyId; });
+        if (old.historyId && (current == s.accounts.end() || current->provider != old.provider ||
+                              current->recordHistory != old.recordHistory)) {
+            curvePolicyChanged = true;
+        }
+    }
+    if (curvePolicyChanged) {
+        ++g_burnUpPolicyGeneration;
+        ResetBurnUpCurvesLocked();
+    }
     std::vector<AccountData> newData(s.accounts.size());
     std::vector<bool> oldDataUsed(g_data.size(), false);
     for (size_t i = 0; i < s.accounts.size(); i++) {
@@ -12078,55 +12931,6 @@ static std::wstring HistoryHours(double ms) {
     return text;
 }
 
-static bool HistoryHasValue(const HistorySample& sample, int meter) {
-    return !sample.failed && sample.meters[meter].value != -1 &&
-           std::isfinite(sample.meters[meter].value);
-}
-
-enum class HistoryBreak { None, Gap, Reset, Unavailable };
-
-// Shared by rendering and integration: no extrapolation, including at range boundaries.
-static HistoryBreak HistoryConnection(const HistorySample& a, const HistorySample& b,
-                                      int meter) {
-    if (!HistoryHasValue(a, meter) || !HistoryHasValue(b, meter))
-        return HistoryBreak::Unavailable;
-    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
-        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
-        return HistoryBreak::Gap;
-    ULONGLONG gap = b.timeMs - a.timeMs;
-    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
-    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
-    if (gap / 2 + gap % 2 > polling) return HistoryBreak::Gap;
-    const auto& av = a.meters[meter];
-    const auto& bv = b.meters[meter];
-    if (av.durationMs != bv.durationMs) return HistoryBreak::Reset;
-    if (!!av.resetMs != !!bv.resetMs) return HistoryBreak::Reset;
-    if (av.resetMs) {
-        // Reset endpoints can jitter. Never require exact equality; reject a boundary
-        // within two minutes of this interval or a material shift of the reset epoch.
-        constexpr ULONGLONG tolerance = 120000;
-        ULONGLONG shift = av.resetMs > bv.resetMs ? av.resetMs - bv.resetMs : bv.resetMs - av.resetMs;
-        ULONGLONG lower = a.timeMs > tolerance ? a.timeMs - tolerance : 0;
-        ULONGLONG upper = b.timeMs > ULLONG_MAX - tolerance ? ULLONG_MAX : b.timeMs + tolerance;
-        if ((av.resetMs >= lower && av.resetMs <= upper) ||
-            (bv.resetMs >= lower && bv.resetMs <= upper)) return HistoryBreak::Reset;
-        if (shift > tolerance) {
-            // OpenAI's unused window rolls a full duration ahead until first use anchors it.
-            // This is not a reset: the old deadline is still beyond this sampled interval.
-            // Keep real boundaries, other providers, backward shifts, and partial windows conservative.
-            if (a.provider == 2 && av.value == 0 && bv.value >= 0 && av.durationMs &&
-                av.resetMs > upper && bv.resetMs > upper && bv.resetMs > av.resetMs &&
-                (shift <= gap || shift - gap <= tolerance)) {
-                ULONGLONG remaining = av.resetMs - a.timeMs;
-                ULONGLONG error = remaining > av.durationMs ? remaining - av.durationMs : av.durationMs - remaining;
-                if (error <= tolerance) return HistoryBreak::None;
-            }
-            return HistoryBreak::Reset;
-        }
-    }
-    return HistoryBreak::None;
-}
-
 // Reduction boundary, also callable by isolated structural tests. Each continuous
 // segment/pixel keeps its first, minimum, maximum and last raw samples in temporal
 // order. A break flushes the bucket even inside the same pixel, so no extrema or
@@ -13619,7 +14423,10 @@ static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wPar
                             if (state->closing || g_unloading || g_historyWindowCancelRequested) break;
                             if (answer != IDOK) { HistorySetStatus(*state, L"Clear history cancelled."); break; }
                             std::wstring error;
-                            if (ClearHistory(&error)) {
+                            bool cleared = ClearHistory(&error);
+                            // Clear changed the history epoch even if the rewrite failed.
+                            InvalidateBurnUpCurves();
+                            if (cleared) {
                                 HistoryLoad(*state);
                                 HistorySetStatus(*state, L"All local history cleared. Future polls can start recording again.");
                             } else HistorySetStatus(*state, L"ERROR: could not clear all history. " + error);

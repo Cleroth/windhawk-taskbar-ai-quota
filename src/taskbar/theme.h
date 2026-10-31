@@ -36,6 +36,18 @@ static Brush FlyoutBrush(winrt::Windows::UI::Color color) {
     }
 }
 
+// FlyoutBrush for chart shapes, mapped in absolute coordinates: a horizontal or vertical line
+// has an empty bounding box, which a bounding-box-relative gradient can't paint.
+static Brush FlyoutShapeBrush(winrt::Windows::UI::Color color) {
+    Brush brush = FlyoutBrush(color);
+    try {
+        if (auto gradient = brush.try_as<LinearGradientBrush>()) {
+            gradient.MappingMode(BrushMappingMode::Absolute);
+        }
+    } catch (...) {}
+    return brush;
+}
+
 // Quota fill: the usage color, lightened toward the top edge.
 static Brush FlyoutFillBrush(winrt::Windows::UI::Color color) {
     try {
@@ -132,6 +144,9 @@ static FlyoutTheme LoadFlyoutTheme() {
     theme.accent = FlyoutBrush(p.accent);
     theme.paceTick = FlyoutBrush(p.paceTick);
     theme.paceHalo = FlyoutBrush(p.paceHalo);
+    theme.markerRing = FlyoutBrush(p.cardSolid);
+    theme.chartGuide = FlyoutShapeBrush(p.mutedText);
+    theme.chartKey = FlyoutShapeBrush(p.text);
 
     theme.card = FlyoutBrush(p.cardSolid);
     if (acrylic) {

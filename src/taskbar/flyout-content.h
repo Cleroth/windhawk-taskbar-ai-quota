@@ -22,6 +22,21 @@ struct FlyoutDisplay {
     bool visualTestMode = false;
 };
 
+// Quota rows' details cell margins (DIP).
+static constexpr double kFlyoutDetailsLeft = 12;
+static constexpr double kFlyoutDetailsRight = 16;
+// Burn-up chart plot (DIP). Its fixed width lets updates compute geometry without a layout
+// pass; 0% and 100% sit inside the vertical inset so their strokes stay in the plot.
+static constexpr double kFlyoutChartWidth = 190;
+static constexpr double kFlyoutChartHeight = 40;
+static constexpr double kFlyoutChartInset = 2;
+
+// The reading each flyout row shows, by FlyoutRowIndex.
+static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(AccountData const& d) {
+    return {&d.win5h, &d.winWeek, &d.antigravityThirdParty5h, &d.antigravityThirdPartyWeek,
+            &d.fableWeek, &d.extraUsage};
+}
+
 // "1d 3h", "2h 15m", "4m 12s" or "45s".
 static std::wstring FormatShortDuration(ULONGLONG seconds) {
     ULONGLONG days = seconds / (24 * 60 * 60);
@@ -81,6 +96,26 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     };
     constexpr GridLength kAuto{0, GridUnitType::Auto};
     constexpr GridLength kStar{1, GridUnitType::Star};
+    // Even-pace and projection strokes, shared by the charts and their legend. Dash lengths are
+    // in stroke thicknesses.
+    auto dashes = [](double dash, double gap) {
+        DoubleCollection pattern;
+        pattern.Append(dash);
+        pattern.Append(gap);
+        return pattern;
+    };
+    auto paceStroke = [&](wuxs::Line const& line) {
+        line.Stroke(theme.chartGuide);
+        line.StrokeThickness(1);
+        line.StrokeDashArray(dashes(3, 3));
+    };
+    auto projectionStroke = [&](wuxs::Line const& line) {
+        line.StrokeThickness(1.4);
+        line.StrokeDashArray(dashes(1.5 / 1.4, 2.5 / 1.4));
+        line.StrokeDashCap(PenLineCap::Round);
+        line.StrokeStartLineCap(PenLineCap::Round);
+        line.StrokeEndLineCap(PenLineCap::Round);
+    };
 
     StackPanel content;
 
@@ -154,8 +189,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         {{{10.f, 5.f}, {14.5f, 5.f}, {14.5f, 9.5f}, {14.5f, 9.5f}}},
     }};
     Grid rowsGrid;
-    addColumn(rowsGrid, kAuto);
-    addColumn(rowsGrid, kStar);
+    popup.namesColumn = addColumn(rowsGrid, kAuto);
+    popup.detailsColumn = addColumn(rowsGrid, kStar);
     content.Children().Append(rowsGrid);
     int gridRow = 0;
     for (FlyoutQuotaRow& row : popup.rows) {
@@ -229,7 +264,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         rowsGrid.Children().Append(names);
 
         StackPanel details;
-        details.Margin({12, 11, 16, 9});
+        details.Margin({kFlyoutDetailsLeft, 11, kFlyoutDetailsRight, 9});
         details.VerticalAlignment(VerticalAlignment::Center);
         Grid::SetRow(details, gridRow);
         Grid::SetColumn(details, 1);
@@ -281,6 +316,69 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.visual.Children().Append(paceLayer);
         details.Children().Append(row.visual);
 
+        // Burn-up chart: card-tinted plot and the even-pace diagonal from the window start to
+        // the reset, under the recorded usage (area, segments, isolated readings), projection,
+        // now line and current point, whose geometry UpdateAccountFlyout sets.
+        Grid chart;
+        chart.Width(kFlyoutChartWidth);
+        chart.Height(kFlyoutChartHeight);
+        chart.HorizontalAlignment(HorizontalAlignment::Left);
+        chart.IsHitTestVisible(false);
+        // The plot clips the drawing to its rounded corners and the canvas to its bounds, so
+        // edge dots, the marker and fills never overhang. A high-contrast outline goes on top
+        // so it doesn't inset the drawing.
+        Border plot;
+        plot.CornerRadius({4, 4, 4, 4});
+        plot.Background(theme.chip);
+        chart.Children().Append(plot);
+        if (theme.highContrast) {
+            Border outline;
+            outline.CornerRadius({4, 4, 4, 4});
+            outline.BorderBrush(theme.trackBorder);
+            outline.BorderThickness({1, 1, 1, 1});
+            chart.Children().Append(outline);
+        }
+        Canvas canvas;
+        RectangleGeometry bounds;
+        bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
+        canvas.Clip(bounds);
+        wuxs::Line pace;
+        pace.X1(0);
+        pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
+        pace.X2(kFlyoutChartWidth);
+        pace.Y2(kFlyoutChartInset);
+        paceStroke(pace);
+        canvas.Children().Append(pace);
+        row.chartArea = wuxs::Path{};
+        canvas.Children().Append(row.chartArea);
+        row.chartLines = wuxs::Path{};
+        row.chartLines.StrokeThickness(1.6);
+        row.chartLines.StrokeLineJoin(PenLineJoin::Round);
+        row.chartLines.StrokeStartLineCap(PenLineCap::Round);
+        row.chartLines.StrokeEndLineCap(PenLineCap::Round);
+        canvas.Children().Append(row.chartLines);
+        row.chartDots = wuxs::Path{};
+        canvas.Children().Append(row.chartDots);
+        row.chartProjection = wuxs::Line{};
+        projectionStroke(row.chartProjection);
+        collapsed(row.chartProjection);
+        canvas.Children().Append(row.chartProjection);
+        row.chartNow = wuxs::Line{};
+        row.chartNow.Y2(kFlyoutChartHeight);
+        row.chartNow.Stroke(theme.chartGuide);
+        row.chartNow.StrokeThickness(1);
+        canvas.Children().Append(row.chartNow);
+        row.chartMarker = wuxs::Ellipse{};
+        row.chartMarker.Width(6);
+        row.chartMarker.Height(6);
+        row.chartMarker.Stroke(theme.markerRing);
+        row.chartMarker.StrokeThickness(1);
+        canvas.Children().Append(row.chartMarker);
+        plot.Child(canvas);
+        collapsed(chart);
+        details.Children().Append(chart);
+        row.chart = chart;
+
         row.amount = makeText(12, theme.secondaryText);
         row.amount.LineHeight(16);
         row.amount.Margin({0, 6, 0, 0});
@@ -297,6 +395,47 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         rowsGrid.Children().Append(details);
         gridRow++;
     }
+
+    // Chart legend: line keys, then the data source.
+    Grid legendGrid;
+    addColumn(legendGrid, kAuto);
+    addColumn(legendGrid, kStar);
+    StackPanel keys;
+    keys.Orientation(Orientation::Horizontal);
+    wuxs::Line paceKey;
+    paceStroke(paceKey);
+    wuxs::Line projectionKey;
+    projectionStroke(projectionKey);
+    projectionKey.Stroke(theme.chartKey);
+    for (auto [key, name] : {std::pair{paceKey, L"even pace"},
+                             std::pair{projectionKey, L"projection"}}) {
+        key.X1(1);
+        key.X2(15);
+        key.Y1(1);
+        key.Y2(1);
+        key.Width(16);
+        key.Height(2);
+        key.Margin({0, 0, 6, 0});
+        key.VerticalAlignment(VerticalAlignment::Center);
+        keys.Children().Append(key);
+        TextBlock label = makeText(11, theme.mutedText);
+        label.Text(name);
+        label.TextWrapping(TextWrapping::NoWrap);
+        label.Margin({0, 0, 14, 0});
+        keys.Children().Append(label);
+    }
+    legendGrid.Children().Append(keys);
+    popup.legendSource = makeText(11, theme.mutedText);
+    singleLine(popup.legendSource);
+    popup.legendSource.TextAlignment(TextAlignment::Right);
+    popup.legendSource.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetColumn(popup.legendSource, 1);
+    legendGrid.Children().Append(popup.legendSource);
+    Border legend = section(legendGrid);
+    legend.Padding({16, 6, 16, 9});
+    collapsed(legend);
+    popup.legend = legend;
+    content.Children().Append(legend);
 
     // Free-form lines: additional limits, provider notes, errors and prompts.
     StackPanel notes;
@@ -400,8 +539,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     return card;
 }
 
-static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& account,
-                                AccountData const& d, FlyoutDisplay const& display) {
+// `curves` holds each row's burn-up curve for its displayed reading (FlyoutRowReadings); rows
+// without one show the bar.
+static void UpdateAccountFlyout(
+    QuotaUiInstance& state, AccountConfig const& account, AccountData const& d,
+    FlyoutDisplay const& display,
+    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> const& curves) {
     FlyoutPopup& popup = state.flyout.popup;
     if (!popup.card) return;
     FlyoutTheme const& theme = popup.theme;
@@ -433,25 +576,24 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
         bool creditsAmount = openAi && !creditsBar &&
                              (d.creditsUnlimited || d.creditsBalance >= 0 || d.hasCredits);
         struct RowSource {
-            const WindowUsage* usage;
             std::wstring name;
             bool available;
         };
         const std::array<RowSource, kFlyoutRowCount> sources = {{
-            {&d.win5h, antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
+            {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
              d.win5h.pct >= 0},
-            {&d.winWeek, antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
-            {&d.antigravityThirdParty5h,
-             poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
+            {antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
+            {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
              antigravity && d.antigravityThirdParty5h.pct >= 0},
-            {&d.antigravityThirdPartyWeek, L"Claude/GPT weekly",
-             antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {&d.fableWeek, L"Fable weekly", d.fableWeek.pct >= 0},
-            {&d.extraUsage, openAi ? L"Credits" : L"Extra usage",
+            {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
+            {L"Fable weekly", d.fableWeek.pct >= 0},
+            {openAi ? L"Credits" : L"Extra usage",
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0},
         }};
+        const auto readings = FlyoutRowReadings(d);
 
         int visibleRows = 0;
+        bool anyChart = false;
         for (int r = 0; r < kFlyoutRowCount; r++) {
             FlyoutQuotaRow& row = popup.rows[r];
             const RowSource& source = sources[r];
@@ -459,7 +601,7 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             for (auto const& part : {row.row, row.labels, row.details}) show(part, source.available);
             if (!source.available) continue;
             visibleRows++;
-            const WindowUsage& wu = *source.usage;
+            const WindowUsage& wu = *readings[r];
             row.name.Text(source.name);
 
             if (r == kFlyoutExtraRow && creditsAmount) {
@@ -471,6 +613,7 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
                 row.unit.Foreground(theme.mutedText);
                 show(row.trend, false);
                 show(row.visual, false);
+                show(row.chart, false);
                 show(row.amount, false);
                 show(row.reset, false);
                 show(row.projection, false);
@@ -484,7 +627,6 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             row.unit.Text(remainingMode ? L"left" : L"used");
 
             // The bar follows the bar mode like the taskbar; its color tracks consumption.
-            show(row.visual, true);
             double fillPct = std::clamp(shownPct, 0.0, 100.0);
             row.fillColumn.Width({fillPct, GridUnitType::Star});
             row.emptyColumn.Width({100.0 - fillPct, GridUnitType::Star});
@@ -520,14 +662,114 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             show(row.trend, overPace);
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
             std::wstring projection;
+            double msToLimit = -1;
             if (overPace && wu.pct < 100) {
-                double msToLimit = elapsed * wu.windowDurationMs * (100.0 - wu.pct) / wu.pct;
+                msToLimit = elapsed * wu.windowDurationMs * (100.0 - wu.pct) / wu.pct;
                 ULONGLONG minutes =
                     std::max<ULONGLONG>(1, (ULONGLONG)std::ceil(msToLimit / 60000.0));
                 projection = L"At this pace: limit in ~" + FormatShortDuration(minutes * 60);
             }
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
+
+            // Burn-up chart in place of the bar: used % in either bar mode over the displayed
+            // reading's window, with the projection of the text above. Shapes are regenerated
+            // only when the drawn geometry changes.
+            const std::optional<BurnUpCurve>& curve = curves[r];
+            bool charted = row.chart && curve && !curve->points.empty() &&
+                           wu.windowDurationMs > 0 && wu.resetUnixMs > wu.windowDurationMs;
+            show(row.visual, !charted);
+            show(row.chart, charted);
+            if (charted) {
+                anyChart = true;
+                using winrt::Windows::Foundation::Point;
+                double start = (double)(wu.resetUnixMs - wu.windowDurationMs);
+                auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
+                auto xAt = [&](ULONGLONG timeMs) {
+                    return snap(std::clamp(((double)timeMs - start) / wu.windowDurationMs,
+                                           0.0, 1.0) * kFlyoutChartWidth);
+                };
+                auto yAt = [&](double used) {
+                    return snap(kFlyoutChartHeight - kFlyoutChartInset -
+                                (kFlyoutChartHeight - 2 * kFlyoutChartInset) *
+                                    std::clamp(used, 0.0, 100.0) / 100.0);
+                };
+                FlyoutChartShape shape;
+                const std::vector<BurnUpPoint>& points = curve->points;
+                for (size_t begin = 0, end; begin < points.size(); begin = end) {
+                    std::vector<Point> run{{xAt(points[begin].timeMs), yAt(points[begin].used)}};
+                    for (end = begin + 1; end < points.size() && points[end].connect; end++) {
+                        run.push_back({xAt(points[end].timeMs), yAt(points[end].used)});
+                    }
+                    if (run.size() == 1) shape.dots.push_back(run.front());
+                    else shape.lines.push_back(std::move(run));
+                }
+                // A rolled-back clock can put now before the newest reading.
+                ULONGLONG now = std::max(display.now, points.back().timeMs);
+                shape.now = {xAt(now), yAt(wu.pct)};
+                if (msToLimit >= 0) shape.limit = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
+                shape.color = colorValue;
+
+                FlyoutChartShape& drawn = row.chartShape;
+                if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
+                    // Each run is a stroked figure over a filled one closed to the plot bottom.
+                    PathGeometry area;
+                    PathGeometry lines;
+                    for (auto const& run : shape.lines) {
+                        PolyLineSegment outline;
+                        for (Point point : run) outline.Points().Append(point);
+                        outline.Points().Append({run.back().X, (float)kFlyoutChartHeight});
+                        PathFigure under;
+                        under.StartPoint({run.front().X, (float)kFlyoutChartHeight});
+                        under.IsClosed(true);
+                        under.Segments().Append(outline);
+                        area.Figures().Append(under);
+
+                        PolyLineSegment rest;
+                        for (size_t p = 1; p < run.size(); p++) rest.Points().Append(run[p]);
+                        PathFigure line;
+                        line.StartPoint(run.front());
+                        line.IsFilled(false);
+                        line.Segments().Append(rest);
+                        lines.Figures().Append(line);
+                    }
+                    GeometryGroup dots;
+                    dots.FillRule(FillRule::Nonzero);
+                    for (Point point : shape.dots) {
+                        EllipseGeometry dot;
+                        dot.Center(point);
+                        dot.RadiusX(2);
+                        dot.RadiusY(2);
+                        dots.Children().Append(dot);
+                    }
+                    row.chartArea.Data(area);
+                    row.chartLines.Data(lines);
+                    row.chartDots.Data(dots);
+                }
+                if (shape.now != drawn.now || shape.limit != drawn.limit) {
+                    row.chartNow.X1(shape.now.X);
+                    row.chartNow.X2(shape.now.X);
+                    Canvas::SetLeft(row.chartMarker, shape.now.X - 3.0);
+                    Canvas::SetTop(row.chartMarker, shape.now.Y - 3.0);
+                    bool projectionShown = shape.limit.X >= 0;
+                    show(row.chartProjection, projectionShown);
+                    if (projectionShown) {
+                        row.chartProjection.X1(shape.now.X);
+                        row.chartProjection.Y1(shape.now.Y);
+                        row.chartProjection.X2(shape.limit.X);
+                        row.chartProjection.Y2(shape.limit.Y);
+                    }
+                }
+                if (shape.color != drawn.color) {
+                    Brush usage = FlyoutShapeBrush(color);
+                    row.chartArea.Fill(FlyoutShapeBrush({0x47, color.R, color.G, color.B}));
+                    row.chartLines.Stroke(usage);
+                    row.chartDots.Fill(usage);
+                    row.chartProjection.Stroke(usage);
+                    row.chartMarker.Fill(usage);
+                }
+                drawn = std::move(shape);
+            }
 
             std::wstring amount;
             if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
@@ -547,6 +789,25 @@ static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& acc
             std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
             row.reset.Text(reset);
             show(row.reset, !reset.empty());
+        }
+
+        // Charts plot used % in either bar mode; the legend says so when numbers show what is
+        // left.
+        show(popup.legend, anyChart);
+        if (anyChart) {
+            popup.legendSource.Text(display.barMode == BarMode::Remaining ?
+                                        L"% used, from local history" : L"from local history");
+        }
+        // With charts the details column fits the fixed-width chart and names take the rest;
+        // otherwise names fit their widest entry and bars take the rest.
+        if (popup.namesColumn && popup.detailsColumn &&
+            (popup.namesColumn.Width().GridUnitType == GridUnitType::Star) != anyChart) {
+            popup.namesColumn.Width(anyChart ? GridLength{1, GridUnitType::Star} :
+                                               GridLength{0, GridUnitType::Auto});
+            popup.detailsColumn.Width(anyChart ?
+                GridLength{kFlyoutDetailsLeft + kFlyoutChartWidth + kFlyoutDetailsRight,
+                           GridUnitType::Pixel} :
+                GridLength{1, GridUnitType::Star});
         }
 
         std::wstring extraLimits =

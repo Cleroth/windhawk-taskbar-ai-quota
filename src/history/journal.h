@@ -10,6 +10,11 @@ static constexpr ULONGLONG kHistoryTimestampLimitMs = 100000000000000ULL;
 static constexpr ULONGLONG kHistoryMaxWindowMs = 3650 * kHistoryDayMs;
 static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
 static std::deque<HistorySample> g_historySamples;
+// Let incremental readers (burn-up curves) mirror g_historySamples: they copy only samples
+// appended since their last copy while the revision is unchanged. The revision changes when
+// samples are loaded or evicted by the size cap; Clear changes g_historyEpoch.
+static uint64_t g_historyAppendCount = 0;
+static uint64_t g_historyRevision = 0;
 static std::wstring g_historyPath;
 static std::wstring g_historyStatus;
 static bool g_historyLoaded = false;
@@ -47,6 +52,7 @@ static uint64_t HistoryChecksum(const HistorySample& sample) {
 static void LoadHistoryLocked(bool create = false) {
     if (g_historyLoaded) return;
     g_historyLoaded = true;
+    ++g_historyRevision;
     g_historyWritable = true;
     SetHistoryStatus({});
     PWSTR localAppData = nullptr;
@@ -278,6 +284,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
             }
             sample.checksum = HistoryChecksum(sample);
             g_historySamples.push_back(sample);
+            ++g_historyAppendCount;
             admitted.push_back(sample);
         }
         if (admitted.empty()) return;
@@ -286,6 +293,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
             while (g_historySamples.size() > kHistoryMaxSamples * 9 / 10) {
                 g_historySamples.pop_front();
             }
+            ++g_historyRevision;
             g_historyDirty = g_historyCapped = true;
         }
         if (g_historyDirty) {

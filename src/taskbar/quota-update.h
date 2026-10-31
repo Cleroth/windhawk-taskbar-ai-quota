@@ -302,10 +302,51 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 if (AccountIdentityHash(accounts[i]) != flyout.accountIdentity) {
                     CloseAccountFlyout(state);
                 } else {
+                    // Burn-up curves per flyout row. The accessor takes the settings and data
+                    // locks, so none may be held here.
+                    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> curves;
+                    const auto readings = FlyoutRowReadings(d);
+                    for (int r = 0; r < kFlyoutRowCount; r++) {
+                        const WindowUsage& reading = *readings[r];
+                        if (!visualTestMode) {
+                            curves[r] = CopyBurnUpCurve(accounts[i].historyId, r, reading);
+                            continue;
+                        }
+                        // Visual test samples: readings from part-way into the window up to now,
+                        // ending at the reading, with a recording gap and an isolated reading.
+                        // The OpenAI sample has none, so its flyout keeps the no-history bars.
+                        if (accounts[i].provider == L"openai" || reading.pct < 0 ||
+                            !reading.windowDurationMs ||
+                            reading.resetUnixMs <= reading.windowDurationMs ||
+                            now <= reading.resetUnixMs - reading.windowDurationMs) {
+                            continue;
+                        }
+                        // Times as fractions of the window's elapsed span from its start, usage
+                        // as shares of the reading. Sample windows move with now, so the drawn
+                        // geometry stays put between ticks.
+                        static constexpr struct {
+                            double time, share;
+                            bool connect;
+                        } kSamples[] = {
+                            {0.15, 0.10, false}, {0.22, 0.18, true}, {0.30, 0.22, true},
+                            {0.38, 0.36, true}, {0.45, 0.40, true}, {0.55, 0.52, false},
+                            {0.68, 0.60, false}, {0.76, 0.66, true}, {0.84, 0.80, true},
+                            {0.92, 0.88, true}, {1.00, 1.00, true},
+                        };
+                        ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+                        BurnUpCurve& curve = curves[r].emplace(
+                            BurnUpCurve{reading.resetUnixMs, reading.windowDurationMs, {}});
+                        for (const auto& sample : kSamples) {
+                            curve.points.push_back(
+                                {start + (ULONGLONG)std::llround((now - start) * sample.time),
+                                 reading.pct * sample.share, sample.connect});
+                        }
+                    }
                     UpdateAccountFlyout(state, accounts[i], d,
                                         {now, barMode, yellowThreshold, orangeThreshold,
                                          redThreshold, colorblindMode, showOpenAiExtraLimits,
-                                         stale, warn, accountRefreshing, visualTestMode});
+                                         stale, warn, accountRefreshing, visualTestMode},
+                                        curves);
                 }
             }
 

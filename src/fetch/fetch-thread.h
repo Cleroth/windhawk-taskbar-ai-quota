@@ -162,6 +162,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<std::array<int, kQuotaBarCount>> redState;
     ULONGLONG lastLoggedSettingsGeneration = 0;
     const uint64_t historySession = NowUnixMs();
+    bool curvesRecording = false;  // Recording was active last round, so curves may be published.
+    BurnUpSampleCache curveSamples;  // Journal tails of recorded accounts, kept between rounds.
     while (!g_unloading) {
         const bool historyOwner = IsHistoryOwnerProcess();
         if (historyOwner && g_historyIdsPendingSave) {
@@ -191,8 +193,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         int intervalMin, redThreshold;
         bool enableNotifications, historyEnabled, skipHiddenPolling;
         int historyRetentionDays;
-        ULONGLONG settingsGeneration, historyContinuityGeneration;
+        ULONGLONG settingsGeneration, historyContinuityGeneration, curvePolicyGeneration;
         const uint64_t historyEpoch = g_historyEpoch.load();
+        // Taken before the snapshot: a later invalidation requests another rebuild and makes
+        // this round's curves stale.
+        bool rebuildAllCurves = g_burnUpRebuildRequested.exchange(false);
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
@@ -204,6 +209,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             skipHiddenPolling = g_settings.skipHiddenPolling;
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
+            curvePolicyGeneration = g_burnUpPolicyGeneration.load();
         }
         ULONGLONG nextHistoryMaintenanceMs = historyOwner && historyEnabled
             ? MaintainHistory(historyRetentionDays, true) : 0;
@@ -442,6 +448,31 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         // Admission is fenced against settings edits and Clear history. Never store a
         // carried-forward result or let a settings refresh manufacture a sample.
         AppendHistory(historyBatch, historyEpoch, settingsGeneration, historyRetentionDays);
+        // Flyout burn-up curves from local history: the accounts recorded this round, or every
+        // recorded account after an invalidation or once recording starts here.
+        bool curvesPublished = false;
+        if (historyEnabled) {
+            bool rebuildAll = rebuildAllCurves || !curvesRecording;
+            std::vector<bool> rebuild(accounts.size(), rebuildAll);
+            for (const auto& sample : historyBatch) {
+                for (size_t i = 0; i < accounts.size(); i++) {
+                    if (accounts[i].historyId == sample.accountId) rebuild[i] = true;
+                }
+            }
+            if (std::find(rebuild.begin(), rebuild.end(), true) != rebuild.end()) {
+                curvesPublished = RebuildBurnUpCurves(curveSamples, accounts, results, rebuild,
+                                                      rebuildAll, historyRetentionDays,
+                                                      curvePolicyGeneration);
+                if (rebuildAll && !curvesPublished) g_burnUpRebuildRequested = true;
+            }
+        } else if (curvesRecording) {
+            // No longer recording here: consent, history ownership or pending IDs.
+            curveSamples = {};
+            std::lock_guard<std::mutex> lk(g_dataMutex);
+            curvesPublished = !g_burnUpCurves.accounts.empty();
+            g_burnUpCurves = {};
+        }
+        curvesRecording = historyEnabled;
         if (!notificationsEnabled && g_notifyWnd) RemoveNotifyIcon();
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
@@ -519,6 +550,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     }
                 }
             }
+            PostUiUpdate();
+        } else if (curvesPublished) {
             PostUiUpdate();
         }
 

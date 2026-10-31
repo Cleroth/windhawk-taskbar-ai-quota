@@ -121,6 +121,11 @@ struct FlyoutTheme {
     Brush trackBorder{nullptr};
     Brush paceTick{nullptr};
     Brush paceHalo{nullptr};
+    // Burn-up charts: opaque card color around markers, guide lines (even pace, now) and the
+    // legend's projection sample.
+    Brush markerRing{nullptr};
+    Brush chartGuide{nullptr};
+    Brush chartKey{nullptr};
     Style buttonStyle{nullptr};
 };
 
@@ -134,6 +139,18 @@ enum FlyoutRowIndex {
     kFlyoutRowCount,
 };
 
+// A burn-up chart's drawn geometry in plot DIPs. It is the chart's update key: shapes are
+// regenerated only when it changes.
+struct FlyoutChartShape {
+    std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
+    std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
+    winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
+    winrt::Windows::Foundation::Point limit{-1.f, -1.f};  // Projection end; X < 0 without one.
+    uint32_t color = 0;
+
+    bool operator==(const FlyoutChartShape&) const = default;
+};
+
 struct FlyoutQuotaRow {
     // Separator, name/number cell and details cell share one grid row; they collapse together.
     FrameworkElement row{nullptr};
@@ -143,7 +160,8 @@ struct FlyoutQuotaRow {
     TextBlock number{nullptr};
     TextBlock unit{nullptr};
     FrameworkElement trend{nullptr};
-    // Holds the quota's visualization; the bar can be swapped for another visual.
+
+    // Bar: hatched track, usage fill and pace tick.
     Grid visual{nullptr};
     ColumnDefinition fillColumn{nullptr};
     ColumnDefinition emptyColumn{nullptr};
@@ -151,10 +169,21 @@ struct FlyoutQuotaRow {
     ColumnDefinition paceColumn{nullptr};
     ColumnDefinition paceRestColumn{nullptr};
     FrameworkElement paceTick{nullptr};
+    uint32_t fillColor = 0;
+
+    // Burn-up chart, shown instead of the bar while the row has a recorded curve.
+    FrameworkElement chart{nullptr};
+    wuxs::Path chartArea{nullptr};
+    wuxs::Path chartLines{nullptr};
+    wuxs::Path chartDots{nullptr};
+    wuxs::Line chartProjection{nullptr};
+    wuxs::Line chartNow{nullptr};
+    wuxs::Ellipse chartMarker{nullptr};
+    FlyoutChartShape chartShape;
+
     TextBlock amount{nullptr};
     TextBlock reset{nullptr};
     TextBlock projection{nullptr};
-    uint32_t fillColor = 0;
 };
 
 struct FlyoutButtonHandler {
@@ -179,6 +208,12 @@ struct FlyoutPopup {
     FrameworkElement planChip{nullptr};
     TextBlock plan{nullptr};
     std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;
+    // Quota grid columns: name/number and details. Charts give details a fixed width.
+    ColumnDefinition namesColumn{nullptr};
+    ColumnDefinition detailsColumn{nullptr};
+    // Chart legend, shown while a row shows a chart.
+    FrameworkElement legend{nullptr};
+    TextBlock legendSource{nullptr};
     FrameworkElement notes{nullptr};
     TextBlock extraLimits{nullptr};
     TextBlock extraLines{nullptr};

@@ -390,7 +390,10 @@ static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wPar
                             if (state->closing || g_unloading || g_historyWindowCancelRequested) break;
                             if (answer != IDOK) { HistorySetStatus(*state, L"Clear history cancelled."); break; }
                             std::wstring error;
-                            if (ClearHistory(&error)) {
+                            bool cleared = ClearHistory(&error);
+                            // Clear changed the history epoch even if the rewrite failed.
+                            InvalidateBurnUpCurves();
+                            if (cleared) {
                                 HistoryLoad(*state);
                                 HistorySetStatus(*state, L"All local history cleared. Future polls can start recording again.");
                             } else HistorySetStatus(*state, L"ERROR: could not clear all history. " + error);

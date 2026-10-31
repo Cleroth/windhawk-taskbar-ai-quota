@@ -77,10 +77,13 @@ def generate(source, output, expected_hash):
     if len(constants) != 1:
         raise ValueError(f"Expected one filetime constant, found {len(constants)}")
     emit("filetime epoch", constants[0].span())
-    for name in ["ScaleForDpi", "WideToUtf8", "UnixMsToLocalSystemTime", "HistoryNumber", "HistoryLocalDate", "HistoryUtcDate", "HistoryCsvId", "HistoryHours", "HistoryHasValue"]:
+    for name in ["ScaleForDpi", "WideToUtf8", "UnixMsToLocalSystemTime", "HistoryNumber", "HistoryLocalDate", "HistoryUtcDate", "HistoryCsvId", "HistoryHours"]:
         emit(name, definition(text, name))
-    emit("HistoryBreak", between(text, "enum class HistoryBreak", "// Shared by rendering and integration:"))
-    for name in ["HistoryConnection", "HistoryReducePeriod", "HistoryPlotRightPadding", "HistoryClearHover", "HistoryPlotPoint", "HistoryLineColor", "HistoryRebuildRenderCache"]:
+    # Whole pure fragments: continuity rules and the flyout's burn-up curve model. The store
+    # fragment after them (locks, settings, journal) is not extracted.
+    emit("history continuity", between(text, "// src/history/continuity.h\n", "// src/history/burn-up.h\n"))
+    emit("burn-up model", between(text, "// src/history/burn-up.h\n", "// src/history/burn-up-store.h\n"))
+    for name in ["HistoryReducePeriod", "HistoryPlotRightPadding", "HistoryClearHover", "HistoryPlotPoint", "HistoryLineColor", "HistoryRebuildRenderCache"]:
         emit(name, definition(text, name))
     emit("HistoryHoverHit", between(text, "struct HistoryHoverHit {", "// Picking boundary:"))
     for name in ["HistoryHitTest", "HistoryUpdateHover", "HistoryAnalyze", "HistoryScroll", "HistoryRebuildView"]:

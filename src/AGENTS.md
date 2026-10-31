@@ -53,6 +53,10 @@ first, then reads/updates XAML.
 - `g_historyMutex` is an independent leaf: never hold settings/auth/UI locks across journal
   operations, or acquire them inside history operations. Clear invalidates in-flight batches via
   `g_historyEpoch`; settings publication updates the history admission generation.
+- Burn-up curves (`history/burn-up-store.h`): only the fetch thread publishes; settings
+  publication and Clear history reset it via `ResetBurnUpCurvesLocked` (under `g_dataMutex`).
+  The fetch thread caches per-account journal tails, so any change to `g_historySamples` other
+  than `AppendHistory` must bump `g_historyEpoch` or `g_historyRevision`.
 - `g_settingsGeneration` gates published data; `g_refreshGeneration` drives manual
   single-account refresh. Code that publishes to `g_data` must re-check the generation under
   lock (see the existing publish block).

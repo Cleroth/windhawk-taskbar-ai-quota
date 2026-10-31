@@ -568,6 +568,23 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
     }
     // Appearance edits/renames don't break graphs; recording and polling changes do.
     if (historyBoundary) ++g_historyContinuityGeneration;
+    // Burn-up curves follow what may be charted: consent, retention, and each history ID's
+    // presence, provider and recording. Callers then update the UI and wake the fetch thread
+    // after releasing their locks (FinishSettingsApply), which rebuilds them locally.
+    bool curvePolicyChanged = s.historyEnabled != g_settings.historyEnabled ||
+                              s.historyRetentionDays != g_settings.historyRetentionDays;
+    for (const auto& old : g_settings.accounts) {
+        auto current = std::find_if(s.accounts.begin(), s.accounts.end(),
+            [&](const AccountConfig& account) { return old.historyId && account.historyId == old.historyId; });
+        if (old.historyId && (current == s.accounts.end() || current->provider != old.provider ||
+                              current->recordHistory != old.recordHistory)) {
+            curvePolicyChanged = true;
+        }
+    }
+    if (curvePolicyChanged) {
+        ++g_burnUpPolicyGeneration;
+        ResetBurnUpCurvesLocked();
+    }
     std::vector<AccountData> newData(s.accounts.size());
     std::vector<bool> oldDataUsed(g_data.size(), false);
     for (size_t i = 0; i < s.accounts.size(); i++) {
