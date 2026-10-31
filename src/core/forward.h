@@ -3,6 +3,7 @@
 static int ScaleForDpi(int value, UINT dpi);
 static UINT WindowDpi(HWND hWnd);
 static void UpdateQuotaUi(QuotaUiInstance& state);
+static void CloseAccountFlyout(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
 static void OpenHistoryWindow();

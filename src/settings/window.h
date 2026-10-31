@@ -52,7 +52,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.orangeThreshold = defaults.orangeThreshold;
         settings.redThreshold = defaults.redThreshold;
     } else {
-        settings.clickAction = defaults.clickAction;
+        settings.showDetailsOnHover = defaults.showDetailsOnHover;
         settings.pollMinutes = defaults.pollMinutes;
         settings.enableNotifications = defaults.enableNotifications;
         settings.historyEnabled = defaults.historyEnabled;
@@ -199,9 +199,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             AddThresholdRow(*state, L"Orange threshold (%)", kOrangeThreshold);
             AddThresholdRow(*state, L"Red threshold (%)", kRedThreshold);
 
-            HWND clickAction = AddSettingsRow(*state, 3, L"Left-click action",
-                                               L"COMBOBOX", CBS_DROPDOWNLIST, 0, kClickAction);
-            AddComboItems(clickAction, {L"Refresh account", L"Open provider dashboard"});
+            AddSettingsCheck(*state, 3, L"Show details on hover", kShowDetailsOnHover);
             HWND pollPreset = AddSettingsRow(*state, 3, L"Cloud poll interval",
                                               L"COMBOBOX", CBS_DROPDOWNLIST, 0, kPollPreset);
             AddComboItems(pollPreset, {L"2 minutes", L"5 minutes", L"10 minutes",
@@ -259,7 +257,10 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     L"Replaces the percentage on Anthropic extra-usage and OpenAI credits bars with the dollar or credit amount: spent in used mode, left in remaining mode.");
                 AddSettingsToolTip(
                     *state, kShowOpenAiExtraLimits,
-                    L"Adds every extra OpenAI rate limit (Codex Spark, hidden model lanes such as gpt-reserve) and the Spark plan name to OpenAI account tooltips.");
+                    L"Adds every extra OpenAI rate limit (Codex Spark, hidden model lanes such as gpt-reserve) and the Spark plan name to OpenAI account details.");
+                AddSettingsToolTip(
+                    *state, kShowDetailsOnHover,
+                    L"Opens an account's details after the pointer rests on its bars. Clicking the bars always opens them.");
                 AddSettingsToolTip(
                     *state, kShowStaleWarning,
                     L"Adds ! when quota data is stale because a refresh failed or is overdue.");

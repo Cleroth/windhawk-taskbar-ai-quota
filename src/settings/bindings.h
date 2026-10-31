@@ -306,8 +306,7 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     SetControlInt(state, kOrangeThreshold, s.orangeThreshold);
     SetControlInt(state, kRedThreshold, s.redThreshold);
 
-    SendDlgItemMessageW(state.hWnd, kClickAction, CB_SETCURSEL,
-                        s.clickAction == ClickAction::OpenDashboard ? 1 : 0, 0);
+    setCheck(kShowDetailsOnHover, s.showDetailsOnHover);
     const int pollPresets[] = {2, 5, 10, 15, 30, 60};
     int pollPresetIndex = 6;
     for (int i = 0; i < (int)ARRAYSIZE(pollPresets); i++) {
@@ -402,8 +401,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     s.yellowThreshold = getBoundedInt(kYellowThreshold, s.yellowThreshold);
     s.orangeThreshold = getBoundedInt(kOrangeThreshold, s.orangeThreshold);
     s.redThreshold = getBoundedInt(kRedThreshold, s.redThreshold);
-    s.clickAction = SendDlgItemMessageW(state.hWnd, kClickAction, CB_GETCURSEL, 0, 0) == 1 ?
-                            ClickAction::OpenDashboard : ClickAction::Refresh;
+    s.showDetailsOnHover = isChecked(kShowDetailsOnHover);
     const int pollPresets[] = {2, 5, 10, 15, 30, 60};
     int pollPresetIndex = (int)SendDlgItemMessageW(state.hWnd, kPollPreset,
                                                    CB_GETCURSEL, 0, 0);

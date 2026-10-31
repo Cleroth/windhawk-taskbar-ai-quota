@@ -255,32 +255,32 @@ static void EraseUiState(HWND hWnd) {
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
-    try {
-        if (state.paceTimer) state.paceTimer.Stop();
-    } catch (...) {}
-    try {
-        if (state.paceTimer) state.paceTimer.Tick(state.paceTimerToken);
-    } catch (...) {}
-    state.paceTimer = nullptr;
+    CloseAccountFlyout(state);
+    auto releaseTimer = [](DispatcherTimer& timer, winrt::event_token& token) {
+        try {
+            if (timer) timer.Stop();
+        } catch (...) {}
+        try {
+            if (timer && token) timer.Tick(token);
+        } catch (...) {}
+        timer = nullptr;
+        token = {};
+    };
+    releaseTimer(state.paceTimer, state.paceTimerToken);
+    FlyoutUi& flyout = state.flyout;
+    releaseTimer(flyout.dwellTimer, flyout.dwellTimerToken);
+    releaseTimer(flyout.pollTimer, flyout.pollTimerToken);
+    releaseTimer(flyout.countdownTimer, flyout.countdownTimerToken);
+    flyout.hoverIndex = -1;
+    flyout.dwellIndex = -1;
+    flyout.hoverSuppressedIndex = -1;
+    flyout.pressIndex = -1;
+    flyout.dismissedIndex = -1;
 
     for (auto& refs : state.accountRefs) {
-        refs.hasToolTipOpenCursor = false;
-        refs.reopenToolTipOnMove = false;
-        refs.manualToolTipOpen = false;
-        try {
-            if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
-        } catch (...) {}
-        try {
-            if (refs.manualToolTipTimer) {
-                refs.manualToolTipTimer.Tick(refs.manualToolTipTimerToken);
-            }
-        } catch (...) {}
-        try {
-            if (refs.toolTip) refs.toolTip.Opened(refs.toolTipOpenedToken);
-        } catch (...) {}
-        try {
-            if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
-        } catch (...) {}
+        if (!refs.menu || !refs.menuOpeningToken) continue;
+        try { refs.menu.Opening(refs.menuOpeningToken); } catch (...) {}
+        refs.menuOpeningToken = {};
     }
 
     for (auto& handler : state.pointerHandlers) {
@@ -288,9 +288,8 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
 
         try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
         try { handler.element.PointerEntered(handler.pointerEnteredToken); } catch (...) {}
-        try { handler.element.PointerMoved(handler.pointerMovedToken); } catch (...) {}
+        try { handler.element.PointerPressed(handler.pointerPressedToken); } catch (...) {}
         try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
-        try { handler.element.PointerCaptureLost(handler.pointerCaptureLostToken); } catch (...) {}
         try { handler.element.PointerCanceled(handler.pointerCanceledToken); } catch (...) {}
         try { handler.element.ContextFlyout(nullptr); } catch (...) {}
         try {

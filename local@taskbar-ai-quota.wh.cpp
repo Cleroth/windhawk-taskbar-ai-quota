@@ -44,7 +44,7 @@ its signed-in local app or CLI session, which must remain running.
 
 - **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
 - **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
-- **Taskbar behavior:** Choose displays, click actions, polling, and alerts.
+- **Taskbar behavior:** Choose displays, hover details, polling, and alerts.
 - **Usage history:** Opt in to local recording, set retention (90 days by default), and
   choose recording per account independently of taskbar visibility. Opt-in is per Windows user.
   Hidden accounts stop
@@ -107,12 +107,15 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 
@@ -144,7 +147,6 @@ using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
 namespace wuxcp = winrt::Windows::UI::Xaml::Controls::Primitives;
-namespace wuxd = winrt::Windows::UI::Xaml::Documents;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
@@ -180,11 +182,6 @@ enum class TaskbarMonitorMode {
     Primary,
     All,
     Specific,
-};
-
-enum class ClickAction {
-    Refresh,
-    OpenDashboard,
 };
 
 enum class BarLayout {
@@ -230,7 +227,8 @@ static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
-    ClickAction clickAction = ClickAction::Refresh;
+    // Hovering a column opens its details flyout; clicking always does.
+    bool showDetailsOnHover = true;
     BarLayout barLayout = BarLayout::Stacked;
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
@@ -299,7 +297,7 @@ struct AccountData {
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
-    bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
+    bool needsLogin = false;  // Sign-in required; left-click signs in instead of opening details.
 };
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide
@@ -364,7 +362,6 @@ struct AppliedState {
     std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1};
-    std::wstring tip;
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
     double labelOpacity = -1;
@@ -377,9 +374,8 @@ struct PointerHandlers {
     UIElement element{nullptr};
     winrt::event_token tappedToken{};
     winrt::event_token pointerEnteredToken{};
-    winrt::event_token pointerMovedToken{};
+    winrt::event_token pointerPressedToken{};
     winrt::event_token pointerExitedToken{};
-    winrt::event_token pointerCaptureLostToken{};
     winrt::event_token pointerCanceledToken{};
 };
 
@@ -391,10 +387,11 @@ struct MenuItemClickHandler {
 struct AccountUiRefs {
     StackPanel column{nullptr};
     FrameworkElement barArea{nullptr};
-    ToolTip toolTip{nullptr};
-    winrt::event_token toolTipOpenedToken{};
-    DispatcherTimer manualToolTipTimer{nullptr};
-    winrt::event_token manualToolTipTimerToken{};
+    // Captured at build time so the flyout matches the tile, including visual-test accounts.
+    std::wstring provider;
+    uint64_t identity = 0;
+    MenuFlyout menu{nullptr};
+    winrt::event_token menuOpeningToken{};
     std::array<Border, kQuotaBarCount> tracks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<Grid, kQuotaBarCount> barItems{
@@ -406,10 +403,126 @@ struct AccountUiRefs {
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
-    POINT toolTipOpenCursor{};
-    bool hasToolTipOpenCursor = false;
-    bool reopenToolTipOnMove = false;
-    bool manualToolTipOpen = false;
+};
+
+// Account details flyout. Brushes and styles come from LoadFlyoutTheme and are shared by the
+// card's elements.
+struct FlyoutTheme {
+    bool light = false;
+    bool highContrast = false;
+    Brush card{nullptr};
+    Brush cardBorder{nullptr};
+    Brush footer{nullptr};
+    Brush separator{nullptr};
+    Brush chip{nullptr};
+    Brush chipBorder{nullptr};
+    Brush text{nullptr};
+    Brush secondaryText{nullptr};
+    Brush mutedText{nullptr};
+    Brush warning{nullptr};
+    Brush error{nullptr};
+    Brush accent{nullptr};
+    Brush track{nullptr};
+    Brush trackBorder{nullptr};
+    Brush paceTick{nullptr};
+    Brush paceHalo{nullptr};
+    Style buttonStyle{nullptr};
+};
+
+enum FlyoutRowIndex {
+    kFlyoutFiveHourRow,
+    kFlyoutWeeklyRow,
+    kFlyoutPoolShortRow,  // Antigravity Claude/GPT pools.
+    kFlyoutPoolWeeklyRow,
+    kFlyoutFableRow,
+    kFlyoutExtraRow,      // Anthropic extra usage or OpenAI credits.
+    kFlyoutRowCount,
+};
+
+struct FlyoutQuotaRow {
+    // Separator, name/number cell and details cell share one grid row; they collapse together.
+    FrameworkElement row{nullptr};
+    FrameworkElement labels{nullptr};
+    FrameworkElement details{nullptr};
+    TextBlock name{nullptr};
+    TextBlock number{nullptr};
+    TextBlock unit{nullptr};
+    FrameworkElement trend{nullptr};
+    // Holds the quota's visualization; the bar can be swapped for another visual.
+    Grid visual{nullptr};
+    ColumnDefinition fillColumn{nullptr};
+    ColumnDefinition emptyColumn{nullptr};
+    Border fill{nullptr};
+    ColumnDefinition paceColumn{nullptr};
+    ColumnDefinition paceRestColumn{nullptr};
+    FrameworkElement paceTick{nullptr};
+    TextBlock amount{nullptr};
+    TextBlock reset{nullptr};
+    TextBlock projection{nullptr};
+    uint32_t fillColor = 0;
+};
+
+struct FlyoutButtonHandler {
+    Button button{nullptr};
+    winrt::event_token token{};
+};
+
+// Everything owned by one open popup; reset as a whole when it closes.
+struct FlyoutPopup {
+    Flyout flyout{nullptr};
+    FrameworkElement card{nullptr};
+    winrt::event_token closedToken{};
+    std::vector<FlyoutButtonHandler> buttonHandlers;
+    // Visible top-level windows of this thread before the popup opened; a visible one that is
+    // not listed is the popup's own window.
+    std::vector<HWND> windowsBeforeOpen;
+    HWND lastForeground = nullptr;
+    FlyoutTheme theme;
+
+    TextBlock title{nullptr};
+    FrameworkElement staleMarker{nullptr};
+    FrameworkElement planChip{nullptr};
+    TextBlock plan{nullptr};
+    std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;
+    FrameworkElement notes{nullptr};
+    TextBlock extraLimits{nullptr};
+    TextBlock extraLines{nullptr};
+    TextBlock error{nullptr};
+    TextBlock status{nullptr};
+    TextBlock updated{nullptr};
+
+    int accountIndex = -1;
+    uint64_t accountIdentity = 0;
+    uint64_t generation = 0;
+    bool pinned = false;  // Opened by click (focusable); otherwise a hover quick look.
+};
+
+struct FlyoutUi {
+    FlyoutPopup popup;
+    // Incremented per open so callbacks from an older popup are no-ops.
+    uint64_t openGeneration = 0;
+
+    // Created on first use; stopped and revoked by ClearQuotaEventState.
+    DispatcherTimer dwellTimer{nullptr};
+    winrt::event_token dwellTimerToken{};
+    // Runs only while a popup is open.
+    DispatcherTimer pollTimer{nullptr};
+    winrt::event_token pollTimerToken{};
+    DispatcherTimer countdownTimer{nullptr};
+    winrt::event_token countdownTimerToken{};
+
+    // Hover and click tracking by account index; -1 when unset.
+    int hoverIndex = -1;
+    int dwellIndex = -1;
+    int hoverSuppressedIndex = -1;  // Explicitly closed while hovered: wait for pointer exit.
+    ULONGLONG pointerOutsideTick = 0;  // When the pointer left a hover popup and its tile; 0 inside.
+    int pressIndex = -1;
+    ULONGLONG pressTick = 0;
+    // Last popup closed by the system (light dismiss, Escape): a click that dismissed a pinned
+    // popup must not reopen it.
+    int dismissedIndex = -1;
+    bool dismissedPinned = false;
+    ULONGLONG dismissedTick = 0;
 };
 
 struct QuotaUiInstance {
@@ -428,6 +541,7 @@ struct QuotaUiInstance {
     std::vector<AppliedState> applied;
     DispatcherTimer paceTimer{nullptr};
     winrt::event_token paceTimerToken{};
+    FlyoutUi flyout;
     // Per-account show/hide toggle items, paired with their account index, for cross-instance
     // IsChecked sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
     std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
@@ -453,6 +567,7 @@ struct TaskbarDisplayInfo {
 static int ScaleForDpi(int value, UINT dpi);
 static UINT WindowDpi(HWND hWnd);
 static void UpdateQuotaUi(QuotaUiInstance& state);
+static void CloseAccountFlyout(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
 static void OpenHistoryWindow();
@@ -672,12 +787,12 @@ static std::wstring FormatReset(ULONGLONG unixMs) {
 }
 
 static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
-    if (!unixMs) return L"updated: no data yet";
+    if (!unixMs) return L"No data yet";
     SYSTEMTIME local;
     if (!UnixMsToLocalSystemTime(unixMs, &local)) {
-        return L"updated: ?";
+        return L"Updated ?";
     }
-    return std::wstring(L"updated: ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
+    return std::wstring(L"Updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
 }
 
 static void OpenUrl(PCWSTR url) {
@@ -4288,32 +4403,32 @@ static void EraseUiState(HWND hWnd) {
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
-    try {
-        if (state.paceTimer) state.paceTimer.Stop();
-    } catch (...) {}
-    try {
-        if (state.paceTimer) state.paceTimer.Tick(state.paceTimerToken);
-    } catch (...) {}
-    state.paceTimer = nullptr;
+    CloseAccountFlyout(state);
+    auto releaseTimer = [](DispatcherTimer& timer, winrt::event_token& token) {
+        try {
+            if (timer) timer.Stop();
+        } catch (...) {}
+        try {
+            if (timer && token) timer.Tick(token);
+        } catch (...) {}
+        timer = nullptr;
+        token = {};
+    };
+    releaseTimer(state.paceTimer, state.paceTimerToken);
+    FlyoutUi& flyout = state.flyout;
+    releaseTimer(flyout.dwellTimer, flyout.dwellTimerToken);
+    releaseTimer(flyout.pollTimer, flyout.pollTimerToken);
+    releaseTimer(flyout.countdownTimer, flyout.countdownTimerToken);
+    flyout.hoverIndex = -1;
+    flyout.dwellIndex = -1;
+    flyout.hoverSuppressedIndex = -1;
+    flyout.pressIndex = -1;
+    flyout.dismissedIndex = -1;
 
     for (auto& refs : state.accountRefs) {
-        refs.hasToolTipOpenCursor = false;
-        refs.reopenToolTipOnMove = false;
-        refs.manualToolTipOpen = false;
-        try {
-            if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
-        } catch (...) {}
-        try {
-            if (refs.manualToolTipTimer) {
-                refs.manualToolTipTimer.Tick(refs.manualToolTipTimerToken);
-            }
-        } catch (...) {}
-        try {
-            if (refs.toolTip) refs.toolTip.Opened(refs.toolTipOpenedToken);
-        } catch (...) {}
-        try {
-            if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
-        } catch (...) {}
+        if (!refs.menu || !refs.menuOpeningToken) continue;
+        try { refs.menu.Opening(refs.menuOpeningToken); } catch (...) {}
+        refs.menuOpeningToken = {};
     }
 
     for (auto& handler : state.pointerHandlers) {
@@ -4321,9 +4436,8 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
 
         try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
         try { handler.element.PointerEntered(handler.pointerEnteredToken); } catch (...) {}
-        try { handler.element.PointerMoved(handler.pointerMovedToken); } catch (...) {}
+        try { handler.element.PointerPressed(handler.pointerPressedToken); } catch (...) {}
         try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
-        try { handler.element.PointerCaptureLost(handler.pointerCaptureLostToken); } catch (...) {}
         try { handler.element.PointerCanceled(handler.pointerCanceledToken); } catch (...) {}
         try { handler.element.ContextFlyout(nullptr); } catch (...) {}
         try {
@@ -4473,8 +4587,8 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
     return nullptr;
 }
 
-// src/taskbar/tooltip.h
-// Quota colors and the per-account tooltip.
+// src/taskbar/theme.h
+// Quota colors and the details flyout's theme. Every flyout brush is created in this file.
 
 static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
                                             int orangeThreshold, int redThreshold,
@@ -4494,178 +4608,253 @@ static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowTh
     return {255, 0x43, 0xA0, 0x47};
 }
 
-static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, bool hasError) {
-    constexpr double maxWidth = 460;
-    auto muted = SolidColorBrush(winrt::Windows::UI::Color{255, 0xD6, 0xD6, 0xD6});
-    auto quotaLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0x9A, 0xBE, 0xFF});
-    auto infoLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
-    auto creditLabel = SolidColorBrush(winrt::Windows::UI::Color{255, 0xFF, 0xD7, 0x66});
-    auto duration = SolidColorBrush(winrt::Windows::UI::Color{255, 0xB7, 0xE4, 0xA3});
-    auto accent = SolidColorBrush(hasError ?
-        winrt::Windows::UI::Color{255, 0xFF, 0xB4, 0xA9} :
-        winrt::Windows::UI::Color{255, 0xC7, 0x9B, 0xFF});
-    auto border = SolidColorBrush(hasError ?
-        winrt::Windows::UI::Color{0xB8, 0xD1, 0x34, 0x38} :
-        winrt::Windows::UI::Color{0x72, 0x8A, 0xD1, 0xFF});
-
-    size_t firstBreak = tip.find(L'\n');
-    std::wstring title = firstBreak == std::wstring::npos ? tip : tip.substr(0, firstBreak);
-    std::wstring body = firstBreak == std::wstring::npos ? L"" : tip.substr(firstBreak + 1);
-
-    TextBlock titleBlock;
-    titleBlock.Text(winrt::hstring(title));
-    titleBlock.FontSize(12.5);
-    titleBlock.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-    titleBlock.Foreground(accent);
-    titleBlock.TextWrapping(TextWrapping::Wrap);
-    titleBlock.MaxWidth(maxWidth);
-    titleBlock.IsHitTestVisible(false);
-
-    StackPanel content;
-    content.Orientation(Orientation::Vertical);
-    content.MaxWidth(maxWidth);
-    content.IsHitTestVisible(false);
-    content.Children().Append(titleBlock);
-
-    if (!body.empty()) {
-        auto appendRun = [](TextBlock const& textBlock, std::wstring const& text,
-                            Brush const& brush, bool bold = false) {
-            if (text.empty()) return;
-            wuxd::Run run;
-            run.Text(winrt::hstring(text));
-            run.Foreground(brush);
-            if (bold) run.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            textBlock.Inlines().Append(run);
-        };
-
-        bool firstLine = true;
-        for (size_t pos = 0; pos <= body.size();) {
-            size_t next = body.find(L'\n', pos);
-            std::wstring line = next == std::wstring::npos ? body.substr(pos) : body.substr(pos, next - pos);
-
-            TextBlock lineBlock;
-            lineBlock.FontSize(12);
-            lineBlock.LineHeight(16);
-            lineBlock.TextWrapping(TextWrapping::Wrap);
-            lineBlock.MaxWidth(maxWidth);
-            lineBlock.Margin(firstLine ? Thickness{0, 4, 0, 0} : Thickness{0, 1, 0, 0});
-            lineBlock.IsHitTestVisible(false);
-
-            Brush labelBrush = muted;
-            size_t labelEnd = std::wstring::npos;
-            size_t highlightStart = std::wstring::npos;
-            size_t highlightEnd = std::wstring::npos;
-            bool labelBold = false;
-            bool quotaLine = false;
-            bool errorLine = false;
-            if (line.rfind(L"5h:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 3;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"week:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 5;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"Fable week:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 11;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"error:", 0) == 0) {
-                labelBrush = accent;
-                labelEnd = 6;
-                labelBold = true;
-                errorLine = true;
-            } else if (line.rfind(L"credits:", 0) == 0) {
-                labelBrush = creditLabel;
-                labelEnd = 8;
-                highlightStart = line.find_first_not_of(L" ", labelEnd);
-                if (highlightStart != std::wstring::npos) {
-                    highlightEnd = highlightStart;
-                    while (highlightEnd < line.size()) {
-                        wchar_t ch = line[highlightEnd];
-                        if ((ch < L'0' || ch > L'9') && ch != L'.') break;
-                        highlightEnd++;
-                    }
-                }
-                labelBold = true;
-            } else if (line.rfind(L"extra usage:", 0) == 0) {
-                labelBrush = creditLabel;
-                labelEnd = 12;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"updated:", 0) == 0) {
-                labelBrush = infoLabel;
-                labelEnd = 8;
-                highlightStart = line.find(L"no data yet", labelEnd);
-                if (highlightStart != std::wstring::npos) highlightEnd = highlightStart + 11;
-                labelBold = true;
-            }
-
-            size_t textStart = 0;
-            if (labelEnd != std::wstring::npos) {
-                appendRun(lineBlock, line.substr(0, labelEnd), labelBrush, labelBold);
-                textStart = labelEnd;
-            }
-
-            if (errorLine) {
-                appendRun(lineBlock, line.substr(textStart), accent);
-                content.Children().Append(lineBlock);
-                firstLine = false;
-                if (next == std::wstring::npos) break;
-                pos = next + 1;
-                continue;
-            }
-
-            size_t cursor = textStart;
-            if (quotaLine) {
-                size_t percentEnd = line.find(L"%", cursor);
-                if (percentEnd != std::wstring::npos) {
-                    size_t percentStart = percentEnd;
-                    while (percentStart > cursor) {
-                        wchar_t ch = line[percentStart - 1];
-                        if ((ch < L'0' || ch > L'9') && ch != L'.') break;
-                        percentStart--;
-                    }
-                    appendRun(lineBlock, line.substr(cursor, percentStart - cursor), muted);
-                    appendRun(lineBlock, line.substr(percentStart, percentEnd + 1 - percentStart), duration, true);
-                    cursor = percentEnd + 1;
-                }
-            }
-
-            size_t inPos = line.find(L"in ", cursor);
-            if (inPos != std::wstring::npos) {
-                size_t durationStart = inPos + 3;
-                size_t durationEnd = line.find(L" (", durationStart);
-                size_t dashEnd = line.find(L" - ", durationStart);
-                if (dashEnd != std::wstring::npos && (durationEnd == std::wstring::npos || dashEnd < durationEnd)) {
-                    durationEnd = dashEnd;
-                }
-                if (durationEnd == std::wstring::npos) durationEnd = line.size();
-
-                appendRun(lineBlock, line.substr(cursor, durationStart - cursor), muted);
-                appendRun(lineBlock, line.substr(durationStart, durationEnd - durationStart), duration, true);
-                appendRun(lineBlock, line.substr(durationEnd), muted);
-            } else if (highlightStart != std::wstring::npos && highlightStart < highlightEnd) {
-                appendRun(lineBlock, line.substr(cursor, highlightStart - cursor), muted);
-                appendRun(lineBlock, line.substr(highlightStart, highlightEnd - highlightStart), duration, true);
-                appendRun(lineBlock, line.substr(highlightEnd), muted);
-            } else {
-                appendRun(lineBlock, line.substr(cursor), muted);
-            }
-
-            content.Children().Append(lineBlock);
-            firstLine = false;
-            if (next == std::wstring::npos) break;
-            pos = next + 1;
+// The single constructor of solid flyout brushes (backgrounds, text, borders and shapes). A
+// single-color gradient on purpose: plain SolidColorBrushes inside this popup in the taskbar's
+// XAML can render dimmed and translucent, while gradient brushes render at full strength.
+static Brush FlyoutBrush(winrt::Windows::UI::Color color) {
+    try {
+        LinearGradientBrush brush;
+        for (double offset : {0.0, 1.0}) {
+            GradientStop stop;
+            stop.Color(color);
+            stop.Offset(offset);
+            brush.GradientStops().Append(stop);
         }
+        return brush;
+    } catch (...) {
+        return SolidColorBrush(color);
+    }
+}
+
+// Quota fill: the usage color, lightened toward the top edge.
+static Brush FlyoutFillBrush(winrt::Windows::UI::Color color) {
+    try {
+        auto lighten = [](uint8_t channel) { return (uint8_t)(channel + (255 - channel) * 28 / 100); };
+        LinearGradientBrush brush;
+        brush.StartPoint({0.f, 0.f});
+        brush.EndPoint({0.f, 1.f});
+        GradientStop top;
+        top.Color({color.A, lighten(color.R), lighten(color.G), lighten(color.B)});
+        top.Offset(0.0);
+        GradientStop body;
+        body.Color(color);
+        body.Offset(0.6);
+        brush.GradientStops().Append(top);
+        brush.GradientStops().Append(body);
+        return brush;
+    } catch (...) {
+        return FlyoutBrush(color);
+    }
+}
+
+// Follows the taskbar's Windows mode (not the app mode), transparency effects and high contrast.
+static FlyoutTheme LoadFlyoutTheme() {
+    using Color = winrt::Windows::UI::Color;
+    FlyoutTheme theme;
+    HIGHCONTRASTW highContrast{sizeof(highContrast)};
+    theme.highContrast =
+        SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast), &highContrast, 0) &&
+        (highContrast.dwFlags & HCF_HIGHCONTRASTON);
+    auto personalizeValue = [](PCWSTR name, DWORD fallback) {
+        DWORD value = fallback;
+        DWORD size = sizeof(value);
+        if (RegGetValueW(HKEY_CURRENT_USER,
+                         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                         name, RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS) {
+            value = fallback;
+        }
+        return value;
+    };
+    theme.light = personalizeValue(L"SystemUsesLightTheme", 0) != 0;
+    bool acrylic = !theme.highContrast && personalizeValue(L"EnableTransparency", 1) != 0;
+
+    struct {
+        Color text, secondaryText, mutedText, separator, chip, chipBorder, cardBorder;
+        Color cardTint, cardSolid, footer, hatchA, hatchB, trackBorder;
+        Color warning, error, accent, paceTick, paceHalo;
+        Color hover, hoverBorder, pressed;
+        double tintOpacity, luminosityOpacity;
+    } p;
+    constexpr Color kTransparent{0, 0, 0, 0};
+    if (theme.highContrast) {
+        auto system = [](int index) {
+            COLORREF c = GetSysColor(index);
+            return Color{0xFF, GetRValue(c), GetGValue(c), GetBValue(c)};
+        };
+        Color window = system(COLOR_WINDOW);
+        Color windowText = system(COLOR_WINDOWTEXT);
+        Color highlight = system(COLOR_HIGHLIGHT);
+        Color link = system(COLOR_HOTLIGHT);
+        p = {windowText, windowText, windowText, windowText, kTransparent, windowText, windowText,
+             window, window, kTransparent, window, window, windowText,
+             link, windowText, link, windowText, window,
+             kTransparent, highlight, kTransparent, 1.0, 1.0};
+    } else if (theme.light) {
+        p = {{0xFF, 0x1A, 0x1A, 0x1A}, {0xC7, 0, 0, 0}, {0x94, 0, 0, 0}, {0x12, 0, 0, 0},
+             {0x0D, 0, 0, 0}, kTransparent, {0x17, 0, 0, 0},
+             {0xFF, 0xF6, 0xF7, 0xFA}, {0xFF, 0xF5, 0xF6, 0xF8}, {0x0A, 0, 0, 0},
+             {0x0A, 0, 0, 0}, {0x1A, 0, 0, 0}, kTransparent,
+             {0xFF, 0xC2, 0x5E, 0x00}, {0xFF, 0xC4, 0x2B, 0x1C}, {0xFF, 0x00, 0x5F, 0xB8},
+             {0xFF, 0x1A, 0x1A, 0x1A}, {0x80, 0xFF, 0xFF, 0xFF},
+             {0x0A, 0, 0, 0}, kTransparent, {0x06, 0, 0, 0}, 0.5, 0.9};
+    } else {
+        p = {{0xFF, 0xFF, 0xFF, 0xFF}, {0xCC, 0xFF, 0xFF, 0xFF}, {0x99, 0xFF, 0xFF, 0xFF},
+             {0x13, 0xFF, 0xFF, 0xFF}, {0x12, 0xFF, 0xFF, 0xFF}, kTransparent,
+             {0x1C, 0xFF, 0xFF, 0xFF},
+             {0xFF, 0x24, 0x26, 0x2C}, {0xFF, 0x26, 0x28, 0x2D}, {0x30, 0, 0, 0},
+             {0x0F, 0xFF, 0xFF, 0xFF}, {0x24, 0xFF, 0xFF, 0xFF}, kTransparent,
+             {0xFF, 0xFB, 0x8C, 0x00}, {0xFF, 0xFF, 0xB4, 0xA9}, {0xFF, 0x60, 0xCD, 0xFF},
+             {0xFF, 0xFF, 0xFF, 0xFF}, {0x59, 0, 0, 0},
+             {0x0F, 0xFF, 0xFF, 0xFF}, kTransparent, {0x0B, 0xFF, 0xFF, 0xFF}, 0.6, 0.96};
     }
 
-    toolTip.BorderBrush(border);
-    toolTip.Content(content);
+    theme.text = FlyoutBrush(p.text);
+    theme.secondaryText = FlyoutBrush(p.secondaryText);
+    theme.mutedText = FlyoutBrush(p.mutedText);
+    theme.separator = FlyoutBrush(p.separator);
+    theme.chip = FlyoutBrush(p.chip);
+    theme.chipBorder = FlyoutBrush(p.chipBorder);
+    theme.cardBorder = FlyoutBrush(p.cardBorder);
+    theme.footer = FlyoutBrush(p.footer);
+    theme.trackBorder = FlyoutBrush(p.trackBorder);
+    theme.warning = FlyoutBrush(p.warning);
+    theme.error = FlyoutBrush(p.error);
+    theme.accent = FlyoutBrush(p.accent);
+    theme.paceTick = FlyoutBrush(p.paceTick);
+    theme.paceHalo = FlyoutBrush(p.paceHalo);
+
+    theme.card = FlyoutBrush(p.cardSolid);
+    if (acrylic) {
+        try {
+            AcrylicBrush brush;
+            brush.BackgroundSource(AcrylicBackgroundSource::Backdrop);
+            brush.TintColor(p.cardTint);
+            brush.TintOpacity(p.tintOpacity);
+            brush.FallbackColor(p.cardSolid);
+            try {
+                brush.TintLuminosityOpacity(p.luminosityOpacity);
+            } catch (...) {}
+            theme.card = brush;
+        } catch (...) {}
+    }
+
+    // Unfilled track: 45-degree stripes repeating every 6 DIP.
+    theme.track = FlyoutBrush(p.hatchB);
+    if (p.hatchA != p.hatchB) {
+        try {
+            LinearGradientBrush hatch;
+            hatch.MappingMode(BrushMappingMode::Absolute);
+            hatch.SpreadMethod(GradientSpreadMethod::Repeat);
+            hatch.StartPoint({0.f, 0.f});
+            hatch.EndPoint({4.243f, 4.243f});
+            for (auto [offset, color] : {std::pair{0.0, p.hatchA}, std::pair{0.5, p.hatchA},
+                                         std::pair{0.5, p.hatchB}, std::pair{1.0, p.hatchB}}) {
+                GradientStop stop;
+                stop.Offset(offset);
+                stop.Color(color);
+                hatch.GradientStops().Append(stop);
+            }
+            theme.track = hatch;
+        } catch (...) {}
+    }
+
+    // Footer icon buttons: flat, rounded, with theme hover/pressed fills and system focus visuals.
+    // Single-color gradients, like FlyoutBrush.
+    auto brushSetter = [](PCWSTR target, Color c) {
+        wchar_t color[16];
+        swprintf(color, ARRAYSIZE(color), L"#%02X%02X%02X%02X", c.A, c.R, c.G, c.B);
+        return std::wstring(L"<Setter Target=\"") + target +
+               L"\"><Setter.Value><LinearGradientBrush><GradientStop Color=\"" + color +
+               L"\" Offset=\"0\"/><GradientStop Color=\"" + color +
+               L"\" Offset=\"1\"/></LinearGradientBrush></Setter.Value></Setter>";
+    };
+    std::wstring style =
+        L"<Style xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+        L"xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" TargetType=\"Button\">"
+        L"<Setter Property=\"UseSystemFocusVisuals\" Value=\"True\"/>"
+        L"<Setter Property=\"Template\"><Setter.Value><ControlTemplate TargetType=\"Button\">"
+        L"<Border x:Name=\"Root\" Background=\"{TemplateBinding Background}\" "
+        L"BorderBrush=\"Transparent\" BorderThickness=\"1\" CornerRadius=\"4\">"
+        L"<VisualStateManager.VisualStateGroups><VisualStateGroup x:Name=\"CommonStates\">"
+        L"<VisualState x:Name=\"Normal\"/>"
+        L"<VisualState x:Name=\"PointerOver\"><VisualState.Setters>" +
+        brushSetter(L"Root.Background", p.hover) +
+        brushSetter(L"Root.BorderBrush", p.hoverBorder) +
+        L"</VisualState.Setters></VisualState>"
+        L"<VisualState x:Name=\"Pressed\"><VisualState.Setters>" +
+        brushSetter(L"Root.Background", p.pressed) +
+        brushSetter(L"Root.BorderBrush", p.hoverBorder) +
+        L"</VisualState.Setters></VisualState>"
+        L"<VisualState x:Name=\"Disabled\"><VisualState.Setters>"
+        L"<Setter Target=\"Root.Opacity\" Value=\"0.4\"/>"
+        L"</VisualState.Setters></VisualState>"
+        L"</VisualStateGroup></VisualStateManager.VisualStateGroups>"
+        L"<ContentPresenter Content=\"{TemplateBinding Content}\" "
+        L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\"/>"
+        L"</Border></ControlTemplate></Setter.Value></Setter></Style>";
+    try {
+        theme.buttonStyle =
+            winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(style)).as<Style>();
+    } catch (...) {
+        Wh_Log(L"Flyout button style failed to load");
+    }
+    return theme;
 }
+
+// src/taskbar/logos.h
+// Provider logo path data from Simple Icons (CC0-1.0), 24x24 viewBox, filled with the text
+// color.
+
+// openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
+static constexpr PCWSTR kOpenAiLogoPath =
+    L"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6"
+    L".0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.096"
+    L"6 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.259"
+    L"9 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0"
+    L" 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2"
+    L".7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4."
+    L"504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852"
+    L" 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L"
+    L"9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1"
+    L".9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071"
+    L" 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7"
+    L".2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79"
+    L" 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409"
+    L" 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.6"
+    L"6zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3"
+    L"757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.499"
+    L"8 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z";
+
+// claude.svg.
+static constexpr PCWSTR kClaudeLogoPath =
+    L"m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.33"
+    L"75-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032"
+    L" 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.83"
+    L"56l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2"
+    L"246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733"
+    L"-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6."
+    L"287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985."
+    L"2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107"
+    L".7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l."
+    L"2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-."
+    L"34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-."
+    L"607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.436"
+    L"4.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-."
+    L"079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2."
+    L"0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-"
+    L"1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1."
+    L"3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.607"
+    L"1-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-."
+    L"1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.400"
+    L"8-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.14"
+    L"57-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z";
+
+// googlegemini.svg; Simple Icons has no Google Antigravity mark.
+static constexpr PCWSTR kGeminiLogoPath =
+    L"M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2"
+    L".49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-."
+    L"96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93"
+    L" 3.81 2.55t2.55 3.81";
 
 // src/taskbar/actions.h
 // Click and context-menu actions on the taskbar bars.
@@ -4787,6 +4976,973 @@ static void ToggleAccountVisibility(uint64_t identityHash,
     else PostUiUpdate();
 }
 
+// src/taskbar/flyout-content.h
+// Account details flyout card: builds the card, then applies account values to it in place.
+
+enum class FlyoutFooterAction {
+    History,
+    Dashboard,
+    Refresh,
+    Settings,
+};
+
+// Display state shared with the taskbar bars for one account.
+struct FlyoutDisplay {
+    ULONGLONG now = 0;
+    BarMode barMode = BarMode::Used;
+    int yellowThreshold = 0;
+    int orangeThreshold = 0;
+    int redThreshold = 0;
+    bool colorblindMode = false;
+    bool showOpenAiExtraLimits = false;
+    bool stale = false;
+    bool warn = false;
+    bool refreshing = false;
+    bool visualTestMode = false;
+};
+
+// "1d 3h", "2h 15m", "4m 12s" or "45s".
+static std::wstring FormatShortDuration(ULONGLONG seconds) {
+    ULONGLONG days = seconds / (24 * 60 * 60);
+    ULONGLONG hours = seconds / (60 * 60) % 24;
+    ULONGLONG minutes = seconds / 60 % 60;
+    ULONGLONG secs = seconds % 60;
+    wchar_t text[48];
+    if (days > 0) {
+        swprintf(text, ARRAYSIZE(text), hours ? L"%llud %lluh" : L"%llud", days, hours);
+    } else if (hours > 0) {
+        swprintf(text, ARRAYSIZE(text), minutes ? L"%lluh %llum" : L"%lluh", hours, minutes);
+    } else if (minutes > 0) {
+        swprintf(text, ARRAYSIZE(text), secs ? L"%llum %llus" : L"%llum", minutes, secs);
+    } else {
+        swprintf(text, ARRAYSIZE(text), L"%llus", secs);
+    }
+    return text;
+}
+
+// Builds the card for `provider` into state.flyout.popup, registering its button delegates there
+// as they are created. Values are filled by UpdateAccountFlyout.
+static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provider,
+                              bool visualTestMode) {
+    FlyoutPopup& popup = state.flyout.popup;
+    FlyoutTheme const& theme = popup.theme;
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
+    FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
+    auto makeText = [](double size, Brush const& brush) {
+        TextBlock text;
+        text.FontSize(size);
+        text.Foreground(brush);
+        text.TextWrapping(TextWrapping::Wrap);
+        text.IsHitTestVisible(false);
+        return text;
+    };
+    auto singleLine = [](TextBlock const& text) {
+        text.TextWrapping(TextWrapping::NoWrap);
+        text.TextTrimming(TextTrimming::CharacterEllipsis);
+    };
+    auto collapsed = [](FrameworkElement const& element) {
+        element.Visibility(Visibility::Collapsed);
+    };
+    // Sections below the header draw a separator on their top edge.
+    auto section = [&](UIElement const& child) {
+        Border border;
+        border.BorderBrush(theme.separator);
+        border.BorderThickness({0, 1, 0, 0});
+        border.Padding({16, 9, 16, 9});
+        border.Child(child);
+        return border;
+    };
+    auto addColumn = [](Grid const& grid, GridLength width) {
+        ColumnDefinition column;
+        column.Width(width);
+        grid.ColumnDefinitions().Append(column);
+        return column;
+    };
+    constexpr GridLength kAuto{0, GridUnitType::Auto};
+    constexpr GridLength kStar{1, GridUnitType::Star};
+
+    StackPanel content;
+
+    // Header: logo, account label, provider, stale marker and plan chip.
+    Grid header;
+    header.Padding({16, 12, 16, 12});
+    for (int column = 0; column < 5; column++) addColumn(header, column == 2 ? kStar : kAuto);
+    try {
+        PCWSTR logoPath = provider == L"openai" ? kOpenAiLogoPath :
+                          provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+        std::wstring pathXaml =
+            L"<Path xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
+        pathXaml += logoPath;
+        pathXaml += L"\"/>";
+        auto path = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(pathXaml))
+                        .as<wuxs::Path>();
+        path.Fill(theme.text);
+        Grid viewBox;
+        viewBox.Width(24);
+        viewBox.Height(24);
+        viewBox.Children().Append(path);
+        Viewbox logo;
+        logo.Width(20);
+        logo.Height(20);
+        logo.Margin({0, 0, 10, 0});
+        logo.VerticalAlignment(VerticalAlignment::Center);
+        logo.IsHitTestVisible(false);
+        logo.Child(viewBox);
+        header.Children().Append(logo);
+    } catch (...) {
+        Wh_Log(L"Flyout logo failed to load");
+    }
+
+    popup.title = makeText(20, theme.text);
+    popup.title.FontFamily(displayFont);
+    popup.title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    popup.title.LineHeight(24);
+    popup.title.MaxWidth(170);
+    popup.title.VerticalAlignment(VerticalAlignment::Center);
+    singleLine(popup.title);
+    Grid::SetColumn(popup.title, 1);
+    header.Children().Append(popup.title);
+
+    TextBlock providerName = makeText(12, theme.mutedText);
+    providerName.Text(ProviderDisplayName(provider));
+    providerName.Margin({10, 3, 0, 0});
+    providerName.VerticalAlignment(VerticalAlignment::Center);
+    singleLine(providerName);
+    Grid::SetColumn(providerName, 2);
+    header.Children().Append(providerName);
+
+    TextBlock staleMarker = makeText(14, theme.warning);
+    staleMarker.FontFamily(iconFont);
+    staleMarker.Text(L"\uE7BA");
+    staleMarker.Margin({8, 0, 0, 0});
+    staleMarker.VerticalAlignment(VerticalAlignment::Center);
+    collapsed(staleMarker);
+    Grid::SetColumn(staleMarker, 3);
+    header.Children().Append(staleMarker);
+    popup.staleMarker = staleMarker;
+
+    Border planChip;
+    planChip.CornerRadius({10, 10, 10, 10});
+    planChip.Padding({9, 2, 9, 2});
+    planChip.Margin({10, 0, 0, 0});
+    planChip.Background(theme.chip);
+    planChip.BorderBrush(theme.chipBorder);
+    planChip.BorderThickness({1, 1, 1, 1});
+    planChip.VerticalAlignment(VerticalAlignment::Center);
+    popup.plan = makeText(11.5, theme.secondaryText);
+    singleLine(popup.plan);
+    planChip.Child(popup.plan);
+    collapsed(planChip);
+    Grid::SetColumn(planChip, 4);
+    header.Children().Append(planChip);
+    popup.planChip = planChip;
+    content.Children().Append(header);
+
+    // One row per quota: name, big number with over-pace arrow, then its visual and timings.
+    // Rows stay in the tree and collapse when the quota is unavailable. All rows share one grid
+    // so the number column fits its widest entry and the bars stay aligned.
+    const std::array<std::array<winrt::Windows::Foundation::Point, 4>, 2> arrowStrokes = {{
+        {{{1.5f, 12.f}, {6.f, 7.5f}, {9.f, 10.5f}, {14.5f, 5.f}}},
+        {{{10.f, 5.f}, {14.5f, 5.f}, {14.5f, 9.5f}, {14.5f, 9.5f}}},
+    }};
+    Grid rowsGrid;
+    addColumn(rowsGrid, kAuto);
+    addColumn(rowsGrid, kStar);
+    content.Children().Append(rowsGrid);
+    int gridRow = 0;
+    for (FlyoutQuotaRow& row : popup.rows) {
+        RowDefinition rowDefinition;
+        rowDefinition.Height({0, GridUnitType::Auto});
+        rowsGrid.RowDefinitions().Append(rowDefinition);
+
+        Border separator;
+        separator.BorderBrush(theme.separator);
+        separator.BorderThickness({0, 1, 0, 0});
+        Grid::SetRow(separator, gridRow);
+        Grid::SetColumnSpan(separator, 2);
+        collapsed(separator);
+        rowsGrid.Children().Append(separator);
+        row.row = separator;
+
+        StackPanel names;
+        names.Margin({16, 9, 0, 9});
+        Grid::SetRow(names, gridRow);
+        collapsed(names);
+        row.labels = names;
+        row.name = makeText(13, theme.text);
+        row.name.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        row.name.LineHeight(17);
+        names.Children().Append(row.name);
+
+        StackPanel value;
+        value.Orientation(Orientation::Horizontal);
+        value.Margin({0, 1, 0, 0});
+        row.number = makeText(26, theme.text);
+        row.number.FontFamily(displayFont);
+        row.number.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        row.number.LineHeight(30);
+        row.number.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
+        row.number.CharacterSpacing(-19);
+        row.number.TextWrapping(TextWrapping::NoWrap);
+        value.Children().Append(row.number);
+
+        Grid arrow;
+        arrow.Width(16);
+        arrow.Height(16);
+        for (const auto& stroke : arrowStrokes) {
+            wuxs::Polyline line;
+            for (auto point : stroke) line.Points().Append(point);
+            line.Stroke(theme.warning);
+            line.StrokeThickness(1.5);
+            line.StrokeStartLineCap(PenLineCap::Round);
+            line.StrokeEndLineCap(PenLineCap::Round);
+            line.StrokeLineJoin(PenLineJoin::Round);
+            arrow.Children().Append(line);
+        }
+        Viewbox trend;
+        trend.Width(14);
+        trend.Height(14);
+        trend.Margin({4, 0, 0, 5});
+        trend.VerticalAlignment(VerticalAlignment::Bottom);
+        trend.IsHitTestVisible(false);
+        trend.Child(arrow);
+        collapsed(trend);
+        value.Children().Append(trend);
+        row.trend = trend;
+
+        row.unit = makeText(12.5, theme.mutedText);
+        row.unit.LineHeight(16);
+        row.unit.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
+        row.unit.TextWrapping(TextWrapping::NoWrap);
+        row.unit.Margin({4, 0, 0, 3});
+        row.unit.VerticalAlignment(VerticalAlignment::Bottom);
+        value.Children().Append(row.unit);
+        names.Children().Append(value);
+        rowsGrid.Children().Append(names);
+
+        StackPanel details;
+        details.Margin({12, 11, 16, 9});
+        details.VerticalAlignment(VerticalAlignment::Center);
+        Grid::SetRow(details, gridRow);
+        Grid::SetColumn(details, 1);
+        collapsed(details);
+        row.details = details;
+
+        // Bar: hatched track, usage fill and a pace tick overhanging the track by 2 DIP.
+        row.visual = Grid{};
+        row.visual.Height(20);
+        Border track;
+        track.Height(16);
+        track.CornerRadius({5, 5, 5, 5});
+        track.Background(theme.track);
+        track.BorderBrush(theme.trackBorder);
+        track.BorderThickness(theme.highContrast ? Thickness{1, 1, 1, 1} : Thickness{});
+        track.VerticalAlignment(VerticalAlignment::Center);
+        Grid fillLayer;
+        row.fillColumn = addColumn(fillLayer, {0, GridUnitType::Star});
+        row.emptyColumn = addColumn(fillLayer, {100, GridUnitType::Star});
+        row.fill = Border{};
+        row.fill.CornerRadius({5, 5, 5, 5});
+        fillLayer.Children().Append(row.fill);
+        track.Child(fillLayer);
+        row.visual.Children().Append(track);
+
+        Grid paceLayer;
+        paceLayer.IsHitTestVisible(false);
+        row.paceColumn = addColumn(paceLayer, {0, GridUnitType::Star});
+        row.paceRestColumn = addColumn(paceLayer, {100, GridUnitType::Star});
+        Border paceTick;
+        paceTick.Width(4);
+        paceTick.Height(20);
+        paceTick.Margin({-2, 0, 0, 0});
+        paceTick.HorizontalAlignment(HorizontalAlignment::Left);
+        paceTick.CornerRadius({2, 2, 2, 2});
+        paceTick.Background(theme.paceHalo);
+        Border paceCore;
+        paceCore.Width(2);
+        paceCore.Height(18);
+        paceCore.CornerRadius({1, 1, 1, 1});
+        paceCore.Background(theme.paceTick);
+        paceCore.HorizontalAlignment(HorizontalAlignment::Center);
+        paceCore.VerticalAlignment(VerticalAlignment::Center);
+        paceTick.Child(paceCore);
+        Grid::SetColumn(paceTick, 1);
+        collapsed(paceTick);
+        paceLayer.Children().Append(paceTick);
+        row.paceTick = paceTick;
+        row.visual.Children().Append(paceLayer);
+        details.Children().Append(row.visual);
+
+        row.amount = makeText(12, theme.secondaryText);
+        row.amount.LineHeight(16);
+        row.amount.Margin({0, 6, 0, 0});
+        collapsed(row.amount);
+        details.Children().Append(row.amount);
+        row.reset = makeText(12, theme.mutedText);
+        row.reset.LineHeight(16);
+        row.reset.Margin({0, 6, 0, 0});
+        details.Children().Append(row.reset);
+        row.projection = makeText(12, theme.warning);
+        row.projection.LineHeight(16);
+        collapsed(row.projection);
+        details.Children().Append(row.projection);
+        rowsGrid.Children().Append(details);
+        gridRow++;
+    }
+
+    // Free-form lines: additional limits, provider notes, errors and prompts.
+    StackPanel notes;
+    notes.Spacing(4);
+    popup.extraLimits = makeText(12, theme.secondaryText);
+    popup.extraLines = makeText(12, theme.secondaryText);
+    popup.error = makeText(12, theme.error);
+    popup.status = makeText(12, theme.accent);
+    for (TextBlock const& line : {popup.extraLimits, popup.extraLines, popup.error, popup.status}) {
+        line.LineHeight(16);
+        collapsed(line);
+        notes.Children().Append(line);
+    }
+    Border notesSection = section(notes);
+    collapsed(notesSection);
+    popup.notes = notesSection;
+    content.Children().Append(notesSection);
+
+    // Footer: update status and actions.
+    Grid footer;
+    footer.Height(40);
+    footer.Padding({16, 0, 6, 0});
+    footer.Background(theme.footer);
+    footer.BorderBrush(theme.separator);
+    footer.BorderThickness({0, 1, 0, 0});
+    footer.CornerRadius({0, 0, 7, 7});
+    addColumn(footer, kStar);
+    addColumn(footer, kAuto);
+    popup.updated = makeText(12, theme.mutedText);
+    popup.updated.VerticalAlignment(VerticalAlignment::Center);
+    singleLine(popup.updated);
+    footer.Children().Append(popup.updated);
+
+    StackPanel buttons;
+    buttons.Orientation(Orientation::Horizontal);
+    buttons.Spacing(2);
+    buttons.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetColumn(buttons, 1);
+    HWND hWnd = state.hWnd;
+    uint64_t generation = popup.generation;
+    uint64_t identity = popup.accountIdentity;
+    Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
+    auto addButton = [&](PCWSTR glyph, PCWSTR name, FlyoutFooterAction action) {
+        Button button;
+        if (theme.buttonStyle) button.Style(theme.buttonStyle);
+        button.Width(32);
+        button.Height(30);
+        button.Padding({0, 0, 0, 0});
+        button.Background(transparent);
+        TextBlock icon = makeText(15, theme.text);
+        icon.FontFamily(iconFont);
+        icon.Text(glyph);
+        icon.TextWrapping(TextWrapping::NoWrap);
+        button.Content(icon);
+        winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(button, name);
+        ToolTipService::SetToolTip(button, winrt::box_value(name));
+        popup.buttonHandlers.reserve(popup.buttonHandlers.size() + 1);
+        auto token = button.Click(
+            [hWnd, generation, identity, action](winrt::Windows::Foundation::IInspectable const&,
+                                                 RoutedEventArgs const&) {
+                if (g_unloading) return;
+                try {
+                    auto* uiState = FindUiState(hWnd);
+                    if (!uiState || !uiState->flyout.popup.flyout ||
+                        uiState->flyout.popup.generation != generation) {
+                        return;
+                    }
+                    if (action == FlyoutFooterAction::Refresh) {
+                        RefreshQuotaByIdentity(identity);
+                        return;
+                    }
+                    // Actions that open a window or browser dismiss the flyout first.
+                    CloseAccountFlyout(*uiState);
+                    if (action == FlyoutFooterAction::History) OpenHistoryWindow();
+                    else if (action == FlyoutFooterAction::Dashboard) OpenDashboardForIdentity(identity);
+                    else OpenSettingsWindow();
+                } catch (...) {}
+            });
+        popup.buttonHandlers.push_back({button, token});
+        buttons.Children().Append(button);
+    };
+    addButton(L"\uE81C", L"Usage history", FlyoutFooterAction::History);
+    if (!visualTestMode && provider != L"antigravity") {
+        addButton(L"\uE8A7", L"Open dashboard", FlyoutFooterAction::Dashboard);
+    }
+    if (!visualTestMode) addButton(L"\uE72C", L"Refresh", FlyoutFooterAction::Refresh);
+    addButton(L"\uE713", L"Settings", FlyoutFooterAction::Settings);
+    footer.Children().Append(buttons);
+    content.Children().Append(footer);
+
+    Border card;
+    card.Width(360);
+    card.CornerRadius({8, 8, 8, 8});
+    card.BorderThickness({1, 1, 1, 1});
+    card.BorderBrush(theme.cardBorder);
+    card.Background(theme.card);
+    if (!theme.highContrast) {
+        card.RequestedTheme(theme.light ? ElementTheme::Light : ElementTheme::Dark);
+    }
+    card.Child(content);
+    return card;
+}
+
+static void UpdateAccountFlyout(QuotaUiInstance& state, AccountConfig const& account,
+                                AccountData const& d, FlyoutDisplay const& display) {
+    FlyoutPopup& popup = state.flyout.popup;
+    if (!popup.card) return;
+    FlyoutTheme const& theme = popup.theme;
+    auto show = [](FrameworkElement const& element, bool visible) {
+        if (element) element.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
+    };
+    bool openAi = account.provider == L"openai";
+    bool antigravity = account.provider == L"antigravity";
+    wchar_t text[128];
+    try {
+        popup.title.Text(account.label);
+        show(popup.staleMarker, display.warn);
+        bool sparkPlan = d.plan.find(L"Spark") != std::wstring::npos ||
+                         d.plan.find(L"spark") != std::wstring::npos;
+        std::wstring plan = openAi && sparkPlan && !display.showOpenAiExtraLimits ? L"" : d.plan;
+        popup.plan.Text(plan);
+        show(popup.planChip, !plan.empty());
+
+        // Antigravity pools are named by their reported window.
+        auto poolName = [](PCWSTR pool, ULONGLONG durationMs) {
+            return std::wstring(pool) +
+                   (durationMs == 3ULL * 60 * 60 * 1000 ? L" 3h" :
+                    durationMs == 60ULL * 60 * 1000 ? L" 1h" :
+                    durationMs == 0 ? L" current limit" : L" 5h");
+        };
+        // OpenAI credits form a percentage only against the user's max and its selected bar;
+        // otherwise the balance is shown as an amount.
+        bool creditsBar = openAi && d.extraUsage.pct >= 0 && account.showBars[kExtraUsageBar];
+        bool creditsAmount = openAi && !creditsBar &&
+                             (d.creditsUnlimited || d.creditsBalance >= 0 || d.hasCredits);
+        struct RowSource {
+            const WindowUsage* usage;
+            std::wstring name;
+            bool available;
+        };
+        const std::array<RowSource, kFlyoutRowCount> sources = {{
+            {&d.win5h, antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
+             d.win5h.pct >= 0},
+            {&d.winWeek, antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
+            {&d.antigravityThirdParty5h,
+             poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
+             antigravity && d.antigravityThirdParty5h.pct >= 0},
+            {&d.antigravityThirdPartyWeek, L"Claude/GPT weekly",
+             antigravity && d.antigravityThirdPartyWeek.pct >= 0},
+            {&d.fableWeek, L"Fable weekly", d.fableWeek.pct >= 0},
+            {&d.extraUsage, openAi ? L"Credits" : L"Extra usage",
+             openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0},
+        }};
+
+        int visibleRows = 0;
+        for (int r = 0; r < kFlyoutRowCount; r++) {
+            FlyoutQuotaRow& row = popup.rows[r];
+            const RowSource& source = sources[r];
+            if (!row.row) continue;
+            for (auto const& part : {row.row, row.labels, row.details}) show(part, source.available);
+            if (!source.available) continue;
+            visibleRows++;
+            const WindowUsage& wu = *source.usage;
+            row.name.Text(source.name);
+
+            if (r == kFlyoutExtraRow && creditsAmount) {
+                bool balance = !d.creditsUnlimited && d.creditsBalance >= 0;
+                if (balance) swprintf(text, ARRAYSIZE(text), L"%.0f", d.creditsBalance);
+                row.number.Text(d.creditsUnlimited ? L"Unlimited" :
+                                balance ? text : L"Available");
+                row.unit.Text(balance ? L"left" : L"");
+                row.unit.Foreground(theme.mutedText);
+                show(row.trend, false);
+                show(row.visual, false);
+                show(row.amount, false);
+                show(row.reset, false);
+                show(row.projection, false);
+                continue;
+            }
+
+            bool remainingMode = display.barMode == BarMode::Remaining;
+            double shownPct = remainingMode ? std::clamp(100.0 - wu.pct, 0.0, 100.0) : wu.pct;
+            swprintf(text, ARRAYSIZE(text), L"%.0f%%", shownPct);
+            row.number.Text(text);
+            row.unit.Text(remainingMode ? L"left" : L"used");
+
+            // The bar follows the bar mode like the taskbar; its color tracks consumption.
+            show(row.visual, true);
+            double fillPct = std::clamp(shownPct, 0.0, 100.0);
+            row.fillColumn.Width({fillPct, GridUnitType::Star});
+            row.emptyColumn.Width({100.0 - fillPct, GridUnitType::Star});
+            row.fill.MinWidth(fillPct > 0 ? 4.0 : 0.0);
+            auto color = UsageColor(wu.pct, display.stale, display.yellowThreshold,
+                                    display.orangeThreshold, display.redThreshold,
+                                    display.colorblindMode);
+            uint32_t colorValue = ((uint32_t)color.A << 24) | ((uint32_t)color.R << 16) |
+                                  ((uint32_t)color.G << 8) | color.B;
+            if (colorValue != row.fillColor) {
+                row.fill.Background(FlyoutFillBrush(color));
+                row.fillColor = colorValue;
+            }
+
+            bool paced = !display.stale && wu.windowDurationMs > 0 &&
+                         wu.resetUnixMs > wu.windowDurationMs &&
+                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
+            double elapsed = paced ?
+                std::clamp(1.0 - ((double)wu.resetUnixMs - (double)display.now) /
+                                     wu.windowDurationMs, 0.0, 1.0) : 0.0;
+            show(row.paceTick, paced);
+            if (paced) {
+                double pacePct = (remainingMode ? 1.0 - elapsed : elapsed) * 100.0;
+                row.paceColumn.Width({pacePct, GridUnitType::Star});
+                row.paceRestColumn.Width({100.0 - pacePct, GridUnitType::Star});
+            }
+
+            // Average rate since the window started (fixed windows start at 0%). Over pace means
+            // the limit is reached before the reset.
+            bool projected = paced && wu.pct > 0 && elapsed >= 0.05 &&
+                             display.now < wu.resetUnixMs;
+            bool overPace = projected && wu.pct > elapsed * 100.0;
+            show(row.trend, overPace);
+            row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
+            std::wstring projection;
+            if (overPace && wu.pct < 100) {
+                double msToLimit = elapsed * wu.windowDurationMs * (100.0 - wu.pct) / wu.pct;
+                ULONGLONG minutes =
+                    std::max<ULONGLONG>(1, (ULONGLONG)std::ceil(msToLimit / 60000.0));
+                projection = L"At this pace: limit in ~" + FormatShortDuration(minutes * 60);
+            }
+            row.projection.Text(projection);
+            show(row.projection, !projection.empty());
+
+            std::wstring amount;
+            if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
+                // Credits state the balance so the text reads the same in both bar modes.
+                if (openAi) {
+                    swprintf(text, ARRAYSIZE(text), L"%.0f left of %.0f credits",
+                             d.extraLimitAmount - d.extraUsedAmount, d.extraLimitAmount);
+                } else {
+                    swprintf(text, ARRAYSIZE(text), L"$%.2f of $%.2f spent",
+                             d.extraUsedAmount, d.extraLimitAmount);
+                }
+                amount = text;
+            }
+            row.amount.Text(amount);
+            show(row.amount, !amount.empty());
+
+            std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+            row.reset.Text(reset);
+            show(row.reset, !reset.empty());
+        }
+
+        std::wstring extraLimits =
+            openAi && display.showOpenAiExtraLimits ? d.openAiExtraLimitLines : L"";
+        popup.extraLimits.Text(extraLimits);
+        show(popup.extraLimits, !extraLimits.empty());
+        popup.extraLines.Text(d.extraLines);
+        show(popup.extraLines, !d.extraLines.empty());
+        std::wstring error;
+        if (!d.error.empty()) {
+            error = L"Error: " + d.error;
+            if (d.retryDeadlineMs > display.now) {
+                error += L" - retry in " +
+                         FormatShortDuration((d.retryDeadlineMs - display.now + 999) / 1000);
+            }
+        }
+        popup.error.Text(error);
+        show(popup.error, !error.empty());
+        std::wstring status;
+        if (d.needsLogin && !display.visualTestMode) {
+            status = L"Sign-in required. Click the bars to sign in.";
+        } else if (!visibleRows && d.lastSuccessMs && error.empty() && extraLimits.empty() &&
+                   d.extraLines.empty()) {
+            status = L"No quotas reported.";
+        }
+        popup.status.Text(status);
+        show(popup.status, !status.empty());
+        show(popup.notes, !extraLimits.empty() || !d.extraLines.empty() || !error.empty() ||
+                              !status.empty());
+
+        std::wstring updated = display.visualTestMode ? L"Visual test data" :
+                                                        FormatUpdated(d.lastSuccessMs, display.stale);
+        if (display.refreshing) updated += L" - refreshing...";
+        popup.updated.Text(updated);
+    } catch (...) {
+        Wh_Log(L"UpdateAccountFlyout: exception");
+    }
+}
+
+// src/taskbar/flyout.h
+// Account details flyout host: open/close, hover quick look and click-to-pin.
+
+static constexpr int kFlyoutHoverDwellMs = 350;
+static constexpr int kFlyoutHoverGraceMs = 300;
+static constexpr int kFlyoutPollMs = 100;
+// Refreshes countdowns while a flyout is open.
+static constexpr int kFlyoutCountdownSeconds = 30;
+static constexpr float kFlyoutTaskbarGap = 12.f;
+
+static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned);
+
+// Taskbars whose UI this thread owns; their flyout state may be used directly. Pointers stay
+// valid while this thread doesn't erase states.
+static std::vector<QuotaUiInstance*> CurrentThreadUiInstances() {
+    std::vector<QuotaUiInstance*> instances;
+    std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+    if (!g_uiInstances) return instances;
+    for (auto& instance : *g_uiInstances) {
+        if (instance->ownerThreadId == GetCurrentThreadId()) instances.push_back(instance.get());
+    }
+    return instances;
+}
+
+// Stops popup timers, revokes every popup delegate, hides the popup, then drops its references.
+// Safe after partial construction, after the popup closed itself, and when nothing is open.
+static void CloseAccountFlyout(QuotaUiInstance& state) {
+    FlyoutUi& fo = state.flyout;
+    FlyoutPopup& popup = fo.popup;
+    try {
+        if (fo.countdownTimer) fo.countdownTimer.Stop();
+    } catch (...) {}
+    try {
+        if (fo.pollTimer) fo.pollTimer.Stop();
+    } catch (...) {}
+    fo.pointerOutsideTick = 0;
+    if (popup.flyout && popup.closedToken) {
+        try { popup.flyout.Closed(popup.closedToken); } catch (...) {}
+    }
+    for (auto& handler : popup.buttonHandlers) {
+        if (!handler.button) continue;
+        try { handler.button.Click(handler.token); } catch (...) {}
+    }
+    popup.buttonHandlers.clear();
+    if (popup.flyout) {
+        try { popup.flyout.Hide(); } catch (...) {}
+    }
+    popup = {};
+}
+
+static void EnsureFlyoutTimers(QuotaUiInstance& state) {
+    FlyoutUi& fo = state.flyout;
+    HWND hWnd = state.hWnd;
+    if (!fo.dwellTimer) {
+        DispatcherTimer timer;
+        timer.Interval(std::chrono::milliseconds(kFlyoutHoverDwellMs));
+        fo.dwellTimerToken = timer.Tick(
+            [hWnd](winrt::Windows::Foundation::IInspectable const&,
+                   winrt::Windows::Foundation::IInspectable const&) {
+                if (g_unloading) return;
+                try {
+                    auto* uiState = FindUiState(hWnd);
+                    if (!uiState || !uiState->quotaGrid) return;
+                    FlyoutUi& fo = uiState->flyout;
+                    if (fo.dwellTimer) fo.dwellTimer.Stop();
+                    int index = fo.dwellIndex;
+                    fo.dwellIndex = -1;
+                    if (index < 0 || fo.hoverIndex != index || fo.hoverSuppressedIndex == index) {
+                        return;
+                    }
+                    // While pinned, hover does nothing, including from another taskbar.
+                    if (fo.popup.flyout && (fo.popup.pinned || fo.popup.accountIndex == index)) {
+                        return;
+                    }
+                    for (auto* instance : CurrentThreadUiInstances()) {
+                        if (instance->flyout.popup.pinned) return;
+                    }
+                    ShowAccountFlyout(*uiState, index, false);
+                } catch (...) {}
+            });
+        fo.dwellTimer = timer;
+    }
+    // XAML pointer events miss the pointer leaving the taskbar or the popup for another window,
+    // and clicks in other apps never reach the taskbar's light dismiss, so open popups poll the
+    // real pointer and foreground window.
+    if (!fo.pollTimer) {
+        DispatcherTimer timer;
+        timer.Interval(std::chrono::milliseconds(kFlyoutPollMs));
+        fo.pollTimerToken = timer.Tick(
+            [hWnd](winrt::Windows::Foundation::IInspectable const&,
+                   winrt::Windows::Foundation::IInspectable const&) {
+                if (g_unloading) return;
+                try {
+                    auto* uiState = FindUiState(hWnd);
+                    if (!uiState) return;
+                    FlyoutUi& fo = uiState->flyout;
+                    FlyoutPopup& popup = fo.popup;
+                    if (!popup.flyout) {
+                        if (fo.pollTimer) fo.pollTimer.Stop();
+                        return;
+                    }
+
+                    // Pinned: close when another thread's window becomes the foreground.
+                    if (popup.pinned) {
+                        HWND foreground = GetForegroundWindow();
+                        if (foreground == popup.lastForeground) return;
+                        popup.lastForeground = foreground;
+                        if (foreground && GetWindowThreadProcessId(foreground, nullptr) !=
+                                              uiState->ownerThreadId) {
+                            CloseAccountFlyout(*uiState);
+                        }
+                        return;
+                    }
+
+                    // Hover: inside while over its tile (taskbar pointer events track that) or
+                    // over a window this thread showed after the popup opened.
+                    POINT pt{};
+                    if (!GetCursorPos(&pt)) return;
+                    bool overTaskbar = false;
+                    for (auto* instance : CurrentThreadUiInstances()) {
+                        RECT rect{};
+                        if (GetWindowRect(instance->hWnd, &rect) && PtInRect(&rect, pt)) {
+                            overTaskbar = true;
+                            break;
+                        }
+                    }
+                    bool inside = fo.hoverIndex == popup.accountIndex;
+                    if (!overTaskbar) {
+                        struct PopupSearch {
+                            POINT pt;
+                            const std::vector<HWND>* before;
+                            HWND found;
+                        } search{pt, &popup.windowsBeforeOpen, nullptr};
+                        EnumThreadWindows(GetCurrentThreadId(),
+                            [](HWND candidate, LPARAM param) CALLBACK -> BOOL {
+                                auto& s = *reinterpret_cast<PopupSearch*>(param);
+                                RECT rect{};
+                                if (!IsWindowVisible(candidate) ||
+                                    !GetWindowRect(candidate, &rect) || !PtInRect(&rect, s.pt) ||
+                                    std::find(s.before->begin(), s.before->end(), candidate) !=
+                                        s.before->end()) {
+                                    return TRUE;
+                                }
+                                s.found = candidate;
+                                return FALSE;
+                            }, reinterpret_cast<LPARAM>(&search));
+                        inside = search.found != nullptr;
+                        static bool loggedPopupClass = false;
+                        if (inside && !loggedPopupClass) {
+                            loggedPopupClass = true;
+                            wchar_t className[128] = {};
+                            GetClassNameW(search.found, className, ARRAYSIZE(className));
+                            Wh_Log(L"Flyout popup window class: %s", className);
+                        }
+                    }
+                    if (inside) {
+                        fo.pointerOutsideTick = 0;
+                        return;
+                    }
+                    ULONGLONG now = GetTickCount64();
+                    if (!fo.pointerOutsideTick) fo.pointerOutsideTick = now;
+                    // On another tile, its dwell switches the account instead.
+                    if (fo.hoverIndex >= 0 && fo.dwellIndex == fo.hoverIndex) return;
+                    if (now - fo.pointerOutsideTick >= kFlyoutHoverGraceMs) {
+                        CloseAccountFlyout(*uiState);
+                    }
+                } catch (...) {}
+            });
+        fo.pollTimer = timer;
+    }
+    if (!fo.countdownTimer) {
+        DispatcherTimer timer;
+        timer.Interval(std::chrono::seconds(kFlyoutCountdownSeconds));
+        fo.countdownTimerToken = timer.Tick(
+            [hWnd](winrt::Windows::Foundation::IInspectable const&,
+                   winrt::Windows::Foundation::IInspectable const&) {
+                if (g_unloading) return;
+                try {
+                    auto* uiState = FindUiState(hWnd);
+                    if (uiState && uiState->quotaGrid && uiState->flyout.popup.flyout) {
+                        UpdateQuotaUi(*uiState);
+                    }
+                } catch (...) {}
+            });
+        fo.countdownTimer = timer;
+    }
+}
+
+// Opens the account's flyout above its column, replacing any open one: transient (no focus)
+// for hover, standard (focusable, light dismiss) when pinned by a click.
+static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
+    if (g_unloading || !state.quotaGrid || index < 0 ||
+        index >= (int)state.accountRefs.size()) {
+        return;
+    }
+    StackPanel column = state.accountRefs[index].column;
+    std::wstring provider = state.accountRefs[index].provider;
+    uint64_t identity = state.accountRefs[index].identity;
+    // One flyout per taskbar thread, including the other taskbars this thread owns.
+    CloseAccountFlyout(state);
+    for (auto* instance : CurrentThreadUiInstances()) CloseAccountFlyout(*instance);
+
+    FlyoutUi& fo = state.flyout;
+    FlyoutPopup& popup = fo.popup;
+    try {
+        if (!column || column.Visibility() != Visibility::Visible) return;
+        auto xamlRoot = column.XamlRoot();
+        auto rootContent = xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+        if (!rootContent) return;
+        EnsureFlyoutTimers(state);
+
+        popup.generation = ++fo.openGeneration;
+        popup.accountIndex = index;
+        popup.accountIdentity = identity;
+        popup.pinned = pinned;
+        popup.theme = LoadFlyoutTheme();
+        Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
+        popup.card = card;
+
+        Flyout flyout;
+        popup.flyout = flyout;
+        flyout.Content(card);
+        // The card draws its own surface; the presenter only hosts it.
+        Style presenterStyle(winrt::xaml_typename<FlyoutPresenter>());
+        Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
+        auto setters = presenterStyle.Setters();
+        setters.Append(Setter(Control::BackgroundProperty(), transparent));
+        setters.Append(Setter(Control::BorderBrushProperty(), transparent));
+        setters.Append(Setter(Control::BorderThicknessProperty(), winrt::box_value(Thickness{})));
+        setters.Append(Setter(Control::PaddingProperty(), winrt::box_value(Thickness{})));
+        setters.Append(Setter(Control::CornerRadiusProperty(),
+                              winrt::box_value(CornerRadius{8, 8, 8, 8})));
+        setters.Append(Setter(Control::FontFamilyProperty(),
+                              FontFamily(L"Segoe UI Variable Text, Segoe UI")));
+        setters.Append(Setter(FrameworkElement::MarginProperty(), winrt::box_value(Thickness{})));
+        setters.Append(Setter(FrameworkElement::MinWidthProperty(), winrt::box_value(0.0)));
+        setters.Append(Setter(FrameworkElement::MaxWidthProperty(), winrt::box_value(10000.0)));
+        setters.Append(Setter(FrameworkElement::MaxHeightProperty(), winrt::box_value(10000.0)));
+        flyout.FlyoutPresenterStyle(presenterStyle);
+        flyout.ShouldConstrainToRootBounds(false);
+        // Taskbar input stays live under the overlay so tiles keep hover, click and menu.
+        flyout.OverlayInputPassThroughElement(rootContent);
+
+        HWND hWnd = state.hWnd;
+        uint64_t generation = popup.generation;
+        // Closed by the system (light dismiss, Escape). Cleanup never depends on this event.
+        popup.closedToken = flyout.Closed(
+            [hWnd, generation](winrt::Windows::Foundation::IInspectable const&,
+                               winrt::Windows::Foundation::IInspectable const&) {
+                if (g_unloading) return;
+                try {
+                    auto* uiState = FindUiState(hWnd);
+                    if (!uiState) return;
+                    FlyoutUi& fo = uiState->flyout;
+                    if (!fo.popup.flyout || fo.popup.generation != generation) return;
+                    fo.dismissedIndex = fo.popup.accountIndex;
+                    fo.dismissedPinned = fo.popup.pinned;
+                    fo.dismissedTick = GetTickCount64();
+                    if (fo.hoverIndex == fo.popup.accountIndex) {
+                        fo.hoverSuppressedIndex = fo.hoverIndex;
+                    }
+                    CloseAccountFlyout(*uiState);
+                } catch (...) {}
+            });
+        UpdateQuotaUi(state);
+        if (!popup.flyout) return;
+
+        // Centered on the column, just above the taskbar's top edge.
+        auto origin = column.TransformToVisual(rootContent).TransformPoint({0.f, 0.f});
+        wuxcp::FlyoutShowOptions options;
+        options.Placement(wuxcp::FlyoutPlacementMode::Top);
+        options.ShowMode(pinned ? wuxcp::FlyoutShowMode::Standard :
+                                  wuxcp::FlyoutShowMode::Transient);
+        options.Position(winrt::Windows::Foundation::Point{
+            (float)column.ActualWidth() / 2.f, -origin.Y - kFlyoutTaskbarGap});
+        EnumThreadWindows(GetCurrentThreadId(),
+            [](HWND candidate, LPARAM param) CALLBACK -> BOOL {
+                if (IsWindowVisible(candidate)) {
+                    reinterpret_cast<std::vector<HWND>*>(param)->push_back(candidate);
+                }
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(&popup.windowsBeforeOpen));
+        popup.lastForeground = GetForegroundWindow();
+        fo.pointerOutsideTick = 0;
+        flyout.ShowAt(column, options);
+        if (fo.countdownTimer) fo.countdownTimer.Start();
+        if (fo.pollTimer) fo.pollTimer.Start();
+    } catch (...) {
+        Wh_Log(L"ShowAccountFlyout: exception");
+        CloseAccountFlyout(state);
+    }
+}
+
+// Click: open pinned; pinned on this account closes; otherwise switch to this account. Accounts
+// that need a sign-in start it instead.
+static void OnTileTapped(QuotaUiInstance& state, int index, uint64_t identity,
+                         bool visualTestMode) {
+    FlyoutUi& fo = state.flyout;
+    if (fo.dwellTimer) fo.dwellTimer.Stop();
+    fo.dwellIndex = -1;
+    if (!visualTestMode) {
+        bool accountFound = false;
+        bool needsLogin = false;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            for (size_t i = 0; i < g_settings.accounts.size(); i++) {
+                if (AccountIdentityHash(g_settings.accounts[i]) != identity) continue;
+                accountFound = true;
+                std::lock_guard<std::mutex> lk2(g_dataMutex);
+                if (i < g_data.size()) needsLogin = g_data[i].needsLogin;
+                break;
+            }
+        }
+        if (!accountFound) return;
+        if (needsLogin) {
+            for (auto* instance : CurrentThreadUiInstances()) CloseAccountFlyout(*instance);
+            StartLoginByIdentity(identity);
+            return;
+        }
+    }
+
+    // Pressing this tile can light-dismiss its pinned flyout before the tap arrives.
+    bool dismissedByThisPress = fo.dismissedIndex == index && fo.pressIndex == index &&
+                                fo.dismissedTick + 50 >= fo.pressTick;
+    bool dismissedPinned = fo.dismissedPinned;
+    fo.dismissedIndex = -1;
+    if (fo.popup.flyout) {
+        bool closeOnly = fo.popup.pinned && fo.popup.accountIndex == index;
+        CloseAccountFlyout(state);
+        if (closeOnly) {
+            if (fo.hoverIndex == index) fo.hoverSuppressedIndex = index;
+            return;
+        }
+    } else if (dismissedByThisPress && dismissedPinned) {
+        return;
+    }
+    ShowAccountFlyout(state, index, true);
+}
+
+static void OnTilePointerEntered(QuotaUiInstance& state, int index, bool showDetailsOnHover) {
+    FlyoutUi& fo = state.flyout;
+    const FlyoutPopup& popup = fo.popup;
+    fo.hoverIndex = index;
+    if (!showDetailsOnHover || fo.hoverSuppressedIndex == index ||
+        (popup.flyout && (popup.pinned || popup.accountIndex == index))) {
+        if (fo.dwellTimer) fo.dwellTimer.Stop();
+        fo.dwellIndex = -1;
+        return;
+    }
+    EnsureFlyoutTimers(state);
+    fo.dwellIndex = index;
+    fo.dwellTimer.Stop();
+    fo.dwellTimer.Start();
+}
+
+static void OnTilePointerExited(QuotaUiInstance& state, int index) {
+    FlyoutUi& fo = state.flyout;
+    if (fo.hoverIndex == index) fo.hoverIndex = -1;
+    if (fo.hoverSuppressedIndex == index) fo.hoverSuppressedIndex = -1;
+    if (fo.dwellIndex == index) {
+        if (fo.dwellTimer) fo.dwellTimer.Stop();
+        fo.dwellIndex = -1;
+    }
+}
+
 // src/taskbar/quota-grid.h
 // Builds the per-taskbar quota grid, including visual-test sample data.
 
@@ -4855,7 +6011,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         int barLength, barThickness, labelFontSize, percentFontSize;
         int accountMargin, labelGap, rightMargin;
         int yellowThreshold, orangeThreshold, redThreshold;
-        bool showPaceTicks, showBarLabels;
+        bool showPaceTicks, showBarLabels, showDetailsOnHover;
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
         COLORREF paceTickColor;
         BarLayout barLayout;
@@ -4863,12 +6019,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         PercentTextAlignment percentTextAlignment;
         PaceTickStyle paceTickStyle;
         LabelPosition labelPosition;
-        ClickAction clickAction;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             state.buildSettingsGeneration = g_settingsGeneration;
             accounts = g_settings.accounts;
-            clickAction = g_settings.clickAction;
+            showDetailsOnHover = g_settings.showDetailsOnHover;
             barLayout = g_settings.barLayout;
             barLength = g_settings.barLength;
             barThickness = g_settings.barThickness;
@@ -4955,24 +6110,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
-        UINT toolTipDurationSeconds = 5;
-        if (!SystemParametersInfoW(SPI_GETMESSAGEDURATION, 0, &toolTipDurationSeconds, 0)) {
-            toolTipDurationSeconds = 5;
-        }
-        auto manualToolTipShowDuration =
-            std::chrono::seconds(std::clamp(toolTipDurationSeconds, 1u, 60u));
-        UINT toolTipHoverDelayMs = 400;
-        if (!SystemParametersInfoW(SPI_GETMOUSEHOVERTIME, 0, &toolTipHoverDelayMs, 0)) {
-            toolTipHoverDelayMs = 400;
-        }
-        auto manualToolTipHoverDelay =
-            std::chrono::milliseconds(std::clamp(toolTipHoverDelayMs, 100u, 2000u));
-        UINT toolTipMoveThresholdX = 4;
-        UINT toolTipMoveThresholdY = 4;
-        SystemParametersInfoW(SPI_GETMOUSEHOVERWIDTH, 0, &toolTipMoveThresholdX, 0);
-        SystemParametersInfoW(SPI_GETMOUSEHOVERHEIGHT, 0, &toolTipMoveThresholdY, 0);
-        toolTipMoveThresholdX = std::clamp(toolTipMoveThresholdX, 2u, 32u);
-        toolTipMoveThresholdY = std::clamp(toolTipMoveThresholdY, 2u, 32u);
 
         wchar_t name[64];
         for (size_t i = 0; i < accounts.size(); i++) {
@@ -4990,6 +6127,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             col.Visibility(accounts[i].hidden ? Visibility::Collapsed : Visibility::Visible);
             AccountUiRefs refs;
             refs.column = col;
+            refs.provider = accounts[i].provider;
+            refs.identity = AccountIdentityHash(accounts[i]);
 
             TextBlock label{nullptr};
             if (labelPosition != LabelPosition::Hidden) {
@@ -5213,232 +6352,71 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             col.Children().Append(bars);
             if (label && !labelBeforeBars) col.Children().Append(label);
 
-            ToolTip toolTip;
-            toolTip.Placement(wuxcp::PlacementMode::Top);
-            toolTip.VerticalOffset(20);
-            toolTip.Padding(Thickness{10, 8, 10, 8});
-            toolTip.Background(SolidColorBrush(winrt::Windows::UI::Color{0xF7, 0x1F, 0x1F, 0x1F}));
-            toolTip.Foreground(SolidColorBrush(winrt::Windows::UI::Color{255, 0xF3, 0xF3, 0xF3}));
-            toolTip.BorderThickness(Thickness{1, 1, 1, 1});
-            toolTip.IsHitTestVisible(false);
-            UpdateQuotaToolTip(toolTip, L"loading...", false);
-            ToolTipService::SetToolTip(col, toolTip);
-            refs.toolTip = toolTip;
-            ToolTipService::SetPlacement(col, wuxcp::PlacementMode::Top);
             UIElement tappedElement = col.as<UIElement>();
             QuotaUiInstance* statePtr = &state;
             int accountIndex = (int)i;
-            uint64_t accountIdentity = AccountIdentityHash(accounts[i]);
-            refs.toolTipOpenedToken = toolTip.Opened(
-                [hWnd = state.hWnd, accountIndex](winrt::Windows::Foundation::IInspectable const&,
-                                                  RoutedEventArgs const&) {
-                    if (g_unloading) return;
-
-                    try {
-                        auto* uiState = FindUiState(hWnd);
-                        if (!uiState || accountIndex >= (int)uiState->accountRefs.size()) return;
-
-                        auto& refs = uiState->accountRefs[accountIndex];
-                        refs.hasToolTipOpenCursor = GetCursorPos(&refs.toolTipOpenCursor) != FALSE;
-                    } catch (...) {}
-                });
-            DispatcherTimer manualToolTipTimer;
-            manualToolTipTimer.Interval(manualToolTipHoverDelay);
-            auto manualToolTipTimerToken = manualToolTipTimer.Tick(
-                [hWnd = state.hWnd, accountIndex, manualToolTipShowDuration](
-                    winrt::Windows::Foundation::IInspectable const& sender,
-                    winrt::Windows::Foundation::IInspectable const&) {
-                    try {
-                        if (auto timer = sender.try_as<DispatcherTimer>()) timer.Stop();
-                        if (g_unloading) return;
-
-                        auto* uiState = FindUiState(hWnd);
-                        if (!uiState || !uiState->quotaGrid ||
-                            accountIndex >= (int)uiState->accountRefs.size()) return;
-
-                        auto& refs = uiState->accountRefs[accountIndex];
-                        if (!refs.toolTip) return;
-                        if (refs.manualToolTipOpen) {
-                            refs.manualToolTipOpen = false;
-                            refs.reopenToolTipOnMove = true;
-                            refs.toolTip.IsOpen(false);
-                            return;
-                        }
-                        if (!refs.reopenToolTipOnMove) return;
-
-                        refs.hasToolTipOpenCursor =
-                            GetCursorPos(&refs.toolTipOpenCursor) != FALSE;
-                        refs.toolTip.IsOpen(true);
-                        refs.reopenToolTipOnMove = false;
-                        refs.manualToolTipOpen = true;
-                        if (refs.manualToolTipTimer) {
-                            refs.manualToolTipTimer.Interval(manualToolTipShowDuration);
-                            refs.manualToolTipTimer.Start();
-                        }
-                    } catch (...) {}
-                });
-            refs.manualToolTipTimer = manualToolTipTimer;
-            refs.manualToolTipTimerToken = manualToolTipTimerToken;
-            bool hasDashboard = !visualTestMode && accounts[i].provider != L"antigravity";
+            uint64_t accountIdentity = refs.identity;
             auto tappedToken = tappedElement.Tapped(
-                [statePtr, accountIndex, accountIdentity, clickAction, hasDashboard,
-                  manualToolTipHoverDelay, visualTestMode](
+                [statePtr, accountIndex, accountIdentity, visualTestMode](
                     winrt::Windows::Foundation::IInspectable const&,
                     wuxi::TappedRoutedEventArgs const& e) {
-                    if (g_unloading || !statePtr->quotaGrid) {
-                        e.Handled(true);
-                        return;
-                    }
-                    if (visualTestMode) {
-                        OpenSettingsWindow();
-                        e.Handled(true);
-                        return;
-                    }
-
-                    bool accountFound = false;
-                    bool needsLogin = false;
-                    {
-                        std::lock_guard<std::mutex> lk(g_settingsMutex);
-                        for (size_t i = 0; i < g_settings.accounts.size(); i++) {
-                            if (AccountIdentityHash(g_settings.accounts[i]) != accountIdentity) continue;
-                            accountFound = true;
-                            std::lock_guard<std::mutex> lk2(g_dataMutex);
-                            if (i < g_data.size()) needsLogin = g_data[i].needsLogin;
-                            break;
-                        }
-                    }
-                    if (!accountFound) {
-                        e.Handled(true);
-                        return;
-                    }
-                    if (needsLogin) StartLoginByIdentity(accountIdentity);
-                    else if (clickAction == ClickAction::OpenDashboard && hasDashboard) {
-                        OpenDashboardForIdentity(accountIdentity);
-                    }
-                    else {
-                        RefreshQuotaByIdentity(accountIdentity);
-                        try {
-                            if (e.PointerDeviceType() ==
-                                    winrt::Windows::Devices::Input::PointerDeviceType::Mouse &&
-                                accountIndex < (int)statePtr->accountRefs.size()) {
-                                auto& refs = statePtr->accountRefs[accountIndex];
-                                if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
-                                if (refs.manualToolTipOpen) {
-                                    refs.manualToolTipOpen = false;
-                                    if (refs.toolTip) refs.toolTip.IsOpen(false);
-                                }
-                                refs.hasToolTipOpenCursor =
-                                    GetCursorPos(&refs.toolTipOpenCursor) != FALSE;
-                                refs.reopenToolTipOnMove = true;
-                                if (refs.manualToolTipTimer) {
-                                    refs.manualToolTipTimer.Interval(manualToolTipHoverDelay);
-                                    refs.manualToolTipTimer.Start();
-                                }
-                            }
-                        } catch (...) {}
-                    }
                     e.Handled(true);
+                    if (g_unloading || !statePtr->quotaGrid) return;
+                    try {
+                        OnTileTapped(*statePtr, accountIndex, accountIdentity, visualTestMode);
+                    } catch (...) {}
                 });
 
             auto pointerEnteredToken = tappedElement.PointerEntered(
-                [statePtr, accountIndex, percentTextVisibility](
-                    winrt::Windows::Foundation::IInspectable const&,
-                    wuxi::PointerRoutedEventArgs const&) {
-                    if (g_unloading || percentTextVisibility != PercentTextVisibility::Hover ||
-                        accountIndex >= (int)statePtr->accountRefs.size()) return;
-
-                    try {
-                        for (auto& percent : statePtr->accountRefs[accountIndex].percents) {
-                            if (percent) percent.Opacity(0.9);
-                        }
-                    } catch (...) {}
-                });
-
-            // System XAML suppresses the automatic tooltip after a click until pointer re-entry.
-            // A short stationary hover reopens it; further movement dismisses it.
-            auto pointerMovedToken = tappedElement.PointerMoved(
-                [statePtr, accountIndex, manualToolTipHoverDelay,
-                 toolTipMoveThresholdX, toolTipMoveThresholdY](
+                [statePtr, accountIndex, percentTextVisibility, showDetailsOnHover](
                     winrt::Windows::Foundation::IInspectable const&,
                     wuxi::PointerRoutedEventArgs const& e) {
                     if (g_unloading || !statePtr->quotaGrid ||
                         accountIndex >= (int)statePtr->accountRefs.size()) return;
 
                     try {
-                        if (e.Pointer().PointerDeviceType() !=
-                            winrt::Windows::Devices::Input::PointerDeviceType::Mouse) return;
-
-                        auto& refs = statePtr->accountRefs[accountIndex];
-                        if (!refs.toolTip) return;
-
-                        bool wasOpen = refs.toolTip.IsOpen();
-                        POINT cursor{};
-                        bool haveCursor = GetCursorPos(&cursor) != FALSE;
-                        bool trackingHover = wasOpen || refs.reopenToolTipOnMove ||
-                                             refs.manualToolTipOpen;
-                        if (trackingHover && refs.hasToolTipOpenCursor && haveCursor &&
-                            std::abs(cursor.x - refs.toolTipOpenCursor.x) < toolTipMoveThresholdX &&
-                            std::abs(cursor.y - refs.toolTipOpenCursor.y) < toolTipMoveThresholdY) {
-                            return;
+                        if (percentTextVisibility == PercentTextVisibility::Hover) {
+                            for (auto& percent : statePtr->accountRefs[accountIndex].percents) {
+                                if (percent) percent.Opacity(0.9);
+                            }
                         }
-                        if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
-                        bool rearmAfterMove = wasOpen || refs.reopenToolTipOnMove ||
-                                              refs.manualToolTipOpen;
-                        refs.manualToolTipOpen = false;
-                        refs.hasToolTipOpenCursor = false;
-                        if (wasOpen) {
-                            // Automatic and manual tooltips both dismiss on local pointer movement.
-                            refs.toolTip.IsOpen(false);
-                        }
-                        if (!rearmAfterMove) return;
-
-                        refs.reopenToolTipOnMove = true;
-                        refs.hasToolTipOpenCursor = haveCursor;
-                        if (haveCursor) refs.toolTipOpenCursor = cursor;
-                        if (refs.manualToolTipTimer) {
-                            refs.manualToolTipTimer.Interval(manualToolTipHoverDelay);
-                            refs.manualToolTipTimer.Start();
+                        if (e.Pointer().PointerDeviceType() ==
+                            winrt::Windows::Devices::Input::PointerDeviceType::Mouse) {
+                            OnTilePointerEntered(*statePtr, accountIndex, showDetailsOnHover);
                         }
                     } catch (...) {}
                 });
 
-            auto closeToolTip =
+            // Lets a click recognize that its own press light-dismissed this tile's flyout.
+            auto pointerPressedToken = tappedElement.PointerPressed(
                 [statePtr, accountIndex](winrt::Windows::Foundation::IInspectable const&,
                                          wuxi::PointerRoutedEventArgs const&) {
+                    statePtr->flyout.pressIndex = accountIndex;
+                    statePtr->flyout.pressTick = GetTickCount64();
+                });
+
+            auto pointerExited =
+                [statePtr, accountIndex, percentTextVisibility](
+                    winrt::Windows::Foundation::IInspectable const&,
+                    wuxi::PointerRoutedEventArgs const&) {
                     if (g_unloading || accountIndex >= (int)statePtr->accountRefs.size()) return;
 
-                    auto& refs = statePtr->accountRefs[accountIndex];
-                    refs.hasToolTipOpenCursor = false;
-                    refs.reopenToolTipOnMove = false;
                     try {
-                        if (refs.manualToolTipTimer) refs.manualToolTipTimer.Stop();
-                    } catch (...) {}
-
-                    refs.manualToolTipOpen = false;
-                    try {
-                        if (refs.toolTip && refs.toolTip.IsOpen()) refs.toolTip.IsOpen(false);
+                        if (percentTextVisibility == PercentTextVisibility::Hover) {
+                            for (auto& percent : statePtr->accountRefs[accountIndex].percents) {
+                                if (percent) percent.Opacity(0.0);
+                            }
+                        }
+                        OnTilePointerExited(*statePtr, accountIndex);
                     } catch (...) {}
                 };
-            auto pointerExitedToken = tappedElement.PointerExited(
-                [closeToolTip, statePtr, accountIndex, percentTextVisibility](
-                    winrt::Windows::Foundation::IInspectable const& sender,
-                    wuxi::PointerRoutedEventArgs const& e) {
-                    closeToolTip(sender, e);
-                    if (g_unloading || percentTextVisibility != PercentTextVisibility::Hover ||
-                        accountIndex >= (int)statePtr->accountRefs.size()) return;
-
-                    try {
-                        for (auto& percent : statePtr->accountRefs[accountIndex].percents) {
-                            if (percent) percent.Opacity(0.0);
-                        }
-                    } catch (...) {}
-                });
-            auto pointerCaptureLostToken = tappedElement.PointerCaptureLost(closeToolTip);
-            auto pointerCanceledToken = tappedElement.PointerCanceled(closeToolTip);
+            auto pointerExitedToken = tappedElement.PointerExited(pointerExited);
+            auto pointerCanceledToken = tappedElement.PointerCanceled(pointerExited);
             state.pointerHandlers.push_back({tappedElement, tappedToken, pointerEnteredToken,
-                                             pointerMovedToken, pointerExitedToken,
-                                             pointerCaptureLostToken, pointerCanceledToken});
+                                             pointerPressedToken, pointerExitedToken,
+                                             pointerCanceledToken});
 
+            bool hasDashboard = !visualTestMode && accounts[i].provider != L"antigravity";
             MenuFlyout menu;
             if (visualTestMode) {
                 MenuFlyoutItem exitTestItem;
@@ -5564,7 +6542,23 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             tappedElement.ContextFlyout(menu);
 
             panel.Children().Append(col);
+            refs.menu = menu;
             state.accountRefs.push_back(std::move(refs));
+            // Right-click closes any details flyout before the menu shows.
+            state.accountRefs.back().menuOpeningToken = menu.Opening(
+                [statePtr](winrt::Windows::Foundation::IInspectable const&,
+                           winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        FlyoutUi& fo = statePtr->flyout;
+                        if (fo.dwellTimer) fo.dwellTimer.Stop();
+                        fo.dwellIndex = -1;
+                        fo.hoverSuppressedIndex = fo.hoverIndex;
+                        for (auto* instance : CurrentThreadUiInstances()) {
+                            CloseAccountFlyout(*instance);
+                        }
+                    } catch (...) {}
+                });
         }
 
         root.Children().Append(panel);
@@ -5610,12 +6604,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     BarMode barMode;
     PercentTextVisibility percentTextVisibility;
     PercentTextAlignment percentTextAlignment;
-    ClickAction clickAction;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         accounts = g_settings.accounts;
         intervalMin = g_settings.pollMinutes;
-        clickAction = g_settings.clickAction;
         barLayout = g_settings.barLayout;
         barMode = g_settings.barMode;
         barLength = g_settings.barLength;
@@ -5659,7 +6651,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     auto displayPct = [&](double pct) {
         return barMode == BarMode::Remaining && pct >= 0 ? std::clamp(100.0 - pct, 0.0, 100.0) : pct;
     };
-    const wchar_t* remainingSuffix = barMode == BarMode::Remaining ? L" remaining" : L"";
+    FlyoutPopup& flyout = state.flyout.popup;
     try {
         for (size_t i = 0; i < data.size(); i++) {
             const AccountData& d = data[i];
@@ -5675,7 +6667,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
                 ap.visible = visible;
             }
-            if (!visible) continue;
+            if (!visible) {
+                if (flyout.flyout && flyout.accountIndex == (int)i) CloseAccountFlyout(state);
+                continue;
+            }
 
             ULONGLONG staleAfterMs = (accounts[i].provider == L"antigravity" ? 1ULL :
                                       (ULONGLONG)intervalMin) * 2 * 60000;
@@ -5857,145 +6852,15 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
             }
 
-            std::wstring tip = (warn ? L"! " : L"") + accounts[i].label + L" - " +
-                               ProviderDisplayName(accounts[i].provider);
-            bool planIsSpark = d.plan.find(L"Spark") != std::wstring::npos ||
-                               d.plan.find(L"spark") != std::wstring::npos;
-            bool hideSparkPlan = accounts[i].provider == L"openai" && planIsSpark &&
-                                 !showOpenAiExtraLimits;
-            if (!d.plan.empty() && !hideSparkPlan) {
-                tip += L" (" + d.plan + L")";
-            }
-            wchar_t line[160];
-            if (d.win5h.pct >= 0) {
-                PCWSTR label = L"5h";
-                if (accounts[i].provider == L"antigravity") {
-                    label = d.win5h.windowDurationMs == 3ULL * 60 * 60 * 1000 ? L"Gemini 3h" :
-                            d.win5h.windowDurationMs == 60ULL * 60 * 1000 ? L"Gemini 1h" :
-                            d.win5h.windowDurationMs == 0 ?
-                                L"Gemini current limit" : L"Gemini 5h";
+            if (flyout.flyout && flyout.accountIndex == (int)i) {
+                if (AccountIdentityHash(accounts[i]) != flyout.accountIdentity) {
+                    CloseAccountFlyout(state);
+                } else {
+                    UpdateAccountFlyout(state, accounts[i], d,
+                                        {now, barMode, yellowThreshold, orangeThreshold,
+                                         redThreshold, colorblindMode, showOpenAiExtraLimits,
+                                         stale, warn, accountRefreshing, visualTestMode});
                 }
-                swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
-                         displayPct(d.win5h.pct),
-                         remainingSuffix, FormatReset(d.win5h.resetUnixMs).c_str());
-                tip += line;
-            }
-            if (d.winWeek.pct >= 0) {
-                PCWSTR label = accounts[i].provider == L"antigravity" ? L"Gemini week" : L"week";
-                swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
-                         displayPct(d.winWeek.pct),
-                         remainingSuffix, FormatReset(d.winWeek.resetUnixMs).c_str());
-                tip += line;
-            }
-            if (accounts[i].provider == L"antigravity" &&
-                d.antigravityThirdParty5h.pct >= 0) {
-                PCWSTR label =
-                    d.antigravityThirdParty5h.windowDurationMs == 3ULL * 60 * 60 * 1000 ?
-                        L"Claude/GPT 3h" :
-                    d.antigravityThirdParty5h.windowDurationMs == 60ULL * 60 * 1000 ?
-                        L"Claude/GPT 1h" :
-                    d.antigravityThirdParty5h.windowDurationMs == 0 ?
-                        L"Claude/GPT current limit" : L"Claude/GPT 5h";
-                swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
-                         displayPct(d.antigravityThirdParty5h.pct), remainingSuffix,
-                         FormatReset(d.antigravityThirdParty5h.resetUnixMs).c_str());
-                tip += line;
-            }
-            if (accounts[i].provider == L"antigravity" &&
-                d.antigravityThirdPartyWeek.pct >= 0) {
-                swprintf(line, ARRAYSIZE(line),
-                         L"\nClaude/GPT week: %.0f%%%s | resets %s",
-                         displayPct(d.antigravityThirdPartyWeek.pct), remainingSuffix,
-                         FormatReset(d.antigravityThirdPartyWeek.resetUnixMs).c_str());
-                tip += line;
-            }
-            if (d.fableWeek.pct >= 0) {
-                swprintf(line, ARRAYSIZE(line), L"\nFable week: %.0f%%%s",
-                         displayPct(d.fableWeek.pct), remainingSuffix);
-                tip += line;
-                if (d.fableWeek.resetUnixMs) {
-                    tip += L" | resets " + FormatReset(d.fableWeek.resetUnixMs);
-                }
-            }
-            bool openAiAccount = accounts[i].provider == L"openai";
-            // The credits percentage is only meaningful relative to the user's max, so with
-            // the credits bar unchecked the tooltip falls back to the plain balance.
-            if (d.extraUsage.pct >= 0 &&
-                (!openAiAccount || accounts[i].showBars[kExtraUsageBar])) {
-                // The slot holds Anthropic monthly extra usage or OpenAI credits vs. the
-                // user's max.
-                PCWSTR label = openAiAccount ? L"credits" : L"extra usage";
-                PCWSTR suffix = barMode == BarMode::Remaining ?
-                    (openAiAccount ? L" remaining" : L" remaining this month") :
-                    (openAiAccount ? L" used" : L" monthly");
-                swprintf(line, ARRAYSIZE(line), L"\n%s: %.1f%%%s", label,
-                         displayPct(d.extraUsage.pct), suffix);
-                tip += line;
-                if (d.extraLimitAmount >= 0) {
-                    // Credits state the balance explicitly so the number reads the same in
-                    // used and remaining modes.
-                    if (openAiAccount) {
-                        swprintf(line, ARRAYSIZE(line), L" (%.0f left of %.0f)",
-                                 d.extraLimitAmount - d.extraUsedAmount, d.extraLimitAmount);
-                    } else {
-                        swprintf(line, ARRAYSIZE(line), L" ($%.2f / $%.2f spent)",
-                                 d.extraUsedAmount, d.extraLimitAmount);
-                    }
-                    tip += line;
-                }
-                if (d.extraUsage.resetUnixMs) {
-                    tip += L" | resets " + FormatReset(d.extraUsage.resetUnixMs);
-                }
-            } else if (openAiAccount && d.creditsUnlimited) {
-                tip += L"\ncredits: unlimited";
-            } else if (openAiAccount && d.creditsBalance >= 0) {
-                swprintf(line, ARRAYSIZE(line), L"\ncredits: %.0f", d.creditsBalance);
-                tip += line;
-            } else if (openAiAccount && d.hasCredits) {
-                tip += L"\ncredits: available";
-            }
-            if (showOpenAiExtraLimits && accounts[i].provider == L"openai" && !d.openAiExtraLimitLines.empty()) {
-                tip += L"\n" + d.openAiExtraLimitLines;
-            }
-            if (!d.extraLines.empty()) tip += L"\n" + d.extraLines;
-            if (!d.error.empty()) {
-                tip += L"\nerror: " + d.error;
-                if (d.retryDeadlineMs > now) {
-                    ULONGLONG retrySec = (d.retryDeadlineMs - now + 999) / 1000;
-                    ULONGLONG days = retrySec / (24 * 60 * 60);
-                    ULONGLONG hours = (retrySec / (60 * 60)) % 24;
-                    ULONGLONG mins = (retrySec / 60) % 60;
-                    ULONGLONG secs = retrySec % 60;
-                    wchar_t retry[64];
-                    if (days > 0) {
-                        if (hours > 0) swprintf(retry, ARRAYSIZE(retry), L"%llud %lluh", days, hours);
-                        else swprintf(retry, ARRAYSIZE(retry), L"%llud", days);
-                    } else if (hours > 0) {
-                        if (mins > 0) swprintf(retry, ARRAYSIZE(retry), L"%lluh %llum", hours, mins);
-                        else swprintf(retry, ARRAYSIZE(retry), L"%lluh", hours);
-                    } else if (mins > 0) {
-                        if (secs > 0) swprintf(retry, ARRAYSIZE(retry), L"%llum %llus", mins, secs);
-                        else swprintf(retry, ARRAYSIZE(retry), L"%llum", mins);
-                    } else {
-                        swprintf(retry, ARRAYSIZE(retry), L"%llus", secs);
-                    }
-                    tip += L" - retry in ";
-                    tip += retry;
-                }
-            }
-            tip += L"\n" + FormatUpdated(d.lastSuccessMs, stale);
-            tip += visualTestMode ? L" - visual test; click to open settings" :
-                   accountRefreshing ? L" - refreshing..." :
-                   d.needsLogin ? L" - click to sign in" :
-                   clickAction == ClickAction::OpenDashboard && accounts[i].provider != L"antigravity"
-                       ? L" - click to open dashboard" :
-                   L" - click to refresh";
-
-            if (tip != ap.tip) {
-                // Keep the attached ToolTip object alive so an in-place refresh doesn't reset
-                // ToolTipService's pointer-over state and require a leave/re-enter cycle.
-                if (ui.toolTip) UpdateQuotaToolTip(ui.toolTip, tip, !d.error.empty());
-                ap.tip = tip;
             }
 
             double columnOpacity = accountRefreshing ? 0.65 : 1.0;
@@ -6670,7 +7535,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setString(L"monitorMode", s.taskbarMonitorMode == TaskbarMonitorMode::All ? L"all" :
                                    s.taskbarMonitorMode == TaskbarMonitorMode::Specific ? L"specific" : L"primary");
         setNumber(L"monitorNumber", s.taskbarMonitorNumber);
-        setString(L"clickAction", s.clickAction == ClickAction::OpenDashboard ? L"dashboard" : L"refresh");
+        setBool(L"showDetailsOnHover", s.showDetailsOnHover);
         setNumber(L"pollMinutes", s.pollMinutes);
         setNumber(L"historyRetentionDays", s.historyRetentionDays);
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
@@ -6763,8 +7628,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                                monitorMode == L"specific" ? TaskbarMonitorMode::Specific :
                                                             TaskbarMonitorMode::Primary;
         s.taskbarMonitorNumber = (int)GetNum(root, L"monitorNumber", 1);
-        s.clickAction = GetStr(root, L"clickAction") == L"dashboard" ?
-                            ClickAction::OpenDashboard : ClickAction::Refresh;
+        s.showDetailsOnHover = getBoolDefault(L"showDetailsOnHover", true);
         s.pollMinutes = (int)GetNum(root, L"pollMinutes", 10);
         double retentionDays = GetNum(root, L"historyRetentionDays", 90);
         s.historyRetentionDays = std::isfinite(retentionDays) ?
@@ -6998,8 +7862,6 @@ static bool LoadLegacySettings(Settings* out) {
                            monitorMode == L"specific" ? TaskbarMonitorMode::Specific :
                                                         TaskbarMonitorMode::Primary;
     s.taskbarMonitorNumber = getInt(L"taskbarMonitorNumber", 1);
-    s.clickAction = getText(L"clickAction") == L"open-dashboard" ?
-                        ClickAction::OpenDashboard : ClickAction::Refresh;
     s.pollMinutes = getInt(L"pollIntervalMinutes", 10);
     s.barLength = getInt(L"barLength", 100);
     s.barThickness = getInt(L"barThickness", 8);
@@ -7241,7 +8103,7 @@ enum SettingsControlId {
     kRedThreshold,
     kShowExtraBarAmounts,
 
-    kClickAction = 2300,
+    kShowDetailsOnHover = 2300,
     kPollPreset,
     kPollMinutes,
     kEnableNotifications,
@@ -8304,8 +9166,7 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
     SetControlInt(state, kOrangeThreshold, s.orangeThreshold);
     SetControlInt(state, kRedThreshold, s.redThreshold);
 
-    SendDlgItemMessageW(state.hWnd, kClickAction, CB_SETCURSEL,
-                        s.clickAction == ClickAction::OpenDashboard ? 1 : 0, 0);
+    setCheck(kShowDetailsOnHover, s.showDetailsOnHover);
     const int pollPresets[] = {2, 5, 10, 15, 30, 60};
     int pollPresetIndex = 6;
     for (int i = 0; i < (int)ARRAYSIZE(pollPresets); i++) {
@@ -8400,8 +9261,7 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     s.yellowThreshold = getBoundedInt(kYellowThreshold, s.yellowThreshold);
     s.orangeThreshold = getBoundedInt(kOrangeThreshold, s.orangeThreshold);
     s.redThreshold = getBoundedInt(kRedThreshold, s.redThreshold);
-    s.clickAction = SendDlgItemMessageW(state.hWnd, kClickAction, CB_GETCURSEL, 0, 0) == 1 ?
-                            ClickAction::OpenDashboard : ClickAction::Refresh;
+    s.showDetailsOnHover = isChecked(kShowDetailsOnHover);
     const int pollPresets[] = {2, 5, 10, 15, 30, 60};
     int pollPresetIndex = (int)SendDlgItemMessageW(state.hWnd, kPollPreset,
                                                    CB_GETCURSEL, 0, 0);
@@ -9243,7 +10103,7 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.orangeThreshold = defaults.orangeThreshold;
         settings.redThreshold = defaults.redThreshold;
     } else {
-        settings.clickAction = defaults.clickAction;
+        settings.showDetailsOnHover = defaults.showDetailsOnHover;
         settings.pollMinutes = defaults.pollMinutes;
         settings.enableNotifications = defaults.enableNotifications;
         settings.historyEnabled = defaults.historyEnabled;
@@ -9390,9 +10250,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             AddThresholdRow(*state, L"Orange threshold (%)", kOrangeThreshold);
             AddThresholdRow(*state, L"Red threshold (%)", kRedThreshold);
 
-            HWND clickAction = AddSettingsRow(*state, 3, L"Left-click action",
-                                               L"COMBOBOX", CBS_DROPDOWNLIST, 0, kClickAction);
-            AddComboItems(clickAction, {L"Refresh account", L"Open provider dashboard"});
+            AddSettingsCheck(*state, 3, L"Show details on hover", kShowDetailsOnHover);
             HWND pollPreset = AddSettingsRow(*state, 3, L"Cloud poll interval",
                                               L"COMBOBOX", CBS_DROPDOWNLIST, 0, kPollPreset);
             AddComboItems(pollPreset, {L"2 minutes", L"5 minutes", L"10 minutes",
@@ -9450,7 +10308,10 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                     L"Replaces the percentage on Anthropic extra-usage and OpenAI credits bars with the dollar or credit amount: spent in used mode, left in remaining mode.");
                 AddSettingsToolTip(
                     *state, kShowOpenAiExtraLimits,
-                    L"Adds every extra OpenAI rate limit (Codex Spark, hidden model lanes such as gpt-reserve) and the Spark plan name to OpenAI account tooltips.");
+                    L"Adds every extra OpenAI rate limit (Codex Spark, hidden model lanes such as gpt-reserve) and the Spark plan name to OpenAI account details.");
+                AddSettingsToolTip(
+                    *state, kShowDetailsOnHover,
+                    L"Opens an account's details after the pointer rests on its bars. Clicking the bars always opens them.");
                 AddSettingsToolTip(
                     *state, kShowStaleWarning,
                     L"Adds ! when quota data is stale because a refresh failed or is overdue.");

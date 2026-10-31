@@ -133,12 +133,12 @@ static std::wstring FormatReset(ULONGLONG unixMs) {
 }
 
 static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
-    if (!unixMs) return L"updated: no data yet";
+    if (!unixMs) return L"No data yet";
     SYSTEMTIME local;
     if (!UnixMsToLocalSystemTime(unixMs, &local)) {
-        return L"updated: ?";
+        return L"Updated ?";
     }
-    return std::wstring(L"updated: ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
+    return std::wstring(L"Updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
 }
 
 static void OpenUrl(PCWSTR url) {

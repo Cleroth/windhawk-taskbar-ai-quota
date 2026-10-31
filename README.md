@@ -14,7 +14,7 @@ Each visible account gets one compact taskbar column. Choose among the provider'
 - stacked layout: horizontal bars stack vertically and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
 
-Hover for percentages, reset times, plan and provider details, errors, and retry countdowns. Click a column to refresh that account or open its provider dashboard, depending on settings and provider support. Right-click a column for Settings, Usage history, Refresh all, provider actions, and show/hide toggles. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
+Hover a column for a quick look at its details flyout, or click to pin it: percentages, reset times, pace, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Right-click a column for Settings, Usage history, Refresh all, provider actions, and show/hide toggles. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
 
 Bars can show compact quota labels and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark labels and tooltips with `!`.
 
@@ -56,8 +56,8 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - compact bar labels (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default
 - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
 - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI) instead of a percentage, following the bar mode
-- optional additional OpenAI rate limits in tooltips (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
-- click action: refresh account or open provider dashboard (Antigravity always refreshes)
+- optional additional OpenAI rate limits in account details (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
+- show details on hover: resting the pointer on a column opens its details flyout (on by default); clicking always opens it
 - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
 - opt-in local history, retention in days (90 by default, configurable from 1 to 3650), and per-account recording
 - do not poll hidden accounts (on by default; overrides per-account history recording)

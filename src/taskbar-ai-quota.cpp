@@ -41,7 +41,7 @@ its signed-in local app or CLI session, which must remain running.
 
 - **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
 - **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
-- **Taskbar behavior:** Choose displays, click actions, polling, and alerts.
+- **Taskbar behavior:** Choose displays, hover details, polling, and alerts.
 - **Usage history:** Opt in to local recording, set retention (90 days by default), and
   choose recording per account independently of taskbar visibility. Opt-in is per Windows user.
   Hidden accounts stop
@@ -104,12 +104,15 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 
@@ -141,7 +144,6 @@ using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
 namespace wuxcp = winrt::Windows::UI::Xaml::Controls::Primitives;
-namespace wuxd = winrt::Windows::UI::Xaml::Documents;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
@@ -188,9 +190,15 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "taskbar/xaml-access.h"
 
-#include "taskbar/tooltip.h"
+#include "taskbar/theme.h"
+
+#include "taskbar/logos.h"
 
 #include "taskbar/actions.h"
+
+#include "taskbar/flyout-content.h"
+
+#include "taskbar/flyout.h"
 
 #include "taskbar/quota-grid.h"
 

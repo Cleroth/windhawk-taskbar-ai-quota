@@ -28,11 +28,6 @@ enum class TaskbarMonitorMode {
     Specific,
 };
 
-enum class ClickAction {
-    Refresh,
-    OpenDashboard,
-};
-
 enum class BarLayout {
     Stacked,
     Vertical,
@@ -76,7 +71,8 @@ static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
-    ClickAction clickAction = ClickAction::Refresh;
+    // Hovering a column opens its details flyout; clicking always does.
+    bool showDetailsOnHover = true;
     BarLayout barLayout = BarLayout::Stacked;
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
@@ -145,7 +141,7 @@ struct AccountData {
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
-    bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
+    bool needsLogin = false;  // Sign-in required; left-click signs in instead of opening details.
 };
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide

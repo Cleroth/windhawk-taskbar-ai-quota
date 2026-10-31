@@ -139,7 +139,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setString(L"monitorMode", s.taskbarMonitorMode == TaskbarMonitorMode::All ? L"all" :
                                    s.taskbarMonitorMode == TaskbarMonitorMode::Specific ? L"specific" : L"primary");
         setNumber(L"monitorNumber", s.taskbarMonitorNumber);
-        setString(L"clickAction", s.clickAction == ClickAction::OpenDashboard ? L"dashboard" : L"refresh");
+        setBool(L"showDetailsOnHover", s.showDetailsOnHover);
         setNumber(L"pollMinutes", s.pollMinutes);
         setNumber(L"historyRetentionDays", s.historyRetentionDays);
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
@@ -232,8 +232,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                                monitorMode == L"specific" ? TaskbarMonitorMode::Specific :
                                                             TaskbarMonitorMode::Primary;
         s.taskbarMonitorNumber = (int)GetNum(root, L"monitorNumber", 1);
-        s.clickAction = GetStr(root, L"clickAction") == L"dashboard" ?
-                            ClickAction::OpenDashboard : ClickAction::Refresh;
+        s.showDetailsOnHover = getBoolDefault(L"showDetailsOnHover", true);
         s.pollMinutes = (int)GetNum(root, L"pollMinutes", 10);
         double retentionDays = GetNum(root, L"historyRetentionDays", 90);
         s.historyRetentionDays = std::isfinite(retentionDays) ?
@@ -467,8 +466,6 @@ static bool LoadLegacySettings(Settings* out) {
                            monitorMode == L"specific" ? TaskbarMonitorMode::Specific :
                                                         TaskbarMonitorMode::Primary;
     s.taskbarMonitorNumber = getInt(L"taskbarMonitorNumber", 1);
-    s.clickAction = getText(L"clickAction") == L"open-dashboard" ?
-                        ClickAction::OpenDashboard : ClickAction::Refresh;
     s.pollMinutes = getInt(L"pollIntervalMinutes", 10);
     s.barLength = getInt(L"barLength", 100);
     s.barThickness = getInt(L"barThickness", 8);

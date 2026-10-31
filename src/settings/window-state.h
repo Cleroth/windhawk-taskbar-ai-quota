@@ -50,7 +50,7 @@ enum SettingsControlId {
     kRedThreshold,
     kShowExtraBarAmounts,
 
-    kClickAction = 2300,
+    kShowDetailsOnHover = 2300,
     kPollPreset,
     kPollMinutes,
     kEnableNotifications,

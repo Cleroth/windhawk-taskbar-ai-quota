@@ -7,7 +7,6 @@ struct AppliedState {
     std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1};
-    std::wstring tip;
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
     double labelOpacity = -1;
@@ -20,9 +19,8 @@ struct PointerHandlers {
     UIElement element{nullptr};
     winrt::event_token tappedToken{};
     winrt::event_token pointerEnteredToken{};
-    winrt::event_token pointerMovedToken{};
+    winrt::event_token pointerPressedToken{};
     winrt::event_token pointerExitedToken{};
-    winrt::event_token pointerCaptureLostToken{};
     winrt::event_token pointerCanceledToken{};
 };
 
@@ -34,10 +32,11 @@ struct MenuItemClickHandler {
 struct AccountUiRefs {
     StackPanel column{nullptr};
     FrameworkElement barArea{nullptr};
-    ToolTip toolTip{nullptr};
-    winrt::event_token toolTipOpenedToken{};
-    DispatcherTimer manualToolTipTimer{nullptr};
-    winrt::event_token manualToolTipTimerToken{};
+    // Captured at build time so the flyout matches the tile, including visual-test accounts.
+    std::wstring provider;
+    uint64_t identity = 0;
+    MenuFlyout menu{nullptr};
+    winrt::event_token menuOpeningToken{};
     std::array<Border, kQuotaBarCount> tracks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<Grid, kQuotaBarCount> barItems{
@@ -49,10 +48,126 @@ struct AccountUiRefs {
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
-    POINT toolTipOpenCursor{};
-    bool hasToolTipOpenCursor = false;
-    bool reopenToolTipOnMove = false;
-    bool manualToolTipOpen = false;
+};
+
+// Account details flyout. Brushes and styles come from LoadFlyoutTheme and are shared by the
+// card's elements.
+struct FlyoutTheme {
+    bool light = false;
+    bool highContrast = false;
+    Brush card{nullptr};
+    Brush cardBorder{nullptr};
+    Brush footer{nullptr};
+    Brush separator{nullptr};
+    Brush chip{nullptr};
+    Brush chipBorder{nullptr};
+    Brush text{nullptr};
+    Brush secondaryText{nullptr};
+    Brush mutedText{nullptr};
+    Brush warning{nullptr};
+    Brush error{nullptr};
+    Brush accent{nullptr};
+    Brush track{nullptr};
+    Brush trackBorder{nullptr};
+    Brush paceTick{nullptr};
+    Brush paceHalo{nullptr};
+    Style buttonStyle{nullptr};
+};
+
+enum FlyoutRowIndex {
+    kFlyoutFiveHourRow,
+    kFlyoutWeeklyRow,
+    kFlyoutPoolShortRow,  // Antigravity Claude/GPT pools.
+    kFlyoutPoolWeeklyRow,
+    kFlyoutFableRow,
+    kFlyoutExtraRow,      // Anthropic extra usage or OpenAI credits.
+    kFlyoutRowCount,
+};
+
+struct FlyoutQuotaRow {
+    // Separator, name/number cell and details cell share one grid row; they collapse together.
+    FrameworkElement row{nullptr};
+    FrameworkElement labels{nullptr};
+    FrameworkElement details{nullptr};
+    TextBlock name{nullptr};
+    TextBlock number{nullptr};
+    TextBlock unit{nullptr};
+    FrameworkElement trend{nullptr};
+    // Holds the quota's visualization; the bar can be swapped for another visual.
+    Grid visual{nullptr};
+    ColumnDefinition fillColumn{nullptr};
+    ColumnDefinition emptyColumn{nullptr};
+    Border fill{nullptr};
+    ColumnDefinition paceColumn{nullptr};
+    ColumnDefinition paceRestColumn{nullptr};
+    FrameworkElement paceTick{nullptr};
+    TextBlock amount{nullptr};
+    TextBlock reset{nullptr};
+    TextBlock projection{nullptr};
+    uint32_t fillColor = 0;
+};
+
+struct FlyoutButtonHandler {
+    Button button{nullptr};
+    winrt::event_token token{};
+};
+
+// Everything owned by one open popup; reset as a whole when it closes.
+struct FlyoutPopup {
+    Flyout flyout{nullptr};
+    FrameworkElement card{nullptr};
+    winrt::event_token closedToken{};
+    std::vector<FlyoutButtonHandler> buttonHandlers;
+    // Visible top-level windows of this thread before the popup opened; a visible one that is
+    // not listed is the popup's own window.
+    std::vector<HWND> windowsBeforeOpen;
+    HWND lastForeground = nullptr;
+    FlyoutTheme theme;
+
+    TextBlock title{nullptr};
+    FrameworkElement staleMarker{nullptr};
+    FrameworkElement planChip{nullptr};
+    TextBlock plan{nullptr};
+    std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;
+    FrameworkElement notes{nullptr};
+    TextBlock extraLimits{nullptr};
+    TextBlock extraLines{nullptr};
+    TextBlock error{nullptr};
+    TextBlock status{nullptr};
+    TextBlock updated{nullptr};
+
+    int accountIndex = -1;
+    uint64_t accountIdentity = 0;
+    uint64_t generation = 0;
+    bool pinned = false;  // Opened by click (focusable); otherwise a hover quick look.
+};
+
+struct FlyoutUi {
+    FlyoutPopup popup;
+    // Incremented per open so callbacks from an older popup are no-ops.
+    uint64_t openGeneration = 0;
+
+    // Created on first use; stopped and revoked by ClearQuotaEventState.
+    DispatcherTimer dwellTimer{nullptr};
+    winrt::event_token dwellTimerToken{};
+    // Runs only while a popup is open.
+    DispatcherTimer pollTimer{nullptr};
+    winrt::event_token pollTimerToken{};
+    DispatcherTimer countdownTimer{nullptr};
+    winrt::event_token countdownTimerToken{};
+
+    // Hover and click tracking by account index; -1 when unset.
+    int hoverIndex = -1;
+    int dwellIndex = -1;
+    int hoverSuppressedIndex = -1;  // Explicitly closed while hovered: wait for pointer exit.
+    ULONGLONG pointerOutsideTick = 0;  // When the pointer left a hover popup and its tile; 0 inside.
+    int pressIndex = -1;
+    ULONGLONG pressTick = 0;
+    // Last popup closed by the system (light dismiss, Escape): a click that dismissed a pinned
+    // popup must not reopen it.
+    int dismissedIndex = -1;
+    bool dismissedPinned = false;
+    ULONGLONG dismissedTick = 0;
 };
 
 struct QuotaUiInstance {
@@ -71,6 +186,7 @@ struct QuotaUiInstance {
     std::vector<AppliedState> applied;
     DispatcherTimer paceTimer{nullptr};
     winrt::event_token paceTimerToken{};
+    FlyoutUi flyout;
     // Per-account show/hide toggle items, paired with their account index, for cross-instance
     // IsChecked sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
     std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
