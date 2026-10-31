@@ -84,6 +84,7 @@ struct AccountUiRefs {
     // Captured at build time so the flyout matches the tile, including visual-test accounts.
     std::wstring provider;
     uint64_t identity = 0;
+    uint64_t historyId = 0;
     MenuFlyout menu{nullptr};
     winrt::event_token menuOpeningToken{};
     std::array<Border, kQuotaBarCount> tracks{

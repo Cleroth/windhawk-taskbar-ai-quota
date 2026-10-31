@@ -532,13 +532,19 @@ static DWORD WINAPI HistoryWindowThreadProc(LPVOID) {
     return 0;
 }
 
-static void OpenHistoryWindow() {
+// Opens or activates the window, selecting the account with `historyId` if it is listed; 0 keeps
+// the current selection.
+static void OpenHistoryWindow(uint64_t historyId) {
     if (g_unloading) return;
     std::lock_guard lock(g_historyWindowMutex);
     // Recheck under the same lock as close/thread publication; never spawn during unload.
     if (g_unloading || g_historyWindowCancelRequested) return;
+    // The latest request wins. Stored before the window check: a window published after it (its
+    // thread still starting) runs its first load later and takes the request then.
+    g_historyRequestedAccount.store(historyId);
     if (HWND window = g_historyWindow.load(); window && IsWindow(window)) {
-        PostMessageW(window, kHistoryActivateMessage, 0, 0);
+        // Without the activation, no prompt load would take the request.
+        if (!PostMessageW(window, kHistoryActivateMessage, 0, 0)) g_historyRequestedAccount.store(0);
         return;
     }
     if (g_historyWindowThread) {

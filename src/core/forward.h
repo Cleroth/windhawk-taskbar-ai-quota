@@ -6,7 +6,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state);
 static void CloseAccountFlyout(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
-static void OpenHistoryWindow();
+static void OpenHistoryWindow(uint64_t historyId = 0);
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
                             uint64_t newIdentity = 0);

@@ -528,6 +528,9 @@ static void HistoryRebuildView(HistoryWindowState& state) {
 }
 
 static void HistoryLoad(HistoryWindowState& state) {
+    // An open request applies to this load only, even one that bails (e.g. under a modal
+    // dialog), so it never switches the selection later.
+    uint64_t requestedId = g_historyRequestedAccount.exchange(0);
     if (state.loading || state.modal || state.closing || g_unloading || g_historyWindowCancelRequested) return;
     HistoryClearHover(state);
     state.loading = true;
@@ -607,12 +610,16 @@ static void HistoryLoad(HistoryWindowState& state) {
     }
     SendMessageW(state.accountCombo, CB_RESETCONTENT, 0, 0);
     SendMessageW(state.accountCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"All accounts"));
+    // A requested account that isn't listed keeps the current selection.
     state.selected = -1;
+    int requested = -1;
     for (size_t i = 0; i < state.accounts.size(); ++i) {
         SendMessageW(state.accountCombo, CB_ADDSTRING, 0,
                      reinterpret_cast<LPARAM>(state.accounts[i].title.c_str()));
         if (state.accounts[i].id == selectedId) state.selected = int(i);
+        if (state.accounts[i].id == requestedId) requested = int(i);
     }
+    if (requested >= 0) state.selected = requested;
     SendMessageW(state.accountCombo, CB_SETCURSEL, state.selected + 1, 0);
     state.snapshotStatus = std::wstring(!state.enabled ? L"Recording off" : state.idsPendingSave
         ? L"Recording pending" : L"Recording on") + L"  ·  Updated " + HistoryLocalDate(state.to);

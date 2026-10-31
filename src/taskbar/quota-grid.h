@@ -154,6 +154,23 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         panel.Orientation(Orientation::Horizontal);
         panel.Margin({4, 0, (double)rightMargin, 0});
 
+        // Context menu items with a Fluent icon; ClearQuotaEventState revokes their Click handlers.
+        FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
+        auto menuIcon = [&](PCWSTR glyph) {
+            FontIcon icon;
+            icon.FontFamily(iconFont);
+            icon.Glyph(glyph);
+            return icon;
+        };
+        auto menuItem = [&](PCWSTR text, PCWSTR glyph, auto const& onClick) {
+            MenuFlyoutItem item;
+            item.Text(text);
+            item.Icon(menuIcon(glyph));
+            auto token = item.Click(onClick);
+            state.menuItemClickHandlers.push_back({item, token});
+            return item;
+        };
+
         if (accounts.empty()) {
             Border setupTile;
             setupTile.CornerRadius({4, 4, 4, 4});
@@ -182,23 +199,14 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     L"Open AI quota settings"));
 
             MenuFlyout menu;
-            MenuFlyoutItem settingsItem;
-            settingsItem.Text(L"Settings...");
-            auto settingsToken = settingsItem.Click(
-                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
-                    OpenSettingsWindow();
-                });
-            state.menuItemClickHandlers.push_back({settingsItem, settingsToken});
-
-            MenuFlyoutItem historyItem;
-            historyItem.Text(L"Usage history...");
-            auto historyToken = historyItem.Click(
+            menu.Items().Append(menuItem(L"Usage history", L"\uE81C",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenHistoryWindow();
-                });
-            state.menuItemClickHandlers.push_back({historyItem, historyToken});
-            menu.Items().Append(historyItem);
-            menu.Items().Append(settingsItem);
+                }));
+            menu.Items().Append(menuItem(L"Settings", L"\uE713",
+                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                    OpenSettingsWindow();
+                }));
             setupElement.ContextFlyout(menu);
 
             panel.Children().Append(setupTile);
@@ -208,11 +216,44 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
 
+        // Context menu account header: icon, bold label, then provider and plan. Unlike the
+        // standard item template, it neither highlights nor dims while disabled; its margin,
+        // padding and icon column match the standard (WinUI 2) items. Without it, headers fall
+        // back to dimmed standard items.
+        ControlTemplate menuHeaderTemplate{nullptr};
+        if (!visualTestMode) {
+            try {
+                menuHeaderTemplate = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(
+                    L"<ControlTemplate "
+                    L"xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+                    L"TargetType=\"MenuFlyoutItem\">"
+                    L"<Grid Margin=\"4,2,4,2\" Padding=\"11,4,11,5\" Background=\"Transparent\">"
+                    L"<Grid.ColumnDefinitions><ColumnDefinition Width=\"28\"/>"
+                    L"<ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"*\"/>"
+                    L"</Grid.ColumnDefinitions>"
+                    L"<Viewbox Width=\"16\" Height=\"16\" HorizontalAlignment=\"Left\" "
+                    L"VerticalAlignment=\"Center\"><ContentPresenter "
+                    L"Content=\"{TemplateBinding Icon}\" Foreground=\"{TemplateBinding Foreground}\"/>"
+                    L"</Viewbox>"
+                    L"<TextBlock Grid.Column=\"1\" Text=\"{TemplateBinding Text}\" "
+                    L"Foreground=\"{TemplateBinding Foreground}\" FontWeight=\"SemiBold\" "
+                    L"VerticalAlignment=\"Center\"/>"
+                    L"<TextBlock Grid.Column=\"2\" "
+                    L"Text=\"{TemplateBinding KeyboardAcceleratorTextOverride}\" "
+                    L"Foreground=\"{TemplateBinding Foreground}\" Opacity=\"0.6\" Margin=\"10,0,0,0\" "
+                    L"TextTrimming=\"CharacterEllipsis\" VerticalAlignment=\"Center\"/>"
+                    L"</Grid></ControlTemplate>").as<ControlTemplate>();
+            } catch (...) {
+                Wh_Log(L"Menu header template failed to load");
+            }
+        }
+
         wchar_t name[64];
         for (size_t i = 0; i < accounts.size(); i++) {
             AccountUiRefs refs;
             refs.provider = accounts[i].provider;
             refs.identity = AccountIdentityHash(accounts[i]);
+            refs.historyId = accounts[i].historyId;
             StackPanel col{nullptr};
             if (tileLayout) {
                 col = BuildAccountTile(accounts, i, barLayout, state.tileHeight, refs);
@@ -523,12 +564,14 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                                              pointerPressedToken, pointerExitedToken,
                                              pointerCanceledToken});
 
-            bool hasDashboard = !visualTestMode && accounts[i].provider != L"antigravity";
+            // Context menu: this account's header and actions, then every account's, then
+            // Settings. Visual tests offer only their exit and Settings.
+            bool antigravity = accounts[i].provider == L"antigravity";
             MenuFlyout menu;
+            MenuFlyoutItem menuHeader{nullptr};
+            MenuFlyoutItem signItem{nullptr};
             if (visualTestMode) {
-                MenuFlyoutItem exitTestItem;
-                exitTestItem.Text(L"Exit visual test");
-                auto exitTestToken = exitTestItem.Click(
+                menu.Items().Append(menuItem(L"Exit visual test", L"\uE711",
                     [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                         HWND settingsWindow = g_settingsWindow.load();
                         if (settingsWindow &&
@@ -540,39 +583,76 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         if (g_visualTestMode.exchange(false, std::memory_order_acq_rel)) {
                             StartRetryInject(true);
                         }
-                    });
-                state.menuItemClickHandlers.push_back({exitTestItem, exitTestToken});
-                menu.Items().Append(exitTestItem);
+                    }));
             } else {
-                MenuFlyoutItem refreshAllItem;
-                refreshAllItem.Text(L"Refresh all");
-                auto refreshAllToken = refreshAllItem.Click(
+                // Non-interactive; the menu's Opening handler adds the plan to the provider.
+                menuHeader = MenuFlyoutItem{};
+                menuHeader.Text(accounts[i].label);
+                menuHeader.KeyboardAcceleratorTextOverride(
+                    ProviderDisplayName(accounts[i].provider));
+                menuHeader.IsEnabled(false);
+                if (menuHeaderTemplate) menuHeader.Template(menuHeaderTemplate);
+                try {
+                    menuHeader.Icon(LoadProviderLogoShape(accounts[i].provider, nullptr)
+                                        .as<IconElement>());
+                } catch (...) {
+                    Wh_Log(L"Menu header logo failed to load");
+                }
+                menu.Items().Append(menuHeader);
+
+                menu.Items().Append(menuItem(L"Refresh", L"\uE72C",
+                    [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
+                                      RoutedEventArgs const&) {
+                        RefreshQuotaByIdentity(accountIdentity);
+                    }));
+                if (!antigravity) {
+                    menu.Items().Append(menuItem(L"Open dashboard", L"\uE8A7",
+                        [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
+                                          RoutedEventArgs const&) {
+                            OpenDashboardForIdentity(accountIdentity);
+                        }));
+                }
+                uint64_t historyId = accounts[i].historyId;
+                menu.Items().Append(menuItem(L"Usage history", L"\uE81C",
+                    [historyId](winrt::Windows::Foundation::IInspectable const&,
+                                RoutedEventArgs const&) {
+                        OpenHistoryWindow(historyId);
+                    }));
+                // Sign in or out with the mod's own OAuth. The Opening handler picks the label,
+                // which decides the action.
+                if (!antigravity) {
+                    signItem = menuItem(L"Sign out", L"\uF3B1",
+                        [accountIdentity](winrt::Windows::Foundation::IInspectable const& sender,
+                                          RoutedEventArgs const&) {
+                            if (g_unloading) return;
+                            bool signIn = false;
+                            try {
+                                auto item = sender.try_as<MenuFlyoutItem>();
+                                if (!item) return;
+                                signIn = item.Text() == L"Sign in";
+                            } catch (...) {
+                                return;
+                            }
+                            if (signIn) StartLoginByIdentity(accountIdentity);
+                            else if (!SignOutAccountByIdentity(accountIdentity)) OpenSettingsWindow();
+                        });
+                    menu.Items().Append(signItem);
+                }
+
+                menu.Items().Append(MenuFlyoutSeparator{});
+                menu.Items().Append(menuItem(L"Refresh all", L"\uE895",
                     [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                         QueueRefresh(0);
-                    });
-                state.menuItemClickHandlers.push_back({refreshAllItem, refreshAllToken});
-                menu.Items().Append(refreshAllItem);
-            }
+                    }));
 
-            if (hasDashboard) {
-                MenuFlyoutItem dashboardItem;
-                dashboardItem.Text(L"Open dashboard");
-                auto dashboardToken = dashboardItem.Click(
-                    [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
-                                   RoutedEventArgs const&) {
-                        OpenDashboardForIdentity(accountIdentity);
-                    });
-                state.menuItemClickHandlers.push_back({dashboardItem, dashboardToken});
-                menu.Items().Append(dashboardItem);
-            }
-
-            if (!visualTestMode) {
                 // Per-account show/hide checkboxes (checked = visible). Every column carries the
                 // same list; toggling flips global state, persists, and re-syncs all instances.
-                menu.Items().Append(MenuFlyoutSeparator{});
+                MenuFlyoutSubItem showSub;
+                showSub.Text(L"Show on taskbar");
+                showSub.Icon(menuIcon(L"\uE890"));
                 for (size_t k = 0; k < accounts.size(); k++) {
                     ToggleMenuFlyoutItem toggle;
-                    toggle.Text(accounts[k].label + L" - " +
+                    toggle.Text(accounts[k].label + L" · " +
                                 ProviderDisplayName(accounts[k].provider));
                     toggle.IsChecked(!accounts[k].hidden);
                     int toggleIndex = (int)k;
@@ -584,77 +664,28 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         });
                     state.menuItemClickHandlers.push_back({toggle, toggleToken});
                     state.accountToggleItems.push_back({toggleIndex, toggle});
-                    menu.Items().Append(toggle);
+                    showSub.Items().Append(toggle);
                 }
-            }
-
-            // Sign in / Sign out submenus drive the mod's own OAuth per account.
-            if (!visualTestMode) {
-                MenuFlyoutSubItem signInSub;
-                signInSub.Text(L"Sign in");
-                MenuFlyoutSubItem signOutSub;
-                signOutSub.Text(L"Sign out");
-                for (size_t k = 0; k < accounts.size(); k++) {
-                    if (accounts[k].provider == L"antigravity") continue;
-                    std::wstring name = accounts[k].label + L" - " +
-                                        ProviderDisplayName(accounts[k].provider);
-                    uint64_t authIdentity = AccountIdentityHash(accounts[k]);
-
-                    MenuFlyoutItem signInItem;
-                    signInItem.Text(name);
-                    auto signInToken = signInItem.Click(
-                        [authIdentity](winrt::Windows::Foundation::IInspectable const&,
-                                       RoutedEventArgs const&) {
-                            StartLoginByIdentity(authIdentity);
-                        });
-                    state.menuItemClickHandlers.push_back({signInItem, signInToken});
-                    signInSub.Items().Append(signInItem);
-
-                    MenuFlyoutItem signOutItem;
-                    signOutItem.Text(name);
-                    auto signOutToken = signOutItem.Click(
-                        [authIdentity](winrt::Windows::Foundation::IInspectable const&,
-                                       RoutedEventArgs const&) {
-                            if (!SignOutAccountByIdentity(authIdentity)) OpenSettingsWindow();
-                        });
-                    state.menuItemClickHandlers.push_back({signOutItem, signOutToken});
-                    signOutSub.Items().Append(signOutItem);
-                }
-                if (signInSub.Items().Size() > 0) {
-                    menu.Items().Append(MenuFlyoutSeparator{});
-                    menu.Items().Append(signInSub);
-                    menu.Items().Append(signOutSub);
-                }
+                menu.Items().Append(showSub);
             }
 
             menu.Items().Append(MenuFlyoutSeparator{});
-            MenuFlyoutItem settingsItem;
-            settingsItem.Text(L"Settings...");
-            auto settingsToken = settingsItem.Click(
+            menu.Items().Append(menuItem(L"Settings", L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
-                });
-            state.menuItemClickHandlers.push_back({settingsItem, settingsToken});
-
-            MenuFlyoutItem historyItem;
-            historyItem.Text(L"Usage history...");
-            auto historyToken = historyItem.Click(
-                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
-                    OpenHistoryWindow();
-                });
-            state.menuItemClickHandlers.push_back({historyItem, historyToken});
-            menu.Items().Append(historyItem);
-            menu.Items().Append(settingsItem);
+                }));
 
             tappedElement.ContextFlyout(menu);
 
             panel.Children().Append(col);
             refs.menu = menu;
             state.accountRefs.push_back(std::move(refs));
-            // Right-click closes any details flyout before the menu shows.
+            // Right-click closes any details flyout before the menu shows. The header's plan and
+            // the sign-in choice then follow the account's current state.
             state.accountRefs.back().menuOpeningToken = menu.Opening(
-                [statePtr](winrt::Windows::Foundation::IInspectable const&,
-                           winrt::Windows::Foundation::IInspectable const&) {
+                [statePtr, accountIdentity, provider = accounts[i].provider, menuHeader, signItem](
+                    winrt::Windows::Foundation::IInspectable const&,
+                    winrt::Windows::Foundation::IInspectable const&) {
                     if (g_unloading) return;
                     try {
                         FlyoutUi& fo = statePtr->flyout;
@@ -663,6 +694,43 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         fo.hoverSuppressedIndex = fo.hoverIndex;
                         for (auto* instance : CurrentThreadUiInstances()) {
                             CloseAccountFlyout(*instance);
+                        }
+                    } catch (...) {}
+                    if (!menuHeader) return;
+                    try {
+                        std::wstring plan;
+                        bool showSparkPlan = false;
+                        bool needsLogin = false;
+                        {
+                            std::lock_guard<std::mutex> lk(g_settingsMutex);
+                            showSparkPlan = g_settings.showOpenAiExtraLimits;
+                            for (size_t k = 0; k < g_settings.accounts.size(); k++) {
+                                if (AccountIdentityHash(g_settings.accounts[k]) != accountIdentity) {
+                                    continue;
+                                }
+                                std::lock_guard<std::mutex> lk2(g_dataMutex);
+                                if (k < g_data.size()) {
+                                    plan = g_data[k].plan;
+                                    needsLogin = g_data[k].needsLogin;
+                                }
+                                break;
+                            }
+                        }
+                        // As in the details flyout, OpenAI's Spark plan name needs its extra
+                        // limits shown.
+                        if (provider == L"openai" && !showSparkPlan &&
+                            (plan.find(L"Spark") != std::wstring::npos ||
+                             plan.find(L"spark") != std::wstring::npos)) {
+                            plan.clear();
+                        }
+                        std::wstring details = ProviderDisplayName(provider);
+                        if (!plan.empty()) details += L" · " + plan;
+                        menuHeader.KeyboardAcceleratorTextOverride(details);
+                        if (signItem) {
+                            signItem.Text(needsLogin ? L"Sign in" : L"Sign out");
+                            if (auto icon = signItem.Icon().try_as<FontIcon>()) {
+                                icon.Glyph(needsLogin ? L"\uE77B" : L"\uF3B1");
+                            }
                         }
                     } catch (...) {}
                 });

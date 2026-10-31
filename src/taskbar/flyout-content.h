@@ -477,6 +477,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     HWND hWnd = state.hWnd;
     uint64_t generation = popup.generation;
     uint64_t identity = popup.accountIdentity;
+    uint64_t historyId = state.accountRefs[popup.accountIndex].historyId;
     Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
     auto addButton = [&](PCWSTR glyph, PCWSTR name, FlyoutFooterAction action) {
         Button button;
@@ -494,8 +495,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         ToolTipService::SetToolTip(button, winrt::box_value(name));
         popup.buttonHandlers.reserve(popup.buttonHandlers.size() + 1);
         auto token = button.Click(
-            [hWnd, generation, identity, action](winrt::Windows::Foundation::IInspectable const&,
-                                                 RoutedEventArgs const&) {
+            [hWnd, generation, identity, historyId, action](
+                winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                 if (g_unloading) return;
                 try {
                     auto* uiState = FindUiState(hWnd);
@@ -509,7 +510,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
                     }
                     // Actions that open a window or browser dismiss the flyout first.
                     CloseAccountFlyout(*uiState);
-                    if (action == FlyoutFooterAction::History) OpenHistoryWindow();
+                    if (action == FlyoutFooterAction::History) OpenHistoryWindow(historyId);
                     else if (action == FlyoutFooterAction::Dashboard) OpenDashboardForIdentity(identity);
                     else OpenSettingsWindow();
                 } catch (...) {}

@@ -5,6 +5,9 @@ static std::mutex g_historyWindowMutex;
 static std::atomic<HWND> g_historyWindow{nullptr};
 static std::atomic<HWND> g_historyDialog{nullptr};
 static std::atomic<bool> g_historyWindowCancelRequested{false};
+// History ID that the window's next load selects, from the latest open request; 0 keeps the
+// current selection. OpenHistoryWindow stores it under g_historyWindowMutex.
+static std::atomic<uint64_t> g_historyRequestedAccount{0};
 
 static constexpr PCWSTR kHistoryWindowClass = L"AiQuotaHistory_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
