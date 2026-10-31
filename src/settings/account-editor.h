@@ -16,24 +16,32 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  sc(16), sc(58), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountLabel), nullptr,
                  controlX, sc(54), controlWidth, sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileIdentityLabel), nullptr,
+                 sc(16), sc(98), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileIdentity), nullptr,
+                 controlX, sc(94), controlWidth, sc(220), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileTextLabel), nullptr,
+                 sc(16), sc(138), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileText), nullptr,
+                 controlX, sc(134), sc(80), sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
-                 sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(178), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
-                 sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(208), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
-                 sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(238), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     // For OpenAI the 4th checkbox reads "Show credits bar, max:" and the max edit follows it.
     bool openai = SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0) == 1;
     SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
-                 sc(16), sc(188), openai ? sc(164) : width - sc(32), sc(24),
+                 sc(16), sc(268), openai ? sc(164) : width - sc(32), sc(24),
                  SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
-                 sc(180), sc(188), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(180), sc(268), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
-                 sc(16), sc(218), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(298), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
-                 sc(16), sc(246), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
-    int buttonY = std::max(sc(306), height - sc(46));
+                 sc(16), sc(326), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    int buttonY = std::max(sc(386), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr,
@@ -74,6 +82,13 @@ static void UpdateAccountEditorProvider(HWND hWnd) {
     SetWindowTextW(extraUsage, openai ? L"Show credits bar, max:" :
                                         L"Show monthly extra-usage bar");
     ShowWindow(GetDlgItem(hWnd, kAccountCreditsMax), openai ? SW_SHOW : SW_HIDE);
+}
+
+static void UpdateAccountEditorTileText(HWND hWnd) {
+    bool text = SendDlgItemMessageW(hWnd, kAccountTileIdentity, CB_GETCURSEL, 0, 0) ==
+                (LRESULT)TileIdentity::Text;
+    EnableWindow(GetDlgItem(hWnd, kAccountTileTextLabel), text);
+    EnableWindow(GetDlgItem(hWnd, kAccountTileText), text);
 }
 
 static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
@@ -121,24 +136,46 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                            GetModuleHandleW(nullptr), nullptr);
             SendMessageW(state->edit, EM_SETLIMITTEXT, 64, 0);
 
+            // Tile identity is used only by the ring and logo layouts.
+            CreateWindowExW(0, L"STATIC", L"Tile identity", WS_CHILD | WS_VISIBLE,
+                            sc(16), sc(98), sc(100), sc(22), hWnd,
+                            reinterpret_cast<HMENU>(kAccountTileIdentityLabel),
+                            GetModuleHandleW(nullptr), nullptr);
+            HWND tileIdentity = CreateWindowExW(
+                0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
+                sc(130), sc(94), sc(240), sc(220), hWnd,
+                reinterpret_cast<HMENU>(kAccountTileIdentity), GetModuleHandleW(nullptr), nullptr);
+            AddComboItems(tileIdentity, {L"Logo + number badge", L"Logo only", L"Label text"});
+            SendMessageW(tileIdentity, CB_SETCURSEL, (int)state->account.tileIdentity, 0);
+            CreateWindowExW(0, L"STATIC", L"Short text", WS_CHILD | WS_VISIBLE,
+                            sc(16), sc(138), sc(100), sc(22), hWnd,
+                            reinterpret_cast<HMENU>(kAccountTileTextLabel),
+                            GetModuleHandleW(nullptr), nullptr);
+            HWND tileText = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"EDIT", state->account.tileText.c_str(),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                sc(130), sc(134), sc(80), sc(26), hWnd,
+                reinterpret_cast<HMENU>(kAccountTileText), GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(tileText, EM_SETLIMITTEXT, 4, 0);
+
             HWND fiveHour = CreateWindowExW(0, L"BUTTON", L"Show 5-hour bar",
                                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                             sc(16), sc(98), sc(180), sc(24), hWnd,
+                                             sc(16), sc(178), sc(180), sc(24), hWnd,
                                              reinterpret_cast<HMENU>(kAccountFiveHour),
                                              GetModuleHandleW(nullptr), nullptr);
             HWND weekly = CreateWindowExW(0, L"BUTTON", L"Show weekly bar",
                                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                           sc(16), sc(128), sc(180), sc(24), hWnd,
+                                           sc(16), sc(208), sc(180), sc(24), hWnd,
                                            reinterpret_cast<HMENU>(kAccountWeekly),
                                            GetModuleHandleW(nullptr), nullptr);
             HWND fable = CreateWindowExW(0, L"BUTTON", L"Show Fable weekly bar",
                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                          sc(16), sc(158), sc(220), sc(24), hWnd,
+                                          sc(16), sc(238), sc(220), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountFableWeekly),
                                           GetModuleHandleW(nullptr), nullptr);
             HWND extra = CreateWindowExW(0, L"BUTTON", L"Show monthly extra-usage bar",
                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                          sc(16), sc(188), sc(260), sc(24), hWnd,
+                                          sc(16), sc(268), sc(260), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountExtraUsage),
                                           GetModuleHandleW(nullptr), nullptr);
             SendMessageW(fiveHour, BM_SETCHECK,
@@ -154,14 +191,14 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 std::to_wstring(state->account.creditsMax) : L"";
             HWND creditsMax = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", creditsMaxText.c_str(),
                                                WS_CHILD | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL,
-                                               sc(180), sc(188), sc(80), sc(24), hWnd,
+                                               sc(180), sc(268), sc(80), sc(24), hWnd,
                                                reinterpret_cast<HMENU>(kAccountCreditsMax),
                                                GetModuleHandleW(nullptr), nullptr);
             SendMessageW(creditsMax, EM_SETLIMITTEXT, 9, 0);
 
             HWND recordHistory = CreateWindowExW(
                 0, L"BUTTON", L"Record history", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                sc(16), sc(218), sc(260), sc(24), hWnd,
+                sc(16), sc(298), sc(260), sc(24), hWnd,
                 reinterpret_cast<HMENU>(kAccountRecordHistory), GetModuleHandleW(nullptr), nullptr);
             SendMessageW(recordHistory, BM_SETCHECK,
                          state->account.recordHistory ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -175,20 +212,31 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
                 CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                 hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
-            if (state->toolTip && recordHistory) {
+            if (state->toolTip) {
                 SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0, sc(360));
-                TOOLINFOW info{};
-                info.cbSize = sizeof(info);
-                info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-                info.hwnd = hWnd;
-                info.uId = reinterpret_cast<UINT_PTR>(recordHistory);
-                info.lpszText = const_cast<PWSTR>(
+                auto addToolTip = [&](HWND control, PCWSTR text) {
+                    if (!control) return;
+                    TOOLINFOW info{};
+                    info.cbSize = sizeof(info);
+                    info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+                    info.hwnd = hWnd;
+                    info.uId = reinterpret_cast<UINT_PTR>(control);
+                    info.lpszText = const_cast<PWSTR>(text);
+                    SendMessageW(state->toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&info));
+                };
+                addToolTip(tileIdentity,
+                    L"Applies only to the ring and logo layouts; stacked and vertical bars show "
+                    L"the label instead. The number badge appears only when several accounts "
+                    L"share this provider.");
+                addToolTip(tileText,
+                    L"Up to 4 characters shown by Label text in the ring and logo layouts. "
+                    L"Leave empty to use the label without spaces.");
+                addToolTip(recordHistory,
                     L"This account preference is shared across Windows users. Records only when "
                     L"Enable local history is on for the current Windows user in Behavior. "
                     L"Do not poll hidden accounts overrides this checkbox: hidden accounts are not "
                     L"polled or recorded while that option is on. History follows this configured "
                     L"account, not the signed-in login. Use a new account entry for a different login.");
-                SendMessageW(state->toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&info));
             }
 
             HWND ok = CreateWindowExW(0, L"BUTTON", L"OK",
@@ -206,6 +254,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             RecreateAccountEditorVisuals(hWnd, *state);
             LayoutAccountEditor(hWnd, *state);
             UpdateAccountEditorProvider(hWnd);
+            UpdateAccountEditorTileText(hWnd);
             SetFocus(state->edit);
             return 0;
         }
@@ -214,6 +263,10 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             if (LOWORD(wParam) == kAccountProvider && HIWORD(wParam) == CBN_SELCHANGE) {
                 UpdateAccountEditorProvider(hWnd);
                 LayoutAccountEditor(hWnd, *state);
+                return 0;
+            }
+            if (LOWORD(wParam) == kAccountTileIdentity && HIWORD(wParam) == CBN_SELCHANGE) {
+                UpdateAccountEditorTileText(hWnd);
                 return 0;
             }
             if (LOWORD(wParam) == IDOK) {
@@ -235,6 +288,15 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.provider = providerIndex == 1 ? L"openai" :
                                           providerIndex == 2 ? L"antigravity" : L"anthropic";
                 state->account.label = std::move(label);
+                int tileIdentity = (int)SendDlgItemMessageW(hWnd, kAccountTileIdentity,
+                                                            CB_GETCURSEL, 0, 0);
+                state->account.tileIdentity =
+                    tileIdentity >= 0 && tileIdentity <= (int)TileIdentity::Text ?
+                        (TileIdentity)tileIdentity : TileIdentity::LogoBadge;
+                // Settings normalization trims and caps the text.
+                wchar_t tileText[16] = {};
+                GetDlgItemTextW(hWnd, kAccountTileText, tileText, ARRAYSIZE(tileText));
+                state->account.tileText = tileText;
                 state->account.recordHistory =
                     IsDlgButtonChecked(hWnd, kAccountRecordHistory) == BST_CHECKED;
                 state->account.showBars[kFiveHourBar] =
@@ -361,7 +423,7 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
     UINT dpi = WindowDpi(owner);
     int width = ScaleForDpi(404, dpi);
-    int height = ScaleForDpi(388, dpi);
+    int height = ScaleForDpi(468, dpi);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitorInfo);
     width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
@@ -451,8 +513,11 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
 
     bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
+    // Tile identity is read only while building tiles, so its edits take the rebuild path.
     bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
                                    oldAccount.label == newAccount.label &&
+                                   oldAccount.tileIdentity == newAccount.tileIdentity &&
+                                   oldAccount.tileText == newAccount.tileText &&
                                    oldAccount.creditsMax == newAccount.creditsMax &&
                                    oldAccount.recordHistory == newAccount.recordHistory &&
                                    oldAccount.historyId == newAccount.historyId &&
@@ -581,7 +646,8 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
         providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
     }
     if (applyResult == SettingsApplyResult::Changed) {
-        // Every bar already exists in the XAML tree; visibility and spacing update in place.
+        // A quota selection change updates in place: bar layouts already hold every bar and
+        // only change visibility and spacing; tile layouts regenerate their meter shapes.
         if (onlyBarSelectionChanged) {
             PostUiUpdate();
             if (!g_uiInjected.load(std::memory_order_acquire)) StartRetryInject();

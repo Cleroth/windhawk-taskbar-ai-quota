@@ -252,6 +252,20 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         }
     } else if (message == WM_DISPLAYCHANGE && !g_unloading) {
         StartRetryInject(true);
+    } else if (message == WM_SETTINGCHANGE && lParam && !g_unloading &&
+               wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
+        // Light/dark switch: once the taskbar has handled it, repaint the tiles' theme colors.
+        // Window procedures run on the window's thread, which owns this taskbar's XAML.
+        LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
+        if (!g_unloading) {
+            try {
+                auto* state = FindUiState(hWnd);
+                if (state && state->quotaGrid && state->ownerThreadId == GetCurrentThreadId()) {
+                    UpdateQuotaUi(*state);
+                }
+            } catch (...) {}
+        }
+        return result;
     }
     return DefSubclassProc(hWnd, message, wParam, lParam);
 }

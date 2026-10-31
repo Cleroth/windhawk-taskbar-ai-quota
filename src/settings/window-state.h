@@ -34,6 +34,8 @@ enum SettingsControlId {
     kLabelGap,
     kBarGap,
     kRightMargin,
+    kRingSize,
+    kRingThickness,
 
     kLabelPosition = 2200,
     kShowPaceTicks,
@@ -76,6 +78,10 @@ enum SettingsControlId {
     kAccountCreditsMax,
     kAccountRecordHistory,
     kAccountHistoryIdentityNote,
+    kAccountTileIdentityLabel,
+    kAccountTileIdentity,
+    kAccountTileTextLabel,
+    kAccountTileText,
 };
 
 struct SettingsRow {

@@ -89,26 +89,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     header.Padding({16, 12, 16, 12});
     for (int column = 0; column < 5; column++) addColumn(header, column == 2 ? kStar : kAuto);
     try {
-        PCWSTR logoPath = provider == L"openai" ? kOpenAiLogoPath :
-                          provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
-        std::wstring pathXaml =
-            L"<Path xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
-        pathXaml += logoPath;
-        pathXaml += L"\"/>";
-        auto path = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(pathXaml))
-                        .as<wuxs::Path>();
-        path.Fill(theme.text);
-        Grid viewBox;
-        viewBox.Width(24);
-        viewBox.Height(24);
-        viewBox.Children().Append(path);
         Viewbox logo;
         logo.Width(20);
         logo.Height(20);
         logo.Margin({0, 0, 10, 0});
         logo.VerticalAlignment(VerticalAlignment::Center);
         logo.IsHitTestVisible(false);
-        logo.Child(viewBox);
+        logo.Child(LoadProviderLogo(provider, theme.text));
         header.Children().Append(logo);
     } catch (...) {
         Wh_Log(L"Flyout logo failed to load");

@@ -29,6 +29,13 @@ static bool NormalizeSettings(Settings* s) {
             !a.showBars[kExtraUsageBar]) {
             a.showBars[kFiveHourBar] = true;
         }
+        if (a.tileIdentity < TileIdentity::LogoBadge || a.tileIdentity > TileIdentity::Text) {
+            a.tileIdentity = TileIdentity::LogoBadge;
+        }
+        // Tile text is trimmed and capped at 4 UTF-16 units without splitting a surrogate pair.
+        a.tileText.erase(0, a.tileText.find_first_not_of(L" \t\r\n"));
+        if (a.tileText.size() > 4) a.tileText.resize(IS_HIGH_SURROGATE(a.tileText[3]) ? 3 : 4);
+        a.tileText.erase(a.tileText.find_last_not_of(L" \t\r\n") + 1);
         bool duplicate = std::any_of(accounts.begin(), accounts.end(),
             [&](const AccountConfig& existing) {
                 return existing.provider == a.provider && existing.label == a.label;
@@ -73,12 +80,18 @@ static bool NormalizeSettings(Settings* s) {
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
     s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 50);
+    s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
+    s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
+                                  kRingThicknessMin, kRingThicknessMax);
     s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
     s->percentFontSize = std::clamp(s->percentFontSize > 0 ? s->percentFontSize : 9, 6, 24);
     s->accountMargin = std::clamp(s->accountMargin, 0, 500);
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
+    if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::LogoHeadline) {
+        s->barLayout = BarLayout::Stacked;
+    }
     if (s->labelPosition < LabelPosition::Hidden ||
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
@@ -111,6 +124,10 @@ static std::wstring SerializeSettings(const Settings& s) {
             JsonObject account;
             account.SetNamedValue(L"provider", JsonValue::CreateStringValue(winrt::hstring(a.provider)));
             account.SetNamedValue(L"label", JsonValue::CreateStringValue(winrt::hstring(a.label)));
+            account.SetNamedValue(L"tileIdentity", JsonValue::CreateStringValue(
+                a.tileIdentity == TileIdentity::Logo ? L"logo" :
+                a.tileIdentity == TileIdentity::Text ? L"text" : L"logoBadge"));
+            account.SetNamedValue(L"tileText", JsonValue::CreateStringValue(winrt::hstring(a.tileText)));
             account.SetNamedValue(L"fiveHour", JsonValue::CreateBooleanValue(a.showBars[kFiveHourBar]));
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
@@ -145,7 +162,14 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
-        setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" : L"stacked");
+        setNumber(L"ringSize", s.ringSize);
+        setNumber(L"ringThickness", s.ringThickness);
+        setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
+                                s.barLayout == BarLayout::SegmentedRing ? L"segmentedRing" :
+                                s.barLayout == BarLayout::ConcentricRings ? L"concentricRings" :
+                                s.barLayout == BarLayout::LogoBars ? L"logoBars" :
+                                s.barLayout == BarLayout::LogoHeadline ? L"logoHeadline" :
+                                                                         L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setBool(L"showPaceTicks", s.showPaceTicks);
         setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
@@ -201,6 +225,11 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 AccountConfig a;
                 a.provider = GetStr(obj, L"provider");
                 a.label = GetStr(obj, L"label");
+                std::wstring tileIdentity = GetStr(obj, L"tileIdentity");
+                a.tileIdentity = tileIdentity == L"logo" ? TileIdentity::Logo :
+                                 tileIdentity == L"text" ? TileIdentity::Text :
+                                                           TileIdentity::LogoBadge;
+                a.tileText = GetStr(obj, L"tileText");
                 auto getBoolDefault = [&](PCWSTR name, bool defaultValue) {
                     if (!obj.HasKey(name)) return defaultValue;
                     auto v = obj.GetNamedValue(name);
@@ -240,8 +269,21 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
-        s.barLayout = GetStr(root, L"barLayout") == L"vertical" ?
-                          BarLayout::Vertical : BarLayout::Stacked;
+        // Clamp before the int conversion; 0 (non-positive or non-finite) restores the default
+        // during normalization.
+        double ringSize = GetNum(root, L"ringSize", 32);
+        double ringThickness = GetNum(root, L"ringThickness", 3);
+        s.ringSize = std::isfinite(ringSize) ?
+                         (int)std::clamp(ringSize, 0.0, (double)kRingSizeMax) : 0;
+        s.ringThickness = std::isfinite(ringThickness) ?
+                              (int)std::clamp(ringThickness, 0.0, (double)kRingThicknessMax) : 0;
+        std::wstring barLayout = GetStr(root, L"barLayout");
+        s.barLayout = barLayout == L"vertical" ? BarLayout::Vertical :
+                      barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :
+                      barLayout == L"concentricRings" ? BarLayout::ConcentricRings :
+                      barLayout == L"logoBars" ? BarLayout::LogoBars :
+                      barLayout == L"logoHeadline" ? BarLayout::LogoHeadline :
+                                                     BarLayout::Stacked;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);

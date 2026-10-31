@@ -8,6 +8,7 @@ static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
 
 static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned);
+static void OnTilePointerExited(QuotaUiInstance& state, int index);
 
 // Taskbars whose UI this thread owns; their flyout state may be used directly. Pointers stay
 // valid while this thread doesn't erase states.
@@ -30,7 +31,8 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
         if (fo.countdownTimer) fo.countdownTimer.Stop();
     } catch (...) {}
     try {
-        if (fo.pollTimer) fo.pollTimer.Stop();
+        // A hovered tile keeps the poll running to catch a missed pointer exit.
+        if (fo.pollTimer && !IsTileHovered(state)) fo.pollTimer.Stop();
     } catch (...) {}
     fo.pointerOutsideTick = 0;
     if (popup.flyout && popup.closedToken) {
@@ -44,7 +46,9 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
     if (popup.flyout) {
         try { popup.flyout.Hide(); } catch (...) {}
     }
+    int closedIndex = popup.accountIndex;
     popup = {};
+    UpdateTileHighlight(state, closedIndex);
 }
 
 static void EnsureFlyoutTimers(QuotaUiInstance& state) {
@@ -95,7 +99,23 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                     FlyoutUi& fo = uiState->flyout;
                     FlyoutPopup& popup = fo.popup;
                     if (!popup.flyout) {
-                        if (fo.pollTimer) fo.pollTimer.Stop();
+                        // Without a popup it runs only while a tile is hovered: XAML can miss
+                        // the pointer leaving the taskbar for another window, so the hover ends
+                        // once the real cursor is off this taskbar. Exits within the taskbar are
+                        // left to XAML's own events.
+                        if (IsTileHovered(*uiState)) {
+                            int index = fo.hoverIndex;
+                            POINT pt{};
+                            RECT window{};
+                            bool inside = GetCursorPos(&pt) &&
+                                          GetWindowRect(uiState->hWnd, &window) &&
+                                          PtInRect(&window, pt);
+                            if (!inside) {
+                                OnTilePointerExited(*uiState, index);
+                                UpdateTileHighlight(*uiState, index);
+                            }
+                        }
+                        if (fo.pollTimer && !IsTileHovered(*uiState)) fo.pollTimer.Stop();
                         return;
                     }
 
@@ -261,6 +281,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
                     CloseAccountFlyout(*uiState);
                 } catch (...) {}
             });
+        UpdateTileHighlight(state, index);
         UpdateQuotaUi(state);
         if (!popup.flyout) return;
 
@@ -340,6 +361,11 @@ static void OnTilePointerEntered(QuotaUiInstance& state, int index, bool showDet
     FlyoutUi& fo = state.flyout;
     const FlyoutPopup& popup = fo.popup;
     fo.hoverIndex = index;
+    // Watches for the pointer leaving a hovered tile without a PointerExited.
+    if (IsTileHovered(state)) {
+        EnsureFlyoutTimers(state);
+        if (!fo.pollTimer.IsEnabled()) fo.pollTimer.Start();
+    }
     if (!showDetailsOnHover || fo.hoverSuppressedIndex == index ||
         (popup.flyout && (popup.pinned || popup.accountIndex == index))) {
         if (fo.dwellTimer) fo.dwellTimer.Stop();

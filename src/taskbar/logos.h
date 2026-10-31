@@ -1,5 +1,5 @@
 // Provider logo path data from Simple Icons (CC0-1.0), 24x24 viewBox, filled with the text
-// color.
+// color, and the element that draws it.
 
 // openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
 static constexpr PCWSTR kOpenAiLogoPath =
@@ -51,3 +51,22 @@ static constexpr PCWSTR kGeminiLogoPath =
     L".49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-."
     L"96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93"
     L" 3.81 2.55t2.55 3.81";
+
+// The provider's logo in a 24x24 DIP box: a Path filled with `fill`, or with a null `fill` a
+// PathIcon, which inherits the surrounding text color like a TextBlock. Throws if it fails to load.
+static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
+    PCWSTR data = provider == L"openai" ? kOpenAiLogoPath :
+                  provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";
+    xaml += L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
+    xaml += data;
+    xaml += L"\"/>";
+    auto logo = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(xaml))
+                    .as<FrameworkElement>();
+    if (fill) logo.as<wuxs::Path>().Fill(fill);
+    Grid box;
+    box.Width(24);
+    box.Height(24);
+    box.Children().Append(logo);
+    return box;
+}

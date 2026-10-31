@@ -133,6 +133,7 @@ Have a suggestion or found a bug?
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -164,9 +165,19 @@ enum QuotaBarIndex {
     kQuotaBarCount,
 };
 
+// How a tile layout (ring, concentric, logo + bars, headline) marks which account it shows.
+// Stacked and vertical bars use the label and label position instead.
+enum class TileIdentity {
+    LogoBadge,  // Provider logo, plus a number badge when several accounts share the provider.
+    Logo,
+    Text,  // tileText, or the label when tileText is empty.
+};
+
 struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
+    TileIdentity tileIdentity = TileIdentity::LogoBadge;
+    std::wstring tileText;  // Optional short text for TileIdentity::Text.
     std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
     // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
     // used-percent bar in the extra-usage slot. 0 disables the bar.
@@ -187,7 +198,16 @@ enum class TaskbarMonitorMode {
 enum class BarLayout {
     Stacked,
     Vertical,
+    SegmentedRing,
+    ConcentricRings,
+    LogoBars,
+    LogoHeadline,
 };
+
+static constexpr int kRingSizeMin = 24;
+static constexpr int kRingSizeMax = 40;
+static constexpr int kRingThicknessMin = 1;
+static constexpr int kRingThicknessMax = 6;
 
 enum class BarMode {
     Used,
@@ -238,6 +258,10 @@ struct Settings {
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;
+    // Segmented and concentric ring diameter and stroke, in DIPs; rendering shrinks the stroke
+    // and gaps further when the meters wouldn't fit around the identity.
+    int ringSize = 32;
+    int ringThickness = 3;
     int labelFontSize = 11;
     int percentFontSize = 9;
     int accountMargin = 3;
@@ -355,6 +379,19 @@ static ULONGLONG g_historyContinuityGeneration = 0;  // Protected by g_settingsM
 // src/taskbar/ui-types.h
 // Per-taskbar XAML UI instances and the registry that owns them.
 
+// Inputs of a tile's meter shapes; any change regenerates them.
+struct TileShapeKey {
+    int layout = -1;
+    int barMask = -1;
+    double size = -1;
+    double stroke = -1;
+    double gap = -1;
+    int light = -1;
+    int paceColor = -1;  // -1 without pace markers.
+
+    bool operator==(const TileShapeKey&) const = default;
+};
+
 struct AppliedState {
     std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1};
     std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
@@ -368,6 +405,15 @@ struct AppliedState {
     double columnOpacity = -1;
     int barMask = -1;
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
+
+    // Tile layouts. Per slot, fillPx and pacePx hold the fill and pace position in thousandths of
+    // the meter.
+    TileShapeKey tileShape;
+    double identityOpacity = -1;
+    int tileWarn = -1;
+    int highlight = -1;  // 0 none, 1 hover, 2 open flyout.
+    std::wstring headline;
+    uint32_t headlineColor = 0;
 };
 
 struct PointerHandlers {
@@ -384,7 +430,34 @@ struct MenuItemClickHandler {
     winrt::event_token token{};
 };
 
+// A tile layout's elements (rings, logo + mini bars, logo + headline). Mini bar and headline
+// segment fills and ticks use AccountUiRefs::fills and paceTicks.
+struct TileUiRefs {
+    BarLayout layout = BarLayout::Stacked;
+    // Rings: the ring area, holding the meters with the identity on top.
+    Grid face{nullptr};
+    // Meter shapes, regenerated whenever their TileShapeKey changes.
+    Panel meters{nullptr};
+    // Logo (with an optional number badge) or text, plus the stale-warning mark.
+    Grid identity{nullptr};
+    FrameworkElement logo{nullptr};
+    TextBlock text{nullptr};
+    double textWidthPerPt = 0;  // Text width per DIP of font size.
+    Border badge{nullptr};
+    TextBlock badgeText{nullptr};
+    TextBlock warn{nullptr};
+    // Logo + headline: the most-used quota's number and window key.
+    TextBlock headline{nullptr};
+    TextBlock headlineKey{nullptr};
+    // Ring fills and pace dots per quota slot.
+    std::array<wuxs::Path, kQuotaBarCount> arcs{
+        wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
+    std::array<wuxs::Path, kQuotaBarCount> dots{
+        wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
+};
+
 struct AccountUiRefs {
+    // Tile root in every layout: hit target and flyout anchor.
     StackPanel column{nullptr};
     FrameworkElement barArea{nullptr};
     // Captured at build time so the flyout matches the tile, including visual-test accounts.
@@ -403,6 +476,7 @@ struct AccountUiRefs {
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
+    TileUiRefs tile;
 };
 
 // Account details flyout. Brushes and styles come from LoadFlyoutTheme and are shared by the
@@ -532,6 +606,9 @@ struct QuotaUiInstance {
     bool windowSubclassed = false;
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
+    BarLayout buildBarLayout = BarLayout::Stacked;
+    double tileHeight = 0;
+    bool tileLightTheme = false;  // Light taskbar at the last tile update; picks highlight colors.
     Grid quotaGrid{nullptr};
     Panel injectionParent{nullptr};
     ColumnDefinition quotaColumnDefinition{nullptr};
@@ -4403,6 +4480,8 @@ static void EraseUiState(HWND hWnd) {
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
+    // Without an account index, closing leaves the tiles' highlight untouched.
+    state.flyout.popup.accountIndex = -1;
     CloseAccountFlyout(state);
     auto releaseTimer = [](DispatcherTimer& timer, winrt::event_token& token) {
         try {
@@ -4803,7 +4882,7 @@ static FlyoutTheme LoadFlyoutTheme() {
 
 // src/taskbar/logos.h
 // Provider logo path data from Simple Icons (CC0-1.0), 24x24 viewBox, filled with the text
-// color.
+// color, and the element that draws it.
 
 // openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
 static constexpr PCWSTR kOpenAiLogoPath =
@@ -4855,6 +4934,720 @@ static constexpr PCWSTR kGeminiLogoPath =
     L".49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-."
     L"96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93"
     L" 3.81 2.55t2.55 3.81";
+
+// The provider's logo in a 24x24 DIP box: a Path filled with `fill`, or with a null `fill` a
+// PathIcon, which inherits the surrounding text color like a TextBlock. Throws if it fails to load.
+static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
+    PCWSTR data = provider == L"openai" ? kOpenAiLogoPath :
+                  provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";
+    xaml += L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
+    xaml += data;
+    xaml += L"\"/>";
+    auto logo = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(xaml))
+                    .as<FrameworkElement>();
+    if (fill) logo.as<wuxs::Path>().Fill(fill);
+    Grid box;
+    box.Width(24);
+    box.Height(24);
+    box.Children().Append(logo);
+    return box;
+}
+
+// src/taskbar/tiles.h
+// Tile layouts: segmented ring, concentric rings, logo + mini bars and logo + headline %. A tile
+// shows the account's identity (provider logo, optionally with a number badge, or short text) and
+// its tile quotas: the meters the bar layouts show, in slot order. BuildAccountTile creates a tile;
+// UpdateAccountTile regenerates its meter shapes whenever their inputs change, then applies values
+// in place.
+
+static constexpr double kTileHeight = 40;  // Nominal; shorter taskbars get shorter tiles.
+static constexpr double kMiniBarLength = 38;
+static constexpr double kMiniBarThickness = 4;
+static constexpr double kMiniBarGap = 3;
+static constexpr double kHeadlineSegmentLength = 9;
+static constexpr double kHeadlineSegmentThickness = 3;
+// Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
+static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
+
+static bool IsTileLayout(BarLayout layout) {
+    return layout != BarLayout::Stacked && layout != BarLayout::Vertical;
+}
+
+// Ring geometry. The centre keeps at least kTileRingHoleMin of radius so the identity always
+// fits; strokes and gaps shrink instead, down to kTileRingStrokeMin.
+static constexpr double kTileRingHoleMin = 7.0;
+static constexpr double kTileRingStrokeMin = 0.75;
+// Visible space between neighbouring segmented arcs, after their round caps.
+static constexpr double kTileArcGapMin = 1.0;
+
+struct TileArc {
+    double start;  // Degrees: 0 = right, positive = clockwise.
+    double sweep;
+};
+
+// Segmented ring arcs by tile quota count. Concentric rings each fill clockwise from the top.
+static constexpr TileArc kSegmentedArcs[kQuotaBarCount][kQuotaBarCount] = {
+    {{270, 360}},
+    {{195, 150}, {165, -150}},
+    {{165, 90}, {135, -90}, {285, 90}},
+    {{190, 70}, {280, 70}, {10, 70}, {100, 70}},
+};
+static constexpr TileArc kConcentricArc{270, 360};
+
+struct TileRingGeometry {
+    double size = 0;         // Ring diameter.
+    double stroke = 0;       // Effective stroke of each arc or ring.
+    double gap = 0;          // Concentric: space between rings. Segmented: space between arcs.
+    double radius = 0;       // Centreline radius of the outermost arc or ring.
+    double hole = 0;         // Free centre radius, inside the innermost stroke.
+    double dot = 0;          // Pace dot radius; its outline straddles it.
+    double logo = 0;         // Logo side without a badge.
+    double badge = 0;        // Badge height.
+    double badgeWidth = 0;
+    double badgeFont = 0;
+    double badgeLeft = 0;    // From the ring area's top-left corner.
+    double badgeTop = 0;
+};
+
+// `badgeChars`: length of the badge text, 0 without a badge.
+static TileRingGeometry TileRingLayout(bool concentric, double size, int thickness, int count,
+                                       int badgeChars) {
+    TileRingGeometry g;
+    g.size = size;
+    double edge = size / 2 - 0.5;  // Outer edge of the outermost stroke.
+    double band = std::max(edge - kTileRingHoleMin, kTileRingStrokeMin);
+    double stroke = std::clamp<double>(thickness, kTileRingStrokeMin, band);
+    double used = 0;
+    if (count > 0 && concentric) {
+        // Nominal strokes and gaps thin out as rings are added, then shrink to keep the hole.
+        static constexpr double kStrokeShare[kQuotaBarCount] = {1.0, 0.87, 0.73, 0.63};
+        stroke = std::max(thickness * kStrokeShare[count - 1], kTileRingStrokeMin);
+        g.gap = count > 1 ? std::clamp(thickness * 0.43, 0.8, 2.0) : 0.0;
+        double need = count * stroke + (count - 1) * g.gap;
+        if (need > band) {
+            stroke = std::max(stroke * band / need, kTileRingStrokeMin);
+            g.gap = count > 1 ? std::max((band - count * stroke) / (count - 1), 0.0) : 0.0;
+        }
+        used = count * stroke + (count - 1) * g.gap;
+    } else if (count > 0) {
+        // Round caps reach into the angular gaps between arcs.
+        double gapAngle = (count == 1 ? 0.0 : count == 4 ? 20.0 : 30.0) * std::numbers::pi / 180;
+        if (gapAngle > 0) {
+            stroke = std::max(std::min(stroke, (gapAngle * edge - kTileArcGapMin) /
+                                                   (1 + gapAngle / 2)),
+                              kTileRingStrokeMin);
+            g.gap = gapAngle * (edge - stroke / 2) - stroke;
+        }
+        used = stroke;
+    }
+    g.stroke = stroke;
+    g.radius = edge - stroke / 2;
+    g.hole = edge - used;
+    g.dot = std::clamp(stroke * 0.57, 1.15, 1.9);
+    g.logo = std::min(size * 0.44, 2 * (g.hole - 1.2));
+    // Badge: a circle, or a pill for two characters, centred just inside the ring's lower-right
+    // edge and kept inside the ring area.
+    g.badge = std::clamp(size * 0.34, 10.0, 13.0);
+    g.badgeFont = g.badge * 0.68;
+    g.badgeWidth = std::max(g.badge, badgeChars * g.badgeFont * 0.6 + 6.4);
+    double badgeCenter = size / 2 + (edge + 1 - g.badge / 2) / std::numbers::sqrt2;
+    g.badgeLeft = std::min(badgeCenter - g.badgeWidth / 2, size - g.badgeWidth);
+    g.badgeTop = std::min(badgeCenter - g.badge / 2, size - g.badge);
+    return g;
+}
+
+static winrt::Windows::Foundation::Point TileRingPoint(double center, double radius,
+                                                       double degrees) {
+    double radians = degrees * std::numbers::pi / 180;
+    return {(float)(center + radius * std::cos(radians)),
+            (float)(center + radius * std::sin(radians))};
+}
+
+// Open arc in two segments, so a full circle renders too.
+static Geometry TileArcGeometry(double center, double radius, double start, double sweep) {
+    PathFigure figure;
+    figure.StartPoint(TileRingPoint(center, radius, start));
+    figure.IsClosed(false);
+    figure.IsFilled(false);
+    for (int half = 1; half <= 2; half++) {
+        ArcSegment arc;
+        arc.Point(TileRingPoint(center, radius, start + sweep * half / 2));
+        arc.Size({(float)radius, (float)radius});
+        arc.SweepDirection(sweep >= 0 ? SweepDirection::Clockwise :
+                                        SweepDirection::Counterclockwise);
+        figure.Segments().Append(arc);
+    }
+    PathGeometry geometry;
+    geometry.Figures().Append(figure);
+    return geometry;
+}
+
+// Tile chrome for the taskbar theme. Logo and text inherit the taskbar's text color instead.
+struct TilePalette {
+    winrt::Windows::UI::Color track;
+    winrt::Windows::UI::Color hover;
+    winrt::Windows::UI::Color open;  // Tile whose flyout is open.
+    winrt::Windows::UI::Color badge;
+    winrt::Windows::UI::Color badgeOutline;
+};
+
+static TilePalette TilePaletteFor(bool light) {
+    if (light) {
+        return {{0x24, 0, 0, 0}, {0x0A, 0, 0, 0}, {0xB3, 0xFF, 0xFF, 0xFF},
+                {0xFF, 0xD8, 0xDB, 0xE2}, {0xFF, 0xEE, 0xF0, 0xF4}};
+    }
+    return {{0x2B, 0xFF, 0xFF, 0xFF}, {0x0F, 0xFF, 0xFF, 0xFF}, {0x1A, 0xFF, 0xFF, 0xFF},
+            {0xFF, 0x3A, 0x3D, 0x44}, {0xFF, 0x1F, 0x21, 0x26}};
+}
+
+// Whether the mouse is over a tile of a tile layout.
+static bool IsTileHovered(QuotaUiInstance const& state) {
+    int index = state.flyout.hoverIndex;
+    return index >= 0 && index < (int)state.accountRefs.size() &&
+           state.accountRefs[index].tile.identity;
+}
+
+// Hover and open-flyout background of a tile; bar layouts have none.
+static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
+    if (g_unloading || index < 0 || index >= (int)state.accountRefs.size()) return;
+    AccountUiRefs const& ui = state.accountRefs[index];
+    if (!ui.tile.identity || !ui.column) return;
+    FlyoutUi const& fo = state.flyout;
+    int level = 0;
+    if (fo.popup.flyout && fo.popup.accountIndex == index) {
+        level = 2;
+    } else if (fo.hoverIndex == index) {
+        // XAML can miss the pointer leaving the taskbar: hover only while it is over it.
+        POINT pt{};
+        RECT rect{};
+        if (GetCursorPos(&pt) && GetWindowRect(state.hWnd, &rect) && PtInRect(&rect, pt)) level = 1;
+    }
+    int* applied = index < (int)state.applied.size() ? &state.applied[index].highlight : nullptr;
+    if (applied && *applied == level) return;
+    TilePalette palette = TilePaletteFor(state.tileLightTheme);
+    try {
+        ui.column.Background(SolidColorBrush(level == 2 ? palette.open :
+                                             level == 1 ? palette.hover :
+                                                          winrt::Windows::UI::Color{0, 0, 0, 0}));
+        if (applied) *applied = level;
+    } catch (...) {}
+}
+
+// Text width per DIP of font size, measured out of the tree; estimated if measuring fails.
+static double TileTextWidthPerPt(TextBlock const& text) {
+    try {
+        text.Measure({INFINITY, INFINITY});
+        double width = text.DesiredSize().Width;
+        if (width > 0 && text.FontSize() > 0) return width / text.FontSize();
+        return std::max<size_t>(text.Text().size(), 1) * 0.62;
+    } catch (...) {
+        return 2.5;
+    }
+}
+
+// Builds account `index`'s tile: its root (hit target and flyout anchor), identity and meter
+// containers. UpdateAccountTile sizes and fills the meters.
+static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, size_t index,
+                                   BarLayout layout, double height, AccountUiRefs& refs) {
+    AccountConfig const& account = accounts[index];
+    TileUiRefs& tile = refs.tile;
+    tile.layout = layout;
+    bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
+
+    StackPanel column;
+    column.Orientation(Orientation::Horizontal);
+    column.VerticalAlignment(VerticalAlignment::Center);
+    column.Height(height);
+    column.CornerRadius({4, 4, 4, 4});
+    column.Padding(ring ? Thickness{4, 0, 4, 0} :
+                   layout == BarLayout::LogoBars ? Thickness{7, 0, 7, 0} :
+                                                   Thickness{7, 0, 8, 0});
+    column.Spacing(6);
+
+    // Identity: the provider logo, with a number badge when several configured accounts share
+    // the provider, or text. Rings resize it to their hole.
+    Grid identity;
+    identity.IsHitTestVisible(false);
+    if (!ring) identity.VerticalAlignment(VerticalAlignment::Center);
+    tile.identity = identity;
+    if (account.tileIdentity != TileIdentity::Text) {
+        try {
+            Viewbox logo;
+            double side = layout == BarLayout::LogoHeadline ? 16 : 15;
+            logo.Width(side);
+            logo.Height(side);
+            logo.HorizontalAlignment(HorizontalAlignment::Center);
+            logo.VerticalAlignment(VerticalAlignment::Center);
+            logo.Child(LoadProviderLogo(account.provider, nullptr));
+            identity.Children().Append(logo);
+            tile.logo = logo;
+        } catch (...) {
+            Wh_Log(L"Tile logo failed to load; showing text");
+        }
+    }
+    bool sharedProvider = std::count_if(accounts.begin(), accounts.end(),
+        [&](AccountConfig const& other) { return other.provider == account.provider; }) > 1;
+    if (tile.logo && account.tileIdentity == TileIdentity::LogoBadge && sharedProvider) {
+        // The label's trailing digits (at most two), else its first letter, else its first
+        // non-space character.
+        std::wstring const& label = account.label;
+        size_t digits = label.size();
+        while (digits > 0 && iswdigit(label[digits - 1])) digits--;
+        auto letter = std::find_if(label.begin(), label.end(),
+                                   [](wchar_t ch) { return iswalpha(ch); });
+        if (letter == label.end()) {
+            letter = std::find_if(label.begin(), label.end(),
+                                  [](wchar_t ch) { return !iswspace(ch); });
+        }
+        std::wstring badgeText;
+        if (digits < label.size()) {
+            badgeText = label.substr(label.size() - std::min<size_t>(label.size() - digits, 2));
+        } else if (letter != label.end()) {
+            badgeText.assign(1, (wchar_t)towupper(*letter));
+        } else {
+            badgeText = std::to_wstring(index + 1);
+        }
+        tile.badgeText = TextBlock{};
+        tile.badgeText.Text(badgeText);
+        tile.badgeText.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
+        tile.badgeText.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
+        tile.badgeText.FontSize(6.8);
+        tile.badgeText.TextLineBounds(TextLineBounds::Tight);
+        tile.badgeText.HorizontalAlignment(HorizontalAlignment::Center);
+        tile.badgeText.VerticalAlignment(VerticalAlignment::Center);
+        tile.badge = Border{};
+        tile.badge.Height(10);
+        tile.badge.MinWidth(10);
+        tile.badge.Padding({1.5, 0, 1.5, 0});
+        tile.badge.CornerRadius({5, 5, 5, 5});
+        tile.badge.BorderThickness({1.2, 1.2, 1.2, 1.2});
+        tile.badge.Child(tile.badgeText);
+        if (ring) {
+            tile.badge.HorizontalAlignment(HorizontalAlignment::Left);
+            tile.badge.VerticalAlignment(VerticalAlignment::Top);
+            tile.logo.Margin({0, 0, 2, 2});  // Shifts the logo up-left, away from the badge.
+        } else {
+            // Centred on the logo's lower-right corner.
+            tile.badge.HorizontalAlignment(HorizontalAlignment::Right);
+            tile.badge.VerticalAlignment(VerticalAlignment::Bottom);
+            tile.badge.Margin({0, 0, -4, -4});
+        }
+        identity.Children().Append(tile.badge);
+    }
+    if (!tile.logo) {
+        std::wstring text = account.tileText;
+        if (text.empty()) {
+            std::copy_if(account.label.begin(), account.label.end(), std::back_inserter(text),
+                         [](wchar_t ch) { return !iswspace(ch); });
+        }
+        if (text.empty()) text = std::to_wstring(index + 1);
+        tile.text = TextBlock{};
+        tile.text.Text(text);
+        tile.text.FontFamily(displayFont);
+        tile.text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        tile.text.FontSize(10);
+        tile.text.TextWrapping(TextWrapping::NoWrap);
+        tile.text.TextTrimming(TextTrimming::Clip);
+        tile.text.TextLineBounds(TextLineBounds::Tight);
+        tile.text.HorizontalAlignment(HorizontalAlignment::Center);
+        tile.text.VerticalAlignment(VerticalAlignment::Center);
+        tile.textWidthPerPt = TileTextWidthPerPt(tile.text);
+        if (!ring) {
+            // Shrinks to fit 26 DIPs, then clips.
+            tile.text.FontSize(std::clamp(26 / tile.textWidthPerPt, 8.0, 12.0));
+            tile.text.MaxWidth(26);
+        }
+        identity.Children().Append(tile.text);
+    }
+    // Stale-warning mark, like the bars' "!" after the label: at the logo or text's top-right
+    // corner; UpdateAccountTile moves it to the tile's top-right corner in rings.
+    tile.warn = TextBlock{};
+    tile.warn.Text(L"!");
+    tile.warn.FontSize(10);
+    tile.warn.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
+    tile.warn.TextLineBounds(TextLineBounds::Tight);
+    tile.warn.HorizontalAlignment(HorizontalAlignment::Right);
+    tile.warn.VerticalAlignment(VerticalAlignment::Top);
+    tile.warn.Margin({0, -3, -4, 0});
+    tile.warn.Visibility(Visibility::Collapsed);
+    identity.Children().Append(tile.warn);
+
+    if (ring) {
+        Grid face;
+        face.IsHitTestVisible(false);
+        face.VerticalAlignment(VerticalAlignment::Center);
+        Grid meters;
+        face.Children().Append(meters);
+        face.Children().Append(identity);
+        tile.face = face;
+        tile.meters = meters;
+        column.Children().Append(face);
+        return column;
+    }
+
+    column.Children().Append(identity);
+    StackPanel meters;
+    meters.IsHitTestVisible(false);
+    meters.VerticalAlignment(VerticalAlignment::Center);
+    tile.meters = meters;
+    if (layout == BarLayout::LogoBars) {
+        meters.Spacing(kMiniBarGap);
+        column.Children().Append(meters);
+        return column;
+    }
+
+    // Headline: the most-used quota's number and window key over per-quota segments.
+    StackPanel headline;
+    headline.IsHitTestVisible(false);
+    headline.VerticalAlignment(VerticalAlignment::Center);
+    headline.Spacing(3);
+    StackPanel numberRow;
+    numberRow.Orientation(Orientation::Horizontal);
+    tile.headline = TextBlock{};
+    tile.headline.FontFamily(displayFont);
+    tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    tile.headline.FontSize(14);
+    tile.headline.TextLineBounds(TextLineBounds::Tight);
+    tile.headline.VerticalAlignment(VerticalAlignment::Bottom);
+    // Reserves "100%" so the tile keeps its width as values change.
+    tile.headline.Text(L"100%");
+    tile.headline.MinWidth(std::ceil(TileTextWidthPerPt(tile.headline) * 14));
+    tile.headline.Text(L"");
+    numberRow.Children().Append(tile.headline);
+    tile.headlineKey = TextBlock{};
+    tile.headlineKey.FontSize(9);
+    tile.headlineKey.Opacity(0.6);
+    tile.headlineKey.TextLineBounds(TextLineBounds::Tight);
+    tile.headlineKey.VerticalAlignment(VerticalAlignment::Bottom);
+    tile.headlineKey.Margin({3, 0, 0, 0});
+    numberRow.Children().Append(tile.headlineKey);
+    headline.Children().Append(numberRow);
+    meters.Orientation(Orientation::Horizontal);
+    meters.HorizontalAlignment(HorizontalAlignment::Left);
+    meters.Spacing(2);
+    headline.Children().Append(meters);
+    column.Children().Append(headline);
+    return column;
+}
+
+// Display settings shared by every tile in one update.
+struct TileDisplay {
+    ULONGLONG now = 0;
+    BarMode barMode = BarMode::Used;
+    int yellowThreshold = 0;
+    int orangeThreshold = 0;
+    int redThreshold = 0;
+    bool colorblindMode = false;
+    bool showPaceTicks = false;
+    COLORREF paceTickColor = 0;
+    int ringSize = 0;
+    int ringThickness = 0;
+    bool light = false;
+};
+
+static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountConfig const& account,
+                              AccountData const& d, int barMask, bool stale, bool warn,
+                              TileDisplay const& display) {
+    AccountUiRefs& ui = state.accountRefs[index];
+    AppliedState& ap = state.applied[index];
+    TileUiRefs& tile = ui.tile;
+    if (!tile.identity || !tile.meters) return;
+    BarLayout layout = tile.layout;
+    bool concentric = layout == BarLayout::ConcentricRings;
+    bool ring = concentric || layout == BarLayout::SegmentedRing;
+    bool miniBars = layout == BarLayout::LogoBars;
+    const std::array<const WindowUsage*, kQuotaBarCount> usage = {
+        &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage};
+    int count = 0;
+    for (int w = 0; w < kQuotaBarCount; w++) {
+        if (barMask & (1 << w)) count++;
+    }
+
+    // The geometry guarantees hold for the settings' ranges.
+    TileRingGeometry geometry;
+    if (ring) {
+        int size = std::clamp(display.ringSize, kRingSizeMin, kRingSizeMax);
+        geometry = TileRingLayout(
+            concentric, std::min<double>(size, state.tileHeight),
+            std::clamp(display.ringThickness, kRingThicknessMin, kRingThicknessMax), count,
+            tile.badge ? (int)tile.badgeText.Text().size() : 0);
+    }
+    double center = geometry.size / 2;
+    // Arc and centreline radius of the tile quota at `position`.
+    auto arcAt = [&](int position) {
+        TileArc arc = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
+        double radius = geometry.radius -
+                        (concentric ? position * (geometry.stroke + geometry.gap) : 0.0);
+        return std::pair{arc, radius};
+    };
+
+    // Meter shapes: regenerated, and the identity resized, whenever an input changes.
+    TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
+                       display.light ? 1 : 0,
+                       display.showPaceTicks ? (int)display.paceTickColor : -1};
+    if (shape != ap.tileShape) {
+        TilePalette palette = TilePaletteFor(display.light);
+        SolidColorBrush track(palette.track);
+        SolidColorBrush paceCore(winrt::Windows::UI::Color{
+            0xFF, GetRValue(display.paceTickColor), GetGValue(display.paceTickColor),
+            GetBValue(display.paceTickColor)});
+        SolidColorBrush paceOutline(winrt::Windows::UI::Color{0x8C, 0, 0, 0});
+        auto meters = tile.meters.Children();
+        meters.Clear();
+        ui.fills.fill(nullptr);
+        ui.paceTicks.fill(nullptr);
+        tile.arcs.fill(nullptr);
+        tile.dots.fill(nullptr);
+        tile.meters.Visibility(count ? Visibility::Visible : Visibility::Collapsed);
+
+        if (ring) {
+            double size = geometry.size;
+            tile.face.Width(size);
+            tile.face.Height(size);
+            auto ringShape = [&]() {
+                wuxs::Path path;
+                path.Width(size);
+                path.Height(size);
+                return path;
+            };
+            auto arcShape = [&](Brush const& stroke) {
+                wuxs::Path path = ringShape();
+                path.Stroke(stroke);
+                path.StrokeThickness(geometry.stroke);
+                path.StrokeStartLineCap(PenLineCap::Round);
+                path.StrokeEndLineCap(PenLineCap::Round);
+                return path;
+            };
+            // Tracks, then fills, then pace dots on top.
+            int position = 0;
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                if (!(barMask & (1 << w))) continue;
+                auto [arc, radius] = arcAt(position++);
+                wuxs::Path trackArc = arcShape(track);
+                trackArc.Data(TileArcGeometry(center, radius, arc.start, arc.sweep));
+                meters.Append(trackArc);
+            }
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                if (!(barMask & (1 << w))) continue;
+                tile.arcs[w] = arcShape(track);
+                tile.arcs[w].Visibility(Visibility::Collapsed);
+                meters.Append(tile.arcs[w]);
+            }
+            for (int w = 0; display.showPaceTicks && w < kQuotaBarCount; w++) {
+                if (!(barMask & (1 << w))) continue;
+                tile.dots[w] = ringShape();
+                tile.dots[w].Fill(paceCore);
+                tile.dots[w].Stroke(paceOutline);
+                tile.dots[w].StrokeThickness(0.8);
+                tile.dots[w].Visibility(Visibility::Collapsed);
+                meters.Append(tile.dots[w]);
+            }
+
+            // Identity, sized to the hole.
+            if (tile.logo) {
+                double side = tile.badge ? geometry.logo - 1 : geometry.logo;
+                tile.logo.Width(side);
+                tile.logo.Height(side);
+            }
+            if (tile.badge) {
+                double radius = geometry.badge / 2;
+                tile.badge.Width(geometry.badgeWidth);
+                tile.badge.Height(geometry.badge);
+                tile.badge.CornerRadius({radius, radius, radius, radius});
+                tile.badge.Margin({geometry.badgeLeft, geometry.badgeTop, 0, 0});
+                tile.badgeText.FontSize(geometry.badgeFont);
+            }
+            if (tile.text) {
+                // The largest font, from min(12, size / 3) down to 7, whose text fits across the
+                // hole at half its cap height; clipped beyond that.
+                double radius = geometry.hole - 0.8;
+                auto chord = [&](double font) {
+                    double half = font * 0.36;
+                    return 2 * std::sqrt(std::max(radius * radius - half * half, 0.0));
+                };
+                double font = std::max(std::min(12.0, size * 0.33), 7.0);
+                while (font > 7 && tile.textWidthPerPt * font > chord(font)) font -= 0.25;
+                font = std::max(font, 7.0);
+                tile.text.FontSize(font);
+                tile.text.MaxWidth(chord(font));
+            }
+            // Into the tile's padding, clear of the ring.
+            tile.warn.Margin({0, 1 - (state.tileHeight - size) / 2, -3, 0});
+        } else {
+            double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
+            double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
+            CornerRadius round{thickness / 2, thickness / 2, thickness / 2, thickness / 2};
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                if (!(barMask & (1 << w))) continue;
+                Grid bar;
+                bar.Width(length);
+                bar.Height(thickness);
+                Border trackBar;
+                trackBar.CornerRadius(round);
+                trackBar.Background(track);
+                bar.Children().Append(trackBar);
+                Border fill;
+                fill.HorizontalAlignment(HorizontalAlignment::Left);
+                fill.CornerRadius(round);
+                fill.Width(0);
+                bar.Children().Append(fill);
+                ui.fills[w] = fill;
+                if (miniBars && display.showPaceTicks) {
+                    // Line tick with a dark outline, overhanging the bar by 2 DIPs.
+                    Border tick;
+                    tick.Width(3.5);
+                    tick.Height(thickness + 4);
+                    tick.Margin({0, -2, 0, -2});
+                    tick.HorizontalAlignment(HorizontalAlignment::Left);
+                    tick.CornerRadius({1.5, 1.5, 1.5, 1.5});
+                    tick.Background(paceOutline);
+                    Border core;
+                    core.Width(2);
+                    core.Height(thickness + 2.5);
+                    core.CornerRadius({1, 1, 1, 1});
+                    core.HorizontalAlignment(HorizontalAlignment::Center);
+                    core.VerticalAlignment(VerticalAlignment::Center);
+                    core.Background(paceCore);
+                    tick.Child(core);
+                    tick.Visibility(Visibility::Collapsed);
+                    bar.Children().Append(tick);
+                    ui.paceTicks[w] = tick;
+                }
+                meters.Append(bar);
+            }
+        }
+        if (tile.badge) {
+            tile.badge.Background(SolidColorBrush(palette.badge));
+            tile.badge.BorderBrush(SolidColorBrush(palette.badgeOutline));
+        }
+        ap.tileShape = shape;
+        ap.fillPx.fill(-1);
+        ap.fillColor.fill(0);
+        ap.pacePx.fill(-1);
+        ap.paceVisible.fill(-1);
+        ap.highlight = -1;
+    }
+
+    // Values. Fill follows the bar mode; color stays keyed to used % like the bars.
+    auto shownPct = [&](double pct) {
+        if (pct < 0) return 0.0;
+        return std::clamp(display.barMode == BarMode::Remaining ? 100.0 - pct : pct, 0.0, 100.0);
+    };
+    int position = 0;
+    for (int w = 0; w < kQuotaBarCount; w++) {
+        if (!(barMask & (1 << w))) continue;
+        const WindowUsage& wu = *usage[w];
+        auto [arc, radius] = ring ? arcAt(position) : std::pair{TileArc{}, 0.0};
+        position++;
+
+        double shown = shownPct(wu.pct);
+        double fill = shown / 100;
+        if (ring && shown > 0) fill = std::max(fill, 5.0 / std::abs(arc.sweep));
+        int fillUnits = shown > 0 ? std::max(1, (int)std::lround(fill * 1000)) : 0;
+        auto color = UsageColor(wu.pct, stale, display.yellowThreshold, display.orangeThreshold,
+                                display.redThreshold, display.colorblindMode);
+        uint32_t colorValue = ((uint32_t)color.A << 24) | ((uint32_t)color.R << 16) |
+                              ((uint32_t)color.G << 8) | color.B;
+        if (fillUnits != ap.fillPx[w] || colorValue != ap.fillColor[w]) {
+            SolidColorBrush brush(color);
+            if (ring && tile.arcs[w]) {
+                tile.arcs[w].Visibility(fillUnits ? Visibility::Visible : Visibility::Collapsed);
+                if (fillUnits) {
+                    tile.arcs[w].Data(
+                        TileArcGeometry(center, radius, arc.start, arc.sweep * fill));
+                }
+                tile.arcs[w].Stroke(brush);
+            } else if (!ring && ui.fills[w]) {
+                double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
+                double minimum = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
+                ui.fills[w].Width(fillUnits ? std::clamp(length * fill, minimum, length) : 0);
+                ui.fills[w].Background(brush);
+            }
+            ap.fillPx[w] = fillUnits;
+            ap.fillColor[w] = colorValue;
+        }
+
+        // Pace marker, under the same conditions as the bars' pace ticks.
+        FrameworkElement marker = ring ? tile.dots[w].try_as<FrameworkElement>() :
+                                         ui.paceTicks[w].try_as<FrameworkElement>();
+        bool paceVisible = marker && !stale && wu.pct >= 0 &&
+                           wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
+                           display.now >= wu.resetUnixMs - wu.windowDurationMs;
+        int paceUnits = 0;
+        if (paceVisible) {
+            double remainingFraction =
+                ((double)wu.resetUnixMs - (double)display.now) / wu.windowDurationMs;
+            double pace = display.barMode == BarMode::Remaining ? remainingFraction :
+                                                                  1.0 - remainingFraction;
+            paceUnits = (int)std::lround(std::clamp(pace, 0.0, 1.0) * 1000);
+        }
+        if ((paceVisible ? 1 : 0) != ap.paceVisible[w]) {
+            if (marker) {
+                marker.Visibility(paceVisible ? Visibility::Visible : Visibility::Collapsed);
+            }
+            ap.paceVisible[w] = paceVisible ? 1 : 0;
+        }
+        if (paceVisible && paceUnits != ap.pacePx[w]) {
+            double pace = paceUnits / 1000.0;
+            if (ring) {
+                EllipseGeometry dot;
+                dot.Center(TileRingPoint(center, radius, arc.start + arc.sweep * pace));
+                dot.RadiusX(geometry.dot);
+                dot.RadiusY(geometry.dot);
+                tile.dots[w].Data(dot);
+            } else {
+                ui.paceTicks[w].Margin({kMiniBarLength * pace - 1.75, -2, 0, -2});
+            }
+            ap.pacePx[w] = paceUnits;
+        }
+    }
+
+    // Headline: the most-used tile quota, shown per the bar mode in its usage color.
+    if (tile.headline) {
+        int top = -1;
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            if ((barMask & (1 << w)) && usage[w]->pct >= 0 &&
+                (top < 0 || usage[w]->pct > usage[top]->pct)) {
+                top = w;
+            }
+        }
+        std::wstring number = L"\u2013";
+        std::wstring key;
+        if (top >= 0) {
+            wchar_t text[16];
+            swprintf(text, ARRAYSIZE(text), L"%.0f%%", shownPct(usage[top]->pct));
+            number = text;
+            key = top == kExtraUsageBar && account.provider == L"openai" ? L"Cr" :
+                                                                           kQuotaKeys[top];
+        }
+        auto color = UsageColor(top >= 0 ? usage[top]->pct : -1, stale, display.yellowThreshold,
+                                display.orangeThreshold, display.redThreshold,
+                                display.colorblindMode);
+        uint32_t colorValue = ((uint32_t)color.A << 24) | ((uint32_t)color.R << 16) |
+                              ((uint32_t)color.G << 8) | color.B;
+        std::wstring headline = number + L"\n" + key;
+        if (headline != ap.headline || colorValue != ap.headlineColor) {
+            tile.headline.Text(number);
+            tile.headline.Foreground(SolidColorBrush(color));
+            tile.headlineKey.Text(key);
+            ap.headline = std::move(headline);
+            ap.headlineColor = colorValue;
+        }
+    }
+
+    // Identity dims while stale, like the bars' label; the warning mark replaces their "!".
+    double identityOpacity = stale ? 0.45 : 1.0;
+    if (identityOpacity != ap.identityOpacity) {
+        tile.identity.Opacity(identityOpacity);
+        ap.identityOpacity = identityOpacity;
+    }
+    if ((warn ? 1 : 0) != ap.tileWarn) {
+        tile.warn.Visibility(warn ? Visibility::Visible : Visibility::Collapsed);
+        ap.tileWarn = warn ? 1 : 0;
+    }
+}
 
 // src/taskbar/actions.h
 // Click and context-menu actions on the taskbar bars.
@@ -5068,26 +5861,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     header.Padding({16, 12, 16, 12});
     for (int column = 0; column < 5; column++) addColumn(header, column == 2 ? kStar : kAuto);
     try {
-        PCWSTR logoPath = provider == L"openai" ? kOpenAiLogoPath :
-                          provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
-        std::wstring pathXaml =
-            L"<Path xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
-        pathXaml += logoPath;
-        pathXaml += L"\"/>";
-        auto path = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(pathXaml))
-                        .as<wuxs::Path>();
-        path.Fill(theme.text);
-        Grid viewBox;
-        viewBox.Width(24);
-        viewBox.Height(24);
-        viewBox.Children().Append(path);
         Viewbox logo;
         logo.Width(20);
         logo.Height(20);
         logo.Margin({0, 0, 10, 0});
         logo.VerticalAlignment(VerticalAlignment::Center);
         logo.IsHitTestVisible(false);
-        logo.Child(viewBox);
+        logo.Child(LoadProviderLogo(provider, theme.text));
         header.Children().Append(logo);
     } catch (...) {
         Wh_Log(L"Flyout logo failed to load");
@@ -5589,6 +6369,7 @@ static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
 
 static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned);
+static void OnTilePointerExited(QuotaUiInstance& state, int index);
 
 // Taskbars whose UI this thread owns; their flyout state may be used directly. Pointers stay
 // valid while this thread doesn't erase states.
@@ -5611,7 +6392,8 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
         if (fo.countdownTimer) fo.countdownTimer.Stop();
     } catch (...) {}
     try {
-        if (fo.pollTimer) fo.pollTimer.Stop();
+        // A hovered tile keeps the poll running to catch a missed pointer exit.
+        if (fo.pollTimer && !IsTileHovered(state)) fo.pollTimer.Stop();
     } catch (...) {}
     fo.pointerOutsideTick = 0;
     if (popup.flyout && popup.closedToken) {
@@ -5625,7 +6407,9 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
     if (popup.flyout) {
         try { popup.flyout.Hide(); } catch (...) {}
     }
+    int closedIndex = popup.accountIndex;
     popup = {};
+    UpdateTileHighlight(state, closedIndex);
 }
 
 static void EnsureFlyoutTimers(QuotaUiInstance& state) {
@@ -5676,7 +6460,23 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                     FlyoutUi& fo = uiState->flyout;
                     FlyoutPopup& popup = fo.popup;
                     if (!popup.flyout) {
-                        if (fo.pollTimer) fo.pollTimer.Stop();
+                        // Without a popup it runs only while a tile is hovered: XAML can miss
+                        // the pointer leaving the taskbar for another window, so the hover ends
+                        // once the real cursor is off this taskbar. Exits within the taskbar are
+                        // left to XAML's own events.
+                        if (IsTileHovered(*uiState)) {
+                            int index = fo.hoverIndex;
+                            POINT pt{};
+                            RECT window{};
+                            bool inside = GetCursorPos(&pt) &&
+                                          GetWindowRect(uiState->hWnd, &window) &&
+                                          PtInRect(&window, pt);
+                            if (!inside) {
+                                OnTilePointerExited(*uiState, index);
+                                UpdateTileHighlight(*uiState, index);
+                            }
+                        }
+                        if (fo.pollTimer && !IsTileHovered(*uiState)) fo.pollTimer.Stop();
                         return;
                     }
 
@@ -5842,6 +6642,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
                     CloseAccountFlyout(*uiState);
                 } catch (...) {}
             });
+        UpdateTileHighlight(state, index);
         UpdateQuotaUi(state);
         if (!popup.flyout) return;
 
@@ -5921,6 +6722,11 @@ static void OnTilePointerEntered(QuotaUiInstance& state, int index, bool showDet
     FlyoutUi& fo = state.flyout;
     const FlyoutPopup& popup = fo.popup;
     fo.hoverIndex = index;
+    // Watches for the pointer leaving a hovered tile without a PointerExited.
+    if (IsTileHovered(state)) {
+        EnsureFlyoutTimers(state);
+        if (!fo.pollTimer.IsEnabled()) fo.pollTimer.Start();
+    }
     if (!showDetailsOnHover || fo.hoverSuppressedIndex == index ||
         (popup.flyout && (popup.pinned || popup.accountIndex == index))) {
         if (fo.dwellTimer) fo.dwellTimer.Stop();
@@ -5950,15 +6756,25 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
                                     int redThreshold, ULONGLONG now,
                                     std::vector<AccountConfig>* accounts,
                                     std::vector<AccountData>* data) {
-    static constexpr std::array<const wchar_t*, 4> kLabels = {
-        L"OAI", L"CC 1", L"CC 2", L"Go",
+    // One value per usage color band.
+    const double green = yellowThreshold / 2.0;
+    const double yellow = (yellowThreshold + orangeThreshold) / 2.0;
+    const double orange = (orangeThreshold + redThreshold) / 2.0;
+    const double red = (redThreshold + 100) / 2.0;
+    // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
+    // share a provider so tiles show number badges. A negative value is a quota not reported.
+    struct Sample {
+        PCWSTR provider;
+        PCWSTR label;
+        std::array<double, kQuotaBarCount> pct;
+        std::array<bool, kQuotaBarCount> showBars;
     };
-    const std::array<double, 4> percentages = {
-        yellowThreshold / 2.0,
-        50.0,
-        orangeThreshold + (redThreshold - orangeThreshold) / 2.0,
-        redThreshold + (100 - redThreshold) / 2.0,
-    };
+    const std::array<Sample, 4> samples = {{
+        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}},
+        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}},
+        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}},
+        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}},
+    }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
         kWeeklyWindowMs,
@@ -5968,20 +6784,23 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
     static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
         0.35, 0.5, 0.6, 0.8,
     };
+    static constexpr double kCreditsMax = 1000;
 
     accounts->clear();
-    accounts->reserve(percentages.size());
+    accounts->reserve(samples.size());
     if (data) {
         data->clear();
-        data->reserve(percentages.size());
+        data->reserve(samples.size());
     }
-    for (size_t i = 0; i < percentages.size(); i++) {
+    for (size_t i = 0; i < samples.size(); i++) {
+        const Sample& sample = samples[i];
         AccountConfig account;
-        account.provider = L"anthropic";
-        account.label = kLabels[i];
-        account.showBars.fill(false);
-        for (size_t w = 0; w <= i; w++) account.showBars[w] = true;
-        accounts->push_back(std::move(account));
+        account.provider = sample.provider;
+        account.label = sample.label;
+        account.showBars = sample.showBars;
+        bool openAi = account.provider == L"openai";
+        if (openAi) account.creditsMax = (int)kCreditsMax;
+        accounts->push_back(account);
 
         if (!data) continue;
         AccountData accountData;
@@ -5990,14 +6809,29 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
             &accountData.fableWeek, &accountData.extraUsage,
         };
         for (int w = 0; w < kQuotaBarCount; w++) {
-            usage[w]->pct = percentages[i];
+            if (sample.pct[w] < 0) continue;
+            usage[w]->pct = sample.pct[w];
             usage[w]->windowDurationMs = kDurations[w];
             usage[w]->resetUnixMs = now +
-                (ULONGLONG)std::lround(kDurations[w] * kRemainingFractions[w]);
+                (ULONGLONG)std::lround(kDurations[w] * (kRemainingFractions[w] - 0.05 * i));
+        }
+        if (openAi) {
+            // Credits are a balance against the user's max, without a window.
+            accountData.hasCredits = true;
+            accountData.creditsBalance = kCreditsMax * (1 - sample.pct[kExtraUsageBar] / 100);
+            ApplyCreditsMax(account, &accountData);
+        } else if (sample.pct[kExtraUsageBar] >= 0) {
+            accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
+            accountData.extraLimitAmount = 50.0;
+        }
+        if (account.provider == L"antigravity") {
+            // Claude/GPT pools appear only in the details flyout.
+            accountData.antigravityThirdParty5h = {
+                yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
+            accountData.antigravityThirdPartyWeek = {
+                green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
         }
         accountData.plan = L"Visual test";
-        accountData.extraUsedAmount = percentages[i] / 2.0;
-        accountData.extraLimitAmount = 50.0;
         accountData.lastSuccessMs = now;
         accountData.stale = false;
         data->push_back(std::move(accountData));
@@ -6044,6 +6878,21 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             redThreshold = g_settings.redThreshold;
         }
         state.buildVisualTestMode = visualTestMode;
+        state.buildBarLayout = barLayout;
+        bool tileLayout = IsTileLayout(barLayout);
+        // Tiles are kTileHeight tall, less on a taskbar too short for that.
+        state.tileHeight = kTileHeight;
+        if (tileLayout && state.injectionParent) {
+            try {
+                if (auto xamlRoot = state.injectionParent.XamlRoot()) {
+                    double taskbarHeight = xamlRoot.Size().Height;
+                    if (taskbarHeight > 0) {
+                        state.tileHeight =
+                            std::clamp(std::floor(taskbarHeight) - 8, 24.0, kTileHeight);
+                    }
+                }
+            } catch (...) {}
+        }
         if (visualTestMode) {
             BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
                                     NowUnixMs(), &accounts, nullptr);
@@ -6113,244 +6962,248 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
         wchar_t name[64];
         for (size_t i = 0; i < accounts.size(); i++) {
-            bool labelOnSide = labelPosition == LabelPosition::Left ||
-                               labelPosition == LabelPosition::Right;
-            bool labelBeforeBars = labelPosition == LabelPosition::Left ||
-                                   labelPosition == LabelPosition::Top;
-            StackPanel col;
-            col.Orientation(labelOnSide ? Orientation::Horizontal : Orientation::Vertical);
-            col.VerticalAlignment(VerticalAlignment::Center);
+            AccountUiRefs refs;
+            refs.provider = accounts[i].provider;
+            refs.identity = AccountIdentityHash(accounts[i]);
+            StackPanel col{nullptr};
+            if (tileLayout) {
+                col = BuildAccountTile(accounts, i, barLayout, state.tileHeight, refs);
+            } else {
+                bool labelOnSide = labelPosition == LabelPosition::Left ||
+                                   labelPosition == LabelPosition::Right;
+                bool labelBeforeBars = labelPosition == LabelPosition::Left ||
+                                       labelPosition == LabelPosition::Top;
+                col = StackPanel{};
+                col.Orientation(labelOnSide ? Orientation::Horizontal : Orientation::Vertical);
+                col.VerticalAlignment(VerticalAlignment::Center);
+
+                TextBlock label{nullptr};
+                if (labelPosition != LabelPosition::Hidden) {
+                    label = TextBlock{};
+                    label.Text(accounts[i].label);
+                    label.FontSize(labelFontSize);
+                    label.VerticalAlignment(VerticalAlignment::Center);
+                    label.HorizontalAlignment(labelOnSide ? HorizontalAlignment::Left :
+                                                             HorizontalAlignment::Center);
+                    if (labelPosition == LabelPosition::Left) {
+                        label.Margin({0, -2, (double)labelGap, 0});
+                    } else if (labelPosition == LabelPosition::Right) {
+                        label.Margin({(double)labelGap, -2, 0, 0});
+                    } else if (labelPosition == LabelPosition::Top) {
+                        label.Margin({0, 0, 0, (double)labelGap});
+                    } else {
+                        label.Margin({0, (double)labelGap, 0, 0});
+                    }
+                    label.Opacity(0.8);
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
+                    label.Name(name);
+                    refs.label = label;
+                    if (labelBeforeBars) col.Children().Append(label);
+                }
+
+                StackPanel bars;
+                bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
+                bars.VerticalAlignment(VerticalAlignment::Center);
+
+                double radius = std::max(1.0, barThickness / 2.0);
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    Border track;
+                    track.Width(verticalBars ? barThickness : barLength);
+                    track.Height(verticalBars ? barLength : barThickness);
+                    track.CornerRadius({radius, radius, radius, radius});
+                    track.HorizontalAlignment(HorizontalAlignment::Center);
+                    track.Background(SolidColorBrush(winrt::Windows::UI::Color{0x46, 0x80, 0x80, 0x80}));
+                    refs.tracks[w] = track;
+
+                    Border fill;
+                    fill.Height(verticalBars ? 0 : barThickness);
+                    fill.Width(verticalBars ? barThickness : 0);
+                    fill.CornerRadius({radius, radius, radius, radius});
+                    fill.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center : HorizontalAlignment::Left);
+                    fill.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom : VerticalAlignment::Center);
+                    fill.Background(SolidColorBrush(winrt::Windows::UI::Color{255, 0x9E, 0x9E, 0x9E}));
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Fill_%d_%d", (int)i, w);
+                    fill.Name(name);
+                    refs.fills[w] = fill;
+
+                    Grid trackContent;
+                    trackContent.Children().Append(fill);
+
+                    if (showPaceTicks) {
+                        double paceCrossSize = barThickness;
+                        double paceLength = (paceTickStyle == PaceTickStyle::Caret ? 5 : 4) *
+                                            physicalPixelDip;
+                        if (paceTickStyle == PaceTickStyle::Notch) {
+                            paceCrossSize = std::max(2.0, std::ceil(barThickness * 0.6));
+                        } else if (paceTickStyle == PaceTickStyle::Dot) {
+                            paceCrossSize = 4 * physicalPixelDip;
+                        }
+
+                        Border paceTick;
+                        paceTick.Width(verticalBars ? paceCrossSize : paceLength);
+                        paceTick.Height(verticalBars ? paceLength : paceCrossSize);
+                        paceTick.HorizontalAlignment(
+                            verticalBars ? (paceTickStyle == PaceTickStyle::Notch ?
+                                                HorizontalAlignment::Left : HorizontalAlignment::Center) :
+                                           HorizontalAlignment::Left);
+                        paceTick.VerticalAlignment(
+                            verticalBars ? VerticalAlignment::Bottom :
+                                           (paceTickStyle == PaceTickStyle::Notch ?
+                                                VerticalAlignment::Top : VerticalAlignment::Center));
+                        paceTick.Visibility(Visibility::Collapsed);
+                        paceTick.IsHitTestVisible(false);
+
+                        auto tickColor = winrt::Windows::UI::Color{
+                            0xFF, GetRValue(paceTickColor), GetGValue(paceTickColor),
+                            GetBValue(paceTickColor)};
+                        if (paceTickStyle == PaceTickStyle::Caret) {
+                            Grid caretShape;
+                            auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
+                            for (int layer = 0; layer < 2; layer++) {
+                                bool core = layer == 1;
+                                double capInset = (core ? 1 : 0) * physicalPixelDip;
+                                double stemInset = (core ? 2 : 1) * physicalPixelDip;
+                                double capDepth = std::min((core ? 1.0 : 2.0) * physicalPixelDip,
+                                                           paceCrossSize / 2.0);
+                                wuxs::Polygon part;
+                                auto addPoint = [&](double along, double cross) {
+                                    part.Points().Append(verticalBars ?
+                                        winrt::Windows::Foundation::Point{
+                                            (float)cross, (float)along} :
+                                        winrt::Windows::Foundation::Point{
+                                            (float)along, (float)cross});
+                                };
+                                addPoint(capInset, 0);
+                                addPoint(paceLength - capInset, 0);
+                                addPoint(paceLength - capInset, capDepth);
+                                addPoint(paceLength - stemInset, capDepth);
+                                addPoint(paceLength - stemInset, paceCrossSize - capDepth);
+                                addPoint(paceLength - capInset, paceCrossSize - capDepth);
+                                addPoint(paceLength - capInset, paceCrossSize);
+                                addPoint(capInset, paceCrossSize);
+                                addPoint(capInset, paceCrossSize - capDepth);
+                                addPoint(stemInset, paceCrossSize - capDepth);
+                                addPoint(stemInset, capDepth);
+                                addPoint(capInset, capDepth);
+                                part.Fill(SolidColorBrush(core ? tickColor : haloColor));
+                                caretShape.Children().Append(part);
+                            }
+                            paceTick.Child(caretShape);
+                        } else {
+                            paceTick.Background(
+                                SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
+                            if (paceTickStyle == PaceTickStyle::Dot) {
+                                double radius = 2 * physicalPixelDip;
+                                paceTick.CornerRadius({radius, radius, radius, radius});
+                            }
+
+                            Border paceCore;
+                            double paceCoreCrossSize =
+                                paceTickStyle == PaceTickStyle::Dot ?
+                                    3 * physicalPixelDip : paceCrossSize;
+                            double paceCoreLength = (paceTickStyle == PaceTickStyle::Dot ? 3 : 2) *
+                                                    physicalPixelDip;
+                            paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
+                            paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
+                            paceCore.HorizontalAlignment(HorizontalAlignment::Center);
+                            paceCore.VerticalAlignment(VerticalAlignment::Center);
+                            if (paceTickStyle == PaceTickStyle::Dot) {
+                                double radius = 1.5 * physicalPixelDip;
+                                paceCore.CornerRadius({radius, radius, radius, radius});
+                            }
+                            paceCore.Background(SolidColorBrush(tickColor));
+                            paceTick.Child(paceCore);
+                        }
+                        refs.paceTicks[w] = paceTick;
+                        trackContent.Children().Append(paceTick);
+                    }
+
+                    track.Child(trackContent);
+
+                    Grid barItem;
+                    double compactLabelFontSize = percentFontSize;
+                    barItem.Height(verticalBars ? barLength : barThickness);
+                    barItem.HorizontalAlignment(HorizontalAlignment::Center);
+
+                    if (showBarLabels) {
+                        ColumnDefinition labelColumn;
+                        labelColumn.Width({std::ceil(compactLabelFontSize * 1.4) + 3.0,
+                                           GridUnitType::Pixel});
+                        ColumnDefinition trackColumn;
+                        trackColumn.Width({(double)(verticalBars ? barThickness : barLength),
+                                           GridUnitType::Pixel});
+                        barItem.ColumnDefinitions().Append(labelColumn);
+                        barItem.ColumnDefinitions().Append(trackColumn);
+
+                        TextBlock barLabel;
+                        barLabel.Text(w == kExtraUsageBar && accounts[i].provider == L"openai" ?
+                                          L"Cr" : kQuotaKeys[w]);
+                        barLabel.FontSize(compactLabelFontSize);
+                        barLabel.Opacity(0.8);
+                        barLabel.IsHitTestVisible(false);
+                        barLabel.TextAlignment(TextAlignment::Right);
+                        barLabel.VerticalAlignment(VerticalAlignment::Center);
+                        barLabel.Margin({0, -1, 3, 0});
+                        barItem.Children().Append(barLabel);
+                        Grid::SetColumn(track, 1);
+                    } else {
+                        barItem.Width(verticalBars ? barThickness : barLength);
+                    }
+
+                    barItem.Children().Append(track);
+                    refs.barItems[w] = barItem;
+
+                    if (percentTextVisibility != PercentTextVisibility::Never) {
+                        TextBlock percent;
+                        percent.FontSize(percentFontSize);
+                        percent.Width(verticalBars ?
+                            std::max((double)barThickness, percentFontSize * 4.0) :
+                            (double)barLength);
+                        percent.VerticalAlignment(VerticalAlignment::Center);
+                        if (percentTextAlignment == PercentTextAlignment::Left) {
+                            percent.HorizontalAlignment(HorizontalAlignment::Left);
+                            percent.TextAlignment(TextAlignment::Left);
+                        } else if (percentTextAlignment == PercentTextAlignment::Center) {
+                            percent.HorizontalAlignment(HorizontalAlignment::Center);
+                            percent.TextAlignment(TextAlignment::Center);
+                        } else {
+                            // Adaptive starts on the unfilled right side.
+                            percent.HorizontalAlignment(HorizontalAlignment::Right);
+                            percent.TextAlignment(TextAlignment::Right);
+                        }
+                        percent.Foreground(SolidColorBrush(
+                            winrt::Windows::UI::Color{255, 255, 255, 255}));
+                        percent.Opacity(percentTextVisibility == PercentTextVisibility::Always ?
+                                            0.9 : 0.0);
+                        percent.IsHitTestVisible(false);
+                        TranslateTransform translation;
+                        translation.X(percentTextAlignment == PercentTextAlignment::Left ?
+                                          4 * physicalPixelDip :
+                                      percentTextAlignment == PercentTextAlignment::Center ?
+                                          0 : -4 * physicalPixelDip);
+                        translation.Y(-1);
+                        percent.RenderTransform(translation);
+                        swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d_%d", (int)i, w);
+                        percent.Name(name);
+                        refs.percents[w] = percent;
+                        if (showBarLabels) Grid::SetColumn(percent, 1);
+                        barItem.Children().Append(percent);
+                    }
+
+                    bars.Children().Append(barItem);
+                }
+
+                refs.barArea = bars.as<FrameworkElement>();
+                col.Children().Append(bars);
+                if (label && !labelBeforeBars) col.Children().Append(label);
+            }
+
             col.Margin({(double)accountMargin, 0, (double)accountMargin, 0});
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);
             col.Visibility(accounts[i].hidden ? Visibility::Collapsed : Visibility::Visible);
-            AccountUiRefs refs;
             refs.column = col;
-            refs.provider = accounts[i].provider;
-            refs.identity = AccountIdentityHash(accounts[i]);
-
-            TextBlock label{nullptr};
-            if (labelPosition != LabelPosition::Hidden) {
-                label = TextBlock{};
-                label.Text(accounts[i].label);
-                label.FontSize(labelFontSize);
-                label.VerticalAlignment(VerticalAlignment::Center);
-                label.HorizontalAlignment(labelOnSide ? HorizontalAlignment::Left :
-                                                         HorizontalAlignment::Center);
-                if (labelPosition == LabelPosition::Left) {
-                    label.Margin({0, -2, (double)labelGap, 0});
-                } else if (labelPosition == LabelPosition::Right) {
-                    label.Margin({(double)labelGap, -2, 0, 0});
-                } else if (labelPosition == LabelPosition::Top) {
-                    label.Margin({0, 0, 0, (double)labelGap});
-                } else {
-                    label.Margin({0, (double)labelGap, 0, 0});
-                }
-                label.Opacity(0.8);
-                swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
-                label.Name(name);
-                refs.label = label;
-                if (labelBeforeBars) col.Children().Append(label);
-            }
-
-            StackPanel bars;
-            bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
-            bars.VerticalAlignment(VerticalAlignment::Center);
-
-            double radius = std::max(1.0, barThickness / 2.0);
-            for (int w = 0; w < kQuotaBarCount; w++) {
-                Border track;
-                track.Width(verticalBars ? barThickness : barLength);
-                track.Height(verticalBars ? barLength : barThickness);
-                track.CornerRadius({radius, radius, radius, radius});
-                track.HorizontalAlignment(HorizontalAlignment::Center);
-                track.Background(SolidColorBrush(winrt::Windows::UI::Color{0x46, 0x80, 0x80, 0x80}));
-                refs.tracks[w] = track;
-
-                Border fill;
-                fill.Height(verticalBars ? 0 : barThickness);
-                fill.Width(verticalBars ? barThickness : 0);
-                fill.CornerRadius({radius, radius, radius, radius});
-                fill.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center : HorizontalAlignment::Left);
-                fill.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom : VerticalAlignment::Center);
-                fill.Background(SolidColorBrush(winrt::Windows::UI::Color{255, 0x9E, 0x9E, 0x9E}));
-                swprintf(name, ARRAYSIZE(name), L"AiQuota_Fill_%d_%d", (int)i, w);
-                fill.Name(name);
-                refs.fills[w] = fill;
-
-                Grid trackContent;
-                trackContent.Children().Append(fill);
-
-                if (showPaceTicks) {
-                    double paceCrossSize = barThickness;
-                    double paceLength = (paceTickStyle == PaceTickStyle::Caret ? 5 : 4) *
-                                        physicalPixelDip;
-                    if (paceTickStyle == PaceTickStyle::Notch) {
-                        paceCrossSize = std::max(2.0, std::ceil(barThickness * 0.6));
-                    } else if (paceTickStyle == PaceTickStyle::Dot) {
-                        paceCrossSize = 4 * physicalPixelDip;
-                    }
-
-                    Border paceTick;
-                    paceTick.Width(verticalBars ? paceCrossSize : paceLength);
-                    paceTick.Height(verticalBars ? paceLength : paceCrossSize);
-                    paceTick.HorizontalAlignment(
-                        verticalBars ? (paceTickStyle == PaceTickStyle::Notch ?
-                                            HorizontalAlignment::Left : HorizontalAlignment::Center) :
-                                       HorizontalAlignment::Left);
-                    paceTick.VerticalAlignment(
-                        verticalBars ? VerticalAlignment::Bottom :
-                                       (paceTickStyle == PaceTickStyle::Notch ?
-                                            VerticalAlignment::Top : VerticalAlignment::Center));
-                    paceTick.Visibility(Visibility::Collapsed);
-                    paceTick.IsHitTestVisible(false);
-
-                    auto tickColor = winrt::Windows::UI::Color{
-                        0xFF, GetRValue(paceTickColor), GetGValue(paceTickColor),
-                        GetBValue(paceTickColor)};
-                    if (paceTickStyle == PaceTickStyle::Caret) {
-                        Grid caretShape;
-                        auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
-                        for (int layer = 0; layer < 2; layer++) {
-                            bool core = layer == 1;
-                            double capInset = (core ? 1 : 0) * physicalPixelDip;
-                            double stemInset = (core ? 2 : 1) * physicalPixelDip;
-                            double capDepth = std::min((core ? 1.0 : 2.0) * physicalPixelDip,
-                                                       paceCrossSize / 2.0);
-                            wuxs::Polygon part;
-                            auto addPoint = [&](double along, double cross) {
-                                part.Points().Append(verticalBars ?
-                                    winrt::Windows::Foundation::Point{
-                                        (float)cross, (float)along} :
-                                    winrt::Windows::Foundation::Point{
-                                        (float)along, (float)cross});
-                            };
-                            addPoint(capInset, 0);
-                            addPoint(paceLength - capInset, 0);
-                            addPoint(paceLength - capInset, capDepth);
-                            addPoint(paceLength - stemInset, capDepth);
-                            addPoint(paceLength - stemInset, paceCrossSize - capDepth);
-                            addPoint(paceLength - capInset, paceCrossSize - capDepth);
-                            addPoint(paceLength - capInset, paceCrossSize);
-                            addPoint(capInset, paceCrossSize);
-                            addPoint(capInset, paceCrossSize - capDepth);
-                            addPoint(stemInset, paceCrossSize - capDepth);
-                            addPoint(stemInset, capDepth);
-                            addPoint(capInset, capDepth);
-                            part.Fill(SolidColorBrush(core ? tickColor : haloColor));
-                            caretShape.Children().Append(part);
-                        }
-                        paceTick.Child(caretShape);
-                    } else {
-                        paceTick.Background(
-                            SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
-                        if (paceTickStyle == PaceTickStyle::Dot) {
-                            double radius = 2 * physicalPixelDip;
-                            paceTick.CornerRadius({radius, radius, radius, radius});
-                        }
-
-                        Border paceCore;
-                        double paceCoreCrossSize =
-                            paceTickStyle == PaceTickStyle::Dot ?
-                                3 * physicalPixelDip : paceCrossSize;
-                        double paceCoreLength = (paceTickStyle == PaceTickStyle::Dot ? 3 : 2) *
-                                                physicalPixelDip;
-                        paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
-                        paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
-                        paceCore.HorizontalAlignment(HorizontalAlignment::Center);
-                        paceCore.VerticalAlignment(VerticalAlignment::Center);
-                        if (paceTickStyle == PaceTickStyle::Dot) {
-                            double radius = 1.5 * physicalPixelDip;
-                            paceCore.CornerRadius({radius, radius, radius, radius});
-                        }
-                        paceCore.Background(SolidColorBrush(tickColor));
-                        paceTick.Child(paceCore);
-                    }
-                    refs.paceTicks[w] = paceTick;
-                    trackContent.Children().Append(paceTick);
-                }
-
-                track.Child(trackContent);
-
-                Grid barItem;
-                double compactLabelFontSize = percentFontSize;
-                barItem.Height(verticalBars ? barLength : barThickness);
-                barItem.HorizontalAlignment(HorizontalAlignment::Center);
-
-                if (showBarLabels) {
-                    static constexpr PCWSTR kBarLabels[kQuotaBarCount] = {
-                        L"5h", L"7d", L"Fa", L"Ex"};
-                    ColumnDefinition labelColumn;
-                    labelColumn.Width({std::ceil(compactLabelFontSize * 1.4) + 3.0,
-                                       GridUnitType::Pixel});
-                    ColumnDefinition trackColumn;
-                    trackColumn.Width({(double)(verticalBars ? barThickness : barLength),
-                                       GridUnitType::Pixel});
-                    barItem.ColumnDefinitions().Append(labelColumn);
-                    barItem.ColumnDefinitions().Append(trackColumn);
-
-                    TextBlock barLabel;
-                    barLabel.Text(w == kExtraUsageBar && accounts[i].provider == L"openai" ?
-                                      L"Cr" : kBarLabels[w]);
-                    barLabel.FontSize(compactLabelFontSize);
-                    barLabel.Opacity(0.8);
-                    barLabel.IsHitTestVisible(false);
-                    barLabel.TextAlignment(TextAlignment::Right);
-                    barLabel.VerticalAlignment(VerticalAlignment::Center);
-                    barLabel.Margin({0, -1, 3, 0});
-                    barItem.Children().Append(barLabel);
-                    Grid::SetColumn(track, 1);
-                } else {
-                    barItem.Width(verticalBars ? barThickness : barLength);
-                }
-
-                barItem.Children().Append(track);
-                refs.barItems[w] = barItem;
-
-                if (percentTextVisibility != PercentTextVisibility::Never) {
-                    TextBlock percent;
-                    percent.FontSize(percentFontSize);
-                    percent.Width(verticalBars ?
-                        std::max((double)barThickness, percentFontSize * 4.0) :
-                        (double)barLength);
-                    percent.VerticalAlignment(VerticalAlignment::Center);
-                    if (percentTextAlignment == PercentTextAlignment::Left) {
-                        percent.HorizontalAlignment(HorizontalAlignment::Left);
-                        percent.TextAlignment(TextAlignment::Left);
-                    } else if (percentTextAlignment == PercentTextAlignment::Center) {
-                        percent.HorizontalAlignment(HorizontalAlignment::Center);
-                        percent.TextAlignment(TextAlignment::Center);
-                    } else {
-                        // Adaptive starts on the unfilled right side.
-                        percent.HorizontalAlignment(HorizontalAlignment::Right);
-                        percent.TextAlignment(TextAlignment::Right);
-                    }
-                    percent.Foreground(SolidColorBrush(
-                        winrt::Windows::UI::Color{255, 255, 255, 255}));
-                    percent.Opacity(percentTextVisibility == PercentTextVisibility::Always ?
-                                        0.9 : 0.0);
-                    percent.IsHitTestVisible(false);
-                    TranslateTransform translation;
-                    translation.X(percentTextAlignment == PercentTextAlignment::Left ?
-                                      4 * physicalPixelDip :
-                                  percentTextAlignment == PercentTextAlignment::Center ?
-                                      0 : -4 * physicalPixelDip);
-                    translation.Y(-1);
-                    percent.RenderTransform(translation);
-                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d_%d", (int)i, w);
-                    percent.Name(name);
-                    refs.percents[w] = percent;
-                    if (showBarLabels) Grid::SetColumn(percent, 1);
-                    barItem.Children().Append(percent);
-                }
-
-                bars.Children().Append(barItem);
-            }
-
-            refs.barArea = bars.as<FrameworkElement>();
-            col.Children().Append(bars);
-            if (label && !labelBeforeBars) col.Children().Append(label);
 
             UIElement tappedElement = col.as<UIElement>();
             QuotaUiInstance* statePtr = &state;
@@ -6382,7 +7235,12 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         }
                         if (e.Pointer().PointerDeviceType() ==
                             winrt::Windows::Devices::Input::PointerDeviceType::Mouse) {
+                            int previousHover = statePtr->flyout.hoverIndex;
                             OnTilePointerEntered(*statePtr, accountIndex, showDetailsOnHover);
+                            if (previousHover != accountIndex) {
+                                UpdateTileHighlight(*statePtr, previousHover);
+                            }
+                            UpdateTileHighlight(*statePtr, accountIndex);
                         }
                     } catch (...) {}
                 });
@@ -6408,6 +7266,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                             }
                         }
                         OnTilePointerExited(*statePtr, accountIndex);
+                        UpdateTileHighlight(*statePtr, accountIndex);
                     } catch (...) {}
                 };
             auto pointerExitedToken = tappedElement.PointerExited(pointerExited);
@@ -6562,7 +7421,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
 
         root.Children().Append(panel);
-        if (showPaceTicks) {
+        // Moves pace marks each minute; tiles also pick up a missed light/dark switch with it.
+        if (showPaceTicks || tileLayout) {
             DispatcherTimer paceTimer;
             paceTimer.Interval(std::chrono::minutes(1));
             auto paceTimerToken = paceTimer.Tick(
@@ -6598,8 +7458,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
+    int ringSize, ringThickness;
     bool showPaceTicks, showExtraBarAmounts, showOpenAiExtraLimits, colorblindMode,
          showStaleWarning;
+    COLORREF paceTickColor;
     BarLayout barLayout;
     BarMode barMode;
     PercentTextVisibility percentTextVisibility;
@@ -6613,10 +7475,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         barLength = g_settings.barLength;
         barThickness = g_settings.barThickness;
         barGap = g_settings.barGap;
+        ringSize = g_settings.ringSize;
+        ringThickness = g_settings.ringThickness;
         yellowThreshold = g_settings.yellowThreshold;
         orangeThreshold = g_settings.orangeThreshold;
         redThreshold = g_settings.redThreshold;
         showPaceTicks = g_settings.showPaceTicks;
+        paceTickColor = g_settings.paceTickColor;
         percentTextVisibility = g_settings.percentTextVisibility;
         percentTextAlignment = g_settings.percentTextAlignment;
         showExtraBarAmounts = g_settings.showExtraBarAmounts;
@@ -6647,6 +7512,30 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
     bool verticalBars = barLayout == BarLayout::Vertical;
     double physicalPixelDip = 1.0 / state.rasterizationScale;
+    // Tiles follow the layout the grid was built with.
+    bool tileLayout = IsTileLayout(state.buildBarLayout);
+    TileDisplay tileDisplay{now, barMode, yellowThreshold, orangeThreshold, redThreshold,
+                            colorblindMode, showPaceTicks, paceTickColor, ringSize, ringThickness};
+    if (tileLayout) {
+        // Tile chrome matches the taskbar text color that the tiles' logo and text inherit, like
+        // the bars' labels: dark text means a light taskbar. Else the tree's theme.
+        tileDisplay.light = state.tileLightTheme;
+        try {
+            SolidColorBrush text{nullptr};
+            for (auto const& refs : state.accountRefs) {
+                if (!refs.tile.warn) continue;
+                text = refs.tile.warn.Foreground().try_as<SolidColorBrush>();
+                break;
+            }
+            if (text) {
+                auto c = text.Color();
+                tileDisplay.light = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
+            } else {
+                tileDisplay.light = state.quotaGrid.ActualTheme() == ElementTheme::Light;
+            }
+        } catch (...) {}
+        state.tileLightTheme = tileDisplay.light;
+    }
     // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged.
     auto displayPct = [&](double pct) {
         return barMode == BarMode::Remaining && pct >= 0 ? std::clamp(100.0 - pct, 0.0, 100.0) : pct;
@@ -6688,166 +7577,172 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     barMask |= 1 << w;
                 }
             }
-            if (barMask != ap.barMask) {
-                int visibleCount = 0;
-                for (int w = 0; w < kQuotaBarCount; w++) {
-                    if (barMask & (1 << w)) visibleCount++;
-                }
+            if (tileLayout) {
+                UpdateAccountTile(state, i, accounts[i], d, barMask, stale, warn,
+                                  tileDisplay);
+                UpdateTileHighlight(state, (int)i);
+            } else {
+                if (barMask != ap.barMask) {
+                    int visibleCount = 0;
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        if (barMask & (1 << w)) visibleCount++;
+                    }
 
-                int visiblePosition = 0;
-                double halfBarGap = barGap / 2.0;
-                for (int w = 0; w < kQuotaBarCount; w++) {
-                    bool barVisible = (barMask & (1 << w)) != 0;
-                    if (ui.barItems[w]) {
-                        ui.barItems[w].Visibility(barVisible ? Visibility::Visible :
-                                                              Visibility::Collapsed);
-                        if (barVisible) {
-                            bool first = visiblePosition == 0;
-                            bool last = visiblePosition == visibleCount - 1;
-                            ui.barItems[w].Margin(verticalBars ?
-                                Thickness{first ? 0.0 : halfBarGap, 0,
-                                          last ? 0.0 : halfBarGap, 0} :
-                                Thickness{0, first ? 1.0 : halfBarGap, 0,
-                                          last ? 1.0 : halfBarGap});
+                    int visiblePosition = 0;
+                    double halfBarGap = barGap / 2.0;
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        bool barVisible = (barMask & (1 << w)) != 0;
+                        if (ui.barItems[w]) {
+                            ui.barItems[w].Visibility(barVisible ? Visibility::Visible :
+                                                                  Visibility::Collapsed);
+                            if (barVisible) {
+                                bool first = visiblePosition == 0;
+                                bool last = visiblePosition == visibleCount - 1;
+                                ui.barItems[w].Margin(verticalBars ?
+                                    Thickness{first ? 0.0 : halfBarGap, 0,
+                                              last ? 0.0 : halfBarGap, 0} :
+                                    Thickness{0, first ? 1.0 : halfBarGap, 0,
+                                              last ? 1.0 : halfBarGap});
+                            }
                         }
+                        if (barVisible) visiblePosition++;
                     }
-                    if (barVisible) visiblePosition++;
-                }
-                if (ui.barArea) {
-                    ui.barArea.Visibility(visibleCount ? Visibility::Visible :
-                                                         Visibility::Collapsed);
-                }
-                if (ui.column) {
-                    // Preserve a small context-menu target if every selected quota is unavailable.
-                    double minimumHitSize = visibleCount ? 0.0 : std::max(barThickness, 8);
-                    ui.column.MinWidth(minimumHitSize);
-                    ui.column.MinHeight(minimumHitSize);
-                }
-                ap.barMask = barMask;
-            }
-
-            for (int w = 0; w < kQuotaBarCount; w++) {
-                const WindowUsage& wu = *usage[w];
-                double dispPct = displayPct(wu.pct);
-                int px = dispPct > 0 ? std::clamp((int)std::lround(barLength * dispPct / 100.0), 2, barLength) : 0;
-                // Color stays keyed to actual usage so depleting quota still reds out.
-                auto c = UsageColor(wu.pct, stale, yellowThreshold, orangeThreshold, redThreshold,
-                                    colorblindMode);
-                uint32_t cv = ((uint32_t)c.A << 24) | ((uint32_t)c.R << 16) |
-                              ((uint32_t)c.G << 8) | c.B;
-                if (px != ap.fillPx[w] || cv != ap.fillColor[w]) {
-                    if (ui.fills[w]) {
-                        if (verticalBars) ui.fills[w].Height(px);
-                        else ui.fills[w].Width(px);
-                        ui.fills[w].Background(SolidColorBrush(c));
+                    if (ui.barArea) {
+                        ui.barArea.Visibility(visibleCount ? Visibility::Visible :
+                                                             Visibility::Collapsed);
                     }
-                    ap.fillPx[w] = px;
-                    ap.fillColor[w] = cv;
-                }
-
-                bool paceVisible = showPaceTicks && ui.paceTicks[w] &&
-                                   !stale && wu.pct >= 0 &&
-                                   wu.resetUnixMs > wu.windowDurationMs &&
-                                   wu.windowDurationMs > 0 &&
-                                   now >= wu.resetUnixMs - wu.windowDurationMs;
-                int pacePx = 0;
-                if (paceVisible) {
-                    double remainingFraction =
-                        ((double)wu.resetUnixMs - (double)now) / wu.windowDurationMs;
-                    double pacePct = barMode == BarMode::Remaining ? remainingFraction * 100.0 :
-                                                                     (1.0 - remainingFraction) * 100.0;
-                    pacePct = std::clamp(pacePct, 0.0, 100.0);
-
-                    double paceThickness = verticalBars ? ui.paceTicks[w].Height() :
-                                                          ui.paceTicks[w].Width();
-                    double radius = std::clamp(std::max(1.0, barThickness / 2.0),
-                                               paceThickness / 2.0,
-                                               (barLength - paceThickness) / 2.0);
-                    double center = std::clamp(barLength * pacePct / 100.0,
-                                               radius, barLength - radius);
-                    pacePx = (int)std::lround(center - paceThickness / 2.0);
-                }
-
-                int paceVisibleInt = paceVisible ? 1 : 0;
-                if (paceVisibleInt != ap.paceVisible[w]) {
-                    if (ui.paceTicks[w]) {
-                        ui.paceTicks[w].Visibility(paceVisible ? Visibility::Visible :
-                                                                Visibility::Collapsed);
+                    if (ui.column) {
+                        // Preserve a small context-menu target if every selected quota is unavailable.
+                        double minimumHitSize = visibleCount ? 0.0 : std::max(barThickness, 8);
+                        ui.column.MinWidth(minimumHitSize);
+                        ui.column.MinHeight(minimumHitSize);
                     }
-                    ap.paceVisible[w] = paceVisibleInt;
-                }
-                if (paceVisible && pacePx != ap.pacePx[w]) {
-                    if (ui.paceTicks[w]) {
-                        ui.paceTicks[w].Margin(verticalBars ? Thickness{0, 0, 0, (double)pacePx} :
-                                                               Thickness{(double)pacePx, 0, 0, 0});
-                    }
-                    ap.pacePx[w] = pacePx;
+                    ap.barMask = barMask;
                 }
 
-                if (percentTextVisibility != PercentTextVisibility::Never) {
-                    PercentTextAlignment appliedAlignment =
-                        percentTextAlignment == PercentTextAlignment::Adaptive ?
-                            (dispPct >= yellowThreshold ? PercentTextAlignment::Left :
-                                                         PercentTextAlignment::Right) :
-                            percentTextAlignment;
-                    if ((int)appliedAlignment != ap.percentAlignments[w]) {
-                        if (ui.percents[w]) {
-                            if (appliedAlignment == PercentTextAlignment::Left) {
-                                ui.percents[w].HorizontalAlignment(HorizontalAlignment::Left);
-                                ui.percents[w].TextAlignment(TextAlignment::Left);
-                            } else if (appliedAlignment == PercentTextAlignment::Center) {
-                                ui.percents[w].HorizontalAlignment(HorizontalAlignment::Center);
-                                ui.percents[w].TextAlignment(TextAlignment::Center);
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    const WindowUsage& wu = *usage[w];
+                    double dispPct = displayPct(wu.pct);
+                    int px = dispPct > 0 ? std::clamp((int)std::lround(barLength * dispPct / 100.0), 2, barLength) : 0;
+                    // Color stays keyed to actual usage so depleting quota still reds out.
+                    auto c = UsageColor(wu.pct, stale, yellowThreshold, orangeThreshold, redThreshold,
+                                        colorblindMode);
+                    uint32_t cv = ((uint32_t)c.A << 24) | ((uint32_t)c.R << 16) |
+                                  ((uint32_t)c.G << 8) | c.B;
+                    if (px != ap.fillPx[w] || cv != ap.fillColor[w]) {
+                        if (ui.fills[w]) {
+                            if (verticalBars) ui.fills[w].Height(px);
+                            else ui.fills[w].Width(px);
+                            ui.fills[w].Background(SolidColorBrush(c));
+                        }
+                        ap.fillPx[w] = px;
+                        ap.fillColor[w] = cv;
+                    }
+
+                    bool paceVisible = showPaceTicks && ui.paceTicks[w] &&
+                                       !stale && wu.pct >= 0 &&
+                                       wu.resetUnixMs > wu.windowDurationMs &&
+                                       wu.windowDurationMs > 0 &&
+                                       now >= wu.resetUnixMs - wu.windowDurationMs;
+                    int pacePx = 0;
+                    if (paceVisible) {
+                        double remainingFraction =
+                            ((double)wu.resetUnixMs - (double)now) / wu.windowDurationMs;
+                        double pacePct = barMode == BarMode::Remaining ? remainingFraction * 100.0 :
+                                                                         (1.0 - remainingFraction) * 100.0;
+                        pacePct = std::clamp(pacePct, 0.0, 100.0);
+
+                        double paceThickness = verticalBars ? ui.paceTicks[w].Height() :
+                                                              ui.paceTicks[w].Width();
+                        double radius = std::clamp(std::max(1.0, barThickness / 2.0),
+                                                   paceThickness / 2.0,
+                                                   (barLength - paceThickness) / 2.0);
+                        double center = std::clamp(barLength * pacePct / 100.0,
+                                                   radius, barLength - radius);
+                        pacePx = (int)std::lround(center - paceThickness / 2.0);
+                    }
+
+                    int paceVisibleInt = paceVisible ? 1 : 0;
+                    if (paceVisibleInt != ap.paceVisible[w]) {
+                        if (ui.paceTicks[w]) {
+                            ui.paceTicks[w].Visibility(paceVisible ? Visibility::Visible :
+                                                                    Visibility::Collapsed);
+                        }
+                        ap.paceVisible[w] = paceVisibleInt;
+                    }
+                    if (paceVisible && pacePx != ap.pacePx[w]) {
+                        if (ui.paceTicks[w]) {
+                            ui.paceTicks[w].Margin(verticalBars ? Thickness{0, 0, 0, (double)pacePx} :
+                                                                   Thickness{(double)pacePx, 0, 0, 0});
+                        }
+                        ap.pacePx[w] = pacePx;
+                    }
+
+                    if (percentTextVisibility != PercentTextVisibility::Never) {
+                        PercentTextAlignment appliedAlignment =
+                            percentTextAlignment == PercentTextAlignment::Adaptive ?
+                                (dispPct >= yellowThreshold ? PercentTextAlignment::Left :
+                                                             PercentTextAlignment::Right) :
+                                percentTextAlignment;
+                        if ((int)appliedAlignment != ap.percentAlignments[w]) {
+                            if (ui.percents[w]) {
+                                if (appliedAlignment == PercentTextAlignment::Left) {
+                                    ui.percents[w].HorizontalAlignment(HorizontalAlignment::Left);
+                                    ui.percents[w].TextAlignment(TextAlignment::Left);
+                                } else if (appliedAlignment == PercentTextAlignment::Center) {
+                                    ui.percents[w].HorizontalAlignment(HorizontalAlignment::Center);
+                                    ui.percents[w].TextAlignment(TextAlignment::Center);
+                                } else {
+                                    ui.percents[w].HorizontalAlignment(HorizontalAlignment::Right);
+                                    ui.percents[w].TextAlignment(TextAlignment::Right);
+                                }
+                                if (auto translation = ui.percents[w].RenderTransform()
+                                                           .try_as<TranslateTransform>()) {
+                                    translation.X(appliedAlignment == PercentTextAlignment::Left ?
+                                                      4 * physicalPixelDip :
+                                                  appliedAlignment == PercentTextAlignment::Center ?
+                                                      0 : -4 * physicalPixelDip);
+                                }
+                            }
+                            ap.percentAlignments[w] = (int)appliedAlignment;
+                        }
+
+                        bool yellowOrOrange = !stale && wu.pct >= 0 &&
+                            ((wu.pct >= yellowThreshold && wu.pct < orangeThreshold) ||
+                             (wu.pct >= orangeThreshold && wu.pct < redThreshold));
+                        int darkText = appliedAlignment == PercentTextAlignment::Left &&
+                                       yellowOrOrange ? 1 : 0;
+                        if (darkText != ap.percentDark[w]) {
+                            if (ui.percents[w]) {
+                                ui.percents[w].Foreground(SolidColorBrush(darkText ?
+                                    winrt::Windows::UI::Color{255, 0, 0, 0} :
+                                    winrt::Windows::UI::Color{255, 255, 255, 255}));
+                            }
+                            ap.percentDark[w] = darkText;
+                        }
+
+                        std::wstring percentText;
+                        if (wu.pct >= 0) {
+                            wchar_t text[24];
+                            if (w == kExtraUsageBar && showExtraBarAmounts &&
+                                d.extraLimitAmount >= 0) {
+                                // Amount follows the bar mode: spent in used mode, left in
+                                // remaining mode. Dollars for Anthropic, credits for OpenAI.
+                                double amount = barMode == BarMode::Remaining ?
+                                    d.extraLimitAmount - d.extraUsedAmount : d.extraUsedAmount;
+                                amount = std::max(amount, 0.0);
+                                swprintf(text, ARRAYSIZE(text),
+                                         accounts[i].provider == L"openai" ? L"%.0f" : L"$%.2f",
+                                         amount);
                             } else {
-                                ui.percents[w].HorizontalAlignment(HorizontalAlignment::Right);
-                                ui.percents[w].TextAlignment(TextAlignment::Right);
+                                swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
                             }
-                            if (auto translation = ui.percents[w].RenderTransform()
-                                                       .try_as<TranslateTransform>()) {
-                                translation.X(appliedAlignment == PercentTextAlignment::Left ?
-                                                  4 * physicalPixelDip :
-                                              appliedAlignment == PercentTextAlignment::Center ?
-                                                  0 : -4 * physicalPixelDip);
-                            }
+                            percentText = text;
                         }
-                        ap.percentAlignments[w] = (int)appliedAlignment;
-                    }
-
-                    bool yellowOrOrange = !stale && wu.pct >= 0 &&
-                        ((wu.pct >= yellowThreshold && wu.pct < orangeThreshold) ||
-                         (wu.pct >= orangeThreshold && wu.pct < redThreshold));
-                    int darkText = appliedAlignment == PercentTextAlignment::Left &&
-                                   yellowOrOrange ? 1 : 0;
-                    if (darkText != ap.percentDark[w]) {
-                        if (ui.percents[w]) {
-                            ui.percents[w].Foreground(SolidColorBrush(darkText ?
-                                winrt::Windows::UI::Color{255, 0, 0, 0} :
-                                winrt::Windows::UI::Color{255, 255, 255, 255}));
+                        if (percentText != ap.percentTexts[w]) {
+                            if (ui.percents[w]) ui.percents[w].Text(percentText);
+                            ap.percentTexts[w] = std::move(percentText);
                         }
-                        ap.percentDark[w] = darkText;
-                    }
-
-                    std::wstring percentText;
-                    if (wu.pct >= 0) {
-                        wchar_t text[24];
-                        if (w == kExtraUsageBar && showExtraBarAmounts &&
-                            d.extraLimitAmount >= 0) {
-                            // Amount follows the bar mode: spent in used mode, left in
-                            // remaining mode. Dollars for Anthropic, credits for OpenAI.
-                            double amount = barMode == BarMode::Remaining ?
-                                d.extraLimitAmount - d.extraUsedAmount : d.extraUsedAmount;
-                            amount = std::max(amount, 0.0);
-                            swprintf(text, ARRAYSIZE(text),
-                                     accounts[i].provider == L"openai" ? L"%.0f" : L"$%.2f",
-                                     amount);
-                        } else {
-                            swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
-                        }
-                        percentText = text;
-                    }
-                    if (percentText != ap.percentTexts[w]) {
-                        if (ui.percents[w]) ui.percents[w].Text(percentText);
-                        ap.percentTexts[w] = std::move(percentText);
                     }
                 }
             }
@@ -7148,6 +8043,20 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         }
     } else if (message == WM_DISPLAYCHANGE && !g_unloading) {
         StartRetryInject(true);
+    } else if (message == WM_SETTINGCHANGE && lParam && !g_unloading &&
+               wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
+        // Light/dark switch: once the taskbar has handled it, repaint the tiles' theme colors.
+        // Window procedures run on the window's thread, which owns this taskbar's XAML.
+        LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
+        if (!g_unloading) {
+            try {
+                auto* state = FindUiState(hWnd);
+                if (state && state->quotaGrid && state->ownerThreadId == GetCurrentThreadId()) {
+                    UpdateQuotaUi(*state);
+                }
+            } catch (...) {}
+        }
+        return result;
     }
     return DefSubclassProc(hWnd, message, wParam, lParam);
 }
@@ -7425,6 +8334,13 @@ static bool NormalizeSettings(Settings* s) {
             !a.showBars[kExtraUsageBar]) {
             a.showBars[kFiveHourBar] = true;
         }
+        if (a.tileIdentity < TileIdentity::LogoBadge || a.tileIdentity > TileIdentity::Text) {
+            a.tileIdentity = TileIdentity::LogoBadge;
+        }
+        // Tile text is trimmed and capped at 4 UTF-16 units without splitting a surrogate pair.
+        a.tileText.erase(0, a.tileText.find_first_not_of(L" \t\r\n"));
+        if (a.tileText.size() > 4) a.tileText.resize(IS_HIGH_SURROGATE(a.tileText[3]) ? 3 : 4);
+        a.tileText.erase(a.tileText.find_last_not_of(L" \t\r\n") + 1);
         bool duplicate = std::any_of(accounts.begin(), accounts.end(),
             [&](const AccountConfig& existing) {
                 return existing.provider == a.provider && existing.label == a.label;
@@ -7469,12 +8385,18 @@ static bool NormalizeSettings(Settings* s) {
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
     s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 50);
+    s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
+    s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
+                                  kRingThicknessMin, kRingThicknessMax);
     s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
     s->percentFontSize = std::clamp(s->percentFontSize > 0 ? s->percentFontSize : 9, 6, 24);
     s->accountMargin = std::clamp(s->accountMargin, 0, 500);
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
+    if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::LogoHeadline) {
+        s->barLayout = BarLayout::Stacked;
+    }
     if (s->labelPosition < LabelPosition::Hidden ||
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
@@ -7507,6 +8429,10 @@ static std::wstring SerializeSettings(const Settings& s) {
             JsonObject account;
             account.SetNamedValue(L"provider", JsonValue::CreateStringValue(winrt::hstring(a.provider)));
             account.SetNamedValue(L"label", JsonValue::CreateStringValue(winrt::hstring(a.label)));
+            account.SetNamedValue(L"tileIdentity", JsonValue::CreateStringValue(
+                a.tileIdentity == TileIdentity::Logo ? L"logo" :
+                a.tileIdentity == TileIdentity::Text ? L"text" : L"logoBadge"));
+            account.SetNamedValue(L"tileText", JsonValue::CreateStringValue(winrt::hstring(a.tileText)));
             account.SetNamedValue(L"fiveHour", JsonValue::CreateBooleanValue(a.showBars[kFiveHourBar]));
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
@@ -7541,7 +8467,14 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
-        setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" : L"stacked");
+        setNumber(L"ringSize", s.ringSize);
+        setNumber(L"ringThickness", s.ringThickness);
+        setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
+                                s.barLayout == BarLayout::SegmentedRing ? L"segmentedRing" :
+                                s.barLayout == BarLayout::ConcentricRings ? L"concentricRings" :
+                                s.barLayout == BarLayout::LogoBars ? L"logoBars" :
+                                s.barLayout == BarLayout::LogoHeadline ? L"logoHeadline" :
+                                                                         L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setBool(L"showPaceTicks", s.showPaceTicks);
         setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
@@ -7597,6 +8530,11 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 AccountConfig a;
                 a.provider = GetStr(obj, L"provider");
                 a.label = GetStr(obj, L"label");
+                std::wstring tileIdentity = GetStr(obj, L"tileIdentity");
+                a.tileIdentity = tileIdentity == L"logo" ? TileIdentity::Logo :
+                                 tileIdentity == L"text" ? TileIdentity::Text :
+                                                           TileIdentity::LogoBadge;
+                a.tileText = GetStr(obj, L"tileText");
                 auto getBoolDefault = [&](PCWSTR name, bool defaultValue) {
                     if (!obj.HasKey(name)) return defaultValue;
                     auto v = obj.GetNamedValue(name);
@@ -7636,8 +8574,21 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
-        s.barLayout = GetStr(root, L"barLayout") == L"vertical" ?
-                          BarLayout::Vertical : BarLayout::Stacked;
+        // Clamp before the int conversion; 0 (non-positive or non-finite) restores the default
+        // during normalization.
+        double ringSize = GetNum(root, L"ringSize", 32);
+        double ringThickness = GetNum(root, L"ringThickness", 3);
+        s.ringSize = std::isfinite(ringSize) ?
+                         (int)std::clamp(ringSize, 0.0, (double)kRingSizeMax) : 0;
+        s.ringThickness = std::isfinite(ringThickness) ?
+                              (int)std::clamp(ringThickness, 0.0, (double)kRingThicknessMax) : 0;
+        std::wstring barLayout = GetStr(root, L"barLayout");
+        s.barLayout = barLayout == L"vertical" ? BarLayout::Vertical :
+                      barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :
+                      barLayout == L"concentricRings" ? BarLayout::ConcentricRings :
+                      barLayout == L"logoBars" ? BarLayout::LogoBars :
+                      barLayout == L"logoHeadline" ? BarLayout::LogoHeadline :
+                                                     BarLayout::Stacked;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
@@ -8087,6 +9038,8 @@ enum SettingsControlId {
     kLabelGap,
     kBarGap,
     kRightMargin,
+    kRingSize,
+    kRingThickness,
 
     kLabelPosition = 2200,
     kShowPaceTicks,
@@ -8129,6 +9082,10 @@ enum SettingsControlId {
     kAccountCreditsMax,
     kAccountRecordHistory,
     kAccountHistoryIdentityNote,
+    kAccountTileIdentityLabel,
+    kAccountTileIdentity,
+    kAccountTileTextLabel,
+    kAccountTileText,
 };
 
 struct SettingsRow {
@@ -9064,24 +10021,42 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
     EnableSettingsRow(state, kMonitorNumber,
                       SendDlgItemMessageW(state.hWnd, kMonitorMode,
                                           CB_GETCURSEL, 0, 0) == 2);
-    bool labelsVisible = SendDlgItemMessageW(state.hWnd, kLabelPosition,
+    // Rows the selected layout ignores stay disabled. No selection commits as stacked bars.
+    LRESULT layout = SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0);
+    bool barLayout = layout <= (LRESULT)BarLayout::Vertical;
+    bool ringLayout = layout == (LRESULT)BarLayout::SegmentedRing ||
+                      layout == (LRESULT)BarLayout::ConcentricRings;
+    bool paceMarksShown = layout != (LRESULT)BarLayout::LogoHeadline;
+    EnableSettingsRow(state, kBarLength, barLayout);
+    EnableSettingsRow(state, kBarThickness, barLayout);
+    EnableSettingsRow(state, kBarGap, barLayout);
+    EnableSettingsRow(state, kRingSize, ringLayout);
+    EnableSettingsRow(state, kRingThickness, ringLayout);
+    EnableSettingsRow(state, kLabelPosition, barLayout);
+    bool labelsVisible = barLayout &&
+                         SendDlgItemMessageW(state.hWnd, kLabelPosition,
                                              CB_GETCURSEL, 0, 0) !=
-                         (LRESULT)LabelPosition::Hidden;
+                             (LRESULT)LabelPosition::Hidden;
     EnableSettingsRow(state, kLabelFontSize, labelsVisible);
     EnableSettingsRow(state, kLabelGap, labelsVisible);
+    EnableSettingsRow(state, kShowBarLabels, barLayout);
+    EnableSettingsRow(state, kPercentTextVisibility, barLayout);
     LRESULT percentTextVisibility = SendDlgItemMessageW(
         state.hWnd, kPercentTextVisibility, CB_GETCURSEL, 0, 0);
+    bool percentTextVisible =
+        barLayout && percentTextVisibility > (LRESULT)PercentTextVisibility::Never;
     bool barTextVisible =
-        SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED ||
-        percentTextVisibility > (LRESULT)PercentTextVisibility::Never;
+        percentTextVisible ||
+        (barLayout &&
+         SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED);
     EnableSettingsRow(state, kPercentFontSize, barTextVisible);
-    EnableSettingsRow(state, kPercentTextAlignment,
-                      percentTextVisibility > (LRESULT)PercentTextVisibility::Never);
-    EnableSettingsRow(state, kShowExtraBarAmounts,
-                      percentTextVisibility > (LRESULT)PercentTextVisibility::Never);
-    bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
+    EnableSettingsRow(state, kPercentTextAlignment, percentTextVisible);
+    EnableSettingsRow(state, kShowExtraBarAmounts, percentTextVisible);
+    EnableSettingsRow(state, kShowPaceTicks, paceMarksShown);
+    bool paceTicksVisible = paceMarksShown &&
+                            SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
                                                 BM_GETCHECK, 0, 0) == BST_CHECKED;
-    EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
+    EnableSettingsRow(state, kPaceTickStyle, barLayout && paceTicksVisible);
     EnableSettingsRow(state, kPaceTickColor, paceTicksVisible);
     EnableSettingsRow(state, kPollMinutes,
                       SendDlgItemMessageW(state.hWnd, kPollPreset,
@@ -9128,12 +10103,13 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
                         s.taskbarMonitorMode == TaskbarMonitorMode::All ? 1 :
                         s.taskbarMonitorMode == TaskbarMonitorMode::Specific ? 2 : 0, 0);
     PopulateMonitorCombo(state, s.taskbarMonitorNumber);
-    SendDlgItemMessageW(state.hWnd, kBarLayout, CB_SETCURSEL,
-                        s.barLayout == BarLayout::Vertical ? 1 : 0, 0);
+    SendDlgItemMessageW(state.hWnd, kBarLayout, CB_SETCURSEL, (int)s.barLayout, 0);
     SendDlgItemMessageW(state.hWnd, kBarMode, CB_SETCURSEL,
                         s.barMode == BarMode::Remaining ? 1 : 0, 0);
     SetControlInt(state, kBarLength, s.barLength);
     SetControlInt(state, kBarThickness, s.barThickness);
+    SetControlInt(state, kRingSize, s.ringSize);
+    SetControlInt(state, kRingThickness, s.ringThickness);
     SetControlInt(state, kLabelFontSize, s.labelFontSize);
     SetControlInt(state, kPercentFontSize, s.percentFontSize);
     SetControlInt(state, kAccountMargin, s.accountMargin);
@@ -9214,12 +10190,15 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
         SendDlgItemMessageW(state.hWnd, kMonitorNumber, CB_GETITEMDATA,
                             monitorSelection, 0) : CB_ERR;
     if (monitorNumber != CB_ERR) s.taskbarMonitorNumber = (int)monitorNumber;
-    s.barLayout = SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0) == 1 ?
-                          BarLayout::Vertical : BarLayout::Stacked;
+    int barLayout = (int)SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0);
+    s.barLayout = barLayout >= 0 && barLayout <= (int)BarLayout::LogoHeadline ?
+                      (BarLayout)barLayout : BarLayout::Stacked;
     s.barMode = SendDlgItemMessageW(state.hWnd, kBarMode, CB_GETCURSEL, 0, 0) == 1 ?
                         BarMode::Remaining : BarMode::Used;
     s.barLength = getBoundedInt(kBarLength, s.barLength);
     s.barThickness = getBoundedInt(kBarThickness, s.barThickness);
+    s.ringSize = getBoundedInt(kRingSize, s.ringSize);
+    s.ringThickness = getBoundedInt(kRingThickness, s.ringThickness);
     s.labelFontSize = getBoundedInt(kLabelFontSize, s.labelFontSize);
     s.percentFontSize = getBoundedInt(kPercentFontSize, s.percentFontSize);
     s.accountMargin = getBoundedInt(kAccountMargin, s.accountMargin);
@@ -9302,24 +10281,32 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  sc(16), sc(58), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountLabel), nullptr,
                  controlX, sc(54), controlWidth, sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileIdentityLabel), nullptr,
+                 sc(16), sc(98), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileIdentity), nullptr,
+                 controlX, sc(94), controlWidth, sc(220), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileTextLabel), nullptr,
+                 sc(16), sc(138), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(hWnd, kAccountTileText), nullptr,
+                 controlX, sc(134), sc(80), sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
-                 sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(178), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
-                 sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(208), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
-                 sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(238), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     // For OpenAI the 4th checkbox reads "Show credits bar, max:" and the max edit follows it.
     bool openai = SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0) == 1;
     SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
-                 sc(16), sc(188), openai ? sc(164) : width - sc(32), sc(24),
+                 sc(16), sc(268), openai ? sc(164) : width - sc(32), sc(24),
                  SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
-                 sc(180), sc(188), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(180), sc(268), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
-                 sc(16), sc(218), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+                 sc(16), sc(298), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
-                 sc(16), sc(246), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
-    int buttonY = std::max(sc(306), height - sc(46));
+                 sc(16), sc(326), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    int buttonY = std::max(sc(386), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr,
@@ -9360,6 +10347,13 @@ static void UpdateAccountEditorProvider(HWND hWnd) {
     SetWindowTextW(extraUsage, openai ? L"Show credits bar, max:" :
                                         L"Show monthly extra-usage bar");
     ShowWindow(GetDlgItem(hWnd, kAccountCreditsMax), openai ? SW_SHOW : SW_HIDE);
+}
+
+static void UpdateAccountEditorTileText(HWND hWnd) {
+    bool text = SendDlgItemMessageW(hWnd, kAccountTileIdentity, CB_GETCURSEL, 0, 0) ==
+                (LRESULT)TileIdentity::Text;
+    EnableWindow(GetDlgItem(hWnd, kAccountTileTextLabel), text);
+    EnableWindow(GetDlgItem(hWnd, kAccountTileText), text);
 }
 
 static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
@@ -9407,24 +10401,46 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                            GetModuleHandleW(nullptr), nullptr);
             SendMessageW(state->edit, EM_SETLIMITTEXT, 64, 0);
 
+            // Tile identity is used only by the ring and logo layouts.
+            CreateWindowExW(0, L"STATIC", L"Tile identity", WS_CHILD | WS_VISIBLE,
+                            sc(16), sc(98), sc(100), sc(22), hWnd,
+                            reinterpret_cast<HMENU>(kAccountTileIdentityLabel),
+                            GetModuleHandleW(nullptr), nullptr);
+            HWND tileIdentity = CreateWindowExW(
+                0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
+                sc(130), sc(94), sc(240), sc(220), hWnd,
+                reinterpret_cast<HMENU>(kAccountTileIdentity), GetModuleHandleW(nullptr), nullptr);
+            AddComboItems(tileIdentity, {L"Logo + number badge", L"Logo only", L"Label text"});
+            SendMessageW(tileIdentity, CB_SETCURSEL, (int)state->account.tileIdentity, 0);
+            CreateWindowExW(0, L"STATIC", L"Short text", WS_CHILD | WS_VISIBLE,
+                            sc(16), sc(138), sc(100), sc(22), hWnd,
+                            reinterpret_cast<HMENU>(kAccountTileTextLabel),
+                            GetModuleHandleW(nullptr), nullptr);
+            HWND tileText = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"EDIT", state->account.tileText.c_str(),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                sc(130), sc(134), sc(80), sc(26), hWnd,
+                reinterpret_cast<HMENU>(kAccountTileText), GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(tileText, EM_SETLIMITTEXT, 4, 0);
+
             HWND fiveHour = CreateWindowExW(0, L"BUTTON", L"Show 5-hour bar",
                                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                             sc(16), sc(98), sc(180), sc(24), hWnd,
+                                             sc(16), sc(178), sc(180), sc(24), hWnd,
                                              reinterpret_cast<HMENU>(kAccountFiveHour),
                                              GetModuleHandleW(nullptr), nullptr);
             HWND weekly = CreateWindowExW(0, L"BUTTON", L"Show weekly bar",
                                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                           sc(16), sc(128), sc(180), sc(24), hWnd,
+                                           sc(16), sc(208), sc(180), sc(24), hWnd,
                                            reinterpret_cast<HMENU>(kAccountWeekly),
                                            GetModuleHandleW(nullptr), nullptr);
             HWND fable = CreateWindowExW(0, L"BUTTON", L"Show Fable weekly bar",
                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                          sc(16), sc(158), sc(220), sc(24), hWnd,
+                                          sc(16), sc(238), sc(220), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountFableWeekly),
                                           GetModuleHandleW(nullptr), nullptr);
             HWND extra = CreateWindowExW(0, L"BUTTON", L"Show monthly extra-usage bar",
                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                          sc(16), sc(188), sc(260), sc(24), hWnd,
+                                          sc(16), sc(268), sc(260), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountExtraUsage),
                                           GetModuleHandleW(nullptr), nullptr);
             SendMessageW(fiveHour, BM_SETCHECK,
@@ -9440,14 +10456,14 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 std::to_wstring(state->account.creditsMax) : L"";
             HWND creditsMax = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", creditsMaxText.c_str(),
                                                WS_CHILD | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL,
-                                               sc(180), sc(188), sc(80), sc(24), hWnd,
+                                               sc(180), sc(268), sc(80), sc(24), hWnd,
                                                reinterpret_cast<HMENU>(kAccountCreditsMax),
                                                GetModuleHandleW(nullptr), nullptr);
             SendMessageW(creditsMax, EM_SETLIMITTEXT, 9, 0);
 
             HWND recordHistory = CreateWindowExW(
                 0, L"BUTTON", L"Record history", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                sc(16), sc(218), sc(260), sc(24), hWnd,
+                sc(16), sc(298), sc(260), sc(24), hWnd,
                 reinterpret_cast<HMENU>(kAccountRecordHistory), GetModuleHandleW(nullptr), nullptr);
             SendMessageW(recordHistory, BM_SETCHECK,
                          state->account.recordHistory ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -9461,20 +10477,31 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
                 CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                 hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
-            if (state->toolTip && recordHistory) {
+            if (state->toolTip) {
                 SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0, sc(360));
-                TOOLINFOW info{};
-                info.cbSize = sizeof(info);
-                info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-                info.hwnd = hWnd;
-                info.uId = reinterpret_cast<UINT_PTR>(recordHistory);
-                info.lpszText = const_cast<PWSTR>(
+                auto addToolTip = [&](HWND control, PCWSTR text) {
+                    if (!control) return;
+                    TOOLINFOW info{};
+                    info.cbSize = sizeof(info);
+                    info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+                    info.hwnd = hWnd;
+                    info.uId = reinterpret_cast<UINT_PTR>(control);
+                    info.lpszText = const_cast<PWSTR>(text);
+                    SendMessageW(state->toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&info));
+                };
+                addToolTip(tileIdentity,
+                    L"Applies only to the ring and logo layouts; stacked and vertical bars show "
+                    L"the label instead. The number badge appears only when several accounts "
+                    L"share this provider.");
+                addToolTip(tileText,
+                    L"Up to 4 characters shown by Label text in the ring and logo layouts. "
+                    L"Leave empty to use the label without spaces.");
+                addToolTip(recordHistory,
                     L"This account preference is shared across Windows users. Records only when "
                     L"Enable local history is on for the current Windows user in Behavior. "
                     L"Do not poll hidden accounts overrides this checkbox: hidden accounts are not "
                     L"polled or recorded while that option is on. History follows this configured "
                     L"account, not the signed-in login. Use a new account entry for a different login.");
-                SendMessageW(state->toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&info));
             }
 
             HWND ok = CreateWindowExW(0, L"BUTTON", L"OK",
@@ -9492,6 +10519,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             RecreateAccountEditorVisuals(hWnd, *state);
             LayoutAccountEditor(hWnd, *state);
             UpdateAccountEditorProvider(hWnd);
+            UpdateAccountEditorTileText(hWnd);
             SetFocus(state->edit);
             return 0;
         }
@@ -9500,6 +10528,10 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             if (LOWORD(wParam) == kAccountProvider && HIWORD(wParam) == CBN_SELCHANGE) {
                 UpdateAccountEditorProvider(hWnd);
                 LayoutAccountEditor(hWnd, *state);
+                return 0;
+            }
+            if (LOWORD(wParam) == kAccountTileIdentity && HIWORD(wParam) == CBN_SELCHANGE) {
+                UpdateAccountEditorTileText(hWnd);
                 return 0;
             }
             if (LOWORD(wParam) == IDOK) {
@@ -9521,6 +10553,15 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.provider = providerIndex == 1 ? L"openai" :
                                           providerIndex == 2 ? L"antigravity" : L"anthropic";
                 state->account.label = std::move(label);
+                int tileIdentity = (int)SendDlgItemMessageW(hWnd, kAccountTileIdentity,
+                                                            CB_GETCURSEL, 0, 0);
+                state->account.tileIdentity =
+                    tileIdentity >= 0 && tileIdentity <= (int)TileIdentity::Text ?
+                        (TileIdentity)tileIdentity : TileIdentity::LogoBadge;
+                // Settings normalization trims and caps the text.
+                wchar_t tileText[16] = {};
+                GetDlgItemTextW(hWnd, kAccountTileText, tileText, ARRAYSIZE(tileText));
+                state->account.tileText = tileText;
                 state->account.recordHistory =
                     IsDlgButtonChecked(hWnd, kAccountRecordHistory) == BST_CHECKED;
                 state->account.showBars[kFiveHourBar] =
@@ -9647,7 +10688,7 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
     UINT dpi = WindowDpi(owner);
     int width = ScaleForDpi(404, dpi);
-    int height = ScaleForDpi(388, dpi);
+    int height = ScaleForDpi(468, dpi);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitorInfo);
     width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
@@ -9737,8 +10778,11 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
 
     bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
+    // Tile identity is read only while building tiles, so its edits take the rebuild path.
     bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
                                    oldAccount.label == newAccount.label &&
+                                   oldAccount.tileIdentity == newAccount.tileIdentity &&
+                                   oldAccount.tileText == newAccount.tileText &&
                                    oldAccount.creditsMax == newAccount.creditsMax &&
                                    oldAccount.recordHistory == newAccount.recordHistory &&
                                    oldAccount.historyId == newAccount.historyId &&
@@ -9867,7 +10911,8 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
         providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
     }
     if (applyResult == SettingsApplyResult::Changed) {
-        // Every bar already exists in the XAML tree; visibility and spacing update in place.
+        // A quota selection change updates in place: bar layouts already hold every bar and
+        // only change visibility and spacing; tile layouts regenerate their meter shapes.
         if (onlyBarSelectionChanged) {
             PostUiUpdate();
             if (!g_uiInjected.load(std::memory_order_acquire)) StartRetryInject();
@@ -10081,6 +11126,8 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.barMode = defaults.barMode;
         settings.barLength = defaults.barLength;
         settings.barThickness = defaults.barThickness;
+        settings.ringSize = defaults.ringSize;
+        settings.ringThickness = defaults.ringThickness;
         settings.labelFontSize = defaults.labelFontSize;
         settings.percentFontSize = defaults.percentFontSize;
         settings.accountMargin = defaults.accountMargin;
@@ -10196,9 +11243,11 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                         L"Specific display"});
             AddSettingsRow(*state, 1, L"Specific display", L"COMBOBOX",
                            CBS_DROPDOWNLIST, 0, kMonitorNumber);
-            HWND layout = AddSettingsRow(*state, 1, L"Bar layout", L"COMBOBOX",
+            HWND layout = AddSettingsRow(*state, 1, L"Layout", L"COMBOBOX",
                                          CBS_DROPDOWNLIST, 0, kBarLayout);
-            AddComboItems(layout, {L"Stacked horizontal", L"Vertical"});
+            AddComboItems(layout, {L"Stacked bars", L"Vertical bars", L"Segmented ring",
+                                   L"Concentric rings", L"Logo + mini bars",
+                                   L"Logo + headline %"});
             HWND mode = AddSettingsRow(*state, 1, L"Bar mode", L"COMBOBOX",
                                        CBS_DROPDOWNLIST, 0, kBarMode);
             AddComboItems(mode, {L"Used", L"Remaining"});
@@ -10206,6 +11255,10 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                           10, 500, true);
             AddNumericRow(*state, 1, L"Bar thickness (px)", kBarThickness,
                           2, 50, true);
+            AddNumericRow(*state, 1, L"Ring size (px)", kRingSize,
+                          kRingSizeMin, kRingSizeMax, true);
+            AddNumericRow(*state, 1, L"Ring thickness (px)", kRingThickness,
+                          kRingThicknessMin, kRingThicknessMax, true);
             AddNumericRow(*state, 1, L"Label font size (px)", kLabelFontSize,
                           6, 24, true);
             AddNumericRow(*state, 1, L"Bar text size (px)", kPercentFontSize,

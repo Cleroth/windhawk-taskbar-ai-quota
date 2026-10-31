@@ -255,6 +255,8 @@ static void EraseUiState(HWND hWnd) {
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
+    // Without an account index, closing leaves the tiles' highlight untouched.
+    state.flyout.popup.accountIndex = -1;
     CloseAccountFlyout(state);
     auto releaseTimer = [](DispatcherTimer& timer, winrt::event_token& token) {
         try {

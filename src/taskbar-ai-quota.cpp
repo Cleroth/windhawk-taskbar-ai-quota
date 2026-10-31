@@ -130,6 +130,7 @@ Have a suggestion or found a bug?
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -193,6 +194,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "taskbar/theme.h"
 
 #include "taskbar/logos.h"
+
+#include "taskbar/tiles.h"
 
 #include "taskbar/actions.h"
 

@@ -30,6 +30,8 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.barMode = defaults.barMode;
         settings.barLength = defaults.barLength;
         settings.barThickness = defaults.barThickness;
+        settings.ringSize = defaults.ringSize;
+        settings.ringThickness = defaults.ringThickness;
         settings.labelFontSize = defaults.labelFontSize;
         settings.percentFontSize = defaults.percentFontSize;
         settings.accountMargin = defaults.accountMargin;
@@ -145,9 +147,11 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                         L"Specific display"});
             AddSettingsRow(*state, 1, L"Specific display", L"COMBOBOX",
                            CBS_DROPDOWNLIST, 0, kMonitorNumber);
-            HWND layout = AddSettingsRow(*state, 1, L"Bar layout", L"COMBOBOX",
+            HWND layout = AddSettingsRow(*state, 1, L"Layout", L"COMBOBOX",
                                          CBS_DROPDOWNLIST, 0, kBarLayout);
-            AddComboItems(layout, {L"Stacked horizontal", L"Vertical"});
+            AddComboItems(layout, {L"Stacked bars", L"Vertical bars", L"Segmented ring",
+                                   L"Concentric rings", L"Logo + mini bars",
+                                   L"Logo + headline %"});
             HWND mode = AddSettingsRow(*state, 1, L"Bar mode", L"COMBOBOX",
                                        CBS_DROPDOWNLIST, 0, kBarMode);
             AddComboItems(mode, {L"Used", L"Remaining"});
@@ -155,6 +159,10 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                           10, 500, true);
             AddNumericRow(*state, 1, L"Bar thickness (px)", kBarThickness,
                           2, 50, true);
+            AddNumericRow(*state, 1, L"Ring size (px)", kRingSize,
+                          kRingSizeMin, kRingSizeMax, true);
+            AddNumericRow(*state, 1, L"Ring thickness (px)", kRingThickness,
+                          kRingThicknessMin, kRingThicknessMax, true);
             AddNumericRow(*state, 1, L"Label font size (px)", kLabelFontSize,
                           6, 24, true);
             AddNumericRow(*state, 1, L"Bar text size (px)", kPercentFontSize,

@@ -204,24 +204,42 @@ static void UpdateDependentSettingsControls(SettingsWindowState& state) {
     EnableSettingsRow(state, kMonitorNumber,
                       SendDlgItemMessageW(state.hWnd, kMonitorMode,
                                           CB_GETCURSEL, 0, 0) == 2);
-    bool labelsVisible = SendDlgItemMessageW(state.hWnd, kLabelPosition,
+    // Rows the selected layout ignores stay disabled. No selection commits as stacked bars.
+    LRESULT layout = SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0);
+    bool barLayout = layout <= (LRESULT)BarLayout::Vertical;
+    bool ringLayout = layout == (LRESULT)BarLayout::SegmentedRing ||
+                      layout == (LRESULT)BarLayout::ConcentricRings;
+    bool paceMarksShown = layout != (LRESULT)BarLayout::LogoHeadline;
+    EnableSettingsRow(state, kBarLength, barLayout);
+    EnableSettingsRow(state, kBarThickness, barLayout);
+    EnableSettingsRow(state, kBarGap, barLayout);
+    EnableSettingsRow(state, kRingSize, ringLayout);
+    EnableSettingsRow(state, kRingThickness, ringLayout);
+    EnableSettingsRow(state, kLabelPosition, barLayout);
+    bool labelsVisible = barLayout &&
+                         SendDlgItemMessageW(state.hWnd, kLabelPosition,
                                              CB_GETCURSEL, 0, 0) !=
-                         (LRESULT)LabelPosition::Hidden;
+                             (LRESULT)LabelPosition::Hidden;
     EnableSettingsRow(state, kLabelFontSize, labelsVisible);
     EnableSettingsRow(state, kLabelGap, labelsVisible);
+    EnableSettingsRow(state, kShowBarLabels, barLayout);
+    EnableSettingsRow(state, kPercentTextVisibility, barLayout);
     LRESULT percentTextVisibility = SendDlgItemMessageW(
         state.hWnd, kPercentTextVisibility, CB_GETCURSEL, 0, 0);
+    bool percentTextVisible =
+        barLayout && percentTextVisibility > (LRESULT)PercentTextVisibility::Never;
     bool barTextVisible =
-        SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED ||
-        percentTextVisibility > (LRESULT)PercentTextVisibility::Never;
+        percentTextVisible ||
+        (barLayout &&
+         SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED);
     EnableSettingsRow(state, kPercentFontSize, barTextVisible);
-    EnableSettingsRow(state, kPercentTextAlignment,
-                      percentTextVisibility > (LRESULT)PercentTextVisibility::Never);
-    EnableSettingsRow(state, kShowExtraBarAmounts,
-                      percentTextVisibility > (LRESULT)PercentTextVisibility::Never);
-    bool paceTicksVisible = SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
+    EnableSettingsRow(state, kPercentTextAlignment, percentTextVisible);
+    EnableSettingsRow(state, kShowExtraBarAmounts, percentTextVisible);
+    EnableSettingsRow(state, kShowPaceTicks, paceMarksShown);
+    bool paceTicksVisible = paceMarksShown &&
+                            SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
                                                 BM_GETCHECK, 0, 0) == BST_CHECKED;
-    EnableSettingsRow(state, kPaceTickStyle, paceTicksVisible);
+    EnableSettingsRow(state, kPaceTickStyle, barLayout && paceTicksVisible);
     EnableSettingsRow(state, kPaceTickColor, paceTicksVisible);
     EnableSettingsRow(state, kPollMinutes,
                       SendDlgItemMessageW(state.hWnd, kPollPreset,
@@ -268,12 +286,13 @@ static void RefreshSettingsControls(SettingsWindowState& state) {
                         s.taskbarMonitorMode == TaskbarMonitorMode::All ? 1 :
                         s.taskbarMonitorMode == TaskbarMonitorMode::Specific ? 2 : 0, 0);
     PopulateMonitorCombo(state, s.taskbarMonitorNumber);
-    SendDlgItemMessageW(state.hWnd, kBarLayout, CB_SETCURSEL,
-                        s.barLayout == BarLayout::Vertical ? 1 : 0, 0);
+    SendDlgItemMessageW(state.hWnd, kBarLayout, CB_SETCURSEL, (int)s.barLayout, 0);
     SendDlgItemMessageW(state.hWnd, kBarMode, CB_SETCURSEL,
                         s.barMode == BarMode::Remaining ? 1 : 0, 0);
     SetControlInt(state, kBarLength, s.barLength);
     SetControlInt(state, kBarThickness, s.barThickness);
+    SetControlInt(state, kRingSize, s.ringSize);
+    SetControlInt(state, kRingThickness, s.ringThickness);
     SetControlInt(state, kLabelFontSize, s.labelFontSize);
     SetControlInt(state, kPercentFontSize, s.percentFontSize);
     SetControlInt(state, kAccountMargin, s.accountMargin);
@@ -354,12 +373,15 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
         SendDlgItemMessageW(state.hWnd, kMonitorNumber, CB_GETITEMDATA,
                             monitorSelection, 0) : CB_ERR;
     if (monitorNumber != CB_ERR) s.taskbarMonitorNumber = (int)monitorNumber;
-    s.barLayout = SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0) == 1 ?
-                          BarLayout::Vertical : BarLayout::Stacked;
+    int barLayout = (int)SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0);
+    s.barLayout = barLayout >= 0 && barLayout <= (int)BarLayout::LogoHeadline ?
+                      (BarLayout)barLayout : BarLayout::Stacked;
     s.barMode = SendDlgItemMessageW(state.hWnd, kBarMode, CB_GETCURSEL, 0, 0) == 1 ?
                         BarMode::Remaining : BarMode::Used;
     s.barLength = getBoundedInt(kBarLength, s.barLength);
     s.barThickness = getBoundedInt(kBarThickness, s.barThickness);
+    s.ringSize = getBoundedInt(kRingSize, s.ringSize);
+    s.ringThickness = getBoundedInt(kRingThickness, s.ringThickness);
     s.labelFontSize = getBoundedInt(kLabelFontSize, s.labelFontSize);
     s.percentFontSize = getBoundedInt(kPercentFontSize, s.percentFontSize);
     s.accountMargin = getBoundedInt(kAccountMargin, s.accountMargin);

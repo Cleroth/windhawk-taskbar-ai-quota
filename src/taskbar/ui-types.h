@@ -1,5 +1,18 @@
 // Per-taskbar XAML UI instances and the registry that owns them.
 
+// Inputs of a tile's meter shapes; any change regenerates them.
+struct TileShapeKey {
+    int layout = -1;
+    int barMask = -1;
+    double size = -1;
+    double stroke = -1;
+    double gap = -1;
+    int light = -1;
+    int paceColor = -1;  // -1 without pace markers.
+
+    bool operator==(const TileShapeKey&) const = default;
+};
+
 struct AppliedState {
     std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1};
     std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
@@ -13,6 +26,15 @@ struct AppliedState {
     double columnOpacity = -1;
     int barMask = -1;
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
+
+    // Tile layouts. Per slot, fillPx and pacePx hold the fill and pace position in thousandths of
+    // the meter.
+    TileShapeKey tileShape;
+    double identityOpacity = -1;
+    int tileWarn = -1;
+    int highlight = -1;  // 0 none, 1 hover, 2 open flyout.
+    std::wstring headline;
+    uint32_t headlineColor = 0;
 };
 
 struct PointerHandlers {
@@ -29,7 +51,34 @@ struct MenuItemClickHandler {
     winrt::event_token token{};
 };
 
+// A tile layout's elements (rings, logo + mini bars, logo + headline). Mini bar and headline
+// segment fills and ticks use AccountUiRefs::fills and paceTicks.
+struct TileUiRefs {
+    BarLayout layout = BarLayout::Stacked;
+    // Rings: the ring area, holding the meters with the identity on top.
+    Grid face{nullptr};
+    // Meter shapes, regenerated whenever their TileShapeKey changes.
+    Panel meters{nullptr};
+    // Logo (with an optional number badge) or text, plus the stale-warning mark.
+    Grid identity{nullptr};
+    FrameworkElement logo{nullptr};
+    TextBlock text{nullptr};
+    double textWidthPerPt = 0;  // Text width per DIP of font size.
+    Border badge{nullptr};
+    TextBlock badgeText{nullptr};
+    TextBlock warn{nullptr};
+    // Logo + headline: the most-used quota's number and window key.
+    TextBlock headline{nullptr};
+    TextBlock headlineKey{nullptr};
+    // Ring fills and pace dots per quota slot.
+    std::array<wuxs::Path, kQuotaBarCount> arcs{
+        wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
+    std::array<wuxs::Path, kQuotaBarCount> dots{
+        wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
+};
+
 struct AccountUiRefs {
+    // Tile root in every layout: hit target and flyout anchor.
     StackPanel column{nullptr};
     FrameworkElement barArea{nullptr};
     // Captured at build time so the flyout matches the tile, including visual-test accounts.
@@ -48,6 +97,7 @@ struct AccountUiRefs {
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
+    TileUiRefs tile;
 };
 
 // Account details flyout. Brushes and styles come from LoadFlyoutTheme and are shared by the
@@ -177,6 +227,9 @@ struct QuotaUiInstance {
     bool windowSubclassed = false;
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
+    BarLayout buildBarLayout = BarLayout::Stacked;
+    double tileHeight = 0;
+    bool tileLightTheme = false;  // Light taskbar at the last tile update; picks highlight colors.
     Grid quotaGrid{nullptr};
     Panel injectionParent{nullptr};
     ColumnDefinition quotaColumnDefinition{nullptr};

@@ -47,7 +47,9 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - account ordering and taskbar visibility
 - per-account 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra-usage, and OpenAI credits bar selection
 - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
-- bar length, thickness, and layout
+- layout: stacked bars, vertical bars, segmented ring, concentric rings, logo + mini bars, or logo + headline %; settings the chosen layout ignores are greyed out
+- bar length and thickness (bar layouts), ring size and thickness (ring layouts)
+- per-account tile identity for the ring and logo layouts: provider logo with a number badge when several accounts share a provider, logo only, or label text (up to 4 characters of short text, else the label without spaces)
 - bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"); threshold colors always represent consumed quota
 - pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles and a configurable color
 - label position: hidden, left, top, right, or bottom
@@ -68,7 +70,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - stale-warning marker
 - temporary threshold-spanning test accounts for previewing current taskbar visuals
 
-Bar dimensions and font sizes use sliders with precise numeric spinner controls. Spacing, thresholds, and custom polling use spinners. Concise hover help explains polling, pace ticks, additional OpenAI rate limits, and stale warnings. Each non-account page can be reset independently without removing accounts or credentials.
+Bar and ring dimensions and font sizes use sliders with precise numeric spinner controls. Spacing, thresholds, and custom polling use spinners. Concise hover help explains polling, pace ticks, additional OpenAI rate limits, and stale warnings. Each non-account page can be reset independently without removing accounts or credentials.
 
 ## Usage history
 

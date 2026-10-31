@@ -8,9 +8,19 @@ enum QuotaBarIndex {
     kQuotaBarCount,
 };
 
+// How a tile layout (ring, concentric, logo + bars, headline) marks which account it shows.
+// Stacked and vertical bars use the label and label position instead.
+enum class TileIdentity {
+    LogoBadge,  // Provider logo, plus a number badge when several accounts share the provider.
+    Logo,
+    Text,  // tileText, or the label when tileText is empty.
+};
+
 struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
+    TileIdentity tileIdentity = TileIdentity::LogoBadge;
+    std::wstring tileText;  // Optional short text for TileIdentity::Text.
     std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
     // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
     // used-percent bar in the extra-usage slot. 0 disables the bar.
@@ -31,7 +41,16 @@ enum class TaskbarMonitorMode {
 enum class BarLayout {
     Stacked,
     Vertical,
+    SegmentedRing,
+    ConcentricRings,
+    LogoBars,
+    LogoHeadline,
 };
+
+static constexpr int kRingSizeMin = 24;
+static constexpr int kRingSizeMax = 40;
+static constexpr int kRingThicknessMin = 1;
+static constexpr int kRingThicknessMax = 6;
 
 enum class BarMode {
     Used,
@@ -82,6 +101,10 @@ struct Settings {
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;
+    // Segmented and concentric ring diameter and stroke, in DIPs; rendering shrinks the stroke
+    // and gaps further when the meters wouldn't fit around the identity.
+    int ringSize = 32;
+    int ringThickness = 3;
     int labelFontSize = 11;
     int percentFontSize = 9;
     int accountMargin = 3;
