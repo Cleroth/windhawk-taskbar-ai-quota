@@ -540,16 +540,17 @@ static void StartLoginByIdentity(uint64_t identityHash) {
 
     // Hand off g_loginThread under the lock and re-check g_unloading: Wh_ModUninit sets
     // g_unloading before joining under the same lock, so we never spawn a thread into an
-    // unloading DLL or leave a handle the join would miss.
+    // unloading DLL or leave a handle the join would miss. The previous login thread clears
+    // g_loginInProgress shortly before it exits, so this sign-in is refused until it has.
     std::lock_guard<std::mutex> lk(g_loginThreadMutex);
-    if (g_unloading) {
+    bool previousRunning = g_loginThread && WaitForSingleObject(g_loginThread, 0) != WAIT_OBJECT_0;
+    if (g_unloading || previousRunning) {
         delete req;
         g_loginAccountIdentity.store(0);
         g_loginInProgress.store(false);
         NotifySettingsWindowChanged();
         return;
     }
-    // A prior login thread has already cleared g_loginInProgress; release its handle before reuse.
     if (g_loginThread) {
         CloseHandle(g_loginThread);
         g_loginThread = nullptr;

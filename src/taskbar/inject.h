@@ -3,7 +3,8 @@
 static HANDLE g_injectEvent = nullptr;
 static HANDLE g_retryThread = nullptr;
 static std::mutex g_retryThreadMutex;
-static std::atomic<bool> g_rebuildQuotaUiBeforeInject{false};
+static std::atomic<bool> g_rebuildQuotaUiBeforeInject{false};  // Remove after the topology settles.
+static std::atomic<bool> g_removeQuotaUiBeforeInject{false};   // Remove before the next attempt.
 static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
 
 static UINT GetQuotaCleanupMessage() {
@@ -376,6 +377,7 @@ static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
 
         ULONGLONG settleUntil = 0;
         for (int attempt = 0; attempt < 600 && !g_unloading; attempt++) {
+            if (g_removeQuotaUiBeforeInject.exchange(false)) RemoveAllQuotaGrids();
             if (g_rebuildQuotaUiBeforeInject.exchange(false)) {
                 settleUntil = GetTickCount64() + 2000;
             }
@@ -440,48 +442,28 @@ static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
     return 0;
 }
 
+// Requests removal/injection from the retry worker, which unload joins; callers never marshal
+// them themselves. If the worker can't start, the UI stays as it is and pending requests wait for
+// the next successful start.
 static void StartRetryInject(bool removeExisting) {
     if (removeExisting) g_rebuildQuotaUiBeforeInject = true;
-    DWORD err;
-    {
-        // The long-lived worker consumes every rebuild event. Keeping it alive closes the race
-        // where an autosave removes the UI just as an older one-shot injection thread exits.
-        std::lock_guard<std::mutex> lk(g_retryThreadMutex);
-        if (g_unloading) return;
+    // The long-lived worker consumes every rebuild event. Keeping it alive closes the race
+    // where an autosave removes the UI just as an older one-shot injection thread exits.
+    std::lock_guard<std::mutex> lk(g_retryThreadMutex);
+    if (g_unloading) return;
 
-        if (g_retryThread && WaitForSingleObject(g_retryThread, 0) == WAIT_OBJECT_0) {
-            CloseHandle(g_retryThread);
-            g_retryThread = nullptr;
-        }
+    if (g_retryThread && WaitForSingleObject(g_retryThread, 0) == WAIT_OBJECT_0) {
+        CloseHandle(g_retryThread);
+        g_retryThread = nullptr;
+    }
+    if (!g_retryThread) {
+        g_retryThread = CreateThread(nullptr, 0, RetryInjectThreadProc, nullptr, 0, nullptr);
         if (!g_retryThread) {
-            g_retryThread = CreateThread(nullptr, 0, RetryInjectThreadProc, nullptr, 0, nullptr);
-            if (!g_retryThread) {
-                err = GetLastError();
-            }
-        }
-        if (g_retryThread) {
-            if (g_injectEvent) SetEvent(g_injectEvent);
+            Wh_Log(L"CreateThread RetryInjectThreadProc failed: %lu", GetLastError());
             return;
         }
     }
-
-    Wh_Log(L"CreateThread RetryInjectThreadProc failed: %lu", err);
-
-    if (removeExisting) {
-        g_rebuildQuotaUiBeforeInject = false;
-        RemoveAllQuotaGrids();
-    }
-    bool anyInjected = false;
-    for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
-        if (RunFromWindowThread(hWnd, [](void* param) -> bool {
-                return !g_unloading && InjectQuotaGrid(static_cast<HWND>(param));
-            }, hWnd)) {
-            anyInjected = true;
-        }
-    }
-    if (!anyInjected) {
-        Wh_Log(L"InjectQuotaGrid fallback failed");
-    }
+    if (g_injectEvent) SetEvent(g_injectEvent);
 }
 
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
@@ -491,7 +473,8 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     TrayUI_StartTaskbar_Original(pThis);
     if (g_unloading) return;
 
-    RemoveAllQuotaGrids();
+    // Drop UI bound to the previous taskbar windows before injecting into the new ones.
+    g_removeQuotaUiBeforeInject = true;
     StartRetryInject();
 }
 

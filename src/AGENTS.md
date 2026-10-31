@@ -34,8 +34,15 @@ The mod is injected into `explorer.exe`. Execution domains:
   UI rebuilds. It must NEVER touch XAML directly.
 - **History thread** (`HistoryWindowThreadProc`): owns the native history window, graph caches and
   export/confirmation dialogs. No XAML. Cancel tracked modal dialogs and join it before unloading.
+- **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
+  `g_urlLaunchMutex`): `ShellExecuteExW` in an STA with error dialogs suppressed. `Wh_ModUninit`
+  joins them after the login thread, which can start them; a stuck launch delays unload.
 - **Taskbar UI threads**: all XAML lives here; one `QuotaUiInstance` per taskbar window in
-  `g_uiInstances`.
+  `g_uiInstances`. Their mod code (XAML handlers, timers, the subclass proc, marshaled payloads)
+  must never pump messages or wait on other threads: no `ShellExecute*`, message boxes or dialogs,
+  synchronous cross-apartment COM, cross-thread `SendMessage` without `SMTO_BLOCK`, clipboard or
+  joins. A nested pump runs marshaled teardown (including unload's) and XAML input inside the
+  caller's frame; hand such work to a joined worker, as `OpenUrl` does.
 
 Marshal cross-thread UI work with `RunFromWindowThread` (a `WH_CALLWNDPROC` hook +
 `SendMessageTimeout`). Resolve XAML refs only on the target UI thread: `PostUiUpdate` marshals
@@ -64,11 +71,14 @@ first, then reads/updates XAML.
   `CloseActiveHttpHandles`; untracked network code can hang unload.
 - A sign-in blocks on the sign-in window's message loop with no timeout. Unload unblocks it by
   posting `WM_CLOSE` to `g_loginWnd` and closing `g_loginSocket`, then joins `g_loginThread`.
-  Keep this path intact when changing the login flow.
+  A new sign-in starts only after the previous login thread has exited. Keep this path intact
+  when changing the login flow.
 - Teardown lifetime barrier: join every worker that can issue finite marshals before
   `RemoveAllQuotaGrids(true)`. A finite marshal may discard only an unclaimed payload; once the
   target claims it, wait for completion. Never add a timeout that lets the DLL unload while a
-  worker, hook, subclass or XAML callback can still execute mod code.
+  worker, hook, subclass or XAML callback can still execute mod code. Hook callbacks on Explorer
+  threads (e.g. taskbar restart) only request removal/injection from the retry worker; they never
+  marshal themselves.
 - Check `g_unloading` in loops and before slow/marshaled work.
 
 ## Stability (a crash takes down the shell)
@@ -79,8 +89,8 @@ first, then reads/updates XAML.
   controlled unload. `Wh_ModUninit` isn't guaranteed to run at process shutdown, so a normal
   global destructor must never release XAML.
 - Unload must stay clean: set `g_unloading`, signal `g_stopEvent`, close+join history and
-  settings, unblock+join the login thread, join the fetch/retry threads, remove injected UI,
-  delete the tray icon, `WSACleanup`.
+  settings, unblock+join the login thread, join link launches, join the retry/fetch threads,
+  remove injected UI, delete the tray icon, `WSACleanup`.
 - Hooks on private `taskbar.dll` symbols and the byte-pattern scan for the
   `TaskbarHost::FrameHeight` offset can break on Windows updates. If bars stop showing, suspect
   `HookTaskbarDllSymbols` and `TryGetTaskbarElementAbi` first.

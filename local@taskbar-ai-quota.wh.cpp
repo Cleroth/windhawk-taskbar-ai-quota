@@ -907,9 +907,49 @@ static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
     return std::wstring(L"Updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
 }
 
+// Browser launch threads still to be joined; Wh_ModUninit collects them. Leaf lock.
+static std::mutex g_urlLaunchMutex;
+static std::vector<HANDLE> g_urlLaunchThreads;
+
+// Opens url in the default browser from a launch thread. ShellExecute runs a message loop on its
+// calling thread; on a taskbar thread that loop would run marshaled teardown (including
+// unload's) and XAML input inside the caller. Foreground permission is per process, and the shell
+// creates the browser process on its own thread either way, so the browser still comes to front.
 static void OpenUrl(PCWSTR url) {
     if (g_unloading || !url || !*url) return;
-    ShellExecuteW(nullptr, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
+    auto request = std::make_unique<std::wstring>(url);
+    std::lock_guard<std::mutex> lock(g_urlLaunchMutex);
+    // Pairs with the unload join, which sets g_unloading before collecting the threads.
+    if (g_unloading) return;
+    std::erase_if(g_urlLaunchThreads, [](HANDLE thread) {
+        if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0) return false;
+        CloseHandle(thread);
+        return true;
+    });
+    // Reserve first so recording the handle can't fail once the thread runs.
+    g_urlLaunchThreads.reserve(g_urlLaunchThreads.size() + 1);
+    HANDLE thread = CreateThread(nullptr, 0, [](LPVOID param) WINAPI -> DWORD {
+        std::unique_ptr<std::wstring> url(static_cast<std::wstring*>(param));
+        // Some shell execute handlers need an STA.
+        HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (!g_unloading) {
+            SHELLEXECUTEINFOW info{sizeof(info)};
+            // No error dialogs, so unload's join can't wait on them. Security prompts still show.
+            info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+            info.lpVerb = L"open";
+            info.lpFile = url->c_str();
+            info.nShow = SW_SHOWNORMAL;
+            if (!ShellExecuteExW(&info)) Wh_Log(L"Could not open a link: %lu", GetLastError());
+        }
+        if (SUCCEEDED(com)) CoUninitialize();
+        return 0;
+    }, request.get(), 0, nullptr);
+    if (!thread) {
+        Wh_Log(L"Could not start a link launch thread: %lu", GetLastError());
+        return;
+    }
+    request.release();
+    g_urlLaunchThreads.push_back(thread);
 }
 
 static PCWSTR ProviderDisplayName(const std::wstring& provider) {
@@ -2131,16 +2171,17 @@ static void StartLoginByIdentity(uint64_t identityHash) {
 
     // Hand off g_loginThread under the lock and re-check g_unloading: Wh_ModUninit sets
     // g_unloading before joining under the same lock, so we never spawn a thread into an
-    // unloading DLL or leave a handle the join would miss.
+    // unloading DLL or leave a handle the join would miss. The previous login thread clears
+    // g_loginInProgress shortly before it exits, so this sign-in is refused until it has.
     std::lock_guard<std::mutex> lk(g_loginThreadMutex);
-    if (g_unloading) {
+    bool previousRunning = g_loginThread && WaitForSingleObject(g_loginThread, 0) != WAIT_OBJECT_0;
+    if (g_unloading || previousRunning) {
         delete req;
         g_loginAccountIdentity.store(0);
         g_loginInProgress.store(false);
         NotifySettingsWindowChanged();
         return;
     }
-    // A prior login thread has already cleared g_loginInProgress; release its handle before reuse.
     if (g_loginThread) {
         CloseHandle(g_loginThread);
         g_loginThread = nullptr;
@@ -8630,7 +8671,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 static HANDLE g_injectEvent = nullptr;
 static HANDLE g_retryThread = nullptr;
 static std::mutex g_retryThreadMutex;
-static std::atomic<bool> g_rebuildQuotaUiBeforeInject{false};
+static std::atomic<bool> g_rebuildQuotaUiBeforeInject{false};  // Remove after the topology settles.
+static std::atomic<bool> g_removeQuotaUiBeforeInject{false};   // Remove before the next attempt.
 static std::atomic<ULONGLONG> g_nextInjectFailureLogMs{0};
 
 static UINT GetQuotaCleanupMessage() {
@@ -9003,6 +9045,7 @@ static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
 
         ULONGLONG settleUntil = 0;
         for (int attempt = 0; attempt < 600 && !g_unloading; attempt++) {
+            if (g_removeQuotaUiBeforeInject.exchange(false)) RemoveAllQuotaGrids();
             if (g_rebuildQuotaUiBeforeInject.exchange(false)) {
                 settleUntil = GetTickCount64() + 2000;
             }
@@ -9067,48 +9110,28 @@ static DWORD WINAPI RetryInjectThreadProc(LPVOID) {
     return 0;
 }
 
+// Requests removal/injection from the retry worker, which unload joins; callers never marshal
+// them themselves. If the worker can't start, the UI stays as it is and pending requests wait for
+// the next successful start.
 static void StartRetryInject(bool removeExisting) {
     if (removeExisting) g_rebuildQuotaUiBeforeInject = true;
-    DWORD err;
-    {
-        // The long-lived worker consumes every rebuild event. Keeping it alive closes the race
-        // where an autosave removes the UI just as an older one-shot injection thread exits.
-        std::lock_guard<std::mutex> lk(g_retryThreadMutex);
-        if (g_unloading) return;
+    // The long-lived worker consumes every rebuild event. Keeping it alive closes the race
+    // where an autosave removes the UI just as an older one-shot injection thread exits.
+    std::lock_guard<std::mutex> lk(g_retryThreadMutex);
+    if (g_unloading) return;
 
-        if (g_retryThread && WaitForSingleObject(g_retryThread, 0) == WAIT_OBJECT_0) {
-            CloseHandle(g_retryThread);
-            g_retryThread = nullptr;
-        }
+    if (g_retryThread && WaitForSingleObject(g_retryThread, 0) == WAIT_OBJECT_0) {
+        CloseHandle(g_retryThread);
+        g_retryThread = nullptr;
+    }
+    if (!g_retryThread) {
+        g_retryThread = CreateThread(nullptr, 0, RetryInjectThreadProc, nullptr, 0, nullptr);
         if (!g_retryThread) {
-            g_retryThread = CreateThread(nullptr, 0, RetryInjectThreadProc, nullptr, 0, nullptr);
-            if (!g_retryThread) {
-                err = GetLastError();
-            }
-        }
-        if (g_retryThread) {
-            if (g_injectEvent) SetEvent(g_injectEvent);
+            Wh_Log(L"CreateThread RetryInjectThreadProc failed: %lu", GetLastError());
             return;
         }
     }
-
-    Wh_Log(L"CreateThread RetryInjectThreadProc failed: %lu", err);
-
-    if (removeExisting) {
-        g_rebuildQuotaUiBeforeInject = false;
-        RemoveAllQuotaGrids();
-    }
-    bool anyInjected = false;
-    for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
-        if (RunFromWindowThread(hWnd, [](void* param) -> bool {
-                return !g_unloading && InjectQuotaGrid(static_cast<HWND>(param));
-            }, hWnd)) {
-            anyInjected = true;
-        }
-    }
-    if (!anyInjected) {
-        Wh_Log(L"InjectQuotaGrid fallback failed");
-    }
+    if (g_injectEvent) SetEvent(g_injectEvent);
 }
 
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
@@ -9118,7 +9141,8 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     TrayUI_StartTaskbar_Original(pThis);
     if (g_unloading) return;
 
-    RemoveAllQuotaGrids();
+    // Drop UI bound to the previous taskbar windows before injecting into the new ones.
+    g_removeQuotaUiBeforeInject = true;
     StartRetryInject();
 }
 
@@ -14743,6 +14767,19 @@ void Wh_ModUninit() {
     }
     g_loginAccountIdentity.store(0);
     g_loginInProgress.store(false);
+
+    // Browser launches, including any the sign-in window started. OpenUrl rechecks g_unloading
+    // under the same lock, so none start after this. A stuck launch delays unload; Explorer's UI
+    // stays responsive meanwhile.
+    std::vector<HANDLE> urlLaunchThreads;
+    {
+        std::lock_guard<std::mutex> lk(g_urlLaunchMutex);
+        urlLaunchThreads.swap(g_urlLaunchThreads);
+    }
+    for (HANDLE thread : urlLaunchThreads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
 
     HANDLE retryThread = nullptr;
     {

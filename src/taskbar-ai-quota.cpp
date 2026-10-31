@@ -377,6 +377,19 @@ void Wh_ModUninit() {
     g_loginAccountIdentity.store(0);
     g_loginInProgress.store(false);
 
+    // Browser launches, including any the sign-in window started. OpenUrl rechecks g_unloading
+    // under the same lock, so none start after this. A stuck launch delays unload; Explorer's UI
+    // stays responsive meanwhile.
+    std::vector<HANDLE> urlLaunchThreads;
+    {
+        std::lock_guard<std::mutex> lk(g_urlLaunchMutex);
+        urlLaunchThreads.swap(g_urlLaunchThreads);
+    }
+    for (HANDLE thread : urlLaunchThreads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+
     HANDLE retryThread = nullptr;
     {
         std::lock_guard<std::mutex> lk(g_retryThreadMutex);
