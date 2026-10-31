@@ -16,19 +16,19 @@ Each visible account gets one compact taskbar column. Choose among the provider'
 
 Hover for percentages, reset times, plan and provider details, errors, and retry countdowns. Click a column to refresh that account or open its provider dashboard, depending on settings and provider support. Right-click a column for Settings, Usage history, Refresh all, provider actions, and show/hide toggles. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
 
-Bars can show compact quota labels (`5h`, `7d`, `Fa`, `Ex`, `Cr`) and percentage text with never, hover, or always visibility plus adaptive, left, center, or right alignment. They use configurable green/yellow/orange/red thresholds, with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window and have caret, full-line, edge-notch, and dot styles with a configurable color. Stale errors can mark labels and tooltips with `!`.
+Bars can show compact quota labels and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark labels and tooltips with `!`.
 
-It can also fire a Windows notification when an account first crosses the red threshold on a selected bar, so you don't have to keep glancing at the bars. The notification re-arms once usage drops back below the threshold.
+It can also fire a Windows notification when an account first crosses the red threshold on a selected bar. The notification re-arms once usage drops back below the threshold.
 
 ## Setup
 
-Install **Taskbar AI Quota Bars** from the Windhawk catalog. For local development, `install-windhawk.ps1` installs `local@taskbar-ai-quota.wh.cpp`. On a fresh install, click the **AI +** taskbar tile to open the native settings window and add an account. Existing Windhawk settings are imported once when upgrading. Settings autosave; most appearance and behavior edits do not immediately re-query providers, while new or identity-changed accounts and stale accounts made visible can fetch.
+Install **Taskbar AI Quota Bars** from the Windhawk catalog. On a fresh install, click the **AI +** taskbar tile to open the native settings window and add an account. Existing Windhawk settings are imported once when upgrading. Settings autosave; most appearance and behavior edits do not immediately re-query providers, while new or identity-changed accounts and stale accounts made visible can fetch.
 
-Configure a provider and label, then select at least one supported quota bar. Each provider-and-label pair must be unique. Sign in to Anthropic/OpenAI from the settings window or a quota column's right-click menu. Antigravity reads quota from its running app or CLI session.
+Configure a provider and label, then select at least one supported quota bar. Each provider-and-label pair must be unique.
 
 ## Signing In
 
-The mod runs its own OAuth sign-in and refreshes the access token itself, so the bars keep working without re-running any CLI. A column that needs authentication shows "click to sign in" - just left-click it to start the flow. You can also right-click a column, open **Sign in**, and pick the account.
+The mod runs its own OAuth sign-in and refreshes the access token itself, so the bars keep working without re-running any CLI. A column that needs authentication shows "click to sign in"; left-click it to start the flow. You can also sign in from the settings window, or right-click a column, open **Sign in**, and pick the account.
 
 Signing in shows a window instead of launching a browser: **Copy link** lets you paste the sign-in link into any browser or profile (handy when each account lives in a different profile), and **Open in browser** uses the default browser.
 
@@ -37,8 +37,6 @@ Signing in shows a window instead of launching a browser: **Copy link** lets you
 - **Google Antigravity**: no separate mod sign-in is needed. Keep the signed-in Antigravity app or CLI running so the mod can query its local language server. Older IDE builds also need an open workspace.
 
 Use **Sign out** in the same menu to delete an Anthropic/OpenAI stored token. Renaming a label preserves its stored sign-in when possible. Removing an Anthropic/OpenAI account asks whether to retain or delete its stored sign-in; removing an Antigravity account only confirms the removal.
-
-Antigravity servers without pooled-quota support can show only their current limiting quota. Weekly stays unavailable and pace ticks are disabled for that fallback.
 
 ## Settings
 
@@ -80,8 +78,8 @@ changing per-account recording selections or hidden-account rules. Account recor
 change **Record history** in an account editor to exclude it. Recording starts with the next poll.
 Use **Usage history...** from the taskbar context menu or Behavior page to open the native viewer.
 It reads local samples, not provider APIs. **Refresh / F5** updates the displayed snapshot.
-**Info...** explains line styles, statistics, recording rules, and export behavior without
-cluttering the charts. Recording state and storage errors stay visible in the main window.
+**Info...** explains line styles, statistics, recording rules, and export behavior. Recording
+state and storage errors stay visible in the main window.
 
 - **All accounts** overlays separately labeled quota lines on one graph; quotas are never
   summed or reduced to a maximum. The view selector offers **Short-term**, **Weekly**,
@@ -99,8 +97,7 @@ cluttering the charts. Recording state and storage errors stay visible in the ma
 - Selecting one account defaults to **All meters**, with the same three groups also available.
   All-account and single-account modes remember their view selections separately until the window
   closes. **All meters** includes weeklies hidden on the taskbar and plots Anthropic USD
-  spending. Single-account colors stay tied to each meter; All accounts keeps account color
-  families. Percentages, USD, and credits use separately labeled axes.
+  spending. Percentages, USD, and credits use separately labeled axes.
 - A compact legend wraps above the graph; line names use the account label without its provider
   prefix. Hover an entry to emphasize its matching line.
   Hover the graph to identify all nearby or coincident lines by name, with recorded sample
@@ -113,14 +110,14 @@ cluttering the charts. Recording state and storage errors stay visible in the ma
   last and peak sampled spending, not total spending across the selected range.
 - **Compare previous week** overlays the last seven days and the preceding seven days. It shifts by
   exactly 168 elapsed hours; local clock times can differ across daylight-saving changes.
-- All accounts uses a color family per account, with tints distinguishing its quotas. Connected
-  samples use rounded, DPI-scaled 3px primary and 2px scoped lines. Current lines are solid;
-  dashes are reserved strictly for the previous week, not for distinguishing meters. Only
-  isolated readings get dots (filled for current, hollow for previous). Genuine resets, missing
-  or failed readings, recording gaps, restarts, and recording changes stay disconnected.
-  No event marks or ticks appear above or below the plot, including reset, missing, or gap marks.
-  OpenAI's idle 0% case with a rolling future reset timestamp no longer fragments the line;
-  genuine resets still break it.
+- All accounts uses a color family per account, with tints distinguishing its quotas;
+  single-account colors stay tied to each meter. Connected samples use rounded, DPI-scaled 3px
+  primary and 2px scoped lines. Current lines are solid; dashes are reserved strictly for the
+  previous week, not for distinguishing meters. Only isolated readings get dots (filled for
+  current, hollow for previous). Genuine resets, missing or failed readings, recording gaps,
+  restarts, and recording changes stay disconnected; idle OpenAI 0% readings with a rolling
+  future reset timestamp stay connected. No event marks or ticks appear above or below the plot,
+  including reset, missing, or gap marks.
 - Charts show recorded peaks, coverage, and estimated time above the current
   red threshold. Near-limit estimates interpolate only connected samples, not gaps or time after
   the last sample. Short and weekly limits overlap and must not be added together.
@@ -160,10 +157,9 @@ Windhawk's existing machine-shared configuration. Opening an empty viewer does n
 Retention defaults to **90 days**. Hourly maintenance prunes older samples while recording or
 when refreshing the viewer (including with recording off); loading a journal also permits
 maintenance. Retention edits do not bypass that hourly cadence. A **250,000-sample cap
-(about 60 MB)** also evicts oldest records in batches;
-many accounts or frequent polls can shorten effective retention. Only the taskbar-owning
-Explorer records, with exclusive journal ownership to prevent competing writers. Storage
-failures appear in the viewer. Downgrading to a version without history support can discard
+(about 60 MB)** also evicts oldest records in batches; many accounts or frequent polls can
+shorten effective retention. Only the taskbar-owning Explorer records, with exclusive journal
+ownership to prevent competing writers. Storage failures appear in the viewer. Downgrading to a version without history support can discard
 saved history IDs when settings are edited; old samples then appear as anonymous retained history.
 
 ### Verification
@@ -229,12 +225,13 @@ Signing in uses the public OAuth clients of the official CLIs (Claude Code for A
 - Specific displays use detected taskbar order: `Display 1` is primary and later entries are secondary taskbars.
 - Anthropic/OpenAI require one browser sign-in per configured account.
 - Antigravity requires a signed-in app or CLI session to remain running; older IDE builds may also require an open workspace.
+- Antigravity servers without pooled-quota support show only their current limiting quota; weekly stays unavailable and pace ticks are disabled.
 - OpenAI sign-in needs `localhost:1455` (or `1457`) free for the browser redirect.
 - Anthropic and OpenAI sessions refresh automatically; sign in again if a stored session is missing, invalid, or revoked.
 
 ## Building from source
 
-Windhawk and its catalog take a single file, so the source lives in `src/` as fragments of one translation unit, included in order by `src/taskbar-ai-quota.cpp`. `pwsh generate-mod.ps1` combines them into the committed `local@taskbar-ai-quota.wh.cpp`; edit `src/` rather than that generated file, regenerate, then run `pwsh install-windhawk.ps1` to install it locally. Edits made in Windhawk's mod editor need to be ported back into `src/`.
+Windhawk and its catalog take a single file, so the source lives in `src/` as fragments of one translation unit, included in order by `src/taskbar-ai-quota.cpp`. `pwsh generate-mod.ps1` combines them into the committed `local@taskbar-ai-quota.wh.cpp`; edit `src/` rather than that generated file, regenerate, then run `pwsh install-windhawk.ps1` as Administrator to install it locally. Edits made in Windhawk's mod editor need to be ported back into `src/`.
 
 ## Suggestions & Bugs
 

@@ -16,7 +16,8 @@ Input rules (violations fail with exit code 1):
 - Local includes appear only in the entry, outside comments and preprocessor conditionals,
   in the exact form `#include "dir/file.h"`; each path is relative, uses `/`, has no `.` or
   `..` segments, stays under the source root, exists, and is included once.
-- Every file under the source root other than the entry is included.
+- Every file under the source root other than the entry and `AGENTS.md` instruction files is
+  included.
 - Fragments contain no local includes.
 
 .PARAMETER SourceRoot
@@ -199,7 +200,8 @@ function Build-Mod {
     foreach ($file in [System.IO.Directory]::EnumerateFiles($root, '*', [System.IO.SearchOption]::AllDirectories)) {
         $rel = [System.IO.Path]::GetRelativePath($root, $file).Replace('\', '/')
         $key = $rel.ToLowerInvariant()
-        if ($key -ne $entryKey -and -not $includes.ContainsKey($key)) { throw "src/${rel}: not included by $entryLabel" }
+        if ($key -eq $entryKey -or $includes.ContainsKey($key) -or [System.IO.Path]::GetFileName($key) -eq 'agents.md') { continue }
+        throw "src/${rel}: not included by $entryLabel"
     }
     return @{ Text = $out.ToString(); Map = $map }
 }
