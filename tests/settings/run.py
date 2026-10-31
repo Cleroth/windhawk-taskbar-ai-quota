@@ -103,7 +103,7 @@ def main():
         # The probes mirror Windhawk's Windows 10 targeting and MSVC-style wide printf.
         native = flags + ["-D_WIN32_WINNT=0x0A00", "-DWINVER=0x0A00", "-D__USE_MINGW_ANSI_STDIO=0"]
         host_libs = ["-ld2d1", "-ldwrite", "-ldwmapi", "-lole32", "-loleaut32", "-lruntimeobject", "-lwindowsapp",
-                     "-luser32", "-lgdi32", "-ladvapi32"]
+                     "-luser32", "-lgdi32", "-ladvapi32", "-lcomctl32"]
         extract = [sys.executable, "-B", str(HERE / "extract.py"), "--source", str(source),
                    "--expected-hash", results["source_sha256_before"]]
         setup = [

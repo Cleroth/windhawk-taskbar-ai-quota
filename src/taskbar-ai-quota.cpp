@@ -242,6 +242,10 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "ui/surface.h"
 
+#include "ui/popup.h"
+
+#include "ui/text-box.h"
+
 #include "ui/host.h"
 
 #include "settings/storage.h"
@@ -250,7 +254,17 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "settings/native.h"
 
+#include "settings/edits.h"
+
+#include "settings/store.h"
+
+#include "settings/view.h"
+
 #include "settings/page-about.h"
+
+#include "settings/page-behavior.h"
+
+#include "settings/page-history.h"
 
 #include "settings/shell.h"
 

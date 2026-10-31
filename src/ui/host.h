@@ -1,7 +1,8 @@
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
-// and its scrolling viewport child, each with its own render target; theme, DPI, pointer and
-// keyboard input, focus, scrolling, close paths and teardown. A client supplies the content and
-// the window-specific behavior. Rules: ui/AGENTS.md.
+// and its scrolling viewport child, each with its own render target; the dropdown popup and the
+// number boxes' native text boxes; theme, DPI, pointer and keyboard input, focus, scrolling,
+// close paths and teardown. A client supplies the content and the window-specific behavior.
+// Rules: ui/AGENTS.md.
 
 struct UiHost;
 
@@ -11,8 +12,9 @@ struct UiHost;
 struct UiHostClient {
     // Builds the frame for a client area of `client` DIPs.
     virtual void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) = 0;
+    // Item and link activations, dropdown choices, number box steps and text events.
     virtual void Invoke(UiHost& host, UiAction action) = 0;
-    // Messages the host doesn't handle (application and registered messages); true if handled.
+    // Main window messages the host doesn't handle; true if handled.
     virtual bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam,
                          LRESULT& result) = 0;
     // End of the main window's WM_CREATE; false fails creation.
@@ -33,6 +35,7 @@ protected:
 
 struct UiHostConfig {
     PCWSTR mainClass = nullptr, viewportClass = nullptr, title = nullptr;
+    PCWSTR popupClass = nullptr;       // Dropdown popup; nullptr: dropdowns don't open.
     UINT activateMessage = 0;          // Registered "show yourself" message; 0 = none.
     D2D1_SIZE_F size{1000, 860};       // Initial outer size, DIPs.
     D2D1_SIZE_F minSize{500, 400};     // Minimum outer size, DIPs.
@@ -64,15 +67,30 @@ struct UiHost {
     bool scrollbarHot = false, scrollDragging = false;
     float scrollDragOffset = 0;
 
+    // Dropdown popup and number boxes' text boxes
+    UiPopup popup;
+    UiTextBoxes boxes;
+    UiFocusRef pendingFocus;  // Focused once the next rebuild has built it
+    bool pendingFocusVisible = false;
+
     // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md).
     int dispatchDepth = 0;
     bool rebuildPending = false, resetScroll = false;
     bool closing = false, faulted = false;
 };
 
+static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+                                          UINT_PTR, DWORD_PTR data);
+
 static void UiHostRequestRebuild(UiHost& host, bool resetScroll) {
     host.rebuildPending = true;
     host.resetScroll = host.resetScroll || resetScroll;
+}
+
+// Focuses an element after the next rebuild (one that the rebuild may create or enable).
+static void UiHostRequestFocus(UiHost& host, UiFocusRef ref, bool visible) {
+    host.pendingFocus = ref;
+    host.pendingFocusVisible = visible;
 }
 
 static float UiHostScale(const UiHost& host) {
@@ -81,6 +99,11 @@ static float UiHostScale(const UiHost& host) {
 
 static float UiHostViewHeight(const UiHost& host) {
     return host.frame.viewport.bottom - host.frame.viewport.top;
+}
+
+static void UiHostInvalidate(const UiHost& host) {
+    if (host.main) InvalidateRect(host.main, nullptr, FALSE);
+    if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
 // Fault close: nothing is saved. WM_CLOSE cancels tracked modals and destroys the window once
@@ -99,8 +122,11 @@ static void UiHostApplyTheme(UiHost& host) {
     UiApplyChrome(host.main, host.palette);
     host.mainSurface.cache.Clear();
     host.viewSurface.cache.Clear();
-    InvalidateRect(host.main, nullptr, FALSE);
-    if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
+    host.popup.surface.cache.Clear();
+    UiHostInvalidate(host);
+    for (const UiTextBox& box : host.boxes.boxes) {
+        if (box.window) InvalidateRect(box.window, nullptr, TRUE);
+    }
 }
 
 static UiScrollbar UiHostScrollbar(const UiHost& host) {
@@ -118,12 +144,177 @@ static UiFocusRef UiHostHit(UiHost& host, UiSurfaceId surface, POINT point) {
                      at);
 }
 
+// Dropdown popup -------------------------------------------------------------------------------
+
+static void UiHostClosePopup(UiHost& host) {
+    if (!host.popup.open && !host.popup.window) return;
+    UiPopupClose(host.popup);
+    UiHostInvalidate(host);
+}
+
+// Opens a dropdown's popup under (or above) its field: owned by the main window, shown without
+// activation, at the DPI of its monitor, holding capture.
+static void UiHostOpenPopup(UiHost& host, uint32_t id) {
+    UiSurfaceId surface = UiSurfaceId::Main;
+    const UiItem* item = UiFindItem(host.frame, id, &surface);
+    if (!item || item->kind != UiItemKind::Dropdown || !item->enabled || item->options.empty() ||
+        !host.config->popupClass || host.closing) {
+        return;
+    }
+    UiHostClosePopup(host);
+    UiPopup& popup = host.popup;
+    float scale = UiHostScale(host);
+    D2D1_SIZE_F size = UiLayoutOptions(*host.graphics, item->options, item->action,
+                                       item->rect.right - item->rect.left, popup.rows);
+    float shift = surface == UiSurfaceId::Content ? -host.scroll : 0;
+    RECT field{LONG(std::lround(item->rect.left * scale)),
+               LONG(std::lround((item->rect.top + shift) * scale)),
+               LONG(std::lround(item->rect.right * scale)),
+               LONG(std::lround((item->rect.bottom + shift) * scale))};
+    MapWindowPoints(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr,
+                    reinterpret_cast<POINT*>(&field), 2);
+    popup.highlight = -1;
+    for (size_t i = 0; i < popup.rows.size(); i++) {
+        if (popup.rows[i].selected) popup.highlight = int(i);
+    }
+
+    MONITORINFO monitor{sizeof(monitor)};
+    GetMonitorInfoW(MonitorFromRect(&field, MONITOR_DEFAULTTONEAREST), &monitor);
+    auto place = [&](float popupScale) {
+        SIZE pixels{LONG(std::lround(size.width * popupScale)), LONG(std::lround(size.height * popupScale))};
+        POINT at = UiPopupPlacement(field, pixels, monitor.rcWork, int(std::lround(4 * scale)));
+        return RECT{at.x, at.y, at.x + pixels.cx, at.y + pixels.cy};
+    };
+    RECT rect = place(scale);
+    HWND window = CreateWindowExW(kUiPopupExStyle, host.config->popupClass, nullptr, WS_POPUP,
+                                  rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+                                  host.main, nullptr, GetModuleHandleW(nullptr), &host);
+    if (!window) {
+        Wh_Log(L"Could not create the dropdown popup: %lu", GetLastError());
+        popup.rows.clear();
+        return;
+    }
+    popup.window = popup.surface.window = window;
+    popup.dpi = WindowDpi(window);
+    if (popup.dpi != host.dpi) {
+        rect = place(float(popup.dpi) / 96);
+        SetWindowPos(window, nullptr, rect.left, rect.top, rect.right - rect.left,
+                     rect.bottom - rect.top, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+    DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    popup.field = id;
+    popup.open = true;
+    SetWindowPos(window, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetCapture(window);
+    UiHostInvalidate(host);
+}
+
+// A chosen row: the popup closes, then the client gets the field's action with the row's value.
+static void UiHostChoose(UiHost& host, int row) {
+    if (row < 0 || row >= int(host.popup.rows.size())) return;
+    UiAction action = host.popup.rows[size_t(row)].action;
+    UiHostClosePopup(host);
+    if (!host.closing) host.client->Invoke(host, std::move(action));
+}
+
+// Text boxes -----------------------------------------------------------------------------------
+
+// The text event of a number box's text box, as its action.
+static void UiHostTextEvent(UiHost& host, uint32_t id, UiActionKind kind, std::wstring text = {},
+                            int value = 0) {
+    const UiItem* item = UiFindItem(host.frame, id);
+    if (host.closing || !item || item->kind != UiItemKind::NumberBox) return;
+    UiAction action = item->action;
+    action.kind = kind;
+    action.text = std::move(text);
+    action.value = value;
+    host.client->Invoke(host, std::move(action));
+}
+
+// Text boxes sit over their number boxes' text areas, vertically centered, scrolled with the
+// content.
+static void UiHostPlaceTextBoxes(UiHost& host) {
+    float scale = UiHostScale(host);
+    for (const UiTextBox& box : host.boxes.boxes) {
+        const UiItem* item = UiFindItem(host.frame, box.id);
+        if (!item || !box.window) continue;
+        D2D1_RECT_F text = UiNumberBoxTextRect(*item);
+        float center = (item->rect.top + item->rect.bottom) / 2 - host.scroll;
+        int left = int(std::lround(text.left * scale)), right = int(std::lround(text.right * scale));
+        int top = int(std::lround(center * scale)) - host.boxes.fontHeight / 2;
+        SetWindowPos(box.window, nullptr, left, top, std::max(right - left, 1), host.boxes.fontHeight,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+// After a rebuild: one text box per number box (kept by id), others destroyed; text set only
+// when the client's text changed and no IME composition is running.
+static void UiHostSyncTextBoxes(UiHost& host) {
+    UiTextBoxes& boxes = host.boxes;
+    // Removed first, so their focus-loss notifications find no box.
+    std::vector<HWND> removed;
+    std::erase_if(boxes.boxes, [&](const UiTextBox& box) {
+        const UiItem* item = UiFindItem(host.frame, box.id);
+        if (item && item->kind == UiItemKind::NumberBox && box.window) return false;
+        if (box.window) removed.push_back(box.window);
+        return true;
+    });
+    for (HWND window : removed) DestroyWindow(window);
+    HFONT font = UiTextBoxFont(boxes, host.dpi);
+    for (const UiItem& item : host.frame.content) {
+        if (item.kind != UiItemKind::NumberBox) continue;
+        UiTextBox* box = UiFindTextBox(boxes, item.id);
+        if (!box) {
+            HWND window = CreateWindowExW(0, L"EDIT", item.text.c_str(),
+                                          WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_LEFT, 0, 0, 0, 0,
+                                          host.viewport, nullptr, GetModuleHandleW(nullptr), nullptr);
+            if (!window) {
+                Wh_Log(L"Could not create a text box: %lu", GetLastError());
+                continue;
+            }
+            if (!SetWindowSubclass(window, UiHostTextBoxProc, 0, reinterpret_cast<DWORD_PTR>(&host))) {
+                Wh_Log(L"Could not subclass a text box");
+                DestroyWindow(window);
+                continue;
+            }
+            boxes.boxes.push_back({item.id, window, item.text});
+            box = &boxes.boxes.back();
+            SendMessageW(window, WM_SETFONT, WPARAM(font), FALSE);
+            SendMessageW(window, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
+            SendMessageW(window, EM_LIMITTEXT, 64, 0);
+        } else if (!box->composing && item.text != box->text) {
+            UiSetTextBoxText(boxes, *box, item.text);
+        }
+        if (bool(IsWindowEnabled(box->window)) != item.enabled) EnableWindow(box->window, item.enabled);
+    }
+    UiHostPlaceTextBoxes(host);
+}
+
+// Focus and scrolling ----------------------------------------------------------------------------
+
+// The window that holds keyboard focus for an element: a number box's text box, else the
+// element's surface.
+static HWND UiHostFocusWindow(UiHost& host, UiFocusRef ref) {
+    UiSurfaceId surface = UiSurfaceId::Main;
+    const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
+    if (!item) return host.main;
+    if (item->kind == UiItemKind::NumberBox) {
+        UiTextBox* box = UiFindTextBox(host.boxes, ref.id);
+        if (box && box->window && IsWindowEnabled(box->window)) return box->window;
+    }
+    return surface == UiSurfaceId::Main ? host.main : host.viewport;
+}
+
 // Scrolls to a pixel-aligned offset and re-targets the pointer, whose element moved under it.
+// Scrolling closes the popup and moves the text boxes.
 static void UiHostScrollTo(UiHost& host, float offset) {
     float scale = UiHostScale(host);
     offset = UiClampScroll(offset, UiHostViewHeight(host), host.frame.contentHeight);
     offset = std::round(offset * scale) / scale;
     if (offset == host.scroll) return;
+    UiHostClosePopup(host);
     host.scroll = offset;
     POINT cursor{};
     RECT client{};
@@ -132,15 +323,17 @@ static void UiHostScrollTo(UiHost& host, float offset) {
         PtInRect(&client, cursor)) {
         UiPointerMove(host.pointer, UiHostHit(host, UiSurfaceId::Content, cursor));
     }
+    UiHostPlaceTextBoxes(host);
     InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
-// Moves focus to an element (keyboard focus to its surface), scrolling content into view when
-// the move came from the keyboard.
+// Moves focus to an element (keyboard focus to its window), scrolling content into view when
+// the move came from the keyboard. Focus leaving the popup's field closes the popup.
 static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
     if (!item) return;
+    if (ref.id != host.popup.field) UiHostClosePopup(host);
     host.focus = ref;
     host.focusVisible = visible;
     if (surface == UiSurfaceId::Content && visible) {
@@ -150,20 +343,87 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
                                                   bounds.front().top, bounds.back().bottom, 12));
         }
     }
-    HWND target = surface == UiSurfaceId::Main ? host.main : host.viewport;
-    if (GetFocus() != target) SetFocus(target);
-    InvalidateRect(host.main, nullptr, FALSE);
-    InvalidateRect(host.viewport, nullptr, FALSE);
+    HWND target = UiHostFocusWindow(host, ref);
+    if (GetFocus() != target) {
+        SetFocus(target);
+        // A text box reached with the keyboard selects its text.
+        if (visible && target != host.main && target != host.viewport) {
+            SendMessageW(target, EM_SETSEL, 0, -1);
+        }
+    }
+    UiHostInvalidate(host);
 }
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
+// A dropdown opens its popup; a number box only takes focus (its text box reports edits).
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
+    const UiItem* item = UiFindItem(host.frame, ref.id);
+    if (item && ref.link < 0 && item->kind == UiItemKind::Dropdown) {
+        UiHostOpenPopup(host, ref.id);
+        return;
+    }
+    if (item && ref.link < 0 && item->kind == UiItemKind::NumberBox) return;
     const UiAction* action = UiActionOf(host.frame, ref);
     if (!action) return;
     UiAction copy = *action;
     host.client->Invoke(host, std::move(copy));
 }
+
+// Deferred structural rebuild, once the outermost dispatch is done with the old items. A
+// rebuild closes the popup; keyboard focus follows the focused element (a requested one, or
+// one whose text box was removed).
+static void UiHostRebuildIfPending(UiHost& host) {
+    for (int pass = 0; pass < 4 && host.dispatchDepth == 1 && host.rebuildPending && host.main &&
+                       host.viewport && !host.closing;
+         pass++) {
+        host.rebuildPending = false;
+        UiHostClosePopup(host);
+        RECT client{};
+        GetClientRect(host.main, &client);
+        float scale = UiHostScale(host);
+        UiTrimCaches(*host.graphics);
+        UiFrame frame;
+        host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        UiFocusRef fallback;
+        for (const UiItem& item : frame.main) {
+            if (item.kind == UiItemKind::Nav && item.selected) fallback = {item.id, -1};
+        }
+        // Keyboard focus starts on the selected navigation item, without a ring.
+        host.focus = UiResolveFocus(host.stops, stops, host.focus.id ? host.focus : fallback,
+                                    fallback);
+        host.frame = std::move(frame);
+        host.stops = std::move(stops);
+        if (!UiFindItem(host.frame, host.pointer.hot.id)) host.pointer.hot = {};
+        if (!UiFindItem(host.frame, host.pointer.pressed.id)) host.pointer.pressed = {};
+        host.scroll = host.resetScroll ? 0 : host.scroll;
+        host.resetScroll = false;
+        host.scroll = std::round(UiClampScroll(host.scroll, UiHostViewHeight(host),
+                                               host.frame.contentHeight) * scale) / scale;
+        const D2D1_RECT_F& v = host.frame.viewport;
+        int left = int(std::lround(v.left * scale)), top = int(std::lround(v.top * scale));
+        SetWindowPos(host.viewport, nullptr, left, top, int(std::lround(v.right * scale)) - left,
+                     int(std::lround(v.bottom * scale)) - top, SWP_NOZORDER | SWP_NOACTIVATE);
+        UiHostSyncTextBoxes(host);
+        UiHostInvalidate(host);
+
+        UiFocusRef pending = std::exchange(host.pendingFocus, {});
+        bool active = GetActiveWindow() == host.main;
+        if (pending.id && UiFindItem(host.frame, pending.id)) {
+            if (active) UiHostSetFocus(host, pending, host.pendingFocusVisible);
+            else host.focus = pending;
+        } else if (active) {
+            HWND focus = GetFocus();
+            if ((!focus || focus == host.main || focus == host.viewport) &&
+                focus != UiHostFocusWindow(host, host.focus)) {
+                UiHostSetFocus(host, host.focus, host.focusVisible);
+            }
+        }
+    }
+}
+
+// Window procedures ------------------------------------------------------------------------------
 
 static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT message,
                           WPARAM wParam, LPARAM lParam) {
@@ -204,6 +464,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     PostMessageW(window, WM_CLOSE, 0, 0);
                     break;
                 }
+                UiHostClosePopup(host);
                 if (!host.faulted && !host.client->Unloading() && !host.client->PrepareClose(host)) {
                     break;
                 }
@@ -213,6 +474,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_DESTROY:
                 if (isMain) {
                     host.closing = true;
+                    UiPopupClose(host.popup);
                     if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
                         ReleaseCapture();
                     }
@@ -220,8 +482,9 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 }
                 break;
             case WM_NCDESTROY:
-                // Children are gone before the main window's NCDESTROY; each surface releases its
-                // target with its window. Host state outlives both.
+                // Children (viewport, text boxes) and the owned popup are gone before the main
+                // window's NCDESTROY; each surface releases its target with its window. Host
+                // state outlives them all.
                 UiDiscardSurface(own);
                 own.window = nullptr;
                 SetWindowLongPtrW(window, GWLP_USERDATA, 0);
@@ -229,6 +492,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     // Quit first: the loop must end even if the client's teardown throws.
                     host.main = nullptr;
                     PostQuitMessage(0);
+                    UiReleaseTextBoxes(host.boxes);
                     host.client->Destroyed();
                 } else {
                     host.viewport = nullptr;
@@ -236,10 +500,20 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 handled = false;
                 break;
 
-            // Size, DPI, theme
+            // Size, position, DPI, theme. Each closes the popup.
             case WM_SIZE:
                 UiResizeSurface(own);
+                if (isMain) UiHostClosePopup(host);
                 if (isMain && wParam != SIZE_MINIMIZED) UiHostRequestRebuild(host, false);
+                break;
+            case WM_MOVE:
+            case WM_ENTERSIZEMOVE:
+                UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_SHOWWINDOW:
+                if (!wParam) UiHostClosePopup(host);
+                handled = false;
                 break;
             case WM_GETMINMAXINFO:
                 if (isMain) {
@@ -249,6 +523,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 }
                 break;
             case WM_DPICHANGED: {
+                UiHostClosePopup(host);
                 host.dpi = HIWORD(wParam);
                 UiDiscardSurface(host.mainSurface);
                 UiDiscardSurface(host.viewSurface);
@@ -274,10 +549,48 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 handled = false;
                 break;
 
+            // Activation and modes: the popup closes before default handling (a system command
+            // such as minimize is swallowed while the popup holds capture).
+            case WM_ACTIVATE:
+                if (LOWORD(wParam) == WA_INACTIVE) UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_CANCELMODE:
+            case WM_SYSCOMMAND:
+                UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_SYSKEYDOWN: {
+                const UiItem* focused = UiFindItem(host.frame, host.focus.id);
+                if (host.popup.open) {
+                    UiHostClosePopup(host);
+                } else if (wParam == VK_DOWN && !host.closing && focused &&
+                           focused->kind == UiItemKind::Dropdown) {
+                    UiHostOpenPopup(host, host.focus.id);  // Alt+Down
+                    break;
+                }
+                handled = false;
+                break;
+            }
+
             // Paint
             case WM_ERASEBKGND:
                 result = 1;
                 break;
+            case WM_CTLCOLOREDIT:
+            case WM_CTLCOLORSTATIC: {
+                UiTextBox* box = UiFindTextBox(host.boxes, reinterpret_cast<HWND>(lParam));
+                if (!box) {
+                    handled = false;
+                    break;
+                }
+                auto [text, fill] = UiTextBoxColors(host.palette, GetFocus() == box->window,
+                                                    IsWindowEnabled(box->window) != FALSE);
+                SetTextColor(reinterpret_cast<HDC>(wParam), text);
+                SetBkColor(reinterpret_cast<HDC>(wParam), fill);
+                result = reinterpret_cast<LRESULT>(UiTextBoxBrush(host.boxes, fill));
+                break;
+            }
             case WM_PAINT: {
                 PAINTSTRUCT paint{};
                 BeginPaint(window, &paint);
@@ -294,8 +607,11 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     break;
                 }
                 float scale = UiHostScale(host);
+                UiTextBox* editing = UiFindTextBox(host.boxes, GetFocus());
                 UiPaintState state{host.pointer.hot, host.pointer.pressed, host.focus,
-                                   host.focusVisible && GetFocus() == window};
+                                   host.focusVisible && GetFocus() == window,
+                                   host.popup.open ? host.popup.field : 0,
+                                   editing ? editing->id : 0};
                 target->BeginDraw();
                 D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
                 target->SetTransform(&identity);
@@ -334,18 +650,14 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.scrollbarHot = overBar;
                 changed |= UiPointerMove(host.pointer, overBar ? UiFocusRef{} :
                                                                  UiHostHit(host, surface, point));
-                if (changed) {
-                    InvalidateRect(host.main, nullptr, FALSE);
-                    InvalidateRect(host.viewport, nullptr, FALSE);
-                }
+                if (changed) UiHostInvalidate(host);
                 break;
             }
             case WM_MOUSELEAVE:
                 if (!host.pointer.pressed.id && !host.scrollDragging) {
                     host.pointer.hot = {};
                     host.scrollbarHot = false;
-                    InvalidateRect(host.main, nullptr, FALSE);
-                    InvalidateRect(host.viewport, nullptr, FALSE);
+                    UiHostInvalidate(host);
                 }
                 break;
             case WM_LBUTTONDOWN: {
@@ -369,15 +681,20 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 UiFocusRef hit = UiHostHit(host, surface, point);
                 host.pointer.hot = hit;
                 host.pointer.pressed = hit;
-                if (hit.id) SetCapture(window);
                 if (hit.id) {
-                    UiHostSetFocus(host, hit, false);
+                    SetCapture(window);
+                    // A spin button keeps focus on its number box's text box.
+                    const UiItem* item = UiFindItem(host.frame, hit.id);
+                    UiFocusRef target = item && item->kind == UiItemKind::SpinButton ?
+                                            UiFocusRef{item->owner, -1} : hit;
+                    if (target != host.focus || GetFocus() != UiHostFocusWindow(host, target)) {
+                        UiHostSetFocus(host, target, false);
+                    }
                 } else {
                     host.focusVisible = false;
                     if (GetFocus() != window) SetFocus(window);
                 }
-                InvalidateRect(host.main, nullptr, FALSE);
-                InvalidateRect(host.viewport, nullptr, FALSE);
+                UiHostInvalidate(host);
                 break;
             }
             case WM_LBUTTONUP: {
@@ -385,20 +702,31 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 UiFocusRef activate = UiPointerRelease(host.pointer, UiHostHit(host, surface, point));
                 host.scrollDragging = false;
                 if (GetCapture() == window) ReleaseCapture();
-                InvalidateRect(host.main, nullptr, FALSE);
-                InvalidateRect(host.viewport, nullptr, FALSE);
+                UiHostInvalidate(host);
                 if (activate.id) UiHostInvoke(host, activate);
                 break;
             }
             case WM_CAPTURECHANGED:
                 host.pointer.pressed = {};
                 host.scrollDragging = false;
-                InvalidateRect(host.main, nullptr, FALSE);
-                InvalidateRect(host.viewport, nullptr, FALSE);
+                UiHostInvalidate(host);
                 break;
-            case WM_MOUSEWHEEL: {
-                // Wheel over the page column (header or content) scrolls the content.
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL: {
+                // With the popup open, a wheel over it does nothing and one elsewhere closes it.
+                // Otherwise the vertical wheel over the page column (header or content) scrolls
+                // the content.
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
+                if (host.popup.open) {
+                    RECT popup{};
+                    GetWindowRect(host.popup.window, &popup);
+                    if (!PtInRect(&popup, point)) UiHostClosePopup(host);
+                    break;
+                }
+                if (message == WM_MOUSEHWHEEL) {
+                    handled = false;
+                    break;
+                }
                 ScreenToClient(host.main, &point);
                 if (float(point.x) / UiHostScale(host) < host.frame.viewport.left) break;
                 UINT lines = 3;
@@ -409,7 +737,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_SETCURSOR: {
-                if (LOWORD(lParam) != HTCLIENT) {
+                if (LOWORD(lParam) != HTCLIENT || reinterpret_cast<HWND>(wParam) != window) {
                     handled = false;
                     break;
                 }
@@ -420,9 +748,34 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
 
-            // Keyboard and focus
+            // Keyboard and focus. While the popup is open, the field's keys drive it.
             case WM_KEYDOWN: {
                 if (host.closing) break;
+                if (host.popup.open) {
+                    UiOptionIntent option = UiOptionKey(int(host.popup.rows.size()),
+                                                        host.popup.highlight, UINT(wParam));
+                    switch (option.kind) {
+                        case UiOptionIntentKind::Highlight:
+                            host.popup.highlight = option.index;
+                            InvalidateRect(host.popup.window, nullptr, FALSE);
+                            break;
+                        case UiOptionIntentKind::Choose:
+                            UiHostChoose(host, option.index);
+                            break;
+                        case UiOptionIntentKind::Close:
+                        case UiOptionIntentKind::CloseAndPass:
+                            UiHostClosePopup(host);
+                            break;
+                        case UiOptionIntentKind::None:
+                            break;
+                    }
+                    if (option.kind != UiOptionIntentKind::CloseAndPass) break;
+                }
+                const UiItem* focused = UiFindItem(host.frame, host.focus.id);
+                if (wParam == VK_F4 && focused && focused->kind == UiItemKind::Dropdown) {
+                    UiHostOpenPopup(host, host.focus.id);
+                    break;
+                }
                 UiIntent intent = UiKeyIntent(host.stops, host.focus, surface, UINT(wParam),
                                               GetKeyState(VK_SHIFT) < 0, 40,
                                               std::max(UiHostViewHeight(host) - 40, 40.0f));
@@ -448,74 +801,76 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_SETFOCUS: {
-                // Activation focuses the main window; keyboard focus belongs to the surface of
-                // the focused element.
-                UiSurfaceId focused = UiSurfaceId::Main;
-                if (isMain && UiFindItem(host.frame, host.focus.id, &focused) &&
-                    focused == UiSurfaceId::Content && host.viewport) {
-                    SetFocus(host.viewport);
+                // Activation focuses the main window; keyboard focus belongs to the focused
+                // element's window.
+                if (isMain && host.viewport) {
+                    HWND target = UiHostFocusWindow(host, host.focus);
+                    if (target != window) SetFocus(target);
                 }
                 InvalidateRect(window, nullptr, FALSE);
                 break;
             }
             case WM_KILLFOCUS:
+                UiHostClosePopup(host);
                 InvalidateRect(window, nullptr, FALSE);
                 break;
+
+            // Text box notifications (viewport)
+            case WM_COMMAND: {
+                UiTextBox* box = lParam ? UiFindTextBox(host.boxes, reinterpret_cast<HWND>(lParam)) :
+                                          nullptr;
+                if (!box) {
+                    handled = false;
+                    break;
+                }
+                uint32_t id = box->id;
+                switch (HIWORD(wParam)) {
+                    case EN_CHANGE: {
+                        if (host.boxes.programmatic || box->composing) break;
+                        std::wstring text = UiTextBoxText(box->window);
+                        if (text == box->text) break;
+                        box->text = text;
+                        UiHostTextEvent(host, id, UiActionKind::TextChange, std::move(text));
+                        break;
+                    }
+                    case EN_SETFOCUS:
+                        if (id != host.popup.field) UiHostClosePopup(host);
+                        host.focus = {id, -1};
+                        InvalidateRect(box->window, nullptr, TRUE);
+                        UiHostInvalidate(host);
+                        break;
+                    case EN_KILLFOCUS:
+                        InvalidateRect(box->window, nullptr, TRUE);
+                        UiHostInvalidate(host);
+                        if (!host.boxes.leavingWindow) {
+                            UiHostTextEvent(host, id, UiActionKind::TextBlur, box->text);
+                        }
+                        break;
+                }
+                break;
+            }
 
             default:
                 handled = false;
                 if (!isMain) break;
                 if (host.config->activateMessage && message == host.config->activateMessage) {
                     // Brings back the window, or the enabled visible modal it owns; never
-                    // anything else it owns.
+                    // anything else it owns (the popup closes first).
                     handled = true;
                     if (host.closing || host.client->Unloading()) break;
+                    UiHostClosePopup(host);
                     if (IsIconic(window)) ShowWindow(window, SW_RESTORE);
                     HWND target = GetLastActivePopup(window);
                     if (target != window && !(IsWindowEnabled(target) && IsWindowVisible(target))) {
                         target = window;
                     }
                     SetForegroundWindow(target);
-                } else if (message >= WM_APP) {
+                } else {
                     handled = host.client->Message(host, message, wParam, lParam, result);
                 }
                 break;
         }
-
-        // Deferred structural rebuild, once the outermost dispatch is done with the old items.
-        if (host.dispatchDepth == 1 && host.rebuildPending && host.main && host.viewport &&
-            !host.closing) {
-            host.rebuildPending = false;
-            RECT client{};
-            GetClientRect(host.main, &client);
-            float scale = UiHostScale(host);
-            UiTrimCaches(*host.graphics);
-            UiFrame frame;
-            host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale},
-                               frame);
-            std::vector<UiFocusStop> stops = UiFocusStops(frame);
-            UiFocusRef fallback;
-            for (const UiItem& item : frame.main) {
-                if (item.kind == UiItemKind::Nav && item.selected) fallback = {item.id, -1};
-            }
-            // Keyboard focus starts on the selected navigation item, without a ring.
-            host.focus = UiResolveFocus(host.stops, stops, host.focus.id ? host.focus : fallback,
-                                        fallback);
-            host.frame = std::move(frame);
-            host.stops = std::move(stops);
-            if (!UiFindItem(host.frame, host.pointer.hot.id)) host.pointer.hot = {};
-            if (!UiFindItem(host.frame, host.pointer.pressed.id)) host.pointer.pressed = {};
-            host.scroll = host.resetScroll ? 0 : host.scroll;
-            host.resetScroll = false;
-            host.scroll = std::round(UiClampScroll(host.scroll, UiHostViewHeight(host),
-                                                   host.frame.contentHeight) * scale) / scale;
-            const D2D1_RECT_F& v = host.frame.viewport;
-            int left = int(std::lround(v.left * scale)), top = int(std::lround(v.top * scale));
-            SetWindowPos(host.viewport, nullptr, left, top, int(std::lround(v.right * scale)) - left,
-                         int(std::lround(v.bottom * scale)) - top, SWP_NOZORDER | SWP_NOACTIVATE);
-            InvalidateRect(host.main, nullptr, FALSE);
-            InvalidateRect(host.viewport, nullptr, FALSE);
-        }
+        UiHostRebuildIfPending(host);
     } catch (...) {
         Wh_Log(L"Window callback failed (message 0x%04X); closing the window", message);
         handled = true;
@@ -524,6 +879,201 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
     }
     host.dispatchDepth--;
     return handled ? result : DefWindowProcW(window, message, wParam, lParam);
+}
+
+// The popup: hover and press select rows; an outside press closes it and swallows its release;
+// losing capture, WM_CANCELMODE or a wheel outside it close it. Never activates.
+static LRESULT CALLBACK UiHostPopupProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_NCCREATE) {
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(
+            reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams));
+    }
+    auto* found = reinterpret_cast<UiHost*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (!found) return DefWindowProcW(window, message, wParam, lParam);
+    UiHost& host = *found;
+    UiPopup& popup = host.popup;
+    host.dispatchDepth++;
+    LRESULT result = 0;
+    bool handled = true;
+    try {
+        POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
+        switch (message) {
+            case WM_MOUSEACTIVATE:
+                result = MA_NOACTIVATE;
+                break;
+            case WM_ERASEBKGND:
+                result = 1;
+                break;
+            case WM_PAINT: {
+                PAINTSTRUCT paint{};
+                BeginPaint(window, &paint);
+                bool painted = host.faulted || popup.window != window ||
+                               UiPaintPopup(popup, *host.graphics, host.palette);
+                EndPaint(window, &paint);
+                if (!painted) UiHostClosePopup(host);
+                break;
+            }
+            case WM_MOUSEMOVE:
+                if (popup.open) {
+                    int row = UiPopupRowAt(popup, point);
+                    if (row >= 0 && row != popup.highlight) {
+                        popup.highlight = row;
+                        InvalidateRect(window, nullptr, FALSE);
+                    }
+                }
+                break;
+            case WM_LBUTTONDOWN:
+            case WM_RBUTTONDOWN:
+            case WM_MBUTTONDOWN: {
+                if (!popup.open) break;
+                RECT client{};
+                GetClientRect(window, &client);
+                if (PtInRect(&client, point)) {
+                    if (message == WM_LBUTTONDOWN) popup.pressed = UiPopupRowAt(popup, point);
+                    InvalidateRect(window, nullptr, FALSE);
+                    break;
+                }
+                popup.open = false;
+                popup.swallowUp = message + 1;  // The matching WM_*BUTTONUP
+                ShowWindow(window, SW_HIDE);
+                UiHostInvalidate(host);
+                break;
+            }
+            case WM_LBUTTONUP:
+            case WM_RBUTTONUP:
+            case WM_MBUTTONUP:
+                if (popup.swallowUp) {
+                    if (message == popup.swallowUp) UiHostClosePopup(host);
+                } else if (message == WM_LBUTTONUP && popup.open) {
+                    int pressed = std::exchange(popup.pressed, -1);
+                    int row = UiPopupRowAt(popup, point);
+                    if (row >= 0 && row == pressed) UiHostChoose(host, row);
+                    else InvalidateRect(window, nullptr, FALSE);
+                }
+                break;
+            case WM_CAPTURECHANGED:
+            case WM_CANCELMODE:
+                if (popup.window == window) UiHostClosePopup(host);
+                break;
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL: {
+                RECT rect{};
+                GetWindowRect(window, &rect);
+                if (!popup.open || !PtInRect(&rect, point)) UiHostClosePopup(host);
+                break;
+            }
+            case WM_SETCURSOR:
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                result = TRUE;
+                break;
+            case WM_NCDESTROY:
+                UiDiscardSurface(popup.surface);
+                popup.surface.window = nullptr;
+                if (popup.window == window) {
+                    popup.window = nullptr;
+                    popup.open = false;
+                }
+                SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+                handled = false;
+                break;
+            default:
+                handled = false;
+                break;
+        }
+        UiHostRebuildIfPending(host);
+    } catch (...) {
+        Wh_Log(L"Popup callback failed (message 0x%04X); closing the window", message);
+        handled = true;
+        result = 0;
+        UiHostFault(host);
+    }
+    host.dispatchDepth--;
+    return handled ? result : DefWindowProcW(window, message, wParam, lParam);
+}
+
+// A number box's text box: Tab moves focus along the item order, Enter commits, Esc reverts,
+// Up/Down step; focus moving elsewhere in the window reports focus loss. During IME composition
+// every message goes to native handling and the composed text is reported when it ends.
+static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+                                          UINT_PTR, DWORD_PTR data) {
+    UiHost& host = *reinterpret_cast<UiHost*>(data);
+    host.dispatchDepth++;
+    LRESULT result = 0;
+    bool handled = false;
+    try {
+        UiTextBox* box = UiFindTextBox(host.boxes, window);
+        bool commands = box && !box->composing && !host.closing;
+        switch (message) {
+            case WM_IME_STARTCOMPOSITION:
+                if (box) box->composing = true;
+                break;
+            case WM_IME_ENDCOMPOSITION: {
+                if (box) box->composing = false;
+                result = DefSubclassProc(window, message, wParam, lParam);
+                handled = true;
+                box = UiFindTextBox(host.boxes, window);
+                if (!box || host.closing) break;
+                std::wstring text = UiTextBoxText(window);
+                if (text == box->text) break;
+                box->text = text;
+                UiHostTextEvent(host, box->id, UiActionKind::TextChange, std::move(text));
+                break;
+            }
+            case WM_KEYDOWN: {
+                if (!commands) break;
+                uint32_t id = box->id;
+                handled = true;
+                switch (wParam) {
+                    case VK_TAB: {
+                        UiIntent intent = UiKeyIntent(host.stops, {id, -1}, UiSurfaceId::Content,
+                                                      VK_TAB, GetKeyState(VK_SHIFT) < 0, 40, 40);
+                        if (intent.kind == UiIntentKind::Focus) UiHostSetFocus(host, intent.target, true);
+                        break;
+                    }
+                    case VK_RETURN:
+                        UiHostTextEvent(host, id, UiActionKind::TextCommit, box->text);
+                        break;
+                    case VK_ESCAPE:
+                        UiHostTextEvent(host, id, UiActionKind::TextRevert);
+                        break;
+                    case VK_UP:
+                    case VK_DOWN:
+                        UiHostTextEvent(host, id, UiActionKind::Step, {}, wParam == VK_UP ? 1 : -1);
+                        break;
+                    default:
+                        handled = false;
+                        break;
+                }
+                break;
+            }
+            case WM_CHAR:
+                // Their keys were handled above; the characters would only beep.
+                handled = commands && (wParam == L'\t' || wParam == L'\r' || wParam == 0x1B);
+                break;
+            case WM_KILLFOCUS: {
+                // The EDIT notifies EN_KILLFOCUS from its default handling.
+                HWND next = reinterpret_cast<HWND>(wParam);
+                bool inside = next && host.main && (next == host.main || IsChild(host.main, next));
+                host.boxes.leavingWindow = !inside;
+                result = DefSubclassProc(window, message, wParam, lParam);
+                host.boxes.leavingWindow = false;
+                handled = true;
+                break;
+            }
+            case WM_NCDESTROY:
+                RemoveWindowSubclass(window, UiHostTextBoxProc, 0);
+                if (box) box->window = nullptr;
+                break;
+        }
+        if (!handled) result = DefSubclassProc(window, message, wParam, lParam);
+        UiHostRebuildIfPending(host);
+    } catch (...) {
+        Wh_Log(L"Text box callback failed (message 0x%04X); closing the window", message);
+        result = 0;
+        UiHostFault(host);
+    }
+    host.dispatchDepth--;
+    return result;
 }
 
 static LRESULT CALLBACK UiHostMainProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -553,8 +1103,9 @@ static LRESULT CALLBACK UiHostViewportProc(HWND window, UINT message, WPARAM wPa
 static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
     HINSTANCE instance = GetModuleHandleW(nullptr);
     // A stale registration of the same name (an instance that never unregistered) is replaced.
-    auto registerClass = [&](PCWSTR name, WNDPROC proc) {
+    auto registerClass = [&](PCWSTR name, WNDPROC proc, UINT style) {
         WNDCLASSEXW windowClass{sizeof(windowClass)};
+        windowClass.style = style;
         windowClass.lpfnWndProc = proc;
         windowClass.hInstance = instance;
         windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -567,14 +1118,19 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
         Wh_Log(L"Could not register window class %s: %lu", name, GetLastError());
         return false;
     };
-    bool mainRegistered = registerClass(config.mainClass, UiHostMainProc);
-    bool viewportRegistered = mainRegistered && registerClass(config.viewportClass, UiHostViewportProc);
+    bool mainRegistered = registerClass(config.mainClass, UiHostMainProc, 0);
+    bool viewportRegistered = mainRegistered && registerClass(config.viewportClass, UiHostViewportProc, 0);
+    // Without its class the popup can't open; the window works otherwise.
+    bool popupRegistered = viewportRegistered && config.popupClass &&
+                           registerClass(config.popupClass, UiHostPopupProc, CS_DROPSHADOW);
+    UiHostConfig effective = config;
+    if (!popupRegistered) effective.popupClass = nullptr;
     bool created = false;
     if (viewportRegistered) {
         UiGraphics graphics;
         UiThemeReader themes;
         UiHost host;
-        host.config = &config;
+        host.config = &effective;
         host.client = &client;
         host.graphics = &graphics;
         host.themes = &themes;
@@ -623,7 +1179,10 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
             Wh_Log(L"Window setup failed");
         }
         if (host.main && IsWindow(host.main)) DestroyWindow(host.main);
+        UiPopupClose(host.popup);
+        UiReleaseTextBoxes(host.boxes);
     }
+    if (popupRegistered) UnregisterClassW(config.popupClass, instance);
     if (viewportRegistered) UnregisterClassW(config.viewportClass, instance);
     if (mainRegistered) UnregisterClassW(config.mainClass, instance);
     return created;

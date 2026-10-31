@@ -1,6 +1,7 @@
 // Headers the extracted toolkit and its native host expect from the mod's entry file, plus the
 // suite's only stub: Wh_Log prints to the probe's console.
 #include "harness.hpp"
+#include <commctrl.h>
 #include <dwmapi.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <atomic>

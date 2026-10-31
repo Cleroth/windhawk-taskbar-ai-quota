@@ -1,14 +1,6 @@
 // Settings window shell: navigation pane, pinned page header and page content, built from an
-// explicit view snapshot (approved mockups: nav and header of layout-v2.png, about.png). Pure.
-// Pages not rebuilt yet show a placeholder card.
-
-enum class SettingsUiPage : int { Accounts, Layout, Display, Behavior, History, About, Count };
-
-// Everything the builders read. Later pages add their projections here.
-struct SettingsView {
-    SettingsUiPage page = SettingsUiPage::Accounts;
-    std::wstring version;
-};
+// explicit view snapshot (settings/view.h; approved mockups: nav and header of layout-v2.png).
+// Pure. Pages not rebuilt yet show a placeholder card.
 
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
@@ -51,18 +43,29 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
                       std::max(client.width, kSettingsNavWidth),
                       std::max(client.height, kSettingsHeaderHeight)};
 
-    // Content, in viewport coordinates. Ids are unique per page.
+    // Content, in viewport coordinates. Running ids are unique per page; interactive controls
+    // take fixed ones (settings/view.h).
     uint32_t id = uint32_t(page + 1) << 12;
     float bottom;
-    if (view.page == SettingsUiPage::About) {
-        bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
-    } else {
-        UiCardSpec spec;
-        spec.glyph = L"\uE946";
-        spec.title = L"Not built yet";
-        spec.description = {{L"This page is still in the classic Settings window. Close this "
-                             L"window and open Settings from the taskbar menu to change it."}};
-        bottom = UiAddCard(g, frame.content, id, left, 2, width, spec).card.bottom;
+    switch (SettingsUiPage(page)) {
+        case SettingsUiPage::About:
+            bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
+            break;
+        case SettingsUiPage::Behavior:
+            bottom = SettingsUiBuildBehavior(g, view, frame.content, id, left, 0, width);
+            break;
+        case SettingsUiPage::History:
+            bottom = SettingsUiBuildHistory(g, view, frame.content, id, left, 0, width);
+            break;
+        default: {
+            UiCardSpec spec;
+            spec.glyph = L"\uE946";
+            spec.title = L"Not built yet";
+            spec.description = {{L"This page is still in the classic Settings window. Close this "
+                                 L"window and open Settings from the taskbar menu to change it."}};
+            bottom = UiAddCard(g, frame.content, id, left, 2, width, spec).card.bottom;
+            break;
+        }
     }
     frame.contentHeight = bottom + 28;
 }

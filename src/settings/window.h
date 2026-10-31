@@ -693,6 +693,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID parameter) {
             UiHostConfig config;
             config.mainClass = kSettingsUiClass;
             config.viewportClass = kSettingsUiViewportClass;
+            config.popupClass = kSettingsUiPopupClass;
             config.title = L"Taskbar AI Quota Bars \u2014 Settings";
             config.activateMessage = GetSettingsActivateMessage();
             if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");

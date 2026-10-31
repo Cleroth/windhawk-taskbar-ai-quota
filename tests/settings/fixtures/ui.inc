@@ -263,9 +263,9 @@ static void RunUiTests() {
                 CHECK_NEAR(item.rect.right - item.rect.left, 680);
                 cards++;
             }
-            if (item.action.kind == UiActionKind::OpenUrl) urls.push_back(item.action.url);
+            if (item.action.kind == UiActionKind::OpenUrl) urls.push_back(item.action.text);
             for (const UiRun& run : item.runs) {
-                if (run.style == UiRunStyle::Link) urls.push_back(run.action.url);
+                if (run.style == UiRunStyle::Link) urls.push_back(run.action.text);
             }
         }
         CHECK(cards == 6);
@@ -294,5 +294,121 @@ static void RunUiTests() {
         }
         CHECK(linkCards == 3);
         CHECK(UiFocusStops(frame).size() == 6 + 3 + 2);
+    });
+
+    Run("controls: toggles, dropdowns and number boxes are tab stops; spin buttons click only", [] {
+        UiGraphics& g = TestGraphics();
+        UiFrame frame;
+        frame.viewport = {260, 56, 1000, 820};
+        UiAction command{UiActionKind::Command, 0, {}, 9};
+        UiAddToggle(frame.content, 300, {500, 10, 500 + UiToggleSize(g).width, 42}, true, true, command);
+        UiAddDropdown(frame.content, 310, {300, 60, 560, 92}, {{L"One", 1}, {L"Two", 2}}, true,
+                      {UiActionKind::Command, 2, {}, 9});
+        UiAddNumberBox(frame.content, 320, {300, 110, 300 + UiNumberBoxSize(g, L"days").width, 142},
+                       L"90", L"days", true, command);
+        UiAddNumberBox(frame.content, 330, {300, 160, 456, 192}, L"5", L"days", false, command);
+        CHECK(frame.content[1].text == L"Two");  // The dropdown shows its value's option
+        CHECK(frame.content[0].text == L"On" && frame.content[0].selected);
+        std::vector<UiFocusRef> expected = {{300}, {310}, {320}};
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        CHECK(stops.size() == expected.size());
+        for (size_t i = 0; i < stops.size(); i++) CHECK(stops[i].ref == expected[i]);
+        // Number box at x 300..396: text area after 11 DIP padding, before 49 DIP of spin buttons;
+        // up (321) and down (322) are 22 DIP each, ending 3 DIP before the edge; the unit (323)
+        // starts 10 DIP after the box.
+        const UiItem* box = UiFindItem(frame, 320);
+        CHECK_NEAR(box->rect.right, 396);
+        D2D1_RECT_F text = UiNumberBoxTextRect(*box);
+        CHECK_NEAR(text.left, 311);
+        CHECK_NEAR(text.right, 347);
+        CHECK(UiHitTest(g, frame.content, {360, 126}) == UiFocusRef{321});
+        CHECK(UiHitTest(g, frame.content, {380, 126}) == UiFocusRef{322});
+        CHECK(UiHitTest(g, frame.content, {320, 126}) == UiFocusRef{320});
+        CHECK(UiFindItem(frame, 321)->owner == 320 && UiFindItem(frame, 323)->kind == UiItemKind::Text);
+        CHECK_NEAR(UiFindItem(frame, 323)->rect.left, 406);
+        const UiAction* up = UiActionOf(frame, {321});
+        const UiAction* down = UiActionOf(frame, {322});
+        CHECK(up && up->kind == UiActionKind::Step && up->value == 1 && up->target == 9);
+        CHECK(down && down->value == -1);
+        // A disabled box and its buttons take no input.
+        CHECK(UiHitTest(g, frame.content, {320, 176}).id == 0);
+        CHECK(!UiActionOf(frame, {331}));
+    });
+
+    Run("card notes: a disabled card dims its title; reason and error lines add height", [] {
+        UiGraphics& g = TestGraphics();
+        UiCardSpec spec;
+        spec.title = L"Custom interval";
+        spec.description = {{L"2 to 1440 minutes."}};
+        std::vector<UiItem> plain, noted;
+        uint32_t id = 1;
+        float plainHeight = UiAddCard(g, plain, id, 0, 0, 680, spec).card.bottom;
+        spec.enabled = false;
+        spec.reason = L"Choose Custom in Cloud poll interval to edit.";
+        spec.error = L"Enter a whole number from 2 to 1440.";
+        id = 1;
+        UiCardLayout layout = UiAddCard(g, noted, id, 0, 0, 680, spec);
+        // Title and description fit the 68 DIP minimum; each note adds 3 + 16.
+        CHECK_NEAR(plainHeight, 68);
+        CHECK_NEAR(layout.card.bottom, 1 + 12 + 20 + 16 + 19 + 19 + 12 + 1);
+        CHECK(!noted[1].enabled && noted[2].enabled);
+        CHECK(noted[3].kind == UiItemKind::Glyph && noted[3].text == L"\uE946" &&
+              noted[3].ink == UiInk::Secondary);
+        CHECK(noted[5].kind == UiItemKind::Glyph && noted[5].text == L"\uE783" &&
+              noted[5].ink == UiInk::Danger && noted[6].runs[0].text == spec.error);
+        CHECK(noted[4].rect.top >= noted[2].rect.bottom + 3 && noted[6].rect.top >= noted[4].rect.bottom);
+    });
+
+    Run("dropdown popup: rows, current value selected, placement below, above or clamped", [] {
+        UiGraphics& g = TestGraphics();
+        std::vector<UiItem> rows;
+        UiAction field{UiActionKind::Command, 10, {}, 4};
+        D2D1_SIZE_F size = UiLayoutOptions(g, {{L"5 minutes", 5}, {L"10 minutes", 10}, {L"Custom", 0}},
+                                           field, 200, rows);
+        CHECK_NEAR(size.width, 200);
+        CHECK_NEAR(size.height, 4 + 3 * 36);
+        CHECK(rows.size() == 3 && !rows[0].selected && rows[1].selected);
+        CHECK(rows[2].action.value == 0 && rows[2].action.target == 4 && rows[2].kind == UiItemKind::Option);
+        CHECK_NEAR(rows[1].rect.top, 4 + 36);
+        CHECK_NEAR(rows[1].rect.bottom - rows[1].rect.top, 32);
+        UiLayoutOptions(g, {{std::wstring(60, L'W'), 1}}, field, 100, rows);
+        CHECK(rows[0].rect.right > 300);
+        RECT work{0, 0, 1000, 800};
+        POINT below = UiPopupPlacement({100, 100, 300, 132}, {200, 150}, work, 4);
+        CHECK(below.x == 100 && below.y == 136);
+        POINT above = UiPopupPlacement({100, 700, 300, 732}, {200, 150}, work, 4);
+        CHECK(above.y == 700 - 4 - 150);
+        POINT clamped = UiPopupPlacement({900, 100, 1100, 132}, {200, 150}, work, 4);
+        CHECK(clamped.x == 800);
+        POINT tall = UiPopupPlacement({100, 300, 300, 332}, {200, 700}, work, 4);
+        CHECK(tall.y == 100);  // More room below: bottom-aligned to the work area
+    });
+
+    Run("dropdown popup keys: arrows, Home/End, Enter chooses, Esc closes, Tab passes on", [] {
+        CHECK(UiOptionKey(3, 0, VK_DOWN).index == 1);
+        CHECK(UiOptionKey(3, 2, VK_DOWN).index == 2);
+        CHECK(UiOptionKey(3, -1, VK_UP).index == 2);
+        CHECK(UiOptionKey(3, 1, VK_HOME).index == 0 && UiOptionKey(3, 1, VK_NEXT).index == 2);
+        CHECK(UiOptionKey(3, 1, VK_RETURN).kind == UiOptionIntentKind::Choose);
+        CHECK(UiOptionKey(3, -1, VK_SPACE).kind == UiOptionIntentKind::Close);
+        CHECK(UiOptionKey(3, 1, VK_ESCAPE).kind == UiOptionIntentKind::Close);
+        CHECK(UiOptionKey(3, 1, VK_TAB).kind == UiOptionIntentKind::CloseAndPass);
+        CHECK(UiOptionKey(3, 1, 'A').kind == UiOptionIntentKind::None);
+    });
+
+    Run("info bar: its links are focus stops of the fixed text id", [] {
+        UiGraphics& g = TestGraphics();
+        UiFrame frame;
+        uint32_t id = 1;
+        float bottom = UiAddInfoBar(g, frame.content, id, 777, 0, 10, 680,
+                                    {{L"See "}, {L"Accounts", UiRunStyle::Link, UiInk::Inherit,
+                                                 {UiActionKind::Navigate, 0}},
+                                     {L" and "}, {L"Behavior", UiRunStyle::Link, UiInk::Inherit,
+                                                  {UiActionKind::Navigate, 3}}});
+        CHECK_NEAR(bottom, 10 + 14 + 19 + 14);  // One 19 DIP line, 13 DIP padding, 1 DIP border
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        CHECK(stops.size() == 2 && stops[0].ref == (UiFocusRef{777, 0}) && stops[1].ref == (UiFocusRef{777, 1}));
+        CHECK(UiActionOf(frame, {777, 1})->value == 3);
+        CHECK(frame.content[1].ink == UiInk::Accent);
     });
 }

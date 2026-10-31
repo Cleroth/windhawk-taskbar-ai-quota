@@ -2,6 +2,7 @@
 #include "meter.inc"
 #include "logos.inc"
 #include "ui.inc"
+#include "edits.inc"
 #include "render.inc"
 
 int main(int argc, char** argv) {
@@ -19,6 +20,8 @@ int main(int argc, char** argv) {
         RunMeterTests();
         RunLogoTests();
         RunUiTests();
+        RunEditTests();
+        RunPageTests();
     }
     std::cout << "RESULT " << passed << " passed, " << failed << " failed; " << assertions << " assertions\n";
     return failed ? 1 : 0;

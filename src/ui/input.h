@@ -86,6 +86,37 @@ static UiIntent UiKeyIntent(const std::vector<UiFocusStop>& stops, UiFocusRef fo
     return {};
 }
 
+// Keys while a dropdown popup is open (keyboard focus stays on the field): arrows, Home/End and
+// Page Up/Down move the highlight; Enter and Space choose it; Esc and F4 close; Tab closes and
+// then moves focus as usual (pass). Other keys do nothing.
+enum class UiOptionIntentKind : uint8_t { None, Highlight, Choose, Close, CloseAndPass };
+
+struct UiOptionIntent {
+    UiOptionIntentKind kind = UiOptionIntentKind::None;
+    int index = -1;
+};
+
+static UiOptionIntent UiOptionKey(int count, int highlight, UINT key) {
+    if (count <= 0) return {UiOptionIntentKind::Close};
+    int last = count - 1;
+    switch (key) {
+        case VK_UP: return {UiOptionIntentKind::Highlight, highlight < 0 ? last : std::max(highlight - 1, 0)};
+        case VK_DOWN: return {UiOptionIntentKind::Highlight, highlight < 0 ? 0 : std::min(highlight + 1, last)};
+        case VK_HOME:
+        case VK_PRIOR: return {UiOptionIntentKind::Highlight, 0};
+        case VK_END:
+        case VK_NEXT: return {UiOptionIntentKind::Highlight, last};
+        case VK_RETURN:
+        case VK_SPACE:
+            return highlight >= 0 && highlight <= last ? UiOptionIntent{UiOptionIntentKind::Choose, highlight} :
+                                                         UiOptionIntent{UiOptionIntentKind::Close};
+        case VK_ESCAPE:
+        case VK_F4: return {UiOptionIntentKind::Close};
+        case VK_TAB: return {UiOptionIntentKind::CloseAndPass};
+    }
+    return {};
+}
+
 static float UiClampScroll(float offset, float viewportHeight, float contentHeight) {
     return std::clamp(offset, 0.0f, std::max(contentHeight - viewportHeight, 0.0f));
 }

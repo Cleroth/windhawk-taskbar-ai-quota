@@ -16,16 +16,23 @@ MODEL = [
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,
+    ("fragment", "settings/edits.h"),
+    ("fragment", "settings/view.h"),
     ("fragment", "settings/page-about.h"),
+    ("fragment", "settings/page-behavior.h"),
+    ("fragment", "settings/page-history.h"),
     ("fragment", "settings/shell.h"),
 ]
 
-# Toolkit with its native host: the probe DLL. No settings, storage or account code.
+# Toolkit with its native host (popup and text boxes included): the probe DLL. No settings,
+# storage or account code.
 HOST = [
     ("definition", "WindowDpi"),
     *UI_PURE,
     ("fragment", "ui/system-theme.h"),
     ("fragment", "ui/surface.h"),
+    ("fragment", "ui/popup.h"),
+    ("fragment", "ui/text-box.h"),
     ("fragment", "ui/host.h"),
 ]
 

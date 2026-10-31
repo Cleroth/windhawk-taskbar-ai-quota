@@ -38,6 +38,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ($Mode -eq 'compare' -and -not $Baseline) { throw 'compare needs -Baseline <snapshot.json>' }
+# `pwsh storage-audit.ps1 -Edited a,b` passes one comma-joined string; split it.
+$Edited = @($Edited | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$Disposable = @($Disposable | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 # Mirrors the mod's sources: auth\token-store.h (auth_<identity hash>), core\model.h
 # (AccountIdentityHash: FNV-1a 64 over the UTF-16 bytes of provider + "\n" + label, with the mod's

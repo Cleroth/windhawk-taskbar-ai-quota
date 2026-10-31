@@ -1,9 +1,10 @@
 # Settings verification
 
 Source-extracted tests of the pure fragments shared by the taskbar and the settings window (meter
-model, `src/ui/` toolkit, settings shell and page builders), offscreen renders of the settings
-window, a native-host probe of the toolkit's window host, and a capture/foreground probe for the
-dropdown popup. Not a Windhawk, Explorer or XAML test.
+model, `src/ui/` toolkit, the settings edit controller, shell and page builders), offscreen
+renders of the settings window, a native-host probe of the toolkit's window host (with its
+dropdown popup and number box text boxes), and a capture/foreground probe for the dropdown popup.
+Not a Windhawk, Explorer or XAML test.
 
 ## Run
 
@@ -32,17 +33,25 @@ regenerates.
 ## Phases
 
 - `model`: pure fixtures (meter model, logos, toolkit palette/input/focus/hit testing/scroll,
-  settings shell and About layout).
+  controls, popup rows/placement/keys, settings shell and pages). The edit controller
+  (`settings/edits.h`) runs against `TestStore` (`fixtures/edits.inc`): an in-memory store with
+  an operation log, deterministic save failures and unload after N transactions; number parsing
+  and the render projection get their own fixtures.
 - `render`: the same executable with `--render-dir` paints the settings client area (1000 x 820
-  DIP, the mockups' window without its caption) into WIC bitmaps: About and a placeholder page at
-  96/144/192 DPI in light, dark and high contrast (Aquatic colors), plus interaction-state sheets.
-  PNGs for review, no pixel goldens.
+  DIP, the mockups' window without its caption) into WIC bitmaps: About, Behavior, History and a
+  placeholder page at 96/144/192 DPI in light, dark and high contrast (Aquatic colors), plus
+  interaction-state sheets (`render-states-*`, `render-controls-*`, `render-history-off-*`) and the
+  dropdown popup's rows (`render-popup-*`). PNGs for review, no pixel goldens.
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
-  (`ui/system-theme.h`, `surface.h`, `host.h`) and a stub client form `ui-host.dll`;
-  `host-probe.cpp` (hand-written) loads it, opens the window on the DLL's worker thread, closes it
-  from another thread, joins and unloads, repeatedly, and checks classes, windows and GDI/USER
-  handle counts; then client creation failure, a conflicting class registration, render-target
-  loss through the production discard path, and an unload close during a message box.
+  (`ui/system-theme.h`, `surface.h`, `popup.h`, `text-box.h`, `host.h`) and a stub client form
+  `ui-host.dll`; `host-probe.cpp` (hand-written) loads it, opens the window on the DLL's worker
+  thread, closes it from another thread, joins and unloads, repeatedly, and checks classes,
+  windows and GDI/USER handle counts; then client creation failure, a conflicting class
+  registration, render-target loss through the production discard path, and an unload close
+  during a message box. On a hidden desktop: the production popup (owned, never active, capture,
+  close triggers, outside press swallowed until release, keys and clicks choosing), the number
+  box EDIT (kept across rebuilds, text/Enter/Esc/arrow/Tab events, focus loss then rebuild), and
+  unload with the popup open, with a focused EDIT, and during a message box over the popup.
 - `extract-popup`, `popup-compile`, `popup-probe`: the same host as the owner of a probe popup
   (owned, `WS_EX_NOACTIVATE`, shown without activation; `fixtures/popup-*.inc`, hand-written).
   Thread-local message hooks record what each window receives while capture is on the popup, on
@@ -56,12 +65,13 @@ regenerates.
 
 Each run creates a retained `.out/run-.../` with the extracted `settings.cpp`, `ui-host.cpp` and
 `popup.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
-`render-*.png`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe shows off-screen,
-never-activated windows and briefly a message box, and reads the user's theme (registry,
-`UISettings`). The popup probe runs on a hidden desktop it creates and never switches to, so its
-windows, activation and message box never reach the user's screen, focus or pointer. The
-interactive mode is the exception: an activated window on the user's desktop, and F8/F9/F10
-registered as global hotkeys until it exits. No storage, network, credential or Explorer access.
+`render-*.png`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe
+shows off-screen, never-activated windows and briefly a message box, and reads the user's theme
+(registry, `UISettings`); its popup and text box cases, like the popup probe, run on a hidden
+desktop it creates and never switches to, so their windows, focus, capture and message box never
+reach the user's screen, focus or pointer. The popup probe's interactive mode is the exception:
+an activated window on the user's desktop, and F8/F9/F10 registered as global hotkeys until it
+exits. No storage, network, credential or Explorer access.
 
 ## Success and evidence limits
 
@@ -69,7 +79,8 @@ Exit 0 requires every phase to pass: tooling self-tests, freshness (default sour
 extractions, compiles, exactly one successful `RESULT` summary from `model`, `render`,
 `host-probe` and `popup-probe`, every reported render present as a PNG, and source and harness
 unchanged during the run. A pass covers extracted logic, offscreen rendering and the host's
-window/thread/teardown contract in a test process; Explorer, the settings thread's real client,
+window/thread/teardown contract in a test process (the controller against a test store, the
+popup and EDITs against a stub client); Explorer, the settings thread's real client and store,
 DWM caption colors, live theme switches and multi-monitor DPI need the runtime check in the root
 guide. The popup probe's automated part covers thread-local activation and programmatic events
 only; real clicks on other apps or the taskbar, Alt+Tab, Start and wheel routing need the

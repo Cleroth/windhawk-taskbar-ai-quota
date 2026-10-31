@@ -10,10 +10,12 @@
 #include <winrt/base.h>
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cwctype>
+#include <deque>
 #include <functional>
 #include <iostream>
 #include <iterator>

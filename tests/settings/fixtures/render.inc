@@ -119,26 +119,94 @@ static void RunRenders(const std::wstring& directory) {
                                               __uuidof(IWICImagingFactory), wic.put_void()));
         // The approved mockups' window is 1000 x 860 with a 40 DIP caption: 1000 x 820 client.
         const D2D1_SIZE_F client{1000, 820};
+        auto path = [&](const std::string& name) {
+            return directory + L"\\" + std::wstring(name.begin(), name.end());
+        };
         for (const RenderTheme& theme : RenderThemes()) {
             for (UINT dpi : {96u, 144u, 192u}) {
-                for (SettingsUiPage page : {SettingsUiPage::About, SettingsUiPage::Accounts}) {
-                    std::string name = std::string("render-") +
-                                       (page == SettingsUiPage::About ? "about" : "placeholder") +
-                                       "-" + theme.name + "-" + std::to_string(dpi) + ".png";
+                const std::pair<SettingsUiPage, const char*> pages[] = {
+                    {SettingsUiPage::About, "about"}, {SettingsUiPage::Accounts, "placeholder"},
+                    {SettingsUiPage::Behavior, "behavior"}, {SettingsUiPage::History, "history"}};
+                for (auto [page, pageName] : pages) {
+                    std::string name = std::string("render-") + pageName + "-" + theme.name + "-" +
+                                       std::to_string(dpi) + ".png";
                     Run(name, [&] {
-                        SettingsView view;
-                        view.page = page;
+                        SettingsView view = TestView(page);
                         view.version = L"2.0.1";
                         UiFrame frame;
                         SettingsUiBuildFrame(g, view, client, frame);
                         UiPaintState state;
                         state.focus = {uint32_t(int(page) + 1)};
-                        RenderFrame(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()),
-                                    frame, client, dpi, theme.input, state, 0, false);
+                        RenderFrame(g, wic.get(), path(name), frame, client, dpi, theme.input, state, 0,
+                                    false);
                         CHECK(true);
                     });
                 }
             }
+
+            // Controls in their states at 144 DPI: the Behavior page with Custom chosen, an
+            // invalid draft with its error, a toggle off, the Show on popup open (the field
+            // pressed), the custom box editing, a hovered toggle and the keyboard focus ring on
+            // another; then History with recording off (a disabled box and its reason); then the
+            // popup's rows with the pointer on the third.
+            std::string controls = std::string("render-controls-") + theme.name + "-144.png";
+            Run(controls, [&] {
+                SettingsView view = TestView(SettingsUiPage::Behavior);
+                view.settings.showDetailsOnHover = false;
+                view.pollCustom = true;
+                view.drafts.push_back({0, SettingsField::PollMinutes, 1, true, L"7x", 10, false, false,
+                                       L"Enter a whole number from 2 to 1440."});
+                UiFrame frame;
+                SettingsUiBuildFrame(g, view, client, frame);
+                UiPaintState state;
+                state.open = SettingsControlId(SettingsField::ShowOn);
+                state.editing = SettingsControlId(SettingsField::PollMinutes);
+                state.hot = {SettingsControlId(SettingsField::SkipHiddenPolling)};
+                state.focus = {SettingsControlId(SettingsField::Notifications)};
+                state.focusVisible = true;
+                RenderFrame(g, wic.get(), path(controls), frame, client, 144, theme.input, state, 0,
+                            false);
+
+                view = TestView(SettingsUiPage::History);
+                view.settings.historyEnabled = false;
+                frame = {};
+                SettingsUiBuildFrame(g, view, client, frame);
+                std::string off = std::string("render-history-off-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(off), frame, client, 144, theme.input, {}, 0, false);
+
+                // The popup surface as ui/popup.h paints it.
+                view = TestView(SettingsUiPage::Behavior);
+                frame = {};
+                SettingsUiBuildFrame(g, view, client, frame);
+                const UiItem& field = *UiFindItem(frame, SettingsControlId(SettingsField::ShowOn));
+                std::vector<UiItem> rows;
+                D2D1_SIZE_F size = UiLayoutOptions(g, field.options, field.action,
+                                                   field.rect.right - field.rect.left, rows);
+                winrt::com_ptr<IWICBitmap> bitmap;
+                winrt::check_hresult(wic->CreateBitmap(UINT(std::lround(size.width * 1.5f)),
+                                                       UINT(std::lround(size.height * 1.5f)),
+                                                       GUID_WICPixelFormat32bppPBGRA,
+                                                       WICBitmapCacheOnLoad, bitmap.put()));
+                D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 144, 144);
+                winrt::com_ptr<ID2D1RenderTarget> target;
+                winrt::check_hresult(g.d2d->CreateWicBitmapRenderTarget(bitmap.get(), &properties,
+                                                                        target.put()));
+                UiTargetCache cache;
+                UiPalette palette = UiPaletteFor(theme.input);
+                UiPaintState popupState;
+                popupState.hot = {3};
+                target->BeginDraw();
+                target->Clear(palette.popup);
+                UiPaintItems(target.get(), g, cache, palette, rows, popupState, {0, 0}, 1.5f, -1e9f, 1e9f);
+                winrt::check_hresult(target->EndDraw());
+                cache.Clear();
+                std::string popup = std::string("render-popup-") + theme.name + "-144.png";
+                SaveRender(wic.get(), bitmap.get(), path(popup));
+                std::cout << "RENDER " << popup << '\n';
+                CHECK(rows.size() == 4 && rows[0].selected);
+            });
 
             // Interaction states at 144 DPI on a short window, scrolled: a hovered link card, the
             // keyboard focus ring on an inline link, a button row and the expanded scrollbar;

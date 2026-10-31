@@ -33,7 +33,7 @@ static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
 // Semantic text colors; items name these, never concrete colors. Muted is the mockups'
 // description gray, between WinUI's secondary and tertiary text.
 enum class UiInk : uint8_t {
-    Inherit, Primary, Secondary, Muted, Disabled, Link, OnAccent, Danger, Success, Caution
+    Inherit, Primary, Secondary, Muted, Disabled, Link, OnAccent, Danger, Success, Caution, Accent
 };
 
 struct UiPalette {
@@ -42,10 +42,12 @@ struct UiPalette {
     // Surfaces
     D2D1_COLOR_F background{}, card{}, cardHover{}, cardPressed{}, cardBorder{};
 
-    // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills
+    // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills; the strong
+    // stroke of an off toggle, a focused text box and the dropdown popup's surface
     D2D1_COLOR_F control{}, controlHover{}, controlPressed{}, controlDisabled{}, controlBorder{};
     D2D1_COLOR_F subtleHover{}, subtlePressed{};
     D2D1_COLOR_F accent{}, accentHover{}, accentPressed{}, accentDisabled{};
+    D2D1_COLOR_F controlStrong{}, inputActive{}, popup{};
 
     // Text
     D2D1_COLOR_F text{}, textSecondary{}, textMuted{}, textDisabled{}, textOnAccent{};
@@ -74,6 +76,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.subtleHover = p.subtlePressed = UiRgb(s.window);
         p.accent = p.accentHover = p.accentPressed = UiRgb(s.highlight);
         p.accentDisabled = UiRgb(s.grayText);
+        p.controlStrong = UiRgb(s.windowText);
+        p.inputActive = p.popup = UiRgb(s.window);
         p.text = p.textSecondary = p.textMuted = UiRgb(s.windowText);
         p.textDisabled = UiRgb(s.grayText);
         p.textOnAccent = UiRgb(s.highlightText);
@@ -104,6 +108,9 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentHover = UiRgb(a.light2, 0.9f);
         p.accentPressed = UiRgb(a.light2, 0.8f);
         p.accentDisabled = UiRgb(0xFFFFFF, 0.16f);
+        p.controlStrong = UiRgb(0xFFFFFF, 0.6f);
+        p.inputActive = UiRgb(0x1E1E1E, 0.7f);
+        p.popup = UiRgb(0x2C2C2C);
         p.text = UiRgb(0xFFFFFF);
         p.textSecondary = UiRgb(0xFFFFFF, 0.786f);
         p.textMuted = UiRgb(0xFFFFFF, 0.6f);
@@ -135,6 +142,9 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentHover = UiRgb(a.dark1, 0.9f);
         p.accentPressed = UiRgb(a.dark1, 0.8f);
         p.accentDisabled = UiRgb(0x000000, 0.216f);
+        p.controlStrong = UiRgb(0x000000, 0.446f);
+        p.inputActive = UiRgb(0xFFFFFF);
+        p.popup = UiRgb(0xF9F9F9);
         p.text = UiRgb(0x000000, 0.894f);
         p.textSecondary = UiRgb(0x000000, 0.62f);
         p.textMuted = UiRgb(0x000000, 0.58f);
@@ -166,6 +176,7 @@ static D2D1_COLOR_F UiInkColor(const UiPalette& p, UiInk ink) {
         case UiInk::Danger: return p.danger;
         case UiInk::Success: return p.success;
         case UiInk::Caution: return p.caution;
+        case UiInk::Accent: return p.accent;
         default: return p.text;
     }
 }
@@ -179,7 +190,8 @@ static constexpr PCWSTR kUiFamilyNames[3][2] = {
     {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},
 };
 
-enum class UiFont : uint8_t { Caption, Body, BodyStrong, Subtitle, Title };
+// Note: info bar text (mockup .infobar).
+enum class UiFont : uint8_t { Caption, Note, Body, BodyStrong, Subtitle, Title };
 
 struct UiTextStyle {
     UiFamily family = UiFamily::Text;
@@ -191,6 +203,7 @@ struct UiTextStyle {
 static UiTextStyle UiTextStyleFor(UiFont font) {
     switch (font) {
         case UiFont::Caption: return {UiFamily::Text, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        case UiFont::Note: return {UiFamily::Text, 13, 19, DWRITE_FONT_WEIGHT_NORMAL};
         case UiFont::BodyStrong: return {UiFamily::Text, 14, 20, DWRITE_FONT_WEIGHT_SEMI_BOLD};
         case UiFont::Subtitle: return {UiFamily::Display, 20, 26, DWRITE_FONT_WEIGHT_SEMI_BOLD};
         case UiFont::Title: return {UiFamily::Display, 28, 36, DWRITE_FONT_WEIGHT_SEMI_BOLD};

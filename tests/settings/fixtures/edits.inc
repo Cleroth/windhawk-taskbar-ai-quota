@@ -1,0 +1,441 @@
+// Edit controller, number parsing, projection and the Behavior/History pages: the real
+// settings/edits.h against an in-memory store with deterministic failure injection.
+
+// In-memory store: settings, statuses, an operation log, failures and unload on demand.
+struct TestStore final : SettingsStore {
+    Settings settings;
+    SettingsStatus status;
+    std::vector<std::wstring> log;  // "load", "apply <field>=<value>"
+    int failNext = 0;               // The next N applies fail
+    int unloadAfter = -1;           // Unloading once this many applies ran
+    int applies = 0;
+
+    SettingsBaseline Load() override {
+        log.push_back(L"load");
+        return {settings, status};
+    }
+    SettingsSaveResult Apply(SettingsField field, int value) override {
+        log.push_back(L"apply " + std::to_wstring(int(field)) + L"=" + std::to_wstring(value));
+        applies++;
+        if (failNext > 0) {
+            failNext--;
+            return SettingsSaveResult::Failed;
+        }
+        Settings next = settings;
+        SettingsAssign(next, field, value);
+        bool changed = !(next == settings);
+        settings = std::move(next);
+        return changed ? SettingsSaveResult::Changed : SettingsSaveResult::Unchanged;
+    }
+    bool Unloading() override { return unloadAfter >= 0 && applies >= unloadAfter; }
+
+    std::vector<std::wstring> Applied() const {
+        std::vector<std::wstring> applied;
+        for (const std::wstring& entry : log) {
+            if (entry.starts_with(L"apply ")) applied.push_back(entry.substr(6));
+        }
+        return applied;
+    }
+};
+
+static std::wstring Op(SettingsField field, int value) {
+    return std::to_wstring(int(field)) + L"=" + std::to_wstring(value);
+}
+
+static constexpr SettingsField kRetention = SettingsField::RetentionDays;
+static constexpr SettingsField kPoll = SettingsField::PollMinutes;
+
+static void RunEditTests() {
+    Run("parse: spaces, sign, digit grouping; empty, malformed and overflow fail; range clamps", [] {
+        SettingsNumberRange days{1, 3650};
+        auto parse = [&](std::wstring_view text, wchar_t separator = L',') {
+            SettingsParsedNumber parsed = SettingsParseNumber(text, days, separator);
+            return parsed.ok ? parsed.value : -999;
+        };
+        CHECK(parse(L"") == -999);
+        CHECK(parse(L"   ") == -999);
+        CHECK(parse(L"-") == -999);
+        CHECK(parse(L"12a") == -999);
+        CHECK(parse(L"1 2") == -999);
+        CHECK(parse(L" 7 ") == 7);
+        CHECK(parse(L"\u00A07\t") == 7);
+        CHECK(parse(L"+12") == 12);
+        CHECK(parse(L"2,500") == 2500);
+        CHECK(parse(L"1,234,567") == 3650);  // Valid grouping, above the range: clamped
+        CHECK(parse(L"25,00") == -999);
+        CHECK(parse(L",500") == -999);
+        CHECK(parse(L"2,500,") == -999);
+        CHECK(parse(L"1,,500") == -999);
+        CHECK(parse(L"1234,567") == -999);
+        CHECK(parse(L"2.500") == -999);       // Not this locale's separator
+        CHECK(parse(L"2.500", L'.') == 2500);
+        CHECK(parse(L"2\u00A0500", L'\u202F') == 2500);  // A space separator takes any space
+        CHECK(parse(L"\uFF11\uFF12") == -999);  // Fullwidth digits
+        CHECK(parse(L"99999999999999999999") == -999);
+        CHECK(parse(L"2147483648") == -999);
+        CHECK(parse(L"2147483647") == 3650);
+        CHECK(parse(L"0") == 1);
+        CHECK(parse(L"-5") == 1);
+        CHECK(parse(L"5000") == 3650);
+        CHECK(SettingsFormatNumber(1440, L',') == L"1,440");
+        CHECK(SettingsFormatNumber(90, L',') == L"90");
+        CHECK(SettingsFormatNumber(1234567, L'.') == L"1.234.567");
+        CHECK(SettingsFormatNumber(0, L',') == L"0");
+    });
+
+    Run("assign: desired values, groups back to defaults, numbers clamped", [] {
+        Settings s;
+        SettingsAssign(s, SettingsField::ShowOn, 3);
+        CHECK(s.taskbarMonitorMode == TaskbarMonitorMode::Specific && s.taskbarMonitorNumber == 3);
+        SettingsAssign(s, SettingsField::ShowOn, -1);
+        CHECK(s.taskbarMonitorMode == TaskbarMonitorMode::All && s.taskbarMonitorNumber == 3);
+        CHECK(SettingsFieldValue(s, SettingsField::ShowOn) == -1);
+        SettingsAssign(s, SettingsField::ShowDetailsOnHover, 0);
+        SettingsAssign(s, SettingsField::ShowDetailsOnHover, 0);  // Desired, not toggled
+        CHECK(!s.showDetailsOnHover);
+        SettingsAssign(s, kPoll, 1);
+        CHECK(s.pollMinutes == 2);
+        SettingsAssign(s, kRetention, 99999);
+        CHECK(s.historyRetentionDays == 3650);
+        s.historyEnabled = false;
+        s.enableNotifications = false;
+        SettingsAssign(s, SettingsField::ResetBehavior, 0);
+        CHECK(s.taskbarMonitorMode == TaskbarMonitorMode::Primary && s.taskbarMonitorNumber == 1);
+        CHECK(s.showDetailsOnHover && s.pollMinutes == 10 && s.enableNotifications);
+        CHECK(!s.historyEnabled && s.historyRetentionDays == 3650);  // Not Behavior's
+        SettingsAssign(s, SettingsField::ResetHistory, 0);
+        CHECK(s.historyEnabled && s.historyRetentionDays == 90);
+    });
+
+    Run("projection: valid drafts show; invalid, empty and overflowing text keeps the last valid value", [] {
+        TestStore store;
+        store.settings.historyRetentionDays = 120;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"");
+        CHECK(edits.Projection().historyRetentionDays == 120);
+        edits.SetText(0, kRetention, L"3");
+        edits.SetText(0, kRetention, L"36");
+        CHECK(edits.Projection().historyRetentionDays == 36);
+        edits.SetText(0, kRetention, L"36a");
+        CHECK(edits.Projection().historyRetentionDays == 36);
+        edits.SetText(0, kRetention, L"99999999999999999999");
+        CHECK(edits.Projection().historyRetentionDays == 36);
+        edits.SetText(0, kRetention, L"0");
+        CHECK(edits.Projection().historyRetentionDays == 1);
+        edits.SetText(0, kRetention, L"9,999");
+        CHECK(edits.Projection().historyRetentionDays == 3650);
+        CHECK(store.Applied().empty());
+    });
+
+    Run("controller: focus loss queues; a page reset then drops the request", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"30");
+        CHECK(edits.RequestCommit(0, kRetention));  // Blur: queued, processed later
+        CHECK(edits.Reset(SettingsField::ResetHistory) == 0);
+        CHECK(edits.Process() == 0);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(SettingsField::ResetHistory, 0)});
+        CHECK(store.settings.historyRetentionDays == 90 && edits.drafts.empty());
+    });
+
+    Run("controller: Esc after a deferred commit skips it", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"30");
+        CHECK(edits.RequestCommit(0, kRetention));
+        edits.Revert(0, kRetention);
+        CHECK(edits.Process() == 0 && store.Applied().empty() && edits.drafts.empty());
+        CHECK(edits.Projection().historyRetentionDays == 90);
+    });
+
+    Run("controller: a newer edit supersedes the queued request; its own commit applies", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"30");
+        CHECK(edits.RequestCommit(0, kRetention));
+        edits.SetText(0, kRetention, L"45");
+        CHECK(edits.Process() == 0 && store.Applied().empty());
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].raw == L"45");
+        CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 0);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(kRetention, 45)});
+        CHECK(edits.drafts.empty() && edits.baseline.settings.historyRetentionDays == 45);
+    });
+
+    Run("controller: an external refresh reloads the baseline and keeps dirty drafts uncommitted", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"45");
+        CHECK(edits.RequestCommit(0, kRetention));  // Queued, not yet processed
+        store.settings.historyEnabled = false;      // The history window's consent change
+        edits.Reload();
+        CHECK(store.Applied().empty());
+        CHECK(edits.drafts.size() == 1 && edits.queue.size() == 1);
+        Settings projected = edits.Projection();
+        CHECK(!projected.historyEnabled && projected.historyRetentionDays == 45);
+    });
+
+    Run("controller: a failed save keeps the draft and its error; only the next action retries", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        store.failNext = 1;
+        edits.SetText(0, kRetention, L"30");
+        CHECK(edits.RequestCommit(0, kRetention));
+        CHECK(edits.Process() == 1);
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].failed && !edits.drafts[0].error.empty());
+        CHECK(edits.Projection().historyRetentionDays == 30);
+        edits.Reload();  // Notifications don't retry
+        CHECK(edits.Process() == 0 && store.applies == 1 && edits.drafts[0].failed);
+        // Nor does focus leaving the box (the error message box takes focus, for one).
+        CHECK(!edits.RequestCommit(0, kRetention, true) && edits.queue.empty());
+        CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 0);  // Enter again
+        CHECK(store.applies == 2 && edits.drafts.empty() && store.settings.historyRetentionDays == 30);
+        // A discrete control keeps its desired value while failed.
+        store.failNext = 1;
+        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 1);
+        CHECK(!edits.Projection().enableNotifications && store.settings.enableNotifications);
+        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 0 && !store.settings.enableNotifications);
+    });
+
+    Run("controller: an invalid draft gets its error and is never queued", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kPoll, L"12a");
+        CHECK(!edits.RequestCommit(0, kPoll));
+        CHECK(edits.drafts[0].error == L"Enter a whole number from 2 to 1440." && edits.queue.empty());
+        edits.SetText(0, kPoll, L"12");  // Typing clears it
+        CHECK(edits.drafts[0].error.empty());
+    });
+
+    Run("controller: a discrete choice supersedes a queued text draft of the same field", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kPoll, L"7");
+        CHECK(edits.RequestCommit(0, kPoll));
+        CHECK(edits.Commit(0, kPoll, 5) == 0);  // The preset dropdown
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(kPoll, 5)});
+        CHECK(edits.drafts.empty() && store.settings.pollMinutes == 5);
+    });
+
+    Run("controller: steps start from the last valid value, clamped, as text", [] {
+        TestStore store;
+        store.settings.historyRetentionDays = 3650;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.Step(0, kRetention, 1);
+        CHECK(edits.drafts[0].raw == L"3,650" && edits.drafts[0].value == 3650);
+        edits.SetText(0, kRetention, L"40x");
+        edits.Step(0, kRetention, -1);
+        CHECK(edits.drafts[0].raw == L"3,649" && edits.drafts[0].valid);
+        CHECK(store.Applied().empty());
+    });
+
+    Run("controller: a step's debounced commit applies only the stepped revision", [] {
+        TestStore store;
+        store.settings.historyRetentionDays = 365;
+        SettingsEdits edits(store);
+        edits.Reload();
+        uint64_t stepped = edits.Step(0, kRetention, 1);
+        edits.SetText(0, kRetention, L"3");  // Typing "365" again before the timer runs out
+        CHECK(!edits.CommitStep(0, kRetention, stepped) && edits.queue.empty());
+        CHECK(edits.Process() == 0 && store.Applied().empty());
+        stepped = edits.Step(0, kRetention, 1);
+        CHECK(edits.drafts[0].raw == L"4" && edits.CommitStep(0, kRetention, stepped));
+        CHECK(edits.Process() == 0 && store.Applied() == std::vector<std::wstring>{Op(kRetention, 4)});
+        CHECK(!edits.CommitStep(0, kRetention, stepped));  // Done: no draft left
+        CHECK(edits.Step(0, SettingsField::Notifications, 1) == 0);  // No range, no step
+        // Step, Enter, the save fails: a stale timer for that revision doesn't retry it.
+        stepped = edits.Step(0, kRetention, 1);
+        store.failNext = 1;
+        CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 1);
+        CHECK(!edits.CommitStep(0, kRetention, stepped) && edits.queue.empty());
+        CHECK(edits.drafts[0].failed && store.applies == 2);
+    });
+
+    Run("navigation: valid drafts commit, invalid ones revert unsaved, failed ones stay", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kPoll, L"12a");
+        edits.SetText(0, kRetention, L"120");
+        CHECK(edits.Navigate() == 0);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(kRetention, 120)});
+        CHECK(edits.drafts.empty() && store.settings.pollMinutes == 10);
+        store.failNext = 1;
+        edits.SetText(0, kRetention, L"150");
+        CHECK(edits.Navigate() == 1);
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].failed);
+        CHECK(edits.Navigate() == 0 && store.applies == 2);  // Kept, not retried
+    });
+
+    Run("close preparation: every draft saves in order, one transaction each", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"30");
+        edits.SetText(0, kPoll, L"7");
+        CHECK(edits.RequestCommit(0, kPoll));  // Queued requests are covered by the flush
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Saved);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(kRetention, 30), Op(kPoll, 7)}));
+        CHECK(edits.drafts.empty() && edits.queue.empty());
+    });
+
+    Run("close preparation: a failing or invalid draft blocks; discard drops everything", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        store.failNext = 1;
+        edits.SetText(0, kRetention, L"30");
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Blocked);
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].failed);
+        edits.SetText(0, kPoll, L"-");
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Blocked);  // Retention saves, poll blocks
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kPoll && !edits.drafts[0].error.empty());
+        edits.Discard();
+        CHECK(edits.drafts.empty() && edits.PrepareClose() == SettingsCloseResult::Saved);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(kRetention, 30), Op(kRetention, 30)}));
+    });
+
+    Run("close preparation: unload between transactions stops the flush", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"30");
+        edits.SetText(0, kPoll, L"7");
+        store.unloadAfter = 1;
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Unloading);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(kRetention, 30)});
+        CHECK(edits.Process() == 0 && store.applies == 1);  // Nothing else commits once unloading
+    });
+
+    Run("page reset: drops only its own fields' drafts", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"30");
+        edits.SetText(0, kPoll, L"7");
+        CHECK(edits.Reset(SettingsField::ResetBehavior) == 0);
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kRetention);
+    });
+}
+
+// Pages ------------------------------------------------------------------------------------------
+
+static SettingsView TestView(SettingsUiPage page) {
+    SettingsView view;
+    view.page = page;
+    view.status.displays = {{1, 2560, 1440, true}, {2, 1920, 1080, false}};
+    view.status.historyFolder = L"C:\\Users\\clero\\AppData\\Local\\TaskbarAIQuota\\taskbar-ai-quota";
+    return view;
+}
+
+static const UiItem& Control(const UiFrame& frame, SettingsField field, uint32_t part = 0) {
+    const UiItem* item = UiFindItem(frame, SettingsControlId(field, part));
+    if (!item) throw std::runtime_error("missing control " + std::to_string(int(field)));
+    return *item;
+}
+
+static bool HasText(const UiFrame& frame, std::wstring_view text) {
+    return std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+        return UiRunsText(item.runs).find(text) != std::wstring::npos;
+    });
+}
+
+static void RunPageTests() {
+    Run("behavior page: controls follow the projection; displays; custom interval", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = TestView(SettingsUiPage::Behavior);
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        const UiItem& showOn = Control(frame, SettingsField::ShowOn);
+        CHECK(showOn.kind == UiItemKind::Dropdown && showOn.text == L"Primary display only");
+        CHECK_NEAR(showOn.rect.right - showOn.rect.left, 260);
+        CHECK(showOn.options.size() == 4 && showOn.options[2].text == L"Display 1 - 2560x1440 (primary)" &&
+              showOn.options[3].value == 2);
+        const UiItem& poll = Control(frame, kPoll, 8);
+        CHECK(poll.text == L"10 minutes" && poll.options.back().text == L"Custom");
+        const UiItem& custom = Control(frame, kPoll);
+        CHECK(custom.kind == UiItemKind::NumberBox && !custom.enabled && custom.text == L"10");
+        CHECK(HasText(frame, L"Choose Custom in Cloud poll interval to edit."));
+        for (SettingsField field : {SettingsField::ShowDetailsOnHover, SettingsField::SkipHiddenPolling,
+                                    SettingsField::Notifications}) {
+            const UiItem& toggle = Control(frame, field);
+            CHECK(toggle.kind == UiItemKind::Toggle && toggle.selected && toggle.action.value == 0);
+        }
+        CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Reset");
+        CHECK(HasText(frame, L"red threshold (90%)"));
+        // Focus order: dropdown, poll dropdown, (disabled box skipped), toggles, reset.
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        CHECK(stops.size() == 6 + 6);
+
+        // A chosen display that is gone stays chosen, marked unavailable; Custom enables the box
+        // and its draft text and error show.
+        view.settings.taskbarMonitorMode = TaskbarMonitorMode::Specific;
+        view.settings.taskbarMonitorNumber = 3;
+        view.settings.showDetailsOnHover = false;
+        view.pollCustom = true;
+        view.drafts.push_back({0, kPoll, 1, true, L"7x", 10, false, false,
+                               L"Enter a whole number from 2 to 1440."});
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::ShowOn).text == L"Display 3 - unavailable");
+        CHECK(Control(frame, kPoll, 8).text == L"Custom");
+        CHECK(Control(frame, kPoll).enabled && Control(frame, kPoll).text == L"7x");
+        CHECK(HasText(frame, L"Enter a whole number from 2 to 1440."));
+        CHECK(!HasText(frame, L"Choose Custom"));
+        const UiItem& hover = Control(frame, SettingsField::ShowDetailsOnHover);
+        CHECK(!hover.selected && hover.text == L"Off" && hover.action.value == 1);
+        // The control ids stay put when lines appear above them.
+        CHECK(Control(frame, SettingsField::Notifications).kind == UiItemKind::Toggle);
+
+        // A saved custom interval being retyped: "1" projects to 2, a preset, yet Custom stays
+        // and the box stays enabled.
+        view = TestView(SettingsUiPage::Behavior);
+        view.settings.pollMinutes = 7;
+        view.drafts.push_back({0, kPoll, 1, true, L"1", 2, true, false, L""});
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, kPoll, 8).text == L"Custom" && Control(frame, kPoll).enabled);
+    });
+
+    Run("history page: status lines, retention needs consent, links, folder", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = TestView(SettingsUiPage::History);
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(HasText(frame, L"\u25CF Recording \u00B7 New samples arrive with each poll."));
+        CHECK(Control(frame, SettingsField::RecordHistory).selected);
+        const UiItem& keep = Control(frame, kRetention);
+        CHECK(keep.enabled && keep.text == L"90");
+        CHECK(Control(frame, kRetention, 3).runs[0].text == L"days");
+        CHECK(HasText(frame, view.status.historyFolder));
+        CHECK(Control(frame, SettingsField::OpenHistory).text == L"Open usage history");
+        CHECK(Control(frame, SettingsField::OpenHistoryFolder).icon == L"\uE838");
+        const UiItem& info = Control(frame, kRetention, 8);
+        CHECK(UiLinkRun(info.runs, 0)->action.value == int(SettingsUiPage::Accounts));
+        CHECK(UiLinkRun(info.runs, 1)->action.value == int(SettingsUiPage::Behavior));
+
+        view.settings.historyEnabled = false;
+        view.settings.historyRetentionDays = 1500;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(HasText(frame, L"\u25CB Off"));
+        CHECK(!Control(frame, kRetention).enabled && Control(frame, kRetention).text == L"1,500");
+        CHECK(HasText(frame, L"Turn on Record usage history to change this."));
+        view.settings.historyEnabled = true;
+        for (auto [state, text] : {std::pair{SettingsRecording::PendingSave, L"\u25CF Waiting"},
+                                   std::pair{SettingsRecording::StorageError, L"\u25CF Not saving"}}) {
+            view.status.recording = state;
+            frame = {};
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            CHECK(HasText(frame, text));
+        }
+    });
+}

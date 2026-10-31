@@ -9403,7 +9403,7 @@ static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
 // Semantic text colors; items name these, never concrete colors. Muted is the mockups'
 // description gray, between WinUI's secondary and tertiary text.
 enum class UiInk : uint8_t {
-    Inherit, Primary, Secondary, Muted, Disabled, Link, OnAccent, Danger, Success, Caution
+    Inherit, Primary, Secondary, Muted, Disabled, Link, OnAccent, Danger, Success, Caution, Accent
 };
 
 struct UiPalette {
@@ -9412,10 +9412,12 @@ struct UiPalette {
     // Surfaces
     D2D1_COLOR_F background{}, card{}, cardHover{}, cardPressed{}, cardBorder{};
 
-    // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills
+    // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills; the strong
+    // stroke of an off toggle, a focused text box and the dropdown popup's surface
     D2D1_COLOR_F control{}, controlHover{}, controlPressed{}, controlDisabled{}, controlBorder{};
     D2D1_COLOR_F subtleHover{}, subtlePressed{};
     D2D1_COLOR_F accent{}, accentHover{}, accentPressed{}, accentDisabled{};
+    D2D1_COLOR_F controlStrong{}, inputActive{}, popup{};
 
     // Text
     D2D1_COLOR_F text{}, textSecondary{}, textMuted{}, textDisabled{}, textOnAccent{};
@@ -9444,6 +9446,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.subtleHover = p.subtlePressed = UiRgb(s.window);
         p.accent = p.accentHover = p.accentPressed = UiRgb(s.highlight);
         p.accentDisabled = UiRgb(s.grayText);
+        p.controlStrong = UiRgb(s.windowText);
+        p.inputActive = p.popup = UiRgb(s.window);
         p.text = p.textSecondary = p.textMuted = UiRgb(s.windowText);
         p.textDisabled = UiRgb(s.grayText);
         p.textOnAccent = UiRgb(s.highlightText);
@@ -9474,6 +9478,9 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentHover = UiRgb(a.light2, 0.9f);
         p.accentPressed = UiRgb(a.light2, 0.8f);
         p.accentDisabled = UiRgb(0xFFFFFF, 0.16f);
+        p.controlStrong = UiRgb(0xFFFFFF, 0.6f);
+        p.inputActive = UiRgb(0x1E1E1E, 0.7f);
+        p.popup = UiRgb(0x2C2C2C);
         p.text = UiRgb(0xFFFFFF);
         p.textSecondary = UiRgb(0xFFFFFF, 0.786f);
         p.textMuted = UiRgb(0xFFFFFF, 0.6f);
@@ -9505,6 +9512,9 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentHover = UiRgb(a.dark1, 0.9f);
         p.accentPressed = UiRgb(a.dark1, 0.8f);
         p.accentDisabled = UiRgb(0x000000, 0.216f);
+        p.controlStrong = UiRgb(0x000000, 0.446f);
+        p.inputActive = UiRgb(0xFFFFFF);
+        p.popup = UiRgb(0xF9F9F9);
         p.text = UiRgb(0x000000, 0.894f);
         p.textSecondary = UiRgb(0x000000, 0.62f);
         p.textMuted = UiRgb(0x000000, 0.58f);
@@ -9536,6 +9546,7 @@ static D2D1_COLOR_F UiInkColor(const UiPalette& p, UiInk ink) {
         case UiInk::Danger: return p.danger;
         case UiInk::Success: return p.success;
         case UiInk::Caution: return p.caution;
+        case UiInk::Accent: return p.accent;
         default: return p.text;
     }
 }
@@ -9549,7 +9560,8 @@ static constexpr PCWSTR kUiFamilyNames[3][2] = {
     {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},
 };
 
-enum class UiFont : uint8_t { Caption, Body, BodyStrong, Subtitle, Title };
+// Note: info bar text (mockup .infobar).
+enum class UiFont : uint8_t { Caption, Note, Body, BodyStrong, Subtitle, Title };
 
 struct UiTextStyle {
     UiFamily family = UiFamily::Text;
@@ -9561,6 +9573,7 @@ struct UiTextStyle {
 static UiTextStyle UiTextStyleFor(UiFont font) {
     switch (font) {
         case UiFont::Caption: return {UiFamily::Text, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        case UiFont::Note: return {UiFamily::Text, 13, 19, DWRITE_FONT_WEIGHT_NORMAL};
         case UiFont::BodyStrong: return {UiFamily::Text, 14, 20, DWRITE_FONT_WEIGHT_SEMI_BOLD};
         case UiFont::Subtitle: return {UiFamily::Display, 20, 26, DWRITE_FONT_WEIGHT_SEMI_BOLD};
         case UiFont::Title: return {UiFamily::Display, 28, 36, DWRITE_FONT_WEIGHT_SEMI_BOLD};
@@ -9905,12 +9918,19 @@ static ID2D1PathGeometry* UiPathGeometry(UiGraphics& g, PCWSTR data) {
 // Effect-free layouts (measuring, hit testing) are shared; colored layouts are per target.
 
 // What activating an item or link does. Data only; the window's client interprets it.
-enum class UiActionKind : uint8_t { None, Navigate, OpenUrl };
+// Command: a client-defined target set to a desired value (toggles, dropdown choices, buttons).
+// Number boxes report their native text box: Step (value = delta), and the text events with the
+// box's text.
+enum class UiActionKind : uint8_t {
+    None, Navigate, OpenUrl, Command, Step, TextChange, TextCommit, TextBlur, TextRevert
+};
 
 struct UiAction {
     UiActionKind kind = UiActionKind::None;
-    int value = 0;       // Navigate: page
-    std::wstring url{};  // OpenUrl
+    int value = 0;         // Navigate: page; Command: desired value; Step: delta
+    std::wstring text{};   // OpenUrl: the URL; text events: the box's text
+    uint32_t target = 0;   // Command, Step and text events: the client's target
+    uint64_t key = 0;      // The target's owner (0: global)
 };
 
 enum class UiRunStyle : uint8_t { Normal, Strong, Link };
@@ -10060,8 +10080,19 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // hit testing, focus order and shared layout builders. Pure. Builders read no globals; paint and
 // input work only from the list.
 
-enum class UiItemKind : uint8_t { Nav, Card, Text, Glyph, Shape, Button, Link };
+// Toggle: selected = on. Dropdown: text = the chosen option's label, action.value = its value;
+// activating it opens the popup (ui/popup.h). NumberBox: the drawn frame of a native text box
+// (ui/text-box.h) showing `text`; SpinButton: its up/down buttons (not tab stops). Option: one
+// row of the dropdown popup.
+enum class UiItemKind : uint8_t {
+    Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option
+};
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
+
+struct UiOption {
+    std::wstring text;
+    int value = 0;
+};
 
 // One filled or stroked path of a Shape item, in the item's view box. A part with an Inherit
 // ink keeps its own color (illustrations); others follow the theme.
@@ -10080,15 +10111,18 @@ struct UiItem {
     UiFont font = UiFont::Body;
     UiInk ink = UiInk::Primary;
     DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
-    std::wstring text;               // Nav, Button and Link label; Glyph character
+    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option);
+                                     // Glyph and SpinButton character; NumberBox text
     std::wstring icon;               // Nav and Button glyph
     float iconSize = 16;             // Glyph, Nav and Button glyph size
     std::vector<UiRun> runs;         // Text, wrapped to the rectangle's width
     std::vector<UiShapePart> parts;  // Shape
+    std::vector<UiOption> options;   // Dropdown
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;
     UiAction action;
+    uint32_t owner = 0;              // SpinButton: its NumberBox
     bool selected = false;
     bool enabled = true;
 };
@@ -10118,12 +10152,17 @@ struct UiFocusStop {
 };
 
 static bool UiInteractiveKind(UiItemKind kind) {
-    return kind == UiItemKind::Nav || kind == UiItemKind::Card || kind == UiItemKind::Button ||
-           kind == UiItemKind::Link;
+    return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape;
 }
 
-static bool UiFocusable(const UiItem& item) {
+// Reacts to the pointer and can be activated.
+static bool UiActive(const UiItem& item) {
     return UiInteractiveKind(item.kind) && item.enabled && item.action.kind != UiActionKind::None;
+}
+
+// A tab stop. Spin buttons belong to their number box; options to the dropdown field.
+static bool UiFocusable(const UiItem& item) {
+    return UiActive(item) && item.kind != UiItemKind::SpinButton && item.kind != UiItemKind::Option;
 }
 
 static const UiItem* UiFindItem(const UiFrame& frame, uint32_t id, UiSurfaceId* surface = nullptr) {
@@ -10166,7 +10205,7 @@ static std::vector<UiFocusStop> UiFocusStops(const UiFrame& frame) {
 static const UiAction* UiActionOf(const UiFrame& frame, UiFocusRef ref) {
     const UiItem* item = UiFindItem(frame, ref.id);
     if (!item || !item->enabled) return nullptr;
-    if (ref.link < 0) return UiFocusable(*item) ? &item->action : nullptr;
+    if (ref.link < 0) return UiActive(*item) ? &item->action : nullptr;
     const UiRun* run = UiLinkRun(item->runs, ref.link);
     return run && run->action.kind != UiActionKind::None ? &run->action : nullptr;
 }
@@ -10187,7 +10226,7 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
             continue;
         }
         if (!UiInteractiveKind(item.kind)) continue;
-        return UiFocusable(item) ? UiFocusRef{item.id, -1} : UiFocusRef{};
+        return UiActive(item) ? UiFocusRef{item.id, -1} : UiFocusRef{};
     }
     return {};
 }
@@ -10276,7 +10315,8 @@ static float UiAddSection(std::vector<UiItem>& items, uint32_t& id, float x, flo
 
 // Settings card (mockup .scard): optional leading glyph, a title, a description and a trailing
 // slot of `trailing` size (or a trailing glyph), vertically centered. With an action the whole
-// card is one interactive item.
+// card is one interactive item. A disabled card dims its title and may say why (mockup
+// .reason); an error line reports an invalid or unsaved value.
 struct UiCardSpec {
     std::wstring glyph;
     std::wstring title;
@@ -10285,6 +10325,8 @@ struct UiCardSpec {
     std::wstring trailingGlyph;
     UiAction action;
     float minHeight = 68;
+    bool enabled = true;
+    std::wstring reason, error;
 };
 
 struct UiCardLayout {
@@ -10308,7 +10350,23 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
     float descriptionHeight =
         spec.description.empty() ? 0 :
         UiLayoutSize(UiRichLayout(g, spec.description, UiFont::Caption, descriptionWidth)).height;
+    // Reason and error lines: a 12 DIP glyph, 6 DIP gap, caption text; 3 DIP above each.
+    struct Note {
+        const std::wstring* text;
+        PCWSTR glyph;
+        UiInk ink;
+        float height;
+    };
+    std::vector<Note> notes;
+    for (Note note : {Note{&spec.reason, L"\uE946", UiInk::Secondary, 0},
+                      Note{&spec.error, L"\uE783", UiInk::Danger, 0}}) {
+        if (note.text->empty()) continue;
+        note.height = 3 + UiLayoutSize(UiLayout(g, *note.text, UiTextStyleFor(UiFont::Caption),
+                                                descriptionWidth - 18)).height;
+        notes.push_back(note);
+    }
     float textHeight = titleHeight + descriptionHeight;
+    for (const Note& note : notes) textHeight += note.height;
     float content = std::max({textHeight, trailing.height, spec.glyph.empty() ? 0.0f : 20.0f});
     float height = std::max(spec.minHeight, content + 2 * (kBorder + kPadY));
     float center = y + height / 2;
@@ -10340,17 +10398,39 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
     title.rect = {textLeft, center - textHeight / 2, textLeft + textWidth,
                   center - textHeight / 2 + titleHeight};
     title.runs.push_back({spec.title});
+    title.enabled = spec.enabled;
     items.push_back(std::move(title));
+    float lineTop = center - textHeight / 2 + titleHeight;
     if (!spec.description.empty()) {
         UiItem description;
         description.id = id++;
         description.kind = UiItemKind::Text;
         description.font = UiFont::Caption;
         description.ink = UiInk::Muted;
-        description.rect = {textLeft, center - textHeight / 2 + titleHeight,
-                            textLeft + descriptionWidth, center + textHeight / 2};
+        description.rect = {textLeft, lineTop, textLeft + descriptionWidth,
+                            lineTop + descriptionHeight};
         description.runs = spec.description;
         items.push_back(std::move(description));
+        lineTop += descriptionHeight;
+    }
+    for (const Note& note : notes) {
+        UiItem glyph;
+        glyph.id = id++;
+        glyph.kind = UiItemKind::Glyph;
+        glyph.text = note.glyph;
+        glyph.iconSize = 12;
+        glyph.ink = note.ink;
+        glyph.rect = {textLeft, lineTop + 3 + 2, textLeft + 12, lineTop + 3 + 14};
+        items.push_back(std::move(glyph));
+        UiItem text;
+        text.id = id++;
+        text.kind = UiItemKind::Text;
+        text.font = UiFont::Caption;
+        text.ink = note.ink;
+        text.rect = {textLeft + 18, lineTop + 3, textLeft + descriptionWidth, lineTop + note.height};
+        text.runs.push_back({*note.text});
+        items.push_back(std::move(text));
+        lineTop += note.height;
     }
     if (!spec.trailingGlyph.empty()) {
         UiItem glyph;
@@ -10365,14 +10445,180 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
     return layout;
 }
 
+// Info bar (mockup .infobar): an accent info glyph and wrapped rich text on a card. The text
+// item takes `textId`, which stays the same across rebuilds so a focused link keeps its focus.
+static float UiAddInfoBar(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, uint32_t textId,
+                          float x, float y, float width, std::vector<UiRun> runs) {
+    constexpr float kInset = 1 + 13, kPadX = 1 + 18, kIcon = 16, kGap = 12;
+    float textLeft = x + kPadX + kIcon + kGap;
+    float textWidth = std::max(x + width - kPadX - textLeft, 40.0f);
+    float textHeight = UiLayoutSize(UiRichLayout(g, runs, UiFont::Note, textWidth)).height;
+    UiItem card;
+    card.id = id++;
+    card.kind = UiItemKind::Card;
+    card.rect = {x, y, x + width, y + textHeight + 2 * kInset};
+    items.push_back(card);
+    UiItem icon;
+    icon.id = id++;
+    icon.kind = UiItemKind::Glyph;
+    icon.text = L"\uF167";  // InfoSolid
+    icon.ink = UiInk::Accent;
+    icon.rect = {x + kPadX, y + kInset + 1.5f, x + kPadX + kIcon, y + kInset + 1.5f + kIcon};
+    items.push_back(std::move(icon));
+    UiItem text;
+    text.id = textId;
+    text.kind = UiItemKind::Text;
+    text.font = UiFont::Note;
+    text.ink = UiInk::Secondary;
+    text.rect = {textLeft, y + kInset, textLeft + textWidth, y + kInset + textHeight};
+    text.runs = std::move(runs);
+    items.push_back(std::move(text));
+    return card.rect.bottom;
+}
+
+// Controls placed in a card's trailing slot (mockup .ctl). Interactive controls take explicit
+// ids that stay the same across rebuilds: focus and native text boxes follow them.
+
+// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch.
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g) {
+    UiTextStyle body = UiTextStyleFor(UiFont::Body);
+    float label = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
+                           UiLayoutSize(UiLayout(g, L"Off", body, 1000, false)).width);
+    return {std::ceil(label) + 12 + 40, 32};
+}
+
+static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
+                        bool enabled, UiAction action) {
+    UiItem toggle;
+    toggle.id = id;
+    toggle.kind = UiItemKind::Toggle;
+    toggle.rect = slot;
+    toggle.text = on ? L"On" : L"Off";
+    toggle.selected = on;
+    toggle.enabled = enabled;
+    toggle.action = std::move(action);
+    items.push_back(std::move(toggle));
+}
+
+// Dropdown field (mockup .combo): the option whose value is action.value.
+static void UiAddDropdown(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+                          std::vector<UiOption> options, bool enabled, UiAction action) {
+    UiItem field;
+    field.id = id;
+    field.kind = UiItemKind::Dropdown;
+    field.rect = slot;
+    for (const UiOption& option : options) {
+        if (option.value == action.value) field.text = option.text;
+    }
+    field.options = std::move(options);
+    field.enabled = enabled;
+    field.action = std::move(action);
+    items.push_back(std::move(field));
+}
+
+// Spin number box (mockup .numwrap): a 96 x 32 DIP box with up/down buttons at its right end,
+// then a unit 10 DIP after it.
+static constexpr float kUiNumberBoxWidth = 96;
+
+static D2D1_SIZE_F UiNumberBoxSize(UiGraphics& g, std::wstring_view unit) {
+    float label = UiLayoutSize(UiLayout(g, unit, UiTextStyleFor(UiFont::Body), 1000, false)).width;
+    return {kUiNumberBoxWidth + 10 + std::max(std::ceil(label), 22.0f), 32};
+}
+
+// Where the box's text sits: after the 11 DIP padding, before the spin buttons.
+static D2D1_RECT_F UiNumberBoxTextRect(const UiItem& box) {
+    const D2D1_RECT_F& r = box.rect;
+    return {r.left + 11, r.top + 1, r.right - 49, r.bottom - 1};
+}
+
+// The box takes `id`, its up and down buttons id + 1 and id + 2. The action names the target;
+// the buttons step it by 1.
+static void UiAddNumberBox(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+                           std::wstring text, std::wstring unit, bool enabled, UiAction action) {
+    UiItem box;
+    box.id = id;
+    box.kind = UiItemKind::NumberBox;
+    box.rect = {slot.left, slot.top, slot.left + kUiNumberBoxWidth, slot.bottom};
+    box.text = std::move(text);
+    box.enabled = enabled;
+    box.action = action;
+    const D2D1_RECT_F r = box.rect;
+    items.push_back(std::move(box));
+    for (int i = 0; i < 2; i++) {
+        UiItem spin;
+        spin.id = id + 1 + uint32_t(i);
+        spin.kind = UiItemKind::SpinButton;
+        float right = r.right - 3 - 22 * float(1 - i);
+        spin.rect = {right - 22, r.top + 4, right, r.bottom - 4};
+        spin.text = i == 0 ? L"\uE70E" : L"\uE70D";
+        spin.owner = id;
+        spin.enabled = enabled;
+        spin.action = action;
+        spin.action.kind = UiActionKind::Step;
+        spin.action.value = i == 0 ? 1 : -1;
+        items.push_back(std::move(spin));
+    }
+    UiItem label;
+    label.id = id + 3;
+    label.kind = UiItemKind::Text;
+    label.ink = UiInk::Secondary;
+    label.rect = {r.right + 10, (r.top + r.bottom) / 2 - 10, slot.right, (r.top + r.bottom) / 2 + 10};
+    label.runs.push_back({std::move(unit)});
+    label.enabled = enabled;
+    items.push_back(std::move(label));
+}
+
+// The dropdown popup's rows (mockup .dmenu, WinUI combo box items): 32 DIP rows on a 36 DIP
+// pitch, 5 DIP side insets, 2 DIP top and bottom padding; the current value's row selected.
+// Each row's action is the field's, with the row's value. Returns the popup size in DIPs, at
+// least `minWidth` wide.
+static D2D1_SIZE_F UiLayoutOptions(UiGraphics& g, const std::vector<UiOption>& options,
+                                   const UiAction& action, float minWidth,
+                                   std::vector<UiItem>& rows) {
+    UiTextStyle body = UiTextStyleFor(UiFont::Body);
+    float width = minWidth;
+    for (const UiOption& option : options) {
+        width = std::max(width, std::ceil(UiLayoutSize(UiLayout(g, option.text, body, 10000,
+                                                                false)).width) + 5 + 12 + 12 + 5);
+    }
+    rows.clear();
+    for (size_t i = 0; i < options.size(); i++) {
+        UiItem row;
+        row.id = uint32_t(i + 1);
+        row.kind = UiItemKind::Option;
+        float top = 2 + 2 + 36 * float(i);
+        row.rect = {5, top, width - 5, top + 32};
+        row.text = options[i].text;
+        row.selected = options[i].value == action.value;
+        row.action = action;
+        row.action.value = options[i].value;
+        rows.push_back(std::move(row));
+    }
+    return {width, 4 + 36 * float(options.size())};
+}
+
+// Where the popup goes, in pixels: below the field, else above it, else on the side with more
+// room; left-aligned with the field and kept inside the work area.
+static POINT UiPopupPlacement(RECT field, SIZE size, RECT work, int gap) {
+    LONG x = std::clamp(field.left, work.left, std::max(work.left, work.right - size.cx));
+    LONG below = field.bottom + gap, above = field.top - gap - size.cy;
+    if (below + size.cy <= work.bottom) return {x, below};
+    if (above >= work.top) return {x, above};
+    bool roomBelow = work.bottom - field.bottom >= field.top - work.top;
+    return {x, roomBelow ? std::max(work.top, work.bottom - size.cy) : work.top};
+}
+
 // src/ui/paint.h
 // Per-kind paint of item lists, the focus ring and the scrollbar. Pure: explicit target, caches,
 // palette and interaction state. High contrast draws only palette (system) colors and borders on
 // every control.
 
+// open: the dropdown whose popup is showing; editing: the number box whose native text box has
+// keyboard focus.
 struct UiPaintState {
     UiFocusRef hot, pressed, focus;
     bool focusVisible = false;
+    uint32_t open = 0, editing = 0;
 };
 
 static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
@@ -10400,8 +10646,9 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
         const bool hot = state.hot == UiFocusRef{item.id, -1};
         const bool pressed = hot && state.pressed == UiFocusRef{item.id, -1};
         switch (item.kind) {
-            // Navigation item: accent pill when selected, glyph, label.
-            case UiItemKind::Nav: {
+            // Navigation item and popup option: accent pill when selected, glyph, label.
+            case UiItemKind::Nav:
+            case UiItemKind::Option: {
                 D2D1_COLOR_F fill{};
                 if (hc) {
                     if (item.selected) fill = p.highlight;
@@ -10418,13 +10665,17 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 }
                 D2D1_COLOR_F ink = !item.enabled ? p.textDisabled :
                                    hc && item.selected ? p.highlightText : p.text;
-                UiDrawLayout(target, cache,
-                             UiLayout(g, item.icon, UiIconStyle(item.iconSize), 16, false,
-                                      DWRITE_TEXT_ALIGNMENT_CENTER),
-                             {r.left + 14, centerY - item.iconSize / 2}, ink);
+                float labelLeft = 12;
+                if (!item.icon.empty()) {
+                    UiDrawLayout(target, cache,
+                                 UiLayout(g, item.icon, UiIconStyle(item.iconSize), 16, false,
+                                          DWRITE_TEXT_ALIGNMENT_CENTER),
+                                 {r.left + 14, centerY - item.iconSize / 2}, ink);
+                    labelLeft = 44;
+                }
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, width - 44, false),
-                             {r.left + 44, centerY - label.lineHeight / 2}, ink);
+                UiDrawLayout(target, cache, UiLayout(g, item.text, label, width - labelLeft, false),
+                             {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                 break;
             }
             // Card: a raised panel; interactive cards react to the pointer as a whole.
@@ -10539,16 +10790,111 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              hot ? p.linkHover : p.link);
                 break;
             }
+            // Toggle switch at the right end, "On"/"Off" before it. On: accent track, knob in
+            // the text-on-accent color; off: strong outline. The knob grows under the pointer.
+            case UiItemKind::Toggle: {
+                bool on = item.selected, active = item.enabled && hot;
+                D2D1_RECT_F track{r.right - 40, centerY - 10, r.right, centerY + 10};
+                D2D1_COLOR_F fill{}, border{}, knob{};
+                if (!item.enabled) {
+                    fill = on ? p.accentDisabled : D2D1_COLOR_F{};
+                    border = on ? D2D1_COLOR_F{} : p.textDisabled;
+                    knob = on ? p.background : p.textDisabled;
+                } else if (on) {
+                    fill = pressed ? p.accentPressed : hot ? p.accentHover : p.accent;
+                    border = hc ? p.controlBorder : D2D1_COLOR_F{};
+                    knob = p.textOnAccent;
+                } else {
+                    fill = pressed ? p.subtlePressed : hot ? p.subtleHover : D2D1_COLOR_F{};
+                    border = hc && active ? p.highlight : p.controlStrong;
+                    knob = p.textSecondary;
+                }
+                UiFillRect(target, cache, track, 10, fill, scale);
+                UiStrokeRect(target, cache, track, 10, border, 1, scale);
+                float size = on ? (active ? 14.0f : 12.0f) : (active ? 12.0f : 10.0f);
+                float knobX = on ? track.right - 10 : track.left + 10;
+                UiFillRect(target, cache,
+                           {knobX - size / 2, centerY - size / 2, knobX + size / 2, centerY + size / 2},
+                           size / 2, knob, scale);
+                UiTextStyle label = UiTextStyleFor(UiFont::Body);
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, std::max(track.left - 12 - r.left, 0.0f),
+                                      false, DWRITE_TEXT_ALIGNMENT_TRAILING),
+                             {r.left, centerY - label.lineHeight / 2},
+                             item.enabled ? p.text : p.textDisabled);
+                break;
+            }
+            // Dropdown field: a standard control fill (pressed while its popup shows), the
+            // chosen label clipped before the chevron.
+            case UiItemKind::Dropdown: {
+                bool down = item.enabled && (pressed || state.open == item.id);
+                bool active = item.enabled && (hot || down);
+                D2D1_COLOR_F fill = !item.enabled ? p.controlDisabled : down ? p.controlPressed :
+                                    hot ? p.controlHover : p.control;
+                D2D1_COLOR_F ink = !item.enabled ? p.textDisabled : hc && active ? p.highlightText : p.text;
+                UiFillRect(target, cache, r, 4, fill, scale);
+                UiStrokeRect(target, cache, r, 4, p.controlBorder, 1, scale);
+                UiTextStyle label = UiTextStyleFor(UiFont::Body);
+                D2D1_RECT_F clip{r.left + 11, r.top, r.right - 30, r.bottom};
+                target->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+                UiDrawLayout(target, cache, UiLayout(g, item.text, label, 10000, false),
+                             {clip.left, centerY - label.lineHeight / 2}, ink);
+                target->PopAxisAlignedClip();
+                UiDrawLayout(target, cache,
+                             UiLayout(g, L"\uE70D", UiIconStyle(10), 12, false,
+                                      DWRITE_TEXT_ALIGNMENT_CENTER),
+                             {r.right - 22, centerY - 5},
+                             !item.enabled ? p.textDisabled : hc && active ? p.highlightText :
+                                                              p.textSecondary);
+                break;
+            }
+            // Number box frame. Its native text box draws the text on screen; the text drawn
+            // here sits under it (and shows in offscreen renders). Editing: solid fill and a
+            // 2 DIP accent bottom edge.
+            case UiItemKind::NumberBox: {
+                bool editing = item.enabled && state.editing == item.id;
+                D2D1_COLOR_F fill = !item.enabled ? p.controlDisabled : editing ? p.inputActive :
+                                                                         p.control;
+                UiFillRect(target, cache, r, 4, fill, scale);
+                UiStrokeRect(target, cache, r, 4, hc && editing ? p.highlight : p.controlBorder, 1,
+                             scale);
+                if (editing) {
+                    UiFillRect(target, cache, {r.left + 2, r.bottom - 2, r.right - 2, r.bottom}, 1,
+                               p.accent, scale);
+                }
+                D2D1_RECT_F clip = UiNumberBoxTextRect(item);
+                UiTextStyle label = UiTextStyleFor(UiFont::Body);
+                target->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+                UiDrawLayout(target, cache, UiLayout(g, item.text, label, 10000, false),
+                             {clip.left, centerY - label.lineHeight / 2},
+                             item.enabled ? p.text : p.textDisabled);
+                target->PopAxisAlignedClip();
+                break;
+            }
+            // Spin button: a subtle button with a small chevron.
+            case UiItemKind::SpinButton: {
+                if (item.enabled && !hc) {
+                    UiFillRect(target, cache, r, 3,
+                               pressed ? p.subtlePressed : hot ? p.subtleHover : D2D1_COLOR_F{},
+                               scale);
+                }
+                if (hc && item.enabled && hot) UiStrokeRect(target, cache, r, 3, p.highlight, 1, scale);
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, UiIconStyle(10), width, false,
+                                      DWRITE_TEXT_ALIGNMENT_CENTER),
+                             {r.left, centerY - 5}, item.enabled ? p.textSecondary : p.textDisabled);
+                break;
+            }
         }
     }
 
     // Focus ring (keyboard focus only): 2 DIP outer and 1 DIP inner band, 3 DIP outside the
     // element; 2 DIP around inline links, between their neighbors; inside for navigation items,
-    // which touch the pane edges.
+    // which touch the pane edges. A number box shows focus with its editing style instead.
     if (state.focusVisible && state.focus.id) {
         auto focused = std::find_if(items.begin(), items.end(),
                                     [&](const UiItem& item) { return item.id == state.focus.id; });
-        if (focused != items.end()) {
+        if (focused != items.end() && focused->kind != UiItemKind::NumberBox) {
             float radius = state.focus.link >= 0           ? 2 :
                            focused->kind == UiItemKind::Card ? 6 : 4;
             float outside = state.focus.link >= 0          ? 2 :
@@ -10657,6 +11003,37 @@ static UiIntent UiKeyIntent(const std::vector<UiFocusStop>& stops, UiFocusRef fo
         case VK_RETURN:
         case VK_SPACE:
             return known ? UiIntent{UiIntentKind::Invoke, focus} : UiIntent{};
+    }
+    return {};
+}
+
+// Keys while a dropdown popup is open (keyboard focus stays on the field): arrows, Home/End and
+// Page Up/Down move the highlight; Enter and Space choose it; Esc and F4 close; Tab closes and
+// then moves focus as usual (pass). Other keys do nothing.
+enum class UiOptionIntentKind : uint8_t { None, Highlight, Choose, Close, CloseAndPass };
+
+struct UiOptionIntent {
+    UiOptionIntentKind kind = UiOptionIntentKind::None;
+    int index = -1;
+};
+
+static UiOptionIntent UiOptionKey(int count, int highlight, UINT key) {
+    if (count <= 0) return {UiOptionIntentKind::Close};
+    int last = count - 1;
+    switch (key) {
+        case VK_UP: return {UiOptionIntentKind::Highlight, highlight < 0 ? last : std::max(highlight - 1, 0)};
+        case VK_DOWN: return {UiOptionIntentKind::Highlight, highlight < 0 ? 0 : std::min(highlight + 1, last)};
+        case VK_HOME:
+        case VK_PRIOR: return {UiOptionIntentKind::Highlight, 0};
+        case VK_END:
+        case VK_NEXT: return {UiOptionIntentKind::Highlight, last};
+        case VK_RETURN:
+        case VK_SPACE:
+            return highlight >= 0 && highlight <= last ? UiOptionIntent{UiOptionIntentKind::Choose, highlight} :
+                                                         UiOptionIntent{UiOptionIntentKind::Close};
+        case VK_ESCAPE:
+        case VK_F4: return {UiOptionIntentKind::Close};
+        case VK_TAB: return {UiOptionIntentKind::CloseAndPass};
     }
     return {};
 }
@@ -10824,11 +11201,208 @@ static bool UiSurfaceDrawResult(UiSurface& surface, HRESULT result) {
     return ++surface.failures < 3;
 }
 
+// src/ui/popup.h
+// Dropdown popup (native): an owned window listing a dropdown's options. It never activates
+// (WS_EX_NOACTIVATE, shown without activation, no taskbar button) and holds mouse capture while
+// open; keyboard focus stays on the dropdown field, whose keys drive it. The host creates it and
+// routes its messages and every close trigger (ui/host.h).
+
+struct UiPopup {
+    HWND window = nullptr;
+    UiSurface surface;
+    UINT dpi = 96;
+    uint32_t field = 0;        // The dropdown item that opened it
+    std::vector<UiItem> rows;  // Popup DIPs; ids 1..n
+    int highlight = -1;        // Row under the pointer or chosen with keys
+    int pressed = -1;          // Row pressed with the left button
+    bool open = false;
+    // An outside press closed it: the window is hidden but keeps capture until this button-up,
+    // so the release doesn't reach whatever is under the pointer.
+    UINT swallowUp = 0;
+};
+
+static constexpr DWORD kUiPopupExStyle = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+
+// The one close routine: marks the popup closed first, releases capture only while the popup
+// still holds it, destroys the window and never restores focus or the foreground. The capture
+// change it causes re-enters here and finds nothing left to do.
+static void UiPopupClose(UiPopup& popup) {
+    popup.open = false;
+    popup.swallowUp = 0;
+    popup.highlight = popup.pressed = -1;
+    HWND window = std::exchange(popup.window, nullptr);
+    if (!window) return;
+    if (GetCapture() == window) ReleaseCapture();
+    DestroyWindow(window);
+}
+
+// The row under a popup client point in pixels, or -1.
+static int UiPopupRowAt(const UiPopup& popup, POINT point) {
+    float scale = float(popup.dpi) / 96;
+    D2D1_POINT_2F at{float(point.x) / scale, float(point.y) / scale};
+    for (size_t i = 0; i < popup.rows.size(); i++) {
+        if (UiContains(popup.rows[i].rect, at)) return int(i);
+    }
+    return -1;
+}
+
+// Paints the rows on the popup surface; false when it can't draw.
+static bool UiPaintPopup(UiPopup& popup, UiGraphics& g, const UiPalette& palette) {
+    ID2D1HwndRenderTarget* target = UiSurfaceTarget(popup.surface, g.d2d.get(), popup.dpi);
+    if (!target) return false;
+    float scale = float(popup.dpi) / 96;
+    UiPaintState state;
+    if (popup.highlight >= 0) state.hot = {uint32_t(popup.highlight + 1), -1};
+    if (popup.pressed >= 0) state.pressed = {uint32_t(popup.pressed + 1), -1};
+    target->BeginDraw();
+    D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
+    target->SetTransform(&identity);
+    target->Clear(palette.popup);
+    UiPaintItems(target, g, popup.surface.cache, palette, popup.rows, state, {0, 0}, scale, -1e9f,
+                 1e9f);
+    // Windows draws the rounded border; high contrast gets its own in the text color.
+    if (palette.kind == UiThemeKind::HighContrast) {
+        D2D1_SIZE_F size = target->GetSize();
+        UiStrokeRect(target, popup.surface.cache, {0, 0, size.width, size.height}, 0,
+                     palette.cardBorder, 1, scale);
+    }
+    return UiSurfaceDrawResult(popup.surface, target->EndDraw());
+}
+
+// src/ui/text-box.h
+// Native text boxes of the custom-drawn windows: one single-line EDIT per number-box item, keyed
+// by the item's id, a child of the viewport over the item's text area. Native entry keeps IME,
+// caret, selection, clipboard and undo; rebuilds keep the window and set its text only when the
+// client's text changed. The host creates them and routes their messages (ui/host.h).
+
+struct UiTextBox {
+    uint32_t id = 0;
+    HWND window = nullptr;
+    std::wstring text;       // What the client last set or was told
+    bool composing = false;  // IME composition in progress: native handling only
+};
+
+struct UiTextBoxes {
+    std::vector<UiTextBox> boxes;
+    HFONT font = nullptr;
+    UINT fontDpi = 0;
+    int fontHeight = 0;  // Pixels
+    std::vector<std::pair<COLORREF, HBRUSH>> brushes;
+    bool programmatic = false;  // Inside our own text set: its EN_CHANGE isn't an edit
+    // Focus is leaving the window (deactivation, a modal), not moving inside it: the box keeps
+    // its draft instead of reporting focus loss.
+    bool leavingWindow = false;
+};
+
+static UiTextBox* UiFindTextBox(UiTextBoxes& boxes, uint32_t id) {
+    for (UiTextBox& box : boxes.boxes) {
+        if (box.id == id) return &box;
+    }
+    return nullptr;
+}
+
+static UiTextBox* UiFindTextBox(UiTextBoxes& boxes, HWND window) {
+    if (!window) return nullptr;
+    for (UiTextBox& box : boxes.boxes) {
+        if (box.window == window) return &box;
+    }
+    return nullptr;
+}
+
+static std::wstring UiTextBoxText(HWND window) {
+    std::wstring text(size_t(std::max(GetWindowTextLengthW(window), 0)) + 1, L'\0');
+    text.resize(size_t(std::max(GetWindowTextW(window, text.data(), int(text.size())), 0)));
+    return text;
+}
+
+static void UiSetTextBoxText(UiTextBoxes& boxes, UiTextBox& box, const std::wstring& text) {
+    box.text = text;
+    boxes.programmatic = true;
+    SetWindowTextW(box.window, text.c_str());
+    boxes.programmatic = false;
+    if (GetFocus() == box.window) SendMessageW(box.window, EM_SETSEL, text.size(), text.size());
+}
+
+// The body font at `dpi` (Segoe UI Variable Text, else Segoe UI), applied to every box. The
+// previous font is deleted only after no box uses it.
+static HFONT UiTextBoxFont(UiTextBoxes& boxes, UINT dpi) {
+    if (boxes.font && boxes.fontDpi == dpi) return boxes.font;
+    HFONT font = nullptr;
+    HDC dc = GetDC(nullptr);
+    for (PCWSTR face : kUiFamilyNames[size_t(UiFamily::Text)]) {
+        font = CreateFontW(-MulDiv(14, int(dpi), 96), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, face);
+        if (!font || !dc) break;
+        // GDI substitutes a missing face; keep the font only when it resolved to this one.
+        HGDIOBJ previous = SelectObject(dc, font);
+        wchar_t resolved[LF_FACESIZE] = {};
+        GetTextFaceW(dc, LF_FACESIZE, resolved);
+        TEXTMETRICW metrics{};
+        GetTextMetricsW(dc, &metrics);
+        SelectObject(dc, previous);
+        boxes.fontHeight = int(metrics.tmHeight);
+        if (_wcsicmp(resolved, face) == 0) break;
+        DeleteObject(font);
+        font = nullptr;
+    }
+    if (dc) ReleaseDC(nullptr, dc);
+    if (!font) {
+        font = HFONT(GetStockObject(DEFAULT_GUI_FONT));
+        boxes.fontHeight = MulDiv(20, int(dpi), 96);
+    }
+    for (const UiTextBox& box : boxes.boxes) {
+        if (box.window) SendMessageW(box.window, WM_SETFONT, WPARAM(font), TRUE);
+    }
+    if (boxes.font) DeleteObject(boxes.font);
+    boxes.font = font;
+    boxes.fontDpi = dpi;
+    return font;
+}
+
+static COLORREF UiColorRef(D2D1_COLOR_F color) {
+    auto channel = [](float value) { return BYTE(std::lround(std::clamp(value, 0.0f, 1.0f) * 255)); };
+    return RGB(channel(color.r), channel(color.g), channel(color.b));
+}
+
+// `top` over an opaque `under`.
+static D2D1_COLOR_F UiOver(D2D1_COLOR_F top, D2D1_COLOR_F under) {
+    auto mix = [&](float a, float b) { return a * top.a + b * (1 - top.a); };
+    return {mix(top.r, under.r), mix(top.g, under.g), mix(top.b, under.b), 1};
+}
+
+// Text and fill of a box on a card, matching the drawn frame (paint.h): {text, fill}.
+static std::pair<COLORREF, COLORREF> UiTextBoxColors(const UiPalette& p, bool focused, bool enabled) {
+    D2D1_COLOR_F fill = UiOver(!enabled ? p.controlDisabled : focused ? p.inputActive : p.control,
+                               UiOver(p.card, p.background));
+    return {UiColorRef(UiOver(enabled ? p.text : p.textDisabled, fill)), UiColorRef(fill)};
+}
+
+static HBRUSH UiTextBoxBrush(UiTextBoxes& boxes, COLORREF color) {
+    for (const auto& [key, brush] : boxes.brushes) {
+        if (key == color) return brush;
+    }
+    HBRUSH brush = CreateSolidBrush(color);
+    if (brush) boxes.brushes.emplace_back(color, brush);
+    return brush;
+}
+
+// After the boxes' windows are gone: their font and brushes.
+static void UiReleaseTextBoxes(UiTextBoxes& boxes) {
+    boxes.boxes.clear();
+    for (const auto& [color, brush] : boxes.brushes) DeleteObject(brush);
+    boxes.brushes.clear();
+    if (boxes.font && boxes.font != HFONT(GetStockObject(DEFAULT_GUI_FONT))) DeleteObject(boxes.font);
+    boxes.font = nullptr;
+    boxes.fontDpi = 0;
+}
+
 // src/ui/host.h
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
-// and its scrolling viewport child, each with its own render target; theme, DPI, pointer and
-// keyboard input, focus, scrolling, close paths and teardown. A client supplies the content and
-// the window-specific behavior. Rules: ui/AGENTS.md.
+// and its scrolling viewport child, each with its own render target; the dropdown popup and the
+// number boxes' native text boxes; theme, DPI, pointer and keyboard input, focus, scrolling,
+// close paths and teardown. A client supplies the content and the window-specific behavior.
+// Rules: ui/AGENTS.md.
 
 struct UiHost;
 
@@ -10838,8 +11412,9 @@ struct UiHost;
 struct UiHostClient {
     // Builds the frame for a client area of `client` DIPs.
     virtual void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) = 0;
+    // Item and link activations, dropdown choices, number box steps and text events.
     virtual void Invoke(UiHost& host, UiAction action) = 0;
-    // Messages the host doesn't handle (application and registered messages); true if handled.
+    // Main window messages the host doesn't handle; true if handled.
     virtual bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam,
                          LRESULT& result) = 0;
     // End of the main window's WM_CREATE; false fails creation.
@@ -10860,6 +11435,7 @@ protected:
 
 struct UiHostConfig {
     PCWSTR mainClass = nullptr, viewportClass = nullptr, title = nullptr;
+    PCWSTR popupClass = nullptr;       // Dropdown popup; nullptr: dropdowns don't open.
     UINT activateMessage = 0;          // Registered "show yourself" message; 0 = none.
     D2D1_SIZE_F size{1000, 860};       // Initial outer size, DIPs.
     D2D1_SIZE_F minSize{500, 400};     // Minimum outer size, DIPs.
@@ -10891,15 +11467,30 @@ struct UiHost {
     bool scrollbarHot = false, scrollDragging = false;
     float scrollDragOffset = 0;
 
+    // Dropdown popup and number boxes' text boxes
+    UiPopup popup;
+    UiTextBoxes boxes;
+    UiFocusRef pendingFocus;  // Focused once the next rebuild has built it
+    bool pendingFocusVisible = false;
+
     // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md).
     int dispatchDepth = 0;
     bool rebuildPending = false, resetScroll = false;
     bool closing = false, faulted = false;
 };
 
+static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+                                          UINT_PTR, DWORD_PTR data);
+
 static void UiHostRequestRebuild(UiHost& host, bool resetScroll) {
     host.rebuildPending = true;
     host.resetScroll = host.resetScroll || resetScroll;
+}
+
+// Focuses an element after the next rebuild (one that the rebuild may create or enable).
+static void UiHostRequestFocus(UiHost& host, UiFocusRef ref, bool visible) {
+    host.pendingFocus = ref;
+    host.pendingFocusVisible = visible;
 }
 
 static float UiHostScale(const UiHost& host) {
@@ -10908,6 +11499,11 @@ static float UiHostScale(const UiHost& host) {
 
 static float UiHostViewHeight(const UiHost& host) {
     return host.frame.viewport.bottom - host.frame.viewport.top;
+}
+
+static void UiHostInvalidate(const UiHost& host) {
+    if (host.main) InvalidateRect(host.main, nullptr, FALSE);
+    if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
 // Fault close: nothing is saved. WM_CLOSE cancels tracked modals and destroys the window once
@@ -10926,8 +11522,11 @@ static void UiHostApplyTheme(UiHost& host) {
     UiApplyChrome(host.main, host.palette);
     host.mainSurface.cache.Clear();
     host.viewSurface.cache.Clear();
-    InvalidateRect(host.main, nullptr, FALSE);
-    if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
+    host.popup.surface.cache.Clear();
+    UiHostInvalidate(host);
+    for (const UiTextBox& box : host.boxes.boxes) {
+        if (box.window) InvalidateRect(box.window, nullptr, TRUE);
+    }
 }
 
 static UiScrollbar UiHostScrollbar(const UiHost& host) {
@@ -10945,12 +11544,177 @@ static UiFocusRef UiHostHit(UiHost& host, UiSurfaceId surface, POINT point) {
                      at);
 }
 
+// Dropdown popup -------------------------------------------------------------------------------
+
+static void UiHostClosePopup(UiHost& host) {
+    if (!host.popup.open && !host.popup.window) return;
+    UiPopupClose(host.popup);
+    UiHostInvalidate(host);
+}
+
+// Opens a dropdown's popup under (or above) its field: owned by the main window, shown without
+// activation, at the DPI of its monitor, holding capture.
+static void UiHostOpenPopup(UiHost& host, uint32_t id) {
+    UiSurfaceId surface = UiSurfaceId::Main;
+    const UiItem* item = UiFindItem(host.frame, id, &surface);
+    if (!item || item->kind != UiItemKind::Dropdown || !item->enabled || item->options.empty() ||
+        !host.config->popupClass || host.closing) {
+        return;
+    }
+    UiHostClosePopup(host);
+    UiPopup& popup = host.popup;
+    float scale = UiHostScale(host);
+    D2D1_SIZE_F size = UiLayoutOptions(*host.graphics, item->options, item->action,
+                                       item->rect.right - item->rect.left, popup.rows);
+    float shift = surface == UiSurfaceId::Content ? -host.scroll : 0;
+    RECT field{LONG(std::lround(item->rect.left * scale)),
+               LONG(std::lround((item->rect.top + shift) * scale)),
+               LONG(std::lround(item->rect.right * scale)),
+               LONG(std::lround((item->rect.bottom + shift) * scale))};
+    MapWindowPoints(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr,
+                    reinterpret_cast<POINT*>(&field), 2);
+    popup.highlight = -1;
+    for (size_t i = 0; i < popup.rows.size(); i++) {
+        if (popup.rows[i].selected) popup.highlight = int(i);
+    }
+
+    MONITORINFO monitor{sizeof(monitor)};
+    GetMonitorInfoW(MonitorFromRect(&field, MONITOR_DEFAULTTONEAREST), &monitor);
+    auto place = [&](float popupScale) {
+        SIZE pixels{LONG(std::lround(size.width * popupScale)), LONG(std::lround(size.height * popupScale))};
+        POINT at = UiPopupPlacement(field, pixels, monitor.rcWork, int(std::lround(4 * scale)));
+        return RECT{at.x, at.y, at.x + pixels.cx, at.y + pixels.cy};
+    };
+    RECT rect = place(scale);
+    HWND window = CreateWindowExW(kUiPopupExStyle, host.config->popupClass, nullptr, WS_POPUP,
+                                  rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+                                  host.main, nullptr, GetModuleHandleW(nullptr), &host);
+    if (!window) {
+        Wh_Log(L"Could not create the dropdown popup: %lu", GetLastError());
+        popup.rows.clear();
+        return;
+    }
+    popup.window = popup.surface.window = window;
+    popup.dpi = WindowDpi(window);
+    if (popup.dpi != host.dpi) {
+        rect = place(float(popup.dpi) / 96);
+        SetWindowPos(window, nullptr, rect.left, rect.top, rect.right - rect.left,
+                     rect.bottom - rect.top, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+    DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    popup.field = id;
+    popup.open = true;
+    SetWindowPos(window, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetCapture(window);
+    UiHostInvalidate(host);
+}
+
+// A chosen row: the popup closes, then the client gets the field's action with the row's value.
+static void UiHostChoose(UiHost& host, int row) {
+    if (row < 0 || row >= int(host.popup.rows.size())) return;
+    UiAction action = host.popup.rows[size_t(row)].action;
+    UiHostClosePopup(host);
+    if (!host.closing) host.client->Invoke(host, std::move(action));
+}
+
+// Text boxes -----------------------------------------------------------------------------------
+
+// The text event of a number box's text box, as its action.
+static void UiHostTextEvent(UiHost& host, uint32_t id, UiActionKind kind, std::wstring text = {},
+                            int value = 0) {
+    const UiItem* item = UiFindItem(host.frame, id);
+    if (host.closing || !item || item->kind != UiItemKind::NumberBox) return;
+    UiAction action = item->action;
+    action.kind = kind;
+    action.text = std::move(text);
+    action.value = value;
+    host.client->Invoke(host, std::move(action));
+}
+
+// Text boxes sit over their number boxes' text areas, vertically centered, scrolled with the
+// content.
+static void UiHostPlaceTextBoxes(UiHost& host) {
+    float scale = UiHostScale(host);
+    for (const UiTextBox& box : host.boxes.boxes) {
+        const UiItem* item = UiFindItem(host.frame, box.id);
+        if (!item || !box.window) continue;
+        D2D1_RECT_F text = UiNumberBoxTextRect(*item);
+        float center = (item->rect.top + item->rect.bottom) / 2 - host.scroll;
+        int left = int(std::lround(text.left * scale)), right = int(std::lround(text.right * scale));
+        int top = int(std::lround(center * scale)) - host.boxes.fontHeight / 2;
+        SetWindowPos(box.window, nullptr, left, top, std::max(right - left, 1), host.boxes.fontHeight,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+// After a rebuild: one text box per number box (kept by id), others destroyed; text set only
+// when the client's text changed and no IME composition is running.
+static void UiHostSyncTextBoxes(UiHost& host) {
+    UiTextBoxes& boxes = host.boxes;
+    // Removed first, so their focus-loss notifications find no box.
+    std::vector<HWND> removed;
+    std::erase_if(boxes.boxes, [&](const UiTextBox& box) {
+        const UiItem* item = UiFindItem(host.frame, box.id);
+        if (item && item->kind == UiItemKind::NumberBox && box.window) return false;
+        if (box.window) removed.push_back(box.window);
+        return true;
+    });
+    for (HWND window : removed) DestroyWindow(window);
+    HFONT font = UiTextBoxFont(boxes, host.dpi);
+    for (const UiItem& item : host.frame.content) {
+        if (item.kind != UiItemKind::NumberBox) continue;
+        UiTextBox* box = UiFindTextBox(boxes, item.id);
+        if (!box) {
+            HWND window = CreateWindowExW(0, L"EDIT", item.text.c_str(),
+                                          WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_LEFT, 0, 0, 0, 0,
+                                          host.viewport, nullptr, GetModuleHandleW(nullptr), nullptr);
+            if (!window) {
+                Wh_Log(L"Could not create a text box: %lu", GetLastError());
+                continue;
+            }
+            if (!SetWindowSubclass(window, UiHostTextBoxProc, 0, reinterpret_cast<DWORD_PTR>(&host))) {
+                Wh_Log(L"Could not subclass a text box");
+                DestroyWindow(window);
+                continue;
+            }
+            boxes.boxes.push_back({item.id, window, item.text});
+            box = &boxes.boxes.back();
+            SendMessageW(window, WM_SETFONT, WPARAM(font), FALSE);
+            SendMessageW(window, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
+            SendMessageW(window, EM_LIMITTEXT, 64, 0);
+        } else if (!box->composing && item.text != box->text) {
+            UiSetTextBoxText(boxes, *box, item.text);
+        }
+        if (bool(IsWindowEnabled(box->window)) != item.enabled) EnableWindow(box->window, item.enabled);
+    }
+    UiHostPlaceTextBoxes(host);
+}
+
+// Focus and scrolling ----------------------------------------------------------------------------
+
+// The window that holds keyboard focus for an element: a number box's text box, else the
+// element's surface.
+static HWND UiHostFocusWindow(UiHost& host, UiFocusRef ref) {
+    UiSurfaceId surface = UiSurfaceId::Main;
+    const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
+    if (!item) return host.main;
+    if (item->kind == UiItemKind::NumberBox) {
+        UiTextBox* box = UiFindTextBox(host.boxes, ref.id);
+        if (box && box->window && IsWindowEnabled(box->window)) return box->window;
+    }
+    return surface == UiSurfaceId::Main ? host.main : host.viewport;
+}
+
 // Scrolls to a pixel-aligned offset and re-targets the pointer, whose element moved under it.
+// Scrolling closes the popup and moves the text boxes.
 static void UiHostScrollTo(UiHost& host, float offset) {
     float scale = UiHostScale(host);
     offset = UiClampScroll(offset, UiHostViewHeight(host), host.frame.contentHeight);
     offset = std::round(offset * scale) / scale;
     if (offset == host.scroll) return;
+    UiHostClosePopup(host);
     host.scroll = offset;
     POINT cursor{};
     RECT client{};
@@ -10959,15 +11723,17 @@ static void UiHostScrollTo(UiHost& host, float offset) {
         PtInRect(&client, cursor)) {
         UiPointerMove(host.pointer, UiHostHit(host, UiSurfaceId::Content, cursor));
     }
+    UiHostPlaceTextBoxes(host);
     InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
-// Moves focus to an element (keyboard focus to its surface), scrolling content into view when
-// the move came from the keyboard.
+// Moves focus to an element (keyboard focus to its window), scrolling content into view when
+// the move came from the keyboard. Focus leaving the popup's field closes the popup.
 static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
     if (!item) return;
+    if (ref.id != host.popup.field) UiHostClosePopup(host);
     host.focus = ref;
     host.focusVisible = visible;
     if (surface == UiSurfaceId::Content && visible) {
@@ -10977,20 +11743,87 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
                                                   bounds.front().top, bounds.back().bottom, 12));
         }
     }
-    HWND target = surface == UiSurfaceId::Main ? host.main : host.viewport;
-    if (GetFocus() != target) SetFocus(target);
-    InvalidateRect(host.main, nullptr, FALSE);
-    InvalidateRect(host.viewport, nullptr, FALSE);
+    HWND target = UiHostFocusWindow(host, ref);
+    if (GetFocus() != target) {
+        SetFocus(target);
+        // A text box reached with the keyboard selects its text.
+        if (visible && target != host.main && target != host.viewport) {
+            SendMessageW(target, EM_SETSEL, 0, -1);
+        }
+    }
+    UiHostInvalidate(host);
 }
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
+// A dropdown opens its popup; a number box only takes focus (its text box reports edits).
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
+    const UiItem* item = UiFindItem(host.frame, ref.id);
+    if (item && ref.link < 0 && item->kind == UiItemKind::Dropdown) {
+        UiHostOpenPopup(host, ref.id);
+        return;
+    }
+    if (item && ref.link < 0 && item->kind == UiItemKind::NumberBox) return;
     const UiAction* action = UiActionOf(host.frame, ref);
     if (!action) return;
     UiAction copy = *action;
     host.client->Invoke(host, std::move(copy));
 }
+
+// Deferred structural rebuild, once the outermost dispatch is done with the old items. A
+// rebuild closes the popup; keyboard focus follows the focused element (a requested one, or
+// one whose text box was removed).
+static void UiHostRebuildIfPending(UiHost& host) {
+    for (int pass = 0; pass < 4 && host.dispatchDepth == 1 && host.rebuildPending && host.main &&
+                       host.viewport && !host.closing;
+         pass++) {
+        host.rebuildPending = false;
+        UiHostClosePopup(host);
+        RECT client{};
+        GetClientRect(host.main, &client);
+        float scale = UiHostScale(host);
+        UiTrimCaches(*host.graphics);
+        UiFrame frame;
+        host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        UiFocusRef fallback;
+        for (const UiItem& item : frame.main) {
+            if (item.kind == UiItemKind::Nav && item.selected) fallback = {item.id, -1};
+        }
+        // Keyboard focus starts on the selected navigation item, without a ring.
+        host.focus = UiResolveFocus(host.stops, stops, host.focus.id ? host.focus : fallback,
+                                    fallback);
+        host.frame = std::move(frame);
+        host.stops = std::move(stops);
+        if (!UiFindItem(host.frame, host.pointer.hot.id)) host.pointer.hot = {};
+        if (!UiFindItem(host.frame, host.pointer.pressed.id)) host.pointer.pressed = {};
+        host.scroll = host.resetScroll ? 0 : host.scroll;
+        host.resetScroll = false;
+        host.scroll = std::round(UiClampScroll(host.scroll, UiHostViewHeight(host),
+                                               host.frame.contentHeight) * scale) / scale;
+        const D2D1_RECT_F& v = host.frame.viewport;
+        int left = int(std::lround(v.left * scale)), top = int(std::lround(v.top * scale));
+        SetWindowPos(host.viewport, nullptr, left, top, int(std::lround(v.right * scale)) - left,
+                     int(std::lround(v.bottom * scale)) - top, SWP_NOZORDER | SWP_NOACTIVATE);
+        UiHostSyncTextBoxes(host);
+        UiHostInvalidate(host);
+
+        UiFocusRef pending = std::exchange(host.pendingFocus, {});
+        bool active = GetActiveWindow() == host.main;
+        if (pending.id && UiFindItem(host.frame, pending.id)) {
+            if (active) UiHostSetFocus(host, pending, host.pendingFocusVisible);
+            else host.focus = pending;
+        } else if (active) {
+            HWND focus = GetFocus();
+            if ((!focus || focus == host.main || focus == host.viewport) &&
+                focus != UiHostFocusWindow(host, host.focus)) {
+                UiHostSetFocus(host, host.focus, host.focusVisible);
+            }
+        }
+    }
+}
+
+// Window procedures ------------------------------------------------------------------------------
 
 static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT message,
                           WPARAM wParam, LPARAM lParam) {
@@ -11031,6 +11864,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     PostMessageW(window, WM_CLOSE, 0, 0);
                     break;
                 }
+                UiHostClosePopup(host);
                 if (!host.faulted && !host.client->Unloading() && !host.client->PrepareClose(host)) {
                     break;
                 }
@@ -11040,6 +11874,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_DESTROY:
                 if (isMain) {
                     host.closing = true;
+                    UiPopupClose(host.popup);
                     if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
                         ReleaseCapture();
                     }
@@ -11047,8 +11882,9 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 }
                 break;
             case WM_NCDESTROY:
-                // Children are gone before the main window's NCDESTROY; each surface releases its
-                // target with its window. Host state outlives both.
+                // Children (viewport, text boxes) and the owned popup are gone before the main
+                // window's NCDESTROY; each surface releases its target with its window. Host
+                // state outlives them all.
                 UiDiscardSurface(own);
                 own.window = nullptr;
                 SetWindowLongPtrW(window, GWLP_USERDATA, 0);
@@ -11056,6 +11892,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     // Quit first: the loop must end even if the client's teardown throws.
                     host.main = nullptr;
                     PostQuitMessage(0);
+                    UiReleaseTextBoxes(host.boxes);
                     host.client->Destroyed();
                 } else {
                     host.viewport = nullptr;
@@ -11063,10 +11900,20 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 handled = false;
                 break;
 
-            // Size, DPI, theme
+            // Size, position, DPI, theme. Each closes the popup.
             case WM_SIZE:
                 UiResizeSurface(own);
+                if (isMain) UiHostClosePopup(host);
                 if (isMain && wParam != SIZE_MINIMIZED) UiHostRequestRebuild(host, false);
+                break;
+            case WM_MOVE:
+            case WM_ENTERSIZEMOVE:
+                UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_SHOWWINDOW:
+                if (!wParam) UiHostClosePopup(host);
+                handled = false;
                 break;
             case WM_GETMINMAXINFO:
                 if (isMain) {
@@ -11076,6 +11923,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 }
                 break;
             case WM_DPICHANGED: {
+                UiHostClosePopup(host);
                 host.dpi = HIWORD(wParam);
                 UiDiscardSurface(host.mainSurface);
                 UiDiscardSurface(host.viewSurface);
@@ -11101,10 +11949,48 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 handled = false;
                 break;
 
+            // Activation and modes: the popup closes before default handling (a system command
+            // such as minimize is swallowed while the popup holds capture).
+            case WM_ACTIVATE:
+                if (LOWORD(wParam) == WA_INACTIVE) UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_CANCELMODE:
+            case WM_SYSCOMMAND:
+                UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_SYSKEYDOWN: {
+                const UiItem* focused = UiFindItem(host.frame, host.focus.id);
+                if (host.popup.open) {
+                    UiHostClosePopup(host);
+                } else if (wParam == VK_DOWN && !host.closing && focused &&
+                           focused->kind == UiItemKind::Dropdown) {
+                    UiHostOpenPopup(host, host.focus.id);  // Alt+Down
+                    break;
+                }
+                handled = false;
+                break;
+            }
+
             // Paint
             case WM_ERASEBKGND:
                 result = 1;
                 break;
+            case WM_CTLCOLOREDIT:
+            case WM_CTLCOLORSTATIC: {
+                UiTextBox* box = UiFindTextBox(host.boxes, reinterpret_cast<HWND>(lParam));
+                if (!box) {
+                    handled = false;
+                    break;
+                }
+                auto [text, fill] = UiTextBoxColors(host.palette, GetFocus() == box->window,
+                                                    IsWindowEnabled(box->window) != FALSE);
+                SetTextColor(reinterpret_cast<HDC>(wParam), text);
+                SetBkColor(reinterpret_cast<HDC>(wParam), fill);
+                result = reinterpret_cast<LRESULT>(UiTextBoxBrush(host.boxes, fill));
+                break;
+            }
             case WM_PAINT: {
                 PAINTSTRUCT paint{};
                 BeginPaint(window, &paint);
@@ -11121,8 +12007,11 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     break;
                 }
                 float scale = UiHostScale(host);
+                UiTextBox* editing = UiFindTextBox(host.boxes, GetFocus());
                 UiPaintState state{host.pointer.hot, host.pointer.pressed, host.focus,
-                                   host.focusVisible && GetFocus() == window};
+                                   host.focusVisible && GetFocus() == window,
+                                   host.popup.open ? host.popup.field : 0,
+                                   editing ? editing->id : 0};
                 target->BeginDraw();
                 D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
                 target->SetTransform(&identity);
@@ -11161,18 +12050,14 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.scrollbarHot = overBar;
                 changed |= UiPointerMove(host.pointer, overBar ? UiFocusRef{} :
                                                                  UiHostHit(host, surface, point));
-                if (changed) {
-                    InvalidateRect(host.main, nullptr, FALSE);
-                    InvalidateRect(host.viewport, nullptr, FALSE);
-                }
+                if (changed) UiHostInvalidate(host);
                 break;
             }
             case WM_MOUSELEAVE:
                 if (!host.pointer.pressed.id && !host.scrollDragging) {
                     host.pointer.hot = {};
                     host.scrollbarHot = false;
-                    InvalidateRect(host.main, nullptr, FALSE);
-                    InvalidateRect(host.viewport, nullptr, FALSE);
+                    UiHostInvalidate(host);
                 }
                 break;
             case WM_LBUTTONDOWN: {
@@ -11196,15 +12081,20 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 UiFocusRef hit = UiHostHit(host, surface, point);
                 host.pointer.hot = hit;
                 host.pointer.pressed = hit;
-                if (hit.id) SetCapture(window);
                 if (hit.id) {
-                    UiHostSetFocus(host, hit, false);
+                    SetCapture(window);
+                    // A spin button keeps focus on its number box's text box.
+                    const UiItem* item = UiFindItem(host.frame, hit.id);
+                    UiFocusRef target = item && item->kind == UiItemKind::SpinButton ?
+                                            UiFocusRef{item->owner, -1} : hit;
+                    if (target != host.focus || GetFocus() != UiHostFocusWindow(host, target)) {
+                        UiHostSetFocus(host, target, false);
+                    }
                 } else {
                     host.focusVisible = false;
                     if (GetFocus() != window) SetFocus(window);
                 }
-                InvalidateRect(host.main, nullptr, FALSE);
-                InvalidateRect(host.viewport, nullptr, FALSE);
+                UiHostInvalidate(host);
                 break;
             }
             case WM_LBUTTONUP: {
@@ -11212,20 +12102,31 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 UiFocusRef activate = UiPointerRelease(host.pointer, UiHostHit(host, surface, point));
                 host.scrollDragging = false;
                 if (GetCapture() == window) ReleaseCapture();
-                InvalidateRect(host.main, nullptr, FALSE);
-                InvalidateRect(host.viewport, nullptr, FALSE);
+                UiHostInvalidate(host);
                 if (activate.id) UiHostInvoke(host, activate);
                 break;
             }
             case WM_CAPTURECHANGED:
                 host.pointer.pressed = {};
                 host.scrollDragging = false;
-                InvalidateRect(host.main, nullptr, FALSE);
-                InvalidateRect(host.viewport, nullptr, FALSE);
+                UiHostInvalidate(host);
                 break;
-            case WM_MOUSEWHEEL: {
-                // Wheel over the page column (header or content) scrolls the content.
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL: {
+                // With the popup open, a wheel over it does nothing and one elsewhere closes it.
+                // Otherwise the vertical wheel over the page column (header or content) scrolls
+                // the content.
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
+                if (host.popup.open) {
+                    RECT popup{};
+                    GetWindowRect(host.popup.window, &popup);
+                    if (!PtInRect(&popup, point)) UiHostClosePopup(host);
+                    break;
+                }
+                if (message == WM_MOUSEHWHEEL) {
+                    handled = false;
+                    break;
+                }
                 ScreenToClient(host.main, &point);
                 if (float(point.x) / UiHostScale(host) < host.frame.viewport.left) break;
                 UINT lines = 3;
@@ -11236,7 +12137,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_SETCURSOR: {
-                if (LOWORD(lParam) != HTCLIENT) {
+                if (LOWORD(lParam) != HTCLIENT || reinterpret_cast<HWND>(wParam) != window) {
                     handled = false;
                     break;
                 }
@@ -11247,9 +12148,34 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
 
-            // Keyboard and focus
+            // Keyboard and focus. While the popup is open, the field's keys drive it.
             case WM_KEYDOWN: {
                 if (host.closing) break;
+                if (host.popup.open) {
+                    UiOptionIntent option = UiOptionKey(int(host.popup.rows.size()),
+                                                        host.popup.highlight, UINT(wParam));
+                    switch (option.kind) {
+                        case UiOptionIntentKind::Highlight:
+                            host.popup.highlight = option.index;
+                            InvalidateRect(host.popup.window, nullptr, FALSE);
+                            break;
+                        case UiOptionIntentKind::Choose:
+                            UiHostChoose(host, option.index);
+                            break;
+                        case UiOptionIntentKind::Close:
+                        case UiOptionIntentKind::CloseAndPass:
+                            UiHostClosePopup(host);
+                            break;
+                        case UiOptionIntentKind::None:
+                            break;
+                    }
+                    if (option.kind != UiOptionIntentKind::CloseAndPass) break;
+                }
+                const UiItem* focused = UiFindItem(host.frame, host.focus.id);
+                if (wParam == VK_F4 && focused && focused->kind == UiItemKind::Dropdown) {
+                    UiHostOpenPopup(host, host.focus.id);
+                    break;
+                }
                 UiIntent intent = UiKeyIntent(host.stops, host.focus, surface, UINT(wParam),
                                               GetKeyState(VK_SHIFT) < 0, 40,
                                               std::max(UiHostViewHeight(host) - 40, 40.0f));
@@ -11275,74 +12201,76 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_SETFOCUS: {
-                // Activation focuses the main window; keyboard focus belongs to the surface of
-                // the focused element.
-                UiSurfaceId focused = UiSurfaceId::Main;
-                if (isMain && UiFindItem(host.frame, host.focus.id, &focused) &&
-                    focused == UiSurfaceId::Content && host.viewport) {
-                    SetFocus(host.viewport);
+                // Activation focuses the main window; keyboard focus belongs to the focused
+                // element's window.
+                if (isMain && host.viewport) {
+                    HWND target = UiHostFocusWindow(host, host.focus);
+                    if (target != window) SetFocus(target);
                 }
                 InvalidateRect(window, nullptr, FALSE);
                 break;
             }
             case WM_KILLFOCUS:
+                UiHostClosePopup(host);
                 InvalidateRect(window, nullptr, FALSE);
                 break;
+
+            // Text box notifications (viewport)
+            case WM_COMMAND: {
+                UiTextBox* box = lParam ? UiFindTextBox(host.boxes, reinterpret_cast<HWND>(lParam)) :
+                                          nullptr;
+                if (!box) {
+                    handled = false;
+                    break;
+                }
+                uint32_t id = box->id;
+                switch (HIWORD(wParam)) {
+                    case EN_CHANGE: {
+                        if (host.boxes.programmatic || box->composing) break;
+                        std::wstring text = UiTextBoxText(box->window);
+                        if (text == box->text) break;
+                        box->text = text;
+                        UiHostTextEvent(host, id, UiActionKind::TextChange, std::move(text));
+                        break;
+                    }
+                    case EN_SETFOCUS:
+                        if (id != host.popup.field) UiHostClosePopup(host);
+                        host.focus = {id, -1};
+                        InvalidateRect(box->window, nullptr, TRUE);
+                        UiHostInvalidate(host);
+                        break;
+                    case EN_KILLFOCUS:
+                        InvalidateRect(box->window, nullptr, TRUE);
+                        UiHostInvalidate(host);
+                        if (!host.boxes.leavingWindow) {
+                            UiHostTextEvent(host, id, UiActionKind::TextBlur, box->text);
+                        }
+                        break;
+                }
+                break;
+            }
 
             default:
                 handled = false;
                 if (!isMain) break;
                 if (host.config->activateMessage && message == host.config->activateMessage) {
                     // Brings back the window, or the enabled visible modal it owns; never
-                    // anything else it owns.
+                    // anything else it owns (the popup closes first).
                     handled = true;
                     if (host.closing || host.client->Unloading()) break;
+                    UiHostClosePopup(host);
                     if (IsIconic(window)) ShowWindow(window, SW_RESTORE);
                     HWND target = GetLastActivePopup(window);
                     if (target != window && !(IsWindowEnabled(target) && IsWindowVisible(target))) {
                         target = window;
                     }
                     SetForegroundWindow(target);
-                } else if (message >= WM_APP) {
+                } else {
                     handled = host.client->Message(host, message, wParam, lParam, result);
                 }
                 break;
         }
-
-        // Deferred structural rebuild, once the outermost dispatch is done with the old items.
-        if (host.dispatchDepth == 1 && host.rebuildPending && host.main && host.viewport &&
-            !host.closing) {
-            host.rebuildPending = false;
-            RECT client{};
-            GetClientRect(host.main, &client);
-            float scale = UiHostScale(host);
-            UiTrimCaches(*host.graphics);
-            UiFrame frame;
-            host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale},
-                               frame);
-            std::vector<UiFocusStop> stops = UiFocusStops(frame);
-            UiFocusRef fallback;
-            for (const UiItem& item : frame.main) {
-                if (item.kind == UiItemKind::Nav && item.selected) fallback = {item.id, -1};
-            }
-            // Keyboard focus starts on the selected navigation item, without a ring.
-            host.focus = UiResolveFocus(host.stops, stops, host.focus.id ? host.focus : fallback,
-                                        fallback);
-            host.frame = std::move(frame);
-            host.stops = std::move(stops);
-            if (!UiFindItem(host.frame, host.pointer.hot.id)) host.pointer.hot = {};
-            if (!UiFindItem(host.frame, host.pointer.pressed.id)) host.pointer.pressed = {};
-            host.scroll = host.resetScroll ? 0 : host.scroll;
-            host.resetScroll = false;
-            host.scroll = std::round(UiClampScroll(host.scroll, UiHostViewHeight(host),
-                                                   host.frame.contentHeight) * scale) / scale;
-            const D2D1_RECT_F& v = host.frame.viewport;
-            int left = int(std::lround(v.left * scale)), top = int(std::lround(v.top * scale));
-            SetWindowPos(host.viewport, nullptr, left, top, int(std::lround(v.right * scale)) - left,
-                         int(std::lround(v.bottom * scale)) - top, SWP_NOZORDER | SWP_NOACTIVATE);
-            InvalidateRect(host.main, nullptr, FALSE);
-            InvalidateRect(host.viewport, nullptr, FALSE);
-        }
+        UiHostRebuildIfPending(host);
     } catch (...) {
         Wh_Log(L"Window callback failed (message 0x%04X); closing the window", message);
         handled = true;
@@ -11351,6 +12279,201 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
     }
     host.dispatchDepth--;
     return handled ? result : DefWindowProcW(window, message, wParam, lParam);
+}
+
+// The popup: hover and press select rows; an outside press closes it and swallows its release;
+// losing capture, WM_CANCELMODE or a wheel outside it close it. Never activates.
+static LRESULT CALLBACK UiHostPopupProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_NCCREATE) {
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(
+            reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams));
+    }
+    auto* found = reinterpret_cast<UiHost*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (!found) return DefWindowProcW(window, message, wParam, lParam);
+    UiHost& host = *found;
+    UiPopup& popup = host.popup;
+    host.dispatchDepth++;
+    LRESULT result = 0;
+    bool handled = true;
+    try {
+        POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
+        switch (message) {
+            case WM_MOUSEACTIVATE:
+                result = MA_NOACTIVATE;
+                break;
+            case WM_ERASEBKGND:
+                result = 1;
+                break;
+            case WM_PAINT: {
+                PAINTSTRUCT paint{};
+                BeginPaint(window, &paint);
+                bool painted = host.faulted || popup.window != window ||
+                               UiPaintPopup(popup, *host.graphics, host.palette);
+                EndPaint(window, &paint);
+                if (!painted) UiHostClosePopup(host);
+                break;
+            }
+            case WM_MOUSEMOVE:
+                if (popup.open) {
+                    int row = UiPopupRowAt(popup, point);
+                    if (row >= 0 && row != popup.highlight) {
+                        popup.highlight = row;
+                        InvalidateRect(window, nullptr, FALSE);
+                    }
+                }
+                break;
+            case WM_LBUTTONDOWN:
+            case WM_RBUTTONDOWN:
+            case WM_MBUTTONDOWN: {
+                if (!popup.open) break;
+                RECT client{};
+                GetClientRect(window, &client);
+                if (PtInRect(&client, point)) {
+                    if (message == WM_LBUTTONDOWN) popup.pressed = UiPopupRowAt(popup, point);
+                    InvalidateRect(window, nullptr, FALSE);
+                    break;
+                }
+                popup.open = false;
+                popup.swallowUp = message + 1;  // The matching WM_*BUTTONUP
+                ShowWindow(window, SW_HIDE);
+                UiHostInvalidate(host);
+                break;
+            }
+            case WM_LBUTTONUP:
+            case WM_RBUTTONUP:
+            case WM_MBUTTONUP:
+                if (popup.swallowUp) {
+                    if (message == popup.swallowUp) UiHostClosePopup(host);
+                } else if (message == WM_LBUTTONUP && popup.open) {
+                    int pressed = std::exchange(popup.pressed, -1);
+                    int row = UiPopupRowAt(popup, point);
+                    if (row >= 0 && row == pressed) UiHostChoose(host, row);
+                    else InvalidateRect(window, nullptr, FALSE);
+                }
+                break;
+            case WM_CAPTURECHANGED:
+            case WM_CANCELMODE:
+                if (popup.window == window) UiHostClosePopup(host);
+                break;
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL: {
+                RECT rect{};
+                GetWindowRect(window, &rect);
+                if (!popup.open || !PtInRect(&rect, point)) UiHostClosePopup(host);
+                break;
+            }
+            case WM_SETCURSOR:
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                result = TRUE;
+                break;
+            case WM_NCDESTROY:
+                UiDiscardSurface(popup.surface);
+                popup.surface.window = nullptr;
+                if (popup.window == window) {
+                    popup.window = nullptr;
+                    popup.open = false;
+                }
+                SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+                handled = false;
+                break;
+            default:
+                handled = false;
+                break;
+        }
+        UiHostRebuildIfPending(host);
+    } catch (...) {
+        Wh_Log(L"Popup callback failed (message 0x%04X); closing the window", message);
+        handled = true;
+        result = 0;
+        UiHostFault(host);
+    }
+    host.dispatchDepth--;
+    return handled ? result : DefWindowProcW(window, message, wParam, lParam);
+}
+
+// A number box's text box: Tab moves focus along the item order, Enter commits, Esc reverts,
+// Up/Down step; focus moving elsewhere in the window reports focus loss. During IME composition
+// every message goes to native handling and the composed text is reported when it ends.
+static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+                                          UINT_PTR, DWORD_PTR data) {
+    UiHost& host = *reinterpret_cast<UiHost*>(data);
+    host.dispatchDepth++;
+    LRESULT result = 0;
+    bool handled = false;
+    try {
+        UiTextBox* box = UiFindTextBox(host.boxes, window);
+        bool commands = box && !box->composing && !host.closing;
+        switch (message) {
+            case WM_IME_STARTCOMPOSITION:
+                if (box) box->composing = true;
+                break;
+            case WM_IME_ENDCOMPOSITION: {
+                if (box) box->composing = false;
+                result = DefSubclassProc(window, message, wParam, lParam);
+                handled = true;
+                box = UiFindTextBox(host.boxes, window);
+                if (!box || host.closing) break;
+                std::wstring text = UiTextBoxText(window);
+                if (text == box->text) break;
+                box->text = text;
+                UiHostTextEvent(host, box->id, UiActionKind::TextChange, std::move(text));
+                break;
+            }
+            case WM_KEYDOWN: {
+                if (!commands) break;
+                uint32_t id = box->id;
+                handled = true;
+                switch (wParam) {
+                    case VK_TAB: {
+                        UiIntent intent = UiKeyIntent(host.stops, {id, -1}, UiSurfaceId::Content,
+                                                      VK_TAB, GetKeyState(VK_SHIFT) < 0, 40, 40);
+                        if (intent.kind == UiIntentKind::Focus) UiHostSetFocus(host, intent.target, true);
+                        break;
+                    }
+                    case VK_RETURN:
+                        UiHostTextEvent(host, id, UiActionKind::TextCommit, box->text);
+                        break;
+                    case VK_ESCAPE:
+                        UiHostTextEvent(host, id, UiActionKind::TextRevert);
+                        break;
+                    case VK_UP:
+                    case VK_DOWN:
+                        UiHostTextEvent(host, id, UiActionKind::Step, {}, wParam == VK_UP ? 1 : -1);
+                        break;
+                    default:
+                        handled = false;
+                        break;
+                }
+                break;
+            }
+            case WM_CHAR:
+                // Their keys were handled above; the characters would only beep.
+                handled = commands && (wParam == L'\t' || wParam == L'\r' || wParam == 0x1B);
+                break;
+            case WM_KILLFOCUS: {
+                // The EDIT notifies EN_KILLFOCUS from its default handling.
+                HWND next = reinterpret_cast<HWND>(wParam);
+                bool inside = next && host.main && (next == host.main || IsChild(host.main, next));
+                host.boxes.leavingWindow = !inside;
+                result = DefSubclassProc(window, message, wParam, lParam);
+                host.boxes.leavingWindow = false;
+                handled = true;
+                break;
+            }
+            case WM_NCDESTROY:
+                RemoveWindowSubclass(window, UiHostTextBoxProc, 0);
+                if (box) box->window = nullptr;
+                break;
+        }
+        if (!handled) result = DefSubclassProc(window, message, wParam, lParam);
+        UiHostRebuildIfPending(host);
+    } catch (...) {
+        Wh_Log(L"Text box callback failed (message 0x%04X); closing the window", message);
+        result = 0;
+        UiHostFault(host);
+    }
+    host.dispatchDepth--;
+    return result;
 }
 
 static LRESULT CALLBACK UiHostMainProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -11380,8 +12503,9 @@ static LRESULT CALLBACK UiHostViewportProc(HWND window, UINT message, WPARAM wPa
 static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
     HINSTANCE instance = GetModuleHandleW(nullptr);
     // A stale registration of the same name (an instance that never unregistered) is replaced.
-    auto registerClass = [&](PCWSTR name, WNDPROC proc) {
+    auto registerClass = [&](PCWSTR name, WNDPROC proc, UINT style) {
         WNDCLASSEXW windowClass{sizeof(windowClass)};
+        windowClass.style = style;
         windowClass.lpfnWndProc = proc;
         windowClass.hInstance = instance;
         windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -11394,14 +12518,19 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
         Wh_Log(L"Could not register window class %s: %lu", name, GetLastError());
         return false;
     };
-    bool mainRegistered = registerClass(config.mainClass, UiHostMainProc);
-    bool viewportRegistered = mainRegistered && registerClass(config.viewportClass, UiHostViewportProc);
+    bool mainRegistered = registerClass(config.mainClass, UiHostMainProc, 0);
+    bool viewportRegistered = mainRegistered && registerClass(config.viewportClass, UiHostViewportProc, 0);
+    // Without its class the popup can't open; the window works otherwise.
+    bool popupRegistered = viewportRegistered && config.popupClass &&
+                           registerClass(config.popupClass, UiHostPopupProc, CS_DROPSHADOW);
+    UiHostConfig effective = config;
+    if (!popupRegistered) effective.popupClass = nullptr;
     bool created = false;
     if (viewportRegistered) {
         UiGraphics graphics;
         UiThemeReader themes;
         UiHost host;
-        host.config = &config;
+        host.config = &effective;
         host.client = &client;
         host.graphics = &graphics;
         host.themes = &themes;
@@ -11450,7 +12579,10 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
             Wh_Log(L"Window setup failed");
         }
         if (host.main && IsWindow(host.main)) DestroyWindow(host.main);
+        UiPopupClose(host.popup);
+        UiReleaseTextBoxes(host.boxes);
     }
+    if (popupRegistered) UnregisterClassW(config.popupClass, instance);
     if (viewportRegistered) UnregisterClassW(config.viewportClass, instance);
     if (mainRegistered) UnregisterClassW(config.mainClass, instance);
     return created;
@@ -12470,6 +13602,602 @@ static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
     }
 }
 
+// src/settings/edits.h
+// Edit controller of the settings window: drafts, the render projection, the commit queue and
+// the navigation and close flushes. Pure: it talks to a SettingsStore (production:
+// settings/store.h; tests: an in-memory store with failure injection) and reads no globals.
+//
+// Drafts are keyed by account key (0: global settings) and field. Every change bumps a revision;
+// a commit request carries the revision it was made for and is skipped once the draft is gone
+// or newer. The drafts, not the queue, are the source of truth.
+
+enum class SettingsField : uint8_t {
+    None,
+    // Behavior
+    ShowOn,  // Monitor mode and number: 0 primary, -1 all, N display N
+    ShowDetailsOnHover,
+    PollMinutes,
+    SkipHiddenPolling,
+    Notifications,
+    // History
+    RecordHistory,  // This Windows user's recording consent
+    RetentionDays,
+    // Operation groups: page resets
+    ResetBehavior,
+    ResetHistory,
+    // Window commands, never drafts or commits
+    OpenHistory,
+    OpenHistoryFolder,
+};
+
+struct SettingsNumberRange {
+    int minimum = 0, maximum = 0;
+};
+
+static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field) {
+    switch (field) {
+        case SettingsField::PollMinutes: return SettingsNumberRange{2, 24 * 60};
+        case SettingsField::RetentionDays: return SettingsNumberRange{1, 3650};
+        default: return std::nullopt;
+    }
+}
+
+// The fields a page reset returns to their defaults.
+static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
+    switch (group) {
+        case SettingsField::ResetBehavior:
+            return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
+                    SettingsField::SkipHiddenPolling, SettingsField::Notifications};
+        case SettingsField::ResetHistory:
+            return {SettingsField::RecordHistory, SettingsField::RetentionDays};
+        default: return {};
+    }
+}
+
+static int SettingsFieldValue(const Settings& s, SettingsField field) {
+    switch (field) {
+        case SettingsField::ShowOn:
+            return s.taskbarMonitorMode == TaskbarMonitorMode::Primary ? 0 :
+                   s.taskbarMonitorMode == TaskbarMonitorMode::All     ? -1 :
+                                                                         s.taskbarMonitorNumber;
+        case SettingsField::ShowDetailsOnHover: return s.showDetailsOnHover;
+        case SettingsField::PollMinutes: return s.pollMinutes;
+        case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
+        case SettingsField::Notifications: return s.enableNotifications;
+        case SettingsField::RecordHistory: return s.historyEnabled;
+        case SettingsField::RetentionDays: return s.historyRetentionDays;
+        default: return 0;
+    }
+}
+
+// Sets one field, or a group's fields to their defaults, to the desired value (never toggles).
+// Numbers clamp to their range; normalization follows when the settings are applied.
+static void SettingsAssign(Settings& s, SettingsField field, int value) {
+    const Settings defaults;
+    if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
+        value = std::clamp(value, range->minimum, range->maximum);
+    }
+    switch (field) {
+        case SettingsField::ShowOn:
+            s.taskbarMonitorMode = value == 0 ? TaskbarMonitorMode::Primary :
+                                   value < 0  ? TaskbarMonitorMode::All : TaskbarMonitorMode::Specific;
+            if (value > 0) s.taskbarMonitorNumber = value;
+            break;
+        case SettingsField::ShowDetailsOnHover: s.showDetailsOnHover = value != 0; break;
+        case SettingsField::PollMinutes: s.pollMinutes = value; break;
+        case SettingsField::SkipHiddenPolling: s.skipHiddenPolling = value != 0; break;
+        case SettingsField::Notifications: s.enableNotifications = value != 0; break;
+        case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
+        case SettingsField::RetentionDays: s.historyRetentionDays = value; break;
+        case SettingsField::ResetBehavior:
+            s.taskbarMonitorMode = defaults.taskbarMonitorMode;
+            s.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
+            s.showDetailsOnHover = defaults.showDetailsOnHover;
+            s.pollMinutes = defaults.pollMinutes;
+            s.skipHiddenPolling = defaults.skipHiddenPolling;
+            s.enableNotifications = defaults.enableNotifications;
+            break;
+        case SettingsField::ResetHistory:
+            s.historyEnabled = defaults.historyEnabled;
+            s.historyRetentionDays = defaults.historyRetentionDays;
+            break;
+        default: break;
+    }
+}
+
+// Number text: optional surrounding spaces and sign, digits with optional digit grouping
+// (`separator`; any space character when it is one), groups of three after the first.
+// Empty, malformed and overflowing text fails; out-of-range values clamp.
+struct SettingsParsedNumber {
+    bool ok = false;
+    int value = 0;
+};
+
+static SettingsParsedNumber SettingsParseNumber(std::wstring_view text, SettingsNumberRange range,
+                                                wchar_t separator) {
+    auto space = [](wchar_t c) { return iswspace(c) || c == 0x00A0 || c == 0x202F; };
+    while (!text.empty() && space(text.front())) text.remove_prefix(1);
+    while (!text.empty() && space(text.back())) text.remove_suffix(1);
+    bool negative = false;
+    if (!text.empty() && (text.front() == L'-' || text.front() == L'+')) {
+        negative = text.front() == L'-';
+        text.remove_prefix(1);
+    }
+    bool spaceSeparator = space(separator);
+    long long value = 0;
+    int digits = 0, group = 0;
+    bool grouped = false;
+    for (wchar_t c : text) {
+        if (c >= L'0' && c <= L'9') {
+            value = value * 10 + (c - L'0');
+            if (value > INT_MAX) return {};
+            digits++;
+            group++;
+            continue;
+        }
+        bool isSeparator = c == separator || (spaceSeparator && space(c));
+        // The first group has 1-3 digits; every later one exactly three.
+        if (!isSeparator || group == 0 || group > 3 || (grouped && group != 3)) return {};
+        grouped = true;
+        group = 0;
+    }
+    if (!digits || (grouped && group != 3)) return {};
+    long long signedValue = negative ? -value : value;
+    return {true, int(std::clamp<long long>(signedValue, range.minimum, range.maximum))};
+}
+
+// Digit grouping by threes with `separator`.
+static std::wstring SettingsFormatNumber(int value, wchar_t separator) {
+    std::wstring digits = std::to_wstring(value < 0 ? -(long long)value : (long long)value);
+    std::wstring text;
+    for (size_t i = 0; i < digits.size(); i++) {
+        if (i && (digits.size() - i) % 3 == 0) text += separator;
+        text += digits[i];
+    }
+    return value < 0 ? L"-" + text : text;
+}
+
+static std::wstring SettingsRangeError(SettingsNumberRange range) {
+    return L"Enter a whole number from " + std::to_wstring(range.minimum) + L" to " +
+           std::to_wstring(range.maximum) + L".";
+}
+
+// Store ------------------------------------------------------------------------------------------
+
+struct SettingsDisplay {
+    int number = 0;  // 1-based, the taskbars' order (primary first)
+    int width = 0, height = 0;
+    bool primary = false;
+};
+
+// Recording state while consent is on.
+enum class SettingsRecording : uint8_t { Recording, PendingSave, StorageError };
+
+struct SettingsStatus {
+    std::vector<SettingsDisplay> displays;
+    SettingsRecording recording = SettingsRecording::Recording;
+    std::wstring historyFolder;
+    wchar_t groupSeparator = L',';
+};
+
+struct SettingsBaseline {
+    Settings settings;
+    SettingsStatus status;
+};
+
+enum class SettingsSaveResult : uint8_t { Changed, Unchanged, Failed };
+
+// What the controller reads and writes. Each Apply is one transaction on fresh settings.
+struct SettingsStore {
+    virtual SettingsBaseline Load() = 0;
+    // A field (or a group's fields) set to `value`, saved and published.
+    virtual SettingsSaveResult Apply(SettingsField field, int value) = 0;
+    // Unload or cancellation: stop committing.
+    virtual bool Unloading() = 0;
+
+protected:
+    ~SettingsStore() = default;
+};
+
+// Controller -------------------------------------------------------------------------------------
+
+struct SettingsDraft {
+    uint64_t key = 0;
+    SettingsField field = SettingsField::None;
+    uint64_t revision = 0;
+    bool text = false;   // Typed into a number box: `raw` is its text
+    std::wstring raw;
+    int value = 0;       // Desired value; for text, the last valid one
+    bool valid = true;   // `raw` parses
+    bool failed = false; // Its last save failed; not retried until the user acts on the field
+    std::wstring error;  // Shown with the control
+};
+
+struct SettingsRequest {
+    uint64_t key = 0;
+    SettingsField field = SettingsField::None;
+    uint64_t revision = 0;  // 0: a group, which has no draft
+    int value = 0;
+};
+
+enum class SettingsCloseResult : uint8_t { Saved, Unloading, Blocked };
+
+struct SettingsEdits {
+    explicit SettingsEdits(SettingsStore& store) : store(&store) {}
+
+    // Store and its last load
+    SettingsStore* store;
+    SettingsBaseline baseline;
+
+    // Drafts and requests
+    std::vector<SettingsDraft> drafts;
+    std::deque<SettingsRequest> queue;
+    uint64_t revisions = 0;
+
+    // Baseline and statuses only: drafts, requests and text boxes stay as they are.
+    void Reload() { baseline = store->Load(); }
+
+    // What builders and previews see: the baseline with each draft's desired value.
+    Settings Projection() const {
+        Settings s = baseline.settings;
+        for (const SettingsDraft& draft : drafts) {
+            if (!draft.key) SettingsAssign(s, draft.field, draft.value);
+        }
+        return s;
+    }
+
+    SettingsDraft* Find(uint64_t key, SettingsField field) {
+        for (SettingsDraft& draft : drafts) {
+            if (draft.key == key && draft.field == field) return &draft;
+        }
+        return nullptr;
+    }
+
+    // A text box's text (every change). Text that doesn't parse keeps the last valid value.
+    void SetText(uint64_t key, SettingsField field, std::wstring text) {
+        std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
+        if (!range) return;
+        SettingsDraft& draft = Touch(key, field);
+        SettingsParsedNumber parsed = SettingsParseNumber(text, *range, baseline.status.groupSeparator);
+        draft.text = true;
+        draft.raw = std::move(text);
+        draft.valid = parsed.ok;
+        if (parsed.ok) draft.value = parsed.value;
+    }
+
+    // Spin buttons and arrow keys: the last valid value stepped, as text. Returns the draft's
+    // revision for the debounced commit (CommitStep); 0 for fields without a range.
+    uint64_t Step(uint64_t key, SettingsField field, int delta) {
+        std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
+        if (!range) return 0;
+        SettingsDraft& draft = Touch(key, field);
+        draft.value = std::clamp(draft.value + delta, range->minimum, range->maximum);
+        draft.text = true;
+        draft.raw = SettingsFormatNumber(draft.value, baseline.status.groupSeparator);
+        draft.valid = true;
+        return draft.revision;
+    }
+
+    // A step's debounce ran out: commits only the stepped revision, and never retries it after
+    // a failed save. Typing or another change since then made a newer draft, which waits for its
+    // own Enter, focus loss or flush.
+    bool CommitStep(uint64_t key, SettingsField field, uint64_t revision) {
+        const SettingsDraft* draft = Find(key, field);
+        return draft && revision && draft->revision == revision && !draft->failed &&
+               RequestCommit(key, field);
+    }
+
+    // Enter, focus loss, a finished step: queues a valid draft (the caller then has the queue
+    // processed). An invalid draft gets its error and stays unqueued. A failed draft retries,
+    // except on focus loss, which isn't an action on the field.
+    bool RequestCommit(uint64_t key, SettingsField field, bool focusLoss = false) {
+        SettingsDraft* draft = Find(key, field);
+        if (!draft || (focusLoss && draft->failed)) return false;
+        if (!draft->valid) {
+            if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
+                draft->error = SettingsRangeError(*range);
+            }
+            return false;
+        }
+        draft->failed = false;
+        draft->error.clear();
+        bool queued = std::any_of(queue.begin(), queue.end(), [&](const SettingsRequest& request) {
+            return request.key == key && request.field == field && request.revision == draft->revision;
+        });
+        if (!queued) queue.push_back({key, field, draft->revision, draft->value});
+        return true;
+    }
+
+    // Esc: back to the committed value; its queued requests go too.
+    void Revert(uint64_t key, SettingsField field) {
+        std::erase_if(drafts, [&](const SettingsDraft& d) { return d.key == key && d.field == field; });
+        std::erase_if(queue, [&](const SettingsRequest& r) { return r.key == key && r.field == field; });
+    }
+
+    // Discrete controls: the desired value, committed at once with whatever is queued. Returns
+    // the number of failed saves.
+    int Commit(uint64_t key, SettingsField field, int value) {
+        SettingsDraft& draft = Touch(key, field);
+        draft.text = false;
+        draft.raw.clear();
+        draft.value = value;
+        draft.valid = true;
+        queue.push_back({key, field, draft.revision, value});
+        return Process();
+    }
+
+    // A page reset: its fields' drafts and requests are dropped, then the group commits.
+    int Reset(SettingsField group) {
+        for (SettingsField field : SettingsGroupFields(group)) Revert(0, field);
+        queue.push_back({0, group, 0, 0});
+        return Process();
+    }
+
+    // Runs the queue in order, one transaction per request, skipping superseded ones.
+    int Process() {
+        int failures = 0;
+        while (!queue.empty()) {
+            if (store->Unloading()) {
+                queue.clear();
+                break;
+            }
+            SettingsRequest request = queue.front();
+            queue.pop_front();
+            if (request.revision) {
+                const SettingsDraft* draft = Find(request.key, request.field);
+                if (!draft || draft->revision != request.revision) continue;
+            }
+            if (!Run(request)) failures++;
+        }
+        return failures;
+    }
+
+    // Page change, which never blocks: valid drafts commit in order, invalid ones revert
+    // without saving, failed ones stay with their error.
+    int Navigate() {
+        queue.clear();
+        int failures = 0;
+        for (const auto& [key, field] : Keys()) {
+            SettingsDraft* draft = Find(key, field);
+            if (!draft || draft->failed) continue;
+            if (!draft->valid) {
+                Revert(key, field);
+                continue;
+            }
+            if (store->Unloading()) break;
+            if (!Run({key, field, draft->revision, draft->value})) failures++;
+        }
+        return failures;
+    }
+
+    // Deliberate close: every draft commits, one transaction at a time, rechecking unload in
+    // between. An invalid or failing draft stops it with its error (Blocked): the window stays
+    // unless the user discards.
+    SettingsCloseResult PrepareClose() {
+        queue.clear();
+        for (const auto& [key, field] : Keys()) {
+            SettingsDraft* draft = Find(key, field);
+            if (!draft) continue;
+            if (store->Unloading()) return SettingsCloseResult::Unloading;
+            if (!draft->valid) {
+                if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
+                    draft->error = SettingsRangeError(*range);
+                }
+                return SettingsCloseResult::Blocked;
+            }
+            if (!Run({key, field, draft->revision, draft->value})) return SettingsCloseResult::Blocked;
+        }
+        return SettingsCloseResult::Saved;
+    }
+
+    void Discard() {
+        drafts.clear();
+        queue.clear();
+    }
+
+private:
+    // The draft of a user action, created from the projection; a new revision clears any error.
+    SettingsDraft& Touch(uint64_t key, SettingsField field) {
+        SettingsDraft* draft = Find(key, field);
+        if (!draft) {
+            SettingsDraft created;
+            created.key = key;
+            created.field = field;
+            created.value = SettingsFieldValue(Projection(), field);
+            drafts.push_back(std::move(created));
+            draft = &drafts.back();
+        }
+        draft->revision = ++revisions;
+        draft->failed = false;
+        draft->error.clear();
+        return *draft;
+    }
+
+    std::vector<std::pair<uint64_t, SettingsField>> Keys() const {
+        std::vector<std::pair<uint64_t, SettingsField>> keys;
+        for (const SettingsDraft& draft : drafts) keys.emplace_back(draft.key, draft.field);
+        return keys;
+    }
+
+    // One transaction. Saved (or already so): the draft it was made for is done and the
+    // baseline reloads. Failed: that draft keeps its value with the error.
+    bool Run(const SettingsRequest& request) {
+        SettingsSaveResult result = store->Apply(request.field, request.value);
+        auto same = [&](const SettingsDraft& d) {
+            return d.key == request.key && d.field == request.field && d.revision == request.revision;
+        };
+        if (result == SettingsSaveResult::Failed) {
+            if (request.revision) {
+                auto draft = std::find_if(drafts.begin(), drafts.end(), same);
+                if (draft != drafts.end()) {
+                    draft->failed = true;
+                    draft->error = L"This change couldn't be saved.";
+                }
+            }
+            return false;
+        }
+        if (request.revision) std::erase_if(drafts, same);
+        Reload();
+        return true;
+    }
+};
+
+// src/settings/store.h
+// Production store of the settings window's edit controller (settings/edits.h): the published
+// settings and statuses, and one transaction per edit. Settings thread only.
+
+struct SettingsProductionStore final : SettingsStore {
+    SettingsBaseline Load() override {
+        SettingsBaseline baseline;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            baseline.settings = g_settings;
+        }
+        SettingsStatus& status = baseline.status;
+        status.recording = g_historyIdsPendingSave ? SettingsRecording::PendingSave :
+                           g_historyStorageError   ? SettingsRecording::StorageError :
+                                                     SettingsRecording::Recording;
+        // Display N is the Nth taskbar in the order the taskbar code targets (primary first).
+        std::vector<TaskbarDisplayInfo> taskbars = FindCurrentProcessTaskbarDisplays();
+        for (size_t i = 0; i < taskbars.size(); i++) {
+            const RECT& rect = taskbars[i].rect;
+            status.displays.push_back({int(i) + 1, int(std::abs(rect.right - rect.left)),
+                                       int(std::abs(rect.bottom - rect.top)), taskbars[i].primary});
+        }
+        // Where the journal lives (history/journal.h), whether or not anything was recorded.
+        PWSTR localAppData = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr,
+                                           &localAppData))) {
+            status.historyFolder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
+        }
+        CoTaskMemFree(localAppData);
+        wchar_t separator[8] = {};
+        if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, separator,
+                            ARRAYSIZE(separator)) > 1) {
+            status.groupSeparator = separator[0];
+        }
+        return baseline;
+    }
+
+    // Under the edit lock: fresh settings, the requested field set, ApplyOwnedSettings. The
+    // taskbar update runs after the lock is released.
+    SettingsSaveResult Apply(SettingsField field, int value) override {
+        std::unique_lock<std::mutex> configLock(g_configEditMutex);
+        Settings settings;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            settings = g_settings;
+        }
+        SettingsAssign(settings, field, value);
+        SettingsApplyResult result = ApplyOwnedSettings(std::move(settings));
+        configLock.unlock();
+        if (result == SettingsApplyResult::Failed) return SettingsSaveResult::Failed;
+        if (result == SettingsApplyResult::Unchanged) return SettingsSaveResult::Unchanged;
+        FinishSettingsApply();
+        return SettingsSaveResult::Changed;
+    }
+
+    bool Unloading() override { return g_unloading || g_settingsWindowCancelRequested; }
+};
+
+// src/settings/view.h
+// Settings window view: the explicit snapshot page builders read (the render projection, draft
+// text and errors, statuses, window flags), the ids of interactive controls, and the settings
+// cards pages share. Pure.
+
+enum class SettingsUiPage : int { Accounts, Layout, Display, Behavior, History, About, Count };
+
+struct SettingsView {
+    SettingsUiPage page = SettingsUiPage::Accounts;
+    std::wstring version;
+    Settings settings;                  // Render projection (SettingsEdits::Projection)
+    SettingsStatus status;
+    std::vector<SettingsDraft> drafts;  // Number box text and errors
+    bool pollCustom = false;            // Custom chosen in Cloud poll interval
+};
+
+// Interactive controls keep their ids across rebuilds, so focus and text boxes follow them.
+// Other items take running ids below 0x10000.
+static uint32_t SettingsControlId(SettingsField field, uint32_t part = 0) {
+    return 0x10000u + uint32_t(field) * 16 + part;
+}
+
+static const SettingsDraft* SettingsViewDraft(const SettingsView& view, SettingsField field) {
+    for (const SettingsDraft& draft : view.drafts) {
+        if (!draft.key && draft.field == field) return &draft;
+    }
+    return nullptr;
+}
+
+static UiAction SettingsCommand(SettingsField field, int value = 0) {
+    return {UiActionKind::Command, value, {}, uint32_t(field)};
+}
+
+// Shared cards; each returns its bottom.
+
+static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
+                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
+                                   float width, UiCardSpec spec, SettingsField field) {
+    bool on = SettingsFieldValue(view.settings, field) != 0;
+    spec.trailing = UiToggleSize(g);
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    UiAddToggle(items, SettingsControlId(field), card.trailing, on, spec.enabled,
+                SettingsCommand(field, !on));
+    return card.card.bottom;
+}
+
+static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
+                                     std::vector<UiItem>& items, uint32_t& id, float x, float y,
+                                     float width, UiCardSpec spec, SettingsField field,
+                                     float fieldWidth, std::vector<UiOption> options, int value,
+                                     uint32_t part = 0) {
+    spec.trailing = {fieldWidth, 32};
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field); draft && !draft->text) {
+        spec.error = draft->error;
+    }
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    UiAddDropdown(items, SettingsControlId(field, part), card.trailing, std::move(options),
+                  spec.enabled, SettingsCommand(field, value));
+    return card.card.bottom;
+}
+
+// A number box shows its draft's text while there is one, else the projected value grouped.
+static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
+                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
+                                   float width, UiCardSpec spec, SettingsField field,
+                                   std::wstring unit) {
+    const SettingsDraft* draft = SettingsViewDraft(view, field);
+    std::wstring text = draft && draft->text ?
+        draft->raw : SettingsFormatNumber(SettingsFieldValue(view.settings, field),
+                                          view.status.groupSeparator);
+    spec.trailing = UiNumberBoxSize(g, unit);
+    if (draft && draft->text) spec.error = draft->error;
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    UiAddNumberBox(items, SettingsControlId(field), card.trailing, std::move(text), std::move(unit),
+                   spec.enabled, SettingsCommand(field));
+    return card.card.bottom;
+}
+
+// A card with a standard button (mockup .btn: 14 DIP padding, optional 12 DIP glyph).
+static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id,
+                                   float x, float y, float width, UiCardSpec spec,
+                                   SettingsField command, std::wstring label, std::wstring icon = {}) {
+    float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
+    spec.trailing = {std::ceil(labelWidth) + 28 + (icon.empty() ? 0 : 12 + 8), 32};
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    UiItem button;
+    button.id = SettingsControlId(command);
+    button.kind = UiItemKind::Button;
+    button.rect = card.trailing;
+    button.text = std::move(label);
+    button.icon = std::move(icon);
+    button.iconSize = 12;
+    button.action = SettingsCommand(command);
+    items.push_back(std::move(button));
+    return card.card.bottom;
+}
+
 // src/settings/page-about.h
 // Settings > About: app card, links, credits and license (approved mockup about.png). Pure
 // builder.
@@ -12637,18 +14365,196 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
     return y;
 }
 
+// src/settings/page-behavior.h
+// Settings > Behavior: where the bars show, hover details, polling and notifications (approved
+// mockup behavior.png). Pure builder.
+
+static constexpr int kSettingsPollPresets[] = {2, 5, 10, 15, 30, 60};
+
+// Lays out the page from content y; returns the bottom of the last card.
+static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
+                                     std::vector<UiItem>& items, uint32_t& id, float x, float y,
+                                     float width) {
+    const Settings& s = view.settings;
+
+    // Taskbar: primary, all, each taskbar's display, and a chosen display that is gone.
+    y = UiAddSection(items, id, x, y + 16, width, L"Taskbar");
+    {
+        std::vector<UiOption> options{{L"Primary display only", 0}, {L"All displays", -1}};
+        for (const SettingsDisplay& display : view.status.displays) {
+            options.push_back({L"Display " + std::to_wstring(display.number) + L" - " +
+                                   std::to_wstring(display.width) + L"x" +
+                                   std::to_wstring(display.height) +
+                                   (display.primary ? L" (primary)" : L""),
+                               display.number});
+        }
+        int showOn = SettingsFieldValue(s, SettingsField::ShowOn);
+        if (std::none_of(options.begin(), options.end(),
+                         [&](const UiOption& option) { return option.value == showOn; })) {
+            options.push_back({L"Display " + std::to_wstring(showOn) + L" - unavailable", showOn});
+        }
+        UiCardSpec spec;
+        spec.title = L"Show on";
+        spec.description = {{L"Primary display, all displays, or one display."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::ShowOn, 260,
+                                    std::move(options), showOn);
+    }
+
+    // Details
+    y = UiAddSection(items, id, x, y + 20, width, L"Details");
+    {
+        UiCardSpec spec;
+        spec.title = L"Show details on hover";
+        spec.description = {{L"Opens an account\u2019s details after the pointer rests on it. "
+                             L"Clicking always opens them."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec,
+                                  SettingsField::ShowDetailsOnHover);
+    }
+
+    // Updates: a preset interval, or Custom with its own number. Text typed into the custom box
+    // keeps Custom even while a partial number matches a preset.
+    y = UiAddSection(items, id, x, y + 20, width, L"Updates");
+    bool preset = std::find(std::begin(kSettingsPollPresets), std::end(kSettingsPollPresets),
+                            s.pollMinutes) != std::end(kSettingsPollPresets);
+    const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::PollMinutes);
+    bool custom = view.pollCustom || !preset || (typed && typed->text);
+    {
+        std::vector<UiOption> options;
+        for (int minutes : kSettingsPollPresets) {
+            options.push_back({std::to_wstring(minutes) + L" minutes", minutes});
+        }
+        options.push_back({L"Custom", 0});
+        UiCardSpec spec;
+        spec.title = L"Cloud poll interval";
+        spec.description = {{L"How often Anthropic and OpenAI are polled. Antigravity polls its "
+                             L"local session every minute."}};
+        // It edits the same field as the custom box: a distinct control id.
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::PollMinutes,
+                                    200, std::move(options), custom ? 0 : s.pollMinutes, 8);
+    }
+    {
+        UiCardSpec spec;
+        spec.title = L"Custom interval";
+        spec.description = {{L"2 to 1440 minutes."}};
+        spec.enabled = custom;
+        if (!custom) spec.reason = L"Choose Custom in Cloud poll interval to edit.";
+        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PollMinutes,
+                                  L"minutes");
+    }
+    {
+        UiCardSpec spec;
+        spec.title = L"Do not poll hidden accounts";
+        spec.description = {{L"Hidden accounts are neither polled nor recorded, even with Record "
+                             L"history on. Turn off to keep recording them. Shared across Windows "
+                             L"users."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec,
+                                  SettingsField::SkipHiddenPolling);
+    }
+
+    // Alerts
+    y = UiAddSection(items, id, x, y + 20, width, L"Alerts");
+    {
+        UiCardSpec spec;
+        spec.title = L"Threshold notifications";
+        spec.description = {{L"Notifies when a taskbar quota first reaches the red threshold (" +
+                             std::to_wstring(s.redThreshold) + L"%). Re-arms after it drops below."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::Notifications);
+    }
+
+    UiCardSpec reset;
+    reset.title = L"Reset Behavior to defaults";
+    reset.description = {{L"Displays, hover details, polling and notifications."}};
+    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
+                                 SettingsField::ResetBehavior, L"Reset");
+}
+
+// src/settings/page-history.h
+// Settings > History: this user's recording with its live status, retention, the viewer and the
+// storage folder (approved mockup history.png). Pure builder.
+
+// Lays out the page from content y; returns the bottom of the last card.
+static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
+                                    std::vector<UiItem>& items, uint32_t& id, float x, float y,
+                                    float width) {
+    const Settings& s = view.settings;
+
+    // Recording: the status follows consent, then the recorder's state.
+    y = UiAddSection(items, id, x, y + 16, width, L"Recording");
+    {
+        struct Status {
+            PCWSTR mark;
+            UiInk ink;
+            PCWSTR detail;
+        };
+        Status status = !s.historyEnabled ?
+            Status{L"\u25CB Off", UiInk::Secondary, L" \u00B7 Nothing new is recorded."} :
+            view.status.recording == SettingsRecording::PendingSave ?
+            Status{L"\u25CF Waiting", UiInk::Caution,
+                   L" \u00B7 Recording starts once the taskbar saves its account IDs."} :
+            view.status.recording == SettingsRecording::StorageError ?
+            Status{L"\u25CF Not saving", UiInk::Danger,
+                   L" \u00B7 History storage failed; Open usage history shows why."} :
+            Status{L"\u25CF Recording", UiInk::Success, L" \u00B7 New samples arrive with each poll."};
+        UiCardSpec spec;
+        spec.title = L"Record usage history";
+        spec.description = {{status.mark, UiRunStyle::Normal, status.ink},
+                            {std::wstring(status.detail) + L"\n"},
+                            {L"Applies to this Windows user only. Turning it off keeps saved history."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::RecordHistory);
+    }
+    {
+        UiCardSpec spec;
+        spec.title = L"Keep history";
+        spec.description = {{L"1 to 3650 days, shared across Windows users. Older samples are pruned "
+                             L"hourly; a cap of about 60 MB can shorten this."}};
+        spec.enabled = s.historyEnabled;
+        if (!s.historyEnabled) spec.reason = L"Turn on Record usage history to change this.";
+        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec,
+                                  SettingsField::RetentionDays, L"days");
+    }
+    y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::RetentionDays, 8), x, y + 3, width,
+                     {{L"Each account chooses whether it records: "},
+                      {L"Accounts", UiRunStyle::Link, UiInk::Inherit,
+                       {UiActionKind::Navigate, int(SettingsUiPage::Accounts)}},
+                      {L" > Record history. Hidden accounts are not recorded while "},
+                      {L"Do not poll hidden accounts", UiRunStyle::Link, UiInk::Inherit,
+                       {UiActionKind::Navigate, int(SettingsUiPage::Behavior)}},
+                      {L" is on in Behavior."}});
+
+    // Viewer
+    y = UiAddSection(items, id, x, y + 20, width, L"Viewer");
+    {
+        UiCardSpec spec;
+        spec.title = L"Usage history";
+        spec.description = {{L"Charts, statistics and CSV export from local samples, also while "
+                             L"recording is off."}};
+        y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistory,
+                                  L"Open usage history", L"\uE81C");
+    }
+
+    // Storage
+    y = UiAddSection(items, id, x, y + 20, width, L"Storage");
+    {
+        UiCardSpec spec;
+        spec.title = L"Storage location";
+        spec.description = {{view.status.historyFolder + L"\n", UiRunStyle::Normal, UiInk::Secondary},
+                            {L"Not encrypted. Readings and opaque IDs, no tokens or labels. "
+                             L"Survives mod removal."}};
+        y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistoryFolder,
+                                  L"Open folder", L"\uE838");
+    }
+
+    UiCardSpec reset;
+    reset.title = L"Reset History to defaults";
+    reset.description = {{L"Recording on for this Windows user, keep 90 days. Saved history stays."}};
+    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
+                                 SettingsField::ResetHistory, L"Reset");
+}
+
 // src/settings/shell.h
 // Settings window shell: navigation pane, pinned page header and page content, built from an
-// explicit view snapshot (approved mockups: nav and header of layout-v2.png, about.png). Pure.
-// Pages not rebuilt yet show a placeholder card.
-
-enum class SettingsUiPage : int { Accounts, Layout, Display, Behavior, History, About, Count };
-
-// Everything the builders read. Later pages add their projections here.
-struct SettingsView {
-    SettingsUiPage page = SettingsUiPage::Accounts;
-    std::wstring version;
-};
+// explicit view snapshot (settings/view.h; approved mockups: nav and header of layout-v2.png).
+// Pure. Pages not rebuilt yet show a placeholder card.
 
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
@@ -12691,18 +14597,29 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
                       std::max(client.width, kSettingsNavWidth),
                       std::max(client.height, kSettingsHeaderHeight)};
 
-    // Content, in viewport coordinates. Ids are unique per page.
+    // Content, in viewport coordinates. Running ids are unique per page; interactive controls
+    // take fixed ones (settings/view.h).
     uint32_t id = uint32_t(page + 1) << 12;
     float bottom;
-    if (view.page == SettingsUiPage::About) {
-        bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
-    } else {
-        UiCardSpec spec;
-        spec.glyph = L"\uE946";
-        spec.title = L"Not built yet";
-        spec.description = {{L"This page is still in the classic Settings window. Close this "
-                             L"window and open Settings from the taskbar menu to change it."}};
-        bottom = UiAddCard(g, frame.content, id, left, 2, width, spec).card.bottom;
+    switch (SettingsUiPage(page)) {
+        case SettingsUiPage::About:
+            bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
+            break;
+        case SettingsUiPage::Behavior:
+            bottom = SettingsUiBuildBehavior(g, view, frame.content, id, left, 0, width);
+            break;
+        case SettingsUiPage::History:
+            bottom = SettingsUiBuildHistory(g, view, frame.content, id, left, 0, width);
+            break;
+        default: {
+            UiCardSpec spec;
+            spec.glyph = L"\uE946";
+            spec.title = L"Not built yet";
+            spec.description = {{L"This page is still in the classic Settings window. Close this "
+                                 L"window and open Settings from the taskbar menu to change it."}};
+            bottom = UiAddCard(g, frame.content, id, left, 2, width, spec).card.bottom;
+            break;
+        }
     }
     frame.contentHeight = bottom + 28;
 }
@@ -12710,45 +14627,257 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
 // src/settings/ui-window.h
 // The rebuilt settings window: the settings client of the custom-drawn host (ui/host.h). Opened
 // by the temporary "Settings (new)" taskbar menu item on the settings thread; never touches XAML.
+// Edits go through the edit controller (settings/edits.h) and its production store.
 
 static constexpr PCWSTR kSettingsUiClass = L"AiQuotaSettingsUi_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiViewportClass = L"AiQuotaSettingsUiView_" WH_MOD_ID;
+static constexpr PCWSTR kSettingsUiPopupClass = L"AiQuotaSettingsUiPopup_" WH_MOD_ID;
+// Posted to run the commit queue outside the handler that queued (focus loss, Enter).
+static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
+// Debounced number box steps: this timer id plus the field.
+static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 
 struct SettingsUiClient final : UiHostClient {
+    // Edits; the draft revision each pending step timer may commit (by field)
+    SettingsProductionStore store;
+    SettingsEdits edits{store};
+    std::map<SettingsField, uint64_t> stepRevisions;
+
+    // Window state. Custom poll mode sticks once chosen or typed into, so the box doesn't
+    // disable itself when a partial number happens to match a preset.
     SettingsUiPage page = SettingsUiPage::Accounts;
+    bool pollCustom = false;
+
+    // Reentrancy: messages that arrive inside a modal wait until it returns; close preparation
+    // ignores input and drops queue messages (its flush covers them).
+    int modalDepth = 0;
+    bool deferredProcess = false, deferredRefresh = false;
+    bool closePreparation = false;
+
+    // A message box owned by the window: the popup closes first; queue and refresh messages
+    // that arrive meanwhile are posted again once it returns.
+    int Ask(UiHost& host, PCWSTR text, PCWSTR caption, UINT type) {
+        UiHostClosePopup(host);
+        modalDepth++;
+        int result = SettingsMessageBoxW(host.main, text, caption, type);
+        modalDepth--;
+        if (!modalDepth && host.main) {
+            if (std::exchange(deferredProcess, false)) {
+                PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
+            }
+            if (std::exchange(deferredRefresh, false)) {
+                PostMessageW(host.main, kSettingsRefreshMessage, 0, 0);
+            }
+        }
+        return result;
+    }
+
+    // Failed saves keep their drafts with an error; the box says so once.
+    void Report(UiHost& host, int failures) {
+        UiHostRequestRebuild(host, false);
+        if (failures) {
+            Ask(host, L"Could not save settings. The change is kept here with its error; "
+                      L"change it again to retry.",
+                L"Taskbar AI Quota Bars", MB_OK | MB_ICONERROR);
+        }
+    }
+
+    void Process(UiHost& host) {
+        if (closePreparation || host.closing) return;
+        if (modalDepth) {
+            deferredProcess = true;
+            return;
+        }
+        Report(host, edits.Process());
+    }
+
+    // A cancelled step timer also forgets its revision: a WM_TIMER already generated then
+    // commits nothing.
+    void KillStepTimer(UiHost& host, SettingsField field) {
+        KillTimer(host.main, kSettingsStepTimer + UINT_PTR(field));
+        stepRevisions.erase(field);
+    }
+
+    void KillStepTimers(UiHost& host) {
+        for (SettingsField field : {SettingsField::PollMinutes, SettingsField::RetentionDays}) {
+            KillStepTimer(host, field);
+        }
+    }
 
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         SettingsView view;
         view.page = page;
         view.version = WH_MOD_VERSION;
+        view.settings = edits.Projection();
+        view.status = edits.baseline.status;
+        view.drafts = edits.drafts;
+        view.pollCustom = pollCustom;
         SettingsUiBuildFrame(*host.graphics, view, client, frame);
     }
 
     void Invoke(UiHost& host, UiAction action) override {
-        if (g_unloading || g_settingsWindowCancelRequested) return;
-        if (action.kind == UiActionKind::Navigate) {
-            page = SettingsUiPage(std::clamp(action.value, 0, int(SettingsUiPage::Count) - 1));
-            UiHostRequestRebuild(host, true);
-        } else if (action.kind == UiActionKind::OpenUrl) {
-            OpenUrl(action.url.c_str());
+        // A modal disables the window: what arrives meanwhile (the focus loss it causes) is ours.
+        if (Unloading() || closePreparation || modalDepth) return;
+        SettingsField field = SettingsField(action.target);
+        switch (action.kind) {
+            case UiActionKind::Navigate: {
+                // Never blocks: valid drafts commit, invalid ones revert, failed ones stay.
+                KillStepTimers(host);
+                int failures = edits.Navigate();
+                page = SettingsUiPage(std::clamp(action.value, 0, int(SettingsUiPage::Count) - 1));
+                UiHostRequestRebuild(host, true);
+                Report(host, failures);
+                break;
+            }
+            case UiActionKind::OpenUrl:
+                OpenUrl(action.text.c_str());
+                break;
+            case UiActionKind::Command:
+                switch (field) {
+                    case SettingsField::PollMinutes:
+                        // The interval dropdown: a preset, or 0 for Custom, which only enables
+                        // the custom box and moves focus there.
+                        if (!action.value) {
+                            pollCustom = true;
+                            UiHostRequestRebuild(host, false);
+                            UiHostRequestFocus(host, {SettingsControlId(field), -1}, true);
+                            break;
+                        }
+                        pollCustom = false;
+                        KillStepTimer(host, field);
+                        Report(host, edits.Commit(0, field, action.value));
+                        break;
+                    case SettingsField::ResetBehavior:
+                    case SettingsField::ResetHistory: {
+                        std::wstring question =
+                            field == SettingsField::ResetBehavior ?
+                                L"Reset Behavior to its defaults?\n\nShow on the primary display "
+                                L"only, show details on hover, poll every 10 minutes, do not poll "
+                                L"hidden accounts, threshold notifications on." :
+                                L"Reset History to its defaults?\n\nRecording turns on for this "
+                                L"Windows user and history is kept for 90 days. Saved history stays.";
+                        // Never shorten retention without saying so: pruning is shared and final.
+                        // The committed value counts, not a draft (which may have failed).
+                        int retention = edits.baseline.settings.historyRetentionDays;
+                        if (field == SettingsField::ResetHistory &&
+                            retention > Settings{}.historyRetentionDays) {
+                            question += L"\n\nHistory is kept for " + std::to_wstring(retention) +
+                                        L" days now: samples older than 90 days will be deleted "
+                                        L"permanently, for every Windows user.";
+                        }
+                        if (Ask(host, question.c_str(), L"Reset settings",
+                                MB_YESNO | MB_ICONQUESTION) != IDYES ||
+                            Unloading() || closePreparation || host.closing) {
+                            break;
+                        }
+                        KillStepTimers(host);
+                        if (field == SettingsField::ResetBehavior) pollCustom = false;
+                        Report(host, edits.Reset(field));
+                        break;
+                    }
+                    case SettingsField::OpenHistory:
+                        OpenHistoryWindow();
+                        break;
+                    case SettingsField::OpenHistoryFolder: {
+                        const std::wstring& folder = edits.baseline.status.historyFolder;
+                        DWORD attributes = folder.empty() ? INVALID_FILE_ATTRIBUTES :
+                                                            GetFileAttributesW(folder.c_str());
+                        if (attributes == INVALID_FILE_ATTRIBUTES ||
+                            !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                            Ask(host, L"Nothing has been recorded yet. The folder is created with "
+                                      L"the first recorded sample.",
+                                L"Usage history", MB_OK | MB_ICONINFORMATION);
+                            break;
+                        }
+                        OpenUrl(folder.c_str());
+                        break;
+                    }
+                    default:
+                        // Toggles and the display dropdown: the desired value, committed now.
+                        Report(host, edits.Commit(0, field, action.value));
+                        break;
+                }
+                break;
+            case UiActionKind::TextChange:
+                // Typing supersedes a pending step: its timer no longer commits.
+                KillStepTimer(host, field);
+                if (field == SettingsField::PollMinutes) pollCustom = true;
+                edits.SetText(action.key, field, std::move(action.text));
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::TextCommit:
+            case UiActionKind::TextBlur:
+                // Committed from the queue, never inside the focus-loss handler.
+                KillStepTimer(host, field);
+                if (edits.RequestCommit(action.key, field, action.kind == UiActionKind::TextBlur)) {
+                    PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
+                }
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::TextRevert:
+                KillStepTimer(host, field);
+                edits.Revert(action.key, field);
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::Step:
+                if (field == SettingsField::PollMinutes) pollCustom = true;
+                stepRevisions[field] = edits.Step(action.key, field, action.value);
+                SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::None:
+                break;
         }
     }
 
-    bool Message(UiHost&, UINT message, WPARAM, LPARAM, LRESULT& result) override {
+    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
         result = 0;
         switch (message) {
-            // Account, sign-in, consent and storage notifications: no built page shows them yet.
+            case kSettingsProcessMessage:
+                Process(host);
+                return true;
+            // Sign-in, visibility, history ID, storage and consent notifications reload the
+            // baseline and statuses only; drafts and text boxes stay.
             case kSettingsRefreshMessage:
             case kHistoryConsentChangedMessage:
+                if (modalDepth) {
+                    deferredRefresh = true;
+                    return true;
+                }
+                edits.Reload();
+                UiHostRequestRebuild(host, false);
                 return true;
             case kExitVisualTestMessage:
                 SetVisualTestMode(false);
                 return true;
+            case WM_DISPLAYCHANGE:
+                // The display list changed (the taskbar re-injects on its own).
+                if (modalDepth) {
+                    deferredRefresh = true;
+                } else {
+                    edits.Reload();
+                    UiHostRequestRebuild(host, false);
+                }
+                return false;
+            case WM_TIMER: {
+                if (wParam < kSettingsStepTimer || wParam > kSettingsStepTimer + 0xFF) return false;
+                KillTimer(host.main, wParam);
+                SettingsField field = SettingsField(wParam - kSettingsStepTimer);
+                auto stepped = stepRevisions.find(field);
+                uint64_t revision = stepped == stepRevisions.end() ? 0 : stepped->second;
+                stepRevisions.erase(field);
+                if (!closePreparation && !host.closing && edits.CommitStep(0, field, revision)) {
+                    Process(host);
+                }
+                UiHostRequestRebuild(host, false);
+                return true;
+            }
         }
         return false;
     }
 
     bool Attach(UiHost& host) override {
+        edits.Reload();
         g_settingsWindow.store(host.main);
         return true;
     }
@@ -12765,8 +14894,26 @@ struct SettingsUiClient final : UiHostClient {
 
     bool Unloading() override { return g_unloading || g_settingsWindowCancelRequested; }
 
-    // No page edits settings yet: nothing to flush.
-    bool PrepareClose(UiHost&) override { return true; }
+    // Deliberate close: every draft commits first. One that is invalid or fails keeps the
+    // window open with its error unless the user discards it.
+    bool PrepareClose(UiHost& host) override {
+        if (closePreparation) return false;
+        closePreparation = true;
+        KillStepTimers(host);
+        SettingsCloseResult result = edits.PrepareClose();
+        bool close = result != SettingsCloseResult::Blocked;
+        if (!close) {
+            UiHostRequestRebuild(host, false);
+            close = Ask(host,
+                        L"A change couldn't be saved; it is shown with its error.\n\n"
+                        L"Discard unsaved changes and close the window?",
+                        L"Taskbar AI Quota Bars", MB_YESNO | MB_ICONWARNING) == IDYES ||
+                    Unloading();
+            if (close) edits.Discard();
+        }
+        closePreparation = false;
+        return close;
+    }
 
     void Destroying() override { SetVisualTestMode(false); }
 
@@ -15263,6 +17410,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID parameter) {
             UiHostConfig config;
             config.mainClass = kSettingsUiClass;
             config.viewportClass = kSettingsUiViewportClass;
+            config.popupClass = kSettingsUiPopupClass;
             config.title = L"Taskbar AI Quota Bars \u2014 Settings";
             config.activateMessage = GetSettingsActivateMessage();
             if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");

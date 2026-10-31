@@ -2,8 +2,19 @@
 // hit testing, focus order and shared layout builders. Pure. Builders read no globals; paint and
 // input work only from the list.
 
-enum class UiItemKind : uint8_t { Nav, Card, Text, Glyph, Shape, Button, Link };
+// Toggle: selected = on. Dropdown: text = the chosen option's label, action.value = its value;
+// activating it opens the popup (ui/popup.h). NumberBox: the drawn frame of a native text box
+// (ui/text-box.h) showing `text`; SpinButton: its up/down buttons (not tab stops). Option: one
+// row of the dropdown popup.
+enum class UiItemKind : uint8_t {
+    Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option
+};
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
+
+struct UiOption {
+    std::wstring text;
+    int value = 0;
+};
 
 // One filled or stroked path of a Shape item, in the item's view box. A part with an Inherit
 // ink keeps its own color (illustrations); others follow the theme.
@@ -22,15 +33,18 @@ struct UiItem {
     UiFont font = UiFont::Body;
     UiInk ink = UiInk::Primary;
     DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
-    std::wstring text;               // Nav, Button and Link label; Glyph character
+    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option);
+                                     // Glyph and SpinButton character; NumberBox text
     std::wstring icon;               // Nav and Button glyph
     float iconSize = 16;             // Glyph, Nav and Button glyph size
     std::vector<UiRun> runs;         // Text, wrapped to the rectangle's width
     std::vector<UiShapePart> parts;  // Shape
+    std::vector<UiOption> options;   // Dropdown
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;
     UiAction action;
+    uint32_t owner = 0;              // SpinButton: its NumberBox
     bool selected = false;
     bool enabled = true;
 };
@@ -60,12 +74,17 @@ struct UiFocusStop {
 };
 
 static bool UiInteractiveKind(UiItemKind kind) {
-    return kind == UiItemKind::Nav || kind == UiItemKind::Card || kind == UiItemKind::Button ||
-           kind == UiItemKind::Link;
+    return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape;
 }
 
-static bool UiFocusable(const UiItem& item) {
+// Reacts to the pointer and can be activated.
+static bool UiActive(const UiItem& item) {
     return UiInteractiveKind(item.kind) && item.enabled && item.action.kind != UiActionKind::None;
+}
+
+// A tab stop. Spin buttons belong to their number box; options to the dropdown field.
+static bool UiFocusable(const UiItem& item) {
+    return UiActive(item) && item.kind != UiItemKind::SpinButton && item.kind != UiItemKind::Option;
 }
 
 static const UiItem* UiFindItem(const UiFrame& frame, uint32_t id, UiSurfaceId* surface = nullptr) {
@@ -108,7 +127,7 @@ static std::vector<UiFocusStop> UiFocusStops(const UiFrame& frame) {
 static const UiAction* UiActionOf(const UiFrame& frame, UiFocusRef ref) {
     const UiItem* item = UiFindItem(frame, ref.id);
     if (!item || !item->enabled) return nullptr;
-    if (ref.link < 0) return UiFocusable(*item) ? &item->action : nullptr;
+    if (ref.link < 0) return UiActive(*item) ? &item->action : nullptr;
     const UiRun* run = UiLinkRun(item->runs, ref.link);
     return run && run->action.kind != UiActionKind::None ? &run->action : nullptr;
 }
@@ -129,7 +148,7 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
             continue;
         }
         if (!UiInteractiveKind(item.kind)) continue;
-        return UiFocusable(item) ? UiFocusRef{item.id, -1} : UiFocusRef{};
+        return UiActive(item) ? UiFocusRef{item.id, -1} : UiFocusRef{};
     }
     return {};
 }
@@ -218,7 +237,8 @@ static float UiAddSection(std::vector<UiItem>& items, uint32_t& id, float x, flo
 
 // Settings card (mockup .scard): optional leading glyph, a title, a description and a trailing
 // slot of `trailing` size (or a trailing glyph), vertically centered. With an action the whole
-// card is one interactive item.
+// card is one interactive item. A disabled card dims its title and may say why (mockup
+// .reason); an error line reports an invalid or unsaved value.
 struct UiCardSpec {
     std::wstring glyph;
     std::wstring title;
@@ -227,6 +247,8 @@ struct UiCardSpec {
     std::wstring trailingGlyph;
     UiAction action;
     float minHeight = 68;
+    bool enabled = true;
+    std::wstring reason, error;
 };
 
 struct UiCardLayout {
@@ -250,7 +272,23 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
     float descriptionHeight =
         spec.description.empty() ? 0 :
         UiLayoutSize(UiRichLayout(g, spec.description, UiFont::Caption, descriptionWidth)).height;
+    // Reason and error lines: a 12 DIP glyph, 6 DIP gap, caption text; 3 DIP above each.
+    struct Note {
+        const std::wstring* text;
+        PCWSTR glyph;
+        UiInk ink;
+        float height;
+    };
+    std::vector<Note> notes;
+    for (Note note : {Note{&spec.reason, L"\uE946", UiInk::Secondary, 0},
+                      Note{&spec.error, L"\uE783", UiInk::Danger, 0}}) {
+        if (note.text->empty()) continue;
+        note.height = 3 + UiLayoutSize(UiLayout(g, *note.text, UiTextStyleFor(UiFont::Caption),
+                                                descriptionWidth - 18)).height;
+        notes.push_back(note);
+    }
     float textHeight = titleHeight + descriptionHeight;
+    for (const Note& note : notes) textHeight += note.height;
     float content = std::max({textHeight, trailing.height, spec.glyph.empty() ? 0.0f : 20.0f});
     float height = std::max(spec.minHeight, content + 2 * (kBorder + kPadY));
     float center = y + height / 2;
@@ -282,17 +320,39 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
     title.rect = {textLeft, center - textHeight / 2, textLeft + textWidth,
                   center - textHeight / 2 + titleHeight};
     title.runs.push_back({spec.title});
+    title.enabled = spec.enabled;
     items.push_back(std::move(title));
+    float lineTop = center - textHeight / 2 + titleHeight;
     if (!spec.description.empty()) {
         UiItem description;
         description.id = id++;
         description.kind = UiItemKind::Text;
         description.font = UiFont::Caption;
         description.ink = UiInk::Muted;
-        description.rect = {textLeft, center - textHeight / 2 + titleHeight,
-                            textLeft + descriptionWidth, center + textHeight / 2};
+        description.rect = {textLeft, lineTop, textLeft + descriptionWidth,
+                            lineTop + descriptionHeight};
         description.runs = spec.description;
         items.push_back(std::move(description));
+        lineTop += descriptionHeight;
+    }
+    for (const Note& note : notes) {
+        UiItem glyph;
+        glyph.id = id++;
+        glyph.kind = UiItemKind::Glyph;
+        glyph.text = note.glyph;
+        glyph.iconSize = 12;
+        glyph.ink = note.ink;
+        glyph.rect = {textLeft, lineTop + 3 + 2, textLeft + 12, lineTop + 3 + 14};
+        items.push_back(std::move(glyph));
+        UiItem text;
+        text.id = id++;
+        text.kind = UiItemKind::Text;
+        text.font = UiFont::Caption;
+        text.ink = note.ink;
+        text.rect = {textLeft + 18, lineTop + 3, textLeft + descriptionWidth, lineTop + note.height};
+        text.runs.push_back({*note.text});
+        items.push_back(std::move(text));
+        lineTop += note.height;
     }
     if (!spec.trailingGlyph.empty()) {
         UiItem glyph;
@@ -305,4 +365,167 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
         items.push_back(std::move(glyph));
     }
     return layout;
+}
+
+// Info bar (mockup .infobar): an accent info glyph and wrapped rich text on a card. The text
+// item takes `textId`, which stays the same across rebuilds so a focused link keeps its focus.
+static float UiAddInfoBar(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, uint32_t textId,
+                          float x, float y, float width, std::vector<UiRun> runs) {
+    constexpr float kInset = 1 + 13, kPadX = 1 + 18, kIcon = 16, kGap = 12;
+    float textLeft = x + kPadX + kIcon + kGap;
+    float textWidth = std::max(x + width - kPadX - textLeft, 40.0f);
+    float textHeight = UiLayoutSize(UiRichLayout(g, runs, UiFont::Note, textWidth)).height;
+    UiItem card;
+    card.id = id++;
+    card.kind = UiItemKind::Card;
+    card.rect = {x, y, x + width, y + textHeight + 2 * kInset};
+    items.push_back(card);
+    UiItem icon;
+    icon.id = id++;
+    icon.kind = UiItemKind::Glyph;
+    icon.text = L"\uF167";  // InfoSolid
+    icon.ink = UiInk::Accent;
+    icon.rect = {x + kPadX, y + kInset + 1.5f, x + kPadX + kIcon, y + kInset + 1.5f + kIcon};
+    items.push_back(std::move(icon));
+    UiItem text;
+    text.id = textId;
+    text.kind = UiItemKind::Text;
+    text.font = UiFont::Note;
+    text.ink = UiInk::Secondary;
+    text.rect = {textLeft, y + kInset, textLeft + textWidth, y + kInset + textHeight};
+    text.runs = std::move(runs);
+    items.push_back(std::move(text));
+    return card.rect.bottom;
+}
+
+// Controls placed in a card's trailing slot (mockup .ctl). Interactive controls take explicit
+// ids that stay the same across rebuilds: focus and native text boxes follow them.
+
+// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch.
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g) {
+    UiTextStyle body = UiTextStyleFor(UiFont::Body);
+    float label = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
+                           UiLayoutSize(UiLayout(g, L"Off", body, 1000, false)).width);
+    return {std::ceil(label) + 12 + 40, 32};
+}
+
+static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
+                        bool enabled, UiAction action) {
+    UiItem toggle;
+    toggle.id = id;
+    toggle.kind = UiItemKind::Toggle;
+    toggle.rect = slot;
+    toggle.text = on ? L"On" : L"Off";
+    toggle.selected = on;
+    toggle.enabled = enabled;
+    toggle.action = std::move(action);
+    items.push_back(std::move(toggle));
+}
+
+// Dropdown field (mockup .combo): the option whose value is action.value.
+static void UiAddDropdown(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+                          std::vector<UiOption> options, bool enabled, UiAction action) {
+    UiItem field;
+    field.id = id;
+    field.kind = UiItemKind::Dropdown;
+    field.rect = slot;
+    for (const UiOption& option : options) {
+        if (option.value == action.value) field.text = option.text;
+    }
+    field.options = std::move(options);
+    field.enabled = enabled;
+    field.action = std::move(action);
+    items.push_back(std::move(field));
+}
+
+// Spin number box (mockup .numwrap): a 96 x 32 DIP box with up/down buttons at its right end,
+// then a unit 10 DIP after it.
+static constexpr float kUiNumberBoxWidth = 96;
+
+static D2D1_SIZE_F UiNumberBoxSize(UiGraphics& g, std::wstring_view unit) {
+    float label = UiLayoutSize(UiLayout(g, unit, UiTextStyleFor(UiFont::Body), 1000, false)).width;
+    return {kUiNumberBoxWidth + 10 + std::max(std::ceil(label), 22.0f), 32};
+}
+
+// Where the box's text sits: after the 11 DIP padding, before the spin buttons.
+static D2D1_RECT_F UiNumberBoxTextRect(const UiItem& box) {
+    const D2D1_RECT_F& r = box.rect;
+    return {r.left + 11, r.top + 1, r.right - 49, r.bottom - 1};
+}
+
+// The box takes `id`, its up and down buttons id + 1 and id + 2. The action names the target;
+// the buttons step it by 1.
+static void UiAddNumberBox(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+                           std::wstring text, std::wstring unit, bool enabled, UiAction action) {
+    UiItem box;
+    box.id = id;
+    box.kind = UiItemKind::NumberBox;
+    box.rect = {slot.left, slot.top, slot.left + kUiNumberBoxWidth, slot.bottom};
+    box.text = std::move(text);
+    box.enabled = enabled;
+    box.action = action;
+    const D2D1_RECT_F r = box.rect;
+    items.push_back(std::move(box));
+    for (int i = 0; i < 2; i++) {
+        UiItem spin;
+        spin.id = id + 1 + uint32_t(i);
+        spin.kind = UiItemKind::SpinButton;
+        float right = r.right - 3 - 22 * float(1 - i);
+        spin.rect = {right - 22, r.top + 4, right, r.bottom - 4};
+        spin.text = i == 0 ? L"\uE70E" : L"\uE70D";
+        spin.owner = id;
+        spin.enabled = enabled;
+        spin.action = action;
+        spin.action.kind = UiActionKind::Step;
+        spin.action.value = i == 0 ? 1 : -1;
+        items.push_back(std::move(spin));
+    }
+    UiItem label;
+    label.id = id + 3;
+    label.kind = UiItemKind::Text;
+    label.ink = UiInk::Secondary;
+    label.rect = {r.right + 10, (r.top + r.bottom) / 2 - 10, slot.right, (r.top + r.bottom) / 2 + 10};
+    label.runs.push_back({std::move(unit)});
+    label.enabled = enabled;
+    items.push_back(std::move(label));
+}
+
+// The dropdown popup's rows (mockup .dmenu, WinUI combo box items): 32 DIP rows on a 36 DIP
+// pitch, 5 DIP side insets, 2 DIP top and bottom padding; the current value's row selected.
+// Each row's action is the field's, with the row's value. Returns the popup size in DIPs, at
+// least `minWidth` wide.
+static D2D1_SIZE_F UiLayoutOptions(UiGraphics& g, const std::vector<UiOption>& options,
+                                   const UiAction& action, float minWidth,
+                                   std::vector<UiItem>& rows) {
+    UiTextStyle body = UiTextStyleFor(UiFont::Body);
+    float width = minWidth;
+    for (const UiOption& option : options) {
+        width = std::max(width, std::ceil(UiLayoutSize(UiLayout(g, option.text, body, 10000,
+                                                                false)).width) + 5 + 12 + 12 + 5);
+    }
+    rows.clear();
+    for (size_t i = 0; i < options.size(); i++) {
+        UiItem row;
+        row.id = uint32_t(i + 1);
+        row.kind = UiItemKind::Option;
+        float top = 2 + 2 + 36 * float(i);
+        row.rect = {5, top, width - 5, top + 32};
+        row.text = options[i].text;
+        row.selected = options[i].value == action.value;
+        row.action = action;
+        row.action.value = options[i].value;
+        rows.push_back(std::move(row));
+    }
+    return {width, 4 + 36 * float(options.size())};
+}
+
+// Where the popup goes, in pixels: below the field, else above it, else on the side with more
+// room; left-aligned with the field and kept inside the work area.
+static POINT UiPopupPlacement(RECT field, SIZE size, RECT work, int gap) {
+    LONG x = std::clamp(field.left, work.left, std::max(work.left, work.right - size.cx));
+    LONG below = field.bottom + gap, above = field.top - gap - size.cy;
+    if (below + size.cy <= work.bottom) return {x, below};
+    if (above >= work.top) return {x, above};
+    bool roomBelow = work.bottom - field.bottom >= field.top - work.top;
+    return {x, roomBelow ? std::max(work.top, work.bottom - size.cy) : work.top};
 }

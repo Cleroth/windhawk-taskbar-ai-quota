@@ -8,8 +8,10 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - Pure (`tokens.h`, `draw.h`, `svg-path.h`, `rich-text.h`, `items.h`, `paint.h`, `input.h`, and
   the settings page/shell builders): explicit inputs only; no HWND, registry, WinRT, globals or
   `Wh_Log`. `tests/settings` extracts and renders them; fix impurities here, never in tests.
-- Native (`system-theme.h`, `surface.h`, `host.h`): window, registry and WinRT calls; covered by
-  the `tests/settings` native-host probe DLL, never by the render harness.
+- Native (`system-theme.h`, `surface.h`, `popup.h`, `text-box.h`, `host.h`): window, registry and
+  WinRT calls; covered by the `tests/settings` native-host probe DLL, never by the render harness.
+  `popup.h` and `text-box.h` hold component state and mechanics; their window procedures live in
+  `host.h`, which routes everything to them.
 
 ## Lifetime and teardown
 
@@ -39,8 +41,22 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 
 ## Input
 
-- Focus owner is the focused HWND (main or viewport); no `IsDialogMessage`. Tab follows item
-  order across surfaces; the focus ring shows only after keyboard input.
+- Focus owner is the focused HWND (main, viewport or a number box's EDIT); no `IsDialogMessage`.
+  Tab follows item order across surfaces; the focus ring shows only after keyboard input.
+- Interactive controls keep fixed item ids across rebuilds: focus and EDITs follow ids.
+- Dropdown popup: owned, `WS_EX_NOACTIVATE`, shown without activation, holding capture; keyboard
+  focus stays on the field, whose keys drive it. `UiPopupClose` is the only close routine
+  (closed first, capture released only if still held, never restores focus or foreground).
+  Every trigger closes it: capture loss, `WM_CANCELMODE` (popup or main), deactivation, focus
+  leaving the field, `WM_SYSCOMMAND`/Alt (before default handling), size/move/minimize/DPI,
+  scroll, rebuild, Esc/Tab, a client modal (`UiHostClosePopup` first), close. An outside press
+  hides it but keeps capture until its button-up. These rest on `tests/settings` popup probe
+  facts; re-run them when changing this.
+- Number box EDITs: one per item id, text set only when the client's text changed and no IME
+  composition runs (composition: native handling only). They report text changes, Enter, Esc,
+  Up/Down and focus moving elsewhere in the window as actions; focus leaving the window
+  (deactivation, a modal) reports nothing, so a half-typed value never commits on its own. Never
+  commit inside the focus-loss notification.
 
 ## Evidence
 

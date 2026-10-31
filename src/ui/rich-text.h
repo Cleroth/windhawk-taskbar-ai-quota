@@ -2,12 +2,19 @@
 // Effect-free layouts (measuring, hit testing) are shared; colored layouts are per target.
 
 // What activating an item or link does. Data only; the window's client interprets it.
-enum class UiActionKind : uint8_t { None, Navigate, OpenUrl };
+// Command: a client-defined target set to a desired value (toggles, dropdown choices, buttons).
+// Number boxes report their native text box: Step (value = delta), and the text events with the
+// box's text.
+enum class UiActionKind : uint8_t {
+    None, Navigate, OpenUrl, Command, Step, TextChange, TextCommit, TextBlur, TextRevert
+};
 
 struct UiAction {
     UiActionKind kind = UiActionKind::None;
-    int value = 0;       // Navigate: page
-    std::wstring url{};  // OpenUrl
+    int value = 0;         // Navigate: page; Command: desired value; Step: delta
+    std::wstring text{};   // OpenUrl: the URL; text events: the box's text
+    uint32_t target = 0;   // Command, Step and text events: the client's target
+    uint64_t key = 0;      // The target's owner (0: global)
 };
 
 enum class UiRunStyle : uint8_t { Normal, Strong, Link };

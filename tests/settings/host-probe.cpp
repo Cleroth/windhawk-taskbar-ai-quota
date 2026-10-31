@@ -2,7 +2,9 @@
 // the extracted toolkit host, opens its window on the DLL's worker thread, closes it from this
 // thread, joins and unloads, repeatedly; then failed creation, a conflicting class, render-target
 // loss and an unload close during a message box. Windows are off-screen and never activated;
-// the message box shows briefly.
+// the message box shows briefly. The dropdown popup and text box cases run on a hidden desktop
+// this probe creates and never switches to, so their focus, capture and message box stay off the
+// user's screen.
 // Usage: host-probe.exe <ui-host.dll>
 #include <windows.h>
 #include <cstdio>
@@ -10,7 +12,7 @@
 #include <stdexcept>
 #include <string>
 
-using OpenFn = BOOL (*)(BOOL);
+using OpenFn = BOOL (*)(BOOL, HDESK);
 using WindowFn = HWND (*)();
 using CountFn = int (*)(int);
 using ClassFn = PCWSTR (*)();
@@ -22,7 +24,20 @@ enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLoss
 static constexpr UINT kProbePing = WM_APP + 70;
 static constexpr UINT kProbeLoseTarget = WM_APP + 71;
 static constexpr UINT kProbeModal = WM_APP + 72;
+static constexpr UINT kProbeCommand = WM_APP + 73;
 static constexpr LRESULT kProbeMagic = 0x51A7E;
+enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, kAction, kFocus,
+                    kEditState, kEditWindow, kEditChar, kEditKey, kEditText, kRebuild, kScroll,
+                    kFocusedItem, kDropFocus };
+enum ProbeState { kWindow = 1, kVisible = 2, kCaptured = 4, kNoActivate = 8, kOwned = 16,
+                  kNotActive = 32, kOpen = 64, kAnyCapture = 128 };
+enum ProbeEdit { kEditExists = 1, kEditFocused = 2, kEditEnabled = 4 };
+static constexpr int kDropdown = 500, kNumberBox = 600, kFirstCard = 10;
+static constexpr int kOpenState = kWindow | kVisible | kCaptured | kNoActivate | kOwned | kNotActive |
+                                  kOpen | kAnyCapture;
+// UiActionKind values the probe client records.
+enum ActionKind { kNone, kNavigate, kOpenUrl, kCommand, kStep, kTextChange, kTextCommit, kTextBlur,
+                  kTextRevert };
 static constexpr DWORD kTimeout = 15000;
 
 static int passed = 0, failed = 0, assertions = 0;
@@ -79,17 +94,27 @@ struct Probe {
         FreeLibrary(module);
     }
 
-    // Opens the window and waits until it answers on its own thread.
-    HWND Open() {
-        CHECK(open(FALSE));
+    // Opens the window (on `desktop`, if any) and waits until it answers on its own thread.
+    HWND Open(HDESK desktop = nullptr) {
+        CHECK(open(FALSE, desktop));
         HWND hwnd = nullptr;
         for (DWORD waited = 0; !(hwnd = window()) && waited < kTimeout; waited += 10) Sleep(10);
         CHECK(hwnd);
         DWORD_PTR answer = 0;
         CHECK(SendMessageTimeoutW(hwnd, kProbePing, 0, 0, SMTO_BLOCK, kTimeout, &answer));
         CHECK(LRESULT(answer) == kProbeMagic);
+        hwnd_ = hwnd;
         return hwnd;
     }
+
+    // A command run on the window's thread (fixtures/host-dll.inc).
+    int Call(int command, int argument = 0) {
+        DWORD_PTR answer = 0;
+        CHECK(SendMessageTimeoutW(hwnd_, kProbeCommand, command, argument, SMTO_BLOCK, kTimeout,
+                                  &answer));
+        return int(answer);
+    }
+    HWND hwnd_ = nullptr;
 
     void Closed(int expectedExit = 0) {
         CHECK(join(kTimeout) == expectedExit);
@@ -157,7 +182,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("client creation failure leaves no window or class", [&] {
         Probe probe;
-        CHECK(probe.open(TRUE));
+        CHECK(probe.open(TRUE, nullptr));
         CHECK(probe.join(kTimeout) == 1);
         CHECK(probe.count(kAttaches) == 1 && probe.count(kDestroying) == 1 &&
               probe.count(kDestroyed) == 1 && probe.count(kBuilds) == 0);
@@ -202,6 +227,149 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(probe.count(kCancels) >= 1);
         CHECK(!probe.modal());
     });
+
+    // Dropdown popup and text boxes, on a hidden desktop.
+    wchar_t desktopName[64];
+    swprintf(desktopName, 64, L"AiQuotaHostProbe-%lu", GetCurrentProcessId());
+    HDESK desktop = CreateDesktopW(desktopName, nullptr, nullptr, 0, GENERIC_ALL, nullptr);
+    std::printf("CONTEXT popup and text box cases on a hidden desktop: %s\n", desktop ? "yes" : "no");
+
+    Run("popup: owned, never active, holds capture; WM_CANCELMODE to main closes it", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        CHECK(probe.Call(kFocus, kDropdown) == 1);
+        CHECK(probe.Call(kOpenPopup) == 1);
+        CHECK(probe.Call(kPopupState) == kOpenState);
+        probe.Call(kSendMain, WM_CANCELMODE);
+        CHECK(probe.Call(kPopupState) == 0);
+        CHECK(probe.Call(kAction, 0) == 0);
+        CHECK(probe.Call(kFocusedItem) == kDropdown);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+        CHECK(!ClassRegistered(L"AiQuotaProbeUiPopup"));
+    });
+
+    Run("popup: the field's keys move and choose; Esc, Alt, deactivation, a system command and "
+        "wheels elsewhere close it without a choice", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        CHECK(probe.Call(kFocus, kDropdown) == 1);
+        probe.Call(kFieldKey, VK_RETURN);  // Opens
+        CHECK(probe.Call(kPopupState) == kOpenState);
+        probe.Call(kFieldKey, VK_DOWN);
+        probe.Call(kFieldKey, VK_RETURN);  // Chooses the second option
+        CHECK(probe.Call(kPopupState) == 0);
+        CHECK(probe.Call(kAction, 0) == 1 && probe.Call(kAction, 1) == kCommand &&
+              probe.Call(kAction, 2) == 1);
+        // Wheels with the pointer at (0, 0), away from the off-screen popup.
+        for (int close : {MAKELONG(WM_KEYDOWN, VK_ESCAPE), MAKELONG(WM_SYSKEYDOWN, VK_MENU),
+                          MAKELONG(WM_ACTIVATE, WA_INACTIVE), MAKELONG(WM_SYSCOMMAND, SC_RESTORE),
+                          MAKELONG(WM_MOUSEWHEEL, 0), MAKELONG(WM_MOUSEHWHEEL, 0)}) {
+            CHECK(probe.Call(kFocus, kDropdown) == 1);
+            CHECK(probe.Call(kOpenPopup) == 1);
+            if (LOWORD(close) == WM_KEYDOWN) probe.Call(kFieldKey, HIWORD(close));
+            else probe.Call(kSendMain, close);
+            CHECK(probe.Call(kPopupState) == 0);
+        }
+        CHECK(probe.Call(kOpenPopup) == 1);
+        probe.Call(kScroll, 60);  // Scrolling closes it too
+        CHECK(probe.Call(kPopupState) == 0);
+        CHECK(probe.Call(kAction, 0) == 1);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("popup: an outside press hides it and keeps capture until its release; an inside click chooses", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        CHECK(probe.Call(kFocus, kDropdown) == 1);
+        CHECK(probe.Call(kOpenPopup) == 1);
+        probe.Call(kPopupMouse, 2);  // Outside press
+        CHECK(probe.Call(kPopupState) == (kWindow | kCaptured | kNoActivate | kOwned | kNotActive |
+                                          kAnyCapture));
+        probe.Call(kPopupMouse, 3);  // Its release
+        CHECK(probe.Call(kPopupState) == 0);
+        CHECK(probe.Call(kAction, 0) == 0);
+        CHECK(probe.Call(kOpenPopup) == 1);
+        probe.Call(kPopupMouse, 0);
+        probe.Call(kPopupMouse, 1);
+        CHECK(probe.Call(kPopupState) == 0);
+        CHECK(probe.Call(kAction, 0) == 1 && probe.Call(kAction, 2) == 2);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("text box: kept across rebuilds; typing, Esc, Enter, arrows and Tab reach the client; "
+        "focus leaving the window reports nothing", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        CHECK(probe.Call(kEditState) == (kEditExists | kEditEnabled));
+        int window = probe.Call(kEditWindow);
+        CHECK(probe.Call(kFocus, kNumberBox) == 1);
+        CHECK(probe.Call(kEditState) == (kEditExists | kEditFocused | kEditEnabled));
+        probe.Call(kEditKey, VK_END);
+        probe.Call(kEditChar, L'7');
+        CHECK(probe.Call(kAction, 1) == kTextChange && probe.Call(kAction, 3) == 107);
+        probe.Call(kRebuild);
+        CHECK(probe.Call(kEditWindow) == window && probe.Call(kEditText) == 107);
+        probe.Call(kEditKey, VK_ESCAPE);
+        CHECK(probe.Call(kAction, 1) == kTextRevert && probe.Call(kEditText) == 10);
+        probe.Call(kEditKey, VK_RETURN);
+        CHECK(probe.Call(kAction, 1) == kTextCommit);
+        probe.Call(kEditKey, VK_UP);
+        CHECK(probe.Call(kAction, 1) == kStep && probe.Call(kAction, 2) == 1);
+        // Focus leaving the window (another app activating) keeps the draft: no focus loss event.
+        int actions = probe.Call(kAction, 0);
+        probe.Call(kDropFocus);
+        CHECK(probe.Call(kEditState) == (kEditExists | kEditEnabled) && probe.Call(kAction, 0) == actions);
+        CHECK(probe.Call(kFocus, kNumberBox) == 1);
+        // Focus loss reports a blur; the rebuild it requests keeps the text box.
+        probe.Call(kEditKey, VK_TAB);
+        CHECK(probe.Call(kFocusedItem) == kFirstCard);
+        CHECK(probe.Call(kAction, 1) == kTextBlur);
+        CHECK(probe.Call(kEditState) == (kEditExists | kEditEnabled));
+        CHECK(probe.Call(kEditWindow) == window);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("unload with the popup open and capture held, then with a focused text box", [&] {
+        CHECK(desktop);
+        for (bool popup : {true, false}) {
+            Probe probe;
+            probe.Open(desktop);
+            if (popup) {
+                CHECK(probe.Call(kFocus, kDropdown) == 1);
+                CHECK(probe.Call(kOpenPopup) == 1);
+                CHECK(probe.Call(kPopupState) == kOpenState);
+            } else {
+                CHECK(probe.Call(kFocus, kNumberBox) == 1);
+            }
+            probe.unload();
+            probe.Closed();
+            CHECK(!ClassRegistered(L"AiQuotaProbeUiPopup"));
+        }
+    });
+
+    Run("unload during a message box opened over the popup", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        CHECK(probe.Call(kFocus, kDropdown) == 1);
+        CHECK(probe.Call(kOpenPopup) == 1);
+        PostMessageW(probe.hwnd_, kProbeModal, 0, 0);
+        for (DWORD waited = 0; !probe.modal() && waited < kTimeout; waited += 10) Sleep(10);
+        CHECK(probe.modal());
+        CHECK(probe.Call(kPopupState) == 0);  // The modal ended its capture: closed
+        probe.unload();
+        probe.Closed();
+        CHECK(probe.count(kCancels) >= 1);
+    });
+    if (desktop) CloseDesktop(desktop);
 
     std::printf("RESULT %d passed, %d failed; %d assertions\n", passed, failed, assertions);
     CoDecrementMTAUsage(mta);

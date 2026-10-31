@@ -31,7 +31,10 @@ The mod is injected into `explorer.exe`. Execution domains:
   notifies that window via `WSAAsyncSelect`. Network and token storage only; NEVER XAML.
 - **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the native settings window
   and account editor, persists autosaved configuration to mod LocalStorage and requests taskbar
-  UI rebuilds. It must NEVER touch XAML directly.
+  UI rebuilds. It must NEVER touch XAML directly. The rebuilt window (`settings/ui-window.h`)
+  writes settings only through the edit controller (`settings/edits.h`: drafts, revisioned
+  commit queue, navigation and close flushes) and its store (`settings/store.h`, one
+  transaction per edit); notifications reload its baseline and never commit drafts.
 - **History thread** (`HistoryWindowThreadProc`): owns the native history window, graph caches and
   export/confirmation dialogs. No XAML. Cancel tracked modal dialogs and join it before unloading.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
