@@ -1,4 +1,4 @@
-"""Run source-extracted settings tests, offscreen renders and native-host probes."""
+"""Run source-extracted settings tests, offscreen renders and native-host and popup probes."""
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -17,7 +17,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DEFAULT_SOURCE = REPO / "local@taskbar-ai-quota.wh.cpp"
 DEFAULT_COMPILER = Path(r"C:\Program Files\Windhawk\Compiler\bin\clang++.exe")
-SUMMARY_PHASES = ("model", "render", "host-probe")
+SUMMARY_PHASES = ("model", "render", "host-probe", "popup-probe")
 
 
 def hashes():
@@ -79,6 +79,8 @@ def main():
                         help="Mod file to extract; the default generated file is first checked against src/")
     parser.add_argument("--compiler", type=Path, default=DEFAULT_COMPILER, help="Windhawk-compatible clang++ executable")
     parser.add_argument("--output", type=Path, default=HERE / ".out", help="Parent for a new unique run directory (never cleaned)")
+    parser.add_argument("--popup-interactive", action="store_true",
+                        help="Only build the popup probe, then run its interactive mode by hand (logs to the run directory)")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("Windows is required")
@@ -88,37 +90,48 @@ def main():
     root = Path(tempfile.mkdtemp(prefix=datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ-"), dir=parent))
     print(f"Output: {root}", flush=True)
     results = {"source": str(source), "compiler": str(compiler), "output": str(root), "phases": [], "ok": False,
-               "scope": "isolated source-extracted model tests, offscreen renders and a native-host probe DLL; "
-                        "not Explorer, XAML or the mod's settings thread"}
+               "scope": "isolated source-extracted model tests, offscreen renders, a native-host probe DLL and a "
+                        "popup capture probe on a hidden desktop; not Explorer, XAML or the mod's settings thread"}
     try:
         results["source_sha256_before"] = hashlib.sha256(source.read_bytes()).hexdigest()
         results["harness_sha256_before"] = hashes()
         cpp, exe = root / "settings.cpp", root / "settings.exe"
         host_cpp, host_dll, probe = root / "ui-host.cpp", root / "ui-host.dll", root / "host-probe.exe"
+        popup_cpp, popup_exe = root / "popup.cpp", root / "popup-probe.exe"
         flags = [str(compiler), "--target=x86_64-w64-mingw32", "-std=c++23", "-DUNICODE", "-D_UNICODE",
                  "-Wall", "-Wextra", "-O0", "-g", "-static"]
-        # The probe mirrors Windhawk's Windows 10 targeting and MSVC-style wide printf.
+        # The probes mirror Windhawk's Windows 10 targeting and MSVC-style wide printf.
         native = flags + ["-D_WIN32_WINNT=0x0A00", "-DWINVER=0x0A00", "-D__USE_MINGW_ANSI_STDIO=0"]
+        host_libs = ["-ld2d1", "-ldwrite", "-ldwmapi", "-lole32", "-loleaut32", "-lruntimeobject", "-lwindowsapp",
+                     "-luser32", "-lgdi32", "-ladvapi32"]
         extract = [sys.executable, "-B", str(HERE / "extract.py"), "--source", str(source),
                    "--expected-hash", results["source_sha256_before"]]
-        commands = [
+        setup = [
             ("tooling", [sys.executable, "-B", str(HERE / "test_tooling.py")]),
             # A stale generated file would test code that src/ no longer contains.
             *([("freshness", ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                               str(REPO / "generate-mod.ps1"), "-Check"])]
               if source == DEFAULT_SOURCE.resolve() else []),
+        ]
+        popup_build = [
+            ("extract-popup", extract + ["--output", str(popup_cpp), "--target", "popup"]),
+            ("popup-compile", native + ["-municode", "-I", str(HERE), str(popup_cpp), "-o", str(popup_exe),
+                                        *host_libs]),
+        ]
+        commands = [*setup, *popup_build] if args.popup_interactive else [
+            *setup,
             ("extract", extract + ["--output", str(cpp)]),
             ("extract-host", extract + ["--output", str(host_cpp), "--target", "host"]),
             ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), "-ld2d1", "-ldwrite",
                                        "-lwindowscodecs", "-lole32", "-loleaut32", "-lruntimeobject"]),
             ("model", [str(exe)]),
             ("render", [str(exe), "--render-dir", str(root)]),
-            ("host-compile", native + ["-shared", "-I", str(HERE), str(host_cpp), "-o", str(host_dll),
-                                       "-ld2d1", "-ldwrite", "-ldwmapi", "-lole32", "-loleaut32",
-                                       "-lruntimeobject", "-lwindowsapp", "-luser32", "-lgdi32", "-ladvapi32"]),
+            ("host-compile", native + ["-shared", "-I", str(HERE), str(host_cpp), "-o", str(host_dll), *host_libs]),
             ("probe-compile", native + ["-municode", str(HERE / "host-probe.cpp"), "-o", str(probe),
                                         "-lole32", "-luser32"]),
             ("host-probe", [str(probe), str(host_dll)]),
+            *popup_build,
+            ("popup-probe", [str(popup_exe)]),
         ]
         for name, command in commands:
             step, text = phase(root, name, command)
@@ -128,17 +141,26 @@ def main():
                     step["tests"] = summary(name, text)
                     if name == "render":
                         results["renders"] = renders(root, text)
-                    if name == "host-probe":
-                        step["observations"] = re.findall(r"^(?:HANDLES|LOSS|LOG) [^\n]+", text, re.M)
+                    if name.endswith("-probe"):
+                        step["observations"] = re.findall(r"^(?:HANDLES|LOSS|LOG|CONTEXT|OBSERVE|NOTE) [^\n]+",
+                                                          text, re.M)
                 except ValueError as error:
                     step.update(ok=False, evidence_error=str(error))
                     print(error, flush=True)
             if name.startswith("extract") and step["ok"]:
-                manifest = (cpp if name == "extract" else host_cpp).with_suffix(".manifest.json")
+                extracted = {"extract": cpp, "extract-host": host_cpp, "extract-popup": popup_cpp}[name]
+                manifest = extracted.with_suffix(".manifest.json")
                 results.setdefault("extraction", {})[name] = json.loads(manifest.read_text(encoding="utf-8"))
             if not step["ok"]:
                 break
         results["ok"] = len(results["phases"]) == len(commands) and all(step["ok"] for step in results["phases"])
+        if args.popup_interactive and results["ok"]:
+            # By hand, attached to this console, no timeout; the log is the evidence.
+            log = root / "popup-interactive.log"
+            print(f"\n=== popup-interactive ===\nFollow the steps below; the log is {log}", flush=True)
+            process = subprocess.run([str(popup_exe), "--interactive", "--log", str(log)], cwd=root)
+            results["interactive"] = {"log": str(log), "exit_code": process.returncode}
+            print(f"Interactive log: {log}", flush=True)
     except (OSError, ValueError) as error:
         results["error"] = str(error)
         print(f"Verification failed: {error}", flush=True)

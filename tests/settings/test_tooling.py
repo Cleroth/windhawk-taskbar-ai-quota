@@ -15,8 +15,15 @@ import run
 class ToolingTests(unittest.TestCase):
     PASSING = "RESULT 3 passed, 0 failed; 9 assertions\n"
 
-    def invoke_runner(self, arguments=(), freshness_exit=0, model_output="no summary\n"):
-        """Exercise real orchestration with no filesystem writes or child execution."""
+    def invoke_runner(self, arguments=(), freshness_exit=0, model_output="no summary\n", child=None, reads=None):
+        """Exercise real orchestration with no filesystem writes; child execution only through `child`.
+
+        `reads` collects the names of the files read as text (extraction manifests)."""
+        def read_text(path, **_):
+            if reads is not None:
+                reads.append(path.name)
+            return "{}"
+
         def fake_phase(root, name, command):
             code = freshness_exit if name == "freshness" else 0
             text = model_output if name == "model" else self.PASSING if name in run.SUMMARY_PHASES else ""
@@ -28,23 +35,26 @@ class ToolingTests(unittest.TestCase):
               patch.object(Path, "mkdir"),
               patch.object(run.tempfile, "mkdtemp", return_value=str(Path.cwd())),
               patch.object(Path, "read_bytes", return_value=b"settled source"),
-              patch.object(Path, "read_text", return_value="{}"),
+              patch.object(Path, "read_text", autospec=True, side_effect=read_text),
               patch.object(Path, "write_text") as saved,
               patch.object(run, "hashes", return_value={"fixture": "stable"}),
               patch.object(run, "renders", return_value=["render-a.png"]),
               patch.object(run, "phase", side_effect=fake_phase) as phases,
-              patch.object(run.subprocess, "run", side_effect=AssertionError("Child execution forbidden in tooling tests")),
+              patch.object(run.subprocess, "run",
+                           side_effect=child or AssertionError("Child execution forbidden in tooling tests")),
               redirect_stdout(output)):
             code = run.main()
         return code, json.loads(saved.call_args.args[0]), [call.args[1] for call in phases.call_args_list]
 
     PHASES = ["extract", "extract-host", "model-compile", "model", "render", "host-compile",
-              "probe-compile", "host-probe"]
+              "probe-compile", "host-probe", "extract-popup", "popup-compile", "popup-probe"]
 
     def test_default_phases_and_summary_required(self):
-        code, results, names = self.invoke_runner(model_output=self.PASSING)
+        reads = []
+        code, results, names = self.invoke_runner(model_output=self.PASSING, reads=reads)
         self.assertEqual(code, 0)
         self.assertEqual(names, ["tooling", "freshness", *self.PHASES])
+        self.assertEqual(reads, ["settings.manifest.json", "ui-host.manifest.json", "popup.manifest.json"])
         self.assertEqual(results["phases"][-1]["tests"], {"passed": 3, "failed": 0, "assertions": 9})
         self.assertEqual(results["renders"], ["render-a.png"])
         code, results, _ = self.invoke_runner()
@@ -56,6 +66,24 @@ class ToolingTests(unittest.TestCase):
         code, results, names = self.invoke_runner(freshness_exit=1)
         self.assertEqual(code, 1)
         self.assertFalse(results["ok"])
+        self.assertEqual(names, ["tooling", "freshness"])
+
+    def test_popup_interactive_builds_only_the_popup_probe_then_runs_it_attached(self):
+        launched = []
+
+        def child(command, **_):
+            launched.append(command)
+            return run.subprocess.CompletedProcess(command, 0)
+
+        reads = []
+        code, results, names = self.invoke_runner(["--popup-interactive"], child=child, reads=reads)
+        self.assertEqual(code, 0)
+        self.assertEqual(names, ["tooling", "freshness", "extract-popup", "popup-compile"])
+        self.assertEqual(reads, ["popup.manifest.json"])
+        self.assertEqual(len(launched), 1)
+        self.assertEqual(launched[0][1:3], ["--interactive", "--log"])
+        self.assertEqual(results["interactive"]["exit_code"], 0)
+        _, _, names = self.invoke_runner(["--popup-interactive"], freshness_exit=1)
         self.assertEqual(names, ["tooling", "freshness"])
 
     def test_explicit_other_source_skips_freshness(self):

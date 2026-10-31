@@ -50,8 +50,9 @@ its bundled clang. There is no `.sln`/`.vcxproj`. Do NOT use `msbuild`.
   regressions and native-control probes (`--capture` saves rendered images). The suite uses
   bundled clang, not `msbuild`/`vstest.console`.
 - `python tests/settings/run.py` tests the extracted meter model, UI toolkit and settings
-  builders the same way, renders the settings window offscreen and probes the toolkit's native
-  window host; guide: [tests/settings/AGENTS.md](tests/settings/AGENTS.md).
+  builders the same way, renders the settings window offscreen, probes the toolkit's native
+  window host and the dropdown popup's capture/activation (`--popup-interactive`: by hand);
+  guide: [tests/settings/AGENTS.md](tests/settings/AGENTS.md).
 - A full integration check still requires Windhawk loading the mod into `explorer.exe`.
 - When changed native-control behavior is hidden by stubs, verify the assumed API/message contract
   with an isolated real-control probe under relevant, verified host contexts. Report caller-logic,
@@ -59,6 +60,28 @@ its bundled clang. There is no `.sln`/`.vcxproj`. Do NOT use `msbuild`.
   native behavior.
 - For changes to persisted settings or identity keys, runtime-test an upgrade from the current
   catalog version with non-default accounts, visibility, configuration, and existing sign-ins.
+
+## Storage audit
+
+`pwsh storage-audit.ps1 snapshot` saves a read-only JSON snapshot of the mod's stored state to
+`%LOCALAPPDATA%\TaskbarAIQuota-audit\` (`-Folder`; `-ModId`, default `local@taskbar-ai-quota`):
+Windhawk LocalStorage (`settings_v1` parsed, `hiddenAccounts`, each `auth_*` sign-in as presence
+plus a SHA-256 of its encrypted value; never decrypted, copied or printed), the HKCU
+`RecordHistory` consent, and history journal metadata (files, header, per-day and per-history-ID
+sample counts). It writes only the snapshot. Take one before installing a step that writes
+settings or sign-ins.
+
+`pwsh storage-audit.ps1 compare -Baseline <snapshot.json>` saves a new snapshot (or reads
+`-Current`) and classifies each difference: expected (`-Edited` fields: top-level names,
+`<label>.<field>`, `accountOrder`, `consent`; `-Disposable` account labels), tolerated (sign-in hash
+changed while present, journal growth, retention pruning, storage-cap compaction) or unexpected
+(anything else, including history ID changes and sign-ins appearing or disappearing). Exit 1 means
+something unexpected.
+
+It's an audit, not a backup. Restore only compatible scalar settings, by hand, with the mod
+disabled; restoring an old `settings_v1` after a rename can orphan the moved sign-in. Sign-in
+hashes can't restore sign-ins (refresh tokens rotate), and journal counts can't restore pruned
+history. Rename/remove/add tests use disposable accounts only.
 
 # Publishing to the windhawk-mods catalog
 

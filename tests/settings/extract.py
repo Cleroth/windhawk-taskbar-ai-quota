@@ -32,6 +32,8 @@ HOST = [
 TARGETS = {
     "model": (MODEL, "harness.hpp", "fixtures/main.inc"),
     "host": (HOST, "host.hpp", "fixtures/host-dll.inc"),
+    # The same host as the owner window of the capture/foreground popup probe.
+    "popup": (HOST, "host.hpp", "fixtures/popup-probe.inc"),
 }
 
 
