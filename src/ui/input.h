@@ -117,6 +117,30 @@ static UiOptionIntent UiOptionKey(int count, int highlight, UINT key) {
     return {};
 }
 
+// Sliders: the value under a pointer x (rounded to whole steps, clamped), and what keys step it
+// by: arrows 1, Page Up/Down a tenth of the range, Home/End all of it (the step clamps).
+static int UiSliderValueAt(const UiItem& slider, float x) {
+    float width = slider.rect.right - slider.rect.left;
+    if (width <= 0 || slider.maximum <= slider.minimum) return slider.minimum;
+    float t = std::clamp((x - slider.rect.left) / width, 0.0f, 1.0f);
+    return slider.minimum + int(std::lround(t * float(slider.maximum - slider.minimum)));
+}
+
+static std::optional<int> UiSliderKey(const UiItem& slider, UINT key) {
+    int range = std::max(slider.maximum - slider.minimum, 1);
+    switch (key) {
+        case VK_RIGHT:
+        case VK_UP: return 1;
+        case VK_LEFT:
+        case VK_DOWN: return -1;
+        case VK_PRIOR: return std::max(range / 10, 1);
+        case VK_NEXT: return -std::max(range / 10, 1);
+        case VK_HOME: return -range;
+        case VK_END: return range;
+    }
+    return std::nullopt;
+}
+
 static float UiClampScroll(float offset, float viewportHeight, float contentHeight) {
     return std::clamp(offset, 0.0f, std::max(contentHeight - viewportHeight, 0.0f));
 }

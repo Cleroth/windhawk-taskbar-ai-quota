@@ -20,24 +20,25 @@ using UnloadFn = void (*)();
 using JoinFn = int (*)(DWORD);
 
 // Mirrors the DLL's counters and messages.
-enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult };
+enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult };
 static constexpr UINT kProbePing = WM_APP + 70;
 static constexpr UINT kProbeLoseTarget = WM_APP + 71;
 static constexpr UINT kProbeModal = WM_APP + 72;
 static constexpr UINT kProbeCommand = WM_APP + 73;
+static constexpr UINT kProbeColor = WM_APP + 74;
 static constexpr LRESULT kProbeMagic = 0x51A7E;
 enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, kAction, kFocus,
                     kEditState, kEditWindow, kEditChar, kEditKey, kEditText, kRebuild, kScroll,
-                    kFocusedItem, kDropFocus };
+                    kFocusedItem, kDropFocus, kSliderMouse, kPreviewMouse, kPreviewWheel, kDropCapture };
 enum ProbeState { kWindow = 1, kVisible = 2, kCaptured = 4, kNoActivate = 8, kOwned = 16,
                   kNotActive = 32, kOpen = 64, kAnyCapture = 128 };
 enum ProbeEdit { kEditExists = 1, kEditFocused = 2, kEditEnabled = 4 };
-static constexpr int kDropdown = 500, kNumberBox = 600, kFirstCard = 10;
+static constexpr int kDropdown = 500, kNumberBox = 600, kSlider = 700;
 static constexpr int kOpenState = kWindow | kVisible | kCaptured | kNoActivate | kOwned | kNotActive |
                                   kOpen | kAnyCapture;
 // UiActionKind values the probe client records.
 enum ActionKind { kNone, kNavigate, kOpenUrl, kCommand, kStep, kTextChange, kTextCommit, kTextBlur,
-                  kTextRevert };
+                  kTextRevert, kSlide, kSlideEnd, kPan };
 static constexpr DWORD kTimeout = 15000;
 
 static int passed = 0, failed = 0, assertions = 0;
@@ -126,6 +127,20 @@ struct Probe {
 static bool ClassRegistered(PCWSTR name) {
     WNDCLASSEXW info{sizeof(info)};
     return GetClassInfoExW(GetModuleHandleW(nullptr), name, &info) != FALSE;
+}
+
+// A visible dialog (#32770) of the window's thread, or nullptr.
+static HWND ThreadDialog(HWND window) {
+    HWND found = nullptr;
+    EnumThreadWindows(GetWindowThreadProcessId(window, nullptr), [](HWND candidate, LPARAM param) -> BOOL {
+        wchar_t name[16] = {};
+        if (GetClassNameW(candidate, name, 16) && wcscmp(name, L"#32770") == 0 && IsWindowVisible(candidate)) {
+            *reinterpret_cast<HWND*>(param) = candidate;
+            return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&found));
+    return found;
 }
 
 int wmain(int argc, wchar_t** argv) {
@@ -329,7 +344,7 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(probe.Call(kFocus, kNumberBox) == 1);
         // Focus loss reports a blur; the rebuild it requests keeps the text box.
         probe.Call(kEditKey, VK_TAB);
-        CHECK(probe.Call(kFocusedItem) == kFirstCard);
+        CHECK(probe.Call(kFocusedItem) == kSlider);  // The next stop after the box
         CHECK(probe.Call(kAction, 1) == kTextBlur);
         CHECK(probe.Call(kEditState) == (kEditExists | kEditEnabled));
         CHECK(probe.Call(kEditWindow) == window);
@@ -352,6 +367,91 @@ int wmain(int argc, wchar_t** argv) {
             probe.unload();
             probe.Closed();
             CHECK(!ClassRegistered(L"AiQuotaProbeUiPopup"));
+        }
+    });
+
+    Run("slider: a press jumps and focuses, a drag reports values, the release ends it; a thumb grab "
+        "doesn't jump, also at the track's end; losing capture or WM_CANCELMODE ends a drag", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        probe.Call(kSliderMouse, 0 * 1000 + 25);  // Press at 25%: jumps there
+        CHECK(probe.Call(kAction, 1) == kSlide && probe.Call(kAction, 2) == 25);
+        CHECK(probe.Call(kFocusedItem) == kSlider);
+        probe.Call(kSliderMouse, 1 * 1000 + 75);
+        CHECK(probe.Call(kAction, 1) == kSlide && probe.Call(kAction, 2) == 75);
+        probe.Call(kSliderMouse, 2 * 1000 + 75);
+        CHECK(probe.Call(kAction, 1) == kSlideEnd);
+        int actions = probe.Call(kAction, 0);
+        probe.Call(kSliderMouse, 0 * 1000 + 75);  // On the thumb: no jump
+        CHECK(probe.Call(kAction, 0) == actions);
+        probe.Call(kSliderMouse, 1 * 1000 + 90);
+        CHECK(probe.Call(kAction, 1) == kSlide && probe.Call(kAction, 2) == 90);
+        probe.Call(kDropCapture);
+        CHECK(probe.Call(kAction, 1) == kSlideEnd);
+        actions = probe.Call(kAction, 0);
+        probe.Call(kSliderMouse, 1 * 1000 + 10);  // No drag any more
+        CHECK(probe.Call(kAction, 0) == actions);
+        // WM_CANCELMODE to the main window ends a drag on the viewport.
+        probe.Call(kSliderMouse, 0 * 1000 + 50);
+        CHECK(probe.Call(kAction, 1) == kSlide && probe.Call(kAction, 2) == 50);
+        probe.Call(kSendMain, WM_CANCELMODE);
+        CHECK(probe.Call(kAction, 1) == kSlideEnd && probe.Call(kPopupState) == 0);
+        actions = probe.Call(kAction, 0);
+        probe.Call(kSliderMouse, 1 * 1000 + 20);
+        CHECK(probe.Call(kAction, 0) == actions);
+        // The thumb at the maximum, pressed at its center (the track's end), grabs it.
+        probe.Call(kSliderMouse, 0 * 1000 + 100);
+        probe.Call(kSliderMouse, 2 * 1000 + 100);
+        CHECK(probe.Call(kAction, 1) == kSlideEnd);
+        actions = probe.Call(kAction, 0);
+        probe.Call(kSliderMouse, 0 * 1000 + 100);
+        CHECK(probe.Call(kAction, 0) == actions);
+        probe.Call(kSliderMouse, 1 * 1000 + 75);
+        CHECK(probe.Call(kAction, 1) == kSlide && probe.Call(kAction, 2) == 75);
+        probe.Call(kSliderMouse, 2 * 1000 + 75);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("slider keys step; a preview pans by drag and sideways wheel without taking focus", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        CHECK(probe.Call(kFocus, kSlider) == 1);
+        for (auto [key, step] : {std::pair{VK_RIGHT, 1}, std::pair{VK_DOWN, -1}, std::pair{VK_PRIOR, 10},
+                                 std::pair{VK_END, 100}, std::pair{VK_HOME, -100}}) {
+            probe.Call(kFieldKey, key);
+            CHECK(probe.Call(kAction, 1) == kStep && probe.Call(kAction, 2) == step);
+        }
+        CHECK(probe.Call(kFocusedItem) == kSlider);
+        probe.Call(kPreviewMouse, 0);
+        CHECK(probe.Call(kFocusedItem) == kSlider);
+        probe.Call(kPreviewMouse, 1 * 1000 + 60);
+        CHECK(probe.Call(kAction, 1) == kPan && probe.Call(kAction, 2) > 0);
+        int actions = probe.Call(kAction, 0);
+        probe.Call(kPreviewMouse, 2 * 1000);
+        CHECK(probe.Call(kAction, 0) == actions);  // The release activates nothing
+        probe.Call(kPreviewWheel);
+        CHECK(probe.Call(kAction, 1) == kPan && probe.Call(kAction, 2) == -48);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("color dialog: a user close and unload's close cancel it, then the window closes", [&] {
+        CHECK(desktop);
+        for (bool unload : {false, true}) {
+            Probe probe;
+            HWND hwnd = probe.Open(desktop);
+            PostMessageW(hwnd, kProbeColor, 0, 0);
+            HWND dialog = nullptr;
+            for (DWORD waited = 0; !(dialog = ThreadDialog(hwnd)) && waited < kTimeout; waited += 10) Sleep(10);
+            CHECK(dialog);
+            if (unload) probe.unload();
+            else PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            probe.Closed();
+            CHECK(probe.count(kCancels) >= 1 && probe.count(kColorResult) == 1);
+            CHECK(!IsWindow(dialog));
         }
     });
 

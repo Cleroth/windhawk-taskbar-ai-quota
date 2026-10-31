@@ -218,18 +218,18 @@ static void RunUiTests() {
     Run("settings shell: navigation, header, capped and centered content", [] {
         UiGraphics& g = TestGraphics();
         SettingsView view;
-        view.page = SettingsUiPage::Layout;
+        view.page = SettingsUiPage::Display;
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         int navs = 0;
         for (const UiItem& item : frame.main) {
             if (item.kind != UiItemKind::Nav) continue;
             navs++;
-            CHECK(item.selected == (item.text == L"Layout"));
+            CHECK(item.selected == (item.text == L"Display"));
             CHECK_NEAR(item.rect.bottom - item.rect.top, 38);
         }
         CHECK(navs == 6);
-        CHECK(frame.main.back().runs[0].text == L"Layout");
+        CHECK(frame.main.back().runs[0].text == L"Display");
         CHECK_NEAR(frame.viewport.left, 260);
         CHECK_NEAR(frame.viewport.top, 56);
         CHECK_NEAR(frame.viewport.bottom, 820);

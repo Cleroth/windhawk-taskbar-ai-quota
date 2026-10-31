@@ -2,28 +2,32 @@
 // pass the factories and the target; nothing here touches windows or globals. Coordinates are
 // DIPs; targets carry the window DPI.
 
-// Device-independent resources shared by every target of one UI thread: resolved font families,
-// text formats, effect-free layouts (measuring and plain drawing) and path geometries. Owned by
-// that thread's graphics scope, released before the apartment is.
+// Device-independent resources shared by every target of one UI thread: font collections and
+// resolved families, text formats, effect-free layouts (measuring and plain drawing) and path
+// geometries. Owned by that thread's graphics scope, released before the apartment is.
 struct UiGraphics {
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
     winrt::com_ptr<ID2D1StrokeStyle> roundCaps;
-    std::array<std::wstring, 3> families;
+    winrt::com_ptr<IDWriteFontCollection> fonts, typographicFonts;
+    std::array<std::wstring, std::size(kUiFamilyNames)> families;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextFormat>> formats;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
     std::map<PCWSTR, winrt::com_ptr<ID2D1PathGeometry>> paths;
 };
 
 // Resources bound to one render target: a recolored brush for primitives, drawing-effect
-// brushes by color, and layouts that carry those effects. Discarded with the target.
+// brushes by color, gradient brushes by color pair, and layouts that carry those effects.
+// Discarded with the target.
 struct UiTargetCache {
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
     std::map<uint32_t, winrt::com_ptr<ID2D1SolidColorBrush>> effects;
+    std::map<uint64_t, winrt::com_ptr<ID2D1LinearGradientBrush>> gradients;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
 
     void Clear() {
         layouts.clear();
+        gradients.clear();
         effects.clear();
         brush = nullptr;
     }
@@ -45,6 +49,56 @@ static void UiTrimCaches(UiGraphics& g) {
     if (g.layouts.size() > 512) g.layouts.clear();
 }
 
+// A family's font collection, its name resolved (preferred, else fallback) on first use. The
+// taskbar's family is the typographic one: the variable font has no WWS family of that name.
+static IDWriteFontCollection* UiFontCollection(UiGraphics& g, UiFamily family) {
+    bool typographic = family == UiFamily::Taskbar;
+    winrt::com_ptr<IDWriteFontCollection>& fonts = typographic ? g.typographicFonts : g.fonts;
+    if (!fonts && typographic) {
+        if (auto factory = g.dwrite.try_as<IDWriteFactory6>()) {
+            winrt::com_ptr<IDWriteFontCollection2> collection;
+            if (SUCCEEDED(factory->GetSystemFontCollection(
+                    FALSE, DWRITE_FONT_FAMILY_MODEL_TYPOGRAPHIC, collection.put()))) {
+                fonts = collection;
+            }
+        }
+    }
+    if (!fonts) winrt::check_hresult(g.dwrite->GetSystemFontCollection(fonts.put(), FALSE));
+    std::wstring& name = g.families[size_t(family)];
+    if (name.empty()) {
+        UINT32 index = 0;
+        BOOL exists = FALSE;
+        PCWSTR preferred = kUiFamilyNames[size_t(family)][0];
+        name = SUCCEEDED(fonts->FindFamilyName(preferred, &index, &exists)) && exists ?
+                   preferred : kUiFamilyNames[size_t(family)][1];
+    }
+    return fonts.get();
+}
+
+// A style's font metrics in DIPs; zero when its family has no matching font.
+struct UiFontMetrics {
+    float ascent = 0, descent = 0, lineGap = 0, capHeight = 0;
+};
+
+static UiFontMetrics UiFontMetricsFor(UiGraphics& g, const UiTextStyle& style) {
+    IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
+    UINT32 index = 0;
+    BOOL exists = FALSE;
+    winrt::com_ptr<IDWriteFontFamily> family;
+    winrt::com_ptr<IDWriteFont> font;
+    DWRITE_FONT_METRICS metrics{};
+    if (SUCCEEDED(fonts->FindFamilyName(g.families[size_t(style.family)].c_str(), &index, &exists)) &&
+        exists && SUCCEEDED(fonts->GetFontFamily(index, family.put())) &&
+        SUCCEEDED(family->GetFirstMatchingFont(style.weight, DWRITE_FONT_STRETCH_NORMAL,
+                                               DWRITE_FONT_STYLE_NORMAL, font.put()))) {
+        font->GetMetrics(&metrics);
+    }
+    if (!metrics.designUnitsPerEm) return {};
+    float unit = style.size / float(metrics.designUnitsPerEm);
+    return {float(metrics.ascent) * unit, float(metrics.descent) * unit,
+            float(metrics.lineGap) * unit, float(metrics.capHeight) * unit};
+}
+
 static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
     std::wstring key = std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) +
                        L'|' + std::to_wstring(style.lineHeight) + L'|' +
@@ -52,39 +106,24 @@ static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
     auto& format = g.formats[key];
     if (format) return format.get();
 
-    winrt::com_ptr<IDWriteFontCollection> fonts;
-    winrt::check_hresult(g.dwrite->GetSystemFontCollection(fonts.put(), FALSE));
-    std::wstring& family = g.families[size_t(style.family)];
-    if (family.empty()) {
-        UINT32 index = 0;
-        BOOL exists = FALSE;
-        PCWSTR preferred = kUiFamilyNames[size_t(style.family)][0];
-        family = SUCCEEDED(fonts->FindFamilyName(preferred, &index, &exists)) && exists ?
-                     preferred : kUiFamilyNames[size_t(style.family)][1];
-    }
+    IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
     winrt::check_hresult(g.dwrite->CreateTextFormat(
-        family.c_str(), nullptr, style.weight, DWRITE_FONT_STYLE_NORMAL,
+        g.families[size_t(style.family)].c_str(), fonts, style.weight, DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL, style.size, L"en-us", format.put()));
+    // The taskbar's XAML text: optical size follows the font size.
+    if (style.family == UiFamily::Taskbar) {
+        if (auto format3 = format.try_as<IDWriteTextFormat3>()) {
+            format3->SetAutomaticFontAxes(DWRITE_AUTOMATIC_FONT_AXES_OPTICAL_SIZE);
+        }
+    }
 
     // Uniform line height with the baseline where CSS puts it: half the leading above the
     // ascent. Fonts without metrics keep DirectWrite's default spacing.
-    UINT32 index = 0;
-    BOOL exists = FALSE;
-    winrt::com_ptr<IDWriteFontFamily> fontFamily;
-    winrt::com_ptr<IDWriteFont> font;
-    if (SUCCEEDED(fonts->FindFamilyName(family.c_str(), &index, &exists)) && exists &&
-        SUCCEEDED(fonts->GetFontFamily(index, fontFamily.put())) &&
-        SUCCEEDED(fontFamily->GetFirstMatchingFont(style.weight, DWRITE_FONT_STRETCH_NORMAL,
-                                                   DWRITE_FONT_STYLE_NORMAL, font.put()))) {
-        DWRITE_FONT_METRICS metrics{};
-        font->GetMetrics(&metrics);
-        if (metrics.designUnitsPerEm) {
-            float unit = style.size / float(metrics.designUnitsPerEm);
-            float ascent = float(metrics.ascent) * unit;
-            float descent = float(metrics.descent) * unit;
-            format->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, style.lineHeight,
-                                   (style.lineHeight - ascent - descent) / 2 + ascent);
-        }
+    UiFontMetrics metrics = style.lineHeight > 0 ? UiFontMetricsFor(g, style) : UiFontMetrics{};
+    if (metrics.ascent + metrics.descent > 0) {
+        format->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, style.lineHeight,
+                               (style.lineHeight - metrics.ascent - metrics.descent) / 2 +
+                                   metrics.ascent);
     }
     return format.get();
 }
@@ -125,13 +164,16 @@ static ID2D1SolidColorBrush* UiBrush(ID2D1RenderTarget* target, UiTargetCache& c
     return cache.brush.get();
 }
 
+// A color as 0xAARRGGBB: cache keys.
+static uint32_t UiColorKey(D2D1_COLOR_F color) {
+    auto channel = [](float v) { return uint32_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+    return channel(color.a) << 24 | channel(color.r) << 16 | channel(color.g) << 8 | channel(color.b);
+}
+
 // A brush that stays this color: drawing effects keep a reference to it.
 static ID2D1SolidColorBrush* UiEffectBrush(ID2D1RenderTarget* target, UiTargetCache& cache,
                                            D2D1_COLOR_F color) {
-    auto channel = [](float v) { return uint32_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
-    uint32_t key = channel(color.a) << 24 | channel(color.r) << 16 | channel(color.g) << 8 |
-                   channel(color.b);
-    auto& brush = cache.effects[key];
+    auto& brush = cache.effects[UiColorKey(color)];
     if (!brush) winrt::check_hresult(target->CreateSolidColorBrush(color, brush.put()));
     return brush.get();
 }
@@ -165,6 +207,27 @@ static void UiFillRect(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_REC
     } else {
         target->FillRectangle(&rect, UiBrush(target, cache, color));
     }
+}
+
+// A linear gradient across the rectangle, left to right or top to bottom.
+static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_RECT_F rect,
+                           float radius, D2D1_COLOR_F from, D2D1_COLOR_F to, bool vertical) {
+    auto& brush = cache.gradients[uint64_t(UiColorKey(from)) << 32 | UiColorKey(to)];
+    if (!brush) {
+        const D2D1_GRADIENT_STOP stops[] = {{0, from}, {1, to}};
+        winrt::com_ptr<ID2D1GradientStopCollection> collection;
+        winrt::check_hresult(target->CreateGradientStopCollection(
+            stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, collection.put()));
+        D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES line{{0, 0}, {1, 0}};
+        D2D1_BRUSH_PROPERTIES properties{1, D2D1::Matrix3x2F::Identity()};
+        winrt::check_hresult(target->CreateLinearGradientBrush(&line, &properties, collection.get(),
+                                                               brush.put()));
+    }
+    brush->SetStartPoint({rect.left, rect.top});
+    brush->SetEndPoint(vertical ? D2D1_POINT_2F{rect.left, rect.bottom} :
+                                  D2D1_POINT_2F{rect.right, rect.top});
+    D2D1_ROUNDED_RECT rounded{rect, radius, radius};
+    target->FillRoundedRectangle(&rounded, brush.get());
 }
 
 // A border of `pixels` device pixels drawn inside the snapped rectangle.

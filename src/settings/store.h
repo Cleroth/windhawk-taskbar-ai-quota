@@ -13,12 +13,18 @@ struct SettingsProductionStore final : SettingsStore {
                            g_historyStorageError   ? SettingsRecording::StorageError :
                                                      SettingsRecording::Recording;
         // Display N is the Nth taskbar in the order the taskbar code targets (primary first).
+        // The preview takes the primary taskbar's height, converted with that taskbar's DPI.
         std::vector<TaskbarDisplayInfo> taskbars = FindCurrentProcessTaskbarDisplays();
         for (size_t i = 0; i < taskbars.size(); i++) {
             const RECT& rect = taskbars[i].rect;
             status.displays.push_back({int(i) + 1, int(std::abs(rect.right - rect.left)),
                                        int(std::abs(rect.bottom - rect.top)), taskbars[i].primary});
+            RECT window{};
+            if (taskbars[i].primary && !status.taskbarHeight && GetWindowRect(taskbars[i].hWnd, &window)) {
+                status.taskbarHeight = double(window.bottom - window.top) * 96 / WindowDpi(taskbars[i].hWnd);
+            }
         }
+        status.visualTest = g_visualTestMode.load(std::memory_order_acquire);
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
         PWSTR localAppData = nullptr;
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr,

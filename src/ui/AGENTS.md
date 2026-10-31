@@ -8,10 +8,13 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - Pure (`tokens.h`, `draw.h`, `svg-path.h`, `rich-text.h`, `items.h`, `paint.h`, `input.h`, and
   the settings page/shell builders): explicit inputs only; no HWND, registry, WinRT, globals or
   `Wh_Log`. `tests/settings` extracts and renders them; fix impurities here, never in tests.
-- Native (`system-theme.h`, `surface.h`, `popup.h`, `text-box.h`, `host.h`): window, registry and
-  WinRT calls; covered by the `tests/settings` native-host probe DLL, never by the render harness.
-  `popup.h` and `text-box.h` hold component state and mechanics; their window procedures live in
-  `host.h`, which routes everything to them.
+- Native (`system-theme.h`, `surface.h`, `popup.h`, `text-box.h`, `host.h`, `color-dialog.h`):
+  window, registry and WinRT calls; covered by the `tests/settings` native-host probe DLL, never by
+  the render harness. `popup.h` and `text-box.h` hold component state and mechanics; their window
+  procedures live in `host.h`, which routes everything to them.
+- Client-drawn items (`Preview`, a `Gallery` card's thumbnail) paint through
+  `UiHostClient::PaintCustom` with the target in item coordinates; the settings window's painter is
+  pure (`settings/preview.h`) and the render harness calls it directly.
 
 ## Lifetime and teardown
 
@@ -36,8 +39,9 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - Copy an item's action before any call that can pump messages, rebuild or show a modal
   (`SetFocus`, message boxes, client calls). Structural rebuilds are requested with
   `UiHostRequestRebuild` and run when the outermost dispatch unwinds.
-- `WM_CLOSE`: cancel a tracked modal and retry; fault and unload close without saving; a
-  deliberate close asks the client (`PrepareClose`). Nothing commits once `WM_DESTROY` starts.
+- `WM_CLOSE`: cancel a tracked modal (message box, `UiChooseColor`'s dialog) and retry; fault and
+  unload close without saving; a deliberate close asks the client (`PrepareClose`). Nothing
+  commits once `WM_DESTROY` starts.
 
 ## Input
 
@@ -57,6 +61,12 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
   Up/Down and focus moving elsewhere in the window as actions; focus leaving the window
   (deactivation, a modal) reports nothing, so a half-typed value never commits on its own. Never
   commit inside the focus-loss notification.
+- Sliders: a press focuses and jumps (unless it grabs the thumb, which hit-tests beyond the
+  track's ends), drags report `Slide` values, the release, a capture loss or `WM_CANCELMODE`
+  reports `SlideEnd`; arrows, Page Up/Down and Home/End `Step`. Clients draft on `Slide` and queue
+  the commit on `SlideEnd`, also when a modal's capture loss caused it (the queue runs after it).
+- Preview strips: drag and the sideways wheel (or Shift+wheel) report `Pan`; never a tab stop and
+  a press doesn't move focus.
 
 ## Evidence
 

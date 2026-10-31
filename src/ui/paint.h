@@ -3,12 +3,18 @@
 // every control.
 
 // open: the dropdown whose popup is showing; editing: the number box whose native text box has
-// keyboard focus.
+// keyboard focus; pointer: where the pointer is over this surface, in item coordinates (far
+// away when it isn't), for client-drawn hover.
 struct UiPaintState {
     UiFocusRef hot, pressed, focus;
     bool focusVisible = false;
     uint32_t open = 0, editing = 0;
+    D2D1_POINT_2F pointer{-1e9f, -1e9f};
 };
+
+// Draws a client-drawn item (a Preview, a Gallery card's thumbnail) with the target's transform
+// in item coordinates.
+using UiCustomPaint = std::function<void(const UiItem&)>;
 
 static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
     color.a *= opacity;
@@ -20,7 +26,7 @@ static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
 static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache,
                          const UiPalette& p, const std::vector<UiItem>& items,
                          const UiPaintState& state, D2D1_POINT_2F offset, float scale, float top,
-                         float bottom) {
+                         float bottom, const UiCustomPaint* custom = nullptr) {
     D2D1_MATRIX_3X2_F base{};
     target->GetTransform(&base);
     D2D1::Matrix3x2F shifted = D2D1::Matrix3x2F::Translation(offset.x, offset.y) *
@@ -254,7 +260,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 D2D1_RECT_F clip = UiNumberBoxTextRect(item);
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
                 target->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, 10000, false),
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, clip.right - clip.left, false, item.align),
                              {clip.left, centerY - label.lineHeight / 2},
                              item.enabled ? p.text : p.textDisabled);
                 target->PopAxisAlignedClip();
@@ -274,21 +281,96 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              {r.left, centerY - 5}, item.enabled ? p.textSecondary : p.textDisabled);
                 break;
             }
+            // Slider (WinUI): a 4 DIP track with the accent fill up to the value; a 20 DIP thumb
+            // whose accent core grows under the pointer and shrinks while dragged.
+            case UiItemKind::Slider: {
+                float thumb = UiSliderThumbX(item);
+                bool dragging = item.enabled && state.pressed == UiFocusRef{item.id, -1};
+                D2D1_COLOR_F accent = !item.enabled ? p.accentDisabled : hc ? p.highlight : p.accent;
+                UiFillRect(target, cache, {r.left, centerY - 2, r.right, centerY + 2}, 2,
+                           item.enabled ? p.controlStrong : p.textDisabled, scale);
+                UiFillRect(target, cache, {r.left, centerY - 2, thumb, centerY + 2}, 2, accent, scale);
+                D2D1_RECT_F knob{thumb - 10, centerY - 10, thumb + 10, centerY + 10};
+                UiFillRect(target, cache, knob, 10, p.controlSolid, scale);
+                UiStrokeRect(target, cache, knob, 10, hc && (hot || dragging) ? p.highlight : p.controlBorder,
+                             1, scale);
+                float core = dragging ? 4.0f : item.enabled && hot ? 7.0f : 5.0f;
+                UiFillRect(target, cache, {thumb - core, centerY - core, thumb + core, centerY + core},
+                           core, accent, scale);
+                break;
+            }
+            // Swatch: a color circle with a thin edge; the current color gets an accent ring
+            // 2 DIP out, a hovered one a thin ring there.
+            case UiItemKind::Swatch: {
+                COLORREF rgb = COLORREF(item.action.value);
+                D2D1_COLOR_F color{float(GetRValue(rgb)) / 255, float(GetGValue(rgb)) / 255,
+                                   float(GetBValue(rgb)) / 255, item.enabled ? 1.0f : 0.4f};
+                float radius = width / 2;
+                UiFillRect(target, cache, r, radius, color, scale);
+                UiStrokeRect(target, cache, r, radius, hc ? p.text : UiFade(p.text, 0.28f), 1, scale);
+                if (item.selected) {
+                    UiStrokeRect(target, cache, UiInflate(r, 4, 4), radius + 4, hc ? p.highlight : p.accent,
+                                 std::max(1.0f, std::round(2 * scale)), scale);
+                } else if (item.enabled && hot) {
+                    UiStrokeRect(target, cache, UiInflate(r, 4, 4), radius + 4,
+                                 hc ? p.highlight : p.textSecondary, 1, scale);
+                }
+                break;
+            }
+            // Gallery card: reacts to the pointer as a whole; the chosen one has a 2 DIP accent
+            // border. The client draws the thumbnail; the name sits under it.
+            case UiItemKind::Gallery: {
+                bool active = UiActive(item);
+                D2D1_COLOR_F fill = active && pressed ? p.cardPressed : active && hot ? p.cardHover : p.card;
+                UiFillRect(target, cache, r, 6, fill, scale);
+                if (item.selected) {
+                    UiStrokeRect(target, cache, r, 6, hc ? p.highlight : p.accent,
+                                 std::max(1.0f, std::round(2 * scale)), scale);
+                } else {
+                    UiStrokeRect(target, cache, r, 6, hc && hot ? p.highlight : p.cardBorder, 1, scale);
+                }
+                D2D1_RECT_F thumb = UiGalleryThumbRect(item);
+                if (custom && *custom) {
+                    (*custom)(item);
+                    target->SetTransform(&shifted);
+                } else {
+                    UiFillRect(target, cache, thumb, 4, p.control, scale);
+                }
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, UiTextStyleFor(UiFont::Note),
+                                      std::max(thumb.right - thumb.left - 4, 0.0f), false),
+                             {thumb.left + 2, thumb.bottom + 8}, item.enabled ? p.text : p.textDisabled);
+                break;
+            }
+            case UiItemKind::Preview:
+                if (custom && *custom) {
+                    (*custom)(item);
+                    target->SetTransform(&shifted);
+                } else {
+                    UiFillRect(target, cache, r, 4, p.control, scale);
+                }
+                break;
         }
     }
 
     // Focus ring (keyboard focus only): 2 DIP outer and 1 DIP inner band, 3 DIP outside the
     // element; 2 DIP around inline links, between their neighbors; inside for navigation items,
-    // which touch the pane edges. A number box shows focus with its editing style instead.
+    // which touch the pane edges; outside a swatch's selection ring. A number box shows focus
+    // with its editing style instead.
     if (state.focusVisible && state.focus.id) {
         auto focused = std::find_if(items.begin(), items.end(),
                                     [&](const UiItem& item) { return item.id == state.focus.id; });
         if (focused != items.end() && focused->kind != UiItemKind::NumberBox) {
-            float radius = state.focus.link >= 0           ? 2 :
-                           focused->kind == UiItemKind::Card ? 6 : 4;
-            float outside = state.focus.link >= 0          ? 2 :
-                            focused->kind == UiItemKind::Nav ? 0 : 3;
+            float radius = state.focus.link >= 0                ? 2 :
+                           focused->kind == UiItemKind::Swatch  ? (focused->rect.right - focused->rect.left) / 2 :
+                           focused->kind == UiItemKind::Card ||
+                               focused->kind == UiItemKind::Gallery ? 6 : 4;
+            float outside = state.focus.link >= 0             ? 2 :
+                            focused->kind == UiItemKind::Nav    ? 0 :
+                            focused->kind == UiItemKind::Swatch ? 6 : 3;
             for (D2D1_RECT_F rect : UiFocusBounds(g, *focused, state.focus.link)) {
+                // A slider's ring takes in its thumb at either end.
+                if (focused->kind == UiItemKind::Slider) rect = UiInflate(rect, 10, -2);
                 UiStrokeRect(target, cache, UiInflate(rect, outside, outside), radius + outside,
                              p.focusOuter, std::max(1.0f, std::round(2 * scale)), scale);
                 UiStrokeRect(target, cache, UiInflate(rect, outside - 2, outside - 2),

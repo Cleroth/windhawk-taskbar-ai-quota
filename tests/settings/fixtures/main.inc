@@ -3,6 +3,7 @@
 #include "logos.inc"
 #include "ui.inc"
 #include "edits.inc"
+#include "layout.inc"
 #include "render.inc"
 
 int main(int argc, char** argv) {
@@ -22,6 +23,7 @@ int main(int argc, char** argv) {
         RunUiTests();
         RunEditTests();
         RunPageTests();
+        RunLayoutTests();
     }
     std::cout << "RESULT " << passed << " passed, " << failed << " failed; " << assertions << " assertions\n";
     return failed ? 1 : 0;

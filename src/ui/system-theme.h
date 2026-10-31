@@ -1,6 +1,6 @@
-// System theme reads and window chrome of the custom-drawn windows (native): app light/dark
-// mode, high contrast with its system colors, the accent palette, and the standard DWM caption
-// recolored to the page background.
+// System theme reads and window chrome of the custom-drawn windows (native): app and Windows
+// (taskbar) light/dark mode, high contrast with its system colors, the accent palette, and the
+// standard DWM caption recolored to the page background.
 
 // UISettings is created on first use and released with the window thread's graphics scope,
 // before the apartment. Accent changes are read on theme messages, never subscribed to.
@@ -10,6 +10,11 @@ struct UiThemeReader {
 
 static UiThemeInput UiReadTheme(UiThemeReader& reader) {
     UiThemeInput theme;
+    DWORD systemLight = 0;
+    DWORD systemSize = sizeof(systemLight);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &systemLight, &systemSize);
+    theme.systemLight = systemLight != 0;
     HIGHCONTRASTW contrast{sizeof(contrast)};
     if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
         (contrast.dwFlags & HCF_HIGHCONTRASTON)) {

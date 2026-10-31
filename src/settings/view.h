@@ -11,6 +11,9 @@ struct SettingsView {
     SettingsStatus status;
     std::vector<SettingsDraft> drafts;  // Number box text and errors
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
+    float scale = 1;                    // Window DPI / 96: the preview's device pixels
+    float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
+    ULONGLONG now = 0;                  // The preview's sample time
 };
 
 // Interactive controls keep their ids across rebuilds, so focus and text boxes follow them.
@@ -73,6 +76,33 @@ static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddNumberBox(items, SettingsControlId(field), card.trailing, std::move(text), std::move(unit),
                    spec.enabled, SettingsCommand(field));
+    return card.card.bottom;
+}
+
+// A slider with a centered number box before it (mockup .sldwrap: 60 DIP box, 14 DIP gap,
+// 220 DIP slider). The box shows its draft's text while there is one, else the projected
+// value; the slider shows the projected value.
+static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
+                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
+                                   float width, UiCardSpec spec, SettingsField field) {
+    SettingsNumberRange range = SettingsFieldRange(field).value_or(SettingsNumberRange{});
+    int value = SettingsFieldValue(view.settings, field);
+    const SettingsDraft* draft = SettingsViewDraft(view, field);
+    spec.trailing = {60 + 14 + 220, 32};
+    if (draft) spec.error = draft->error;
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    const D2D1_RECT_F& slot = card.trailing;
+    UiItem box;
+    box.id = SettingsControlId(field);
+    box.kind = UiItemKind::NumberBox;
+    box.rect = {slot.left, slot.top, slot.left + 60, slot.bottom};
+    box.text = draft && draft->text ? draft->raw : SettingsFormatNumber(value, view.status.groupSeparator);
+    box.align = DWRITE_TEXT_ALIGNMENT_CENTER;
+    box.enabled = spec.enabled;
+    box.action = SettingsCommand(field);
+    items.push_back(std::move(box));
+    UiAddSlider(items, SettingsControlId(field, 1), {slot.left + 74, slot.top, slot.right, slot.bottom},
+                value, range.minimum, range.maximum, spec.enabled, SettingsCommand(field));
     return card.card.bottom;
 }
 

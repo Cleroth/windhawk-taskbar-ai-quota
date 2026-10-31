@@ -96,6 +96,7 @@ Have a suggestion or found a bug?
 #include <unknwn.h>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <dwrite_3.h>
 #include <dwmapi.h>
 
 #ifdef GetCurrentTime
@@ -123,6 +124,7 @@ Have a suggestion or found a bug?
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <charconv>
 #include <chrono>
 #include <climits>
@@ -130,6 +132,7 @@ Have a suggestion or found a bug?
 #include <cstdio>
 #include <cwctype>
 #include <deque>
+#include <functional>
 #include <initializer_list>
 #include <limits>
 #include <map>
@@ -248,6 +251,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "ui/host.h"
 
+#include "ui/color-dialog.h"
+
 #include "settings/storage.h"
 
 #include "settings/window-state.h"
@@ -260,11 +265,15 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "settings/view.h"
 
+#include "settings/preview.h"
+
 #include "settings/page-about.h"
 
 #include "settings/page-behavior.h"
 
 #include "settings/page-history.h"
+
+#include "settings/page-layout.h"
 
 #include "settings/shell.h"
 

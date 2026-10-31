@@ -4,10 +4,14 @@
 
 // Toggle: selected = on. Dropdown: text = the chosen option's label, action.value = its value;
 // activating it opens the popup (ui/popup.h). NumberBox: the drawn frame of a native text box
-// (ui/text-box.h) showing `text`; SpinButton: its up/down buttons (not tab stops). Option: one
-// row of the dropdown popup.
+// (ui/text-box.h) showing `text`, centered without spin buttons when align is center;
+// SpinButton: its up/down buttons (not tab stops). Option: one row of the dropdown popup.
+// Slider: action.value within [minimum, maximum]. Swatch: a color choice, action.value =
+// 0xBBGGRR, selected = current. Gallery: a choice card named `text` with a client-drawn
+// thumbnail. Preview: a client-drawn strip that pans sideways (not a tab stop).
 enum class UiItemKind : uint8_t {
-    Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option
+    Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
+    Slider, Swatch, Gallery, Preview
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -45,6 +49,7 @@ struct UiItem {
     UiButtonStyle button = UiButtonStyle::Standard;
     UiAction action;
     uint32_t owner = 0;              // SpinButton: its NumberBox
+    int minimum = 0, maximum = 0;    // Slider range; Preview: its sideways scroll range
     bool selected = false;
     bool enabled = true;
 };
@@ -82,9 +87,11 @@ static bool UiActive(const UiItem& item) {
     return UiInteractiveKind(item.kind) && item.enabled && item.action.kind != UiActionKind::None;
 }
 
-// A tab stop. Spin buttons belong to their number box; options to the dropdown field.
+// A tab stop. Spin buttons belong to their number box; options to the dropdown field; a
+// preview strip only pans.
 static bool UiFocusable(const UiItem& item) {
-    return UiActive(item) && item.kind != UiItemKind::SpinButton && item.kind != UiItemKind::Option;
+    return UiActive(item) && item.kind != UiItemKind::SpinButton && item.kind != UiItemKind::Option &&
+           item.kind != UiItemKind::Preview;
 }
 
 static const UiItem* UiFindItem(const UiFrame& frame, uint32_t id, UiSurfaceId* surface = nullptr) {
@@ -133,11 +140,14 @@ static const UiAction* UiActionOf(const UiFrame& frame, UiFocusRef ref) {
 }
 
 // The interactive element under a point: an inline link, else the topmost interactive item.
-// A disabled interactive item blocks the items below it.
+// A disabled interactive item blocks the items below it. A slider takes in its thumb, which
+// overhangs the track's ends by its 10 DIP radius.
 static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D1_POINT_2F point) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const UiItem& item = *it;
-        if (!UiContains(item.rect, point)) continue;
+        if (!UiContains(item.kind == UiItemKind::Slider ? UiInflate(item.rect, 10, 0) : item.rect, point)) {
+            continue;
+        }
         if (item.kind == UiItemKind::Text) {
             if (!item.enabled || UiLinkRanges(item.runs).empty()) continue;
             int link = UiLinkAt(UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left,
@@ -447,9 +457,11 @@ static D2D1_SIZE_F UiNumberBoxSize(UiGraphics& g, std::wstring_view unit) {
     return {kUiNumberBoxWidth + 10 + std::max(std::ceil(label), 22.0f), 32};
 }
 
-// Where the box's text sits: after the 11 DIP padding, before the spin buttons.
+// Where the box's text sits: after the 11 DIP padding, before the spin buttons; a centered box
+// (no spin buttons) keeps 6 DIP on each side.
 static D2D1_RECT_F UiNumberBoxTextRect(const UiItem& box) {
     const D2D1_RECT_F& r = box.rect;
+    if (box.align == DWRITE_TEXT_ALIGNMENT_CENTER) return {r.left + 6, r.top + 1, r.right - 6, r.bottom - 1};
     return {r.left + 11, r.top + 1, r.right - 49, r.bottom - 1};
 }
 
@@ -488,6 +500,35 @@ static void UiAddNumberBox(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F 
     label.runs.push_back({std::move(unit)});
     label.enabled = enabled;
     items.push_back(std::move(label));
+}
+
+// Slider (mockup .sld): a track across the slot, the thumb centered on the value (overhanging
+// the ends by its radius). The action names the target; drags report their value.
+static void UiAddSlider(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, int value,
+                        int minimum, int maximum, bool enabled, UiAction action) {
+    UiItem slider;
+    slider.id = id;
+    slider.kind = UiItemKind::Slider;
+    slider.rect = slot;
+    slider.minimum = minimum;
+    slider.maximum = std::max(maximum, minimum);
+    slider.enabled = enabled;
+    slider.action = std::move(action);
+    slider.action.value = std::clamp(value, slider.minimum, slider.maximum);
+    items.push_back(std::move(slider));
+}
+
+// The thumb's center for the slider's value.
+static float UiSliderThumbX(const UiItem& slider) {
+    int range = slider.maximum - slider.minimum;
+    float t = range > 0 ? float(slider.action.value - slider.minimum) / float(range) : 0;
+    return slider.rect.left + std::clamp(t, 0.0f, 1.0f) * (slider.rect.right - slider.rect.left);
+}
+
+// A gallery card's thumbnail (mockup .gcard .thumb): 72 DIP tall inside its 1 DIP border and
+// 8 DIP padding; the name sits 8 DIP below it.
+static D2D1_RECT_F UiGalleryThumbRect(const UiItem& card) {
+    return {card.rect.left + 9, card.rect.top + 9, card.rect.right - 9, card.rect.top + 9 + 72};
 }
 
 // The dropdown popup's rows (mockup .dmenu, WinUI combo box items): 32 DIP rows on a 36 DIP

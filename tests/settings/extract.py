@@ -18,14 +18,16 @@ MODEL = [
     *UI_PURE,
     ("fragment", "settings/edits.h"),
     ("fragment", "settings/view.h"),
+    ("fragment", "settings/preview.h"),
     ("fragment", "settings/page-about.h"),
     ("fragment", "settings/page-behavior.h"),
     ("fragment", "settings/page-history.h"),
+    ("fragment", "settings/page-layout.h"),
     ("fragment", "settings/shell.h"),
 ]
 
-# Toolkit with its native host (popup and text boxes included): the probe DLL. No settings,
-# storage or account code.
+# Toolkit with its native host (popup, text boxes and color dialog included): the probe DLL. No
+# settings, storage or account code.
 HOST = [
     ("definition", "WindowDpi"),
     *UI_PURE,
@@ -34,6 +36,7 @@ HOST = [
     ("fragment", "ui/popup.h"),
     ("fragment", "ui/text-box.h"),
     ("fragment", "ui/host.h"),
+    ("fragment", "ui/color-dialog.h"),
 ]
 
 TARGETS = {

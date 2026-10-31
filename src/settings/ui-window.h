@@ -5,9 +5,10 @@
 static constexpr PCWSTR kSettingsUiClass = L"AiQuotaSettingsUi_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiViewportClass = L"AiQuotaSettingsUiView_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiPopupClass = L"AiQuotaSettingsUiPopup_" WH_MOD_ID;
-// Posted to run the commit queue outside the handler that queued (focus loss, Enter).
+// Posted to run the commit queue outside the handler that queued (focus loss, Enter, a slider's
+// release).
 static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
-// Debounced number box steps: this timer id plus the field.
+// Debounced number box and slider key steps: this timer id plus the field.
 static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 
 struct SettingsUiClient final : UiHostClient {
@@ -17,22 +18,28 @@ struct SettingsUiClient final : UiHostClient {
     std::map<SettingsField, uint64_t> stepRevisions;
 
     // Window state. Custom poll mode sticks once chosen or typed into, so the box doesn't
-    // disable itself when a partial number happens to match a preset.
+    // disable itself when a partial number happens to match a preset. The last built view
+    // paints the preview; the color dialog's custom colors last for the window.
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false;
+    float previewScroll = 0;
+    SettingsView view;
+    std::array<COLORREF, 16> customColors{};
 
     // Reentrancy: messages that arrive inside a modal wait until it returns; close preparation
-    // ignores input and drops queue messages (its flush covers them).
+    // ignores input and drops queue messages (its flush covers them). The color dialog's
+    // window, while it runs, for the close to cancel it.
     int modalDepth = 0;
     bool deferredProcess = false, deferredRefresh = false;
     bool closePreparation = false;
+    HWND colorDialog = nullptr;
 
-    // A message box owned by the window: the popup closes first; queue and refresh messages
-    // that arrive meanwhile are posted again once it returns.
-    int Ask(UiHost& host, PCWSTR text, PCWSTR caption, UINT type) {
+    // A modal owned by the window (message box, color dialog): the popup closes first; queue
+    // and refresh messages that arrive meanwhile are posted again once it returns.
+    template <class Run> auto Modal(UiHost& host, Run run) {
         UiHostClosePopup(host);
         modalDepth++;
-        int result = SettingsMessageBoxW(host.main, text, caption, type);
+        auto result = run();
         modalDepth--;
         if (!modalDepth && host.main) {
             if (std::exchange(deferredProcess, false)) {
@@ -43,6 +50,10 @@ struct SettingsUiClient final : UiHostClient {
             }
         }
         return result;
+    }
+
+    int Ask(UiHost& host, PCWSTR text, PCWSTR caption, UINT type) {
+        return Modal(host, [&] { return SettingsMessageBoxW(host.main, text, caption, type); });
     }
 
     // Failed saves keep their drafts with an error; the box says so once.
@@ -72,25 +83,42 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     void KillStepTimers(UiHost& host) {
-        for (SettingsField field : {SettingsField::PollMinutes, SettingsField::RetentionDays}) {
-            KillStepTimer(host, field);
-        }
+        while (!stepRevisions.empty()) KillStepTimer(host, stepRevisions.begin()->first);
     }
 
+    // The preview's scroll stays within what the built strip can scroll.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
-        SettingsView view;
+        view = {};
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
+        view.scale = UiHostScale(host);
+        view.previewScroll = previewScroll;
+        view.now = NowUnixMs();
         SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
+            for (const UiItem& item : *items) {
+                if (item.kind != UiItemKind::Preview) continue;
+                previewScroll = view.previewScroll = std::min(previewScroll, float(item.maximum));
+            }
+        }
+    }
+
+    void PaintCustom(UiHost& host, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
+                     const UiPaintState& state) override {
+        SettingsPaintPreview(target, cache, *host.graphics, host.theme, view, item, state.pointer);
     }
 
     void Invoke(UiHost& host, UiAction action) override {
-        // A modal disables the window: what arrives meanwhile (the focus loss it causes) is ours.
-        if (Unloading() || closePreparation || modalDepth) return;
+        // A modal disables the window: what arrives meanwhile (the focus loss it causes) is ours,
+        // except the end of a slider drag its capture loss cut short: that queues its commit,
+        // which runs once the modal returns.
+        if (Unloading() || closePreparation || (modalDepth && action.kind != UiActionKind::SlideEnd)) {
+            return;
+        }
         SettingsField field = SettingsField(action.target);
         switch (action.kind) {
             case UiActionKind::Navigate: {
@@ -121,12 +149,17 @@ struct SettingsUiClient final : UiHostClient {
                         Report(host, edits.Commit(0, field, action.value));
                         break;
                     case SettingsField::ResetBehavior:
-                    case SettingsField::ResetHistory: {
+                    case SettingsField::ResetHistory:
+                    case SettingsField::ResetLayout: {
                         std::wstring question =
                             field == SettingsField::ResetBehavior ?
                                 L"Reset Behavior to its defaults?\n\nShow on the primary display "
                                 L"only, show details on hover, poll every 10 minutes, do not poll "
                                 L"hidden accounts, threshold notifications on." :
+                            field == SettingsField::ResetLayout ?
+                                L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
+                                L"on the left, 32 px rings, light grey caret pace markers and the "
+                                L"default spacing. Accounts are not changed." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user and history is kept for 90 days. Saved history stays.";
                         // Never shorten retention without saying so: pruning is shared and final.
@@ -150,6 +183,24 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::OpenHistory:
                         OpenHistoryWindow();
+                        break;
+                    case SettingsField::ShowOnTaskbar:
+                        // The taskbar shows the sample accounts with the committed settings.
+                        SetVisualTestMode(action.value != 0);
+                        edits.Reload();
+                        UiHostRequestRebuild(host, false);
+                        break;
+                    case SettingsField::PaceTickColorCustom: {
+                        COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), SettingsField::PaceTickColor));
+                        std::optional<COLORREF> chosen = Modal(host, [&] {
+                            return UiChooseColor(host.main, initial, customColors, colorDialog);
+                        });
+                        if (chosen && !Unloading() && !closePreparation && !host.closing) {
+                            Report(host, edits.Commit(0, SettingsField::PaceTickColor, int(*chosen)));
+                        }
+                        break;
+                    }
+                    case SettingsField::PreviewScroll:
                         break;
                     case SettingsField::OpenHistoryFolder: {
                         const std::wstring& folder = edits.baseline.status.historyFolder;
@@ -198,6 +249,28 @@ struct SettingsUiClient final : UiHostClient {
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);
                 break;
+            case UiActionKind::Slide:
+                // A drag only drafts: the preview follows; the release commits.
+                KillStepTimer(host, field);
+                edits.SetValue(action.key, field, action.value);
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::SlideEnd:
+                KillStepTimer(host, field);
+                if (edits.RequestCommit(action.key, field)) {
+                    PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
+                }
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::Pan: {
+                // Repaints with the new scroll; the next build keeps it in range.
+                const UiItem* strip = UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll));
+                float maximum = strip ? float(strip->maximum) : 0;
+                previewScroll = view.previewScroll =
+                    std::clamp(previewScroll + float(action.value), 0.0f, maximum);
+                UiHostInvalidate(host);
+                break;
+            }
             case UiActionKind::None:
                 break;
         }
@@ -256,6 +329,10 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     bool CancelModal() override {
+        if (colorDialog && IsWindow(colorDialog)) {
+            PostMessageW(colorDialog, WM_COMMAND, IDCANCEL, 0);
+            return true;
+        }
         if (!g_settingsMessageBoxContext || !IsWindow(g_settingsMessageBoxContext->hWnd)) {
             return false;
         }

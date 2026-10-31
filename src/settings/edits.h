@@ -17,12 +17,33 @@ enum class SettingsField : uint8_t {
     // History
     RecordHistory,  // This Windows user's recording consent
     RetentionDays,
+    // Layout
+    BarLayout,        // Tile style: a BarLayout
+    BarLength,
+    BarThickness,
+    BarGap,
+    RingSize,
+    RingThickness,
+    LabelPosition,    // A LabelPosition
+    LabelFontSize,
+    LabelGap,
+    ShowBarLabels,    // Quota keys
+    PercentFontSize,  // Bar text size
+    ShowPaceTicks,
+    PaceTickStyle,    // A PaceTickStyle
+    PaceTickColor,    // 0xBBGGRR
+    AccountMargin,
+    RightMargin,      // Tray gap
     // Operation groups: page resets
     ResetBehavior,
     ResetHistory,
+    ResetLayout,
     // Window commands, never drafts or commits
     OpenHistory,
     OpenHistoryFolder,
+    PaceTickColorCustom,  // The color dialog
+    ShowOnTaskbar,        // Visual test mode
+    PreviewScroll,        // The preview strip's sideways scroll
 };
 
 struct SettingsNumberRange {
@@ -33,6 +54,16 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
     switch (field) {
         case SettingsField::PollMinutes: return SettingsNumberRange{2, 24 * 60};
         case SettingsField::RetentionDays: return SettingsNumberRange{1, 3650};
+        case SettingsField::BarLength: return SettingsNumberRange{10, 500};
+        case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
+        case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
+        case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
+        case SettingsField::LabelFontSize:
+        case SettingsField::PercentFontSize: return SettingsNumberRange{6, 24};
+        case SettingsField::BarGap:
+        case SettingsField::LabelGap:
+        case SettingsField::AccountMargin:
+        case SettingsField::RightMargin: return SettingsNumberRange{0, 500};
         default: return std::nullopt;
     }
 }
@@ -45,6 +76,15 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::SkipHiddenPolling, SettingsField::Notifications};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::RetentionDays};
+        case SettingsField::ResetLayout:
+            return {SettingsField::BarLayout,     SettingsField::BarLength,
+                    SettingsField::BarThickness,  SettingsField::BarGap,
+                    SettingsField::RingSize,      SettingsField::RingThickness,
+                    SettingsField::LabelPosition, SettingsField::LabelFontSize,
+                    SettingsField::LabelGap,      SettingsField::ShowBarLabels,
+                    SettingsField::PercentFontSize, SettingsField::ShowPaceTicks,
+                    SettingsField::PaceTickStyle, SettingsField::PaceTickColor,
+                    SettingsField::AccountMargin, SettingsField::RightMargin};
         default: return {};
     }
 }
@@ -61,12 +101,29 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::Notifications: return s.enableNotifications;
         case SettingsField::RecordHistory: return s.historyEnabled;
         case SettingsField::RetentionDays: return s.historyRetentionDays;
+        case SettingsField::BarLayout: return int(s.barLayout);
+        case SettingsField::BarLength: return s.barLength;
+        case SettingsField::BarThickness: return s.barThickness;
+        case SettingsField::BarGap: return s.barGap;
+        case SettingsField::RingSize: return s.ringSize;
+        case SettingsField::RingThickness: return s.ringThickness;
+        case SettingsField::LabelPosition: return int(s.labelPosition);
+        case SettingsField::LabelFontSize: return s.labelFontSize;
+        case SettingsField::LabelGap: return s.labelGap;
+        case SettingsField::ShowBarLabels: return s.showBarLabels;
+        case SettingsField::PercentFontSize: return s.percentFontSize;
+        case SettingsField::ShowPaceTicks: return s.showPaceTicks;
+        case SettingsField::PaceTickStyle: return int(s.paceTickStyle);
+        case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
+        case SettingsField::AccountMargin: return s.accountMargin;
+        case SettingsField::RightMargin: return s.rightMargin;
         default: return 0;
     }
 }
 
 // Sets one field, or a group's fields to their defaults, to the desired value (never toggles).
-// Numbers clamp to their range; normalization follows when the settings are applied.
+// Numbers clamp to their range and choices to their values, so every assigned value is one the
+// preview can draw; normalization follows when the settings are applied.
 static void SettingsAssign(Settings& s, SettingsField field, int value) {
     const Settings defaults;
     if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
@@ -84,6 +141,48 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::Notifications: s.enableNotifications = value != 0; break;
         case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
         case SettingsField::RetentionDays: s.historyRetentionDays = value; break;
+        case SettingsField::BarLayout:
+            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
+            break;
+        case SettingsField::BarLength: s.barLength = value; break;
+        case SettingsField::BarThickness: s.barThickness = value; break;
+        case SettingsField::BarGap: s.barGap = value; break;
+        case SettingsField::RingSize: s.ringSize = value; break;
+        case SettingsField::RingThickness: s.ringThickness = value; break;
+        case SettingsField::LabelPosition:
+            s.labelPosition = LabelPosition(std::clamp(value, int(LabelPosition::Hidden),
+                                                       int(LabelPosition::Bottom)));
+            break;
+        case SettingsField::LabelFontSize: s.labelFontSize = value; break;
+        case SettingsField::LabelGap: s.labelGap = value; break;
+        case SettingsField::ShowBarLabels: s.showBarLabels = value != 0; break;
+        case SettingsField::PercentFontSize: s.percentFontSize = value; break;
+        case SettingsField::ShowPaceTicks: s.showPaceTicks = value != 0; break;
+        case SettingsField::PaceTickStyle:
+            s.paceTickStyle = PaceTickStyle(std::clamp(value, int(PaceTickStyle::Caret),
+                                                       int(PaceTickStyle::Dot)));
+            break;
+        case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
+        case SettingsField::AccountMargin: s.accountMargin = value; break;
+        case SettingsField::RightMargin: s.rightMargin = value; break;
+        case SettingsField::ResetLayout:
+            s.barLayout = defaults.barLayout;
+            s.barLength = defaults.barLength;
+            s.barThickness = defaults.barThickness;
+            s.barGap = defaults.barGap;
+            s.ringSize = defaults.ringSize;
+            s.ringThickness = defaults.ringThickness;
+            s.labelPosition = defaults.labelPosition;
+            s.labelFontSize = defaults.labelFontSize;
+            s.labelGap = defaults.labelGap;
+            s.showBarLabels = defaults.showBarLabels;
+            s.percentFontSize = defaults.percentFontSize;
+            s.showPaceTicks = defaults.showPaceTicks;
+            s.paceTickStyle = defaults.paceTickStyle;
+            s.paceTickColor = defaults.paceTickColor;
+            s.accountMargin = defaults.accountMargin;
+            s.rightMargin = defaults.rightMargin;
+            break;
         case SettingsField::ResetBehavior:
             s.taskbarMonitorMode = defaults.taskbarMonitorMode;
             s.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
@@ -173,6 +272,8 @@ struct SettingsStatus {
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
     wchar_t groupSeparator = L',';
+    double taskbarHeight = 0;  // The primary taskbar's, in DIPs at its own DPI; 0 if unknown
+    bool visualTest = false;   // The taskbar shows the sample accounts
 };
 
 struct SettingsBaseline {
@@ -309,15 +410,25 @@ struct SettingsEdits {
         std::erase_if(queue, [&](const SettingsRequest& r) { return r.key == key && r.field == field; });
     }
 
-    // Discrete controls: the desired value, committed at once with whatever is queued. Returns
-    // the number of failed saves.
-    int Commit(uint64_t key, SettingsField field, int value) {
+    // A slider drag: the desired value (clamped to the field's range) as a draft, committed when
+    // the drag ends (RequestCommit). Returns the draft's revision.
+    uint64_t SetValue(uint64_t key, SettingsField field, int value) {
+        if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
+            value = std::clamp(value, range->minimum, range->maximum);
+        }
         SettingsDraft& draft = Touch(key, field);
         draft.text = false;
         draft.raw.clear();
         draft.value = value;
         draft.valid = true;
-        queue.push_back({key, field, draft.revision, value});
+        return draft.revision;
+    }
+
+    // Discrete controls: the desired value, committed at once with whatever is queued. Returns
+    // the number of failed saves.
+    int Commit(uint64_t key, SettingsField field, int value) {
+        uint64_t revision = SetValue(key, field, value);
+        queue.push_back({key, field, revision, Find(key, field)->value});
         return Process();
     }
 

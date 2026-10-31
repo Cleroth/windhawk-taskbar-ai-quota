@@ -23,6 +23,7 @@ struct UiThemeInput {
     UiThemeKind kind = UiThemeKind::Dark;
     UiAccentColors accent;
     UiSystemColors system;
+    bool systemLight = false;  // Windows (taskbar) mode, which the taskbar preview follows
 };
 
 static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
@@ -43,11 +44,12 @@ struct UiPalette {
     D2D1_COLOR_F background{}, card{}, cardHover{}, cardPressed{}, cardBorder{};
 
     // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills; the strong
-    // stroke of an off toggle, a focused text box and the dropdown popup's surface
+    // stroke of an off toggle and a slider track, a slider thumb, a focused text box and the
+    // dropdown popup's surface
     D2D1_COLOR_F control{}, controlHover{}, controlPressed{}, controlDisabled{}, controlBorder{};
     D2D1_COLOR_F subtleHover{}, subtlePressed{};
     D2D1_COLOR_F accent{}, accentHover{}, accentPressed{}, accentDisabled{};
-    D2D1_COLOR_F controlStrong{}, inputActive{}, popup{};
+    D2D1_COLOR_F controlStrong{}, controlSolid{}, inputActive{}, popup{};
 
     // Text
     D2D1_COLOR_F text{}, textSecondary{}, textMuted{}, textDisabled{}, textOnAccent{};
@@ -77,6 +79,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accent = p.accentHover = p.accentPressed = UiRgb(s.highlight);
         p.accentDisabled = UiRgb(s.grayText);
         p.controlStrong = UiRgb(s.windowText);
+        p.controlSolid = UiRgb(s.buttonFace);
         p.inputActive = p.popup = UiRgb(s.window);
         p.text = p.textSecondary = p.textMuted = UiRgb(s.windowText);
         p.textDisabled = UiRgb(s.grayText);
@@ -109,6 +112,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentPressed = UiRgb(a.light2, 0.8f);
         p.accentDisabled = UiRgb(0xFFFFFF, 0.16f);
         p.controlStrong = UiRgb(0xFFFFFF, 0.6f);
+        p.controlSolid = UiRgb(0x454545);
         p.inputActive = UiRgb(0x1E1E1E, 0.7f);
         p.popup = UiRgb(0x2C2C2C);
         p.text = UiRgb(0xFFFFFF);
@@ -143,6 +147,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentPressed = UiRgb(a.dark1, 0.8f);
         p.accentDisabled = UiRgb(0x000000, 0.216f);
         p.controlStrong = UiRgb(0x000000, 0.446f);
+        p.controlSolid = UiRgb(0xFFFFFF);
         p.inputActive = UiRgb(0xFFFFFF);
         p.popup = UiRgb(0xF9F9F9);
         p.text = UiRgb(0x000000, 0.894f);
@@ -182,12 +187,16 @@ static D2D1_COLOR_F UiInkColor(const UiPalette& p, UiInk ink) {
 }
 
 // Type ramp (WinUI 2 sizes, mockup line heights) and icon font. Families fall back to Segoe UI
-// and Segoe MDL2 Assets where the Windows 11 fonts are missing.
-enum class UiFamily : uint8_t { Text, Display, Icons };
-static constexpr PCWSTR kUiFamilyNames[3][2] = {
+// and Segoe MDL2 Assets where the Windows 11 fonts are missing. Small and Taskbar are the
+// taskbar preview's: the badge font and the taskbar XAML's default text font, the variable
+// family with automatic optical size (ui/draw.h).
+enum class UiFamily : uint8_t { Text, Display, Icons, Small, Taskbar };
+static constexpr PCWSTR kUiFamilyNames[5][2] = {
     {L"Segoe UI Variable Text", L"Segoe UI"},
     {L"Segoe UI Variable Display", L"Segoe UI"},
     {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},
+    {L"Segoe UI Variable Small", L"Segoe UI"},
+    {L"Segoe UI Variable", L"Segoe UI"},
 };
 
 // Note: info bar text (mockup .infobar).
@@ -196,7 +205,7 @@ enum class UiFont : uint8_t { Caption, Note, Body, BodyStrong, Subtitle, Title }
 struct UiTextStyle {
     UiFamily family = UiFamily::Text;
     float size = 14;
-    float lineHeight = 20;
+    float lineHeight = 20;  // Uniform line height; 0 keeps the font's own spacing
     DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL;
 };
 

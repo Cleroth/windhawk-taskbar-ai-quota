@@ -99,6 +99,7 @@ Have a suggestion or found a bug?
 #include <unknwn.h>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <dwrite_3.h>
 #include <dwmapi.h>
 
 #ifdef GetCurrentTime
@@ -126,6 +127,7 @@ Have a suggestion or found a bug?
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <charconv>
 #include <chrono>
 #include <climits>
@@ -133,6 +135,7 @@ Have a suggestion or found a bug?
 #include <cstdio>
 #include <cwctype>
 #include <deque>
+#include <functional>
 #include <initializer_list>
 #include <limits>
 #include <map>
@@ -9393,6 +9396,7 @@ struct UiThemeInput {
     UiThemeKind kind = UiThemeKind::Dark;
     UiAccentColors accent;
     UiSystemColors system;
+    bool systemLight = false;  // Windows (taskbar) mode, which the taskbar preview follows
 };
 
 static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
@@ -9413,11 +9417,12 @@ struct UiPalette {
     D2D1_COLOR_F background{}, card{}, cardHover{}, cardPressed{}, cardBorder{};
 
     // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills; the strong
-    // stroke of an off toggle, a focused text box and the dropdown popup's surface
+    // stroke of an off toggle and a slider track, a slider thumb, a focused text box and the
+    // dropdown popup's surface
     D2D1_COLOR_F control{}, controlHover{}, controlPressed{}, controlDisabled{}, controlBorder{};
     D2D1_COLOR_F subtleHover{}, subtlePressed{};
     D2D1_COLOR_F accent{}, accentHover{}, accentPressed{}, accentDisabled{};
-    D2D1_COLOR_F controlStrong{}, inputActive{}, popup{};
+    D2D1_COLOR_F controlStrong{}, controlSolid{}, inputActive{}, popup{};
 
     // Text
     D2D1_COLOR_F text{}, textSecondary{}, textMuted{}, textDisabled{}, textOnAccent{};
@@ -9447,6 +9452,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accent = p.accentHover = p.accentPressed = UiRgb(s.highlight);
         p.accentDisabled = UiRgb(s.grayText);
         p.controlStrong = UiRgb(s.windowText);
+        p.controlSolid = UiRgb(s.buttonFace);
         p.inputActive = p.popup = UiRgb(s.window);
         p.text = p.textSecondary = p.textMuted = UiRgb(s.windowText);
         p.textDisabled = UiRgb(s.grayText);
@@ -9479,6 +9485,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentPressed = UiRgb(a.light2, 0.8f);
         p.accentDisabled = UiRgb(0xFFFFFF, 0.16f);
         p.controlStrong = UiRgb(0xFFFFFF, 0.6f);
+        p.controlSolid = UiRgb(0x454545);
         p.inputActive = UiRgb(0x1E1E1E, 0.7f);
         p.popup = UiRgb(0x2C2C2C);
         p.text = UiRgb(0xFFFFFF);
@@ -9513,6 +9520,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.accentPressed = UiRgb(a.dark1, 0.8f);
         p.accentDisabled = UiRgb(0x000000, 0.216f);
         p.controlStrong = UiRgb(0x000000, 0.446f);
+        p.controlSolid = UiRgb(0xFFFFFF);
         p.inputActive = UiRgb(0xFFFFFF);
         p.popup = UiRgb(0xF9F9F9);
         p.text = UiRgb(0x000000, 0.894f);
@@ -9552,12 +9560,16 @@ static D2D1_COLOR_F UiInkColor(const UiPalette& p, UiInk ink) {
 }
 
 // Type ramp (WinUI 2 sizes, mockup line heights) and icon font. Families fall back to Segoe UI
-// and Segoe MDL2 Assets where the Windows 11 fonts are missing.
-enum class UiFamily : uint8_t { Text, Display, Icons };
-static constexpr PCWSTR kUiFamilyNames[3][2] = {
+// and Segoe MDL2 Assets where the Windows 11 fonts are missing. Small and Taskbar are the
+// taskbar preview's: the badge font and the taskbar XAML's default text font, the variable
+// family with automatic optical size (ui/draw.h).
+enum class UiFamily : uint8_t { Text, Display, Icons, Small, Taskbar };
+static constexpr PCWSTR kUiFamilyNames[5][2] = {
     {L"Segoe UI Variable Text", L"Segoe UI"},
     {L"Segoe UI Variable Display", L"Segoe UI"},
     {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},
+    {L"Segoe UI Variable Small", L"Segoe UI"},
+    {L"Segoe UI Variable", L"Segoe UI"},
 };
 
 // Note: info bar text (mockup .infobar).
@@ -9566,7 +9578,7 @@ enum class UiFont : uint8_t { Caption, Note, Body, BodyStrong, Subtitle, Title }
 struct UiTextStyle {
     UiFamily family = UiFamily::Text;
     float size = 14;
-    float lineHeight = 20;
+    float lineHeight = 20;  // Uniform line height; 0 keeps the font's own spacing
     DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL;
 };
 
@@ -9590,28 +9602,32 @@ static UiTextStyle UiIconStyle(float size) {
 // pass the factories and the target; nothing here touches windows or globals. Coordinates are
 // DIPs; targets carry the window DPI.
 
-// Device-independent resources shared by every target of one UI thread: resolved font families,
-// text formats, effect-free layouts (measuring and plain drawing) and path geometries. Owned by
-// that thread's graphics scope, released before the apartment is.
+// Device-independent resources shared by every target of one UI thread: font collections and
+// resolved families, text formats, effect-free layouts (measuring and plain drawing) and path
+// geometries. Owned by that thread's graphics scope, released before the apartment is.
 struct UiGraphics {
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
     winrt::com_ptr<ID2D1StrokeStyle> roundCaps;
-    std::array<std::wstring, 3> families;
+    winrt::com_ptr<IDWriteFontCollection> fonts, typographicFonts;
+    std::array<std::wstring, std::size(kUiFamilyNames)> families;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextFormat>> formats;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
     std::map<PCWSTR, winrt::com_ptr<ID2D1PathGeometry>> paths;
 };
 
 // Resources bound to one render target: a recolored brush for primitives, drawing-effect
-// brushes by color, and layouts that carry those effects. Discarded with the target.
+// brushes by color, gradient brushes by color pair, and layouts that carry those effects.
+// Discarded with the target.
 struct UiTargetCache {
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
     std::map<uint32_t, winrt::com_ptr<ID2D1SolidColorBrush>> effects;
+    std::map<uint64_t, winrt::com_ptr<ID2D1LinearGradientBrush>> gradients;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
 
     void Clear() {
         layouts.clear();
+        gradients.clear();
         effects.clear();
         brush = nullptr;
     }
@@ -9633,6 +9649,56 @@ static void UiTrimCaches(UiGraphics& g) {
     if (g.layouts.size() > 512) g.layouts.clear();
 }
 
+// A family's font collection, its name resolved (preferred, else fallback) on first use. The
+// taskbar's family is the typographic one: the variable font has no WWS family of that name.
+static IDWriteFontCollection* UiFontCollection(UiGraphics& g, UiFamily family) {
+    bool typographic = family == UiFamily::Taskbar;
+    winrt::com_ptr<IDWriteFontCollection>& fonts = typographic ? g.typographicFonts : g.fonts;
+    if (!fonts && typographic) {
+        if (auto factory = g.dwrite.try_as<IDWriteFactory6>()) {
+            winrt::com_ptr<IDWriteFontCollection2> collection;
+            if (SUCCEEDED(factory->GetSystemFontCollection(
+                    FALSE, DWRITE_FONT_FAMILY_MODEL_TYPOGRAPHIC, collection.put()))) {
+                fonts = collection;
+            }
+        }
+    }
+    if (!fonts) winrt::check_hresult(g.dwrite->GetSystemFontCollection(fonts.put(), FALSE));
+    std::wstring& name = g.families[size_t(family)];
+    if (name.empty()) {
+        UINT32 index = 0;
+        BOOL exists = FALSE;
+        PCWSTR preferred = kUiFamilyNames[size_t(family)][0];
+        name = SUCCEEDED(fonts->FindFamilyName(preferred, &index, &exists)) && exists ?
+                   preferred : kUiFamilyNames[size_t(family)][1];
+    }
+    return fonts.get();
+}
+
+// A style's font metrics in DIPs; zero when its family has no matching font.
+struct UiFontMetrics {
+    float ascent = 0, descent = 0, lineGap = 0, capHeight = 0;
+};
+
+static UiFontMetrics UiFontMetricsFor(UiGraphics& g, const UiTextStyle& style) {
+    IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
+    UINT32 index = 0;
+    BOOL exists = FALSE;
+    winrt::com_ptr<IDWriteFontFamily> family;
+    winrt::com_ptr<IDWriteFont> font;
+    DWRITE_FONT_METRICS metrics{};
+    if (SUCCEEDED(fonts->FindFamilyName(g.families[size_t(style.family)].c_str(), &index, &exists)) &&
+        exists && SUCCEEDED(fonts->GetFontFamily(index, family.put())) &&
+        SUCCEEDED(family->GetFirstMatchingFont(style.weight, DWRITE_FONT_STRETCH_NORMAL,
+                                               DWRITE_FONT_STYLE_NORMAL, font.put()))) {
+        font->GetMetrics(&metrics);
+    }
+    if (!metrics.designUnitsPerEm) return {};
+    float unit = style.size / float(metrics.designUnitsPerEm);
+    return {float(metrics.ascent) * unit, float(metrics.descent) * unit,
+            float(metrics.lineGap) * unit, float(metrics.capHeight) * unit};
+}
+
 static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
     std::wstring key = std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) +
                        L'|' + std::to_wstring(style.lineHeight) + L'|' +
@@ -9640,39 +9706,24 @@ static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
     auto& format = g.formats[key];
     if (format) return format.get();
 
-    winrt::com_ptr<IDWriteFontCollection> fonts;
-    winrt::check_hresult(g.dwrite->GetSystemFontCollection(fonts.put(), FALSE));
-    std::wstring& family = g.families[size_t(style.family)];
-    if (family.empty()) {
-        UINT32 index = 0;
-        BOOL exists = FALSE;
-        PCWSTR preferred = kUiFamilyNames[size_t(style.family)][0];
-        family = SUCCEEDED(fonts->FindFamilyName(preferred, &index, &exists)) && exists ?
-                     preferred : kUiFamilyNames[size_t(style.family)][1];
-    }
+    IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
     winrt::check_hresult(g.dwrite->CreateTextFormat(
-        family.c_str(), nullptr, style.weight, DWRITE_FONT_STYLE_NORMAL,
+        g.families[size_t(style.family)].c_str(), fonts, style.weight, DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL, style.size, L"en-us", format.put()));
+    // The taskbar's XAML text: optical size follows the font size.
+    if (style.family == UiFamily::Taskbar) {
+        if (auto format3 = format.try_as<IDWriteTextFormat3>()) {
+            format3->SetAutomaticFontAxes(DWRITE_AUTOMATIC_FONT_AXES_OPTICAL_SIZE);
+        }
+    }
 
     // Uniform line height with the baseline where CSS puts it: half the leading above the
     // ascent. Fonts without metrics keep DirectWrite's default spacing.
-    UINT32 index = 0;
-    BOOL exists = FALSE;
-    winrt::com_ptr<IDWriteFontFamily> fontFamily;
-    winrt::com_ptr<IDWriteFont> font;
-    if (SUCCEEDED(fonts->FindFamilyName(family.c_str(), &index, &exists)) && exists &&
-        SUCCEEDED(fonts->GetFontFamily(index, fontFamily.put())) &&
-        SUCCEEDED(fontFamily->GetFirstMatchingFont(style.weight, DWRITE_FONT_STRETCH_NORMAL,
-                                                   DWRITE_FONT_STYLE_NORMAL, font.put()))) {
-        DWRITE_FONT_METRICS metrics{};
-        font->GetMetrics(&metrics);
-        if (metrics.designUnitsPerEm) {
-            float unit = style.size / float(metrics.designUnitsPerEm);
-            float ascent = float(metrics.ascent) * unit;
-            float descent = float(metrics.descent) * unit;
-            format->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, style.lineHeight,
-                                   (style.lineHeight - ascent - descent) / 2 + ascent);
-        }
+    UiFontMetrics metrics = style.lineHeight > 0 ? UiFontMetricsFor(g, style) : UiFontMetrics{};
+    if (metrics.ascent + metrics.descent > 0) {
+        format->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, style.lineHeight,
+                               (style.lineHeight - metrics.ascent - metrics.descent) / 2 +
+                                   metrics.ascent);
     }
     return format.get();
 }
@@ -9713,13 +9764,16 @@ static ID2D1SolidColorBrush* UiBrush(ID2D1RenderTarget* target, UiTargetCache& c
     return cache.brush.get();
 }
 
+// A color as 0xAARRGGBB: cache keys.
+static uint32_t UiColorKey(D2D1_COLOR_F color) {
+    auto channel = [](float v) { return uint32_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+    return channel(color.a) << 24 | channel(color.r) << 16 | channel(color.g) << 8 | channel(color.b);
+}
+
 // A brush that stays this color: drawing effects keep a reference to it.
 static ID2D1SolidColorBrush* UiEffectBrush(ID2D1RenderTarget* target, UiTargetCache& cache,
                                            D2D1_COLOR_F color) {
-    auto channel = [](float v) { return uint32_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
-    uint32_t key = channel(color.a) << 24 | channel(color.r) << 16 | channel(color.g) << 8 |
-                   channel(color.b);
-    auto& brush = cache.effects[key];
+    auto& brush = cache.effects[UiColorKey(color)];
     if (!brush) winrt::check_hresult(target->CreateSolidColorBrush(color, brush.put()));
     return brush.get();
 }
@@ -9753,6 +9807,27 @@ static void UiFillRect(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_REC
     } else {
         target->FillRectangle(&rect, UiBrush(target, cache, color));
     }
+}
+
+// A linear gradient across the rectangle, left to right or top to bottom.
+static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_RECT_F rect,
+                           float radius, D2D1_COLOR_F from, D2D1_COLOR_F to, bool vertical) {
+    auto& brush = cache.gradients[uint64_t(UiColorKey(from)) << 32 | UiColorKey(to)];
+    if (!brush) {
+        const D2D1_GRADIENT_STOP stops[] = {{0, from}, {1, to}};
+        winrt::com_ptr<ID2D1GradientStopCollection> collection;
+        winrt::check_hresult(target->CreateGradientStopCollection(
+            stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, collection.put()));
+        D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES line{{0, 0}, {1, 0}};
+        D2D1_BRUSH_PROPERTIES properties{1, D2D1::Matrix3x2F::Identity()};
+        winrt::check_hresult(target->CreateLinearGradientBrush(&line, &properties, collection.get(),
+                                                               brush.put()));
+    }
+    brush->SetStartPoint({rect.left, rect.top});
+    brush->SetEndPoint(vertical ? D2D1_POINT_2F{rect.left, rect.bottom} :
+                                  D2D1_POINT_2F{rect.right, rect.top});
+    D2D1_ROUNDED_RECT rounded{rect, radius, radius};
+    target->FillRoundedRectangle(&rounded, brush.get());
 }
 
 // A border of `pixels` device pixels drawn inside the snapped rectangle.
@@ -9918,16 +9993,19 @@ static ID2D1PathGeometry* UiPathGeometry(UiGraphics& g, PCWSTR data) {
 // Effect-free layouts (measuring, hit testing) are shared; colored layouts are per target.
 
 // What activating an item or link does. Data only; the window's client interprets it.
-// Command: a client-defined target set to a desired value (toggles, dropdown choices, buttons).
-// Number boxes report their native text box: Step (value = delta), and the text events with the
-// box's text.
+// Command: a client-defined target set to a desired value (toggles, dropdown choices, buttons,
+// gallery cards, swatches). Number boxes report their native text box: Step (value = delta),
+// and the text events with the box's text. Sliders report Slide (value = the dragged value)
+// and SlideEnd (released); their keys Step. Pan: a preview strip dragged or wheeled sideways.
 enum class UiActionKind : uint8_t {
-    None, Navigate, OpenUrl, Command, Step, TextChange, TextCommit, TextBlur, TextRevert
+    None, Navigate, OpenUrl, Command, Step, TextChange, TextCommit, TextBlur, TextRevert, Slide,
+    SlideEnd, Pan
 };
 
 struct UiAction {
     UiActionKind kind = UiActionKind::None;
-    int value = 0;         // Navigate: page; Command: desired value; Step: delta
+    int value = 0;         // Navigate: page; Command: desired value; Step: delta; Slide: value;
+                           // Pan: DIPs the content moves right
     std::wstring text{};   // OpenUrl: the URL; text events: the box's text
     uint32_t target = 0;   // Command, Step and text events: the client's target
     uint64_t key = 0;      // The target's owner (0: global)
@@ -10082,10 +10160,14 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 
 // Toggle: selected = on. Dropdown: text = the chosen option's label, action.value = its value;
 // activating it opens the popup (ui/popup.h). NumberBox: the drawn frame of a native text box
-// (ui/text-box.h) showing `text`; SpinButton: its up/down buttons (not tab stops). Option: one
-// row of the dropdown popup.
+// (ui/text-box.h) showing `text`, centered without spin buttons when align is center;
+// SpinButton: its up/down buttons (not tab stops). Option: one row of the dropdown popup.
+// Slider: action.value within [minimum, maximum]. Swatch: a color choice, action.value =
+// 0xBBGGRR, selected = current. Gallery: a choice card named `text` with a client-drawn
+// thumbnail. Preview: a client-drawn strip that pans sideways (not a tab stop).
 enum class UiItemKind : uint8_t {
-    Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option
+    Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
+    Slider, Swatch, Gallery, Preview
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -10123,6 +10205,7 @@ struct UiItem {
     UiButtonStyle button = UiButtonStyle::Standard;
     UiAction action;
     uint32_t owner = 0;              // SpinButton: its NumberBox
+    int minimum = 0, maximum = 0;    // Slider range; Preview: its sideways scroll range
     bool selected = false;
     bool enabled = true;
 };
@@ -10160,9 +10243,11 @@ static bool UiActive(const UiItem& item) {
     return UiInteractiveKind(item.kind) && item.enabled && item.action.kind != UiActionKind::None;
 }
 
-// A tab stop. Spin buttons belong to their number box; options to the dropdown field.
+// A tab stop. Spin buttons belong to their number box; options to the dropdown field; a
+// preview strip only pans.
 static bool UiFocusable(const UiItem& item) {
-    return UiActive(item) && item.kind != UiItemKind::SpinButton && item.kind != UiItemKind::Option;
+    return UiActive(item) && item.kind != UiItemKind::SpinButton && item.kind != UiItemKind::Option &&
+           item.kind != UiItemKind::Preview;
 }
 
 static const UiItem* UiFindItem(const UiFrame& frame, uint32_t id, UiSurfaceId* surface = nullptr) {
@@ -10211,11 +10296,14 @@ static const UiAction* UiActionOf(const UiFrame& frame, UiFocusRef ref) {
 }
 
 // The interactive element under a point: an inline link, else the topmost interactive item.
-// A disabled interactive item blocks the items below it.
+// A disabled interactive item blocks the items below it. A slider takes in its thumb, which
+// overhangs the track's ends by its 10 DIP radius.
 static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D1_POINT_2F point) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const UiItem& item = *it;
-        if (!UiContains(item.rect, point)) continue;
+        if (!UiContains(item.kind == UiItemKind::Slider ? UiInflate(item.rect, 10, 0) : item.rect, point)) {
+            continue;
+        }
         if (item.kind == UiItemKind::Text) {
             if (!item.enabled || UiLinkRanges(item.runs).empty()) continue;
             int link = UiLinkAt(UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left,
@@ -10525,9 +10613,11 @@ static D2D1_SIZE_F UiNumberBoxSize(UiGraphics& g, std::wstring_view unit) {
     return {kUiNumberBoxWidth + 10 + std::max(std::ceil(label), 22.0f), 32};
 }
 
-// Where the box's text sits: after the 11 DIP padding, before the spin buttons.
+// Where the box's text sits: after the 11 DIP padding, before the spin buttons; a centered box
+// (no spin buttons) keeps 6 DIP on each side.
 static D2D1_RECT_F UiNumberBoxTextRect(const UiItem& box) {
     const D2D1_RECT_F& r = box.rect;
+    if (box.align == DWRITE_TEXT_ALIGNMENT_CENTER) return {r.left + 6, r.top + 1, r.right - 6, r.bottom - 1};
     return {r.left + 11, r.top + 1, r.right - 49, r.bottom - 1};
 }
 
@@ -10566,6 +10656,35 @@ static void UiAddNumberBox(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F 
     label.runs.push_back({std::move(unit)});
     label.enabled = enabled;
     items.push_back(std::move(label));
+}
+
+// Slider (mockup .sld): a track across the slot, the thumb centered on the value (overhanging
+// the ends by its radius). The action names the target; drags report their value.
+static void UiAddSlider(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, int value,
+                        int minimum, int maximum, bool enabled, UiAction action) {
+    UiItem slider;
+    slider.id = id;
+    slider.kind = UiItemKind::Slider;
+    slider.rect = slot;
+    slider.minimum = minimum;
+    slider.maximum = std::max(maximum, minimum);
+    slider.enabled = enabled;
+    slider.action = std::move(action);
+    slider.action.value = std::clamp(value, slider.minimum, slider.maximum);
+    items.push_back(std::move(slider));
+}
+
+// The thumb's center for the slider's value.
+static float UiSliderThumbX(const UiItem& slider) {
+    int range = slider.maximum - slider.minimum;
+    float t = range > 0 ? float(slider.action.value - slider.minimum) / float(range) : 0;
+    return slider.rect.left + std::clamp(t, 0.0f, 1.0f) * (slider.rect.right - slider.rect.left);
+}
+
+// A gallery card's thumbnail (mockup .gcard .thumb): 72 DIP tall inside its 1 DIP border and
+// 8 DIP padding; the name sits 8 DIP below it.
+static D2D1_RECT_F UiGalleryThumbRect(const UiItem& card) {
+    return {card.rect.left + 9, card.rect.top + 9, card.rect.right - 9, card.rect.top + 9 + 72};
 }
 
 // The dropdown popup's rows (mockup .dmenu, WinUI combo box items): 32 DIP rows on a 36 DIP
@@ -10614,12 +10733,18 @@ static POINT UiPopupPlacement(RECT field, SIZE size, RECT work, int gap) {
 // every control.
 
 // open: the dropdown whose popup is showing; editing: the number box whose native text box has
-// keyboard focus.
+// keyboard focus; pointer: where the pointer is over this surface, in item coordinates (far
+// away when it isn't), for client-drawn hover.
 struct UiPaintState {
     UiFocusRef hot, pressed, focus;
     bool focusVisible = false;
     uint32_t open = 0, editing = 0;
+    D2D1_POINT_2F pointer{-1e9f, -1e9f};
 };
+
+// Draws a client-drawn item (a Preview, a Gallery card's thumbnail) with the target's transform
+// in item coordinates.
+using UiCustomPaint = std::function<void(const UiItem&)>;
 
 static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
     color.a *= opacity;
@@ -10631,7 +10756,7 @@ static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
 static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache,
                          const UiPalette& p, const std::vector<UiItem>& items,
                          const UiPaintState& state, D2D1_POINT_2F offset, float scale, float top,
-                         float bottom) {
+                         float bottom, const UiCustomPaint* custom = nullptr) {
     D2D1_MATRIX_3X2_F base{};
     target->GetTransform(&base);
     D2D1::Matrix3x2F shifted = D2D1::Matrix3x2F::Translation(offset.x, offset.y) *
@@ -10865,7 +10990,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 D2D1_RECT_F clip = UiNumberBoxTextRect(item);
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
                 target->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, 10000, false),
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, clip.right - clip.left, false, item.align),
                              {clip.left, centerY - label.lineHeight / 2},
                              item.enabled ? p.text : p.textDisabled);
                 target->PopAxisAlignedClip();
@@ -10885,21 +11011,96 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              {r.left, centerY - 5}, item.enabled ? p.textSecondary : p.textDisabled);
                 break;
             }
+            // Slider (WinUI): a 4 DIP track with the accent fill up to the value; a 20 DIP thumb
+            // whose accent core grows under the pointer and shrinks while dragged.
+            case UiItemKind::Slider: {
+                float thumb = UiSliderThumbX(item);
+                bool dragging = item.enabled && state.pressed == UiFocusRef{item.id, -1};
+                D2D1_COLOR_F accent = !item.enabled ? p.accentDisabled : hc ? p.highlight : p.accent;
+                UiFillRect(target, cache, {r.left, centerY - 2, r.right, centerY + 2}, 2,
+                           item.enabled ? p.controlStrong : p.textDisabled, scale);
+                UiFillRect(target, cache, {r.left, centerY - 2, thumb, centerY + 2}, 2, accent, scale);
+                D2D1_RECT_F knob{thumb - 10, centerY - 10, thumb + 10, centerY + 10};
+                UiFillRect(target, cache, knob, 10, p.controlSolid, scale);
+                UiStrokeRect(target, cache, knob, 10, hc && (hot || dragging) ? p.highlight : p.controlBorder,
+                             1, scale);
+                float core = dragging ? 4.0f : item.enabled && hot ? 7.0f : 5.0f;
+                UiFillRect(target, cache, {thumb - core, centerY - core, thumb + core, centerY + core},
+                           core, accent, scale);
+                break;
+            }
+            // Swatch: a color circle with a thin edge; the current color gets an accent ring
+            // 2 DIP out, a hovered one a thin ring there.
+            case UiItemKind::Swatch: {
+                COLORREF rgb = COLORREF(item.action.value);
+                D2D1_COLOR_F color{float(GetRValue(rgb)) / 255, float(GetGValue(rgb)) / 255,
+                                   float(GetBValue(rgb)) / 255, item.enabled ? 1.0f : 0.4f};
+                float radius = width / 2;
+                UiFillRect(target, cache, r, radius, color, scale);
+                UiStrokeRect(target, cache, r, radius, hc ? p.text : UiFade(p.text, 0.28f), 1, scale);
+                if (item.selected) {
+                    UiStrokeRect(target, cache, UiInflate(r, 4, 4), radius + 4, hc ? p.highlight : p.accent,
+                                 std::max(1.0f, std::round(2 * scale)), scale);
+                } else if (item.enabled && hot) {
+                    UiStrokeRect(target, cache, UiInflate(r, 4, 4), radius + 4,
+                                 hc ? p.highlight : p.textSecondary, 1, scale);
+                }
+                break;
+            }
+            // Gallery card: reacts to the pointer as a whole; the chosen one has a 2 DIP accent
+            // border. The client draws the thumbnail; the name sits under it.
+            case UiItemKind::Gallery: {
+                bool active = UiActive(item);
+                D2D1_COLOR_F fill = active && pressed ? p.cardPressed : active && hot ? p.cardHover : p.card;
+                UiFillRect(target, cache, r, 6, fill, scale);
+                if (item.selected) {
+                    UiStrokeRect(target, cache, r, 6, hc ? p.highlight : p.accent,
+                                 std::max(1.0f, std::round(2 * scale)), scale);
+                } else {
+                    UiStrokeRect(target, cache, r, 6, hc && hot ? p.highlight : p.cardBorder, 1, scale);
+                }
+                D2D1_RECT_F thumb = UiGalleryThumbRect(item);
+                if (custom && *custom) {
+                    (*custom)(item);
+                    target->SetTransform(&shifted);
+                } else {
+                    UiFillRect(target, cache, thumb, 4, p.control, scale);
+                }
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, UiTextStyleFor(UiFont::Note),
+                                      std::max(thumb.right - thumb.left - 4, 0.0f), false),
+                             {thumb.left + 2, thumb.bottom + 8}, item.enabled ? p.text : p.textDisabled);
+                break;
+            }
+            case UiItemKind::Preview:
+                if (custom && *custom) {
+                    (*custom)(item);
+                    target->SetTransform(&shifted);
+                } else {
+                    UiFillRect(target, cache, r, 4, p.control, scale);
+                }
+                break;
         }
     }
 
     // Focus ring (keyboard focus only): 2 DIP outer and 1 DIP inner band, 3 DIP outside the
     // element; 2 DIP around inline links, between their neighbors; inside for navigation items,
-    // which touch the pane edges. A number box shows focus with its editing style instead.
+    // which touch the pane edges; outside a swatch's selection ring. A number box shows focus
+    // with its editing style instead.
     if (state.focusVisible && state.focus.id) {
         auto focused = std::find_if(items.begin(), items.end(),
                                     [&](const UiItem& item) { return item.id == state.focus.id; });
         if (focused != items.end() && focused->kind != UiItemKind::NumberBox) {
-            float radius = state.focus.link >= 0           ? 2 :
-                           focused->kind == UiItemKind::Card ? 6 : 4;
-            float outside = state.focus.link >= 0          ? 2 :
-                            focused->kind == UiItemKind::Nav ? 0 : 3;
+            float radius = state.focus.link >= 0                ? 2 :
+                           focused->kind == UiItemKind::Swatch  ? (focused->rect.right - focused->rect.left) / 2 :
+                           focused->kind == UiItemKind::Card ||
+                               focused->kind == UiItemKind::Gallery ? 6 : 4;
+            float outside = state.focus.link >= 0             ? 2 :
+                            focused->kind == UiItemKind::Nav    ? 0 :
+                            focused->kind == UiItemKind::Swatch ? 6 : 3;
             for (D2D1_RECT_F rect : UiFocusBounds(g, *focused, state.focus.link)) {
+                // A slider's ring takes in its thumb at either end.
+                if (focused->kind == UiItemKind::Slider) rect = UiInflate(rect, 10, -2);
                 UiStrokeRect(target, cache, UiInflate(rect, outside, outside), radius + outside,
                              p.focusOuter, std::max(1.0f, std::round(2 * scale)), scale);
                 UiStrokeRect(target, cache, UiInflate(rect, outside - 2, outside - 2),
@@ -11038,6 +11239,30 @@ static UiOptionIntent UiOptionKey(int count, int highlight, UINT key) {
     return {};
 }
 
+// Sliders: the value under a pointer x (rounded to whole steps, clamped), and what keys step it
+// by: arrows 1, Page Up/Down a tenth of the range, Home/End all of it (the step clamps).
+static int UiSliderValueAt(const UiItem& slider, float x) {
+    float width = slider.rect.right - slider.rect.left;
+    if (width <= 0 || slider.maximum <= slider.minimum) return slider.minimum;
+    float t = std::clamp((x - slider.rect.left) / width, 0.0f, 1.0f);
+    return slider.minimum + int(std::lround(t * float(slider.maximum - slider.minimum)));
+}
+
+static std::optional<int> UiSliderKey(const UiItem& slider, UINT key) {
+    int range = std::max(slider.maximum - slider.minimum, 1);
+    switch (key) {
+        case VK_RIGHT:
+        case VK_UP: return 1;
+        case VK_LEFT:
+        case VK_DOWN: return -1;
+        case VK_PRIOR: return std::max(range / 10, 1);
+        case VK_NEXT: return -std::max(range / 10, 1);
+        case VK_HOME: return -range;
+        case VK_END: return range;
+    }
+    return std::nullopt;
+}
+
 static float UiClampScroll(float offset, float viewportHeight, float contentHeight) {
     return std::clamp(offset, 0.0f, std::max(contentHeight - viewportHeight, 0.0f));
 }
@@ -11062,9 +11287,9 @@ static float UiScrollForThumb(const UiScrollbar& bar, float thumbTop, float view
 }
 
 // src/ui/system-theme.h
-// System theme reads and window chrome of the custom-drawn windows (native): app light/dark
-// mode, high contrast with its system colors, the accent palette, and the standard DWM caption
-// recolored to the page background.
+// System theme reads and window chrome of the custom-drawn windows (native): app and Windows
+// (taskbar) light/dark mode, high contrast with its system colors, the accent palette, and the
+// standard DWM caption recolored to the page background.
 
 // UISettings is created on first use and released with the window thread's graphics scope,
 // before the apartment. Accent changes are read on theme messages, never subscribed to.
@@ -11074,6 +11299,11 @@ struct UiThemeReader {
 
 static UiThemeInput UiReadTheme(UiThemeReader& reader) {
     UiThemeInput theme;
+    DWORD systemLight = 0;
+    DWORD systemSize = sizeof(systemLight);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &systemLight, &systemSize);
+    theme.systemLight = systemLight != 0;
     HIGHCONTRASTW contrast{sizeof(contrast)};
     if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
         (contrast.dwFlags & HCF_HIGHCONTRASTON)) {
@@ -11428,6 +11658,10 @@ struct UiHostClient {
     // Main window WM_DESTROY, then WM_NCDESTROY.
     virtual void Destroying() = 0;
     virtual void Destroyed() = 0;
+    // Draws a client-drawn item (UiCustomPaint) on a surface's target, inside its BeginDraw:
+    // never pumps messages, rebuilds or shows a modal.
+    virtual void PaintCustom(UiHost&, ID2D1RenderTarget*, UiTargetCache&, const UiItem&,
+                             const UiPaintState&) {}
 
 protected:
     ~UiHostClient() = default;
@@ -11457,7 +11691,8 @@ struct UiHost {
     UiThemeInput theme;
     UiPalette palette;
 
-    // Frame and interaction
+    // Frame and interaction. The pointer position (item coordinates of its surface) feeds
+    // client-drawn hover; a slider or preview drag keeps its item until release.
     UiFrame frame;
     std::vector<UiFocusStop> stops;
     UiPointerState pointer;
@@ -11466,6 +11701,10 @@ struct UiHost {
     float scroll = 0;
     bool scrollbarHot = false, scrollDragging = false;
     float scrollDragOffset = 0;
+    D2D1_POINT_2F pointerAt{-1e9f, -1e9f};
+    UiSurfaceId pointerSurface = UiSurfaceId::Main;
+    uint32_t sliderDrag = 0, panDrag = 0;
+    float dragAnchor = 0;  // Slider: pointer offset from the thumb; preview: last pointer x
 
     // Dropdown popup and number boxes' text boxes
     UiPopup popup;
@@ -11619,19 +11858,20 @@ static void UiHostChoose(UiHost& host, int row) {
     if (!host.closing) host.client->Invoke(host, std::move(action));
 }
 
-// Text boxes -----------------------------------------------------------------------------------
-
-// The text event of a number box's text box, as its action.
-static void UiHostTextEvent(UiHost& host, uint32_t id, UiActionKind kind, std::wstring text = {},
+// An item's event, as a copy of its action: a number box's text box (text events, steps), a
+// slider's drag and keys, a preview's pans.
+static void UiHostItemEvent(UiHost& host, uint32_t id, UiActionKind kind, std::wstring text = {},
                             int value = 0) {
     const UiItem* item = UiFindItem(host.frame, id);
-    if (host.closing || !item || item->kind != UiItemKind::NumberBox) return;
+    if (host.closing || !item) return;
     UiAction action = item->action;
     action.kind = kind;
     action.text = std::move(text);
     action.value = value;
     host.client->Invoke(host, std::move(action));
 }
+
+// Text boxes -----------------------------------------------------------------------------------
 
 // Text boxes sit over their number boxes' text areas, vertically centered, scrolled with the
 // content.
@@ -11667,8 +11907,9 @@ static void UiHostSyncTextBoxes(UiHost& host) {
         if (item.kind != UiItemKind::NumberBox) continue;
         UiTextBox* box = UiFindTextBox(boxes, item.id);
         if (!box) {
+            DWORD align = item.align == DWRITE_TEXT_ALIGNMENT_CENTER ? ES_CENTER : ES_LEFT;
             HWND window = CreateWindowExW(0, L"EDIT", item.text.c_str(),
-                                          WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_LEFT, 0, 0, 0, 0,
+                                          WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | align, 0, 0, 0, 0,
                                           host.viewport, nullptr, GetModuleHandleW(nullptr), nullptr);
             if (!window) {
                 Wh_Log(L"Could not create a text box: %lu", GetLastError());
@@ -11722,6 +11963,8 @@ static void UiHostScrollTo(UiHost& host, float offset) {
         ScreenToClient(host.viewport, &cursor) && GetClientRect(host.viewport, &client) &&
         PtInRect(&client, cursor)) {
         UiPointerMove(host.pointer, UiHostHit(host, UiSurfaceId::Content, cursor));
+        host.pointerSurface = UiSurfaceId::Content;
+        host.pointerAt = {float(cursor.x) / scale, float(cursor.y) / scale + offset};
     }
     UiHostPlaceTextBoxes(host);
     InvalidateRect(host.viewport, nullptr, FALSE);
@@ -11755,7 +11998,8 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
 }
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
-// A dropdown opens its popup; a number box only takes focus (its text box reports edits).
+// A dropdown opens its popup; a number box only takes focus (its text box reports edits); a
+// slider and a preview report their drags instead.
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
     const UiItem* item = UiFindItem(host.frame, ref.id);
@@ -11763,7 +12007,11 @@ static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
         UiHostOpenPopup(host, ref.id);
         return;
     }
-    if (item && ref.link < 0 && item->kind == UiItemKind::NumberBox) return;
+    if (item && ref.link < 0 &&
+        (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::Slider ||
+         item->kind == UiItemKind::Preview)) {
+        return;
+    }
     const UiAction* action = UiActionOf(host.frame, ref);
     if (!action) return;
     UiAction copy = *action;
@@ -11958,6 +12206,11 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_CANCELMODE:
             case WM_SYSCOMMAND:
                 UiHostClosePopup(host);
+                // Cancellation ends a drag on either surface (its capture loss reports it).
+                if (HWND capture = GetCapture();
+                    message == WM_CANCELMODE && (capture == host.main || capture == host.viewport)) {
+                    ReleaseCapture();
+                }
                 handled = false;
                 break;
             case WM_SYSKEYDOWN: {
@@ -12012,17 +12265,22 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                                    host.focusVisible && GetFocus() == window,
                                    host.popup.open ? host.popup.field : 0,
                                    editing ? editing->id : 0};
+                if (host.pointerSurface == surface) state.pointer = host.pointerAt;
+                UiCustomPaint custom = [&](const UiItem& item) {
+                    host.client->PaintCustom(host, target, own.cache, item, state);
+                };
                 target->BeginDraw();
                 D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
                 target->SetTransform(&identity);
                 target->Clear(host.palette.background);
                 if (isMain) {
                     UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
-                                 state, {0, 0}, scale, -1e9f, 1e9f);
+                                 state, {0, 0}, scale, -1e9f, 1e9f, &custom);
                 } else {
                     float height = UiHostViewHeight(host);
                     UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.content,
-                                 state, {0, -host.scroll}, scale, host.scroll, host.scroll + height);
+                                 state, {0, -host.scroll}, scale, host.scroll, host.scroll + height,
+                                 &custom);
                     UiPaintScrollbar(target, own.cache, host.palette, UiHostScrollbar(host),
                                      host.scrollbarHot || host.scrollDragging, scale);
                 }
@@ -12036,6 +12294,26 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, window, 0};
                 TrackMouseEvent(&track);
                 float scale = UiHostScale(host);
+                float x = float(point.x) / scale;
+                host.pointerSurface = surface;
+                host.pointerAt = {x, float(point.y) / scale + (isMain ? 0 : host.scroll)};
+                // A slider drag reports each new value; a preview drag pans by whole DIPs.
+                if (host.sliderDrag) {
+                    const UiItem* slider = UiFindItem(host.frame, host.sliderDrag);
+                    int value = slider ? UiSliderValueAt(*slider, x - host.dragAnchor) : 0;
+                    if (slider && value != slider->action.value) {
+                        UiHostItemEvent(host, host.sliderDrag, UiActionKind::Slide, {}, value);
+                    }
+                    break;
+                }
+                if (host.panDrag) {
+                    int moved = int(x - host.dragAnchor);
+                    if (moved) {
+                        host.dragAnchor += float(moved);
+                        UiHostItemEvent(host, host.panDrag, UiActionKind::Pan, {}, moved);
+                    }
+                    break;
+                }
                 if (!isMain && host.scrollDragging) {
                     UiHostScrollTo(host, UiScrollForThumb(UiHostScrollbar(host),
                                                           float(point.y) / scale - host.scrollDragOffset,
@@ -12050,15 +12328,19 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.scrollbarHot = overBar;
                 changed |= UiPointerMove(host.pointer, overBar ? UiFocusRef{} :
                                                                  UiHostHit(host, surface, point));
+                // A preview's hover follows the pointer within it.
+                const UiItem* hot = UiFindItem(host.frame, host.pointer.hot.id);
                 if (changed) UiHostInvalidate(host);
+                else if (hot && hot->kind == UiItemKind::Preview) InvalidateRect(window, nullptr, FALSE);
                 break;
             }
             case WM_MOUSELEAVE:
+                if (host.pointerSurface == surface) host.pointerAt = {-1e9f, -1e9f};
                 if (!host.pointer.pressed.id && !host.scrollDragging) {
                     host.pointer.hot = {};
                     host.scrollbarHot = false;
-                    UiHostInvalidate(host);
                 }
+                UiHostInvalidate(host);
                 break;
             case WM_LBUTTONDOWN: {
                 if (host.closing) break;
@@ -12083,12 +12365,30 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.pointer.pressed = hit;
                 if (hit.id) {
                     SetCapture(window);
-                    // A spin button keeps focus on its number box's text box.
+                    // A spin button keeps focus on its number box's text box; a preview takes
+                    // no focus.
                     const UiItem* item = UiFindItem(host.frame, hit.id);
-                    UiFocusRef target = item && item->kind == UiItemKind::SpinButton ?
-                                            UiFocusRef{item->owner, -1} : hit;
-                    if (target != host.focus || GetFocus() != UiHostFocusWindow(host, target)) {
+                    UiItemKind kind = item ? item->kind : UiItemKind::Text;
+                    UiFocusRef target = kind == UiItemKind::SpinButton ? UiFocusRef{item->owner, -1} : hit;
+                    if (kind != UiItemKind::Preview &&
+                        (target != host.focus || GetFocus() != UiHostFocusWindow(host, target))) {
                         UiHostSetFocus(host, target, false);
+                    }
+                    // Drags: a slider jumps to the press unless it grabs the thumb; a preview
+                    // pans with the pointer.
+                    float x = float(point.x) / scale;
+                    const UiItem* slider = UiFindItem(host.frame, hit.id);
+                    if (slider && slider->kind == UiItemKind::Slider) {
+                        float offset = x - UiSliderThumbX(*slider);
+                        host.sliderDrag = hit.id;
+                        host.dragAnchor = std::abs(offset) <= 10 ? offset : 0;
+                        int value = UiSliderValueAt(*slider, x - host.dragAnchor);
+                        if (value != slider->action.value) {
+                            UiHostItemEvent(host, hit.id, UiActionKind::Slide, {}, value);
+                        }
+                    } else if (kind == UiItemKind::Preview) {
+                        host.panDrag = hit.id;
+                        host.dragAnchor = x;
                     }
                 } else {
                     host.focusVisible = false;
@@ -12098,24 +12398,34 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_LBUTTONUP: {
+                // A slider drag ends wherever the pointer is: its value commits.
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
+                uint32_t slider = std::exchange(host.sliderDrag, 0);
+                host.panDrag = 0;
                 UiFocusRef activate = UiPointerRelease(host.pointer, UiHostHit(host, surface, point));
                 host.scrollDragging = false;
                 if (GetCapture() == window) ReleaseCapture();
                 UiHostInvalidate(host);
-                if (activate.id) UiHostInvoke(host, activate);
+                if (slider) UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
+                else if (activate.id) UiHostInvoke(host, activate);
                 break;
             }
             case WM_CAPTURECHANGED:
+                // Losing capture ends a slider drag as a release does.
                 host.pointer.pressed = {};
                 host.scrollDragging = false;
+                host.panDrag = 0;
+                if (uint32_t slider = std::exchange(host.sliderDrag, 0)) {
+                    UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
+                }
                 UiHostInvalidate(host);
                 break;
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL: {
                 // With the popup open, a wheel over it does nothing and one elsewhere closes it.
-                // Otherwise the vertical wheel over the page column (header or content) scrolls
-                // the content.
+                // Otherwise a sideways wheel (or Shift) over a preview pans it, 48 DIPs a notch,
+                // and the vertical wheel over the page column (header or content) scrolls the
+                // content.
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
                 if (host.popup.open) {
                     RECT popup{};
@@ -12123,15 +12433,29 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     if (!PtInRect(&popup, point)) UiHostClosePopup(host);
                     break;
                 }
+                float notches = float(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA;
+                ScreenToClient(host.main, &point);
+                float scale = UiHostScale(host);
+                if (message == WM_MOUSEHWHEEL || GetKeyState(VK_SHIFT) < 0) {
+                    const D2D1_RECT_F& v = host.frame.viewport;
+                    bool content = UiContains(v, {float(point.x) / scale, float(point.y) / scale});
+                    POINT at = content ? POINT{point.x - LONG(std::lround(v.left * scale)),
+                                               point.y - LONG(std::lround(v.top * scale))} : point;
+                    UiFocusRef hit = UiHostHit(host, content ? UiSurfaceId::Content : UiSurfaceId::Main, at);
+                    const UiItem* item = UiFindItem(host.frame, hit.id);
+                    if (item && item->kind == UiItemKind::Preview) {
+                        int moved = int(std::lround(notches * 48)) * (message == WM_MOUSEHWHEEL ? -1 : 1);
+                        UiHostItemEvent(host, hit.id, UiActionKind::Pan, {}, moved);
+                        break;
+                    }
+                }
                 if (message == WM_MOUSEHWHEEL) {
                     handled = false;
                     break;
                 }
-                ScreenToClient(host.main, &point);
-                if (float(point.x) / UiHostScale(host) < host.frame.viewport.left) break;
+                if (float(point.x) / scale < host.frame.viewport.left) break;
                 UINT lines = 3;
                 SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
-                float notches = float(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA;
                 float step = lines == WHEEL_PAGESCROLL ? UiHostViewHeight(host) - 40 : float(lines) * 16;
                 UiHostScrollTo(host, host.scroll - notches * step);
                 break;
@@ -12175,6 +12499,14 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (wParam == VK_F4 && focused && focused->kind == UiItemKind::Dropdown) {
                     UiHostOpenPopup(host, host.focus.id);
                     break;
+                }
+                // A focused slider's arrows, Page Up/Down and Home/End step its value.
+                if (focused && focused->kind == UiItemKind::Slider && focused->enabled) {
+                    if (std::optional<int> step = UiSliderKey(*focused, UINT(wParam))) {
+                        host.focusVisible = true;
+                        UiHostItemEvent(host, host.focus.id, UiActionKind::Step, {}, *step);
+                        break;
+                    }
                 }
                 UiIntent intent = UiKeyIntent(host.stops, host.focus, surface, UINT(wParam),
                                               GetKeyState(VK_SHIFT) < 0, 40,
@@ -12230,7 +12562,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         std::wstring text = UiTextBoxText(box->window);
                         if (text == box->text) break;
                         box->text = text;
-                        UiHostTextEvent(host, id, UiActionKind::TextChange, std::move(text));
+                        UiHostItemEvent(host, id, UiActionKind::TextChange, std::move(text));
                         break;
                     }
                     case EN_SETFOCUS:
@@ -12243,7 +12575,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         InvalidateRect(box->window, nullptr, TRUE);
                         UiHostInvalidate(host);
                         if (!host.boxes.leavingWindow) {
-                            UiHostTextEvent(host, id, UiActionKind::TextBlur, box->text);
+                            UiHostItemEvent(host, id, UiActionKind::TextBlur, box->text);
                         }
                         break;
                 }
@@ -12416,7 +12748,7 @@ static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wPar
                 std::wstring text = UiTextBoxText(window);
                 if (text == box->text) break;
                 box->text = text;
-                UiHostTextEvent(host, box->id, UiActionKind::TextChange, std::move(text));
+                UiHostItemEvent(host, box->id, UiActionKind::TextChange, std::move(text));
                 break;
             }
             case WM_KEYDOWN: {
@@ -12431,14 +12763,14 @@ static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wPar
                         break;
                     }
                     case VK_RETURN:
-                        UiHostTextEvent(host, id, UiActionKind::TextCommit, box->text);
+                        UiHostItemEvent(host, id, UiActionKind::TextCommit, box->text);
                         break;
                     case VK_ESCAPE:
-                        UiHostTextEvent(host, id, UiActionKind::TextRevert);
+                        UiHostItemEvent(host, id, UiActionKind::TextRevert);
                         break;
                     case VK_UP:
                     case VK_DOWN:
-                        UiHostTextEvent(host, id, UiActionKind::Step, {}, wParam == VK_UP ? 1 : -1);
+                        UiHostItemEvent(host, id, UiActionKind::Step, {}, wParam == VK_UP ? 1 : -1);
                         break;
                     default:
                         handled = false;
@@ -12586,6 +12918,33 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
     if (viewportRegistered) UnregisterClassW(config.viewportClass, instance);
     if (mainRegistered) UnregisterClassW(config.mainClass, instance);
     return created;
+}
+
+// src/ui/color-dialog.h
+// The system color dialog as a tracked modal of a custom-drawn window (native). While it runs,
+// `dialog` holds its window: a close cancels it (WM_COMMAND IDCANCEL posted to it) and retries
+// once the call has returned. Custom colors persist in the caller's array.
+
+// The chosen color (0xBBGGRR); nothing when cancelled or ended by a close.
+static std::optional<COLORREF> UiChooseColor(HWND owner, COLORREF initial,
+                                             std::array<COLORREF, 16>& custom, HWND& dialog) {
+    CHOOSECOLORW chooser{};
+    chooser.lStructSize = sizeof(chooser);
+    chooser.hwndOwner = owner;
+    chooser.rgbResult = initial & 0x00FFFFFF;
+    chooser.lpCustColors = custom.data();
+    chooser.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
+    chooser.lCustData = reinterpret_cast<LPARAM>(&dialog);
+    chooser.lpfnHook = [](HWND window, UINT message, WPARAM, LPARAM lParam) -> UINT_PTR {
+        if (message == WM_INITDIALOG) {
+            *reinterpret_cast<HWND*>(reinterpret_cast<CHOOSECOLORW*>(lParam)->lCustData) = window;
+        }
+        return 0;
+    };
+    bool chosen = ChooseColorW(&chooser);
+    dialog = nullptr;
+    if (!chosen) return std::nullopt;
+    return chooser.rgbResult & 0x00FFFFFF;
 }
 
 // src/settings/storage.h
@@ -13622,12 +13981,33 @@ enum class SettingsField : uint8_t {
     // History
     RecordHistory,  // This Windows user's recording consent
     RetentionDays,
+    // Layout
+    BarLayout,        // Tile style: a BarLayout
+    BarLength,
+    BarThickness,
+    BarGap,
+    RingSize,
+    RingThickness,
+    LabelPosition,    // A LabelPosition
+    LabelFontSize,
+    LabelGap,
+    ShowBarLabels,    // Quota keys
+    PercentFontSize,  // Bar text size
+    ShowPaceTicks,
+    PaceTickStyle,    // A PaceTickStyle
+    PaceTickColor,    // 0xBBGGRR
+    AccountMargin,
+    RightMargin,      // Tray gap
     // Operation groups: page resets
     ResetBehavior,
     ResetHistory,
+    ResetLayout,
     // Window commands, never drafts or commits
     OpenHistory,
     OpenHistoryFolder,
+    PaceTickColorCustom,  // The color dialog
+    ShowOnTaskbar,        // Visual test mode
+    PreviewScroll,        // The preview strip's sideways scroll
 };
 
 struct SettingsNumberRange {
@@ -13638,6 +14018,16 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
     switch (field) {
         case SettingsField::PollMinutes: return SettingsNumberRange{2, 24 * 60};
         case SettingsField::RetentionDays: return SettingsNumberRange{1, 3650};
+        case SettingsField::BarLength: return SettingsNumberRange{10, 500};
+        case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
+        case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
+        case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
+        case SettingsField::LabelFontSize:
+        case SettingsField::PercentFontSize: return SettingsNumberRange{6, 24};
+        case SettingsField::BarGap:
+        case SettingsField::LabelGap:
+        case SettingsField::AccountMargin:
+        case SettingsField::RightMargin: return SettingsNumberRange{0, 500};
         default: return std::nullopt;
     }
 }
@@ -13650,6 +14040,15 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::SkipHiddenPolling, SettingsField::Notifications};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::RetentionDays};
+        case SettingsField::ResetLayout:
+            return {SettingsField::BarLayout,     SettingsField::BarLength,
+                    SettingsField::BarThickness,  SettingsField::BarGap,
+                    SettingsField::RingSize,      SettingsField::RingThickness,
+                    SettingsField::LabelPosition, SettingsField::LabelFontSize,
+                    SettingsField::LabelGap,      SettingsField::ShowBarLabels,
+                    SettingsField::PercentFontSize, SettingsField::ShowPaceTicks,
+                    SettingsField::PaceTickStyle, SettingsField::PaceTickColor,
+                    SettingsField::AccountMargin, SettingsField::RightMargin};
         default: return {};
     }
 }
@@ -13666,12 +14065,29 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::Notifications: return s.enableNotifications;
         case SettingsField::RecordHistory: return s.historyEnabled;
         case SettingsField::RetentionDays: return s.historyRetentionDays;
+        case SettingsField::BarLayout: return int(s.barLayout);
+        case SettingsField::BarLength: return s.barLength;
+        case SettingsField::BarThickness: return s.barThickness;
+        case SettingsField::BarGap: return s.barGap;
+        case SettingsField::RingSize: return s.ringSize;
+        case SettingsField::RingThickness: return s.ringThickness;
+        case SettingsField::LabelPosition: return int(s.labelPosition);
+        case SettingsField::LabelFontSize: return s.labelFontSize;
+        case SettingsField::LabelGap: return s.labelGap;
+        case SettingsField::ShowBarLabels: return s.showBarLabels;
+        case SettingsField::PercentFontSize: return s.percentFontSize;
+        case SettingsField::ShowPaceTicks: return s.showPaceTicks;
+        case SettingsField::PaceTickStyle: return int(s.paceTickStyle);
+        case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
+        case SettingsField::AccountMargin: return s.accountMargin;
+        case SettingsField::RightMargin: return s.rightMargin;
         default: return 0;
     }
 }
 
 // Sets one field, or a group's fields to their defaults, to the desired value (never toggles).
-// Numbers clamp to their range; normalization follows when the settings are applied.
+// Numbers clamp to their range and choices to their values, so every assigned value is one the
+// preview can draw; normalization follows when the settings are applied.
 static void SettingsAssign(Settings& s, SettingsField field, int value) {
     const Settings defaults;
     if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
@@ -13689,6 +14105,48 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::Notifications: s.enableNotifications = value != 0; break;
         case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
         case SettingsField::RetentionDays: s.historyRetentionDays = value; break;
+        case SettingsField::BarLayout:
+            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
+            break;
+        case SettingsField::BarLength: s.barLength = value; break;
+        case SettingsField::BarThickness: s.barThickness = value; break;
+        case SettingsField::BarGap: s.barGap = value; break;
+        case SettingsField::RingSize: s.ringSize = value; break;
+        case SettingsField::RingThickness: s.ringThickness = value; break;
+        case SettingsField::LabelPosition:
+            s.labelPosition = LabelPosition(std::clamp(value, int(LabelPosition::Hidden),
+                                                       int(LabelPosition::Bottom)));
+            break;
+        case SettingsField::LabelFontSize: s.labelFontSize = value; break;
+        case SettingsField::LabelGap: s.labelGap = value; break;
+        case SettingsField::ShowBarLabels: s.showBarLabels = value != 0; break;
+        case SettingsField::PercentFontSize: s.percentFontSize = value; break;
+        case SettingsField::ShowPaceTicks: s.showPaceTicks = value != 0; break;
+        case SettingsField::PaceTickStyle:
+            s.paceTickStyle = PaceTickStyle(std::clamp(value, int(PaceTickStyle::Caret),
+                                                       int(PaceTickStyle::Dot)));
+            break;
+        case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
+        case SettingsField::AccountMargin: s.accountMargin = value; break;
+        case SettingsField::RightMargin: s.rightMargin = value; break;
+        case SettingsField::ResetLayout:
+            s.barLayout = defaults.barLayout;
+            s.barLength = defaults.barLength;
+            s.barThickness = defaults.barThickness;
+            s.barGap = defaults.barGap;
+            s.ringSize = defaults.ringSize;
+            s.ringThickness = defaults.ringThickness;
+            s.labelPosition = defaults.labelPosition;
+            s.labelFontSize = defaults.labelFontSize;
+            s.labelGap = defaults.labelGap;
+            s.showBarLabels = defaults.showBarLabels;
+            s.percentFontSize = defaults.percentFontSize;
+            s.showPaceTicks = defaults.showPaceTicks;
+            s.paceTickStyle = defaults.paceTickStyle;
+            s.paceTickColor = defaults.paceTickColor;
+            s.accountMargin = defaults.accountMargin;
+            s.rightMargin = defaults.rightMargin;
+            break;
         case SettingsField::ResetBehavior:
             s.taskbarMonitorMode = defaults.taskbarMonitorMode;
             s.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
@@ -13778,6 +14236,8 @@ struct SettingsStatus {
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
     wchar_t groupSeparator = L',';
+    double taskbarHeight = 0;  // The primary taskbar's, in DIPs at its own DPI; 0 if unknown
+    bool visualTest = false;   // The taskbar shows the sample accounts
 };
 
 struct SettingsBaseline {
@@ -13914,15 +14374,25 @@ struct SettingsEdits {
         std::erase_if(queue, [&](const SettingsRequest& r) { return r.key == key && r.field == field; });
     }
 
-    // Discrete controls: the desired value, committed at once with whatever is queued. Returns
-    // the number of failed saves.
-    int Commit(uint64_t key, SettingsField field, int value) {
+    // A slider drag: the desired value (clamped to the field's range) as a draft, committed when
+    // the drag ends (RequestCommit). Returns the draft's revision.
+    uint64_t SetValue(uint64_t key, SettingsField field, int value) {
+        if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
+            value = std::clamp(value, range->minimum, range->maximum);
+        }
         SettingsDraft& draft = Touch(key, field);
         draft.text = false;
         draft.raw.clear();
         draft.value = value;
         draft.valid = true;
-        queue.push_back({key, field, draft.revision, value});
+        return draft.revision;
+    }
+
+    // Discrete controls: the desired value, committed at once with whatever is queued. Returns
+    // the number of failed saves.
+    int Commit(uint64_t key, SettingsField field, int value) {
+        uint64_t revision = SetValue(key, field, value);
+        queue.push_back({key, field, revision, Find(key, field)->value});
         return Process();
     }
 
@@ -14058,12 +14528,18 @@ struct SettingsProductionStore final : SettingsStore {
                            g_historyStorageError   ? SettingsRecording::StorageError :
                                                      SettingsRecording::Recording;
         // Display N is the Nth taskbar in the order the taskbar code targets (primary first).
+        // The preview takes the primary taskbar's height, converted with that taskbar's DPI.
         std::vector<TaskbarDisplayInfo> taskbars = FindCurrentProcessTaskbarDisplays();
         for (size_t i = 0; i < taskbars.size(); i++) {
             const RECT& rect = taskbars[i].rect;
             status.displays.push_back({int(i) + 1, int(std::abs(rect.right - rect.left)),
                                        int(std::abs(rect.bottom - rect.top)), taskbars[i].primary});
+            RECT window{};
+            if (taskbars[i].primary && !status.taskbarHeight && GetWindowRect(taskbars[i].hWnd, &window)) {
+                status.taskbarHeight = double(window.bottom - window.top) * 96 / WindowDpi(taskbars[i].hWnd);
+            }
         }
+        status.visualTest = g_visualTestMode.load(std::memory_order_acquire);
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
         PWSTR localAppData = nullptr;
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr,
@@ -14114,6 +14590,9 @@ struct SettingsView {
     SettingsStatus status;
     std::vector<SettingsDraft> drafts;  // Number box text and errors
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
+    float scale = 1;                    // Window DPI / 96: the preview's device pixels
+    float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
+    ULONGLONG now = 0;                  // The preview's sample time
 };
 
 // Interactive controls keep their ids across rebuilds, so focus and text boxes follow them.
@@ -14179,6 +14658,33 @@ static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
     return card.card.bottom;
 }
 
+// A slider with a centered number box before it (mockup .sldwrap: 60 DIP box, 14 DIP gap,
+// 220 DIP slider). The box shows its draft's text while there is one, else the projected
+// value; the slider shows the projected value.
+static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
+                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
+                                   float width, UiCardSpec spec, SettingsField field) {
+    SettingsNumberRange range = SettingsFieldRange(field).value_or(SettingsNumberRange{});
+    int value = SettingsFieldValue(view.settings, field);
+    const SettingsDraft* draft = SettingsViewDraft(view, field);
+    spec.trailing = {60 + 14 + 220, 32};
+    if (draft) spec.error = draft->error;
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    const D2D1_RECT_F& slot = card.trailing;
+    UiItem box;
+    box.id = SettingsControlId(field);
+    box.kind = UiItemKind::NumberBox;
+    box.rect = {slot.left, slot.top, slot.left + 60, slot.bottom};
+    box.text = draft && draft->text ? draft->raw : SettingsFormatNumber(value, view.status.groupSeparator);
+    box.align = DWRITE_TEXT_ALIGNMENT_CENTER;
+    box.enabled = spec.enabled;
+    box.action = SettingsCommand(field);
+    items.push_back(std::move(box));
+    UiAddSlider(items, SettingsControlId(field, 1), {slot.left + 74, slot.top, slot.right, slot.bottom},
+                value, range.minimum, range.maximum, spec.enabled, SettingsCommand(field));
+    return card.card.bottom;
+}
+
 // A card with a standard button (mockup .btn: 14 DIP padding, optional 12 DIP glyph).
 static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id,
                                    float x, float y, float width, UiCardSpec spec,
@@ -14196,6 +14702,735 @@ static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, ui
     button.action = SettingsCommand(command);
     items.push_back(std::move(button));
     return card.card.bottom;
+}
+
+// src/settings/preview.h
+// Settings preview: the taskbar strip under the Layout title and the tile style gallery's
+// thumbnails, drawn from the shared meter model (taskbar/meter-model.h) with the visual test
+// accounts at 1:1 DIPs. Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h,
+// quota-update.h) as draw operations; painting takes an explicit target and theme.
+//
+// Units: the strip is as tall as the primary taskbar in DIPs (converted with that taskbar's
+// DPI); the meter model's pixel details (pace ticks, text offsets) and snapping use the preview
+// window's scale. Text uses the fonts the taskbar's XAML resolves: Segoe UI Variable with
+// automatic optical size (its default font) for labels, percentages and keys, the named Display
+// and Small instances for tile text and badges.
+
+// One draw operation, in strip DIPs. Colors are ARGB.
+struct SettingsPreviewOp {
+    enum class Kind : uint8_t { Rect, Arc, Dot, Polygon, Text, Logo };
+    Kind kind = Kind::Rect;
+    int hover = -1;                     // Drawn only while this column is hovered; -1: always
+    D2D1_RECT_F rect{};                 // Rect, Dot bounds, Text box (aligns in its width), Logo box
+    float radius = 0;                   // Rect corners; Arc centerline radius
+    float stroke = 0;                   // Rect border (inside), Arc width, Dot outline
+    uint32_t color = 0;                 // Fill, arc or text color
+    uint32_t outline = 0;               // Rect border and Dot outline
+    float opacity = 1;
+    D2D1_POINT_2F center{};             // Arc
+    float start = 0, sweep = 0;         // Arc: degrees clockwise from the right
+    std::vector<D2D1_POINT_2F> points;  // Polygon
+    std::wstring text;
+    UiTextStyle style;
+    DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
+    bool clip = false;                  // Text clipped to its box (XAML MaxWidth, clip trimming)
+    PCWSTR path = nullptr;              // Logo path data (24 DIP view box), scaled to the box
+};
+
+// A strip: one column per sample account, laid out from x 0 (the first column's margin box) and
+// centered on the strip's height; the tray from its own left edge.
+struct SettingsPreviewStrip {
+    std::vector<SettingsPreviewOp> ops, tray;
+    std::vector<D2D1_RECT_F> columns;  // Hover targets: the XAML columns without their margins
+    float width = 0;                   // Columns with their margins
+    float trayWidth = 0;
+    float height = 0;
+    float rightMargin = 0;             // Tray gap
+};
+
+// The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
+// accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
+// taskbar's text (logos, labels, keys, tray).
+static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
+                                                  double taskbarHeight, float scale, ULONGLONG now,
+                                                  bool gallery, bool light, uint32_t text) {
+    using Op = SettingsPreviewOp;
+    SettingsPreviewStrip strip;
+    MeterDisplay display = MeterDisplayFor(settings, now, scale, taskbarHeight);
+    std::vector<AccountConfig> accounts;
+    std::vector<AccountData> data;
+    BuildVisualTestSnapshot(display, &accounts, &data);
+    if (gallery) {
+        accounts = {accounts[1], accounts[2]};
+        data = {data[1], data[2]};
+    }
+    const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Stacked),
+                                                  int(BarLayout::LogoHeadline)));
+    const float H = gallery ? 48 : float(std::clamp(taskbarHeight > 0 ? taskbarHeight : 48.0, 24.0, 96.0));
+    const float margin = float(std::clamp(settings.accountMargin, 0, 500));
+    strip.height = H;
+    strip.rightMargin = float(std::clamp(settings.rightMargin, 0, 500));
+    const TilePalette palette = TilePaletteFor(light);
+    const uint32_t pace = 0xFF000000 | uint32_t(GetRValue(display.paceTickColor)) << 16 |
+                          uint32_t(GetGValue(display.paceTickColor)) << 8 | GetBValue(display.paceTickColor);
+
+    // Text as XAML lays it out: natural line height, width rounded up to device pixels.
+    struct Measured {
+        float width, height, baseline, cap;
+    };
+    auto measure = [&](std::wstring_view s, const UiTextStyle& style) {
+        IDWriteTextLayout* layout = UiLayout(g, s, style, 100000, false);
+        DWRITE_LINE_METRICS line{};
+        UINT32 lines = 0;
+        layout->GetLineMetrics(&line, 1, &lines);
+        return Measured{std::ceil(UiLayoutSize(layout).width * scale - 0.01f) / scale, line.height,
+                        line.baseline, UiFontMetricsFor(g, style).capHeight};
+    };
+    auto add = [](std::vector<Op>& ops, Op op) { ops.push_back(std::move(op)); };
+    auto rect = [&](std::vector<Op>& ops, D2D1_RECT_F r, float radius, uint32_t color, int hover = -1) {
+        Op op;
+        op.rect = r;
+        op.radius = radius;
+        op.color = color;
+        op.hover = hover;
+        add(ops, std::move(op));
+    };
+    // Text whose box top is at `top` (natural) or whose cap height starts there (XAML Tight
+    // line bounds: cap height to baseline).
+    auto label = [&](std::vector<Op>& ops, std::wstring s, const UiTextStyle& style, float left,
+                     float top, float width, DWRITE_TEXT_ALIGNMENT align, uint32_t color,
+                     float opacity, bool tight = false, int hover = -1, bool clip = false) {
+        Measured m = measure(s, style);
+        Op op;
+        op.kind = Op::Kind::Text;
+        op.rect = {left, tight ? top + m.cap - m.baseline : top, left + width,
+                   (tight ? top + m.cap - m.baseline : top) + m.height};
+        op.text = std::move(s);
+        op.style = style;
+        op.align = align;
+        op.color = color;
+        op.opacity = opacity;
+        op.hover = hover;
+        op.clip = clip;
+        add(ops, std::move(op));
+    };
+    auto logo = [&](std::vector<Op>& ops, const std::wstring& provider, D2D1_RECT_F box, float opacity) {
+        Op op;
+        op.kind = Op::Kind::Logo;
+        op.rect = box;
+        op.color = text;
+        op.opacity = opacity;
+        op.path = provider == L"openai" ? kOpenAiLogoPath :
+                  provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+        add(ops, std::move(op));
+    };
+    // A number badge (tiles.h): a pill with a border, its bold text centered by its cap height.
+    auto badge = [&](std::vector<Op>& ops, D2D1_RECT_F box, const std::wstring& s, float font, float opacity) {
+        Op op;
+        op.rect = box;
+        op.radius = (box.bottom - box.top) / 2;
+        op.color = palette.badge;
+        op.outline = palette.badgeOutline;
+        op.stroke = 1.2f;
+        op.opacity = opacity;
+        add(ops, std::move(op));
+        UiTextStyle style{UiFamily::Small, font, 0, DWRITE_FONT_WEIGHT_BOLD};
+        label(ops, s, style, box.left, (box.top + box.bottom) / 2 - measure(s, style).cap / 2,
+              box.right - box.left, DWRITE_TEXT_ALIGNMENT_CENTER, text, opacity, true);
+    };
+
+    float x = 0;
+    for (size_t i = 0; i < accounts.size(); i++) {
+        const AccountConfig& account = accounts[i];
+        const int column = int(i);
+        float x0 = x + margin, width = 0, top = 0, height = 0;
+        std::vector<Op>& ops = strip.ops;
+
+        if (!IsTileLayout(layout)) {
+            // Bars (quota-grid.h): a label beside, above or below a stack of bars; each bar a
+            // track, its fill and pace tick, an optional quota key and the percentage text.
+            const bool vertical = layout == BarLayout::Vertical;
+            const int len = display.barLength, th = display.barThickness;
+            const float gap = float(std::clamp(settings.barGap, 0, 500));
+            const float labelGap = float(std::clamp(settings.labelGap, 0, 500));
+            const LabelPosition position = LabelPosition(std::clamp(
+                int(settings.labelPosition), int(LabelPosition::Hidden), int(LabelPosition::Bottom)));
+            const bool keys = settings.showBarLabels;
+            const float textSize = float(std::clamp(settings.percentFontSize, 6, 24));
+            const UiTextStyle labelStyle{UiFamily::Taskbar, float(std::clamp(settings.labelFontSize, 6, 24)), 0,
+                                         DWRITE_FONT_WEIGHT_NORMAL};
+            const UiTextStyle textStyle{UiFamily::Taskbar, textSize, 0, DWRITE_FONT_WEIGHT_NORMAL};
+            const float keyColumn = std::ceil(textSize * 1.4f) + 3;
+            const float itemWidth = float(vertical ? th : len) + (keys ? keyColumn : 0);
+            const float itemHeight = float(vertical ? len : th);
+            const BarGeometry geometry = BarGeometryFor(display);
+            AccountMeters meters = AccountMeterState(display, layout, account, data[i], 0, 0);
+            int count = std::popcount(unsigned(meters.barMask));
+
+            float barsWidth = 0, barsHeight = 0;
+            if (count) {
+                barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
+                barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
+            }
+            bool labelled = position != LabelPosition::Hidden;
+            bool side = position == LabelPosition::Left || position == LabelPosition::Right;
+            Measured labelText = measure(meters.labelText, labelStyle);
+            float labelWidth = labelled ? labelText.width : 0;
+            // Side labels have a -2 DIP top margin; stacked ones the label gap toward the bars.
+            if (side) {
+                width = labelWidth + labelGap + barsWidth;
+                height = std::max(labelText.height - 2, barsHeight);
+            } else {
+                width = std::max(labelWidth, barsWidth);
+                height = (labelled ? labelText.height + labelGap : 0) + barsHeight;
+            }
+            if (!count) {
+                // A small context-menu target stays when no quota shows.
+                width = std::max(width, float(std::max(th, 8)));
+                height = std::max(height, float(std::max(th, 8)));
+            }
+            top = (H - height) / 2;
+
+            if (labelled) {
+                float left = position == LabelPosition::Right ? barsWidth + labelGap :
+                             side ? 0 : (width - labelWidth) / 2;
+                float labelTop = side ? top + (height - labelText.height) / 2 - 1 :
+                                 position == LabelPosition::Top ? top : top + barsHeight + labelGap;
+                label(ops, meters.labelText, labelStyle, x0 + left, labelTop, labelWidth,
+                      DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
+            }
+            float barsLeft = x0 + (position == LabelPosition::Left ? labelWidth + labelGap : 0);
+            float barsTop = side ? top + (height - barsHeight) / 2 :
+                            position == LabelPosition::Top ? top + labelText.height + labelGap : top;
+            float panelWidth = side ? barsWidth : width;
+            int k = 0;
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                if (!(meters.barMask & (1 << w))) continue;
+                const QuotaMeter& q = meters.quotas[w];
+                // Stacked items center in the panel; vertical ones line up from its left.
+                float itemLeft = vertical ? barsLeft + k * (itemWidth + gap) :
+                                            barsLeft + (panelWidth - itemWidth) / 2;
+                float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + gap);
+                float tx = itemLeft + (keys ? keyColumn : 0), ty = itemTop;
+                float trackWidth = float(vertical ? th : len), trackHeight = itemHeight;
+                float radius = std::max(1.0f, th / 2.0f);
+                rect(ops, {tx, ty, tx + trackWidth, ty + trackHeight}, radius, 0x46808080);
+                if (q.fillPx > 0) {
+                    rect(ops, vertical ? D2D1_RECT_F{tx, ty + len - q.fillPx, tx + th, ty + len} :
+                                         D2D1_RECT_F{tx, ty, tx + q.fillPx, ty + th},
+                         radius, q.color);
+                }
+                if (display.showPaceTicks && q.paceVisible) {
+                    bool notch = display.paceTickStyle == PaceTickStyle::Notch;
+                    float along = geometry.paceLength, cross = geometry.paceCrossSize;
+                    D2D1_POINT_2F at = vertical ?
+                        D2D1_POINT_2F{notch ? tx : tx + (th - cross) / 2, ty + len - q.pacePx - along} :
+                        D2D1_POINT_2F{tx + q.pacePx, notch ? ty : ty + (th - cross) / 2};
+                    if (display.paceTickStyle == PaceTickStyle::Caret) {
+                        // A dark halo polygon, then the core.
+                        for (int layer = 0; layer < 2; layer++) {
+                            Op op;
+                            op.kind = Op::Kind::Polygon;
+                            op.color = layer ? pace : 0xC0000000;
+                            for (auto [a, c] : geometry.caret[layer]) {
+                                op.points.push_back(vertical ? D2D1_POINT_2F{at.x + float(c), at.y + float(a)} :
+                                                               D2D1_POINT_2F{at.x + float(a), at.y + float(c)});
+                            }
+                            add(ops, std::move(op));
+                        }
+                    } else {
+                        float boxWidth = vertical ? cross : along, boxHeight = vertical ? along : cross;
+                        rect(ops, {at.x, at.y, at.x + boxWidth, at.y + boxHeight}, geometry.paceRadius,
+                             0xC0000000);
+                        float coreWidth = vertical ? geometry.coreCrossSize : geometry.coreLength;
+                        float coreHeight = vertical ? geometry.coreLength : geometry.coreCrossSize;
+                        float cx = at.x + (boxWidth - coreWidth) / 2, cy = at.y + (boxHeight - coreHeight) / 2;
+                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, pace);
+                    }
+                }
+                if (keys) {
+                    label(ops, w == kExtraUsageBar && account.provider == L"openai" ? L"Cr" : kQuotaKeys[w],
+                          textStyle, itemLeft, itemTop + (itemHeight - measure(L"5h", textStyle).height) / 2 - 0.5f,
+                          keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
+                }
+                if (settings.percentTextVisibility != PercentTextVisibility::Never && !q.text.empty()) {
+                    // As wide as the bar (vertical: at least four characters), aligned per the
+                    // meter, nudged up a DIP; hover-only text shows while the column is hovered.
+                    float boxWidth = vertical ? std::max(float(th), textSize * 4) : float(len);
+                    float left = !vertical || q.textAlignment == PercentTextAlignment::Left ? tx :
+                                 q.textAlignment == PercentTextAlignment::Right ? tx + th - boxWidth :
+                                                                                  tx + (th - boxWidth) / 2;
+                    DWRITE_TEXT_ALIGNMENT align =
+                        q.textAlignment == PercentTextAlignment::Left   ? DWRITE_TEXT_ALIGNMENT_LEADING :
+                        q.textAlignment == PercentTextAlignment::Center ? DWRITE_TEXT_ALIGNMENT_CENTER :
+                                                                          DWRITE_TEXT_ALIGNMENT_TRAILING;
+                    label(ops, q.text, textStyle, left + float(q.textOffset),
+                          ty + (trackHeight - measure(q.text, textStyle).height) / 2 - 1, boxWidth, align,
+                          q.darkText ? 0xFF000000 : 0xFFFFFFFF, 0.9f, false,
+                          settings.percentTextVisibility == PercentTextVisibility::Hover ? column : -1);
+                }
+                k++;
+            }
+        } else {
+            // Tiles (tiles.h): the identity (logo, badge, or text) and the meters in a 4 DIP
+            // rounded column; hovered, the column takes the tile hover fill.
+            const float T = float(display.tileHeight);
+            const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+            const bool miniBars = layout == BarLayout::LogoBars;
+            TileIdentityText identity = TileIdentityFor(accounts, i);
+            const bool hasLogo = account.tileIdentity != TileIdentity::Text;
+            const bool hasBadge = hasLogo && identity.badge;
+            const UiTextStyle idStyle{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+            double perPt = hasLogo ? 0 : std::max(measure(identity.text, idStyle).width, 0.1f) / 10.0;
+            AccountMeters meters = AccountMeterState(display, layout, account, data[i],
+                                                     hasBadge ? int(identity.badgeText.size()) : 0, perPt);
+            const float opacity = float(meters.identityOpacity);
+            const UiTextStyle warnStyle{UiFamily::Taskbar, 10, 0, DWRITE_FONT_WEIGHT_BOLD};
+            const float padLeft = ring ? 4 : 7, padRight = ring ? 4 : miniBars ? 7 : 8;
+            top = (H - T) / 2;
+            height = T;
+            size_t hoverAt = ops.size();
+            int count = std::popcount(unsigned(meters.barMask));
+
+            if (ring) {
+                const TileRingGeometry& geometry = meters.ring;
+                const float S = float(geometry.size);
+                const float faceLeft = x0 + padLeft, faceTop = top + (T - S) / 2;
+                const D2D1_POINT_2F center{faceLeft + S / 2, faceTop + S / 2};
+                width = padLeft + S + padRight;
+                // Tracks, then fills, then pace dots on top.
+                for (int pass = 0; pass < 3; pass++) {
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        const QuotaMeter& q = meters.quotas[w];
+                        if (!(meters.barMask & (1 << w))) continue;
+                        if (pass == 2) {
+                            if (!display.showPaceTicks || !q.paceVisible) continue;
+                            double radians = q.paceAngle * std::numbers::pi / 180;
+                            float px = center.x + float(q.radius * std::cos(radians));
+                            float py = center.y + float(q.radius * std::sin(radians));
+                            float dot = float(geometry.dot);
+                            Op op;
+                            op.kind = Op::Kind::Dot;
+                            op.rect = {px - dot, py - dot, px + dot, py + dot};
+                            op.color = pace;
+                            op.outline = 0x8C000000;
+                            op.stroke = 0.8f;
+                            add(ops, std::move(op));
+                            continue;
+                        }
+                        if (pass == 1 && !q.fillUnits) continue;
+                        Op op;
+                        op.kind = Op::Kind::Arc;
+                        op.center = center;
+                        op.radius = float(q.radius);
+                        op.stroke = float(geometry.stroke);
+                        op.start = float(q.arc.start);
+                        op.sweep = float(pass ? q.fillSweep : q.arc.sweep);
+                        op.color = pass ? q.color : palette.track;
+                        add(ops, std::move(op));
+                    }
+                }
+                // Identity, sized to the hole; with a badge the logo shifts up-left by a DIP.
+                if (hasLogo) {
+                    float side = float(hasBadge ? geometry.logo - 1 : geometry.logo);
+                    float area = hasBadge ? S - 2 : S;
+                    float left = faceLeft + (area - side) / 2, logoTop = faceTop + (area - side) / 2;
+                    logo(ops, account.provider, {left, logoTop, left + side, logoTop + side}, opacity);
+                    if (hasBadge) {
+                        float left2 = faceLeft + float(geometry.badgeLeft), top2 = faceTop + float(geometry.badgeTop);
+                        badge(ops, {left2, top2, left2 + float(geometry.badgeWidth), top2 + float(geometry.badge)},
+                              identity.badgeText, float(geometry.badgeFont), opacity);
+                    }
+                } else {
+                    UiTextStyle style{UiFamily::Display, float(meters.ringTextFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                    Measured m = measure(identity.text, style);
+                    float w = std::min(m.width, float(meters.ringTextWidth));
+                    label(ops, identity.text, style, faceLeft + (S - w) / 2, faceTop + (S - m.cap) / 2, w,
+                          DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true, -1, true);
+                }
+                if (meters.warn) {
+                    Measured m = measure(L"!", warnStyle);
+                    label(ops, L"!", warnStyle, faceLeft + S + 3 - m.width, faceTop + float(meters.ringWarnTop),
+                          m.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
+                }
+            } else {
+                // Logo + bars and headline: the identity, then the meters 6 DIP after it.
+                float idWidth, idHeight, font = 0;
+                if (hasLogo) {
+                    idWidth = idHeight = miniBars ? 15 : 16;
+                } else {
+                    font = float(std::clamp(26 / perPt, 8.0, 12.0));
+                    Measured m = measure(identity.text, {UiFamily::Display, font, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD});
+                    idWidth = std::min(m.width, 26.0f);
+                    idHeight = m.cap;
+                }
+                float idLeft = x0 + padLeft, idTop = top + (T - idHeight) / 2;
+                if (hasLogo) {
+                    logo(ops, account.provider, {idLeft, idTop, idLeft + idWidth, idTop + idHeight}, opacity);
+                    if (hasBadge) {
+                        // Centered on the logo's lower-right corner, overhanging it by 4 DIPs.
+                        UiTextStyle style{UiFamily::Small, 6.8f, 0, DWRITE_FONT_WEIGHT_BOLD};
+                        float badgeWidth = std::max(10.0f, measure(identity.badgeText, style).width + 3 + 2.4f);
+                        float right = idLeft + idWidth + 4, bottom = idTop + idHeight + 4;
+                        badge(ops, {right - badgeWidth, bottom - 10, right, bottom}, identity.badgeText, 6.8f, opacity);
+                    }
+                } else {
+                    label(ops, identity.text, {UiFamily::Display, font, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD}, idLeft,
+                          idTop, idWidth, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true, -1, true);
+                }
+                if (meters.warn) {
+                    Measured m = measure(L"!", warnStyle);
+                    label(ops, L"!", warnStyle, idLeft + idWidth + 4 - m.width, idTop - 3, m.width,
+                          DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
+                }
+                float metersLeft = idLeft + idWidth + 6;
+                float content = 0;
+                if (miniBars) {
+                    // Bars 38 x 4 DIP, 3 DIP apart; pace: a line tick with a dark outline,
+                    // overhanging the bar by 2 DIPs.
+                    float barsHeight = count ? count * kMiniBarThickness + (count - 1) * kMiniBarGap : 0;
+                    float y = top + (T - float(barsHeight)) / 2;
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        const QuotaMeter& q = meters.quotas[w];
+                        if (!(meters.barMask & (1 << w))) continue;
+                        float left = metersLeft, thick = float(kMiniBarThickness);
+                        rect(ops, {left, y, left + float(kMiniBarLength), y + thick}, thick / 2, palette.track);
+                        if (q.fillUnits) {
+                            rect(ops, {left, y, left + float(q.fillLength), y + thick}, thick / 2, q.color);
+                        }
+                        if (display.showPaceTicks && q.paceVisible) {
+                            float tick = left + float(q.paceOffset);
+                            rect(ops, {tick, y - 2, tick + 3.5f, y + thick + 2}, 1.5f, 0x8C000000);
+                            rect(ops, {tick + 0.75f, y - 1.25f, tick + 2.75f, y + thick + 1.25f}, 1, pace);
+                        }
+                        y += thick + float(kMiniBarGap);
+                    }
+                    content = count ? float(kMiniBarLength) : 0;
+                } else {
+                    // Headline: the most-used quota's number and window key (bottom-aligned on
+                    // the baseline), over per-quota segments.
+                    UiTextStyle numberStyle{UiFamily::Display, 14, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                    UiTextStyle keyStyle{UiFamily::Taskbar, 9, 0, DWRITE_FONT_WEIGHT_NORMAL};
+                    Measured number = measure(meters.headline, numberStyle);
+                    float numberWidth = std::max(number.width, std::ceil(measure(L"100%", numberStyle).width));
+                    Measured key = measure(meters.headlineKey, keyStyle);
+                    float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
+                    float segments = count ? count * float(kHeadlineSegmentLength) + (count - 1) * 2.0f : 0;
+                    float panelHeight = rowHeight + (count ? 3 + float(kHeadlineSegmentThickness) : 0);
+                    float panelTop = top + (T - panelHeight) / 2;
+                    label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
+                          numberWidth, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
+                    if (!meters.headlineKey.empty()) {
+                        label(ops, meters.headlineKey, keyStyle, metersLeft + numberWidth + 3,
+                              panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
+                              0.6f, true);
+                    }
+                    float left = metersLeft, y = panelTop + rowHeight + 3;
+                    float thick = float(kHeadlineSegmentThickness);
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        const QuotaMeter& q = meters.quotas[w];
+                        if (!(meters.barMask & (1 << w))) continue;
+                        rect(ops, {left, y, left + float(kHeadlineSegmentLength), y + thick}, thick / 2,
+                             palette.track);
+                        if (q.fillUnits) {
+                            rect(ops, {left, y, left + float(q.fillLength), y + thick}, thick / 2, q.color);
+                        }
+                        left += float(kHeadlineSegmentLength) + 2;
+                    }
+                    content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
+                }
+                width = padLeft + idWidth + (content > 0 ? 6 + content : 0) + padRight;
+            }
+            Op hover;
+            hover.rect = {x0, top, x0 + width, top + T};
+            hover.radius = 4;
+            hover.color = palette.hover;
+            hover.hover = column;
+            ops.insert(ops.begin() + std::ptrdiff_t(hoverAt), std::move(hover));
+        }
+        strip.columns.push_back({x0, top, x0 + width, top + height});
+        x = x0 + width + margin;
+    }
+    strip.width = x;
+
+    // Tray (mockup .tray): overflow chevron, three status glyphs, then the two-line clock.
+    if (!gallery) {
+        auto glyph = [&](PCWSTR s, float size, float left, float width) {
+            label(strip.tray, s, UiIconStyle(size), left, H / 2 - size / 2, width,
+                  DWRITE_TEXT_ALIGNMENT_CENTER, text, 1);
+        };
+        glyph(L"\uE70E", 11, 0, 24);
+        float left = 24 + 4;
+        for (PCWSTR icon : {L"\uE701", L"\uE767", L"\uE83F"}) {
+            glyph(icon, 14, left, 26);
+            left += 26;
+        }
+        left += 4 + 8;
+        UiTextStyle clock{UiFamily::Taskbar, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        float clockWidth = std::max(measure(L"14:32", clock).width, measure(L"2026-10-31", clock).width);
+        label(strip.tray, L"14:32", clock, left, H / 2 - 16, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
+        label(strip.tray, L"2026-10-31", clock, left, H / 2, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
+        strip.trayWidth = left + clockWidth + 10 + 4;
+    }
+    return strip;
+}
+
+// How far a strip `width` DIPs wide must scroll to show every column: the panel keeps a 4 DIP
+// margin at its left and the tray gap at its right.
+static float SettingsPreviewOverflow(const SettingsPreviewStrip& strip, float width) {
+    return std::max(4 + strip.width + strip.rightMargin + strip.trayWidth - width, 0.0f);
+}
+
+// Paints a preview item: the strip (Preview; hover follows `pointer`, scrolled by
+// view.previewScroll) or a tile style's thumbnail (Gallery; the style in action.value), its
+// sample tiles scaled to fit. Colors follow the taskbar: the Windows mode with transparency off,
+// or high contrast's system colors.
+static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache, UiGraphics& g,
+                                 const UiThemeInput& theme, const SettingsView& view,
+                                 const UiItem& item, D2D1_POINT_2F pointer) {
+    using Op = SettingsPreviewOp;
+    const bool hc = theme.kind == UiThemeKind::HighContrast;
+    const uint32_t background = hc ? 0xFF000000 | theme.system.window : theme.systemLight ? 0xFFEEEEEE : 0xFF1C1C1C;
+    const uint32_t text = hc ? 0xFF000000 | theme.system.windowText : theme.systemLight ? 0xE4000000 : 0xFFFFFFFF;
+    const uint32_t ink = theme.system.windowText;
+    const bool light = hc ? ((ink >> 16 & 0xFF) * 299 + (ink >> 8 & 0xFF) * 587 + (ink & 0xFF) * 114) < 128000 :
+                            theme.systemLight;
+    auto color = [](uint32_t argb, float opacity = 1) {
+        return D2D1_COLOR_F{float(argb >> 16 & 0xFF) / 255, float(argb >> 8 & 0xFF) / 255, float(argb & 0xFF) / 255,
+                            float(argb >> 24) / 255 * opacity};
+    };
+    const float scale = view.scale;
+    const bool gallery = item.kind == UiItemKind::Gallery;
+    Settings settings = view.settings;
+    if (gallery) settings.barLayout = BarLayout(item.action.value);
+    SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.status.taskbarHeight, scale, view.now,
+                                                       gallery, light, text);
+
+    D2D1_MATRIX_3X2_F base{};
+    target->GetTransform(&base);
+    D2D1_TEXT_ANTIALIAS_MODE antialias = target->GetTextAntialiasMode();
+    target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);  // As the taskbar's XAML text
+
+    // Operations moved to `origin` and zoomed; hover operations only for `hovered`. Fills snap
+    // to device pixels.
+    auto paint = [&](const std::vector<Op>& ops, D2D1_POINT_2F origin, float zoom, int hovered) {
+        D2D1::Matrix3x2F local = D2D1::Matrix3x2F::Scale(zoom, zoom) *
+                                 D2D1::Matrix3x2F::Translation(origin.x, origin.y) *
+                                 *D2D1::Matrix3x2F::ReinterpretBaseType(&base);
+        target->SetTransform(&local);
+        for (const Op& op : ops) {
+            if (op.hover >= 0 && op.hover != hovered) continue;
+            const D2D1_RECT_F& r = op.rect;
+            switch (op.kind) {
+                case Op::Kind::Rect: {
+                    float radius = std::min({op.radius, (r.right - r.left) / 2, (r.bottom - r.top) / 2});
+                    UiFillRect(target, cache, r, radius, color(op.color, op.opacity), scale * zoom);
+                    if (op.stroke > 0) {
+                        D2D1_ROUNDED_RECT edge{UiInflate(r, -op.stroke / 2, -op.stroke / 2),
+                                               std::max(radius - op.stroke / 2, 0.0f),
+                                               std::max(radius - op.stroke / 2, 0.0f)};
+                        target->DrawRoundedRectangle(&edge, UiBrush(target, cache, color(op.outline, op.opacity)),
+                                                     op.stroke);
+                    }
+                    break;
+                }
+                case Op::Kind::Arc:
+                case Op::Kind::Polygon: {
+                    // Arcs in two halves, so a full circle draws too.
+                    winrt::com_ptr<ID2D1PathGeometry> path;
+                    winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
+                    winrt::com_ptr<ID2D1GeometrySink> sink;
+                    winrt::check_hresult(path->Open(sink.put()));
+                    auto point = [&](float degrees) {
+                        double radians = degrees * std::numbers::pi / 180;
+                        return D2D1::Point2F(op.center.x + float(op.radius * std::cos(radians)),
+                                             op.center.y + float(op.radius * std::sin(radians)));
+                    };
+                    if (op.kind == Op::Kind::Arc) {
+                        sink->BeginFigure(point(op.start), D2D1_FIGURE_BEGIN_HOLLOW);
+                        for (int half = 1; half <= 2; half++) {
+                            D2D1_ARC_SEGMENT arc{point(op.start + op.sweep * float(half) / 2),
+                                                 {op.radius, op.radius}, 0,
+                                                 op.sweep >= 0 ? D2D1_SWEEP_DIRECTION_CLOCKWISE :
+                                                                 D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+                                                 D2D1_ARC_SIZE_SMALL};
+                            sink->AddArc(&arc);
+                        }
+                        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+                    } else if (!op.points.empty()) {
+                        sink->BeginFigure(op.points[0], D2D1_FIGURE_BEGIN_FILLED);
+                        for (size_t p = 1; p < op.points.size(); p++) sink->AddLine(op.points[p]);
+                        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                    }
+                    winrt::check_hresult(sink->Close());
+                    ID2D1SolidColorBrush* brush = UiBrush(target, cache, color(op.color, op.opacity));
+                    if (op.kind == Op::Kind::Arc) target->DrawGeometry(path.get(), brush, op.stroke, g.roundCaps.get());
+                    else target->FillGeometry(path.get(), brush, nullptr);
+                    break;
+                }
+                case Op::Kind::Dot: {
+                    D2D1_ELLIPSE dot{{(r.left + r.right) / 2, (r.top + r.bottom) / 2}, (r.right - r.left) / 2,
+                                     (r.bottom - r.top) / 2};
+                    target->FillEllipse(&dot, UiBrush(target, cache, color(op.color, op.opacity)));
+                    target->DrawEllipse(&dot, UiBrush(target, cache, color(op.outline, op.opacity)), op.stroke);
+                    break;
+                }
+                case Op::Kind::Text: {
+                    IDWriteTextLayout* layout = UiLayout(g, op.text, op.style, std::max(r.right - r.left, 0.0f),
+                                                         false, op.align);
+                    if (op.clip) target->PushAxisAlignedClip(&r, D2D1_ANTIALIAS_MODE_ALIASED);
+                    UiDrawLayout(target, cache, layout, {r.left, r.top}, color(op.color, op.opacity));
+                    if (op.clip) target->PopAxisAlignedClip();
+                    break;
+                }
+                case Op::Kind::Logo: {
+                    float s = (r.right - r.left) / 24;
+                    D2D1::Matrix3x2F logo = D2D1::Matrix3x2F::Scale(s, s) *
+                                            D2D1::Matrix3x2F::Translation(r.left, r.top) * local;
+                    target->SetTransform(&logo);
+                    target->FillGeometry(UiPathGeometry(g, op.path),
+                                         UiBrush(target, cache, color(op.color, op.opacity)), nullptr);
+                    target->SetTransform(&local);
+                    break;
+                }
+            }
+        }
+    };
+
+    if (gallery) {
+        // Wallpaper, a 48 DIP taskbar across its middle, the tiles scaled to fit and centered.
+        D2D1_RECT_F thumb = UiGalleryThumbRect(item);
+        D2D1_COLOR_F wallTop = hc ? color(background) : color(theme.systemLight ? 0xFFDCE5FA : 0xFF0E1734);
+        D2D1_COLOR_F wallBottom = hc ? color(background) : color(theme.systemLight ? 0xFF8FB2FF : 0xFF2D63D8);
+        UiFillGradient(target, cache, thumb, 4, wallTop, wallBottom, true);
+        float barTop = (thumb.top + thumb.bottom - strip.height) / 2;
+        D2D1_RECT_F bar{thumb.left, barTop, thumb.right, barTop + strip.height};
+        UiFillRect(target, cache, bar, 0, color(background), scale);
+        float top = 0, bottom = strip.height;
+        for (const D2D1_RECT_F& column : strip.columns) {
+            top = std::min(top, column.top);
+            bottom = std::max(bottom, column.bottom);
+        }
+        float zoom = std::min({1.0f, (bar.right - bar.left - 12) / std::max(strip.width, 1.0f),
+                               strip.height / std::max(bottom - top, 1.0f)});
+        D2D1_POINT_2F origin{(bar.left + bar.right - strip.width * zoom) / 2,
+                             (bar.top + bar.bottom) / 2 - (top + bottom) / 2 * zoom};
+        target->PushAxisAlignedClip(&bar, D2D1_ANTIALIAS_MODE_ALIASED);
+        paint(strip.ops, origin, zoom, -1);
+        target->SetTransform(&base);
+        target->PopAxisAlignedClip();
+        // High contrast: the taskbar's edge in the text color.
+        if (hc) UiStrokeRect(target, cache, bar, 0, color(text), 1, scale);
+    } else {
+        // Columns right-anchored before the tray gap, scrolled right by the preview scroll;
+        // content beyond the strip fades at that edge, with a thin position bar along the bottom.
+        const D2D1_RECT_F& r = item.rect;
+        float trayLeft = std::max(r.right - r.left - strip.trayWidth, 0.0f);
+        float overflow = SettingsPreviewOverflow(strip, r.right - r.left);
+        float scroll = std::clamp(view.previewScroll, 0.0f, overflow);
+        float left = UiSnap(r.left + trayLeft - strip.rightMargin - strip.width + scroll, scale);
+        D2D1_RECT_F tiles{r.left, r.top, r.left + trayLeft, r.bottom};
+        int hovered = -1;
+        if (UiContains(tiles, pointer)) {
+            for (size_t i = 0; i < strip.columns.size(); i++) {
+                if (UiContains(strip.columns[i], {pointer.x - left, pointer.y - r.top})) hovered = int(i);
+            }
+        }
+        UiFillRect(target, cache, r, 4, color(background), scale);
+        target->PushAxisAlignedClip(&r, D2D1_ANTIALIAS_MODE_ALIASED);
+        target->PushAxisAlignedClip(&tiles, D2D1_ANTIALIAS_MODE_ALIASED);
+        paint(strip.ops, {left, r.top}, 1, hovered);
+        target->SetTransform(&base);
+        target->PopAxisAlignedClip();
+        paint(strip.tray, {r.left + trayLeft, r.top}, 1, -1);
+        target->SetTransform(&base);
+        if (overflow > 0) {
+            D2D1_COLOR_F solid = color(background), clear = color(background, 0);
+            if (scroll < overflow) {
+                UiFillGradient(target, cache, {r.left, r.top, r.left + std::min(96.0f, trayLeft), r.bottom}, 4,
+                               solid, clear, false);
+            }
+            if (scroll > 0) {
+                UiFillGradient(target, cache, {r.left + std::max(trayLeft - 48, 0.0f), r.top, r.left + trayLeft, r.bottom},
+                               0, clear, solid, false);
+            }
+            float thumbWidth = trayLeft * trayLeft / (trayLeft + overflow);
+            float thumbLeft = r.left + (trayLeft - thumbWidth) * (1 - scroll / overflow);
+            UiFillRect(target, cache, {thumbLeft, r.bottom - 4, thumbLeft + thumbWidth, r.bottom - 2}, 1,
+                       color(text, 0.4f), scale);
+        }
+        target->PopAxisAlignedClip();
+        if (hc) UiStrokeRect(target, cache, r, 4, color(text), 1, scale);
+    }
+    target->SetTransform(&base);
+    target->SetTextAntialiasMode(antialias);
+}
+
+// The preview card (mockup .pvcard): "Preview", the sample-data note, the Show on taskbar switch
+// and the strip, as tall as the taskbar. Items take `items`' coordinates from (x, y); returns
+// the card's bottom.
+static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
+                                    uint32_t& id, float x, float y, float width) {
+    constexpr float kPadX = 1 + 14, kPadTop = 1 + 12, kRow = 20, kGap = 10, kPadBottom = 14 + 1;
+    SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.status.taskbarHeight, view.scale,
+                                                       view.now, false, false, 0);
+    float stripWidth = std::max(width - 2 * kPadX, 1.0f);
+    float overflow = SettingsPreviewOverflow(strip, stripWidth);
+    float bottom = y + kPadTop + kRow + kGap + strip.height + kPadBottom;
+
+    UiItem card;
+    card.id = id++;
+    card.kind = UiItemKind::Card;
+    card.rect = {x, y, x + width, bottom};
+    items.push_back(std::move(card));
+
+    // Title and note, then the switch with its label at the right. The note says when the
+    // tiles don't fit; it and then the label are left out where they wouldn't fit on one line.
+    float row = y + kPadTop, center = row + kRow / 2;
+    UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
+    float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, L"Preview", body, 1000, false)).width);
+    PCWSTR switchLabel = L"Show on taskbar";
+    float labelWidth = std::ceil(UiLayoutSize(UiLayout(g, switchLabel, caption, 1000, false)).width);
+    float switchRight = x + width - kPadX, labelLeft = switchRight - 40 - 12 - labelWidth;
+    if (labelLeft < x + kPadX + titleWidth + 12) {
+        labelWidth = 0;
+        labelLeft = switchRight - 40;
+    }
+    auto text = [&](std::wstring s, UiFont font, UiInk ink, D2D1_RECT_F rect) {
+        UiItem line;
+        line.id = id++;
+        line.kind = UiItemKind::Text;
+        line.font = font;
+        line.ink = ink;
+        line.rect = rect;
+        line.runs.push_back({std::move(s)});
+        items.push_back(std::move(line));
+    };
+    text(L"Preview", UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
+    std::wstring note = overflow > 0 ? L"Sample data, wider than shown: drag to scroll" :
+                                       L"Sample data, updates as you change settings";
+    float noteLeft = x + kPadX + titleWidth + 12;
+    if (UiLayoutSize(UiLayout(g, note, caption, 10000, false)).width <= labelLeft - 12 - noteLeft) {
+        text(std::move(note), UiFont::Caption, UiInk::Muted, {noteLeft, center - 8, labelLeft - 12, center + 8});
+    }
+    if (labelWidth > 0) {
+        text(switchLabel, UiFont::Caption, UiInk::Muted, {labelLeft, center - 8, labelLeft + labelWidth, center + 8});
+    }
+    bool shown = view.status.visualTest;
+    UiAddToggle(items, SettingsControlId(SettingsField::ShowOnTaskbar), {labelLeft - 4, center - 16, switchRight, center + 16},
+                shown, true, SettingsCommand(SettingsField::ShowOnTaskbar, !shown));
+    items.back().text.clear();
+
+    UiItem preview;
+    preview.id = SettingsControlId(SettingsField::PreviewScroll);
+    preview.kind = UiItemKind::Preview;
+    float stripTop = row + kRow + kGap;
+    preview.rect = {x + kPadX, stripTop, x + kPadX + stripWidth, stripTop + strip.height};
+    preview.maximum = int(std::ceil(overflow));
+    preview.action = {UiActionKind::Pan, int(std::min(view.previewScroll, overflow)), {},
+                      uint32_t(SettingsField::PreviewScroll)};
+    items.push_back(std::move(preview));
+    return bottom;
 }
 
 // src/settings/page-about.h
@@ -14551,10 +15786,246 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                                  SettingsField::ResetHistory, L"Reset");
 }
 
+// src/settings/page-layout.h
+// Settings > Layout: the tile style gallery, then the chosen style's sizes, labels, pace markers
+// and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
+// shell's pinned header (settings/preview.h). Pure builder.
+
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",     L"Vertical bars", L"Segmented ring",
+                                                 L"Concentric rings", L"Logo + bars",   L"Headline %"};
+static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
+                                                   RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
+                                                   RGB(0xFF, 0x6E, 0xC7)};
+
+// Lays out the page from content y; returns the bottom of the last card.
+static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
+                                   uint32_t& id, float x, float y, float width) {
+    const Settings& s = view.settings;
+    const BarLayout layout = s.barLayout;
+    const bool bars = !IsTileLayout(layout);
+    const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+
+    // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined.
+    y = UiAddSection(items, id, x, y + 16, width, L"Tile style");
+    {
+        constexpr float kCardHeight = 1 + 8 + 72 + 8 + 17 + 2 + 8 + 1, kGap = 8;
+        float cardWidth = std::max((width - 2 * kGap) / 3, 1.0f);
+        for (int i = 0; i < int(std::size(kSettingsTileStyles)); i++) {
+            float left = x + float(i % 3) * (cardWidth + kGap), top = y + float(i / 3) * (kCardHeight + kGap);
+            UiItem card;
+            card.id = SettingsControlId(SettingsField::BarLayout, uint32_t(i));
+            card.kind = UiItemKind::Gallery;
+            card.rect = {left, top, left + cardWidth, top + kCardHeight};
+            card.text = kSettingsTileStyles[i];
+            card.selected = i == int(layout);
+            card.action = SettingsCommand(SettingsField::BarLayout, i);
+            items.push_back(std::move(card));
+        }
+        y += 2 * kCardHeight + kGap;
+    }
+
+    // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays
+    // on it when cards above it change.
+    auto identityCard = [&](float top) {
+        UiCardSpec spec;
+        spec.glyph = L"\uE716";
+        spec.title = L"Account identity is set per account in Accounts";
+        spec.description = {{L"Logo + number badge, logo only, or label text."}};
+        spec.trailingGlyph = L"\uE76C";
+        spec.action = {UiActionKind::Navigate, int(SettingsUiPage::Accounts)};
+        spec.minHeight = 62;
+        uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 8);
+        return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
+    };
+
+    if (bars) {
+        y = UiAddSection(items, id, x, y + 20, width, L"Bars");
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar length";
+            spec.description = {{L"Pixels along each bar."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::BarLength);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar thickness";
+            spec.description = {{L"Pixels across each bar."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarThickness);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar gap";
+            spec.description = {{L"Space between an account\u2019s bars."}};
+            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
+        }
+
+        // Labels: their size and gap need a position; the bar text size, quota keys or
+        // percentage text.
+        y = UiAddSection(items, id, x, y + 20, width, L"Labels");
+        bool labelled = s.labelPosition != LabelPosition::Hidden;
+        {
+            UiCardSpec spec;
+            spec.title = L"Label position";
+            spec.description = {{L"Where the account label sits next to its bars."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::LabelPosition, 200,
+                                        {{L"Left", int(LabelPosition::Left)},
+                                         {L"Right", int(LabelPosition::Right)},
+                                         {L"Top", int(LabelPosition::Top)},
+                                         {L"Bottom", int(LabelPosition::Bottom)},
+                                         {L"Hidden", int(LabelPosition::Hidden)}},
+                                        int(s.labelPosition));
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Label font size";
+            spec.description = {{L"Account label text, in pixels."}};
+            spec.enabled = labelled;
+            if (!labelled) spec.reason = L"Choose a label position to change this.";
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelFontSize);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Label gap";
+            spec.description = {{L"Space between the label and the bars."}};
+            spec.enabled = labelled;
+            if (!labelled) spec.reason = L"Choose a label position to change this.";
+            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, L"px");
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Quota keys";
+            spec.description = {{L"Short key beside each bar: 5h, 7d, Fa, Ex, Cr."}};
+            y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
+        }
+        {
+            bool text = s.showBarLabels || s.percentTextVisibility != PercentTextVisibility::Never;
+            UiCardSpec spec;
+            spec.title = L"Bar text size";
+            spec.description = {{L"Percentage text and quota keys. Percentage text is set in Display."}};
+            spec.enabled = text;
+            if (!text) spec.reason = L"Turn on Quota keys, or percentage text in Display, to change this.";
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
+        }
+    } else if (ring) {
+        y = UiAddSection(items, id, x, y + 20, width, L"Ring");
+        {
+            UiCardSpec spec;
+            spec.title = L"Ring size";
+            spec.description = {{L"Diameter in pixels."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::RingSize);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Ring thickness";
+            spec.description = {{L"Stroke width in pixels. Narrows automatically when the meters don\u2019t fit "
+                                 L"around the logo or text."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
+        }
+        y = identityCard(y + 3);
+    } else {
+        // Logo + bars and headline tiles have no size settings.
+        y = UiAddSection(items, id, x, y + 20, width, L"Tile");
+        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
+                         {{std::wstring(kSettingsTileStyles[int(layout)]) +
+                           L" tiles have a fixed size that follows the taskbar\u2019s height. Bar sizes and "
+                           L"labels apply to Stacked and Vertical bars."}});
+        y = identityCard(y + 3);
+    }
+
+    // Pace markers: none on headline tiles; the marker style is the bars'. Style and color
+    // need the markers on.
+    if (layout != BarLayout::LogoHeadline) {
+        y = UiAddSection(items, id, x, y + 20, width, L"Pace markers");
+        bool on = s.showPaceTicks;
+        {
+            UiCardSpec spec;
+            spec.title = L"Pace markers";
+            spec.description = {{std::wstring(ring ? L"Dots" : L"Ticks") +
+                                 L" mark how much of each quota window has elapsed, to compare with its usage."}};
+            y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
+        }
+        if (bars) {
+            UiCardSpec spec;
+            spec.title = L"Marker style";
+            spec.description = {{L"Thin caret, full-width line, edge notch, or centered dot."}};
+            spec.enabled = on;
+            if (!on) spec.reason = L"Turn on Pace markers to change this.";
+            y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickStyle, 200,
+                                        {{L"Caret", int(PaceTickStyle::Caret)},
+                                         {L"Full line", int(PaceTickStyle::Line)},
+                                         {L"Edge notch", int(PaceTickStyle::Notch)},
+                                         {L"Dot", int(PaceTickStyle::Dot)}},
+                                        int(s.paceTickStyle));
+        }
+        {
+            // Swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... 16 DIP after them. A
+            // color picked in Custom... shows as one more swatch.
+            COLORREF current = s.paceTickColor & 0x00FFFFFF;
+            std::vector<COLORREF> colors(std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors));
+            if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
+            PCWSTR custom = L"Custom...";
+            float buttonWidth =
+                std::ceil(UiLayoutSize(UiLayout(g, custom, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
+            float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
+            UiCardSpec spec;
+            spec.title = L"Marker color";
+            spec.description = {{L"Light grey by default. Custom... opens the color picker."}};
+            spec.trailing = {swatches + 16 + buttonWidth, 32};
+            spec.enabled = on;
+            if (!on) spec.reason = L"Turn on Pace markers to change this.";
+            if (const SettingsDraft* draft = SettingsViewDraft(view, SettingsField::PaceTickColor)) {
+                spec.error = draft->error;
+            }
+            UiCardLayout card = UiAddCard(g, items, id, x, y + 3, width, spec);
+            float center = (card.trailing.top + card.trailing.bottom) / 2;
+            for (size_t i = 0; i < colors.size(); i++) {
+                UiItem swatch;
+                swatch.id = SettingsControlId(SettingsField::PaceTickColor, uint32_t(1 + i));
+                swatch.kind = UiItemKind::Swatch;
+                float left = card.trailing.left + float(i) * 34;
+                swatch.rect = {left, center - 12, left + 24, center + 12};
+                swatch.selected = colors[i] == current;
+                swatch.enabled = on;
+                swatch.action = SettingsCommand(SettingsField::PaceTickColor, int(colors[i]));
+                items.push_back(std::move(swatch));
+            }
+            UiItem button;
+            button.id = SettingsControlId(SettingsField::PaceTickColorCustom);
+            button.kind = UiItemKind::Button;
+            button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right,
+                           card.trailing.bottom};
+            button.text = custom;
+            button.enabled = on;
+            button.action = SettingsCommand(SettingsField::PaceTickColorCustom);
+            items.push_back(std::move(button));
+            y = card.card.bottom;
+        }
+    }
+
+    y = UiAddSection(items, id, x, y + 20, width, L"Spacing");
+    {
+        UiCardSpec spec;
+        spec.title = L"Account margin";
+        spec.description = {{L"Space on each side of every account."}};
+        y = SettingsAddNumberCard(g, view, items, id, x, y, width, spec, SettingsField::AccountMargin, L"px");
+    }
+    {
+        UiCardSpec spec;
+        spec.title = L"Tray gap";
+        spec.description = {{L"Space between the last account and the system tray."}};
+        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RightMargin, L"px");
+    }
+
+    UiCardSpec reset;
+    reset.title = L"Reset Layout to defaults";
+    reset.description = {{L"Tile style, sizes, labels, pace markers and spacing. Accounts are not changed."}};
+    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
+}
+
 // src/settings/shell.h
-// Settings window shell: navigation pane, pinned page header and page content, built from an
-// explicit view snapshot (settings/view.h; approved mockups: nav and header of layout-v2.png).
-// Pure. Pages not rebuilt yet show a placeholder card.
+// Settings window shell: navigation pane, pinned page header (with the Layout preview) and page
+// content, built from an explicit view snapshot (settings/view.h; approved mockups: nav and
+// header of layout-v2.png). Pure. Pages not rebuilt yet show a placeholder card.
 
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
@@ -14593,13 +16064,27 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     title.rect = {kSettingsNavWidth + left, 6, kSettingsNavWidth + left + std::max(width, 1.0f), 42};
     title.runs.push_back({kPages[page][0]});
     frame.main.push_back(std::move(title));
-    frame.viewport = {kSettingsNavWidth, kSettingsHeaderHeight,
-                      std::max(client.width, kSettingsNavWidth),
-                      std::max(client.height, kSettingsHeaderHeight)};
 
-    // Content, in viewport coordinates. Running ids are unique per page; interactive controls
-    // take fixed ones (settings/view.h).
+    // Running ids are unique per page; interactive controls take fixed ones (settings/view.h).
+    // On Layout the preview card is pinned under the title, 12 DIP above the viewport, unless
+    // the viewport would get too short (UiUnpinHeader): then it scrolls at the content's top.
     uint32_t id = uint32_t(page + 1) << 12;
+    float header = kSettingsHeaderHeight, contentTop = 0;
+    if (SettingsUiPage(page) == SettingsUiPage::Layout) {
+        std::vector<UiItem> preview;
+        float height = SettingsAddPreviewCard(g, view, preview, id, 0, 0, std::max(width, 1.0f));
+        bool unpinned = UiUnpinHeader(client.height, kSettingsHeaderHeight, height + 12);
+        float dx = unpinned ? left : kSettingsNavWidth + left, dy = unpinned ? 0 : kSettingsHeaderHeight;
+        for (UiItem& item : preview) {
+            item.rect = {item.rect.left + dx, item.rect.top + dy, item.rect.right + dx, item.rect.bottom + dy};
+            (unpinned ? frame.content : frame.main).push_back(std::move(item));
+        }
+        (unpinned ? contentTop : header) += height + 12;
+    }
+    frame.viewport = {kSettingsNavWidth, header, std::max(client.width, kSettingsNavWidth),
+                      std::max(client.height, header)};
+
+    // Content, in viewport coordinates.
     float bottom;
     switch (SettingsUiPage(page)) {
         case SettingsUiPage::About:
@@ -14610,6 +16095,9 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             break;
         case SettingsUiPage::History:
             bottom = SettingsUiBuildHistory(g, view, frame.content, id, left, 0, width);
+            break;
+        case SettingsUiPage::Layout:
+            bottom = SettingsUiBuildLayout(g, view, frame.content, id, left, contentTop, width);
             break;
         default: {
             UiCardSpec spec;
@@ -14632,9 +16120,10 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
 static constexpr PCWSTR kSettingsUiClass = L"AiQuotaSettingsUi_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiViewportClass = L"AiQuotaSettingsUiView_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiPopupClass = L"AiQuotaSettingsUiPopup_" WH_MOD_ID;
-// Posted to run the commit queue outside the handler that queued (focus loss, Enter).
+// Posted to run the commit queue outside the handler that queued (focus loss, Enter, a slider's
+// release).
 static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
-// Debounced number box steps: this timer id plus the field.
+// Debounced number box and slider key steps: this timer id plus the field.
 static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 
 struct SettingsUiClient final : UiHostClient {
@@ -14644,22 +16133,28 @@ struct SettingsUiClient final : UiHostClient {
     std::map<SettingsField, uint64_t> stepRevisions;
 
     // Window state. Custom poll mode sticks once chosen or typed into, so the box doesn't
-    // disable itself when a partial number happens to match a preset.
+    // disable itself when a partial number happens to match a preset. The last built view
+    // paints the preview; the color dialog's custom colors last for the window.
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false;
+    float previewScroll = 0;
+    SettingsView view;
+    std::array<COLORREF, 16> customColors{};
 
     // Reentrancy: messages that arrive inside a modal wait until it returns; close preparation
-    // ignores input and drops queue messages (its flush covers them).
+    // ignores input and drops queue messages (its flush covers them). The color dialog's
+    // window, while it runs, for the close to cancel it.
     int modalDepth = 0;
     bool deferredProcess = false, deferredRefresh = false;
     bool closePreparation = false;
+    HWND colorDialog = nullptr;
 
-    // A message box owned by the window: the popup closes first; queue and refresh messages
-    // that arrive meanwhile are posted again once it returns.
-    int Ask(UiHost& host, PCWSTR text, PCWSTR caption, UINT type) {
+    // A modal owned by the window (message box, color dialog): the popup closes first; queue
+    // and refresh messages that arrive meanwhile are posted again once it returns.
+    template <class Run> auto Modal(UiHost& host, Run run) {
         UiHostClosePopup(host);
         modalDepth++;
-        int result = SettingsMessageBoxW(host.main, text, caption, type);
+        auto result = run();
         modalDepth--;
         if (!modalDepth && host.main) {
             if (std::exchange(deferredProcess, false)) {
@@ -14670,6 +16165,10 @@ struct SettingsUiClient final : UiHostClient {
             }
         }
         return result;
+    }
+
+    int Ask(UiHost& host, PCWSTR text, PCWSTR caption, UINT type) {
+        return Modal(host, [&] { return SettingsMessageBoxW(host.main, text, caption, type); });
     }
 
     // Failed saves keep their drafts with an error; the box says so once.
@@ -14699,25 +16198,42 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     void KillStepTimers(UiHost& host) {
-        for (SettingsField field : {SettingsField::PollMinutes, SettingsField::RetentionDays}) {
-            KillStepTimer(host, field);
-        }
+        while (!stepRevisions.empty()) KillStepTimer(host, stepRevisions.begin()->first);
     }
 
+    // The preview's scroll stays within what the built strip can scroll.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
-        SettingsView view;
+        view = {};
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
+        view.scale = UiHostScale(host);
+        view.previewScroll = previewScroll;
+        view.now = NowUnixMs();
         SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
+            for (const UiItem& item : *items) {
+                if (item.kind != UiItemKind::Preview) continue;
+                previewScroll = view.previewScroll = std::min(previewScroll, float(item.maximum));
+            }
+        }
+    }
+
+    void PaintCustom(UiHost& host, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
+                     const UiPaintState& state) override {
+        SettingsPaintPreview(target, cache, *host.graphics, host.theme, view, item, state.pointer);
     }
 
     void Invoke(UiHost& host, UiAction action) override {
-        // A modal disables the window: what arrives meanwhile (the focus loss it causes) is ours.
-        if (Unloading() || closePreparation || modalDepth) return;
+        // A modal disables the window: what arrives meanwhile (the focus loss it causes) is ours,
+        // except the end of a slider drag its capture loss cut short: that queues its commit,
+        // which runs once the modal returns.
+        if (Unloading() || closePreparation || (modalDepth && action.kind != UiActionKind::SlideEnd)) {
+            return;
+        }
         SettingsField field = SettingsField(action.target);
         switch (action.kind) {
             case UiActionKind::Navigate: {
@@ -14748,12 +16264,17 @@ struct SettingsUiClient final : UiHostClient {
                         Report(host, edits.Commit(0, field, action.value));
                         break;
                     case SettingsField::ResetBehavior:
-                    case SettingsField::ResetHistory: {
+                    case SettingsField::ResetHistory:
+                    case SettingsField::ResetLayout: {
                         std::wstring question =
                             field == SettingsField::ResetBehavior ?
                                 L"Reset Behavior to its defaults?\n\nShow on the primary display "
                                 L"only, show details on hover, poll every 10 minutes, do not poll "
                                 L"hidden accounts, threshold notifications on." :
+                            field == SettingsField::ResetLayout ?
+                                L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
+                                L"on the left, 32 px rings, light grey caret pace markers and the "
+                                L"default spacing. Accounts are not changed." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user and history is kept for 90 days. Saved history stays.";
                         // Never shorten retention without saying so: pruning is shared and final.
@@ -14777,6 +16298,24 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::OpenHistory:
                         OpenHistoryWindow();
+                        break;
+                    case SettingsField::ShowOnTaskbar:
+                        // The taskbar shows the sample accounts with the committed settings.
+                        SetVisualTestMode(action.value != 0);
+                        edits.Reload();
+                        UiHostRequestRebuild(host, false);
+                        break;
+                    case SettingsField::PaceTickColorCustom: {
+                        COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), SettingsField::PaceTickColor));
+                        std::optional<COLORREF> chosen = Modal(host, [&] {
+                            return UiChooseColor(host.main, initial, customColors, colorDialog);
+                        });
+                        if (chosen && !Unloading() && !closePreparation && !host.closing) {
+                            Report(host, edits.Commit(0, SettingsField::PaceTickColor, int(*chosen)));
+                        }
+                        break;
+                    }
+                    case SettingsField::PreviewScroll:
                         break;
                     case SettingsField::OpenHistoryFolder: {
                         const std::wstring& folder = edits.baseline.status.historyFolder;
@@ -14825,6 +16364,28 @@ struct SettingsUiClient final : UiHostClient {
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);
                 break;
+            case UiActionKind::Slide:
+                // A drag only drafts: the preview follows; the release commits.
+                KillStepTimer(host, field);
+                edits.SetValue(action.key, field, action.value);
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::SlideEnd:
+                KillStepTimer(host, field);
+                if (edits.RequestCommit(action.key, field)) {
+                    PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
+                }
+                UiHostRequestRebuild(host, false);
+                break;
+            case UiActionKind::Pan: {
+                // Repaints with the new scroll; the next build keeps it in range.
+                const UiItem* strip = UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll));
+                float maximum = strip ? float(strip->maximum) : 0;
+                previewScroll = view.previewScroll =
+                    std::clamp(previewScroll + float(action.value), 0.0f, maximum);
+                UiHostInvalidate(host);
+                break;
+            }
             case UiActionKind::None:
                 break;
         }
@@ -14883,6 +16444,10 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     bool CancelModal() override {
+        if (colorDialog && IsWindow(colorDialog)) {
+            PostMessageW(colorDialog, WM_COMMAND, IDCANCEL, 0);
+            return true;
+        }
         if (!g_settingsMessageBoxContext || !IsWindow(g_settingsMessageBoxContext->hWnd)) {
             return false;
         }

@@ -9,10 +9,14 @@ static constexpr UINT kProbePing = WM_APP + 70;        // Answered with kProbeMa
 static constexpr UINT kProbeLoseTarget = WM_APP + 71;  // Device loss through the production path.
 static constexpr UINT kProbeModal = WM_APP + 72;       // A tracked message box.
 static constexpr UINT kProbeCommand = WM_APP + 73;     // wParam: ProbeCommand, lParam: argument.
+static constexpr UINT kProbeColor = WM_APP + 74;       // The tracked color dialog.
 static constexpr LRESULT kProbeMagic = 0x51A7E;
-static constexpr uint32_t kProbeDropdown = 500, kProbeNumberBox = 600;
+static constexpr uint32_t kProbeDropdown = 500, kProbeNumberBox = 600, kProbeSlider = 700,
+                          kProbePreview = 800;
 
-enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kCounterCount };
+// kColorResult: 1 cancelled (or ended by a close), 2 chosen.
+enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult,
+                    kCounterCount };
 
 // Commands run on the window thread inside the client's message handler, like client code.
 enum ProbeCommand {
@@ -32,6 +36,10 @@ enum ProbeCommand {
     kScroll,       // Scrolls the content to `argument` DIPs
     kFocusedItem,  // The host's focused item id
     kDropFocus,    // Keyboard focus to nothing, as when another app activates
+    kSliderMouse,  // argument / 1000: 0 left down, 1 move, 2 up; % 1000: percent along the slider
+    kPreviewMouse, // argument / 1000: 0 left down at the preview's center, 1 move by % 1000 pixels, 2 up
+    kPreviewWheel, // A sideways wheel notch (right) over the preview, sent to the main window
+    kDropCapture,  // ReleaseCapture, as when another window takes capture
 };
 enum ProbeState { kWindow = 1, kVisible = 2, kCaptured = 4, kNoActivate = 8, kOwned = 16,
                   kNotActive = 32, kOpen = 64, kAnyCapture = 128 };
@@ -55,14 +63,17 @@ static LRESULT CALLBACK ProbeModalHook(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-// A navigation item; a dropdown and a number box; cards long enough to scroll. Choices, typing,
-// reverts and focus loss behave like a settings client's drafts: they change what the next
-// build shows, then request a rebuild.
+// A navigation item; a dropdown, a number box, a slider and a preview strip; cards long enough
+// to scroll. Choices, typing, reverts, slides and focus loss behave like a settings client's
+// drafts: they change what the next build shows, then request a rebuild. The color dialog is
+// tracked like the settings client's.
 struct ProbeClient final : UiHostClient {
-    int choice = 0;
+    int choice = 0, sliderValue = 50;
     std::wstring boxText = L"10";
     int actions = 0;
     UiAction last;
+    HWND colorDialog = nullptr;
+    std::array<COLORREF, 16> customColors{};
 
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         g_counters[kBuilds]++;
@@ -81,6 +92,15 @@ struct ProbeClient final : UiHostClient {
                       {UiActionKind::Command, choice, {}, 7});
         UiAddNumberBox(frame.content, kProbeNumberBox, {20, 44, 20 + 96 + 10 + 40, 76}, boxText,
                        L"days", true, {UiActionKind::Command, 0, {}, 8});
+        UiAddSlider(frame.content, kProbeSlider, {300, 0, 420, 32}, sliderValue, 0, 100, true,
+                    {UiActionKind::Command, 0, {}, 9});
+        UiItem preview;
+        preview.id = kProbePreview;
+        preview.kind = UiItemKind::Preview;
+        preview.rect = {300, 44, 420, 76};
+        preview.maximum = 100;
+        preview.action = {UiActionKind::Pan, 0, {}, 10};
+        frame.content.push_back(preview);
         uint32_t id = 10;
         float y = 88;
         for (int i = 0; i < 12; i++) {
@@ -100,6 +120,7 @@ struct ProbeClient final : UiHostClient {
             case UiActionKind::Command: choice = action.value; break;
             case UiActionKind::TextChange: boxText = action.text; break;
             case UiActionKind::TextRevert: boxText = L"10"; break;
+            case UiActionKind::Slide: sliderValue = action.value; break;
             default: break;
         }
         last = std::move(action);
@@ -172,6 +193,35 @@ struct ProbeClient final : UiHostClient {
             case kDropFocus:
                 SetFocus(nullptr);
                 return 0;
+            case kSliderMouse:
+            case kPreviewMouse: {
+                // Pixels in the viewport (the content's surface), from the item's DIPs.
+                float scale = UiHostScale(host);
+                const UiItem* item = UiFindItem(host.frame, command == kSliderMouse ? kProbeSlider : kProbePreview);
+                if (!item) return 0;
+                int kind = argument / 1000, amount = argument % 1000;
+                float x = command == kSliderMouse ?
+                    item->rect.left + (item->rect.right - item->rect.left) * float(amount) / 100 :
+                    (item->rect.left + item->rect.right) / 2;
+                POINT at{LONG(std::lround(x * scale)) + (command == kPreviewMouse && kind == 1 ? amount : 0),
+                         LONG(std::lround(((item->rect.top + item->rect.bottom) / 2 - host.scroll) * scale))};
+                UINT message = kind == 0 ? WM_LBUTTONDOWN : kind == 1 ? WM_MOUSEMOVE : WM_LBUTTONUP;
+                SendMessageW(host.viewport, message, kind == 2 ? 0 : MK_LBUTTON, MAKELPARAM(at.x, at.y));
+                return 1;
+            }
+            case kPreviewWheel: {
+                const UiItem* item = UiFindItem(host.frame, kProbePreview);
+                if (!item) return 0;
+                float scale = UiHostScale(host);
+                POINT at{LONG(std::lround((item->rect.left + item->rect.right) / 2 * scale)),
+                         LONG(std::lround(((item->rect.top + item->rect.bottom) / 2 - host.scroll) * scale))};
+                ClientToScreen(host.viewport, &at);
+                SendMessageW(host.main, WM_MOUSEHWHEEL, MAKEWPARAM(0, WHEEL_DELTA), MAKELPARAM(at.x, at.y));
+                return 1;
+            }
+            case kDropCapture:
+                ReleaseCapture();
+                return 0;
         }
         return -1;
     }
@@ -204,6 +254,11 @@ struct ProbeClient final : UiHostClient {
                 result = 1;
                 return true;
             }
+            case kProbeColor:
+                g_counters[kColorResult] =
+                    UiChooseColor(host.main, RGB(1, 2, 3), customColors, colorDialog) ? 2 : 1;
+                result = 1;
+                return true;
         }
         return false;
     }
@@ -214,7 +269,7 @@ struct ProbeClient final : UiHostClient {
         return true;
     }
     bool CancelModal() override {
-        HWND modal = g_probeModal.load();
+        HWND modal = colorDialog && IsWindow(colorDialog) ? colorDialog : g_probeModal.load();
         if (!modal || !IsWindow(modal)) return false;
         g_counters[kCancels]++;
         PostMessageW(modal, WM_COMMAND, IDCANCEL, 0);
