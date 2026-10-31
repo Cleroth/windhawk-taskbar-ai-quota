@@ -632,11 +632,10 @@ static void UpdateAccountFlyout(
             row.fillColumn.Width({fillPct, GridUnitType::Star});
             row.emptyColumn.Width({100.0 - fillPct, GridUnitType::Star});
             row.fill.MinWidth(fillPct > 0 ? 4.0 : 0.0);
-            auto color = UsageColor(wu.pct, display.stale, display.yellowThreshold,
-                                    display.orangeThreshold, display.redThreshold,
-                                    display.colorblindMode);
-            uint32_t colorValue = ((uint32_t)color.A << 24) | ((uint32_t)color.R << 16) |
-                                  ((uint32_t)color.G << 8) | color.B;
+            uint32_t colorValue = UsageColor(wu.pct, display.stale, display.yellowThreshold,
+                                             display.orangeThreshold, display.redThreshold,
+                                             display.colorblindMode);
+            auto color = ArgbColor(colorValue);
             if (colorValue != row.fillColor) {
                 row.fill.Background(FlyoutFillBrush(color));
                 row.fillColor = colorValue;

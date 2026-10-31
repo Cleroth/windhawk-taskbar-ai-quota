@@ -264,7 +264,7 @@ struct QuotaUiInstance {
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
-    double tileHeight = 0;
+    double taskbarHeight = 0;  // DIPs, measured at build for tile layouts; 0 if unknown.
     bool tileLightTheme = false;  // Light taskbar at the last tile update; picks highlight colors.
     Grid quotaGrid{nullptr};
     Panel injectionParent{nullptr};

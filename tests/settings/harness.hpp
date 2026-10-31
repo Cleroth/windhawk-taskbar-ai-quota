@@ -1,0 +1,19 @@
+// Headers the extracted pure fragments expect from the mod's entry file. No stubs: the extracted
+// code makes no Windhawk, window, registry, storage or network calls.
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cwctype>
+#include <functional>
+#include <iostream>
+#include <iterator>
+#include <limits>
+#include <numbers>
+#include <stdexcept>
+#include <string>
+#include <vector>

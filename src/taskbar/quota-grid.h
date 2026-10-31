@@ -1,150 +1,45 @@
-// Builds the per-taskbar quota grid, including visual-test sample data.
-
-static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
-                                    int redThreshold, ULONGLONG now,
-                                    std::vector<AccountConfig>* accounts,
-                                    std::vector<AccountData>* data) {
-    // One value per usage color band.
-    const double green = yellowThreshold / 2.0;
-    const double yellow = (yellowThreshold + orangeThreshold) / 2.0;
-    const double orange = (orangeThreshold + redThreshold) / 2.0;
-    const double red = (redThreshold + 100) / 2.0;
-    // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
-    // share a provider so tiles show number badges. A negative value is a quota not reported.
-    struct Sample {
-        PCWSTR provider;
-        PCWSTR label;
-        std::array<double, kQuotaBarCount> pct;
-        std::array<bool, kQuotaBarCount> showBars;
-    };
-    const std::array<Sample, 4> samples = {{
-        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}},
-        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}},
-        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}},
-        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}},
-    }};
-    static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
-        kFiveHourWindowMs,
-        kWeeklyWindowMs,
-        kWeeklyWindowMs,
-        30ULL * 24 * 60 * 60 * 1000,
-    };
-    static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
-        0.35, 0.5, 0.6, 0.8,
-    };
-    static constexpr double kCreditsMax = 1000;
-
-    accounts->clear();
-    accounts->reserve(samples.size());
-    if (data) {
-        data->clear();
-        data->reserve(samples.size());
-    }
-    for (size_t i = 0; i < samples.size(); i++) {
-        const Sample& sample = samples[i];
-        AccountConfig account;
-        account.provider = sample.provider;
-        account.label = sample.label;
-        account.showBars = sample.showBars;
-        bool openAi = account.provider == L"openai";
-        if (openAi) account.creditsMax = (int)kCreditsMax;
-        accounts->push_back(account);
-
-        if (!data) continue;
-        AccountData accountData;
-        std::array<WindowUsage*, kQuotaBarCount> usage = {
-            &accountData.win5h, &accountData.winWeek,
-            &accountData.fableWeek, &accountData.extraUsage,
-        };
-        for (int w = 0; w < kQuotaBarCount; w++) {
-            if (sample.pct[w] < 0) continue;
-            usage[w]->pct = sample.pct[w];
-            usage[w]->windowDurationMs = kDurations[w];
-            usage[w]->resetUnixMs = now +
-                (ULONGLONG)std::lround(kDurations[w] * (kRemainingFractions[w] - 0.05 * i));
-        }
-        if (openAi) {
-            // Credits are a balance against the user's max, without a window.
-            accountData.hasCredits = true;
-            accountData.creditsBalance = kCreditsMax * (1 - sample.pct[kExtraUsageBar] / 100);
-            ApplyCreditsMax(account, &accountData);
-        } else if (sample.pct[kExtraUsageBar] >= 0) {
-            accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
-            accountData.extraLimitAmount = 50.0;
-        }
-        if (account.provider == L"antigravity") {
-            // Claude/GPT pools appear only in the details flyout.
-            accountData.antigravityThirdParty5h = {
-                yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
-            accountData.antigravityThirdPartyWeek = {
-                green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
-        }
-        accountData.plan = L"Visual test";
-        accountData.lastSuccessMs = now;
-        accountData.stale = false;
-        data->push_back(std::move(accountData));
-    }
-}
+// Builds the per-taskbar quota grid.
 
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
-        double physicalPixelDip = 1.0 / state.rasterizationScale;
-        std::vector<AccountConfig> accounts;
-        int barLength, barThickness, labelFontSize, percentFontSize;
-        int accountMargin, labelGap, rightMargin;
-        int yellowThreshold, orangeThreshold, redThreshold;
-        bool showPaceTicks, showBarLabels, showDetailsOnHover;
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
-        COLORREF paceTickColor;
-        BarLayout barLayout;
-        PercentTextVisibility percentTextVisibility;
-        PercentTextAlignment percentTextAlignment;
-        PaceTickStyle paceTickStyle;
-        LabelPosition labelPosition;
+        Settings settings;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             state.buildSettingsGeneration = g_settingsGeneration;
-            accounts = g_settings.accounts;
-            showDetailsOnHover = g_settings.showDetailsOnHover;
-            barLayout = g_settings.barLayout;
-            barLength = g_settings.barLength;
-            barThickness = g_settings.barThickness;
-            labelFontSize = g_settings.labelFontSize;
-            percentFontSize = g_settings.percentFontSize;
-            accountMargin = g_settings.accountMargin;
-            labelGap = g_settings.labelGap;
-            rightMargin = g_settings.rightMargin;
-            labelPosition = g_settings.labelPosition;
-            showPaceTicks = g_settings.showPaceTicks;
-            paceTickStyle = g_settings.paceTickStyle;
-            paceTickColor = g_settings.paceTickColor;
-            showBarLabels = g_settings.showBarLabels;
-            percentTextVisibility = g_settings.percentTextVisibility;
-            percentTextAlignment = g_settings.percentTextAlignment;
-            yellowThreshold = g_settings.yellowThreshold;
-            orangeThreshold = g_settings.orangeThreshold;
-            redThreshold = g_settings.redThreshold;
+            settings = g_settings;
         }
+        std::vector<AccountConfig>& accounts = settings.accounts;
+        BarLayout barLayout = settings.barLayout;
         state.buildVisualTestMode = visualTestMode;
         state.buildBarLayout = barLayout;
         bool tileLayout = IsTileLayout(barLayout);
         // Tiles are kTileHeight tall, less on a taskbar too short for that.
-        state.tileHeight = kTileHeight;
+        state.taskbarHeight = 0;
         if (tileLayout && state.injectionParent) {
             try {
                 if (auto xamlRoot = state.injectionParent.XamlRoot()) {
-                    double taskbarHeight = xamlRoot.Size().Height;
-                    if (taskbarHeight > 0) {
-                        state.tileHeight =
-                            std::clamp(std::floor(taskbarHeight) - 8, 24.0, kTileHeight);
-                    }
+                    state.taskbarHeight = xamlRoot.Size().Height;
                 }
             } catch (...) {}
         }
-        if (visualTestMode) {
-            BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
-                                    NowUnixMs(), &accounts, nullptr);
-        }
+        MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+                                               state.taskbarHeight);
+        if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, nullptr);
+        BarGeometry barGeometry = BarGeometryFor(display);
+        // Bar sizes and pace ticks as the meter model clamps them.
+        int barLength = display.barLength, barThickness = display.barThickness;
+        bool showPaceTicks = display.showPaceTicks;
+        PaceTickStyle paceTickStyle = display.paceTickStyle;
+        COLORREF paceTickColor = display.paceTickColor;
+        int labelFontSize = settings.labelFontSize, percentFontSize = settings.percentFontSize;
+        int accountMargin = settings.accountMargin, labelGap = settings.labelGap;
+        int rightMargin = settings.rightMargin;
+        bool showBarLabels = settings.showBarLabels;
+        bool showDetailsOnHover = settings.showDetailsOnHover;
+        PercentTextVisibility percentTextVisibility = settings.percentTextVisibility;
+        PercentTextAlignment percentTextAlignment = settings.percentTextAlignment;
+        LabelPosition labelPosition = settings.labelPosition;
         state.accountRefs.clear();
         Grid root;
         root.Name(kRootName);
@@ -256,7 +151,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             refs.historyId = accounts[i].historyId;
             StackPanel col{nullptr};
             if (tileLayout) {
-                col = BuildAccountTile(accounts, i, barLayout, state.tileHeight, refs);
+                col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
             } else {
                 bool labelOnSide = labelPosition == LabelPosition::Left ||
                                    labelPosition == LabelPosition::Right;
@@ -319,15 +214,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     trackContent.Children().Append(fill);
 
                     if (showPaceTicks) {
-                        double paceCrossSize = barThickness;
-                        double paceLength = (paceTickStyle == PaceTickStyle::Caret ? 5 : 4) *
-                                            physicalPixelDip;
-                        if (paceTickStyle == PaceTickStyle::Notch) {
-                            paceCrossSize = std::max(2.0, std::ceil(barThickness * 0.6));
-                        } else if (paceTickStyle == PaceTickStyle::Dot) {
-                            paceCrossSize = 4 * physicalPixelDip;
-                        }
-
+                        double paceCrossSize = barGeometry.paceCrossSize;
+                        double paceLength = barGeometry.paceLength;
                         Border paceTick;
                         paceTick.Width(verticalBars ? paceCrossSize : paceLength);
                         paceTick.Height(verticalBars ? paceLength : paceCrossSize);
@@ -349,32 +237,15 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                             Grid caretShape;
                             auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
                             for (int layer = 0; layer < 2; layer++) {
-                                bool core = layer == 1;
-                                double capInset = (core ? 1 : 0) * physicalPixelDip;
-                                double stemInset = (core ? 2 : 1) * physicalPixelDip;
-                                double capDepth = std::min((core ? 1.0 : 2.0) * physicalPixelDip,
-                                                           paceCrossSize / 2.0);
                                 wuxs::Polygon part;
-                                auto addPoint = [&](double along, double cross) {
+                                for (auto [along, cross] : barGeometry.caret[layer]) {
                                     part.Points().Append(verticalBars ?
                                         winrt::Windows::Foundation::Point{
                                             (float)cross, (float)along} :
                                         winrt::Windows::Foundation::Point{
                                             (float)along, (float)cross});
-                                };
-                                addPoint(capInset, 0);
-                                addPoint(paceLength - capInset, 0);
-                                addPoint(paceLength - capInset, capDepth);
-                                addPoint(paceLength - stemInset, capDepth);
-                                addPoint(paceLength - stemInset, paceCrossSize - capDepth);
-                                addPoint(paceLength - capInset, paceCrossSize - capDepth);
-                                addPoint(paceLength - capInset, paceCrossSize);
-                                addPoint(capInset, paceCrossSize);
-                                addPoint(capInset, paceCrossSize - capDepth);
-                                addPoint(stemInset, paceCrossSize - capDepth);
-                                addPoint(stemInset, capDepth);
-                                addPoint(capInset, capDepth);
-                                part.Fill(SolidColorBrush(core ? tickColor : haloColor));
+                                }
+                                part.Fill(SolidColorBrush(layer == 1 ? tickColor : haloColor));
                                 caretShape.Children().Append(part);
                             }
                             paceTick.Child(caretShape);
@@ -382,22 +253,19 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                             paceTick.Background(
                                 SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
                             if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = 2 * physicalPixelDip;
+                                double radius = barGeometry.paceRadius;
                                 paceTick.CornerRadius({radius, radius, radius, radius});
                             }
 
                             Border paceCore;
-                            double paceCoreCrossSize =
-                                paceTickStyle == PaceTickStyle::Dot ?
-                                    3 * physicalPixelDip : paceCrossSize;
-                            double paceCoreLength = (paceTickStyle == PaceTickStyle::Dot ? 3 : 2) *
-                                                    physicalPixelDip;
+                            double paceCoreCrossSize = barGeometry.coreCrossSize;
+                            double paceCoreLength = barGeometry.coreLength;
                             paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
                             paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
                             paceCore.HorizontalAlignment(HorizontalAlignment::Center);
                             paceCore.VerticalAlignment(VerticalAlignment::Center);
                             if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = 1.5 * physicalPixelDip;
+                                double radius = barGeometry.coreRadius;
                                 paceCore.CornerRadius({radius, radius, radius, radius});
                             }
                             paceCore.Background(SolidColorBrush(tickColor));
@@ -467,9 +335,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         percent.IsHitTestVisible(false);
                         TranslateTransform translation;
                         translation.X(percentTextAlignment == PercentTextAlignment::Left ?
-                                          4 * physicalPixelDip :
+                                          barGeometry.textInset :
                                       percentTextAlignment == PercentTextAlignment::Center ?
-                                          0 : -4 * physicalPixelDip);
+                                          0 : -barGeometry.textInset);
                         translation.Y(-1);
                         percent.RenderTransform(translation);
                         swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d_%d", (int)i, w);

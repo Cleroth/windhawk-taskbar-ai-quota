@@ -643,7 +643,7 @@ struct QuotaUiInstance {
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
-    double tileHeight = 0;
+    double taskbarHeight = 0;  // DIPs, measured at build for tile layouts; 0 if unknown.
     bool tileLightTheme = false;  // Light taskbar at the last tile update; picks highlight colors.
     Grid quotaGrid{nullptr};
     Panel injectionParent{nullptr};
@@ -5225,25 +5225,67 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
     return nullptr;
 }
 
+// src/taskbar/logo-paths.h
+// Provider logo path data from Simple Icons (CC0-1.0): SVG path strings in a 24x24 viewBox,
+// filled with the text color. Pure data, shared by every renderer.
+
+// openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
+static constexpr PCWSTR kOpenAiLogoPath =
+    L"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6"
+    L".0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.096"
+    L"6 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.259"
+    L"9 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0"
+    L" 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2"
+    L".7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4."
+    L"504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852"
+    L" 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L"
+    L"9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1"
+    L".9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071"
+    L" 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7"
+    L".2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79"
+    L" 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409"
+    L" 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.6"
+    L"6zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3"
+    L"757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.499"
+    L"8 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z";
+
+// claude.svg.
+static constexpr PCWSTR kClaudeLogoPath =
+    L"m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.33"
+    L"75-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032"
+    L" 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.83"
+    L"56l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2"
+    L"246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733"
+    L"-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6."
+    L"287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985."
+    L"2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107"
+    L".7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l."
+    L"2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-."
+    L"34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-."
+    L"607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.436"
+    L"4.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-."
+    L"079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2."
+    L"0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-"
+    L"1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1."
+    L"3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.607"
+    L"1-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-."
+    L"1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.400"
+    L"8-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.14"
+    L"57-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z";
+
+// googlegemini.svg; Simple Icons has no Google Antigravity mark.
+static constexpr PCWSTR kGeminiLogoPath =
+    L"M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2"
+    L".49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-."
+    L"96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93"
+    L" 3.81 2.55t2.55 3.81";
+
 // src/taskbar/theme.h
-// Quota colors and the details flyout's theme. Every flyout brush is created in this file.
+// XAML colors for the meter model's ARGB values, and the details flyout's theme. Every flyout
+// brush is created in this file.
 
-static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
-                                            int orangeThreshold, int redThreshold,
-                                            bool colorblindMode) {
-    if (stale || pct < 0) return {255, 0x9E, 0x9E, 0x9E};
-
-    if (colorblindMode) {
-        if (pct >= redThreshold) return {255, 0xD5, 0x5E, 0x00};
-        if (pct >= orangeThreshold) return {255, 0xE6, 0x9F, 0x00};
-        if (pct >= yellowThreshold) return {255, 0x56, 0xB4, 0xE9};
-        return {255, 0x00, 0x72, 0xB2};
-    }
-
-    if (pct >= redThreshold) return {255, 0xE5, 0x39, 0x35};
-    if (pct >= orangeThreshold) return {255, 0xFB, 0x8C, 0x00};
-    if (pct >= yellowThreshold) return {255, 0xFD, 0xD8, 0x35};
-    return {255, 0x43, 0xA0, 0x47};
+static winrt::Windows::UI::Color ArgbColor(uint32_t argb) {
+    return {(uint8_t)(argb >> 24), (uint8_t)(argb >> 16), (uint8_t)(argb >> 8), (uint8_t)argb};
 }
 
 // The single constructor of solid flyout brushes (backgrounds, text, borders and shapes). A
@@ -5454,93 +5496,16 @@ static FlyoutTheme LoadFlyoutTheme() {
     return theme;
 }
 
-// src/taskbar/logos.h
-// Provider logo path data from Simple Icons (CC0-1.0), 24x24 viewBox, filled with the text
-// color, and the element that draws it.
+// src/taskbar/meter-model.h
+// Meter model: what every quota meter shows (fill, usage color, pace mark, text) and the tile,
+// ring and pace tick geometry, as plain values from explicit inputs. Pure: no XAML, WinRT,
+// window, registry or global state; colors are ARGB. Renderers own measuring, theme detection,
+// fonts and applied-state caching.
+//
+// MeterDisplayFor is the entry. It clamps the display settings to their ranges, and every other
+// function here relies on them (clamp bounds, ring and pace tick fit).
 
-// openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
-static constexpr PCWSTR kOpenAiLogoPath =
-    L"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6"
-    L".0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.096"
-    L"6 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.259"
-    L"9 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0"
-    L" 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2"
-    L".7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4."
-    L"504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852"
-    L" 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L"
-    L"9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1"
-    L".9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071"
-    L" 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7"
-    L".2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79"
-    L" 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409"
-    L" 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.6"
-    L"6zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3"
-    L"757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.499"
-    L"8 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z";
-
-// claude.svg.
-static constexpr PCWSTR kClaudeLogoPath =
-    L"m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.33"
-    L"75-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032"
-    L" 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.83"
-    L"56l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2"
-    L"246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733"
-    L"-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6."
-    L"287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985."
-    L"2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107"
-    L".7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l."
-    L"2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-."
-    L"34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-."
-    L"607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.436"
-    L"4.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-."
-    L"079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2."
-    L"0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-"
-    L"1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1."
-    L"3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.607"
-    L"1-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-."
-    L"1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.400"
-    L"8-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.14"
-    L"57-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z";
-
-// googlegemini.svg; Simple Icons has no Google Antigravity mark.
-static constexpr PCWSTR kGeminiLogoPath =
-    L"M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2"
-    L".49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-."
-    L"96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93"
-    L" 3.81 2.55t2.55 3.81";
-
-// The provider's logo shape in its 24x24 viewBox: a Path filled with `fill`, or with a null `fill`
-// a PathIcon, which inherits the surrounding text color like a TextBlock. Throws if it fails to
-// load.
-static FrameworkElement LoadProviderLogoShape(std::wstring const& provider, Brush const& fill) {
-    PCWSTR data = provider == L"openai" ? kOpenAiLogoPath :
-                  provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
-    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";
-    xaml += L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
-    xaml += data;
-    xaml += L"\"/>";
-    auto logo = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(xaml))
-                    .as<FrameworkElement>();
-    if (fill) logo.as<wuxs::Path>().Fill(fill);
-    return logo;
-}
-
-// The provider's logo shape in a 24x24 DIP box. Throws if it fails to load.
-static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
-    Grid box;
-    box.Width(24);
-    box.Height(24);
-    box.Children().Append(LoadProviderLogoShape(provider, fill));
-    return box;
-}
-
-// src/taskbar/tiles.h
-// Tile layouts: segmented ring, concentric rings, logo + mini bars and logo + headline %. A tile
-// shows the account's identity (provider logo, optionally with a number badge, or short text) and
-// its tile quotas: the meters the bar layouts show, in slot order. BuildAccountTile creates a tile;
-// UpdateAccountTile regenerates its meter shapes whenever their inputs change, then applies values
-// in place.
-
+// Tile sizes, in DIPs.
 static constexpr double kTileHeight = 40;  // Nominal; shorter taskbars get shorter tiles.
 static constexpr double kMiniBarLength = 38;
 static constexpr double kMiniBarThickness = 4;
@@ -5552,6 +5517,23 @@ static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"
 
 static bool IsTileLayout(BarLayout layout) {
     return layout != BarLayout::Stacked && layout != BarLayout::Vertical;
+}
+
+static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int orangeThreshold,
+                           int redThreshold, bool colorblindMode) {
+    if (stale || pct < 0) return 0xFF9E9E9E;
+
+    if (colorblindMode) {
+        if (pct >= redThreshold) return 0xFFD55E00;
+        if (pct >= orangeThreshold) return 0xFFE69F00;
+        if (pct >= yellowThreshold) return 0xFF56B4E9;
+        return 0xFF0072B2;
+    }
+
+    if (pct >= redThreshold) return 0xFFE53935;
+    if (pct >= orangeThreshold) return 0xFFFB8C00;
+    if (pct >= yellowThreshold) return 0xFFFDD835;
+    return 0xFF43A047;
 }
 
 // Ring geometry. The centre keeps at least kTileRingHoleMin of radius so the identity always
@@ -5637,6 +5619,520 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
     return g;
 }
 
+// Tile chrome for the taskbar theme. Logo and text inherit the taskbar's text color instead.
+struct TilePalette {
+    uint32_t track;
+    uint32_t hover;
+    uint32_t open;  // Tile whose flyout is open.
+    uint32_t badge;
+    uint32_t badgeOutline;
+};
+
+static TilePalette TilePaletteFor(bool light) {
+    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFD8DBE2, 0xFFEEF0F4};
+    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF3A3D44, 0xFF1F2126};
+}
+
+// Display inputs of every meter. Build it with MeterDisplayFor only; the ranges below hold.
+struct MeterDisplay {
+    ULONGLONG now;
+    BarMode barMode;
+    int barLength;            // 10-500 DIPs.
+    int barThickness;         // 2-50 DIPs.
+    int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
+    int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
+    int yellowThreshold;      // 0-100, yellow <= orange <= red.
+    int orangeThreshold;
+    int redThreshold;
+    int pollMinutes;          // 2-1440.
+    bool colorblindMode;
+    bool showPaceTicks;
+    PaceTickStyle paceTickStyle;
+    COLORREF paceTickColor;   // RGB only.
+    PercentTextAlignment percentTextAlignment;
+    bool showExtraBarAmounts;
+    bool showStaleWarning;
+    // Physical pixels per DIP, at least 1 (100% scaling), so a pace tick fits twice into the
+    // shortest bar.
+    double rasterizationScale;
+    double tileHeight;        // 24-kTileHeight DIPs.
+};
+
+// `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown; tiles leave 4 DIPs above and
+// below them.
+static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
+                                    double rasterizationScale, double taskbarHeight) {
+    int yellow = std::clamp(settings.yellowThreshold, 0, 100);
+    int orange = std::clamp(settings.orangeThreshold, yellow, 100);
+    return {
+        .now = now,
+        .barMode = settings.barMode,
+        .barLength = std::clamp(settings.barLength, 10, 500),
+        .barThickness = std::clamp(settings.barThickness, 2, 50),
+        .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
+        .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
+        .yellowThreshold = yellow,
+        .orangeThreshold = orange,
+        .redThreshold = std::clamp(settings.redThreshold, orange, 100),
+        .pollMinutes = std::clamp(settings.pollMinutes, 2, 24 * 60),
+        .colorblindMode = settings.colorblindMode,
+        .showPaceTicks = settings.showPaceTicks,
+        .paceTickStyle = settings.paceTickStyle,
+        .paceTickColor = settings.paceTickColor & 0x00FFFFFF,
+        .percentTextAlignment = settings.percentTextAlignment,
+        .showExtraBarAmounts = settings.showExtraBarAmounts,
+        .showStaleWarning = settings.showStaleWarning,
+        .rasterizationScale =
+            std::isfinite(rasterizationScale) ? std::max(rasterizationScale, 1.0) : 1.0,
+        .tileHeight = taskbarHeight > 0 ?
+            std::clamp(std::floor(taskbarHeight) - 8, 24.0, kTileHeight) : kTileHeight,
+    };
+}
+
+// Visual test accounts with sample data at display.now. `data` may be null.
+static void BuildVisualTestSnapshot(const MeterDisplay& display,
+                                    std::vector<AccountConfig>* accounts,
+                                    std::vector<AccountData>* data) {
+    // One value per usage color band.
+    const double green = display.yellowThreshold / 2.0;
+    const double yellow = (display.yellowThreshold + display.orangeThreshold) / 2.0;
+    const double orange = (display.orangeThreshold + display.redThreshold) / 2.0;
+    const double red = (display.redThreshold + 100) / 2.0;
+    const ULONGLONG now = display.now;
+    // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
+    // share a provider so tiles show number badges. A negative value is a quota not reported.
+    struct Sample {
+        PCWSTR provider;
+        PCWSTR label;
+        std::array<double, kQuotaBarCount> pct;
+        std::array<bool, kQuotaBarCount> showBars;
+    };
+    const std::array<Sample, 4> samples = {{
+        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}},
+        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}},
+        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}},
+        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}},
+    }};
+    static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
+        kFiveHourWindowMs,
+        kWeeklyWindowMs,
+        kWeeklyWindowMs,
+        30ULL * 24 * 60 * 60 * 1000,
+    };
+    static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
+        0.35, 0.5, 0.6, 0.8,
+    };
+    static constexpr double kCreditsMax = 1000;
+
+    accounts->clear();
+    accounts->reserve(samples.size());
+    if (data) {
+        data->clear();
+        data->reserve(samples.size());
+    }
+    for (size_t i = 0; i < samples.size(); i++) {
+        const Sample& sample = samples[i];
+        AccountConfig account;
+        account.provider = sample.provider;
+        account.label = sample.label;
+        account.showBars = sample.showBars;
+        bool openAi = account.provider == L"openai";
+        if (openAi) account.creditsMax = (int)kCreditsMax;
+        accounts->push_back(account);
+
+        if (!data) continue;
+        AccountData accountData;
+        std::array<WindowUsage*, kQuotaBarCount> usage = {
+            &accountData.win5h, &accountData.winWeek,
+            &accountData.fableWeek, &accountData.extraUsage,
+        };
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            if (sample.pct[w] < 0) continue;
+            usage[w]->pct = sample.pct[w];
+            usage[w]->windowDurationMs = kDurations[w];
+            usage[w]->resetUnixMs = now +
+                (ULONGLONG)std::lround(kDurations[w] * (kRemainingFractions[w] - 0.05 * i));
+        }
+        if (openAi) {
+            // Credits are a balance against the user's max, without a window.
+            accountData.hasCredits = true;
+            accountData.creditsBalance = kCreditsMax * (1 - sample.pct[kExtraUsageBar] / 100);
+            ApplyCreditsMax(account, &accountData);
+        } else if (sample.pct[kExtraUsageBar] >= 0) {
+            accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
+            accountData.extraLimitAmount = 50.0;
+        }
+        if (account.provider == L"antigravity") {
+            // Claude/GPT pools appear only in the details flyout.
+            accountData.antigravityThirdParty5h = {
+                yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
+            accountData.antigravityThirdPartyWeek = {
+                green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
+        }
+        accountData.plan = L"Visual test";
+        accountData.lastSuccessMs = now;
+        accountData.stale = false;
+        data->push_back(std::move(accountData));
+    }
+}
+
+// Bar layouts' pace tick and percent text placement, in DIPs along and across the bar. Pixel
+// details scale with 1 / rasterizationScale.
+struct BarGeometry {
+    struct Point {
+        double along, cross;
+    };
+    double paceLength;     // Pace tick outline.
+    double paceCrossSize;
+    double paceRadius;     // Corner radius; dots only.
+    double coreLength;     // Line, notch and dot core, centred in the outline.
+    double coreCrossSize;
+    double coreRadius;     // Dots only.
+    std::array<std::array<Point, 12>, 2> caret;  // Caret outline, then core polygon.
+    double textInset;      // Percent text shift away from its aligned edge.
+};
+
+static BarGeometry BarGeometryFor(const MeterDisplay& display) {
+    double pixel = 1.0 / display.rasterizationScale;
+    PaceTickStyle style = display.paceTickStyle;
+    BarGeometry g{};
+    g.paceLength = (style == PaceTickStyle::Caret ? 5 : 4) * pixel;
+    g.paceCrossSize = style == PaceTickStyle::Notch ?
+                          std::max(2.0, std::ceil(display.barThickness * 0.6)) :
+                      style == PaceTickStyle::Dot ? 4 * pixel : display.barThickness;
+    g.paceRadius = style == PaceTickStyle::Dot ? 2 * pixel : 0;
+    g.coreLength = (style == PaceTickStyle::Dot ? 3 : 2) * pixel;
+    g.coreCrossSize = style == PaceTickStyle::Dot ? 3 * pixel : g.paceCrossSize;
+    g.coreRadius = style == PaceTickStyle::Dot ? 1.5 * pixel : 0;
+    // Caret: a bracket of two caps joined by a stem, a dark halo around the core.
+    double length = g.paceLength;
+    double cross = g.paceCrossSize;
+    for (int layer = 0; layer < 2; layer++) {
+        bool core = layer == 1;
+        double capInset = (core ? 1 : 0) * pixel;
+        double stemInset = (core ? 2 : 1) * pixel;
+        double capDepth = std::min((core ? 1.0 : 2.0) * pixel, cross / 2.0);
+        g.caret[layer] = {{
+            {capInset, 0},
+            {length - capInset, 0},
+            {length - capInset, capDepth},
+            {length - stemInset, capDepth},
+            {length - stemInset, cross - capDepth},
+            {length - capInset, cross - capDepth},
+            {length - capInset, cross},
+            {capInset, cross},
+            {capInset, cross - capDepth},
+            {stemInset, cross - capDepth},
+            {stemInset, capDepth},
+            {capInset, capDepth},
+        }};
+    }
+    g.textInset = 4 * pixel;
+    return g;
+}
+
+// A tile's identity text. Logo identities show a number badge when several configured accounts
+// share the provider; text identities, and logos that fail to load, show `text`.
+struct TileIdentityText {
+    bool badge = false;
+    std::wstring badgeText;
+    std::wstring text;
+};
+
+static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accounts,
+                                        size_t index) {
+    const AccountConfig& account = accounts[index];
+    TileIdentityText identity;
+    identity.badge = account.tileIdentity == TileIdentity::LogoBadge &&
+        std::count_if(accounts.begin(), accounts.end(), [&](const AccountConfig& other) {
+            return other.provider == account.provider;
+        }) > 1;
+    if (identity.badge) {
+        // The label's trailing digits (at most two), else its first letter, else its first
+        // non-space character.
+        const std::wstring& label = account.label;
+        size_t digits = label.size();
+        while (digits > 0 && iswdigit(label[digits - 1])) digits--;
+        auto letter = std::find_if(label.begin(), label.end(),
+                                   [](wchar_t ch) { return iswalpha(ch); });
+        if (letter == label.end()) {
+            letter = std::find_if(label.begin(), label.end(),
+                                  [](wchar_t ch) { return !iswspace(ch); });
+        }
+        if (digits < label.size()) {
+            identity.badgeText =
+                label.substr(label.size() - std::min<size_t>(label.size() - digits, 2));
+        } else if (letter != label.end()) {
+            identity.badgeText.assign(1, (wchar_t)towupper(*letter));
+        } else {
+            identity.badgeText = std::to_wstring(index + 1);
+        }
+    }
+    // Short text, else the label without spaces, else the account's position.
+    identity.text = account.tileText;
+    if (identity.text.empty()) {
+        std::copy_if(account.label.begin(), account.label.end(),
+                     std::back_inserter(identity.text), [](wchar_t ch) { return !iswspace(ch); });
+    }
+    if (identity.text.empty()) identity.text = std::to_wstring(index + 1);
+    return identity;
+}
+
+// One quota slot's meter. Bar fields cover every slot of a bar layout; tile fields cover a tile
+// layout's slots in the mask.
+struct QuotaMeter {
+    uint32_t color = 0;        // Usage color: follows used % in either bar mode.
+    bool paceVisible = false;  // Pace mark shown, in layouts that draw one.
+
+    // Bars, in DIPs along the bar.
+    int fillPx = 0;
+    int pacePx = 0;            // Pace tick's start.
+    PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
+    double textOffset = 0;     // Percent text shift.
+    bool darkText = false;     // Black percent text over a yellow or orange fill.
+    std::wstring text;         // Percent or amount; empty while unavailable.
+
+    // Tiles. Fill and pace in thousandths of the meter are the update keys; the geometry
+    // below follows them.
+    int fillUnits = 0;
+    int paceUnits = 0;
+    double fillLength = 0;     // Mini bar or headline segment fill.
+    double paceOffset = 0;     // Mini bar pace tick's start.
+    TileArc arc{};             // Ring arc and its centreline radius.
+    double radius = 0;
+    double fillSweep = 0;      // Ring fill, in degrees from the arc's start.
+    double paceAngle = 0;      // Ring pace dot centre, in degrees.
+};
+
+struct AccountMeters {
+    bool stale = false;
+    bool warn = false;         // Stale with an error: the bars' "!" or the tiles' mark.
+    int barMask = 0;           // Quota slots shown.
+    std::array<QuotaMeter, kQuotaBarCount> quotas;
+    std::wstring labelText;    // Bars' label.
+    double labelOpacity = 0;
+    double identityOpacity = 0;  // Tiles' identity.
+    // Ring tiles: the identity text's fitted font size and width, and the warning mark's top
+    // margin, into the tile's padding.
+    TileRingGeometry ring;
+    double ringTextFont = 0;
+    double ringTextWidth = 0;
+    double ringWarnTop = 0;
+    // Logo + headline tiles: the most-used quota's number, window key and color.
+    std::wstring headline;
+    std::wstring headlineKey;
+    uint32_t headlineColor = 0;
+};
+
+// `layout`: the layout the meters are drawn in. `badgeChars`: the tile badge's text length, 0
+// without a badge. `textWidthPerPt`: the tile identity text's width per DIP of font size, 0
+// without text.
+static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout layout,
+                                       const AccountConfig& account, const AccountData& data,
+                                       int badgeChars, double textWidthPerPt) {
+    AccountMeters meters;
+    const std::array<const WindowUsage*, kQuotaBarCount> usage = {
+        &data.win5h, &data.winWeek, &data.fableWeek, &data.extraUsage};
+    bool remainingMode = display.barMode == BarMode::Remaining;
+    int yellow = display.yellowThreshold;
+    int orange = display.orangeThreshold;
+    int red = display.redThreshold;
+
+    // Account state. Stale after two missed polls; Antigravity after two minutes.
+    ULONGLONG staleAfterMs = (account.provider == L"antigravity" ? 1ULL :
+                              (ULONGLONG)display.pollMinutes) * 2 * 60000;
+    meters.stale = data.stale || data.lastSuccessMs == 0 ||
+                   display.now - data.lastSuccessMs > staleAfterMs;
+    meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
+    meters.labelText = meters.warn ? account.label + L"!" : account.label;
+    meters.labelOpacity = meters.stale ? 0.45 : 0.8;
+    meters.identityOpacity = meters.stale ? 0.45 : 1.0;
+    // Every selected quota until the first success, then the reported ones.
+    int count = 0;
+    for (int w = 0; w < kQuotaBarCount; w++) {
+        if (account.showBars[w] && (data.lastSuccessMs == 0 || usage[w]->pct >= 0)) {
+            meters.barMask |= 1 << w;
+            count++;
+        }
+    }
+
+    bool tiles = IsTileLayout(layout);
+    bool concentric = layout == BarLayout::ConcentricRings;
+    bool ring = concentric || layout == BarLayout::SegmentedRing;
+    bool miniBars = layout == BarLayout::LogoBars;
+    bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline;
+    if (ring) {
+        meters.ring = TileRingLayout(concentric,
+                                     std::min<double>(display.ringSize, display.tileHeight),
+                                     display.ringThickness, count, badgeChars);
+        // The largest font, from min(12, size / 3) down to 7, whose text fits across the hole at
+        // half its cap height; clipped beyond that.
+        double radius = meters.ring.hole - 0.8;
+        auto chord = [&](double font) {
+            double half = font * 0.36;
+            return 2 * std::sqrt(std::max(radius * radius - half * half, 0.0));
+        };
+        double font = std::max(std::min(12.0, meters.ring.size * 0.33), 7.0);
+        while (font > 7 && textWidthPerPt * font > chord(font)) font -= 0.25;
+        font = std::max(font, 7.0);
+        meters.ringTextFont = font;
+        meters.ringTextWidth = chord(font);
+        meters.ringWarnTop = 1 - (display.tileHeight - meters.ring.size) / 2;
+    }
+    // Tiles fill per the bar mode, clamped to the meter; unavailable quotas stay empty.
+    auto tileShown = [&](double pct) {
+        if (pct < 0) return 0.0;
+        return std::clamp(remainingMode ? 100.0 - pct : pct, 0.0, 100.0);
+    };
+
+    BarGeometry bar = BarGeometryFor(display);
+    int position = 0;
+    for (int w = 0; w < kQuotaBarCount; w++) {
+        const WindowUsage& wu = *usage[w];
+        QuotaMeter& m = meters.quotas[w];
+        // Color stays keyed to actual usage so depleting quota still reds out.
+        m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.colorblindMode);
+        m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
+                        wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
+                        display.now >= wu.resetUnixMs - wu.windowDurationMs;
+        double remainingFraction = m.paceVisible ?
+            ((double)wu.resetUnixMs - (double)display.now) / wu.windowDurationMs : 0.0;
+
+        if (!tiles) {
+            // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged
+            // and used mode stays unclamped, so text can exceed 100%.
+            double displayed = remainingMode && wu.pct >= 0 ?
+                                   std::clamp(100.0 - wu.pct, 0.0, 100.0) : wu.pct;
+            m.fillPx = displayed > 0 ?
+                std::clamp((int)std::lround(display.barLength * displayed / 100.0), 2,
+                           display.barLength) : 0;
+            if (m.paceVisible) {
+                // Centred on the pace, kept inside the bar's rounded ends.
+                double pacePct = remainingMode ? remainingFraction * 100.0 :
+                                                 (1.0 - remainingFraction) * 100.0;
+                pacePct = std::clamp(pacePct, 0.0, 100.0);
+                double radius = std::clamp(std::max(1.0, display.barThickness / 2.0),
+                                           bar.paceLength / 2.0,
+                                           (display.barLength - bar.paceLength) / 2.0);
+                double center = std::clamp(display.barLength * pacePct / 100.0,
+                                           radius, display.barLength - radius);
+                m.pacePx = (int)std::lround(center - bar.paceLength / 2.0);
+            }
+            // Adaptive text sits over the fill from the yellow threshold on, else over the track.
+            m.textAlignment = display.percentTextAlignment == PercentTextAlignment::Adaptive ?
+                (displayed >= yellow ? PercentTextAlignment::Left : PercentTextAlignment::Right) :
+                display.percentTextAlignment;
+            m.textOffset = m.textAlignment == PercentTextAlignment::Left ? bar.textInset :
+                           m.textAlignment == PercentTextAlignment::Center ? 0 : -bar.textInset;
+            bool yellowOrOrange = !meters.stale && wu.pct >= 0 &&
+                ((wu.pct >= yellow && wu.pct < orange) || (wu.pct >= orange && wu.pct < red));
+            m.darkText = m.textAlignment == PercentTextAlignment::Left && yellowOrOrange;
+            if (wu.pct >= 0) {
+                wchar_t text[24];
+                if (w == kExtraUsageBar && display.showExtraBarAmounts &&
+                    data.extraLimitAmount >= 0) {
+                    // Amount follows the bar mode: spent in used mode, left in remaining mode.
+                    // Dollars for Anthropic, credits for OpenAI.
+                    double amount = remainingMode ? data.extraLimitAmount - data.extraUsedAmount :
+                                                    data.extraUsedAmount;
+                    amount = std::max(amount, 0.0);
+                    swprintf(text, ARRAYSIZE(text),
+                             account.provider == L"openai" ? L"%.0f" : L"$%.2f", amount);
+                } else {
+                    swprintf(text, ARRAYSIZE(text), L"%.0f%%", displayed);
+                }
+                m.text = text;
+            }
+            continue;
+        }
+
+        if (!(meters.barMask & (1 << w))) continue;
+        double shown = tileShown(wu.pct);
+        double fill = shown / 100;
+        if (ring) {
+            m.arc = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
+            m.radius = meters.ring.radius -
+                       (concentric ? position * (meters.ring.stroke + meters.ring.gap) : 0.0);
+            // Any usage fills at least 5 degrees.
+            if (shown > 0) fill = std::max(fill, 5.0 / std::abs(m.arc.sweep));
+        }
+        position++;
+        m.fillUnits = shown > 0 ? std::max(1, (int)std::lround(fill * 1000)) : 0;
+        if (m.paceVisible) {
+            double pace = remainingMode ? remainingFraction : 1.0 - remainingFraction;
+            m.paceUnits = (int)std::lround(std::clamp(pace, 0.0, 1.0) * 1000);
+        }
+        double pace = m.paceUnits / 1000.0;
+        if (ring) {
+            m.fillSweep = m.arc.sweep * fill;
+            m.paceAngle = m.arc.start + m.arc.sweep * pace;
+        } else {
+            double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
+            double minimum = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
+            m.fillLength = m.fillUnits ? std::clamp(length * fill, minimum, length) : 0;
+            // Line tick, 3.5 DIPs wide, centred on the pace.
+            m.paceOffset = kMiniBarLength * pace - 1.75;
+        }
+    }
+
+    // Headline: the most-used tile quota, shown per the bar mode in its usage color.
+    if (layout == BarLayout::LogoHeadline) {
+        int top = -1;
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            if ((meters.barMask & (1 << w)) && usage[w]->pct >= 0 &&
+                (top < 0 || usage[w]->pct > usage[top]->pct)) {
+                top = w;
+            }
+        }
+        meters.headline = L"\u2013";
+        if (top >= 0) {
+            wchar_t text[16];
+            swprintf(text, ARRAYSIZE(text), L"%.0f%%", tileShown(usage[top]->pct));
+            meters.headline = text;
+            meters.headlineKey = top == kExtraUsageBar && account.provider == L"openai" ?
+                                     L"Cr" : kQuotaKeys[top];
+        }
+        meters.headlineColor = UsageColor(top >= 0 ? usage[top]->pct : -1, meters.stale, yellow,
+                                          orange, red, display.colorblindMode);
+    }
+    return meters;
+}
+
+// src/taskbar/logos.h
+// The XAML element that draws a provider logo from its path data (logo-paths.h).
+
+// The provider's logo shape in its 24x24 viewBox: a Path filled with `fill`, or with a null `fill`
+// a PathIcon, which inherits the surrounding text color like a TextBlock. Throws if it fails to
+// load.
+static FrameworkElement LoadProviderLogoShape(std::wstring const& provider, Brush const& fill) {
+    PCWSTR data = provider == L"openai" ? kOpenAiLogoPath :
+                  provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";
+    xaml += L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
+    xaml += data;
+    xaml += L"\"/>";
+    auto logo = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(xaml))
+                    .as<FrameworkElement>();
+    if (fill) logo.as<wuxs::Path>().Fill(fill);
+    return logo;
+}
+
+// The provider's logo shape in a 24x24 DIP box. Throws if it fails to load.
+static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
+    Grid box;
+    box.Width(24);
+    box.Height(24);
+    box.Children().Append(LoadProviderLogoShape(provider, fill));
+    return box;
+}
+
+// src/taskbar/tiles.h
+// Tile layouts: segmented ring, concentric rings, logo + mini bars and logo + headline %. A tile
+// shows the account's identity (provider logo, optionally with a number badge, or short text) and
+// its tile quotas: the meters the bar layouts show, in slot order. BuildAccountTile creates a tile;
+// UpdateAccountTile regenerates its meter shapes whenever their inputs change, then applies values
+// in place. Values, identity text and geometry come from the meter model (meter-model.h).
+
 static winrt::Windows::Foundation::Point TileRingPoint(double center, double radius,
                                                        double degrees) {
     double radians = degrees * std::numbers::pi / 180;
@@ -5661,24 +6157,6 @@ static Geometry TileArcGeometry(double center, double radius, double start, doub
     PathGeometry geometry;
     geometry.Figures().Append(figure);
     return geometry;
-}
-
-// Tile chrome for the taskbar theme. Logo and text inherit the taskbar's text color instead.
-struct TilePalette {
-    winrt::Windows::UI::Color track;
-    winrt::Windows::UI::Color hover;
-    winrt::Windows::UI::Color open;  // Tile whose flyout is open.
-    winrt::Windows::UI::Color badge;
-    winrt::Windows::UI::Color badgeOutline;
-};
-
-static TilePalette TilePaletteFor(bool light) {
-    if (light) {
-        return {{0x24, 0, 0, 0}, {0x0A, 0, 0, 0}, {0xB3, 0xFF, 0xFF, 0xFF},
-                {0xFF, 0xD8, 0xDB, 0xE2}, {0xFF, 0xEE, 0xF0, 0xF4}};
-    }
-    return {{0x2B, 0xFF, 0xFF, 0xFF}, {0x0F, 0xFF, 0xFF, 0xFF}, {0x1A, 0xFF, 0xFF, 0xFF},
-            {0xFF, 0x3A, 0x3D, 0x44}, {0xFF, 0x1F, 0x21, 0x26}};
 }
 
 // Whether the mouse is over a tile of a tile layout.
@@ -5707,9 +6185,8 @@ static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
     if (applied && *applied == level) return;
     TilePalette palette = TilePaletteFor(state.tileLightTheme);
     try {
-        ui.column.Background(SolidColorBrush(level == 2 ? palette.open :
-                                             level == 1 ? palette.hover :
-                                                          winrt::Windows::UI::Color{0, 0, 0, 0}));
+        ui.column.Background(SolidColorBrush(ArgbColor(level == 2 ? palette.open :
+                                                       level == 1 ? palette.hover : 0)));
         if (applied) *applied = level;
     } catch (...) {}
 }
@@ -5767,30 +6244,10 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
             Wh_Log(L"Tile logo failed to load; showing text");
         }
     }
-    bool sharedProvider = std::count_if(accounts.begin(), accounts.end(),
-        [&](AccountConfig const& other) { return other.provider == account.provider; }) > 1;
-    if (tile.logo && account.tileIdentity == TileIdentity::LogoBadge && sharedProvider) {
-        // The label's trailing digits (at most two), else its first letter, else its first
-        // non-space character.
-        std::wstring const& label = account.label;
-        size_t digits = label.size();
-        while (digits > 0 && iswdigit(label[digits - 1])) digits--;
-        auto letter = std::find_if(label.begin(), label.end(),
-                                   [](wchar_t ch) { return iswalpha(ch); });
-        if (letter == label.end()) {
-            letter = std::find_if(label.begin(), label.end(),
-                                  [](wchar_t ch) { return !iswspace(ch); });
-        }
-        std::wstring badgeText;
-        if (digits < label.size()) {
-            badgeText = label.substr(label.size() - std::min<size_t>(label.size() - digits, 2));
-        } else if (letter != label.end()) {
-            badgeText.assign(1, (wchar_t)towupper(*letter));
-        } else {
-            badgeText = std::to_wstring(index + 1);
-        }
+    TileIdentityText identityText = TileIdentityFor(accounts, index);
+    if (tile.logo && identityText.badge) {
         tile.badgeText = TextBlock{};
-        tile.badgeText.Text(badgeText);
+        tile.badgeText.Text(identityText.badgeText);
         tile.badgeText.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
         tile.badgeText.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
         tile.badgeText.FontSize(6.8);
@@ -5817,14 +6274,8 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         identity.Children().Append(tile.badge);
     }
     if (!tile.logo) {
-        std::wstring text = account.tileText;
-        if (text.empty()) {
-            std::copy_if(account.label.begin(), account.label.end(), std::back_inserter(text),
-                         [](wchar_t ch) { return !iswspace(ch); });
-        }
-        if (text.empty()) text = std::to_wstring(index + 1);
         tile.text = TextBlock{};
-        tile.text.Text(text);
+        tile.text.Text(identityText.text);
         tile.text.FontFamily(displayFont);
         tile.text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         tile.text.FontSize(10);
@@ -5912,75 +6363,37 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     return column;
 }
 
-// Display settings shared by every tile in one update.
-struct TileDisplay {
-    ULONGLONG now = 0;
-    BarMode barMode = BarMode::Used;
-    int yellowThreshold = 0;
-    int orangeThreshold = 0;
-    int redThreshold = 0;
-    bool colorblindMode = false;
-    bool showPaceTicks = false;
-    COLORREF paceTickColor = 0;
-    int ringSize = 0;
-    int ringThickness = 0;
-    bool light = false;
-};
-
-static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountConfig const& account,
-                              AccountData const& d, int barMask, bool stale, bool warn,
-                              TileDisplay const& display) {
+// `meters`: AccountMeterState of the account in the tile's layout. `light`: light taskbar chrome.
+static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeters const& meters,
+                              MeterDisplay const& display, bool light) {
     AccountUiRefs& ui = state.accountRefs[index];
     AppliedState& ap = state.applied[index];
     TileUiRefs& tile = ui.tile;
     if (!tile.identity || !tile.meters) return;
     BarLayout layout = tile.layout;
-    bool concentric = layout == BarLayout::ConcentricRings;
-    bool ring = concentric || layout == BarLayout::SegmentedRing;
+    bool ring = layout == BarLayout::ConcentricRings || layout == BarLayout::SegmentedRing;
     bool miniBars = layout == BarLayout::LogoBars;
-    const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-        &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage};
-    int count = 0;
-    for (int w = 0; w < kQuotaBarCount; w++) {
-        if (barMask & (1 << w)) count++;
-    }
-
-    // The geometry guarantees hold for the settings' ranges.
-    TileRingGeometry geometry;
-    if (ring) {
-        int size = std::clamp(display.ringSize, kRingSizeMin, kRingSizeMax);
-        geometry = TileRingLayout(
-            concentric, std::min<double>(size, state.tileHeight),
-            std::clamp(display.ringThickness, kRingThicknessMin, kRingThicknessMax), count,
-            tile.badge ? (int)tile.badgeText.Text().size() : 0);
-    }
+    int barMask = meters.barMask;
+    TileRingGeometry const& geometry = meters.ring;
     double center = geometry.size / 2;
-    // Arc and centreline radius of the tile quota at `position`.
-    auto arcAt = [&](int position) {
-        TileArc arc = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
-        double radius = geometry.radius -
-                        (concentric ? position * (geometry.stroke + geometry.gap) : 0.0);
-        return std::pair{arc, radius};
-    };
 
     // Meter shapes: regenerated, and the identity resized, whenever an input changes.
     TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
-                       display.light ? 1 : 0,
-                       display.showPaceTicks ? (int)display.paceTickColor : -1};
+                       light ? 1 : 0, display.showPaceTicks ? (int)display.paceTickColor : -1};
     if (shape != ap.tileShape) {
-        TilePalette palette = TilePaletteFor(display.light);
-        SolidColorBrush track(palette.track);
+        TilePalette palette = TilePaletteFor(light);
+        SolidColorBrush track(ArgbColor(palette.track));
         SolidColorBrush paceCore(winrt::Windows::UI::Color{
             0xFF, GetRValue(display.paceTickColor), GetGValue(display.paceTickColor),
             GetBValue(display.paceTickColor)});
         SolidColorBrush paceOutline(winrt::Windows::UI::Color{0x8C, 0, 0, 0});
-        auto meters = tile.meters.Children();
-        meters.Clear();
+        auto meterShapes = tile.meters.Children();
+        meterShapes.Clear();
         ui.fills.fill(nullptr);
         ui.paceTicks.fill(nullptr);
         tile.arcs.fill(nullptr);
         tile.dots.fill(nullptr);
-        tile.meters.Visibility(count ? Visibility::Visible : Visibility::Collapsed);
+        tile.meters.Visibility(barMask ? Visibility::Visible : Visibility::Collapsed);
 
         if (ring) {
             double size = geometry.size;
@@ -6001,19 +6414,18 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountConfi
                 return path;
             };
             // Tracks, then fills, then pace dots on top.
-            int position = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
-                auto [arc, radius] = arcAt(position++);
+                QuotaMeter const& m = meters.quotas[w];
                 wuxs::Path trackArc = arcShape(track);
-                trackArc.Data(TileArcGeometry(center, radius, arc.start, arc.sweep));
-                meters.Append(trackArc);
+                trackArc.Data(TileArcGeometry(center, m.radius, m.arc.start, m.arc.sweep));
+                meterShapes.Append(trackArc);
             }
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 tile.arcs[w] = arcShape(track);
                 tile.arcs[w].Visibility(Visibility::Collapsed);
-                meters.Append(tile.arcs[w]);
+                meterShapes.Append(tile.arcs[w]);
             }
             for (int w = 0; display.showPaceTicks && w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
@@ -6022,7 +6434,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountConfi
                 tile.dots[w].Stroke(paceOutline);
                 tile.dots[w].StrokeThickness(0.8);
                 tile.dots[w].Visibility(Visibility::Collapsed);
-                meters.Append(tile.dots[w]);
+                meterShapes.Append(tile.dots[w]);
             }
 
             // Identity, sized to the hole.
@@ -6040,21 +6452,10 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountConfi
                 tile.badgeText.FontSize(geometry.badgeFont);
             }
             if (tile.text) {
-                // The largest font, from min(12, size / 3) down to 7, whose text fits across the
-                // hole at half its cap height; clipped beyond that.
-                double radius = geometry.hole - 0.8;
-                auto chord = [&](double font) {
-                    double half = font * 0.36;
-                    return 2 * std::sqrt(std::max(radius * radius - half * half, 0.0));
-                };
-                double font = std::max(std::min(12.0, size * 0.33), 7.0);
-                while (font > 7 && tile.textWidthPerPt * font > chord(font)) font -= 0.25;
-                font = std::max(font, 7.0);
-                tile.text.FontSize(font);
-                tile.text.MaxWidth(chord(font));
+                tile.text.FontSize(meters.ringTextFont);
+                tile.text.MaxWidth(meters.ringTextWidth);
             }
-            // Into the tile's padding, clear of the ring.
-            tile.warn.Margin({0, 1 - (state.tileHeight - size) / 2, -3, 0});
+            tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
         } else {
             double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
             double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
@@ -6095,12 +6496,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountConfi
                     bar.Children().Append(tick);
                     ui.paceTicks[w] = tick;
                 }
-                meters.Append(bar);
+                meterShapes.Append(bar);
             }
         }
         if (tile.badge) {
-            tile.badge.Background(SolidColorBrush(palette.badge));
-            tile.badge.BorderBrush(SolidColorBrush(palette.badgeOutline));
+            tile.badge.Background(SolidColorBrush(ArgbColor(palette.badge)));
+            tile.badge.BorderBrush(SolidColorBrush(ArgbColor(palette.badgeOutline)));
         }
         ap.tileShape = shape;
         ap.fillPx.fill(-1);
@@ -6110,122 +6511,68 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountConfi
         ap.highlight = -1;
     }
 
-    // Values. Fill follows the bar mode; color stays keyed to used % like the bars.
-    auto shownPct = [&](double pct) {
-        if (pct < 0) return 0.0;
-        return std::clamp(display.barMode == BarMode::Remaining ? 100.0 - pct : pct, 0.0, 100.0);
-    };
-    int position = 0;
+    // Values, applied when their update keys change.
     for (int w = 0; w < kQuotaBarCount; w++) {
         if (!(barMask & (1 << w))) continue;
-        const WindowUsage& wu = *usage[w];
-        auto [arc, radius] = ring ? arcAt(position) : std::pair{TileArc{}, 0.0};
-        position++;
-
-        double shown = shownPct(wu.pct);
-        double fill = shown / 100;
-        if (ring && shown > 0) fill = std::max(fill, 5.0 / std::abs(arc.sweep));
-        int fillUnits = shown > 0 ? std::max(1, (int)std::lround(fill * 1000)) : 0;
-        auto color = UsageColor(wu.pct, stale, display.yellowThreshold, display.orangeThreshold,
-                                display.redThreshold, display.colorblindMode);
-        uint32_t colorValue = ((uint32_t)color.A << 24) | ((uint32_t)color.R << 16) |
-                              ((uint32_t)color.G << 8) | color.B;
-        if (fillUnits != ap.fillPx[w] || colorValue != ap.fillColor[w]) {
-            SolidColorBrush brush(color);
+        QuotaMeter const& m = meters.quotas[w];
+        if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
+            SolidColorBrush brush(ArgbColor(m.color));
             if (ring && tile.arcs[w]) {
-                tile.arcs[w].Visibility(fillUnits ? Visibility::Visible : Visibility::Collapsed);
-                if (fillUnits) {
-                    tile.arcs[w].Data(
-                        TileArcGeometry(center, radius, arc.start, arc.sweep * fill));
+                tile.arcs[w].Visibility(m.fillUnits ? Visibility::Visible : Visibility::Collapsed);
+                if (m.fillUnits) {
+                    tile.arcs[w].Data(TileArcGeometry(center, m.radius, m.arc.start, m.fillSweep));
                 }
                 tile.arcs[w].Stroke(brush);
             } else if (!ring && ui.fills[w]) {
-                double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
-                double minimum = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
-                ui.fills[w].Width(fillUnits ? std::clamp(length * fill, minimum, length) : 0);
+                ui.fills[w].Width(m.fillLength);
                 ui.fills[w].Background(brush);
             }
-            ap.fillPx[w] = fillUnits;
-            ap.fillColor[w] = colorValue;
+            ap.fillPx[w] = m.fillUnits;
+            ap.fillColor[w] = m.color;
         }
 
-        // Pace marker, under the same conditions as the bars' pace ticks.
         FrameworkElement marker = ring ? tile.dots[w].try_as<FrameworkElement>() :
                                          ui.paceTicks[w].try_as<FrameworkElement>();
-        bool paceVisible = marker && !stale && wu.pct >= 0 &&
-                           wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
-                           display.now >= wu.resetUnixMs - wu.windowDurationMs;
-        int paceUnits = 0;
-        if (paceVisible) {
-            double remainingFraction =
-                ((double)wu.resetUnixMs - (double)display.now) / wu.windowDurationMs;
-            double pace = display.barMode == BarMode::Remaining ? remainingFraction :
-                                                                  1.0 - remainingFraction;
-            paceUnits = (int)std::lround(std::clamp(pace, 0.0, 1.0) * 1000);
-        }
+        bool paceVisible = marker && m.paceVisible;
         if ((paceVisible ? 1 : 0) != ap.paceVisible[w]) {
             if (marker) {
                 marker.Visibility(paceVisible ? Visibility::Visible : Visibility::Collapsed);
             }
             ap.paceVisible[w] = paceVisible ? 1 : 0;
         }
-        if (paceVisible && paceUnits != ap.pacePx[w]) {
-            double pace = paceUnits / 1000.0;
+        if (paceVisible && m.paceUnits != ap.pacePx[w]) {
             if (ring) {
                 EllipseGeometry dot;
-                dot.Center(TileRingPoint(center, radius, arc.start + arc.sweep * pace));
+                dot.Center(TileRingPoint(center, m.radius, m.paceAngle));
                 dot.RadiusX(geometry.dot);
                 dot.RadiusY(geometry.dot);
                 tile.dots[w].Data(dot);
             } else {
-                ui.paceTicks[w].Margin({kMiniBarLength * pace - 1.75, -2, 0, -2});
+                ui.paceTicks[w].Margin({m.paceOffset, -2, 0, -2});
             }
-            ap.pacePx[w] = paceUnits;
+            ap.pacePx[w] = m.paceUnits;
         }
     }
 
-    // Headline: the most-used tile quota, shown per the bar mode in its usage color.
     if (tile.headline) {
-        int top = -1;
-        for (int w = 0; w < kQuotaBarCount; w++) {
-            if ((barMask & (1 << w)) && usage[w]->pct >= 0 &&
-                (top < 0 || usage[w]->pct > usage[top]->pct)) {
-                top = w;
-            }
-        }
-        std::wstring number = L"\u2013";
-        std::wstring key;
-        if (top >= 0) {
-            wchar_t text[16];
-            swprintf(text, ARRAYSIZE(text), L"%.0f%%", shownPct(usage[top]->pct));
-            number = text;
-            key = top == kExtraUsageBar && account.provider == L"openai" ? L"Cr" :
-                                                                           kQuotaKeys[top];
-        }
-        auto color = UsageColor(top >= 0 ? usage[top]->pct : -1, stale, display.yellowThreshold,
-                                display.orangeThreshold, display.redThreshold,
-                                display.colorblindMode);
-        uint32_t colorValue = ((uint32_t)color.A << 24) | ((uint32_t)color.R << 16) |
-                              ((uint32_t)color.G << 8) | color.B;
-        std::wstring headline = number + L"\n" + key;
-        if (headline != ap.headline || colorValue != ap.headlineColor) {
-            tile.headline.Text(number);
-            tile.headline.Foreground(SolidColorBrush(color));
-            tile.headlineKey.Text(key);
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey;
+        if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
+            tile.headline.Text(meters.headline);
+            tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            tile.headlineKey.Text(meters.headlineKey);
             ap.headline = std::move(headline);
-            ap.headlineColor = colorValue;
+            ap.headlineColor = meters.headlineColor;
         }
     }
 
     // Identity dims while stale, like the bars' label; the warning mark replaces their "!".
-    double identityOpacity = stale ? 0.45 : 1.0;
-    if (identityOpacity != ap.identityOpacity) {
-        tile.identity.Opacity(identityOpacity);
-        ap.identityOpacity = identityOpacity;
+    if (meters.identityOpacity != ap.identityOpacity) {
+        tile.identity.Opacity(meters.identityOpacity);
+        ap.identityOpacity = meters.identityOpacity;
     }
-    if ((warn ? 1 : 0) != ap.tileWarn) {
-        tile.warn.Visibility(warn ? Visibility::Visible : Visibility::Collapsed);
-        ap.tileWarn = warn ? 1 : 0;
+    if ((meters.warn ? 1 : 0) != ap.tileWarn) {
+        tile.warn.Visibility(meters.warn ? Visibility::Visible : Visibility::Collapsed);
+        ap.tileWarn = meters.warn ? 1 : 0;
     }
 }
 
@@ -6984,11 +7331,10 @@ static void UpdateAccountFlyout(
             row.fillColumn.Width({fillPct, GridUnitType::Star});
             row.emptyColumn.Width({100.0 - fillPct, GridUnitType::Star});
             row.fill.MinWidth(fillPct > 0 ? 4.0 : 0.0);
-            auto color = UsageColor(wu.pct, display.stale, display.yellowThreshold,
-                                    display.orangeThreshold, display.redThreshold,
-                                    display.colorblindMode);
-            uint32_t colorValue = ((uint32_t)color.A << 24) | ((uint32_t)color.R << 16) |
-                                  ((uint32_t)color.G << 8) | color.B;
+            uint32_t colorValue = UsageColor(wu.pct, display.stale, display.yellowThreshold,
+                                             display.orangeThreshold, display.redThreshold,
+                                             display.colorblindMode);
+            auto color = ArgbColor(colorValue);
             if (colorValue != row.fillColor) {
                 row.fill.Background(FlyoutFillBrush(color));
                 row.fillColor = colorValue;
@@ -7592,153 +7938,48 @@ static void OnTilePointerExited(QuotaUiInstance& state, int index) {
 }
 
 // src/taskbar/quota-grid.h
-// Builds the per-taskbar quota grid, including visual-test sample data.
-
-static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
-                                    int redThreshold, ULONGLONG now,
-                                    std::vector<AccountConfig>* accounts,
-                                    std::vector<AccountData>* data) {
-    // One value per usage color band.
-    const double green = yellowThreshold / 2.0;
-    const double yellow = (yellowThreshold + orangeThreshold) / 2.0;
-    const double orange = (orangeThreshold + redThreshold) / 2.0;
-    const double red = (redThreshold + 100) / 2.0;
-    // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
-    // share a provider so tiles show number badges. A negative value is a quota not reported.
-    struct Sample {
-        PCWSTR provider;
-        PCWSTR label;
-        std::array<double, kQuotaBarCount> pct;
-        std::array<bool, kQuotaBarCount> showBars;
-    };
-    const std::array<Sample, 4> samples = {{
-        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}},
-        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}},
-        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}},
-        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}},
-    }};
-    static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
-        kFiveHourWindowMs,
-        kWeeklyWindowMs,
-        kWeeklyWindowMs,
-        30ULL * 24 * 60 * 60 * 1000,
-    };
-    static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
-        0.35, 0.5, 0.6, 0.8,
-    };
-    static constexpr double kCreditsMax = 1000;
-
-    accounts->clear();
-    accounts->reserve(samples.size());
-    if (data) {
-        data->clear();
-        data->reserve(samples.size());
-    }
-    for (size_t i = 0; i < samples.size(); i++) {
-        const Sample& sample = samples[i];
-        AccountConfig account;
-        account.provider = sample.provider;
-        account.label = sample.label;
-        account.showBars = sample.showBars;
-        bool openAi = account.provider == L"openai";
-        if (openAi) account.creditsMax = (int)kCreditsMax;
-        accounts->push_back(account);
-
-        if (!data) continue;
-        AccountData accountData;
-        std::array<WindowUsage*, kQuotaBarCount> usage = {
-            &accountData.win5h, &accountData.winWeek,
-            &accountData.fableWeek, &accountData.extraUsage,
-        };
-        for (int w = 0; w < kQuotaBarCount; w++) {
-            if (sample.pct[w] < 0) continue;
-            usage[w]->pct = sample.pct[w];
-            usage[w]->windowDurationMs = kDurations[w];
-            usage[w]->resetUnixMs = now +
-                (ULONGLONG)std::lround(kDurations[w] * (kRemainingFractions[w] - 0.05 * i));
-        }
-        if (openAi) {
-            // Credits are a balance against the user's max, without a window.
-            accountData.hasCredits = true;
-            accountData.creditsBalance = kCreditsMax * (1 - sample.pct[kExtraUsageBar] / 100);
-            ApplyCreditsMax(account, &accountData);
-        } else if (sample.pct[kExtraUsageBar] >= 0) {
-            accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
-            accountData.extraLimitAmount = 50.0;
-        }
-        if (account.provider == L"antigravity") {
-            // Claude/GPT pools appear only in the details flyout.
-            accountData.antigravityThirdParty5h = {
-                yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
-            accountData.antigravityThirdPartyWeek = {
-                green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
-        }
-        accountData.plan = L"Visual test";
-        accountData.lastSuccessMs = now;
-        accountData.stale = false;
-        data->push_back(std::move(accountData));
-    }
-}
+// Builds the per-taskbar quota grid.
 
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
-        double physicalPixelDip = 1.0 / state.rasterizationScale;
-        std::vector<AccountConfig> accounts;
-        int barLength, barThickness, labelFontSize, percentFontSize;
-        int accountMargin, labelGap, rightMargin;
-        int yellowThreshold, orangeThreshold, redThreshold;
-        bool showPaceTicks, showBarLabels, showDetailsOnHover;
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
-        COLORREF paceTickColor;
-        BarLayout barLayout;
-        PercentTextVisibility percentTextVisibility;
-        PercentTextAlignment percentTextAlignment;
-        PaceTickStyle paceTickStyle;
-        LabelPosition labelPosition;
+        Settings settings;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             state.buildSettingsGeneration = g_settingsGeneration;
-            accounts = g_settings.accounts;
-            showDetailsOnHover = g_settings.showDetailsOnHover;
-            barLayout = g_settings.barLayout;
-            barLength = g_settings.barLength;
-            barThickness = g_settings.barThickness;
-            labelFontSize = g_settings.labelFontSize;
-            percentFontSize = g_settings.percentFontSize;
-            accountMargin = g_settings.accountMargin;
-            labelGap = g_settings.labelGap;
-            rightMargin = g_settings.rightMargin;
-            labelPosition = g_settings.labelPosition;
-            showPaceTicks = g_settings.showPaceTicks;
-            paceTickStyle = g_settings.paceTickStyle;
-            paceTickColor = g_settings.paceTickColor;
-            showBarLabels = g_settings.showBarLabels;
-            percentTextVisibility = g_settings.percentTextVisibility;
-            percentTextAlignment = g_settings.percentTextAlignment;
-            yellowThreshold = g_settings.yellowThreshold;
-            orangeThreshold = g_settings.orangeThreshold;
-            redThreshold = g_settings.redThreshold;
+            settings = g_settings;
         }
+        std::vector<AccountConfig>& accounts = settings.accounts;
+        BarLayout barLayout = settings.barLayout;
         state.buildVisualTestMode = visualTestMode;
         state.buildBarLayout = barLayout;
         bool tileLayout = IsTileLayout(barLayout);
         // Tiles are kTileHeight tall, less on a taskbar too short for that.
-        state.tileHeight = kTileHeight;
+        state.taskbarHeight = 0;
         if (tileLayout && state.injectionParent) {
             try {
                 if (auto xamlRoot = state.injectionParent.XamlRoot()) {
-                    double taskbarHeight = xamlRoot.Size().Height;
-                    if (taskbarHeight > 0) {
-                        state.tileHeight =
-                            std::clamp(std::floor(taskbarHeight) - 8, 24.0, kTileHeight);
-                    }
+                    state.taskbarHeight = xamlRoot.Size().Height;
                 }
             } catch (...) {}
         }
-        if (visualTestMode) {
-            BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
-                                    NowUnixMs(), &accounts, nullptr);
-        }
+        MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+                                               state.taskbarHeight);
+        if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, nullptr);
+        BarGeometry barGeometry = BarGeometryFor(display);
+        // Bar sizes and pace ticks as the meter model clamps them.
+        int barLength = display.barLength, barThickness = display.barThickness;
+        bool showPaceTicks = display.showPaceTicks;
+        PaceTickStyle paceTickStyle = display.paceTickStyle;
+        COLORREF paceTickColor = display.paceTickColor;
+        int labelFontSize = settings.labelFontSize, percentFontSize = settings.percentFontSize;
+        int accountMargin = settings.accountMargin, labelGap = settings.labelGap;
+        int rightMargin = settings.rightMargin;
+        bool showBarLabels = settings.showBarLabels;
+        bool showDetailsOnHover = settings.showDetailsOnHover;
+        PercentTextVisibility percentTextVisibility = settings.percentTextVisibility;
+        PercentTextAlignment percentTextAlignment = settings.percentTextAlignment;
+        LabelPosition labelPosition = settings.labelPosition;
         state.accountRefs.clear();
         Grid root;
         root.Name(kRootName);
@@ -7850,7 +8091,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             refs.historyId = accounts[i].historyId;
             StackPanel col{nullptr};
             if (tileLayout) {
-                col = BuildAccountTile(accounts, i, barLayout, state.tileHeight, refs);
+                col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
             } else {
                 bool labelOnSide = labelPosition == LabelPosition::Left ||
                                    labelPosition == LabelPosition::Right;
@@ -7913,15 +8154,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     trackContent.Children().Append(fill);
 
                     if (showPaceTicks) {
-                        double paceCrossSize = barThickness;
-                        double paceLength = (paceTickStyle == PaceTickStyle::Caret ? 5 : 4) *
-                                            physicalPixelDip;
-                        if (paceTickStyle == PaceTickStyle::Notch) {
-                            paceCrossSize = std::max(2.0, std::ceil(barThickness * 0.6));
-                        } else if (paceTickStyle == PaceTickStyle::Dot) {
-                            paceCrossSize = 4 * physicalPixelDip;
-                        }
-
+                        double paceCrossSize = barGeometry.paceCrossSize;
+                        double paceLength = barGeometry.paceLength;
                         Border paceTick;
                         paceTick.Width(verticalBars ? paceCrossSize : paceLength);
                         paceTick.Height(verticalBars ? paceLength : paceCrossSize);
@@ -7943,32 +8177,15 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                             Grid caretShape;
                             auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
                             for (int layer = 0; layer < 2; layer++) {
-                                bool core = layer == 1;
-                                double capInset = (core ? 1 : 0) * physicalPixelDip;
-                                double stemInset = (core ? 2 : 1) * physicalPixelDip;
-                                double capDepth = std::min((core ? 1.0 : 2.0) * physicalPixelDip,
-                                                           paceCrossSize / 2.0);
                                 wuxs::Polygon part;
-                                auto addPoint = [&](double along, double cross) {
+                                for (auto [along, cross] : barGeometry.caret[layer]) {
                                     part.Points().Append(verticalBars ?
                                         winrt::Windows::Foundation::Point{
                                             (float)cross, (float)along} :
                                         winrt::Windows::Foundation::Point{
                                             (float)along, (float)cross});
-                                };
-                                addPoint(capInset, 0);
-                                addPoint(paceLength - capInset, 0);
-                                addPoint(paceLength - capInset, capDepth);
-                                addPoint(paceLength - stemInset, capDepth);
-                                addPoint(paceLength - stemInset, paceCrossSize - capDepth);
-                                addPoint(paceLength - capInset, paceCrossSize - capDepth);
-                                addPoint(paceLength - capInset, paceCrossSize);
-                                addPoint(capInset, paceCrossSize);
-                                addPoint(capInset, paceCrossSize - capDepth);
-                                addPoint(stemInset, paceCrossSize - capDepth);
-                                addPoint(stemInset, capDepth);
-                                addPoint(capInset, capDepth);
-                                part.Fill(SolidColorBrush(core ? tickColor : haloColor));
+                                }
+                                part.Fill(SolidColorBrush(layer == 1 ? tickColor : haloColor));
                                 caretShape.Children().Append(part);
                             }
                             paceTick.Child(caretShape);
@@ -7976,22 +8193,19 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                             paceTick.Background(
                                 SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
                             if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = 2 * physicalPixelDip;
+                                double radius = barGeometry.paceRadius;
                                 paceTick.CornerRadius({radius, radius, radius, radius});
                             }
 
                             Border paceCore;
-                            double paceCoreCrossSize =
-                                paceTickStyle == PaceTickStyle::Dot ?
-                                    3 * physicalPixelDip : paceCrossSize;
-                            double paceCoreLength = (paceTickStyle == PaceTickStyle::Dot ? 3 : 2) *
-                                                    physicalPixelDip;
+                            double paceCoreCrossSize = barGeometry.coreCrossSize;
+                            double paceCoreLength = barGeometry.coreLength;
                             paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
                             paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
                             paceCore.HorizontalAlignment(HorizontalAlignment::Center);
                             paceCore.VerticalAlignment(VerticalAlignment::Center);
                             if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = 1.5 * physicalPixelDip;
+                                double radius = barGeometry.coreRadius;
                                 paceCore.CornerRadius({radius, radius, radius, radius});
                             }
                             paceCore.Background(SolidColorBrush(tickColor));
@@ -8061,9 +8275,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         percent.IsHitTestVisible(false);
                         TranslateTransform translation;
                         translation.X(percentTextAlignment == PercentTextAlignment::Left ?
-                                          4 * physicalPixelDip :
+                                          barGeometry.textInset :
                                       percentTextAlignment == PercentTextAlignment::Center ?
-                                          0 : -4 * physicalPixelDip);
+                                          0 : -barGeometry.textInset);
                         translation.Y(-1);
                         percent.RenderTransform(translation);
                         swprintf(name, ARRAYSIZE(name), L"AiQuota_Percent_%d_%d", (int)i, w);
@@ -8365,50 +8579,22 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
     if (state.buildVisualTestMode != visualTestMode) return;
 
-    std::vector<AccountConfig> accounts;
+    Settings settings;
     std::vector<AccountData> data;
-    int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
-    int ringSize, ringThickness;
-    bool showPaceTicks, showExtraBarAmounts, showOpenAiExtraLimits, colorblindMode,
-         showStaleWarning;
-    COLORREF paceTickColor;
-    BarLayout barLayout;
-    BarMode barMode;
-    PercentTextVisibility percentTextVisibility;
-    PercentTextAlignment percentTextAlignment;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
-        accounts = g_settings.accounts;
-        intervalMin = g_settings.pollMinutes;
-        barLayout = g_settings.barLayout;
-        barMode = g_settings.barMode;
-        barLength = g_settings.barLength;
-        barThickness = g_settings.barThickness;
-        barGap = g_settings.barGap;
-        ringSize = g_settings.ringSize;
-        ringThickness = g_settings.ringThickness;
-        yellowThreshold = g_settings.yellowThreshold;
-        orangeThreshold = g_settings.orangeThreshold;
-        redThreshold = g_settings.redThreshold;
-        showPaceTicks = g_settings.showPaceTicks;
-        paceTickColor = g_settings.paceTickColor;
-        percentTextVisibility = g_settings.percentTextVisibility;
-        percentTextAlignment = g_settings.percentTextAlignment;
-        showExtraBarAmounts = g_settings.showExtraBarAmounts;
-        showOpenAiExtraLimits = g_settings.showOpenAiExtraLimits;
-        colorblindMode = g_settings.colorblindMode;
-        showStaleWarning = g_settings.showStaleWarning;
+        settings = g_settings;
         if (!visualTestMode) {
             std::lock_guard<std::mutex> dataLock(g_dataMutex);
             data = g_data;
         }
     }
+    std::vector<AccountConfig>& accounts = settings.accounts;
 
-    ULONGLONG now = NowUnixMs();
-    if (visualTestMode) {
-        BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
-                                now, &accounts, &data);
-    }
+    MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+                                           state.taskbarHeight);
+    ULONGLONG now = display.now;
+    if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
     if (state.accountRefs.size() != data.size()) return;
     if (state.applied.size() != data.size()) state.applied.assign(data.size(), {});
@@ -8420,16 +8606,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         refreshing = g_refreshing.load();
         refreshAccountIdentity = g_refreshAccountIdentity.load();
     }
-    bool verticalBars = barLayout == BarLayout::Vertical;
-    double physicalPixelDip = 1.0 / state.rasterizationScale;
+    bool verticalBars = settings.barLayout == BarLayout::Vertical;
     // Tiles follow the layout the grid was built with.
     bool tileLayout = IsTileLayout(state.buildBarLayout);
-    TileDisplay tileDisplay{now, barMode, yellowThreshold, orangeThreshold, redThreshold,
-                            colorblindMode, showPaceTicks, paceTickColor, ringSize, ringThickness};
+    bool lightTiles = state.tileLightTheme;
     if (tileLayout) {
         // Tile chrome matches the taskbar text color that the tiles' logo and text inherit, like
         // the bars' labels: dark text means a light taskbar. Else the tree's theme.
-        tileDisplay.light = state.tileLightTheme;
         try {
             SolidColorBrush text{nullptr};
             for (auto const& refs : state.accountRefs) {
@@ -8439,17 +8622,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
             if (text) {
                 auto c = text.Color();
-                tileDisplay.light = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
+                lightTiles = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
             } else {
-                tileDisplay.light = state.quotaGrid.ActualTheme() == ElementTheme::Light;
+                lightTiles = state.quotaGrid.ActualTheme() == ElementTheme::Light;
             }
         } catch (...) {}
-        state.tileLightTheme = tileDisplay.light;
+        state.tileLightTheme = lightTiles;
     }
-    // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged.
-    auto displayPct = [&](double pct) {
-        return barMode == BarMode::Remaining && pct >= 0 ? std::clamp(100.0 - pct, 0.0, 100.0) : pct;
-    };
     FlyoutPopup& flyout = state.flyout.popup;
     try {
         for (size_t i = 0; i < data.size(); i++) {
@@ -8471,25 +8650,16 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
-            ULONGLONG staleAfterMs = (accounts[i].provider == L"antigravity" ? 1ULL :
-                                      (ULONGLONG)intervalMin) * 2 * 60000;
-            bool stale = d.stale || d.lastSuccessMs == 0 || now - d.lastSuccessMs > staleAfterMs;
-            bool warn = showStaleWarning && stale && !d.error.empty();
+            AccountMeters meters = AccountMeterState(
+                display, state.buildBarLayout, accounts[i], d,
+                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt);
             bool accountRefreshing = !visualTestMode && refreshing &&
                 (!refreshAccountIdentity ||
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
 
-            const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage};
-            int barMask = 0;
-            for (int w = 0; w < kQuotaBarCount; w++) {
-                if (accounts[i].showBars[w] && (d.lastSuccessMs == 0 || usage[w]->pct >= 0)) {
-                    barMask |= 1 << w;
-                }
-            }
+            int barMask = meters.barMask;
             if (tileLayout) {
-                UpdateAccountTile(state, i, accounts[i], d, barMask, stale, warn,
-                                  tileDisplay);
+                UpdateAccountTile(state, i, meters, display, lightTiles);
                 UpdateTileHighlight(state, (int)i);
             } else {
                 if (barMask != ap.barMask) {
@@ -8499,7 +8669,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
 
                     int visiblePosition = 0;
-                    double halfBarGap = barGap / 2.0;
+                    double halfBarGap = settings.barGap / 2.0;
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         bool barVisible = (barMask & (1 << w)) != 0;
                         if (ui.barItems[w]) {
@@ -8523,7 +8693,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                     if (ui.column) {
                         // Preserve a small context-menu target if every selected quota is unavailable.
-                        double minimumHitSize = visibleCount ? 0.0 : std::max(barThickness, 8);
+                        double minimumHitSize =
+                            visibleCount ? 0.0 : std::max(display.barThickness, 8);
                         ui.column.MinWidth(minimumHitSize);
                         ui.column.MinHeight(minimumHitSize);
                     }
@@ -8531,47 +8702,18 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
 
                 for (int w = 0; w < kQuotaBarCount; w++) {
-                    const WindowUsage& wu = *usage[w];
-                    double dispPct = displayPct(wu.pct);
-                    int px = dispPct > 0 ? std::clamp((int)std::lround(barLength * dispPct / 100.0), 2, barLength) : 0;
-                    // Color stays keyed to actual usage so depleting quota still reds out.
-                    auto c = UsageColor(wu.pct, stale, yellowThreshold, orangeThreshold, redThreshold,
-                                        colorblindMode);
-                    uint32_t cv = ((uint32_t)c.A << 24) | ((uint32_t)c.R << 16) |
-                                  ((uint32_t)c.G << 8) | c.B;
-                    if (px != ap.fillPx[w] || cv != ap.fillColor[w]) {
+                    QuotaMeter& m = meters.quotas[w];
+                    if (m.fillPx != ap.fillPx[w] || m.color != ap.fillColor[w]) {
                         if (ui.fills[w]) {
-                            if (verticalBars) ui.fills[w].Height(px);
-                            else ui.fills[w].Width(px);
-                            ui.fills[w].Background(SolidColorBrush(c));
+                            if (verticalBars) ui.fills[w].Height(m.fillPx);
+                            else ui.fills[w].Width(m.fillPx);
+                            ui.fills[w].Background(SolidColorBrush(ArgbColor(m.color)));
                         }
-                        ap.fillPx[w] = px;
-                        ap.fillColor[w] = cv;
+                        ap.fillPx[w] = m.fillPx;
+                        ap.fillColor[w] = m.color;
                     }
 
-                    bool paceVisible = showPaceTicks && ui.paceTicks[w] &&
-                                       !stale && wu.pct >= 0 &&
-                                       wu.resetUnixMs > wu.windowDurationMs &&
-                                       wu.windowDurationMs > 0 &&
-                                       now >= wu.resetUnixMs - wu.windowDurationMs;
-                    int pacePx = 0;
-                    if (paceVisible) {
-                        double remainingFraction =
-                            ((double)wu.resetUnixMs - (double)now) / wu.windowDurationMs;
-                        double pacePct = barMode == BarMode::Remaining ? remainingFraction * 100.0 :
-                                                                         (1.0 - remainingFraction) * 100.0;
-                        pacePct = std::clamp(pacePct, 0.0, 100.0);
-
-                        double paceThickness = verticalBars ? ui.paceTicks[w].Height() :
-                                                              ui.paceTicks[w].Width();
-                        double radius = std::clamp(std::max(1.0, barThickness / 2.0),
-                                                   paceThickness / 2.0,
-                                                   (barLength - paceThickness) / 2.0);
-                        double center = std::clamp(barLength * pacePct / 100.0,
-                                                   radius, barLength - radius);
-                        pacePx = (int)std::lround(center - paceThickness / 2.0);
-                    }
-
+                    bool paceVisible = m.paceVisible && ui.paceTicks[w];
                     int paceVisibleInt = paceVisible ? 1 : 0;
                     if (paceVisibleInt != ap.paceVisible[w]) {
                         if (ui.paceTicks[w]) {
@@ -8580,20 +8722,17 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         }
                         ap.paceVisible[w] = paceVisibleInt;
                     }
-                    if (paceVisible && pacePx != ap.pacePx[w]) {
+                    if (paceVisible && m.pacePx != ap.pacePx[w]) {
                         if (ui.paceTicks[w]) {
-                            ui.paceTicks[w].Margin(verticalBars ? Thickness{0, 0, 0, (double)pacePx} :
-                                                                   Thickness{(double)pacePx, 0, 0, 0});
+                            ui.paceTicks[w].Margin(verticalBars ?
+                                Thickness{0, 0, 0, (double)m.pacePx} :
+                                Thickness{(double)m.pacePx, 0, 0, 0});
                         }
-                        ap.pacePx[w] = pacePx;
+                        ap.pacePx[w] = m.pacePx;
                     }
 
-                    if (percentTextVisibility != PercentTextVisibility::Never) {
-                        PercentTextAlignment appliedAlignment =
-                            percentTextAlignment == PercentTextAlignment::Adaptive ?
-                                (dispPct >= yellowThreshold ? PercentTextAlignment::Left :
-                                                             PercentTextAlignment::Right) :
-                                percentTextAlignment;
+                    if (settings.percentTextVisibility != PercentTextVisibility::Never) {
+                        PercentTextAlignment appliedAlignment = m.textAlignment;
                         if ((int)appliedAlignment != ap.percentAlignments[w]) {
                             if (ui.percents[w]) {
                                 if (appliedAlignment == PercentTextAlignment::Left) {
@@ -8608,20 +8747,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                 }
                                 if (auto translation = ui.percents[w].RenderTransform()
                                                            .try_as<TranslateTransform>()) {
-                                    translation.X(appliedAlignment == PercentTextAlignment::Left ?
-                                                      4 * physicalPixelDip :
-                                                  appliedAlignment == PercentTextAlignment::Center ?
-                                                      0 : -4 * physicalPixelDip);
+                                    translation.X(m.textOffset);
                                 }
                             }
                             ap.percentAlignments[w] = (int)appliedAlignment;
                         }
 
-                        bool yellowOrOrange = !stale && wu.pct >= 0 &&
-                            ((wu.pct >= yellowThreshold && wu.pct < orangeThreshold) ||
-                             (wu.pct >= orangeThreshold && wu.pct < redThreshold));
-                        int darkText = appliedAlignment == PercentTextAlignment::Left &&
-                                       yellowOrOrange ? 1 : 0;
+                        int darkText = m.darkText ? 1 : 0;
                         if (darkText != ap.percentDark[w]) {
                             if (ui.percents[w]) {
                                 ui.percents[w].Foreground(SolidColorBrush(darkText ?
@@ -8631,27 +8763,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                             ap.percentDark[w] = darkText;
                         }
 
-                        std::wstring percentText;
-                        if (wu.pct >= 0) {
-                            wchar_t text[24];
-                            if (w == kExtraUsageBar && showExtraBarAmounts &&
-                                d.extraLimitAmount >= 0) {
-                                // Amount follows the bar mode: spent in used mode, left in
-                                // remaining mode. Dollars for Anthropic, credits for OpenAI.
-                                double amount = barMode == BarMode::Remaining ?
-                                    d.extraLimitAmount - d.extraUsedAmount : d.extraUsedAmount;
-                                amount = std::max(amount, 0.0);
-                                swprintf(text, ARRAYSIZE(text),
-                                         accounts[i].provider == L"openai" ? L"%.0f" : L"$%.2f",
-                                         amount);
-                            } else {
-                                swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
-                            }
-                            percentText = text;
-                        }
-                        if (percentText != ap.percentTexts[w]) {
-                            if (ui.percents[w]) ui.percents[w].Text(percentText);
-                            ap.percentTexts[w] = std::move(percentText);
+                        if (m.text != ap.percentTexts[w]) {
+                            if (ui.percents[w]) ui.percents[w].Text(m.text);
+                            ap.percentTexts[w] = std::move(m.text);
                         }
                     }
                 }
@@ -8702,9 +8816,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         }
                     }
                     UpdateAccountFlyout(state, accounts[i], d,
-                                        {now, barMode, yellowThreshold, orangeThreshold,
-                                         redThreshold, colorblindMode, showOpenAiExtraLimits,
-                                         stale, warn, accountRefreshing, visualTestMode},
+                                        {now, display.barMode, display.yellowThreshold,
+                                         display.orangeThreshold, display.redThreshold,
+                                         display.colorblindMode, settings.showOpenAiExtraLimits,
+                                         meters.stale, meters.warn, accountRefreshing,
+                                         visualTestMode},
                                         curves);
                 }
             }
@@ -8715,15 +8831,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ap.columnOpacity = columnOpacity;
             }
 
-            double labelOpacity = stale ? 0.45 : 0.8;
-            std::wstring labelText = warn ? accounts[i].label + L"!" : accounts[i].label;
-            if (labelOpacity != ap.labelOpacity || labelText != ap.labelText) {
+            if (meters.labelOpacity != ap.labelOpacity || meters.labelText != ap.labelText) {
                 if (ui.label) {
-                    ui.label.Opacity(labelOpacity);
-                    ui.label.Text(labelText);
+                    ui.label.Opacity(meters.labelOpacity);
+                    ui.label.Text(meters.labelText);
                 }
-                ap.labelOpacity = labelOpacity;
-                ap.labelText = std::move(labelText);
+                ap.labelOpacity = meters.labelOpacity;
+                ap.labelText = std::move(meters.labelText);
             }
         }
 

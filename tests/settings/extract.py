@@ -1,0 +1,95 @@
+"""Extract pure production fragments and named definitions verbatim for the settings suite."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import re
+
+# Declaration order: each section may use the ones before it.
+SECTIONS = [
+    ("fragment", "core/model.h"),
+    ("definition", "ApplyCreditsMax"),
+    ("fragment", "taskbar/logo-paths.h"),
+    ("fragment", "taskbar/meter-model.h"),
+]
+
+
+def balanced(text, start):
+    """Find the closing brace, ignoring comments and ordinary quoted literals.
+
+    Not a C++ parser: raw literals in a scanned definition fail closed.
+    """
+    opening = text.index("{", start)
+    depth = 0
+    token = re.compile(r'//[^\n]*|/\*.*?\*/|R"|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[{}]', re.S)
+    for match in token.finditer(text, opening):
+        item = match.group()
+        if item == 'R"':
+            raise ValueError("Raw C++ literals need an explicit extraction update")
+        if item == "{":
+            depth += 1
+        elif item == "}":
+            depth -= 1
+            if depth == 0:
+                return match.end()
+    raise ValueError("Unbalanced production definition")
+
+
+def definition(text, name):
+    matches = list(re.finditer(r"(?m)^static [^\n;{}]+?\b" + re.escape(name) + r"\([^;{}]*\)\s*\{", text))
+    if len(matches) != 1:
+        raise ValueError(f"Expected one definition of {name}, found {len(matches)}")
+    start = matches[0].start()
+    return start, balanced(text, start)
+
+
+def fragment(text, path):
+    """A whole fragment: after its `// src/<path>` marker line, up to the next marker line."""
+    starts = [m.end() for m in re.finditer(r"(?m)^// src/" + re.escape(path) + r"\n", text)]
+    if len(starts) != 1:
+        raise ValueError(f"Expected one marker for src/{path}, found {len(starts)}")
+    end = re.compile(r"(?m)^// src/").search(text, starts[0])
+    if not end:
+        raise ValueError(f"No marker after src/{path}")
+    return starts[0], end.start()
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def generate(source, output, expected_hash):
+    raw = source.read_bytes()
+    if digest(raw) != expected_hash:
+        raise ValueError("Source changed before extraction; rerun against settled source")
+    text = raw.decode("utf-8-sig")
+    manifest = {"source": str(source), "sha256": digest(raw), "extractions": []}
+    chunks = ["// GENERATED: production sections below are extracted verbatim.\n",
+              '#include "harness.hpp"\n']
+    for kind, name in SECTIONS:
+        a, b = fragment(text, name) if kind == "fragment" else definition(text, name)
+        code = text[a:b]
+        line = text.count("\n", 0, a) + 1
+        manifest["extractions"].append({"kind": kind, "name": name, "line": line,
+                                        "sha256": digest(code.encode("utf-8")), "characters": len(code)})
+        # Diagnostics point at the generated mod file without modifying the code.
+        chunks.append(f'\n#line {line} {json.dumps(source.as_posix())}\n{code}\n')
+    chunks.append('\n#include "fixtures/main.inc"\n')
+    if source.read_bytes() != raw:
+        raise ValueError("Source changed during extraction; rerun against settled source")
+    output.write_bytes("".join(chunks).encode("utf-8"))
+    manifest["generated_sha256"] = digest(output.read_bytes())
+    output.with_suffix(".manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"Generated {output}\nProduction SHA256: {manifest['sha256']}\nVerbatim sections: {len(manifest['extractions'])}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--expected-hash", required=True)
+    args = parser.parse_args()
+    try:
+        generate(args.source.resolve(), args.output.resolve(), args.expected_hash)
+    except (OSError, UnicodeError, ValueError) as error:
+        parser.exit(1, f"Extraction refused: {error}\n")

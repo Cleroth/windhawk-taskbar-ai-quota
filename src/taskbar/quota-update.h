@@ -6,50 +6,22 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
     if (state.buildVisualTestMode != visualTestMode) return;
 
-    std::vector<AccountConfig> accounts;
+    Settings settings;
     std::vector<AccountData> data;
-    int intervalMin, barLength, barThickness, barGap, yellowThreshold, orangeThreshold, redThreshold;
-    int ringSize, ringThickness;
-    bool showPaceTicks, showExtraBarAmounts, showOpenAiExtraLimits, colorblindMode,
-         showStaleWarning;
-    COLORREF paceTickColor;
-    BarLayout barLayout;
-    BarMode barMode;
-    PercentTextVisibility percentTextVisibility;
-    PercentTextAlignment percentTextAlignment;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
-        accounts = g_settings.accounts;
-        intervalMin = g_settings.pollMinutes;
-        barLayout = g_settings.barLayout;
-        barMode = g_settings.barMode;
-        barLength = g_settings.barLength;
-        barThickness = g_settings.barThickness;
-        barGap = g_settings.barGap;
-        ringSize = g_settings.ringSize;
-        ringThickness = g_settings.ringThickness;
-        yellowThreshold = g_settings.yellowThreshold;
-        orangeThreshold = g_settings.orangeThreshold;
-        redThreshold = g_settings.redThreshold;
-        showPaceTicks = g_settings.showPaceTicks;
-        paceTickColor = g_settings.paceTickColor;
-        percentTextVisibility = g_settings.percentTextVisibility;
-        percentTextAlignment = g_settings.percentTextAlignment;
-        showExtraBarAmounts = g_settings.showExtraBarAmounts;
-        showOpenAiExtraLimits = g_settings.showOpenAiExtraLimits;
-        colorblindMode = g_settings.colorblindMode;
-        showStaleWarning = g_settings.showStaleWarning;
+        settings = g_settings;
         if (!visualTestMode) {
             std::lock_guard<std::mutex> dataLock(g_dataMutex);
             data = g_data;
         }
     }
+    std::vector<AccountConfig>& accounts = settings.accounts;
 
-    ULONGLONG now = NowUnixMs();
-    if (visualTestMode) {
-        BuildVisualTestSnapshot(yellowThreshold, orangeThreshold, redThreshold,
-                                now, &accounts, &data);
-    }
+    MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+                                           state.taskbarHeight);
+    ULONGLONG now = display.now;
+    if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
     if (state.accountRefs.size() != data.size()) return;
     if (state.applied.size() != data.size()) state.applied.assign(data.size(), {});
@@ -61,16 +33,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         refreshing = g_refreshing.load();
         refreshAccountIdentity = g_refreshAccountIdentity.load();
     }
-    bool verticalBars = barLayout == BarLayout::Vertical;
-    double physicalPixelDip = 1.0 / state.rasterizationScale;
+    bool verticalBars = settings.barLayout == BarLayout::Vertical;
     // Tiles follow the layout the grid was built with.
     bool tileLayout = IsTileLayout(state.buildBarLayout);
-    TileDisplay tileDisplay{now, barMode, yellowThreshold, orangeThreshold, redThreshold,
-                            colorblindMode, showPaceTicks, paceTickColor, ringSize, ringThickness};
+    bool lightTiles = state.tileLightTheme;
     if (tileLayout) {
         // Tile chrome matches the taskbar text color that the tiles' logo and text inherit, like
         // the bars' labels: dark text means a light taskbar. Else the tree's theme.
-        tileDisplay.light = state.tileLightTheme;
         try {
             SolidColorBrush text{nullptr};
             for (auto const& refs : state.accountRefs) {
@@ -80,17 +49,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
             if (text) {
                 auto c = text.Color();
-                tileDisplay.light = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
+                lightTiles = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
             } else {
-                tileDisplay.light = state.quotaGrid.ActualTheme() == ElementTheme::Light;
+                lightTiles = state.quotaGrid.ActualTheme() == ElementTheme::Light;
             }
         } catch (...) {}
-        state.tileLightTheme = tileDisplay.light;
+        state.tileLightTheme = lightTiles;
     }
-    // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged.
-    auto displayPct = [&](double pct) {
-        return barMode == BarMode::Remaining && pct >= 0 ? std::clamp(100.0 - pct, 0.0, 100.0) : pct;
-    };
     FlyoutPopup& flyout = state.flyout.popup;
     try {
         for (size_t i = 0; i < data.size(); i++) {
@@ -112,25 +77,16 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
-            ULONGLONG staleAfterMs = (accounts[i].provider == L"antigravity" ? 1ULL :
-                                      (ULONGLONG)intervalMin) * 2 * 60000;
-            bool stale = d.stale || d.lastSuccessMs == 0 || now - d.lastSuccessMs > staleAfterMs;
-            bool warn = showStaleWarning && stale && !d.error.empty();
+            AccountMeters meters = AccountMeterState(
+                display, state.buildBarLayout, accounts[i], d,
+                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt);
             bool accountRefreshing = !visualTestMode && refreshing &&
                 (!refreshAccountIdentity ||
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
 
-            const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage};
-            int barMask = 0;
-            for (int w = 0; w < kQuotaBarCount; w++) {
-                if (accounts[i].showBars[w] && (d.lastSuccessMs == 0 || usage[w]->pct >= 0)) {
-                    barMask |= 1 << w;
-                }
-            }
+            int barMask = meters.barMask;
             if (tileLayout) {
-                UpdateAccountTile(state, i, accounts[i], d, barMask, stale, warn,
-                                  tileDisplay);
+                UpdateAccountTile(state, i, meters, display, lightTiles);
                 UpdateTileHighlight(state, (int)i);
             } else {
                 if (barMask != ap.barMask) {
@@ -140,7 +96,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
 
                     int visiblePosition = 0;
-                    double halfBarGap = barGap / 2.0;
+                    double halfBarGap = settings.barGap / 2.0;
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         bool barVisible = (barMask & (1 << w)) != 0;
                         if (ui.barItems[w]) {
@@ -164,7 +120,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                     if (ui.column) {
                         // Preserve a small context-menu target if every selected quota is unavailable.
-                        double minimumHitSize = visibleCount ? 0.0 : std::max(barThickness, 8);
+                        double minimumHitSize =
+                            visibleCount ? 0.0 : std::max(display.barThickness, 8);
                         ui.column.MinWidth(minimumHitSize);
                         ui.column.MinHeight(minimumHitSize);
                     }
@@ -172,47 +129,18 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
 
                 for (int w = 0; w < kQuotaBarCount; w++) {
-                    const WindowUsage& wu = *usage[w];
-                    double dispPct = displayPct(wu.pct);
-                    int px = dispPct > 0 ? std::clamp((int)std::lround(barLength * dispPct / 100.0), 2, barLength) : 0;
-                    // Color stays keyed to actual usage so depleting quota still reds out.
-                    auto c = UsageColor(wu.pct, stale, yellowThreshold, orangeThreshold, redThreshold,
-                                        colorblindMode);
-                    uint32_t cv = ((uint32_t)c.A << 24) | ((uint32_t)c.R << 16) |
-                                  ((uint32_t)c.G << 8) | c.B;
-                    if (px != ap.fillPx[w] || cv != ap.fillColor[w]) {
+                    QuotaMeter& m = meters.quotas[w];
+                    if (m.fillPx != ap.fillPx[w] || m.color != ap.fillColor[w]) {
                         if (ui.fills[w]) {
-                            if (verticalBars) ui.fills[w].Height(px);
-                            else ui.fills[w].Width(px);
-                            ui.fills[w].Background(SolidColorBrush(c));
+                            if (verticalBars) ui.fills[w].Height(m.fillPx);
+                            else ui.fills[w].Width(m.fillPx);
+                            ui.fills[w].Background(SolidColorBrush(ArgbColor(m.color)));
                         }
-                        ap.fillPx[w] = px;
-                        ap.fillColor[w] = cv;
+                        ap.fillPx[w] = m.fillPx;
+                        ap.fillColor[w] = m.color;
                     }
 
-                    bool paceVisible = showPaceTicks && ui.paceTicks[w] &&
-                                       !stale && wu.pct >= 0 &&
-                                       wu.resetUnixMs > wu.windowDurationMs &&
-                                       wu.windowDurationMs > 0 &&
-                                       now >= wu.resetUnixMs - wu.windowDurationMs;
-                    int pacePx = 0;
-                    if (paceVisible) {
-                        double remainingFraction =
-                            ((double)wu.resetUnixMs - (double)now) / wu.windowDurationMs;
-                        double pacePct = barMode == BarMode::Remaining ? remainingFraction * 100.0 :
-                                                                         (1.0 - remainingFraction) * 100.0;
-                        pacePct = std::clamp(pacePct, 0.0, 100.0);
-
-                        double paceThickness = verticalBars ? ui.paceTicks[w].Height() :
-                                                              ui.paceTicks[w].Width();
-                        double radius = std::clamp(std::max(1.0, barThickness / 2.0),
-                                                   paceThickness / 2.0,
-                                                   (barLength - paceThickness) / 2.0);
-                        double center = std::clamp(barLength * pacePct / 100.0,
-                                                   radius, barLength - radius);
-                        pacePx = (int)std::lround(center - paceThickness / 2.0);
-                    }
-
+                    bool paceVisible = m.paceVisible && ui.paceTicks[w];
                     int paceVisibleInt = paceVisible ? 1 : 0;
                     if (paceVisibleInt != ap.paceVisible[w]) {
                         if (ui.paceTicks[w]) {
@@ -221,20 +149,17 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         }
                         ap.paceVisible[w] = paceVisibleInt;
                     }
-                    if (paceVisible && pacePx != ap.pacePx[w]) {
+                    if (paceVisible && m.pacePx != ap.pacePx[w]) {
                         if (ui.paceTicks[w]) {
-                            ui.paceTicks[w].Margin(verticalBars ? Thickness{0, 0, 0, (double)pacePx} :
-                                                                   Thickness{(double)pacePx, 0, 0, 0});
+                            ui.paceTicks[w].Margin(verticalBars ?
+                                Thickness{0, 0, 0, (double)m.pacePx} :
+                                Thickness{(double)m.pacePx, 0, 0, 0});
                         }
-                        ap.pacePx[w] = pacePx;
+                        ap.pacePx[w] = m.pacePx;
                     }
 
-                    if (percentTextVisibility != PercentTextVisibility::Never) {
-                        PercentTextAlignment appliedAlignment =
-                            percentTextAlignment == PercentTextAlignment::Adaptive ?
-                                (dispPct >= yellowThreshold ? PercentTextAlignment::Left :
-                                                             PercentTextAlignment::Right) :
-                                percentTextAlignment;
+                    if (settings.percentTextVisibility != PercentTextVisibility::Never) {
+                        PercentTextAlignment appliedAlignment = m.textAlignment;
                         if ((int)appliedAlignment != ap.percentAlignments[w]) {
                             if (ui.percents[w]) {
                                 if (appliedAlignment == PercentTextAlignment::Left) {
@@ -249,20 +174,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                 }
                                 if (auto translation = ui.percents[w].RenderTransform()
                                                            .try_as<TranslateTransform>()) {
-                                    translation.X(appliedAlignment == PercentTextAlignment::Left ?
-                                                      4 * physicalPixelDip :
-                                                  appliedAlignment == PercentTextAlignment::Center ?
-                                                      0 : -4 * physicalPixelDip);
+                                    translation.X(m.textOffset);
                                 }
                             }
                             ap.percentAlignments[w] = (int)appliedAlignment;
                         }
 
-                        bool yellowOrOrange = !stale && wu.pct >= 0 &&
-                            ((wu.pct >= yellowThreshold && wu.pct < orangeThreshold) ||
-                             (wu.pct >= orangeThreshold && wu.pct < redThreshold));
-                        int darkText = appliedAlignment == PercentTextAlignment::Left &&
-                                       yellowOrOrange ? 1 : 0;
+                        int darkText = m.darkText ? 1 : 0;
                         if (darkText != ap.percentDark[w]) {
                             if (ui.percents[w]) {
                                 ui.percents[w].Foreground(SolidColorBrush(darkText ?
@@ -272,27 +190,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                             ap.percentDark[w] = darkText;
                         }
 
-                        std::wstring percentText;
-                        if (wu.pct >= 0) {
-                            wchar_t text[24];
-                            if (w == kExtraUsageBar && showExtraBarAmounts &&
-                                d.extraLimitAmount >= 0) {
-                                // Amount follows the bar mode: spent in used mode, left in
-                                // remaining mode. Dollars for Anthropic, credits for OpenAI.
-                                double amount = barMode == BarMode::Remaining ?
-                                    d.extraLimitAmount - d.extraUsedAmount : d.extraUsedAmount;
-                                amount = std::max(amount, 0.0);
-                                swprintf(text, ARRAYSIZE(text),
-                                         accounts[i].provider == L"openai" ? L"%.0f" : L"$%.2f",
-                                         amount);
-                            } else {
-                                swprintf(text, ARRAYSIZE(text), L"%.0f%%", dispPct);
-                            }
-                            percentText = text;
-                        }
-                        if (percentText != ap.percentTexts[w]) {
-                            if (ui.percents[w]) ui.percents[w].Text(percentText);
-                            ap.percentTexts[w] = std::move(percentText);
+                        if (m.text != ap.percentTexts[w]) {
+                            if (ui.percents[w]) ui.percents[w].Text(m.text);
+                            ap.percentTexts[w] = std::move(m.text);
                         }
                     }
                 }
@@ -343,9 +243,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         }
                     }
                     UpdateAccountFlyout(state, accounts[i], d,
-                                        {now, barMode, yellowThreshold, orangeThreshold,
-                                         redThreshold, colorblindMode, showOpenAiExtraLimits,
-                                         stale, warn, accountRefreshing, visualTestMode},
+                                        {now, display.barMode, display.yellowThreshold,
+                                         display.orangeThreshold, display.redThreshold,
+                                         display.colorblindMode, settings.showOpenAiExtraLimits,
+                                         meters.stale, meters.warn, accountRefreshing,
+                                         visualTestMode},
                                         curves);
                 }
             }
@@ -356,15 +258,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ap.columnOpacity = columnOpacity;
             }
 
-            double labelOpacity = stale ? 0.45 : 0.8;
-            std::wstring labelText = warn ? accounts[i].label + L"!" : accounts[i].label;
-            if (labelOpacity != ap.labelOpacity || labelText != ap.labelText) {
+            if (meters.labelOpacity != ap.labelOpacity || meters.labelText != ap.labelText) {
                 if (ui.label) {
-                    ui.label.Opacity(labelOpacity);
-                    ui.label.Text(labelText);
+                    ui.label.Opacity(meters.labelOpacity);
+                    ui.label.Text(meters.labelText);
                 }
-                ap.labelOpacity = labelOpacity;
-                ap.labelText = std::move(labelText);
+                ap.labelOpacity = meters.labelOpacity;
+                ap.labelText = std::move(meters.labelText);
             }
         }
 

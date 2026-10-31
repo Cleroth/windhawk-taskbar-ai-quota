@@ -197,7 +197,11 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "taskbar/xaml-access.h"
 
+#include "taskbar/logo-paths.h"
+
 #include "taskbar/theme.h"
+
+#include "taskbar/meter-model.h"
 
 #include "taskbar/logos.h"
 

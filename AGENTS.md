@@ -49,6 +49,8 @@ its bundled clang. There is no `.sln`/`.vcxproj`. Do NOT use `msbuild`.
 - Run `check-mod.ps1` for syntax/metadata and `python tests/history/run.py` for isolated history
   regressions and native-control probes (`--capture` saves rendered images). The suite uses
   bundled clang, not `msbuild`/`vstest.console`.
+- `python tests/settings/run.py` tests the extracted meter model and other pure settings
+  fragments the same way; guide: [tests/settings/AGENTS.md](tests/settings/AGENTS.md).
 - A full integration check still requires Windhawk loading the mod into `explorer.exe`.
 - When changed native-control behavior is hidden by stubs, verify the assumed API/message contract
   with an isolated real-control probe under relevant, verified host contexts. Report caller-logic,

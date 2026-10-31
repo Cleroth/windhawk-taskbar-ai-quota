@@ -9,3 +9,5 @@ Debug/
 Release/
 /tests/history/.out/
 /tests/history/__pycache__/
+/tests/settings/.out/
+/tests/settings/__pycache__/

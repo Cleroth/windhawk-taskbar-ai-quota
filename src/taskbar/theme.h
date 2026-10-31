@@ -1,21 +1,8 @@
-// Quota colors and the details flyout's theme. Every flyout brush is created in this file.
+// XAML colors for the meter model's ARGB values, and the details flyout's theme. Every flyout
+// brush is created in this file.
 
-static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
-                                            int orangeThreshold, int redThreshold,
-                                            bool colorblindMode) {
-    if (stale || pct < 0) return {255, 0x9E, 0x9E, 0x9E};
-
-    if (colorblindMode) {
-        if (pct >= redThreshold) return {255, 0xD5, 0x5E, 0x00};
-        if (pct >= orangeThreshold) return {255, 0xE6, 0x9F, 0x00};
-        if (pct >= yellowThreshold) return {255, 0x56, 0xB4, 0xE9};
-        return {255, 0x00, 0x72, 0xB2};
-    }
-
-    if (pct >= redThreshold) return {255, 0xE5, 0x39, 0x35};
-    if (pct >= orangeThreshold) return {255, 0xFB, 0x8C, 0x00};
-    if (pct >= yellowThreshold) return {255, 0xFD, 0xD8, 0x35};
-    return {255, 0x43, 0xA0, 0x47};
+static winrt::Windows::UI::Color ArgbColor(uint32_t argb) {
+    return {(uint8_t)(argb >> 24), (uint8_t)(argb >> 16), (uint8_t)(argb >> 8), (uint8_t)argb};
 }
 
 // The single constructor of solid flyout brushes (backgrounds, text, borders and shapes). A
