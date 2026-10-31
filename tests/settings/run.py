@@ -1,4 +1,4 @@
-"""Run source-extracted settings and meter model tests."""
+"""Run source-extracted settings tests, offscreen renders and native-host probes."""
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -17,10 +17,11 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DEFAULT_SOURCE = REPO / "local@taskbar-ai-quota.wh.cpp"
 DEFAULT_COMPILER = Path(r"C:\Program Files\Windhawk\Compiler\bin\clang++.exe")
+SUMMARY_PHASES = ("model", "render", "host-probe")
 
 
 def hashes():
-    paths = sorted(p for p in HERE.iterdir() if p.is_file() and p.suffix in {".py", ".hpp"})
+    paths = sorted(p for p in HERE.iterdir() if p.is_file() and p.suffix in {".py", ".hpp", ".cpp"})
     paths += sorted((HERE / "fixtures").glob("*.inc"))
     return {p.relative_to(HERE).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
 
@@ -59,6 +60,19 @@ def summary(name, text):
     return result
 
 
+def renders(root, text):
+    """Every reported render is a PNG in this run's directory."""
+    names = [Path(line.removeprefix("RENDER ").strip()).name for line in text.splitlines()
+             if line.startswith("RENDER ")]
+    if not names:
+        raise ValueError("render: no renders reported")
+    for name in names:
+        path = root / name
+        if not name.startswith("render-") or not path.is_file() or path.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
+            raise ValueError(f"render: missing or invalid PNG {name}")
+    return names
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE,
@@ -74,35 +88,54 @@ def main():
     root = Path(tempfile.mkdtemp(prefix=datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ-"), dir=parent))
     print(f"Output: {root}", flush=True)
     results = {"source": str(source), "compiler": str(compiler), "output": str(root), "phases": [], "ok": False,
-               "scope": "isolated source-extracted model tests; not Explorer, XAML or settings window integration"}
+               "scope": "isolated source-extracted model tests, offscreen renders and a native-host probe DLL; "
+                        "not Explorer, XAML or the mod's settings thread"}
     try:
         results["source_sha256_before"] = hashlib.sha256(source.read_bytes()).hexdigest()
         results["harness_sha256_before"] = hashes()
         cpp, exe = root / "settings.cpp", root / "settings.exe"
+        host_cpp, host_dll, probe = root / "ui-host.cpp", root / "ui-host.dll", root / "host-probe.exe"
         flags = [str(compiler), "--target=x86_64-w64-mingw32", "-std=c++23", "-DUNICODE", "-D_UNICODE",
                  "-Wall", "-Wextra", "-O0", "-g", "-static"]
+        # The probe mirrors Windhawk's Windows 10 targeting and MSVC-style wide printf.
+        native = flags + ["-D_WIN32_WINNT=0x0A00", "-DWINVER=0x0A00", "-D__USE_MINGW_ANSI_STDIO=0"]
+        extract = [sys.executable, "-B", str(HERE / "extract.py"), "--source", str(source),
+                   "--expected-hash", results["source_sha256_before"]]
         commands = [
             ("tooling", [sys.executable, "-B", str(HERE / "test_tooling.py")]),
             # A stale generated file would test code that src/ no longer contains.
             *([("freshness", ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                               str(REPO / "generate-mod.ps1"), "-Check"])]
               if source == DEFAULT_SOURCE.resolve() else []),
-            ("extract", [sys.executable, "-B", str(HERE / "extract.py"), "--source", str(source),
-                         "--output", str(cpp), "--expected-hash", results["source_sha256_before"]]),
-            ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe)]),
+            ("extract", extract + ["--output", str(cpp)]),
+            ("extract-host", extract + ["--output", str(host_cpp), "--target", "host"]),
+            ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), "-ld2d1", "-ldwrite",
+                                       "-lwindowscodecs", "-lole32", "-loleaut32", "-lruntimeobject"]),
             ("model", [str(exe)]),
+            ("render", [str(exe), "--render-dir", str(root)]),
+            ("host-compile", native + ["-shared", "-I", str(HERE), str(host_cpp), "-o", str(host_dll),
+                                       "-ld2d1", "-ldwrite", "-ldwmapi", "-lole32", "-loleaut32",
+                                       "-lruntimeobject", "-lwindowsapp", "-luser32", "-lgdi32", "-ladvapi32"]),
+            ("probe-compile", native + ["-municode", str(HERE / "host-probe.cpp"), "-o", str(probe),
+                                        "-lole32", "-luser32"]),
+            ("host-probe", [str(probe), str(host_dll)]),
         ]
         for name, command in commands:
             step, text = phase(root, name, command)
             results["phases"].append(step)
-            if name == "model":
+            if name in SUMMARY_PHASES:
                 try:
                     step["tests"] = summary(name, text)
+                    if name == "render":
+                        results["renders"] = renders(root, text)
+                    if name == "host-probe":
+                        step["observations"] = re.findall(r"^(?:HANDLES|LOSS|LOG) [^\n]+", text, re.M)
                 except ValueError as error:
                     step.update(ok=False, evidence_error=str(error))
                     print(error, flush=True)
-            if name == "extract" and step["ok"]:
-                results["extraction"] = json.loads(cpp.with_suffix(".manifest.json").read_text(encoding="utf-8"))
+            if name.startswith("extract") and step["ok"]:
+                manifest = (cpp if name == "extract" else host_cpp).with_suffix(".manifest.json")
+                results.setdefault("extraction", {})[name] = json.loads(manifest.read_text(encoding="utf-8"))
             if not step["ok"]:
                 break
         results["ok"] = len(results["phases"]) == len(commands) and all(step["ok"] for step in results["phases"])

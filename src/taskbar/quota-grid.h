@@ -102,6 +102,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
                 }));
+            // The rebuilt settings window while its pages are being built.
+            menu.Items().Append(menuItem(L"Settings (new)", L"\uE713",
+                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                    OpenSettingsWindow(SettingsWindowKind::New);
+                }));
             setupElement.ContextFlyout(menu);
 
             panel.Children().Append(setupTile);
@@ -541,6 +546,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             menu.Items().Append(menuItem(L"Settings", L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
+                }));
+            // The rebuilt settings window while its pages are being built.
+            menu.Items().Append(menuItem(L"Settings (new)", L"\uE713",
+                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                    OpenSettingsWindow(SettingsWindowKind::New);
                 }));
 
             tappedElement.ContextFlyout(menu);

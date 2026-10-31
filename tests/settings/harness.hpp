@@ -3,6 +3,11 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <unknwn.h>
+#include <d2d1.h>
+#include <dwrite.h>
+#include <wincodec.h>
+#include <winrt/base.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -13,7 +18,10 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <numbers>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>

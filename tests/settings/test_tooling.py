@@ -13,11 +13,13 @@ import run
 
 
 class ToolingTests(unittest.TestCase):
+    PASSING = "RESULT 3 passed, 0 failed; 9 assertions\n"
+
     def invoke_runner(self, arguments=(), freshness_exit=0, model_output="no summary\n"):
         """Exercise real orchestration with no filesystem writes or child execution."""
         def fake_phase(root, name, command):
             code = freshness_exit if name == "freshness" else 0
-            text = model_output if name == "model" else ""
+            text = model_output if name == "model" else self.PASSING if name in run.SUMMARY_PHASES else ""
             return {"name": name, "command": command, "log": f"{name}.log",
                     "exit_code": code, "ok": code == 0}, text
 
@@ -29,21 +31,26 @@ class ToolingTests(unittest.TestCase):
               patch.object(Path, "read_text", return_value="{}"),
               patch.object(Path, "write_text") as saved,
               patch.object(run, "hashes", return_value={"fixture": "stable"}),
+              patch.object(run, "renders", return_value=["render-a.png"]),
               patch.object(run, "phase", side_effect=fake_phase) as phases,
               patch.object(run.subprocess, "run", side_effect=AssertionError("Child execution forbidden in tooling tests")),
               redirect_stdout(output)):
             code = run.main()
         return code, json.loads(saved.call_args.args[0]), [call.args[1] for call in phases.call_args_list]
 
+    PHASES = ["extract", "extract-host", "model-compile", "model", "render", "host-compile",
+              "probe-compile", "host-probe"]
+
     def test_default_phases_and_summary_required(self):
-        passing = "RESULT 3 passed, 0 failed; 9 assertions\n"
-        code, results, names = self.invoke_runner(model_output=passing)
+        code, results, names = self.invoke_runner(model_output=self.PASSING)
         self.assertEqual(code, 0)
-        self.assertEqual(names, ["tooling", "freshness", "extract", "model-compile", "model"])
+        self.assertEqual(names, ["tooling", "freshness", *self.PHASES])
         self.assertEqual(results["phases"][-1]["tests"], {"passed": 3, "failed": 0, "assertions": 9})
+        self.assertEqual(results["renders"], ["render-a.png"])
         code, results, _ = self.invoke_runner()
         self.assertEqual(code, 1)
         self.assertIn("evidence_error", results["phases"][-1])
+        self.assertEqual(results["phases"][-1]["name"], "model")
 
     def test_stale_generated_source_stops_before_extraction(self):
         code, results, names = self.invoke_runner(freshness_exit=1)
@@ -52,8 +59,14 @@ class ToolingTests(unittest.TestCase):
         self.assertEqual(names, ["tooling", "freshness"])
 
     def test_explicit_other_source_skips_freshness(self):
-        _, _, names = self.invoke_runner(["--source", "other.wh.cpp"])
-        self.assertEqual(names, ["tooling", "extract", "model-compile", "model"])
+        _, _, names = self.invoke_runner(["--source", "other.wh.cpp"], model_output=self.PASSING)
+        self.assertEqual(names, ["tooling", *self.PHASES])
+
+    def test_renders_require_reported_png_files(self):
+        with self.assertRaises(ValueError):
+            run.renders(Path("missing-run"), "RESULT 1 passed, 0 failed; 1 assertions\n")
+        with self.assertRaises(ValueError):
+            run.renders(Path("missing-run"), "RENDER C:\\missing-run\\render-about.png\n")
 
     def test_unsuccessful_or_duplicate_summary_is_not_success(self):
         for text in ("", "RESULT 1 passed, 1 failed; 2 assertions\n",

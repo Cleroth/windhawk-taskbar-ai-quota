@@ -1,4 +1,4 @@
-"""Extract pure production fragments and named definitions verbatim for the settings suite."""
+"""Extract production fragments and named definitions verbatim for the settings suite."""
 import argparse
 import hashlib
 import json
@@ -6,12 +6,33 @@ from pathlib import Path
 import re
 
 # Declaration order: each section may use the ones before it.
-SECTIONS = [
+UI_PURE = [("fragment", f"ui/{name}.h") for name in
+           ("tokens", "draw", "svg-path", "rich-text", "items", "paint", "input")]
+
+# Pure model, toolkit and page builders: tests and offscreen renders.
+MODEL = [
     ("fragment", "core/model.h"),
     ("definition", "ApplyCreditsMax"),
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
+    *UI_PURE,
+    ("fragment", "settings/page-about.h"),
+    ("fragment", "settings/shell.h"),
 ]
+
+# Toolkit with its native host: the probe DLL. No settings, storage or account code.
+HOST = [
+    ("definition", "WindowDpi"),
+    *UI_PURE,
+    ("fragment", "ui/system-theme.h"),
+    ("fragment", "ui/surface.h"),
+    ("fragment", "ui/host.h"),
+]
+
+TARGETS = {
+    "model": (MODEL, "harness.hpp", "fixtures/main.inc"),
+    "host": (HOST, "host.hpp", "fixtures/host-dll.inc"),
+}
 
 
 def balanced(text, start):
@@ -58,15 +79,16 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def generate(source, output, expected_hash):
+def generate(source, output, expected_hash, target="model"):
+    sections, header, fixture = TARGETS[target]
     raw = source.read_bytes()
     if digest(raw) != expected_hash:
         raise ValueError("Source changed before extraction; rerun against settled source")
     text = raw.decode("utf-8-sig")
-    manifest = {"source": str(source), "sha256": digest(raw), "extractions": []}
+    manifest = {"source": str(source), "sha256": digest(raw), "target": target, "extractions": []}
     chunks = ["// GENERATED: production sections below are extracted verbatim.\n",
-              '#include "harness.hpp"\n']
-    for kind, name in SECTIONS:
+              f'#include "{header}"\n']
+    for kind, name in sections:
         a, b = fragment(text, name) if kind == "fragment" else definition(text, name)
         code = text[a:b]
         line = text.count("\n", 0, a) + 1
@@ -74,7 +96,7 @@ def generate(source, output, expected_hash):
                                         "sha256": digest(code.encode("utf-8")), "characters": len(code)})
         # Diagnostics point at the generated mod file without modifying the code.
         chunks.append(f'\n#line {line} {json.dumps(source.as_posix())}\n{code}\n')
-    chunks.append('\n#include "fixtures/main.inc"\n')
+    chunks.append(f'\n#include "{fixture}"\n')
     if source.read_bytes() != raw:
         raise ValueError("Source changed during extraction; rerun against settled source")
     output.write_bytes("".join(chunks).encode("utf-8"))
@@ -88,8 +110,9 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-hash", required=True)
+    parser.add_argument("--target", choices=sorted(TARGETS), default="model")
     args = parser.parse_args()
     try:
-        generate(args.source.resolve(), args.output.resolve(), args.expected_hash)
+        generate(args.source.resolve(), args.output.resolve(), args.expected_hash, args.target)
     except (OSError, UnicodeError, ValueError) as error:
         parser.exit(1, f"Extraction refused: {error}\n")

@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -luuid
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -luuid -ld2d1 -ldwrite -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -94,6 +94,9 @@ Have a suggestion or found a bug?
 #include <wincrypt.h>
 #include <dpapi.h>
 #include <unknwn.h>
+#include <d2d1.h>
+#include <dwrite.h>
+#include <dwmapi.h>
 
 #ifdef GetCurrentTime
 #undef GetCurrentTime
@@ -106,6 +109,7 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -127,6 +131,7 @@ Have a suggestion or found a bug?
 #include <cwctype>
 #include <deque>
 #include <initializer_list>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -219,11 +224,37 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "taskbar/inject.h"
 
+#include "ui/tokens.h"
+
+#include "ui/draw.h"
+
+#include "ui/svg-path.h"
+
+#include "ui/rich-text.h"
+
+#include "ui/items.h"
+
+#include "ui/paint.h"
+
+#include "ui/input.h"
+
+#include "ui/system-theme.h"
+
+#include "ui/surface.h"
+
+#include "ui/host.h"
+
 #include "settings/storage.h"
 
 #include "settings/window-state.h"
 
 #include "settings/native.h"
+
+#include "settings/page-about.h"
+
+#include "settings/shell.h"
+
+#include "settings/ui-window.h"
 
 #include "settings/controls.h"
 

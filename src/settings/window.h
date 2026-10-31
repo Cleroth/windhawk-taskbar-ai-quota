@@ -672,7 +672,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
     return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 
-static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
+static DWORD WINAPI SettingsWindowThreadProc(LPVOID parameter) {
     using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
     if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
         auto setDpi = reinterpret_cast<SetThreadDpiAwarenessContext_t>(
@@ -684,6 +684,24 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         winrt::init_apartment(winrt::apartment_type::single_threaded);
         apartmentInitialized = true;
     } catch (...) {}
+
+    // The rebuilt window keeps its graphics and WinRT objects inside UiHostRun, which returns
+    // before the apartment is uninitialized.
+    if (SettingsWindowKind(reinterpret_cast<INT_PTR>(parameter)) == SettingsWindowKind::New) {
+        if (apartmentInitialized && !g_unloading && !g_settingsWindowCancelRequested) {
+            SettingsUiClient client;
+            UiHostConfig config;
+            config.mainClass = kSettingsUiClass;
+            config.viewportClass = kSettingsUiViewportClass;
+            config.title = L"Taskbar AI Quota Bars \u2014 Settings";
+            config.activateMessage = GetSettingsActivateMessage();
+            if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
+        }
+        SetVisualTestMode(false);
+        g_settingsWindow.store(nullptr);
+        if (apartmentInitialized) winrt::uninit_apartment();
+        return 0;
+    }
 
     INITCOMMONCONTROLSEX controls{sizeof(controls),
                                   ICC_WIN95_CLASSES | ICC_LISTVIEW_CLASSES |
@@ -783,7 +801,9 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
     return 0;
 }
 
-static void OpenSettingsWindow() {
+// Opens the settings window of `kind`, or activates the one already open (of either kind). The
+// thread picks its window once, at start.
+static void OpenSettingsWindow(SettingsWindowKind kind) {
     if (g_unloading) return;
     std::lock_guard<std::mutex> lock(g_settingsWindowMutex);
     if (HWND window = g_settingsWindow.load(); window && IsWindow(window)) {
@@ -800,6 +820,6 @@ static void OpenSettingsWindow() {
     if (g_unloading) return;
     g_settingsWindowCancelRequested = false;
     g_settingsWindowThread = CreateThread(nullptr, 0, SettingsWindowThreadProc,
-                                          nullptr, 0, nullptr);
+                                          reinterpret_cast<LPVOID>(INT_PTR(kind)), 0, nullptr);
     if (!g_settingsWindowThread) Wh_Log(L"Could not create settings window thread");
 }
