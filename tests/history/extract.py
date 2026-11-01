@@ -47,6 +47,38 @@ def between(text, start, end):
     return a, b
 
 
+def fragment(text, path):
+    """A whole fragment: after its `// src/<path>` marker line, up to the next marker line. The
+    last fragment runs to the end of the file, where only the entry's own code follows it."""
+    starts = [m.end() for m in re.finditer(r"(?m)^// src/" + re.escape(path) + r"\n", text)]
+    if len(starts) != 1:
+        raise ValueError(f"Expected one marker for src/{path}, found {len(starts)}")
+    end = re.compile(r"(?m)^// src/").search(text, starts[0])
+    return starts[0], end.start() if end else len(text)
+
+
+def within(text, path, find, *args):
+    """Run a boundary search inside one fragment only, so neither another fragment's code nor
+    include order can extend or satisfy it."""
+    a, b = fragment(text, path)
+    start, end = find(text[a:b], *args)
+    return a + start, a + end
+
+
+def constant(text, name):
+    matches = list(re.finditer(r"(?m)^static constexpr [^\n]*\b" + re.escape(name) + r"\b[^\n]+", text))
+    if len(matches) != 1:
+        raise ValueError(f"Expected one {name} constant, found {len(matches)}")
+    return matches[0].span()
+
+
+def branch(text, opening):
+    if text.count(opening) != 1:
+        raise ValueError(f"Ambiguous branch: {opening!r}")
+    a = text.index(opening)
+    return a, balanced(text, a)
+
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -71,37 +103,35 @@ def generate(source, output, expected_hash):
         # Keep compiler diagnostics on the actual source without modifying the definition.
         chunks.append(f'\n#line {line} {json.dumps(source.as_posix())}\n{code}\n')
 
-    emit("raw history definitions", between(text, "static constexpr size_t kHistoryMeterCount", "static std::mutex g_historyMutex"))
-    emit("history view definitions", between(text, "static constexpr int kHistorySeriesHeight", "static void HistoryLayout(HistoryWindowState& state, bool newFont);"))
-    constants = list(re.finditer(r"(?m)^static constexpr ULONGLONG kFileTimeUnixEpochOffsetMs[^\n]+", text))
-    if len(constants) != 1:
-        raise ValueError(f"Expected one filetime constant, found {len(constants)}")
-    emit("filetime epoch", constants[0].span())
-    for name in ["ScaleForDpi", "WideToUtf8", "UnixMsToLocalSystemTime", "HistoryNumber", "HistoryLocalDate", "HistoryUtcDate", "HistoryCsvId", "HistoryHours"]:
-        emit(name, definition(text, name))
-    # Whole pure fragments: continuity rules and the flyout's burn-up curve model. The store
-    # fragment after them (locks, settings, journal) is not extracted.
-    emit("history continuity", between(text, "// src/history/continuity.h\n", "// src/history/burn-up.h\n"))
-    emit("burn-up model", between(text, "// src/history/burn-up.h\n", "// src/history/burn-up-store.h\n"))
-    for name in ["HistoryReducePeriod", "HistoryPlotRightPadding", "HistoryClearHover", "HistoryPlotPoint", "HistoryLineColor", "HistoryRebuildRenderCache"]:
-        emit(name, definition(text, name))
-    emit("HistoryHoverHit", between(text, "struct HistoryHoverHit {", "// Picking boundary:"))
-    for name in ["HistoryHitTest", "HistoryUpdateHover", "HistoryAnalyze", "HistoryScroll", "HistoryRebuildView"]:
-        emit(name, definition(text, name))
+    # Every section is bounded by its own fragment. Pure fragments are taken whole: the account
+    # model, sample types, continuity rules, the flyout's burn-up curves and the shared history
+    # model. Journal, store, state and window fragments only contribute named definitions.
+    emit("core/model.h", fragment(text, "core/model.h"))
+    emit("history/types.h", fragment(text, "history/types.h"))
+    emit("filetime epoch", within(text, "core/helpers.h", constant, "kFileTimeUnixEpochOffsetMs"))
+    for name in ["Utf8ToWide", "WideToUtf8", "UnixMsToLocalSystemTime", "ProviderDisplayName"]:
+        emit(name, within(text, "core/helpers.h", definition, name))
+    emit("ScaleForDpi", within(text, "settings/native.h", definition, "ScaleForDpi"))
+    for path in ["history/continuity.h", "history/burn-up.h", "history/series.h"]:
+        emit(path, fragment(text, path))
+    # Classic window: its view types, then view-model, export, paint and window definitions.
+    view = "history/view-model.h"
+    emit("history view definitions", within(text, "history/window-state.h", between, "static constexpr int kHistorySeriesHeight", "static void HistoryLayout(HistoryWindowState& state, bool newFont);"))
+    for name in ["HistoryLocalDate", "HistoryUtcDate", "HistoryReducePeriod", "HistoryPlotRightPadding", "HistoryClearHover", "HistoryPlotPoint", "HistoryLineColor", "HistoryRebuildRenderCache"]:
+        emit(name, within(text, view, definition, name))
+    emit("HistoryHoverHit", within(text, view, between, "struct HistoryHoverHit {", "// Picking boundary:"))
+    for name in ["HistoryHitTest", "HistoryUpdateHover", "HistoryScroll", "HistoryRebuildView"]:
+        emit(name, within(text, view, definition, name))
     # Storage/export dialogs are not linked. Only the serializer writes to this memory sink.
     chunks.append('\n#line 1 "harness-csv-wrapper"\nstruct CapturedCsv {\nstd::string bytes;\nbool Write(const std::string& text) { bytes += text; return true; }\n')
-    emit("HistoryCsvFile::WriteSnapshot", definition(text, "WriteSnapshot", method=True))
+    emit("HistoryCsvFile::WriteSnapshot", within(text, "history/export.h", definition, "WriteSnapshot", True))
     chunks.append("\n};\n")
-    emit("production paint", between(text, "struct HistoryPaint {", "static void HistoryLayout(HistoryWindowState& state, bool newFont) {"))
+    emit("history/paint.h", fragment(text, "history/paint.h"))
     for name in ["HistoryLayout", "HistoryGraphWndProc"]:
-        emit(name, definition(text, name))
+        emit(name, within(text, "history/window.h", definition, name))
     # Extract the real selection branch, not an imitation of its state transitions.
-    branch = "if (event == CBN_SELCHANGE) {"
-    if text.count(branch) != 1:
-        raise ValueError("Ambiguous selection branch")
-    a = text.index(branch)
     chunks.append('\n#line 1 "harness-selection-wrapper"\nstatic void HistoryLoad(HistoryWindowState&) { throw std::runtime_error("HistoryLoad deliberately unavailable in isolated harness"); }\nstatic void DispatchSelection(HistoryWindowState* state, int id, int event = CBN_SELCHANGE) {\n')
-    emit("HistoryWindowProc selection branch", (a, balanced(text, a)))
+    emit("HistoryWindowProc selection branch", within(text, "history/window.h", branch, "if (event == CBN_SELCHANGE) {"))
     chunks.append('\n}\n#include "fixtures/main.inc"\n')
     if source.read_bytes() != raw:
         raise ValueError("Source changed during extraction; rerun against settled source")

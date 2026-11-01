@@ -56,8 +56,9 @@ GDI resource growth/deletion failures fail the run. Inspect `results.json` and p
 captures are optional human review. Readiness evidence is a fresh successful run, not a result
 from an older source hash.
 
-- **Extracted model/UI:** grouping, selection, continuity, reduction, statistics, in-memory CSV,
-  layout, picking, hover, cancellation and paint logic are actual source. Fake HWND/tooltip seams
+- **Extracted model/UI:** grouping, account collection, selection, continuity, reduction,
+  statistics, in-memory CSV, layout, picking, hover, cancellation and paint logic are actual
+  source. Fake HWND/tooltip seams
   assert observable calls, text lifetime and failure handling. GDI rendering/resource counts are
   real. Stubs don't prove native control semantics.
 - **Native contracts:** a separate hand-written positive probe (not extracted production code)
@@ -98,8 +99,14 @@ native evidence suffices.
   missing/ambiguous boundaries, unsupported raw literals in scanned definitions, and source
   changes. Preserve extracted text exactly, including line endings; never patch generated code to
   pass a test. Review extraction when production structure changes. Extraction reads the
-  generated file, so a section may span `// src/<path>` markers; fix production code in `src/`
-  and regenerate.
+  generated file, but every section is bounded by its own `// src/<path>` fragment: pure
+  fragments (`core/model.h`, `history/types.h`, `continuity.h`, `burn-up.h`, `series.h`,
+  `paint.h`) whole, other fragments by named definitions or anchors searched inside that fragment
+  only, so include order can't change what is extracted. Fix production code in `src/` and
+  regenerate.
+- `fixtures/model.inc` tests the shared model (`history/series.h`) through its explicit inputs;
+  its trailing classic section and the interaction/tooltip/paint fixtures test the classic
+  window through its adapters.
 - Fixtures are split by domain under `fixtures/`. Add independent expected behavior, not
   Python/C++ copies of production decision rules or source-text call-count audits.
 - Preserve synthetic continuity coverage for clock rollback, gaps, real resets, idle rolling

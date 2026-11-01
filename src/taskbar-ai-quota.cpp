@@ -166,6 +166,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "history/types.h"
 
+#include "history/state.h"
+
 #include "taskbar/ui-types.h"
 
 #include "core/forward.h"
@@ -291,6 +293,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "settings/ui-window.h"
 
 #include "settings/window.h"
+
+#include "history/series.h"
 
 #include "history/window-state.h"
 

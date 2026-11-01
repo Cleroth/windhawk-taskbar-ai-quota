@@ -124,6 +124,25 @@ class ToolingTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 extract.between(text, "begin", "end")
 
+    def test_sections_stay_inside_their_fragment(self):
+        text = ("// src/a.h\nstatic int Example() { return 1; }\nbegin end\n"
+                "// src/b.h\nstatic int Other() { return 2; }\nbegin\n")
+        a, b = extract.within(text, "a.h", extract.definition, "Example")
+        self.assertEqual(text[a:b], "static int Example() { return 1; }")
+        a, b = extract.within(text, "a.h", extract.between, "begin", "end")
+        self.assertEqual(text[a:b], "begin ")
+        a, b = extract.fragment(text, "b.h")  # The last fragment runs to the end of the file.
+        self.assertEqual(text[a:b], "static int Other() { return 2; }\nbegin\n")
+        crossing = "// src/a.h\nstatic int Open() {\n// src/b.h\n}\n"
+        for source, path, find, args in ((text, "a.h", extract.definition, ("Other",)),
+                                         (text, "b.h", extract.between, ("begin", "end")),
+                                         (crossing, "a.h", extract.definition, ("Open",))):
+            with self.subTest(path=path, args=args), self.assertRaises(ValueError):
+                extract.within(source, path, find, *args)
+        for source, path in ((text, "c.h"), (text + "// src/a.h\n", "a.h")):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                extract.fragment(source, path)
+
     def test_raw_literals_refused_instead_of_misparsed(self):
         with self.assertRaisesRegex(ValueError, "Raw C\\+\\+"):
             extract.definition('static int Example() { auto x = R"tag(})tag"; }', "Example")

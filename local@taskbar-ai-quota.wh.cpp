@@ -349,10 +349,7 @@ static uint64_t AccountIdentityHash(const AccountConfig& a) {
 }
 
 // src/history/types.h
-// Usage-history samples and the journal coordination state shared with fetch and settings.
-
-// Loaded IDs are not recording identities until the shell owner persists them.
-static std::atomic<bool> g_historyIdsPendingSave{false};
+// Usage-history sample and snapshot types.
 
 // History is a separate domain: sampled levels, never inferred token counts or spend.
 // Fixed-width records contain no credentials, account labels, or server response text.
@@ -379,6 +376,12 @@ struct HistorySnapshot {
     std::vector<HistorySample> samples;
     std::wstring status;
 };
+
+// src/history/state.h
+// Journal coordination state shared by the history journal, fetch and settings.
+
+// Loaded IDs are not recording identities until the shell owner persists them.
+static std::atomic<bool> g_historyIdsPendingSave{false};
 
 static std::mutex g_historyMutex;  // Leaf: never acquire settings/UI/auth locks inside it.
 static std::atomic<uint64_t> g_historyEpoch{1};  // Clear invalidates in-flight fetch batches.
@@ -18460,31 +18463,10 @@ static void OpenSettingsWindow() {
     if (!g_settingsWindowThread) Wh_Log(L"Could not create settings window thread");
 }
 
-// src/history/window-state.h
-// History window thread state, control IDs, meter and view tables, and view-model types.
-
-static HANDLE g_historyWindowThread = nullptr;
-static std::mutex g_historyWindowMutex;
-static std::atomic<HWND> g_historyWindow{nullptr};
-static std::atomic<HWND> g_historyDialog{nullptr};
-static std::atomic<bool> g_historyWindowCancelRequested{false};
-// History ID that the window's next load selects, from the latest open request; 0 keeps the
-// current selection. OpenHistoryWindow stores it under g_historyWindowMutex.
-static std::atomic<uint64_t> g_historyRequestedAccount{0};
-
-static constexpr PCWSTR kHistoryWindowClass = L"AiQuotaHistory_" WH_MOD_ID;
-static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
-static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
-static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
-static constexpr int kHistorySeriesHeight = 90;
-static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
-
-enum HistoryControlId {
-    kHistoryAccountCombo = 2800, kHistoryMeterCombo, kHistoryRangeCombo,
-    kHistoryOverlayCheck, kHistoryRefreshButton, kHistoryExportButton,
-    kHistoryClearButton, kHistorySettingsButton, kHistoryGraphControl, kHistoryInfoButton,
-    kHistoryEnableButton,
-};
+// src/history/series.h
+// Usage-history model shared by the history windows: meter and view tables, statistics,
+// reduction, series building, account collection and selection resolution. Explicit inputs
+// only; loops stop as soon as `cancelled` returns true.
 
 static constexpr PCWSTR kHistoryMeterNames[kHistoryMeterCount] = {
     L"Short-term used (%)", L"Weekly used (%)", L"Fable weekly used (%)", L"Extra budget used (%)",
@@ -18545,22 +18527,350 @@ struct HistoryUiAccount {
     std::vector<size_t> rows;
 };
 
-struct HistoryUiSeries {
+struct HistorySeries {
     size_t account = 0;
     int meter = 0;
     std::wstring title;
     std::wstring legendTitle, hoverTitle;
-    RECT legendRect{};  // Unscrolled graph coordinates, shared by paint and hit testing.
     COLORREF color = 0;
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
     bool plotted = true;
     HistoryStatistics current, previous;
-    std::array<HistoryRenderSeries, 2> render;
 };
 
 struct HistoryAxis {
     double low = 0, high = 1;
     bool visible = false;
+};
+
+// What a series build reads besides the samples and accounts.
+struct HistorySeriesQuery {
+    int selected = -1;  // Account index; -1 is All accounts.
+    HistoryView view = HistoryView::Weekly;
+    ULONGLONG from = 0, to = 0, readFrom = 0;
+    bool overlay = false;  // Compare previous week: [readFrom, from) is the previous period.
+    bool enabled = false, skipHidden = true;  // Recording consent; hidden accounts not polled.
+    int redThreshold = 90;
+};
+
+struct HistorySeriesSet {
+    std::vector<HistorySeries> series;
+    std::vector<std::wstring> noReadings;
+    std::array<HistoryAxis, 3> axes;  // Percent, USD, credits; never share unlike units.
+};
+
+// Formatting stays independent of locale for exact values/CSV.
+static std::wstring HistoryNumber(double value) {
+    char buffer[64];
+    auto result = std::to_chars(buffer, buffer + sizeof(buffer), value);
+    if (result.ec != std::errc{}) return L"?";
+    return std::wstring(buffer, result.ptr);
+}
+
+static std::string HistoryCsvId(const char* prefix, uint64_t id) {
+    char text[48];
+    snprintf(text, sizeof(text), "%s%016llx", prefix, static_cast<unsigned long long>(id));
+    return text;
+}
+
+static std::wstring HistoryHours(double ms) {
+    wchar_t text[40];
+    swprintf(text, ARRAYSIZE(text), L"%.2f h", ms / 3600000.0);
+    return text;
+}
+
+// Reduction boundary, also callable by isolated structural tests. Each continuous
+// segment/pixel keeps its first, minimum, maximum and last raw samples in temporal
+// order. A break flushes the bucket even inside the same pixel, so no extrema or
+// segment endpoints are lost and no fabricated bridge crosses a reset/failure/gap.
+// A cancelled reduction returns no points.
+static HistoryRenderSeries HistoryReduceRows(const std::vector<HistorySample>& samples,
+                                             const std::vector<size_t>& rows,
+                                             int meter, ULONGLONG from,
+                                             ULONGLONG to, int width,
+                                             const std::function<bool()>& cancelled) {
+    HistoryRenderSeries result;
+    if (width <= 0 || to <= from) return result;
+    result.points.reserve(std::min(rows.size(), size_t(width) * 4));
+    int bucketX = -1;
+    size_t first = 0, minimum = 0, maximum = 0, last = 0;
+    bool bucketConnect = false;
+    const HistorySample* previous = nullptr;
+    auto flush = [&] {
+        if (bucketX < 0) return;
+        std::array<size_t, 4> positions{first, minimum, maximum, last};
+        std::sort(positions.begin(), positions.end());
+        auto end = std::unique(positions.begin(), positions.end());
+        bool connect = bucketConnect;
+        for (auto it = positions.begin(); it != end; ++it) {
+            size_t row = rows[*it];
+            result.points.push_back({bucketX, samples[row].meters[meter].value, row, connect});
+            connect = true;
+        }
+        bucketX = -1;
+    };
+    // rows follow timestamp order: callers stable-sort the samples before collecting accounts.
+    // The number of occupied segment/pixel buckets is bounded by plot width + structural breaks.
+    for (size_t position = 0; position < rows.size(); ++position) {
+        if (cancelled()) return {};
+        const auto& sample = samples[rows[position]];
+        if (sample.timeMs < from || sample.timeMs >= to) continue;
+        int x = std::clamp(int(double(sample.timeMs - from) / double(to - from) * width), 0, width - 1);
+        bool valid = HistoryHasValue(sample, meter);
+        HistoryBreak reason = previous ? HistoryConnection(*previous, sample, meter) : HistoryBreak::None;
+        bool connect = previous && reason == HistoryBreak::None;
+        if (!valid || !connect || x != bucketX) flush();
+        if (valid) {
+            if (bucketX < 0) {
+                bucketX = x;
+                first = minimum = maximum = last = position;
+                bucketConnect = connect;
+            } else {
+                double value = sample.meters[meter].value;
+                if (value < samples[rows[minimum]].meters[meter].value) minimum = position;
+                if (value > samples[rows[maximum]].meters[meter].value) maximum = position;
+                last = position;
+            }
+        }
+        previous = &sample;
+    }
+    flush();
+    return result;
+}
+
+static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& samples,
+                                            const std::vector<size_t>& rows, int meter,
+                                            ULONGLONG from, ULONGLONG to, int redThreshold,
+                                            const std::function<bool()>& cancelled) {
+    HistoryStatistics result;
+    const HistorySample* previous = nullptr;
+    for (size_t row : rows) {
+        if (cancelled()) break;
+        const auto& sample = samples[row];
+        if (sample.timeMs < from || sample.timeMs >= to) continue;
+        if (HistoryHasValue(sample, meter)) {
+            double value = sample.meters[meter].value;
+            result.latest = value;
+            result.latestTime = sample.timeMs;
+            ++result.validSamples;
+            if (!result.hasValue || value > result.peak) {
+                result.hasValue = true;
+                result.peak = value;
+                result.peakTime = sample.timeMs;
+            }
+            if (previous && HistoryConnection(*previous, sample, meter) == HistoryBreak::None) {
+                double elapsed = double(sample.timeMs - previous->timeMs);
+                result.coverageMs += elapsed;
+                if (meter < 6) {
+                    double a = previous->meters[meter].value;
+                    double b = value;
+                    if (a >= redThreshold && b >= redThreshold) {
+                        result.nearLimitMs += elapsed;
+                    } else if ((a >= redThreshold) != (b >= redThreshold)) {
+                        // Ratio form avoids overflow when finite endpoints are very far apart.
+                        double low = std::min(a, b), high = std::max(a, b);
+                        double divisor = std::max({1.0, std::abs(low), std::abs(high)});
+                        double fraction = (high / divisor - redThreshold / divisor) /
+                                          (high / divisor - low / divisor);
+                        result.nearLimitMs += elapsed * std::clamp(fraction, 0.0, 1.0);
+                    }
+                }
+            }
+        }
+        // Failures/missing values remain the predecessor, so a line never bridges them.
+        previous = &sample;
+    }
+    return result;
+}
+
+// Series of the selected account (or every account) in the query's view: one per meter with
+// readings in either period, in account then meter order. An account with none gets one
+// no-readings entry carrying its recording status.
+static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& samples,
+                                           const std::vector<HistoryUiAccount>& accounts,
+                                           const HistorySeriesQuery& query,
+                                           const std::function<bool()>& cancelled) {
+    HistorySeriesSet result;
+    result.axes[0].high = 100;
+    // Keep percentages on the left even if only dollar/credit readings are available.
+    result.axes[0].visible = true;
+    for (size_t i = 0; i < accounts.size(); ++i) {
+        if (cancelled()) break;
+        if (query.selected >= 0 && size_t(query.selected) != i) continue;
+        const auto& account = accounts[i];
+        unsigned meters = account.provider < ARRAYSIZE(kHistoryProviderMeters)
+            ? kHistoryProviderMeters[account.provider] & kHistoryViewMeters[size_t(query.view)] : 0;
+        // Only Weekly follows taskbar choices; All meters and removed accounts stay unfiltered.
+        if (query.view == HistoryView::Weekly && account.provider == 1 && account.configured) {
+            if (!account.showWeekly) meters &= ~(1U << 1);
+            if (!account.showFableWeekly) meters &= ~(1U << 2);
+        }
+        if (!meters) continue;
+        size_t firstSeries = result.series.size();
+        std::wstring status;
+        if (account.configured && query.enabled) {
+            if (!account.recording) status = L"  [recording off]";
+            else if (account.hidden && query.skipHidden) status = L"  [paused]";
+        }
+        for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
+            if (cancelled()) break;
+            if (!(meters & (1U << meter))) continue;
+            HistorySeries series;
+            series.account = i;
+            series.meter = meter;
+            series.current = HistoryAnalyzeRows(samples, account.rows, meter, query.from, query.to,
+                                                query.redThreshold, cancelled);
+            series.previous = query.overlay
+                ? HistoryAnalyzeRows(samples, account.rows, meter, query.readFrom, query.from,
+                                     query.redThreshold, cancelled)
+                : HistoryStatistics{};
+            // No empty per-meter legends. A USD-only account still has real detail data.
+            if (!series.current.hasValue && !series.previous.hasValue) continue;
+            series.plotted = meter != 6 || query.view == HistoryView::AllMeters;
+            bool scoped = meter == 2 || meter == 4 || meter == 5;
+            series.stroke = scoped ? 2 : 3;
+            series.color = kHistoryColors[(query.selected < 0 ? i : size_t(meter)) % ARRAYSIZE(kHistoryColors)];
+            if (query.selected < 0 && scoped) {
+                // Keep scoped quotas in the account's color family; width survives high contrast.
+                COLORREF color = series.color;
+                series.color = RGB((GetRValue(color) * 3 + 255) / 4,
+                                   (GetGValue(color) * 3 + 255) / 4,
+                                   (GetBValue(color) * 3 + 255) / 4);
+            }
+            std::wstring label = kHistoryMeterNames[meter];
+            if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
+            auto& axis = result.axes[meter < 6 ? 0 : meter - 5];
+            if (series.plotted) axis.visible = true;
+            ULONGLONG shortDuration = 0;
+            bool hasDuration = false, mixedDuration = false;
+            for (size_t row : account.rows) {
+                if (cancelled()) break;
+                const auto& sample = samples[row];
+                if (sample.timeMs < query.readFrom || sample.timeMs >= query.to ||
+                    !HistoryHasValue(sample, meter)) continue;
+                double value = sample.meters[meter].value;
+                if (series.plotted) {
+                    axis.low = std::min(axis.low, value);
+                    axis.high = std::max(axis.high, value);
+                }
+                if (meter == 0 || meter == 4) {
+                    ULONGLONG duration = sample.meters[meter].durationMs;
+                    if (hasDuration && shortDuration != duration) mixedDuration = true;
+                    shortDuration = duration;
+                    hasDuration = true;
+                }
+            }
+            if (meter == 0 || meter == 4) {
+                label = mixedDuration ? L"Short-term (varying windows)" : !shortDuration ? L"Current limit" :
+                    shortDuration % 3600000 == 0 ? std::to_wstring(shortDuration / 3600000) + L"h" :
+                    HistoryHours(double(shortDuration));
+                if (account.provider == 3) {
+                    label.front() = wchar_t(towlower(label.front()));
+                    label = (meter == 4 ? L"Claude/GPT " : L"Gemini ") + label;
+                }
+                label += L" used (%)";
+            }
+            series.hoverTitle = account.label + L" · " + label;
+            std::wstring compact = label;
+            if (compact.ends_with(L" used (%)")) compact.resize(compact.size() - 9);
+            series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + compact;
+            if (!series.plotted) label += L" — details only";
+            series.title = (query.selected < 0 ? account.label + L" · " : L"") + label;
+            if (result.series.size() == firstSeries) series.title += status;
+            result.series.push_back(std::move(series));
+        }
+        if (result.series.size() == firstSeries) result.noReadings.push_back(account.title + status);
+    }
+    return result;
+}
+
+// Configured accounts in settings order (zero and duplicate history IDs skipped), then removed
+// accounts with samples in [readFrom, to), in order of their first sample. Rows index `samples`.
+static std::vector<HistoryUiAccount> HistoryCollectAccounts(const std::vector<AccountConfig>& configured,
+                                                            const std::vector<HistorySample>& samples,
+                                                            ULONGLONG readFrom, ULONGLONG to,
+                                                            const std::function<bool()>& cancelled) {
+    std::vector<HistoryUiAccount> accounts;
+    std::map<uint64_t, size_t> index;
+    for (const auto& config : configured) {
+        if (cancelled()) break;
+        if (!config.historyId || index.contains(config.historyId)) continue;
+        HistoryUiAccount account;
+        account.id = config.historyId;
+        account.provider = config.provider == L"anthropic" ? 1 : config.provider == L"openai" ? 2 : 3;
+        account.configured = true;
+        account.recording = config.recordHistory;
+        account.hidden = config.hidden;
+        account.showWeekly = config.showBars[kWeeklyBar];
+        account.showFableWeekly = config.showBars[kFableWeeklyBar];
+        account.label = config.label;
+        account.title = std::wstring(ProviderDisplayName(config.provider)) + L" — " + config.label;
+        index.emplace(account.id, accounts.size());
+        accounts.push_back(std::move(account));
+    }
+    for (size_t row = 0; row < samples.size(); ++row) {
+        if (cancelled()) break;
+        const auto& sample = samples[row];
+        if (!sample.accountId || sample.timeMs < readFrom || sample.timeMs >= to) continue;
+        auto [it, inserted] = index.emplace(sample.accountId, accounts.size());
+        if (inserted) {
+            HistoryUiAccount account;
+            account.id = sample.accountId;
+            account.provider = sample.provider;
+            PCWSTR provider = sample.provider == 1 ? L"Anthropic" : sample.provider == 2 ? L"OpenAI" :
+                              sample.provider == 3 ? L"Google Antigravity" : L"Unknown provider";
+            account.label = L"removed " + Utf8ToWide(HistoryCsvId("account_", sample.accountId));
+            account.title = std::wstring(provider) + L" — " + account.label;
+            accounts.push_back(std::move(account));
+        }
+        accounts[it->second].rows.push_back(row);
+    }
+    return accounts;
+}
+
+// The account index to select after a reload (-1: All accounts), by history ID. A listed
+// request wins; a request that isn't listed (or 0) keeps the current account, which falls back
+// to All accounts once it is no longer listed.
+static int HistoryResolveSelection(const std::vector<HistoryUiAccount>& accounts, uint64_t currentId,
+                                   uint64_t requestId) {
+    int selected = -1, requested = -1;
+    for (size_t i = 0; i < accounts.size(); ++i) {
+        if (accounts[i].id == currentId) selected = int(i);
+        if (accounts[i].id == requestId) requested = int(i);
+    }
+    return requested >= 0 ? requested : selected;
+}
+
+// src/history/window-state.h
+// History window thread state, control IDs, and the classic window's view-model types.
+
+static HANDLE g_historyWindowThread = nullptr;
+static std::mutex g_historyWindowMutex;
+static std::atomic<HWND> g_historyWindow{nullptr};
+static std::atomic<HWND> g_historyDialog{nullptr};
+static std::atomic<bool> g_historyWindowCancelRequested{false};
+// History ID that the window's next load selects, from the latest open request; 0 keeps the
+// current selection. OpenHistoryWindow stores it under g_historyWindowMutex.
+static std::atomic<uint64_t> g_historyRequestedAccount{0};
+
+static constexpr PCWSTR kHistoryWindowClass = L"AiQuotaHistory_" WH_MOD_ID;
+static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
+static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
+static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
+static constexpr int kHistorySeriesHeight = 90;
+static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
+
+enum HistoryControlId {
+    kHistoryAccountCombo = 2800, kHistoryMeterCombo, kHistoryRangeCombo,
+    kHistoryOverlayCheck, kHistoryRefreshButton, kHistoryExportButton,
+    kHistoryClearButton, kHistorySettingsButton, kHistoryGraphControl, kHistoryInfoButton,
+    kHistoryEnableButton,
+};
+
+// A built series with its legend placement and per-period render cache.
+struct HistoryUiSeries : HistorySeries {
+    RECT legendRect{};  // Unscrolled graph coordinates, shared by paint and hit testing.
+    std::array<HistoryRenderSeries, 2> render;
 };
 
 struct HistoryWindowState {
@@ -18597,16 +18907,10 @@ struct HistoryWindowState {
 static void HistoryLayout(HistoryWindowState& state, bool newFont);
 
 // src/history/view-model.h
-// History series reduction, render cache, hover hit-testing, statistics, and loading.
+// Classic history window over the shared model (history/series.h): dates, render cache, hover
+// hit-testing, and loading.
 
-// Formatting stays independent of locale for exact values/CSV. Dates on-screen are local.
-static std::wstring HistoryNumber(double value) {
-    char buffer[64];
-    auto result = std::to_chars(buffer, buffer + sizeof(buffer), value);
-    if (result.ec != std::errc{}) return L"?";
-    return std::wstring(buffer, result.ptr);
-}
-
+// Dates on-screen are local; CSV dates are UTC.
 static std::wstring HistoryLocalDate(ULONGLONG time) {
     SYSTEMTIME local{};
     if (!UnixMsToLocalSystemTime(time, &local)) return L"unknown local time";
@@ -18629,73 +18933,13 @@ static std::string HistoryUtcDate(ULONGLONG time) {
     return text;
 }
 
-static std::string HistoryCsvId(const char* prefix, uint64_t id) {
-    char text[48];
-    snprintf(text, sizeof(text), "%s%016llx", prefix, static_cast<unsigned long long>(id));
-    return text;
-}
-
-static std::wstring HistoryHours(double ms) {
-    wchar_t text[40];
-    swprintf(text, ARRAYSIZE(text), L"%.2f h", ms / 3600000.0);
-    return text;
-}
-
-// Reduction boundary, also callable by isolated structural tests. Each continuous
-// segment/pixel keeps its first, minimum, maximum and last raw samples in temporal
-// order. A break flushes the bucket even inside the same pixel, so no extrema or
-// segment endpoints are lost and no fabricated bridge crosses a reset/failure/gap.
+// The render cache's reduction, stopped by unload or window close.
 static HistoryRenderSeries HistoryReducePeriod(const HistorySnapshot& snapshot,
                                                const std::vector<size_t>& rows,
                                                int meter, ULONGLONG from,
                                                ULONGLONG to, int width) {
-    HistoryRenderSeries result;
-    if (width <= 0 || to <= from) return result;
-    result.points.reserve(std::min(rows.size(), size_t(width) * 4));
-    int bucketX = -1;
-    size_t first = 0, minimum = 0, maximum = 0, last = 0;
-    bool bucketConnect = false;
-    const HistorySample* previous = nullptr;
-    auto flush = [&] {
-        if (bucketX < 0) return;
-        std::array<size_t, 4> positions{first, minimum, maximum, last};
-        std::sort(positions.begin(), positions.end());
-        auto end = std::unique(positions.begin(), positions.end());
-        bool connect = bucketConnect;
-        for (auto it = positions.begin(); it != end; ++it) {
-            size_t row = rows[*it];
-            result.points.push_back({bucketX, snapshot.samples[row].meters[meter].value, row, connect});
-            connect = true;
-        }
-        bucketX = -1;
-    };
-    // rows follow timestamp order, as established by HistoryLoad. The number of
-    // occupied segment/pixel buckets is bounded by plot width + structural breaks.
-    for (size_t position = 0; position < rows.size(); ++position) {
-        if (g_unloading || g_historyWindowCancelRequested) return {};
-        const auto& sample = snapshot.samples[rows[position]];
-        if (sample.timeMs < from || sample.timeMs >= to) continue;
-        int x = std::clamp(int(double(sample.timeMs - from) / double(to - from) * width), 0, width - 1);
-        bool valid = HistoryHasValue(sample, meter);
-        HistoryBreak reason = previous ? HistoryConnection(*previous, sample, meter) : HistoryBreak::None;
-        bool connect = previous && reason == HistoryBreak::None;
-        if (!valid || !connect || x != bucketX) flush();
-        if (valid) {
-            if (bucketX < 0) {
-                bucketX = x;
-                first = minimum = maximum = last = position;
-                bucketConnect = connect;
-            } else {
-                double value = sample.meters[meter].value;
-                if (value < snapshot.samples[rows[minimum]].meters[meter].value) minimum = position;
-                if (value > snapshot.samples[rows[maximum]].meters[meter].value) maximum = position;
-                last = position;
-            }
-        }
-        previous = &sample;
-    }
-    flush();
-    return result;
+    return HistoryReduceRows(snapshot.samples, rows, meter, from, to, width,
+                             [] { return g_unloading || g_historyWindowCancelRequested; });
 }
 
 // Cache reduction and painting reserve identical space for additional unit axes.
@@ -18947,50 +19191,6 @@ static void HistoryUpdateHover(HistoryWindowState& state, POINT cursor) {
     SendMessageW(state.graphTip, TTM_TRACKPOSITION, 0, MAKELPARAM(x, y));
 }
 
-static HistoryStatistics HistoryAnalyze(const HistoryWindowState& state,
-                                        const HistoryUiAccount& account, int meter,
-                                        ULONGLONG from, ULONGLONG to) {
-    HistoryStatistics result;
-    const HistorySample* previous = nullptr;
-    for (size_t row : account.rows) {
-        if (g_unloading || g_historyWindowCancelRequested) break;
-        const auto& sample = state.snapshot.samples[row];
-        if (sample.timeMs < from || sample.timeMs >= to) continue;
-        if (HistoryHasValue(sample, meter)) {
-            double value = sample.meters[meter].value;
-            result.latest = value;
-            result.latestTime = sample.timeMs;
-            ++result.validSamples;
-            if (!result.hasValue || value > result.peak) {
-                result.hasValue = true;
-                result.peak = value;
-                result.peakTime = sample.timeMs;
-            }
-            if (previous && HistoryConnection(*previous, sample, meter) == HistoryBreak::None) {
-                double elapsed = double(sample.timeMs - previous->timeMs);
-                result.coverageMs += elapsed;
-                if (meter < 6) {
-                    double a = previous->meters[meter].value;
-                    double b = value;
-                    if (a >= state.redThreshold && b >= state.redThreshold) {
-                        result.nearLimitMs += elapsed;
-                    } else if ((a >= state.redThreshold) != (b >= state.redThreshold)) {
-                        // Ratio form avoids overflow when finite endpoints are very far apart.
-                        double low = std::min(a, b), high = std::max(a, b);
-                        double divisor = std::max({1.0, std::abs(low), std::abs(high)});
-                        double fraction = (high / divisor - state.redThreshold / divisor) /
-                                          (high / divisor - low / divisor);
-                        result.nearLimitMs += elapsed * std::clamp(fraction, 0.0, 1.0);
-                    }
-                }
-            }
-        }
-        // Failures/missing values remain the predecessor, so a line never bridges them.
-        previous = &sample;
-    }
-    return result;
-}
-
 static void HistorySetStatus(HistoryWindowState& state, const std::wstring& message) {
     // Keep operational failures visible; explanatory text lives behind Info.
     std::wstring text = message.empty() ? state.snapshotStatus : message;
@@ -19027,95 +19227,16 @@ static void HistoryRebuildView(HistoryWindowState& state) {
     state.visible.clear();
     state.noReadings.clear();
     state.renderWidth = -1;
-    state.axes = {};
-    state.axes[0].high = 100;
-    // Keep percentages on the left even if only dollar/credit readings are available.
-    state.axes[0].visible = true;
     HistoryView view = state.selected < 0 ? state.allAccountsView : state.accountView;
-    for (size_t i = 0; i < state.accounts.size(); ++i) {
-        if (g_unloading || g_historyWindowCancelRequested) break;
-        if (state.selected >= 0 && size_t(state.selected) != i) continue;
-        const auto& account = state.accounts[i];
-        unsigned meters = account.provider < ARRAYSIZE(kHistoryProviderMeters)
-            ? kHistoryProviderMeters[account.provider] & kHistoryViewMeters[size_t(view)] : 0;
-        // Only Weekly follows taskbar choices; All meters and removed accounts stay unfiltered.
-        if (view == HistoryView::Weekly && account.provider == 1 && account.configured) {
-            if (!account.showWeekly) meters &= ~(1U << 1);
-            if (!account.showFableWeekly) meters &= ~(1U << 2);
-        }
-        if (!meters) continue;
-        size_t firstSeries = state.visible.size();
-        std::wstring status;
-        if (account.configured && state.enabled) {
-            if (!account.recording) status = L"  [recording off]";
-            else if (account.hidden && state.skipHidden) status = L"  [paused]";
-        }
-        for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
-            if (g_unloading || g_historyWindowCancelRequested) break;
-            if (!(meters & (1U << meter))) continue;
-            HistoryUiSeries series;
-            series.account = i;
-            series.meter = meter;
-            series.current = HistoryAnalyze(state, account, meter, state.from, state.to);
-            series.previous = state.overlay
-                ? HistoryAnalyze(state, account, meter, state.readFrom, state.from) : HistoryStatistics{};
-            // No empty per-meter legends. A USD-only account still has real detail data.
-            if (!series.current.hasValue && !series.previous.hasValue) continue;
-            series.plotted = meter != 6 || view == HistoryView::AllMeters;
-            bool scoped = meter == 2 || meter == 4 || meter == 5;
-            series.stroke = scoped ? 2 : 3;
-            series.color = kHistoryColors[(state.selected < 0 ? i : size_t(meter)) % ARRAYSIZE(kHistoryColors)];
-            if (state.selected < 0 && scoped) {
-                // Keep scoped quotas in the account's color family; width survives high contrast.
-                COLORREF color = series.color;
-                series.color = RGB((GetRValue(color) * 3 + 255) / 4,
-                                   (GetGValue(color) * 3 + 255) / 4,
-                                   (GetBValue(color) * 3 + 255) / 4);
-            }
-            std::wstring label = kHistoryMeterNames[meter];
-            if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
-            auto& axis = state.axes[meter < 6 ? 0 : meter - 5];
-            if (series.plotted) axis.visible = true;
-            ULONGLONG shortDuration = 0;
-            bool hasDuration = false, mixedDuration = false;
-            for (size_t row : account.rows) {
-                if (g_unloading || g_historyWindowCancelRequested) break;
-                const auto& sample = state.snapshot.samples[row];
-                if (sample.timeMs < state.readFrom || sample.timeMs >= state.to ||
-                    !HistoryHasValue(sample, meter)) continue;
-                double value = sample.meters[meter].value;
-                if (series.plotted) {
-                    axis.low = std::min(axis.low, value);
-                    axis.high = std::max(axis.high, value);
-                }
-                if (meter == 0 || meter == 4) {
-                    ULONGLONG duration = sample.meters[meter].durationMs;
-                    if (hasDuration && shortDuration != duration) mixedDuration = true;
-                    shortDuration = duration;
-                    hasDuration = true;
-                }
-            }
-            if (meter == 0 || meter == 4) {
-                label = mixedDuration ? L"Short-term (varying windows)" : !shortDuration ? L"Current limit" :
-                    shortDuration % 3600000 == 0 ? std::to_wstring(shortDuration / 3600000) + L"h" :
-                    HistoryHours(double(shortDuration));
-                if (account.provider == 3) {
-                    label.front() = wchar_t(towlower(label.front()));
-                    label = (meter == 4 ? L"Claude/GPT " : L"Gemini ") + label;
-                }
-                label += L" used (%)";
-            }
-            series.hoverTitle = account.label + L" · " + label;
-            std::wstring compact = label;
-            if (compact.ends_with(L" used (%)")) compact.resize(compact.size() - 9);
-            series.legendTitle = (state.selected < 0 ? account.label + L" · " : L"") + compact;
-            if (!series.plotted) label += L" — details only";
-            series.title = (state.selected < 0 ? account.label + L" · " : L"") + label;
-            if (state.visible.size() == firstSeries) series.title += status;
-            state.visible.push_back(std::move(series));
-        }
-        if (state.visible.size() == firstSeries) state.noReadings.push_back(account.title + status);
-    }
+    auto built = HistoryBuildSeries(state.snapshot.samples, state.accounts,
+        {.selected = state.selected, .view = view, .from = state.from, .to = state.to,
+         .readFrom = state.readFrom, .overlay = state.overlay, .enabled = state.enabled,
+         .skipHidden = state.skipHidden, .redThreshold = state.redThreshold},
+        [] { return g_unloading || g_historyWindowCancelRequested; });
+    state.visible.reserve(built.series.size());
+    for (auto& series : built.series) state.visible.push_back({std::move(series), {}, {}});
+    state.noReadings = std::move(built.noReadings);
+    state.axes = built.axes;
     // Each account mode keeps its own view selection; single accounts start on All meters.
     SendMessageW(state.meterCombo, CB_RESETCONTENT, 0, 0);
     for (PCWSTR name : kHistoryViewNames)
@@ -19172,53 +19293,15 @@ static void HistoryLoad(HistoryWindowState& state) {
                      [](const HistorySample& a, const HistorySample& b) {
                          return a.timeMs < b.timeMs;
                      });
+    // Old rows index the replaced snapshot: drop them even if collection throws.
     state.accounts.clear();
-    std::map<uint64_t, size_t> index;
-    for (const auto& config : configured) {
-        if (g_unloading || g_historyWindowCancelRequested) break;
-        if (!config.historyId || index.contains(config.historyId)) continue;
-        HistoryUiAccount account;
-        account.id = config.historyId;
-        account.provider = config.provider == L"anthropic" ? 1 : config.provider == L"openai" ? 2 : 3;
-        account.configured = true;
-        account.recording = config.recordHistory;
-        account.hidden = config.hidden;
-        account.showWeekly = config.showBars[kWeeklyBar];
-        account.showFableWeekly = config.showBars[kFableWeeklyBar];
-        account.label = config.label;
-        account.title = std::wstring(ProviderDisplayName(config.provider)) + L" — " + config.label;
-        index.emplace(account.id, state.accounts.size());
-        state.accounts.push_back(std::move(account));
-    }
-    for (size_t row = 0; row < state.snapshot.samples.size(); ++row) {
-        if (g_unloading || g_historyWindowCancelRequested) break;
-        const auto& sample = state.snapshot.samples[row];
-        if (!sample.accountId || sample.timeMs < state.readFrom || sample.timeMs >= state.to) continue;
-        auto [it, inserted] = index.emplace(sample.accountId, state.accounts.size());
-        if (inserted) {
-            HistoryUiAccount account;
-            account.id = sample.accountId;
-            account.provider = sample.provider;
-            PCWSTR provider = sample.provider == 1 ? L"Anthropic" : sample.provider == 2 ? L"OpenAI" :
-                              sample.provider == 3 ? L"Google Antigravity" : L"Unknown provider";
-            account.label = L"removed " + Utf8ToWide(HistoryCsvId("account_", sample.accountId));
-            account.title = std::wstring(provider) + L" — " + account.label;
-            state.accounts.push_back(std::move(account));
-        }
-        state.accounts[it->second].rows.push_back(row);
-    }
+    state.accounts = HistoryCollectAccounts(configured, state.snapshot.samples, state.readFrom, state.to,
+                                            [] { return g_unloading || g_historyWindowCancelRequested; });
     SendMessageW(state.accountCombo, CB_RESETCONTENT, 0, 0);
     SendMessageW(state.accountCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"All accounts"));
-    // A requested account that isn't listed keeps the current selection.
-    state.selected = -1;
-    int requested = -1;
-    for (size_t i = 0; i < state.accounts.size(); ++i) {
-        SendMessageW(state.accountCombo, CB_ADDSTRING, 0,
-                     reinterpret_cast<LPARAM>(state.accounts[i].title.c_str()));
-        if (state.accounts[i].id == selectedId) state.selected = int(i);
-        if (state.accounts[i].id == requestedId) requested = int(i);
-    }
-    if (requested >= 0) state.selected = requested;
+    for (const auto& account : state.accounts)
+        SendMessageW(state.accountCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(account.title.c_str()));
+    state.selected = HistoryResolveSelection(state.accounts, selectedId, requestedId);
     SendMessageW(state.accountCombo, CB_SETCURSEL, state.selected + 1, 0);
     state.snapshotStatus = std::wstring(!state.enabled ? L"Recording off" : state.idsPendingSave
         ? L"Recording pending" : L"Recording on") + L"  ·  Updated " + HistoryLocalDate(state.to);

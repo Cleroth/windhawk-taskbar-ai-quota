@@ -1,4 +1,4 @@
-// History window thread state, control IDs, meter and view tables, and view-model types.
+// History window thread state, control IDs, and the classic window's view-model types.
 
 static HANDLE g_historyWindowThread = nullptr;
 static std::mutex g_historyWindowMutex;
@@ -23,81 +23,10 @@ enum HistoryControlId {
     kHistoryEnableButton,
 };
 
-static constexpr PCWSTR kHistoryMeterNames[kHistoryMeterCount] = {
-    L"Short-term used (%)", L"Weekly used (%)", L"Fable weekly used (%)", L"Extra budget used (%)",
-    L"Claude/GPT short-term used (%)", L"Claude/GPT weekly used (%)",
-    L"Extra spending (USD)", L"Credits remaining",
-};
-static constexpr const char* kHistoryMeterIds[kHistoryMeterCount] = {
-    "short", "weekly", "fable_weekly", "extra_percent", "third_party_short",
-    "third_party_weekly", "anthropic_extra_used", "openai_credit_balance",
-};
-
-// Views group existing journal lanes; raw meter indices and CSV remain unchanged.
-enum class HistoryView { ShortTerm, Weekly, ExtraUsage, AllMeters };
-static constexpr PCWSTR kHistoryViewNames[] = {L"Short-term", L"Weekly", L"Extra usage", L"All meters"};
-static constexpr unsigned kHistoryViewMeters[] = {
-    (1U << 0) | (1U << 4), (1U << 1) | (1U << 2) | (1U << 5),
-    (1U << 3) | (1U << 6) | (1U << 7), (1U << kHistoryMeterCount) - 1,
-};
-static constexpr unsigned kHistoryProviderMeters[] = {
-    0, (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3) | (1U << 6),
-    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 4) | (1U << 5),
-};
-static constexpr COLORREF kHistoryColors[] = {
-    RGB(0, 80, 230), RGB(220, 100, 0), RGB(0, 140, 40), RGB(200, 0, 160),
-    RGB(115, 45, 200), RGB(0, 140, 170), RGB(35, 35, 35), RGB(220, 25, 35),
-};
-
-struct HistoryStatistics {
-    bool hasValue = false;
-    double peak = 0;
-    ULONGLONG peakTime = 0;
-    double latest = 0;
-    ULONGLONG latestTime = 0;
-    double coverageMs = 0;
-    double nearLimitMs = 0;
-    size_t validSamples = 0;
-};
-
-struct HistoryRenderPoint {
-    int x = 0;
-    double value = 0;
-    size_t sourceRow = 0;  // Raw provenance for structural tests; paint never dereferences it.
-    bool connect = false;
-};
-
-struct HistoryRenderSeries {
-    std::vector<HistoryRenderPoint> points;
-};
-
-struct HistoryUiAccount {
-    uint64_t id = 0;
-    uint32_t provider = 0;
-    std::wstring title, label;
-    bool configured = false;
-    bool recording = false;
-    bool hidden = false;
-    bool showWeekly = true, showFableWeekly = true;
-    std::vector<size_t> rows;
-};
-
-struct HistoryUiSeries {
-    size_t account = 0;
-    int meter = 0;
-    std::wstring title;
-    std::wstring legendTitle, hoverTitle;
+// A built series with its legend placement and per-period render cache.
+struct HistoryUiSeries : HistorySeries {
     RECT legendRect{};  // Unscrolled graph coordinates, shared by paint and hit testing.
-    COLORREF color = 0;
-    int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
-    bool plotted = true;
-    HistoryStatistics current, previous;
     std::array<HistoryRenderSeries, 2> render;
-};
-
-struct HistoryAxis {
-    double low = 0, high = 1;
-    bool visible = false;
 };
 
 struct HistoryWindowState {

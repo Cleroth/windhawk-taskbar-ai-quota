@@ -25,10 +25,15 @@ static void Run(const std::string& name, const std::function<void()>& body) {
     catch (const std::exception& e) { ++failed; std::cout << "FAIL " << name << ": " << e.what() << '\n'; }
 }
 
-static HistoryWindowState Fixture(std::vector<uint32_t> providers = {1, 2, 3}) {
-    HistoryWindowState state;
-    state.graph = FakeHandle(1); state.meterCombo = FakeHandle(2);
-    state.accountCombo = FakeHandle(3); state.exportButton = FakeHandle(4);
+// Explicit inputs of the shared model (history/series.h): a series query plus the samples and
+// accounts it reads. The field names match the classic window state, so row helpers serve both.
+struct ModelFixture : HistorySeriesQuery {
+    HistorySnapshot snapshot;
+    std::vector<HistoryUiAccount> accounts;
+};
+
+template <typename State>
+static void AddAccounts(State& state, const std::vector<uint32_t>& providers) {
     state.from = state.readFrom = baseTime;
     state.to = baseTime + kHistoryWeekMs;
     for (auto provider : providers) {
@@ -39,10 +44,24 @@ static HistoryWindowState Fixture(std::vector<uint32_t> providers = {1, 2, 3}) {
         account.configured = true; account.recording = true;
         state.accounts.push_back(std::move(account));
     }
+}
+
+static HistoryWindowState Fixture(std::vector<uint32_t> providers = {1, 2, 3}) {
+    HistoryWindowState state;
+    state.graph = FakeHandle(1); state.meterCombo = FakeHandle(2);
+    state.accountCombo = FakeHandle(3); state.exportButton = FakeHandle(4);
+    AddAccounts(state, providers);
     return state;
 }
 
-static HistorySample& AddRow(HistoryWindowState& state, size_t account, ULONGLONG time,
+static ModelFixture Model(std::vector<uint32_t> providers = {1, 2, 3}) {
+    ModelFixture state;
+    AddAccounts(state, providers);
+    return state;
+}
+
+template <typename State>
+static HistorySample& AddRow(State& state, size_t account, ULONGLONG time,
                              std::initializer_list<std::pair<int, double>> values) {
     HistorySample sample;
     sample.accountId = state.accounts.at(account).id;
@@ -58,7 +77,8 @@ static HistorySample& AddRow(HistoryWindowState& state, size_t account, ULONGLON
     return state.snapshot.samples.back();
 }
 
-static void AllLanes(HistoryWindowState& state, bool previousOnly = false) {
+template <typename State>
+static void AllLanes(State& state, bool previousOnly = false) {
     for (size_t account = 0; account < state.accounts.size(); ++account) {
         ULONGLONG start = previousOnly ? state.readFrom : state.from;
         AddRow(state, account, start + 1000, {{0, 10}, {1, 20}, {2, 30}, {3, 40}, {4, 50}, {5, 60}, {6, 12.5}, {7, 800}});
@@ -80,6 +100,34 @@ static std::set<int> Meters(const HistoryWindowState& state, size_t account = 0)
     return result;
 }
 
+static bool Never() { return false; }
+
+static HistorySeriesSet Build(const ModelFixture& state) {
+    return HistoryBuildSeries(state.snapshot.samples, state.accounts, state, Never);
+}
+
+static const HistorySeries& Series(const HistorySeriesSet& built, size_t account, int meter) {
+    auto it = std::find_if(built.series.begin(), built.series.end(), [&](const auto& line) {
+        return line.account == account && line.meter == meter;
+    });
+    if (it == built.series.end()) throw std::runtime_error("Missing account/meter " + std::to_string(account) + "/" + std::to_string(meter));
+    return *it;
+}
+
+static std::set<int> Meters(const HistorySeriesSet& built, size_t account = 0) {
+    std::set<int> result;
+    for (const auto& line : built.series) if (line.account == account) result.insert(line.meter);
+    return result;
+}
+
+// A built line's raw samples in its current [from, to) or previous [readFrom, from) period,
+// reduced at a fixed plot width.
+static HistoryRenderSeries Reduce(const ModelFixture& state, const HistorySeries& line, int period) {
+    const auto& rows = state.accounts.at(line.account).rows;
+    return period ? HistoryReduceRows(state.snapshot.samples, rows, line.meter, state.readFrom, state.from, 1000, Never)
+                  : HistoryReduceRows(state.snapshot.samples, rows, line.meter, state.from, state.to, 1000, Never);
+}
+
 static void SelectAccount(HistoryWindowState& state, int account) {
     controls[state.accountCombo].selection = account + 1;
     DispatchSelection(&state, kHistoryAccountCombo);
@@ -96,10 +144,11 @@ static size_t Occurrences(const std::wstring& text, const std::wstring& part) {
     return count;
 }
 
-static size_t StatusCount(const HistoryWindowState& state, size_t account, const std::wstring& status) {
+static size_t StatusCount(const HistorySeriesSet& built, const ModelFixture& state, size_t account,
+                          const std::wstring& status) {
     size_t count = 0;
-    for (const auto& line : state.visible) if (line.account == account) count += Occurrences(line.title, status);
-    for (const auto& title : state.noReadings)
+    for (const auto& line : built.series) if (line.account == account) count += Occurrences(line.title, status);
+    for (const auto& title : built.noReadings)
         if (title.starts_with(state.accounts[account].title)) count += Occurrences(title, status);
     return count;
 }
