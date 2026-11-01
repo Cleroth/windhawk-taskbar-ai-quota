@@ -8,10 +8,10 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - Pure (`tokens.h`, `draw.h`, `svg-path.h`, `rich-text.h`, `items.h`, `paint.h`, `input.h`, and
   the settings page/shell builders): explicit inputs only; no HWND, registry, WinRT, globals or
   `Wh_Log`. `tests/settings` extracts and renders them; fix impurities here, never in tests.
-- Native (`system-theme.h`, `surface.h`, `popup.h`, `text-box.h`, `host.h`, `color-dialog.h`):
-  window, registry and WinRT calls; covered by the `tests/settings` native-host probe DLL, never by
-  the render harness. `popup.h` and `text-box.h` hold component state and mechanics; their window
-  procedures live in `host.h`, which routes everything to them.
+- Native (`system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
+  `color-dialog.h`): window, registry and WinRT calls; covered by the `tests/settings`
+  native-host probe DLL, never by the render harness. `popup.h` and `text-box.h` hold component
+  state and mechanics; their window procedures live in `host.h`, which routes everything to them.
 - Client-drawn items (`Preview`, a `Gallery` card's thumbnail) paint through
   `UiHostClient::PaintCustom` with the target in item coordinates; the settings window's painter is
   pure (`settings/preview.h`) and the render harness calls it directly.
@@ -29,6 +29,9 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
   layouts, geometries) live in `UiGraphics`.
 - Target creation: hardware, then software once, else fault close. `Resize` failure or
   `D2DERR_RECREATE_TARGET`: discard target and cache, repaint.
+- Window icons (`UiHostConfig::icon`): drawn by the host at the window's DPI and in its palette,
+  redrawn on DPI and theme changes (each replaced icon destroyed after its successor is set),
+  destroyed in `UiHostRun` after the window, never while it can still show them.
 - Window classes are host-specific (`AiQuotaSettingsUi*_<mod id>`); another host uses its own.
 
 ## Reentrancy and close paths

@@ -1,10 +1,10 @@
 // Native-host probe driver (hand-written, not production code). Loads the probe DLL built from
 // the extracted toolkit host, opens its window on the DLL's worker thread, closes it from this
 // thread, joins and unloads, repeatedly; then failed creation, a conflicting class, render-target
-// loss and an unload close during a message box. Windows are off-screen and never activated;
-// the message box shows briefly. The dropdown popup and text box cases run on a hidden desktop
-// this probe creates and never switches to, so their focus, capture and message box stay off the
-// user's screen.
+// loss, window icons across DPI changes and an unload close during a message box. Windows are
+// off-screen and never activated; the message box shows briefly. The dropdown popup and text box
+// cases run on a hidden desktop this probe creates and never switches to, so their focus, capture
+// and message box stay off the user's screen.
 // Usage: host-probe.exe <ui-host.dll>
 #include <windows.h>
 #include <cmath>
@@ -236,6 +236,59 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(recreated == 1);
         PostMessageW(hwnd, WM_CLOSE, 0, 0);
         probe.Closed();
+    });
+
+    Run("window icons: both sizes at the window's DPI, redrawn on DPI changes, destroyed after close", [&] {
+        Probe probe;
+        HWND hwnd = probe.Open();
+        auto iconOf = [&](WPARAM type) {
+            DWORD_PTR answer = 0;
+            CHECK(SendMessageTimeoutW(hwnd, WM_GETICON, type, 0, SMTO_BLOCK, kTimeout, &answer));
+            return reinterpret_cast<HICON>(answer);
+        };
+        // An icon's width; 0 once it is destroyed.
+        auto width = [](HICON icon) {
+            ICONINFO info{};
+            if (!icon || !GetIconInfo(icon, &info)) return 0;
+            BITMAP bitmap{};
+            GetObjectW(info.hbmColor, sizeof(bitmap), &bitmap);
+            if (info.hbmColor) DeleteObject(info.hbmColor);
+            if (info.hbmMask) DeleteObject(info.hbmMask);
+            return int(bitmap.bmWidth);
+        };
+        UINT dpi = GetDpiForWindow(hwnd);
+        HICON last[2] = {iconOf(ICON_SMALL), iconOf(ICON_BIG)};
+        CHECK(width(last[0]) == GetSystemMetricsForDpi(SM_CXSMICON, dpi));
+        CHECK(width(last[1]) == GetSystemMetricsForDpi(SM_CXICON, dpi));
+        // DPI changes as the system reports them (made-up DPIs, the window's rectangle kept): new
+        // icons at the new sizes replace the old, which are destroyed; repeated, no handles stay.
+        DWORD gdiWarm = 0, userWarm = 0;
+        for (int change = 0; change < 6; change++) {
+            UINT next = change % 2 ? 192 : 144;
+            RECT rect{};
+            GetWindowRect(hwnd, &rect);
+            DWORD_PTR answer = 0;
+            CHECK(SendMessageTimeoutW(hwnd, WM_DPICHANGED, MAKEWPARAM(next, next), LPARAM(&rect), SMTO_BLOCK,
+                                      kTimeout, &answer));
+            probe.Call(kPaintMain);
+            HICON now[2] = {iconOf(ICON_SMALL), iconOf(ICON_BIG)};
+            CHECK(width(now[0]) == GetSystemMetricsForDpi(SM_CXSMICON, next));
+            CHECK(width(now[1]) == GetSystemMetricsForDpi(SM_CXICON, next));
+            CHECK(!width(last[0]) && !width(last[1]));
+            last[0] = now[0];
+            last[1] = now[1];
+            if (change == 1) {
+                gdiWarm = GetGuiResources(process, GR_GDIOBJECTS);
+                userWarm = GetGuiResources(process, GR_USEROBJECTS);
+            }
+        }
+        DWORD gdiEnd = GetGuiResources(process, GR_GDIOBJECTS), userEnd = GetGuiResources(process, GR_USEROBJECTS);
+        std::printf("HANDLES icons gdi_after_warmup=%lu gdi_end=%lu user_after_warmup=%lu user_end=%lu\n",
+                    gdiWarm, gdiEnd, userWarm, userEnd);
+        CHECK(gdiWarm == gdiEnd && userWarm == userEnd);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+        CHECK(!width(last[0]) && !width(last[1]));
     });
 
     Run("unload close from another thread during a message box", [&] {

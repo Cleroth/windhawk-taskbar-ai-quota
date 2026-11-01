@@ -1,6 +1,6 @@
-// The rebuilt settings window: the settings client of the custom-drawn host (ui/host.h). Opened
-// by the temporary "Settings (new)" taskbar menu item on the settings thread; never touches XAML.
-// Edits go through the edit controller (settings/edits.h) and its production store.
+// The settings window: the settings client of the custom-drawn host (ui/host.h), run on the
+// settings thread (settings/window.h); never touches XAML. Edits go through the edit controller
+// (settings/edits.h) and its production store.
 
 static constexpr PCWSTR kSettingsUiClass = L"AiQuotaSettingsUi_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiViewportClass = L"AiQuotaSettingsUiView_" WH_MOD_ID;

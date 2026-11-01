@@ -28,13 +28,14 @@ MODEL = [
     ("fragment", "settings/shell.h"),
 ]
 
-# Toolkit with its native host (popup, text boxes and color dialog included): the probe DLL. No
-# settings, storage or account code.
+# Toolkit with its native host (window icons, popup, text boxes and color dialog included): the
+# probe DLL. No settings, storage or account code.
 HOST = [
     ("definition", "WindowDpi"),
     *UI_PURE,
     ("fragment", "ui/system-theme.h"),
     ("fragment", "ui/surface.h"),
+    ("fragment", "ui/window-icon.h"),
     ("fragment", "ui/popup.h"),
     ("fragment", "ui/text-box.h"),
     ("fragment", "ui/host.h"),

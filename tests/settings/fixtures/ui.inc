@@ -61,9 +61,9 @@ static void RunUiTests() {
             CHECK(bounds.left > -0.5f && bounds.top > -0.5f && bounds.right < 24.5f &&
                   bounds.bottom < 24.5f && bounds.right - bounds.left > 20);
         }
-        // First track arc: from 190 to 260 degrees around (26, 26), radius 23.25, clockwise.
-        // Its midpoint (225 degrees) is at 26 - 23.25 / sqrt(2); the opposite sweep's isn't.
-        ID2D1PathGeometry* arc = UiPathGeometry(g, kSettingsAboutTracks[0]);
+        // An arc from 190 to 260 degrees around (26, 26), radius 23.25, clockwise. Its midpoint
+        // (225 degrees) is at 26 - 23.25 / sqrt(2); the opposite sweep's isn't.
+        ID2D1PathGeometry* arc = UiPathGeometry(g, L"M3.103,21.963 A23.25,23.25 0 0 1 21.963,3.103");
         CHECK(SUCCEEDED(arc->GetBounds(nullptr, &bounds)));
         CHECK(std::abs(bounds.left - 3.103f) < 0.01f && std::abs(bounds.right - 21.963f) < 0.01f);
         float mid = 26 - 23.25f / std::numbers::sqrt2_v<float>;
@@ -71,10 +71,19 @@ static void RunUiTests() {
         arc->StrokeContainsPoint({mid, mid}, 0.5f, nullptr, nullptr, &on);
         arc->StrokeContainsPoint({15.5f, 15.5f}, 0.5f, nullptr, nullptr, &opposite);
         CHECK(on && !opposite);
-        // Dots are closed circles of radius 1.7.
-        CHECK(SUCCEEDED(UiPathGeometry(g, kSettingsAboutDots[0])->GetBounds(nullptr, &bounds)));
+        // Relative arcs close a circle of radius 1.7.
+        CHECK(SUCCEEDED(UiPathGeometry(g, L"M4.371,14.025a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z")
+                            ->GetBounds(nullptr, &bounds)));
         CHECK(std::abs(bounds.right - bounds.left - 3.4f) < 0.01f);
         CHECK(std::abs(bounds.bottom - bounds.top - 3.4f) < 0.01f);
+        // App icon bars: horizontal lines from x 3 to 13 at y 2, 8 and 14 (view box 16).
+        for (int i = 0; i < 3; i++) {
+            CHECK(SUCCEEDED(UiPathGeometry(g, kSettingsAppIconTracks[i])->GetBounds(nullptr, &bounds)));
+            CHECK_NEAR(bounds.left, 3);
+            CHECK_NEAR(bounds.right, 13);
+            CHECK_NEAR(bounds.top, 2 + 6 * i);
+            CHECK_NEAR(bounds.bottom, 2 + 6 * i);
+        }
         static constexpr PCWSTR kBroken = L"M0 0 L 3";
         bool threw = false;
         try { UiPathGeometry(g, kBroken); } catch (const winrt::hresult_error&) { threw = true; }

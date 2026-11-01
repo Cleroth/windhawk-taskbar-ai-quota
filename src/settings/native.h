@@ -1,5 +1,5 @@
-// Native window helpers shared with the history window: themed message boxes and color
-// dialogs, DPI scaling, and dark mode.
+// Native window helpers: the settings window's tracked message box, and the DPI helpers the
+// sign-in, history and custom-drawn windows share.
 
 struct SettingsMessageBoxContext {
     SettingsMessageBoxContext* previous = nullptr;
@@ -67,16 +67,6 @@ static int SettingsMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT ty
     return context.forced ? context.forcedResult : result;
 }
 
-static UINT_PTR CALLBACK SettingsColorHookProc(HWND hWnd, UINT message,
-                                               WPARAM, LPARAM lParam) {
-    if (message == WM_INITDIALOG) {
-        auto* chooser = reinterpret_cast<CHOOSECOLORW*>(lParam);
-        auto* state = reinterpret_cast<SettingsWindowState*>(chooser->lCustData);
-        if (state) state->colorDialog = hWnd;
-    }
-    return FALSE;
-}
-
 static int ScaleForDpi(int value, UINT dpi) {
     return MulDiv(value, (int)dpi, 96);
 }
@@ -92,65 +82,4 @@ static UINT WindowDpi(HWND hWnd) {
     UINT dpi = dc ? (UINT)GetDeviceCaps(dc, LOGPIXELSX) : 96;
     if (dc) ReleaseDC(hWnd, dc);
     return dpi ? dpi : 96;
-}
-
-static bool IsWindowsDarkMode() {
-    HIGHCONTRASTW highContrast{sizeof(highContrast)};
-    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast),
-                              &highContrast, 0) &&
-        (highContrast.dwFlags & HCF_HIGHCONTRASTON)) {
-        return false;
-    }
-
-    DWORD light = 1;
-    DWORD size = sizeof(light);
-    RegGetValueW(HKEY_CURRENT_USER,
-                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
-    return light == 0;
-}
-
-static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
-    HMODULE uxTheme = GetModuleHandleW(L"uxtheme.dll");
-    if (!uxTheme) {
-        uxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (uxTheme) {
-        using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-        auto setWindowTheme = reinterpret_cast<SetWindowTheme_t>(
-            GetProcAddress(uxTheme, "SetWindowTheme"));
-        if (setWindowTheme) {
-            struct ThemeContext {
-                SetWindowTheme_t setWindowTheme;
-                bool dark;
-            } context{setWindowTheme, dark};
-            EnumChildWindows(hWnd, [](HWND child, LPARAM param) -> BOOL {
-                auto* context = reinterpret_cast<ThemeContext*>(param);
-                wchar_t className[32] = {};
-                GetClassNameW(child, className, ARRAYSIZE(className));
-                PCWSTR theme = context->dark ? L"DarkMode_Explorer" : L"Explorer";
-                if (context->dark && _wcsicmp(className, L"ComboBox") == 0) {
-                    theme = L"DarkMode_CFD";
-                } else if (context->dark && _wcsicmp(className, WC_HEADERW) == 0) {
-                    theme = L"DarkMode_ItemsView";
-                }
-                context->setWindowTheme(child, theme, nullptr);
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(&context));
-        }
-    }
-
-    HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-    if (!dwm) {
-        dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (dwm) {
-        using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-        auto setAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
-            GetProcAddress(dwm, "DwmSetWindowAttribute"));
-        if (setAttribute) {
-            BOOL enabled = dark;
-            setAttribute(hWnd, 20, &enabled, sizeof(enabled));
-        }
-    }
 }

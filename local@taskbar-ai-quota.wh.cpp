@@ -36,23 +36,26 @@ Optional notifications warn when usage crosses the configured red threshold.
 
 ## Setup
 
-Open the native Settings window from the taskbar to add accounts. Anthropic and OpenAI
-use browser sign-in; tokens are encrypted locally with Windows DPAPI. Antigravity uses
-its signed-in local app or CLI session, which must remain running.
+Click the **AI +** taskbar tile (later: right-click a quota column, **Settings**) and choose
+**Add account**. A new account is polled right away; Anthropic and OpenAI use browser
+sign-in, with tokens encrypted locally with Windows DPAPI. Antigravity uses its signed-in
+local app or CLI session, which must remain running.
 
 ## Settings
 
-- **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
-- **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
-- **Taskbar behavior:** Choose displays, hover details, polling, and alerts.
-- **Usage history:** Local recording is on by default per Windows user; set retention (90 days
-  by default) and choose recording per account independently of taskbar visibility.
-  Hidden accounts stop
-  polling unless you disable **Do not poll hidden accounts** and enable their recording.
+- **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
+  quotas, tile identity, history recording, and sign-in. Removing an account keeps its history.
+- **Layout:** Tile style with a live taskbar preview, sizes, labels, pace markers, and spacing.
+- **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
+- **Behavior:** Choose displays, hover details, polling, and alerts.
+- **History:** Local recording is on by default per Windows user; set retention (90 days by
+  default) and choose recording per account independently of taskbar visibility. Hidden
+  accounts stop polling unless you disable **Do not poll hidden accounts** and enable their
+  recording.
 
 ## Usage history
 
-Open **Usage history...** from the taskbar context menu or Settings > Behavior. Compare raw
+Open **Usage history...** from the taskbar context menu or Settings > History. Compare raw
 quota timelines on one graph with color-coded account lines, overlay the preceding week,
 view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samples;
 history starts when recording starts, with no backfill.
@@ -690,9 +693,7 @@ static UINT WindowDpi(HWND hWnd);
 static void UpdateQuotaUi(QuotaUiInstance& state);
 static void CloseAccountFlyout(QuotaUiInstance& state);
 static void PostUiUpdate();
-// Classic is every opener's window; New is the rebuilt one behind "Settings (new)".
-enum class SettingsWindowKind { Classic, New };
-static void OpenSettingsWindow(SettingsWindowKind kind = SettingsWindowKind::Classic);
+static void OpenSettingsWindow();
 static void OpenHistoryWindow(uint64_t historyId = 0);
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
@@ -8069,11 +8070,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
                 }));
-            // The rebuilt settings window while its pages are being built.
-            menu.Items().Append(menuItem(L"Settings (new)", L"\uE713",
-                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
-                    OpenSettingsWindow(SettingsWindowKind::New);
-                }));
             setupElement.ContextFlyout(menu);
 
             panel.Children().Append(setupTile);
@@ -8513,11 +8509,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             menu.Items().Append(menuItem(L"Settings", L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
-                }));
-            // The rebuilt settings window while its pages are being built.
-            menu.Items().Append(menuItem(L"Settings (new)", L"\uE713",
-                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
-                    OpenSettingsWindow(SettingsWindowKind::New);
                 }));
 
             tappedElement.ContextFlyout(menu);
@@ -11591,6 +11582,88 @@ static bool UiSurfaceDrawResult(UiSurface& surface, HRESULT result) {
     return ++surface.failures < 3;
 }
 
+// src/ui/window-icon.h
+// Window icons drawn by the toolkit (native): a Shape item, its view box filling the icon, as the
+// title bar's small and Alt+Tab's big icon at a window's DPI and in its palette. A window doesn't
+// own icons set with WM_SETICON: the caller keeps them and destroys each once the window holds
+// its successor or is gone.
+
+// Draws `shape` at the small and big icon sizes of `dpi` and sets them on `window`, destroying
+// the ones in `icons` (indexed by ICON_SMALL and ICON_BIG) they replace. A size that can't be
+// drawn keeps its previous icon.
+static void UiSetWindowIcons(HWND window, UiGraphics& g, const UiPalette& palette, const UiItem& shape,
+                             UINT dpi, std::array<HICON, 2>& icons) {
+    // Not declared by the toolchain's default headers (Windows 10 1607 and later).
+    using GetSystemMetricsForDpi_t = int(WINAPI*)(int, UINT);
+    static const auto metricsForDpi = reinterpret_cast<GetSystemMetricsForDpi_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
+    for (WPARAM type : {WPARAM(ICON_SMALL), WPARAM(ICON_BIG)}) {
+        bool big = type == ICON_BIG;
+        int pixels = std::max(metricsForDpi ? metricsForDpi(big ? SM_CXICON : SM_CXSMICON, dpi) :
+                                              MulDiv(big ? 32 : 16, int(dpi), 96), 1);
+
+        // Drawn premultiplied into a top-down 32-bit DIB by a software DC target at 96 DPI (a DIP
+        // is a pixel). The target and its brushes are gone before the bits are read.
+        BITMAPINFO format{};
+        format.bmiHeader = {sizeof(BITMAPINFOHEADER), pixels, -pixels, 1, 32, BI_RGB, 0, 0, 0, 0, 0};
+        void* bits = nullptr;
+        HDC dc = CreateCompatibleDC(nullptr);
+        HBITMAP color = dc ? CreateDIBSection(dc, &format, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+        HGDIOBJ previous = color ? SelectObject(dc, color) : nullptr;
+        bool drawn = false;
+        if (previous) {
+            try {
+                D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
+                winrt::com_ptr<ID2D1DCRenderTarget> target;
+                winrt::check_hresult(g.d2d->CreateDCRenderTarget(&properties, target.put()));
+                RECT bounds{0, 0, pixels, pixels};
+                winrt::check_hresult(target->BindDC(dc, &bounds));
+                UiTargetCache cache;
+                std::vector<UiItem> items{shape};
+                items[0].rect = {0, 0, float(pixels), float(pixels)};
+                target->BeginDraw();
+                target->Clear(D2D1_COLOR_F{});
+                UiPaintItems(target.get(), g, cache, palette, items, {}, {0, 0}, 1, -1e9f, 1e9f);
+                drawn = SUCCEEDED(target->EndDraw());
+            } catch (...) {}
+            SelectObject(dc, previous);
+            GdiFlush();
+        }
+
+        // Icons take straight alpha; the mask marks the fully transparent pixels.
+        HICON icon = nullptr;
+        if (drawn) {
+            int stride = (pixels + 15) / 16 * 2;
+            std::vector<BYTE> mask(size_t(stride) * size_t(pixels));
+            auto* pixel = static_cast<BYTE*>(bits);
+            for (int y = 0; y < pixels; y++) {
+                for (int x = 0; x < pixels; x++, pixel += 4) {
+                    if (BYTE alpha = pixel[3]) {
+                        for (int c = 0; c < 3; c++) pixel[c] = BYTE(std::min(255, (pixel[c] * 255 + alpha / 2) / alpha));
+                    } else {
+                        mask[size_t(y) * size_t(stride) + size_t(x / 8)] |= BYTE(0x80 >> (x % 8));
+                    }
+                }
+            }
+            if (HBITMAP monochrome = CreateBitmap(pixels, pixels, 1, 1, mask.data())) {
+                ICONINFO parts{TRUE, 0, 0, monochrome, color};
+                icon = CreateIconIndirect(&parts);
+                DeleteObject(monochrome);
+            }
+        }
+        if (color) DeleteObject(color);
+        if (dc) DeleteDC(dc);
+        if (!icon) {
+            Wh_Log(L"Could not draw the %d px window icon", pixels);
+            continue;
+        }
+        SendMessageW(window, WM_SETICON, type, LPARAM(icon));
+        if (HICON replaced = std::exchange(icons[type], icon)) DestroyIcon(replaced);
+    }
+}
+
 // src/ui/popup.h
 // Dropdown popup (native): an owned window listing a dropdown's options. It never activates
 // (WS_EX_NOACTIVATE, shown without activation, no taskbar button) and holds mouse capture while
@@ -11787,9 +11860,9 @@ static void UiReleaseTextBoxes(UiTextBoxes& boxes) {
 // src/ui/host.h
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
 // and its scrolling viewport child, each with its own render target; the dropdown popup and the
-// number boxes' native text boxes; theme, DPI, pointer and keyboard input, focus, scrolling,
-// close paths and teardown. A client supplies the content and the window-specific behavior.
-// Rules: ui/AGENTS.md.
+// number boxes' native text boxes; theme, window icons, DPI, pointer and keyboard input, focus,
+// scrolling, close paths and teardown. A client supplies the content and the window-specific
+// behavior. Rules: ui/AGENTS.md.
 
 struct UiHost;
 
@@ -11832,6 +11905,7 @@ struct UiHostConfig {
     D2D1_SIZE_F minSize{500, 400};     // Minimum outer size, DIPs.
     bool activate = true;              // Show active and in the foreground.
     std::optional<POINT> position;     // Top-left in pixels; default: centered on the cursor's monitor.
+    std::optional<UiItem> icon;        // Title bar and Alt+Tab icon (a Shape); none: the default.
 };
 
 struct UiHost {
@@ -11841,12 +11915,14 @@ struct UiHost {
     UiGraphics* graphics = nullptr;
     UiThemeReader* themes = nullptr;
 
-    // Windows, targets, DPI and theme
+    // Windows, targets, DPI and theme; the main window's icons (ICON_SMALL, ICON_BIG), redrawn
+    // for its DPI and palette and destroyed once it is gone
     HWND main = nullptr, viewport = nullptr;
     UiSurface mainSurface, viewSurface;
     UINT dpi = 96;
     UiThemeInput theme;
     UiPalette palette;
+    std::array<HICON, 2> icons{};
 
     // Frame and interaction. The pointer position (item coordinates of its surface) feeds
     // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
@@ -11936,6 +12012,9 @@ static void UiHostApplyTheme(UiHost& host) {
     host.theme = UiReadTheme(*host.themes);
     host.palette = UiPaletteFor(host.theme);
     UiApplyChrome(host.main, host.palette);
+    if (host.config->icon) {
+        UiSetWindowIcons(host.main, *host.graphics, host.palette, *host.config->icon, host.dpi, host.icons);
+    }
     host.mainSurface.cache.Clear();
     host.viewSurface.cache.Clear();
     host.popup.surface.cache.Clear();
@@ -12436,6 +12515,9 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.dpi = HIWORD(wParam);
                 UiDiscardSurface(host.mainSurface);
                 UiDiscardSurface(host.viewSurface);
+                if (host.config->icon) {
+                    UiSetWindowIcons(window, *host.graphics, host.palette, *host.config->icon, host.dpi, host.icons);
+                }
                 const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
                 SetWindowPos(window, nullptr, suggested->left, suggested->top,
                              suggested->right - suggested->left, suggested->bottom - suggested->top,
@@ -13177,8 +13259,8 @@ static LRESULT CALLBACK UiHostViewportProc(HWND window, UINT message, WPARAM wPa
 
 // Runs one window on the calling thread (an STA) until it closes: registers the window classes,
 // keeps every graphics and WinRT object in one scope that ends before the caller uninitializes
-// the apartment, destroys the window inside that scope on every path, and unregisters the
-// classes. Returns false when the window could not be created.
+// the apartment, destroys the window (then its icons) inside that scope on every path, and
+// unregisters the classes. Returns false when the window could not be created.
 static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
     HINSTANCE instance = GetModuleHandleW(nullptr);
     // A stale registration of the same name (an instance that never unregistered) is replaced.
@@ -13260,6 +13342,9 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
         if (host.main && IsWindow(host.main)) DestroyWindow(host.main);
         UiPopupClose(host.popup);
         UiReleaseTextBoxes(host.boxes);
+        for (HICON icon : host.icons) {
+            if (icon) DestroyIcon(icon);
+        }
     }
     if (popupRegistered) UnregisterClassW(config.popupClass, instance);
     if (viewportRegistered) UnregisterClassW(config.viewportClass, instance);
@@ -14011,148 +14096,15 @@ static void LoadSettings() {
 }
 
 // src/settings/window-state.h
-// Settings window thread state, control IDs, and window/editor state.
+// Settings window thread state.
 
 static HANDLE g_settingsWindowThread = nullptr;
 static std::mutex g_settingsWindowMutex;
 static std::atomic<bool> g_settingsWindowCancelRequested{false};
 
-static constexpr UINT_PTR kSettingsAutosaveTimer = 1;
-
-enum SettingsControlId {
-    kSettingsPageAccounts = 1996,
-    kSettingsPageLayout,
-    kSettingsPageDisplay,
-    kSettingsPageBehavior,
-    kAccountList = 2001,
-    kAccountAdd,
-    kAccountEdit,
-    kAccountRemove,
-    kAccountMoveUp,
-    kAccountMoveDown,
-    kAccountToggleVisible,
-    kAccountSignIn,
-    kAccountSignOut,
-    kResetPage,
-
-    kMonitorMode = 2100,
-    kMonitorNumber,
-    kBarLayout,
-    kBarMode,
-    kBarLength,
-    kBarThickness,
-    kLabelFontSize,
-    kPercentFontSize,
-    kAccountMargin,
-    kLabelGap,
-    kBarGap,
-    kRightMargin,
-    kRingSize,
-    kRingThickness,
-
-    kLabelPosition = 2200,
-    kShowPaceTicks,
-    kPaceTickStyle,
-    kPaceTickColor,
-    kShowBarLabels,
-    kPercentTextVisibility,
-    kPercentTextAlignment,
-    kShowOpenAiExtraLimits,
-    kColorblindMode,
-    kShowStaleWarning,
-    kYellowThreshold,
-    kOrangeThreshold,
-    kRedThreshold,
-    kShowExtraBarAmounts,
-
-    kShowDetailsOnHover = 2300,
-    kPollPreset,
-    kPollMinutes,
-    kEnableNotifications,
-    kHistoryEnabled,
-    kHistoryRetentionDays,
-    kSkipHiddenPolling,
-    kOpenHistoryWindow,
-
-    kVisualTestModeLayout = 2350,
-    kVisualTestModeDisplay,
-
-    kSettingsRowsPrevious = 2360,
-    kSettingsRowsNext,
-
-    kAccountProvider = 2400,
-    kAccountLabel,
-    kAccountFiveHour,
-    kAccountWeekly,
-    kAccountFableWeekly,
-    kAccountExtraUsage,
-    kAccountProviderLabel,
-    kAccountLabelLabel,
-    kAccountCreditsMax,
-    kAccountRecordHistory,
-    kAccountHistoryIdentityNote,
-    kAccountTileIdentityLabel,
-    kAccountTileIdentity,
-    kAccountTileTextLabel,
-    kAccountTileText,
-};
-
-struct SettingsRow {
-    HWND label = nullptr;
-    HWND control = nullptr;
-    HWND slider = nullptr;
-    HWND spin = nullptr;
-    HWND preview = nullptr;
-    COLORREF previewColor = RGB(128, 128, 128);
-    int minimum = 0;
-    int maximum = 0;
-};
-
-struct SettingsWindowState {
-    HWND hWnd = nullptr;
-    std::array<HWND, 4> pageButtons{};
-    HWND resetPageButton = nullptr;
-    HWND previousRowsButton = nullptr;
-    HWND rowsPageLabel = nullptr;
-    HWND nextRowsButton = nullptr;
-    HWND accountList = nullptr;
-    HWND toolTip = nullptr;
-    HWND colorDialog = nullptr;
-    std::array<std::vector<HWND>, 4> pageControls;
-    std::array<std::vector<SettingsRow>, 4> rows;
-    HFONT font = nullptr;
-    HBRUSH backgroundBrush = nullptr;
-    HBRUSH inputBrush = nullptr;
-    int currentPage = 0;
-    std::array<int, 4> rowSubpages{};
-    int lockedWindowHeight = 0;
-    UINT dpi = 96;
-    bool dark = false;
-    bool updating = false;
-    bool inSizeMove = false;
-    std::array<COLORREF, 16> customColors{};
-};
-
-struct AccountEditorState {
-    AccountConfig account;
-    uint64_t originalIdentity = 0;
-    HWND edit = nullptr;
-    HWND toolTip = nullptr;
-    HFONT font = nullptr;
-    HBRUSH backgroundBrush = nullptr;
-    HBRUSH inputBrush = nullptr;
-    UINT dpi = 96;
-    bool dark = false;
-    bool accepted = false;
-    bool done = false;
-};
-
-static constexpr PCWSTR kSettingsWindowClass = L"AiQuotaSettings_" WH_MOD_ID;
-static constexpr PCWSTR kAccountEditorClass = L"AiQuotaAccountEditor_" WH_MOD_ID;
-
 // src/settings/native.h
-// Native window helpers shared with the history window: themed message boxes and color
-// dialogs, DPI scaling, and dark mode.
+// Native window helpers: the settings window's tracked message box, and the DPI helpers the
+// sign-in, history and custom-drawn windows share.
 
 struct SettingsMessageBoxContext {
     SettingsMessageBoxContext* previous = nullptr;
@@ -14220,16 +14172,6 @@ static int SettingsMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT ty
     return context.forced ? context.forcedResult : result;
 }
 
-static UINT_PTR CALLBACK SettingsColorHookProc(HWND hWnd, UINT message,
-                                               WPARAM, LPARAM lParam) {
-    if (message == WM_INITDIALOG) {
-        auto* chooser = reinterpret_cast<CHOOSECOLORW*>(lParam);
-        auto* state = reinterpret_cast<SettingsWindowState*>(chooser->lCustData);
-        if (state) state->colorDialog = hWnd;
-    }
-    return FALSE;
-}
-
 static int ScaleForDpi(int value, UINT dpi) {
     return MulDiv(value, (int)dpi, 96);
 }
@@ -14247,70 +14189,9 @@ static UINT WindowDpi(HWND hWnd) {
     return dpi ? dpi : 96;
 }
 
-static bool IsWindowsDarkMode() {
-    HIGHCONTRASTW highContrast{sizeof(highContrast)};
-    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast),
-                              &highContrast, 0) &&
-        (highContrast.dwFlags & HCF_HIGHCONTRASTON)) {
-        return false;
-    }
-
-    DWORD light = 1;
-    DWORD size = sizeof(light);
-    RegGetValueW(HKEY_CURRENT_USER,
-                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
-    return light == 0;
-}
-
-static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
-    HMODULE uxTheme = GetModuleHandleW(L"uxtheme.dll");
-    if (!uxTheme) {
-        uxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (uxTheme) {
-        using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-        auto setWindowTheme = reinterpret_cast<SetWindowTheme_t>(
-            GetProcAddress(uxTheme, "SetWindowTheme"));
-        if (setWindowTheme) {
-            struct ThemeContext {
-                SetWindowTheme_t setWindowTheme;
-                bool dark;
-            } context{setWindowTheme, dark};
-            EnumChildWindows(hWnd, [](HWND child, LPARAM param) -> BOOL {
-                auto* context = reinterpret_cast<ThemeContext*>(param);
-                wchar_t className[32] = {};
-                GetClassNameW(child, className, ARRAYSIZE(className));
-                PCWSTR theme = context->dark ? L"DarkMode_Explorer" : L"Explorer";
-                if (context->dark && _wcsicmp(className, L"ComboBox") == 0) {
-                    theme = L"DarkMode_CFD";
-                } else if (context->dark && _wcsicmp(className, WC_HEADERW) == 0) {
-                    theme = L"DarkMode_ItemsView";
-                }
-                context->setWindowTheme(child, theme, nullptr);
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(&context));
-        }
-    }
-
-    HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-    if (!dwm) {
-        dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (dwm) {
-        using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-        auto setAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
-            GetProcAddress(dwm, "DwmSetWindowAttribute"));
-        if (setAttribute) {
-            BOOL enabled = dark;
-            setAttribute(hWnd, 20, &enabled, sizeof(enabled));
-        }
-    }
-}
-
 // src/settings/account-commands.h
-// Account commands shared by the settings windows: add, edit, remove, reorder and show or hide
-// an account, each one transaction on fresh settings under the edit lock, the account resolved
+// Account commands of the settings window: add, edit, remove, reorder and show or hide an
+// account, each one transaction on fresh settings under the edit lock, the account resolved
 // afresh. Settings thread only. They show nothing: the result says what to tell the user.
 
 // Which account: by history ID, else (none generated) by provider+label identity.
@@ -14393,11 +14274,9 @@ static AccountCommandResult AddAccountCommand(AccountConfig account, const std::
 // Replaces the account with `edit` applied to its fresh settings. Visibility (which a taskbar
 // menu can change meanwhile) and the history ID stay the fresh ones; a provider change starts a
 // new history. A rename moves the stored sign-in to the new identity, blocking epoch-gated token
-// saves across the local copy, settings and delete transaction; `clearOldSignIn` deletes a
-// provider change's old sign-in afterwards.
+// saves across the local copy, settings and delete transaction.
 static AccountCommandResult EditAccountCommand(AccountTarget target,
-                                               const std::function<void(AccountConfig&)>& edit,
-                                               bool clearOldSignIn = false) {
+                                               const std::function<void(AccountConfig&)>& edit) {
     AccountCommandResult result;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     Settings settings;
@@ -14497,10 +14376,6 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     }
     result.account = PublishedAccountTarget(newIdentity);
     configLock.unlock();
-    bool providerTokenCleared = true;
-    if (clearOldSignIn) {
-        providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
-    }
     if (result.apply == SettingsApplyResult::Changed) {
         // A quota selection change updates in place: bar layouts already hold every bar and
         // only change visibility and spacing; tile layouts regenerate their meter shapes.
@@ -14516,11 +14391,6 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
             L"The account was renamed, but a duplicate stored sign-in remains under the old "
             L"identity. To delete it, re-add an account with the old provider and label, then "
             L"remove it and choose to delete its stored sign-in.";
-        result.icon = MB_ICONWARNING;
-    } else if (!providerTokenCleared) {
-        result.message =
-            L"The provider was changed, but the old sign-in remains retained. To recover or "
-            L"delete it, re-add an account with the old provider and label.";
         result.icon = MB_ICONWARNING;
     }
     NotifySettingsWindowChanged();
@@ -16638,26 +16508,24 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
 // Settings > About: app card, links, credits and license (approved mockup about.png). Pure
 // builder.
 
-// App icon (52 DIP view box): four quota arcs on tracks with pace dots, as a segmented ring tile.
-static constexpr PCWSTR kSettingsAboutTracks[4] = {
-    L"M3.103,21.963 A23.25,23.25 0 0 1 21.963,3.103",
-    L"M30.037,3.103 A23.25,23.25 0 0 1 48.897,21.963",
-    L"M48.897,30.037 A23.25,23.25 0 0 1 30.037,48.897",
-    L"M21.963,48.897 A23.25,23.25 0 0 1 3.103,30.037",
-};
-static constexpr PCWSTR kSettingsAboutFills[4] = {
-    L"M3.103,21.963 A23.25,23.25 0 0 1 3.939,18.661",
-    L"M30.037,3.103 A23.25,23.25 0 0 1 48.468,20.022",
-    L"M48.897,30.037 A23.25,23.25 0 0 1 40.757,43.966",
-    L"M21.963,48.897 A23.25,23.25 0 0 1 16.543,47.24",
-};
-static constexpr uint32_t kSettingsAboutFillColors[4] = {0x43A047, 0xE53935, 0xFDD835, 0x43A047};
-static constexpr PCWSTR kSettingsAboutDots[4] = {
-    L"M4.371,14.025a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-    L"M44.374,14.27a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-    L"M36.03,46.074a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-    L"M1.567,30.874a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-};
+// App icon (16 DIP view box): green, yellow and red quota bars on tracks, as stacked bars. The
+// 4-unit round-capped bars and 2-unit gaps land on whole pixels at 16, 24, 32 and 48 px.
+static constexpr PCWSTR kSettingsAppIconTracks[3] = {L"M3,2H13", L"M3,8H13", L"M3,14H13"};
+static constexpr PCWSTR kSettingsAppIconFills[3] = {L"M3,2H4", L"M3,8H8", L"M3,14H12"};
+static constexpr uint32_t kSettingsAppIconColors[3] = {0x43A047, 0xFDD835, 0xE53935};
+
+// The app icon over `rect`: the About page's, and the settings window's (ui/window-icon.h).
+static UiItem SettingsAppIcon(D2D1_RECT_F rect) {
+    UiItem icon;
+    icon.kind = UiItemKind::Shape;
+    icon.viewBox = 16;
+    icon.rect = rect;
+    for (int i = 0; i < 3; i++) {
+        icon.parts.push_back({kSettingsAppIconTracks[i], {}, UiInk::Primary, 0.2f, 4});
+        icon.parts.push_back({kSettingsAppIconFills[i], UiRgb(kSettingsAppIconColors[i]), UiInk::Inherit, 1, 4});
+    }
+    return icon;
+}
 
 static constexpr PCWSTR kSettingsProjectUrl = L"https://github.com/Cleroth/windhawk-taskbar-ai-quota";
 
@@ -16687,20 +16555,9 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         card.rect = {x, y, x + width, y + height};
         items.push_back(std::move(card));
 
-        UiItem icon;
+        UiItem icon =
+            SettingsAppIcon({x + 1 + kPadX, center - kIcon / 2, x + 1 + kPadX + kIcon, center + kIcon / 2});
         icon.id = id++;
-        icon.kind = UiItemKind::Shape;
-        icon.viewBox = 52;
-        icon.rect = {x + 1 + kPadX, center - kIcon / 2, x + 1 + kPadX + kIcon, center + kIcon / 2};
-        for (int i = 0; i < 4; i++) {
-            icon.parts.push_back({kSettingsAboutTracks[i], {}, UiInk::Primary, 0.17f, 4.5f});
-            icon.parts.push_back({kSettingsAboutFills[i], UiRgb(kSettingsAboutFillColors[i]),
-                                  UiInk::Inherit, 1, 4.5f});
-        }
-        for (PCWSTR dot : kSettingsAboutDots) {
-            icon.parts.push_back({dot, UiRgb(0xFFFFFF)});
-            icon.parts.push_back({dot, UiRgb(0x000000, 0.55f), UiInk::Inherit, 1, 0.8f});
-        }
         items.push_back(std::move(icon));
 
         float lineTop = top;
@@ -17931,9 +17788,9 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
 }
 
 // src/settings/ui-window.h
-// The rebuilt settings window: the settings client of the custom-drawn host (ui/host.h). Opened
-// by the temporary "Settings (new)" taskbar menu item on the settings thread; never touches XAML.
-// Edits go through the edit controller (settings/edits.h) and its production store.
+// The settings window: the settings client of the custom-drawn host (ui/host.h), run on the
+// settings thread (settings/window.h); never touches XAML. Edits go through the edit controller
+// (settings/edits.h) and its production store.
 
 static constexpr PCWSTR kSettingsUiClass = L"AiQuotaSettingsUi_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiViewportClass = L"AiQuotaSettingsUiView_" WH_MOD_ID;
@@ -18541,1546 +18398,8 @@ struct SettingsUiClient final : UiHostClient {
     void Destroyed() override { g_settingsWindow.store(nullptr); }
 };
 
-// src/settings/controls.h
-// Settings window control creation, pages, and layout.
-
-static void RecreateSettingsVisuals(SettingsWindowState& state) {
-    state.dark = IsWindowsDarkMode();
-    if (state.font) DeleteObject(state.font);
-    if (state.backgroundBrush) DeleteObject(state.backgroundBrush);
-    if (state.inputBrush) DeleteObject(state.inputBrush);
-
-    LOGFONTW lf{};
-    lf.lfHeight = -MulDiv(9, (int)state.dpi, 72);
-    lf.lfQuality = CLEARTYPE_QUALITY;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
-    state.font = CreateFontIndirectW(&lf);
-    state.backgroundBrush = CreateSolidBrush(state.dark ? RGB(32, 32, 32) :
-                                                          GetSysColor(COLOR_BTNFACE));
-    state.inputBrush = CreateSolidBrush(state.dark ? RGB(43, 43, 43) :
-                                                     GetSysColor(COLOR_WINDOW));
-    EnumChildWindows(state.hWnd, [](HWND child, LPARAM param) -> BOOL {
-        SendMessageW(child, WM_SETFONT, param, TRUE);
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(state.font));
-    if (state.accountList) {
-        COLORREF background = state.dark ? RGB(43, 43, 43) : GetSysColor(COLOR_WINDOW);
-        ListView_SetBkColor(state.accountList, background);
-        ListView_SetTextBkColor(state.accountList, background);
-        ListView_SetTextColor(state.accountList,
-                              state.dark ? RGB(235, 235, 235) : GetSysColor(COLOR_WINDOWTEXT));
-    }
-    ApplyNativeWindowTheme(state.hWnd, state.dark);
-    RedrawWindow(state.hWnd, nullptr, nullptr,
-                 RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
-}
-
-static LRESULT CALLBACK AccountListSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
-                                                LPARAM lParam, UINT_PTR subclassId,
-                                                DWORD_PTR referenceData) {
-    auto* state = reinterpret_cast<SettingsWindowState*>(referenceData);
-    if (message == WM_NOTIFY && state && state->dark) {
-        auto* header = reinterpret_cast<NMHDR*>(lParam);
-        if (header->hwndFrom == ListView_GetHeader(hWnd) &&
-            header->code == NM_CUSTOMDRAW) {
-            auto* draw = reinterpret_cast<NMCUSTOMDRAW*>(lParam);
-            if (draw->dwDrawStage == CDDS_PREPAINT) {
-                RECT client{};
-                GetClientRect(header->hwndFrom, &client);
-                FillRect(draw->hdc, &client, state->inputBrush);
-                return CDRF_NOTIFYITEMDRAW;
-            }
-            if (draw->dwDrawStage == CDDS_ITEMPREPAINT) {
-                int savedDc = SaveDC(draw->hdc);
-                if (draw->uItemState & (CDIS_HOT | CDIS_SELECTED)) {
-                    SetDCBrushColor(draw->hdc, RGB(62, 62, 62));
-                    FillRect(draw->hdc, &draw->rc,
-                             reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-                } else {
-                    FillRect(draw->hdc, &draw->rc, state->inputBrush);
-                }
-
-                wchar_t text[256] = {};
-                HDITEMW item{};
-                item.mask = HDI_TEXT | HDI_FORMAT;
-                item.pszText = text;
-                item.cchTextMax = ARRAYSIZE(text);
-                Header_GetItem(header->hwndFrom, (int)draw->dwItemSpec, &item);
-
-                SetBkMode(draw->hdc, TRANSPARENT);
-                SetTextColor(draw->hdc, RGB(235, 235, 235));
-                if (HFONT font = reinterpret_cast<HFONT>(
-                        SendMessageW(header->hwndFrom, WM_GETFONT, 0, 0))) {
-                    SelectObject(draw->hdc, font);
-                }
-                RECT textRect = draw->rc;
-                int padding = ScaleForDpi(6, state->dpi);
-                textRect.left += padding;
-                textRect.right -= padding;
-                UINT format = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
-                format |= (item.fmt & HDF_RIGHT) ? DT_RIGHT :
-                          (item.fmt & HDF_CENTER) ? DT_CENTER : DT_LEFT;
-                DrawTextW(draw->hdc, text, -1, &textRect, format);
-
-                SetDCPenColor(draw->hdc, RGB(75, 75, 75));
-                SelectObject(draw->hdc, GetStockObject(DC_PEN));
-                MoveToEx(draw->hdc, draw->rc.right - 1, draw->rc.top, nullptr);
-                LineTo(draw->hdc, draw->rc.right - 1, draw->rc.bottom);
-                MoveToEx(draw->hdc, draw->rc.left, draw->rc.bottom - 1, nullptr);
-                LineTo(draw->hdc, draw->rc.right, draw->rc.bottom - 1);
-                if (savedDc) RestoreDC(draw->hdc, savedDc);
-                return CDRF_SKIPDEFAULT;
-            }
-        }
-    } else if (message == WM_NCDESTROY) {
-        RemoveWindowSubclass(hWnd, AccountListSubclassProc, subclassId);
-    }
-    return DefSubclassProc(hWnd, message, wParam, lParam);
-}
-
-static LRESULT CALLBACK SettingsNoEraseSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
-                                                    LPARAM lParam, UINT_PTR subclassId,
-                                                    DWORD_PTR referenceData) {
-    if (message == WM_ERASEBKGND) {
-        auto* state = reinterpret_cast<SettingsWindowState*>(referenceData);
-        if (state && state->dark) {
-            // Preserve the previous frame until the native dark paint pass replaces it.
-            return 1;
-        }
-    } else if (message == WM_NCDESTROY) {
-        RemoveWindowSubclass(hWnd, SettingsNoEraseSubclassProc, subclassId);
-    }
-    return DefSubclassProc(hWnd, message, wParam, lParam);
-}
-
-static HWND CreateSettingsControl(SettingsWindowState& state, int page, PCWSTR className,
-                                  PCWSTR text, DWORD style, DWORD exStyle, int id) {
-    HWND control = CreateWindowExW(exStyle, className, text, WS_CHILD | style,
-                                   0, 0, 1, 1, state.hWnd,
-                                   reinterpret_cast<HMENU>((INT_PTR)id),
-                                   GetModuleHandleW(nullptr), nullptr);
-    if (control) {
-        SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(state.font), TRUE);
-        state.pageControls[page].push_back(control);
-    }
-    return control;
-}
-
-static HWND AddSettingsRow(SettingsWindowState& state, int page, PCWSTR labelText,
-                           PCWSTR className, DWORD style, DWORD exStyle, int id) {
-    HWND label = CreateSettingsControl(state, page, L"STATIC", labelText,
-                                       WS_VISIBLE | SS_LEFT | SS_NOTIFY, 0, -1);
-    HWND control = CreateSettingsControl(state, page, className, L"",
-                                         WS_VISIBLE | WS_TABSTOP | style, exStyle, id);
-    state.rows[page].push_back({label, control});
-    return control;
-}
-
-static HWND AddNumericRow(SettingsWindowState& state, int page, PCWSTR labelText, int id,
-                          int minimum, int maximum, bool addSlider = false,
-                          int sliderMaximum = -1) {
-    HWND edit = AddSettingsRow(state, page, labelText, L"EDIT", ES_NUMBER,
-                               WS_EX_CLIENTEDGE, id);
-    SettingsRow& row = state.rows[page].back();
-    row.minimum = minimum;
-    row.maximum = maximum;
-    row.spin = CreateSettingsControl(
-        state, page, UPDOWN_CLASSW, L"",
-        WS_VISIBLE | UDS_ARROWKEYS | UDS_SETBUDDYINT | UDS_NOTHOUSANDS, 0, -1);
-    if (row.spin &&
-        !SetWindowSubclass(row.spin, SettingsNoEraseSubclassProc, 0,
-                           reinterpret_cast<DWORD_PTR>(&state))) {
-        Wh_Log(L"Could not subclass settings spin control");
-    }
-    SendMessageW(row.spin, UDM_SETBUDDY, reinterpret_cast<WPARAM>(edit), 0);
-    SendMessageW(row.spin, UDM_SETRANGE32, minimum, maximum);
-    if (addSlider) {
-        row.slider = CreateSettingsControl(
-            state, page, TRACKBAR_CLASSW, L"",
-            WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS, 0, -1);
-        if (row.slider &&
-            !SetWindowSubclass(row.slider, SettingsNoEraseSubclassProc, 0,
-                               reinterpret_cast<DWORD_PTR>(&state))) {
-            Wh_Log(L"Could not subclass settings slider");
-        }
-        int trackMaximum = sliderMaximum >= minimum ? sliderMaximum : maximum;
-        SendMessageW(row.slider, TBM_SETRANGE, TRUE, MAKELPARAM(minimum, trackMaximum));
-        SendMessageW(row.slider, TBM_SETPAGESIZE, 0,
-                     std::max(1, (trackMaximum - minimum) / 10));
-    }
-    return edit;
-}
-
-static HWND AddThresholdRow(SettingsWindowState& state, PCWSTR labelText, int id) {
-    HWND edit = AddNumericRow(state, 2, labelText, id, 0, 100);
-    SettingsRow& row = state.rows[2].back();
-    row.preview = CreateSettingsControl(state, 2, L"STATIC", L"",
-                                        WS_VISIBLE | SS_OWNERDRAW, 0, -1);
-    return edit;
-}
-
-static HWND AddSettingsCheck(SettingsWindowState& state, int page, PCWSTR text, int id) {
-    HWND control = CreateSettingsControl(state, page, L"BUTTON", text,
-                                         WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 0, id);
-    state.rows[page].push_back({nullptr, control});
-    return control;
-}
-
-static void AddComboItems(HWND combo, std::initializer_list<PCWSTR> items) {
-    for (PCWSTR item : items) SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(item));
-}
-
-static void AddSettingsToolTip(SettingsWindowState& state, int id, PCWSTR text) {
-    if (!state.toolTip || !text) return;
-    HWND control = GetDlgItem(state.hWnd, id);
-    SettingsRow* row = nullptr;
-    for (auto& pageRows : state.rows) {
-        auto it = std::find_if(pageRows.begin(), pageRows.end(),
-                               [control](const SettingsRow& candidate) {
-                                   return candidate.control == control;
-                               });
-        if (it != pageRows.end()) {
-            row = &*it;
-            break;
-        }
-    }
-    const HWND targets[] = {row ? row->label : nullptr, control,
-                            row ? row->slider : nullptr, row ? row->spin : nullptr};
-    for (HWND target : targets) {
-        if (!target) continue;
-        TOOLINFOW info{};
-        info.cbSize = sizeof(info);
-        info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-        info.hwnd = state.hWnd;
-        info.uId = reinterpret_cast<UINT_PTR>(target);
-        info.lpszText = const_cast<PWSTR>(text);
-        SendMessageW(state.toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&info));
-    }
-}
-
-static void ShowSettingsPage(SettingsWindowState& state, int page) {
-    state.currentPage = std::clamp(page, 0, 3);
-    state.rowSubpages[state.currentPage] = 0;
-    const PCWSTR resetLabels[] = {L"", L"Reset Layout to defaults...",
-                                  L"Reset Display to defaults...",
-                                  L"Reset Behavior to defaults..."};
-    SetWindowTextW(state.resetPageButton, resetLabels[state.currentPage]);
-    for (int i = 0; i < 4; i++) {
-        SendMessageW(state.pageButtons[i], BM_SETCHECK,
-                     i == state.currentPage ? BST_CHECKED : BST_UNCHECKED, 0);
-    }
-    for (int i = 0; i < 4; i++) {
-        for (HWND control : state.pageControls[i]) {
-            SetWindowPos(control, nullptr, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                             SWP_NOREDRAW |
-                             (i == state.currentPage ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
-        }
-    }
-}
-
-static void FitSettingsWindowToContent(SettingsWindowState& state,
-                                       bool reposition = true) {
-    if (!state.hWnd || IsIconic(state.hWnd) || IsZoomed(state.hWnd)) return;
-
-    // Grow from live row counts; constrained work areas paginate in the layout pass.
-    size_t maximumRows = 0;
-    for (int page = 1; page < 4; page++) {
-        maximumRows = std::max(maximumRows, state.rows[page].size());
-    }
-    int desiredClientHeight = ScaleForDpi(62, state.dpi) +
-                              (int)maximumRows * ScaleForDpi(37, state.dpi) +
-                              ScaleForDpi(28, state.dpi) + ScaleForDpi(12, state.dpi);
-
-    RECT windowRect{};
-    GetWindowRect(state.hWnd, &windowRect);
-    RECT adjustedRect{0, 0, ScaleForDpi(700, state.dpi), desiredClientHeight};
-    DWORD style = (DWORD)GetWindowLongPtrW(state.hWnd, GWL_STYLE);
-    DWORD exStyle = (DWORD)GetWindowLongPtrW(state.hWnd, GWL_EXSTYLE);
-    using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
-    auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi"));
-    int desiredWindowHeight;
-    if (adjustWindowRectExForDpi &&
-        adjustWindowRectExForDpi(&adjustedRect, style, FALSE, exStyle, state.dpi)) {
-        desiredWindowHeight = adjustedRect.bottom - adjustedRect.top;
-    } else {
-        RECT client{};
-        GetClientRect(state.hWnd, &client);
-        desiredWindowHeight = desiredClientHeight +
-                              (windowRect.bottom - windowRect.top) - client.bottom;
-    }
-
-    HMONITOR monitor = MonitorFromWindow(state.hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO monitorInfo{sizeof(monitorInfo)};
-    GetMonitorInfoW(monitor, &monitorInfo);
-    int workWidth = monitorInfo.rcWork.right - monitorInfo.rcWork.left;
-    int workHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
-    int width = std::min((int)(windowRect.right - windowRect.left), workWidth);
-    int height = std::min(desiredWindowHeight, workHeight);
-    int centerX = windowRect.left + (windowRect.right - windowRect.left) / 2;
-    int centerY = windowRect.top + (windowRect.bottom - windowRect.top) / 2;
-    int x = std::clamp(centerX - width / 2, (int)monitorInfo.rcWork.left,
-                       (int)monitorInfo.rcWork.right - width);
-    int y = std::clamp(centerY - height / 2, (int)monitorInfo.rcWork.top,
-                       (int)monitorInfo.rcWork.bottom - height);
-    state.lockedWindowHeight = height;
-    if (!reposition && width == windowRect.right - windowRect.left &&
-        height == windowRect.bottom - windowRect.top) {
-        return;
-    }
-    SetWindowPos(state.hWnd, nullptr, x, y, width, height,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
-}
-
-static void LayoutSettingsWindow(SettingsWindowState& state) {
-    RECT client{};
-    GetClientRect(state.hWnd, &client);
-    int width = client.right;
-    int height = client.bottom;
-    int margin = ScaleForDpi(12, state.dpi);
-    constexpr UINT positionFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW;
-    auto setVisible = [&](HWND control, bool visible) {
-        SetWindowPos(control, nullptr, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | positionFlags |
-                         (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
-    };
-    int pageButtonWidth = std::max(1, (width - margin * 2) / 4);
-    for (int i = 0; i < 4; i++) {
-        int x = margin + i * pageButtonWidth;
-        int buttonWidth = i == 3 ? std::max(1, width - margin - x) : pageButtonWidth;
-        SetWindowPos(state.pageButtons[i], nullptr, x, margin,
-                     buttonWidth, ScaleForDpi(32, state.dpi),
-                     positionFlags);
-    }
-
-    int viewportTop = ScaleForDpi(52, state.dpi);
-    int viewportBottom = height - margin;
-    int settingsRowHeight = ScaleForDpi(37, state.dpi);
-    int resetButtonHeight = ScaleForDpi(28, state.dpi);
-
-    if (state.accountList) {
-        int x = ScaleForDpi(26, state.dpi);
-        int y = ScaleForDpi(54, state.dpi);
-        int buttonHeight = ScaleForDpi(28, state.dpi);
-        int gap = ScaleForDpi(6, state.dpi);
-        bool compactButtons = width < ScaleForDpi(600, state.dpi);
-        int buttonRows = compactButtons ? 2 : 1;
-        int buttonY = viewportBottom - buttonHeight * buttonRows - gap * (buttonRows - 1);
-        int listTop = std::max(y, viewportTop);
-        int listBottom = std::min(buttonY - ScaleForDpi(10, state.dpi), viewportBottom);
-        SetWindowPos(state.accountList, nullptr, x, listTop, width - x * 2,
-                     std::max(1, listBottom - listTop), positionFlags);
-        setVisible(state.accountList,
-                   state.currentPage == 0 &&
-                       listBottom - listTop >= ScaleForDpi(30, state.dpi));
-        const int columnWidths[] = {80, 135, 110, 55, 125, 100};
-        int desiredColumnsWidth = ScaleForDpi(605, state.dpi);
-        int availableColumnsWidth = width - x * 2 - ScaleForDpi(4, state.dpi);
-        double columnScale = desiredColumnsWidth > availableColumnsWidth ?
-                                 (double)availableColumnsWidth / desiredColumnsWidth : 1.0;
-        for (int i = 0; i < (int)ARRAYSIZE(columnWidths); i++) {
-            ListView_SetColumnWidth(state.accountList, i,
-                                    std::max(ScaleForDpi(48, state.dpi),
-                                             (int)(ScaleForDpi(columnWidths[i], state.dpi) *
-                                                   columnScale)));
-        }
-        const int ids[] = {kAccountAdd, kAccountEdit, kAccountRemove,
-                           kAccountMoveUp, kAccountMoveDown, kAccountToggleVisible,
-                           kAccountSignIn, kAccountSignOut};
-        const int widths[] = {60, 60, 70, 42, 50, 72, 68, 68};
-        int availableButtonsWidth = width - x * 2 - gap * 7;
-        int desiredButtonsWidth = ScaleForDpi(490, state.dpi);
-        double buttonScale = desiredButtonsWidth > availableButtonsWidth ?
-                                 (double)availableButtonsWidth / desiredButtonsWidth : 1.0;
-        int normalButtonX = x;
-        for (int i = 0; i < 8; i++) {
-            int buttonRow = compactButtons ? i / 4 : 0;
-            int buttonColumn = compactButtons ? i % 4 : i;
-            int buttonWidth = compactButtons ?
-                std::max(1, (width - x * 2 - gap * 3) / 4) :
-                std::max(ScaleForDpi(36, state.dpi),
-                         (int)(ScaleForDpi(widths[i], state.dpi) * buttonScale));
-            int buttonX = compactButtons ? x + buttonColumn * (buttonWidth + gap) :
-                                           normalButtonX;
-            HWND button = GetDlgItem(state.hWnd, ids[i]);
-            int rowY = buttonY + buttonRow * (buttonHeight + gap);
-            SetWindowPos(button, nullptr, buttonX, rowY,
-                         buttonWidth, buttonHeight, positionFlags);
-            setVisible(button, state.currentPage == 0 && rowY >= viewportTop &&
-                                   rowY + buttonHeight <= viewportBottom);
-            if (!compactButtons) normalButtonX += buttonWidth + gap;
-        }
-    }
-
-    setVisible(state.resetPageButton, false);
-    setVisible(state.previousRowsButton, false);
-    setVisible(state.rowsPageLabel, false);
-    setVisible(state.nextRowsButton, false);
-    for (int page = 1; page < 4; page++) {
-        int firstRow = 0;
-        int lastRow = (int)state.rows[page].size();
-        int subpageCount = 1;
-        int rowsPerSubpage = std::max(
-            1, (viewportBottom - ScaleForDpi(62, state.dpi) - resetButtonHeight) /
-                   settingsRowHeight);
-        if (page == state.currentPage) {
-            subpageCount = std::max(
-                1, ((int)state.rows[page].size() + rowsPerSubpage - 1) / rowsPerSubpage);
-            state.rowSubpages[page] = std::clamp(state.rowSubpages[page], 0,
-                                                 subpageCount - 1);
-            firstRow = state.rowSubpages[page] * rowsPerSubpage;
-            lastRow = std::min((int)state.rows[page].size(), firstRow + rowsPerSubpage);
-        }
-        int y = ScaleForDpi(62, state.dpi);
-        int labelX = ScaleForDpi(28, state.dpi);
-        int controlX = width < ScaleForDpi(620, state.dpi) ?
-                           std::max(labelX + ScaleForDpi(120, state.dpi), width * 44 / 100) :
-                           ScaleForDpi(300, state.dpi);
-        int controlWidth = std::max(ScaleForDpi(100, state.dpi),
-                                    width - controlX - ScaleForDpi(24, state.dpi));
-        for (int rowIndex = 0; rowIndex < (int)state.rows[page].size(); rowIndex++) {
-            const auto& row = state.rows[page][rowIndex];
-            bool rowOnSubpage = page == state.currentPage && rowIndex >= firstRow &&
-                                rowIndex < lastRow;
-            if (!rowOnSubpage) {
-                if (row.label) setVisible(row.label, false);
-                setVisible(row.control, false);
-                if (row.slider) setVisible(row.slider, false);
-                if (row.spin) setVisible(row.spin, false);
-                if (row.preview) setVisible(row.preview, false);
-                continue;
-            }
-            bool sliderFits = row.slider && controlWidth >= ScaleForDpi(200, state.dpi);
-            bool rowVisible = y >= viewportTop &&
-                               y + ScaleForDpi(26, state.dpi) <= viewportBottom;
-            if (row.label) {
-                int labelRight = controlX - ScaleForDpi(12, state.dpi);
-                if (row.preview) labelRight -= ScaleForDpi(28, state.dpi);
-                SetWindowPos(row.label, nullptr, labelX, y + ScaleForDpi(4, state.dpi),
-                             std::max(1, labelRight - labelX),
-                             ScaleForDpi(22, state.dpi), positionFlags);
-                if (row.preview) {
-                    SetWindowPos(row.preview, nullptr,
-                                 controlX - ScaleForDpi(24, state.dpi),
-                                 y + ScaleForDpi(4, state.dpi),
-                                 ScaleForDpi(18, state.dpi), ScaleForDpi(18, state.dpi),
-                                 positionFlags);
-                }
-                if (row.spin) {
-                    int spinWidth = ScaleForDpi(18, state.dpi);
-                    int editWidth = ScaleForDpi(72, state.dpi);
-                    int editX = controlX;
-                    if (sliderFits) {
-                        int sliderWidth = std::max(ScaleForDpi(80, state.dpi),
-                                                   controlWidth - editWidth - spinWidth -
-                                                       ScaleForDpi(12, state.dpi));
-                        SetWindowPos(row.slider, nullptr, controlX, y, sliderWidth,
-                                     ScaleForDpi(28, state.dpi), positionFlags);
-                        editX += sliderWidth + ScaleForDpi(8, state.dpi);
-                    }
-                    SetWindowPos(row.control, nullptr, editX, y, editWidth,
-                                 ScaleForDpi(26, state.dpi), positionFlags);
-                    SetWindowPos(row.spin, nullptr, editX + editWidth, y, spinWidth,
-                                 ScaleForDpi(26, state.dpi), positionFlags);
-                } else {
-                    wchar_t className[32] = {};
-                    GetClassNameW(row.control, className, ARRAYSIZE(className));
-                    int controlHeight = _wcsicmp(className, L"ComboBox") == 0 ?
-                                            ScaleForDpi(220, state.dpi) :
-                                            ScaleForDpi(26, state.dpi);
-                    SetWindowPos(row.control, nullptr, controlX, y, controlWidth, controlHeight,
-                                 positionFlags);
-                }
-                setVisible(row.label, rowVisible);
-            } else {
-                SetWindowPos(row.control, nullptr, labelX, y, width - labelX * 2,
-                             ScaleForDpi(26, state.dpi), positionFlags);
-            }
-            setVisible(row.control, rowVisible);
-            if (row.slider) setVisible(row.slider, rowVisible && sliderFits);
-            if (row.spin) setVisible(row.spin, rowVisible);
-            if (row.preview) setVisible(row.preview, rowVisible);
-            y += settingsRowHeight;
-        }
-        if (page == state.currentPage) {
-            int buttonWidth = std::max(
-                1, std::min(width - labelX * 2, ScaleForDpi(200, state.dpi)));
-            int buttonY = y;
-            bool buttonVisible = buttonY >= viewportTop &&
-                                 buttonY + resetButtonHeight <= viewportBottom;
-            SetWindowPos(state.resetPageButton, nullptr,
-                         width - labelX - buttonWidth, buttonY,
-                         buttonWidth, resetButtonHeight, positionFlags);
-            setVisible(state.resetPageButton, buttonVisible);
-            if (subpageCount > 1) {
-                int gap = ScaleForDpi(6, state.dpi);
-                int navigationButtonWidth = ScaleForDpi(72, state.dpi);
-                int pageLabelWidth = ScaleForDpi(48, state.dpi);
-                int previousX = labelX;
-                int labelPositionX = previousX + navigationButtonWidth + gap;
-                int nextX = labelPositionX + pageLabelWidth + gap;
-                SetWindowPos(state.previousRowsButton, nullptr,
-                             previousX, buttonY, navigationButtonWidth,
-                             resetButtonHeight, positionFlags);
-                SetWindowPos(state.rowsPageLabel, nullptr,
-                             labelPositionX, buttonY, pageLabelWidth,
-                             resetButtonHeight, positionFlags);
-                SetWindowPos(state.nextRowsButton, nullptr,
-                             nextX, buttonY, navigationButtonWidth,
-                             resetButtonHeight, positionFlags);
-                wchar_t pageText[32];
-                swprintf(pageText, ARRAYSIZE(pageText), L"%d / %d",
-                         state.rowSubpages[page] + 1, subpageCount);
-                SetWindowTextW(state.rowsPageLabel, pageText);
-                bool previousEnabled = state.rowSubpages[page] > 0;
-                bool nextEnabled = state.rowSubpages[page] + 1 < subpageCount;
-                if (!previousEnabled && GetFocus() == state.previousRowsButton) {
-                    SetFocus(state.nextRowsButton);
-                } else if (!nextEnabled && GetFocus() == state.nextRowsButton) {
-                    SetFocus(state.previousRowsButton);
-                }
-                EnableWindow(state.previousRowsButton, previousEnabled);
-                EnableWindow(state.nextRowsButton, nextEnabled);
-                setVisible(state.previousRowsButton, buttonVisible);
-                setVisible(state.rowsPageLabel, buttonVisible);
-                setVisible(state.nextRowsButton, buttonVisible);
-            }
-        }
-    }
-    for (HWND pageButton : state.pageButtons) {
-        SetWindowPos(pageButton, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
-    }
-    RedrawWindow(state.hWnd, nullptr, nullptr,
-                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-}
-
-// src/settings/bindings.h
-// Two-way sync between the settings controls and the edited settings.
-
-static int SelectedAccountIndex(const SettingsWindowState& state) {
-    if (!state.accountList) return -1;
-    return ListView_GetNextItem(state.accountList, -1, LVNI_SELECTED);
-}
-
-static uint64_t SelectedAccountIdentity(const SettingsWindowState& state) {
-    int index = SelectedAccountIndex(state);
-    std::lock_guard<std::mutex> lk(g_settingsMutex);
-    return index >= 0 && index < (int)g_settings.accounts.size() ?
-               AccountIdentityHash(g_settings.accounts[index]) : 0;
-}
-
-static void UpdateAccountButtons(SettingsWindowState& state) {
-    int index = SelectedAccountIndex(state);
-    bool selected = index >= 0;
-    AccountConfig account;
-    int accountCount = 0;
-    int visibleCount = 0;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        accountCount = (int)g_settings.accounts.size();
-        for (const auto& candidate : g_settings.accounts) {
-            if (!candidate.hidden) visibleCount++;
-        }
-        if (selected && index < accountCount) account = g_settings.accounts[index];
-        else selected = false;
-    }
-    bool loginInProgress = g_loginInProgress.load();
-    EnableWindow(GetDlgItem(state.hWnd, kAccountEdit), selected && !loginInProgress);
-    EnableWindow(GetDlgItem(state.hWnd, kAccountRemove), selected && !loginInProgress);
-    EnableWindow(GetDlgItem(state.hWnd, kAccountMoveUp), selected && index > 0);
-    EnableWindow(GetDlgItem(state.hWnd, kAccountMoveDown),
-                 selected && index + 1 < accountCount);
-    HWND visibilityButton = GetDlgItem(state.hWnd, kAccountToggleVisible);
-    EnableWindow(visibilityButton, selected && (account.hidden || visibleCount > 1));
-    SetWindowTextW(visibilityButton, selected && account.hidden ? L"Show" : L"Hide");
-
-    bool oauth = selected && account.provider != L"antigravity";
-    bool hasToken = false;
-    if (oauth) {
-        StoredToken token;
-        hasToken = LoadStoredToken(AccountIdentityHash(account), &token);
-    }
-    bool selectedSigningIn = selected && loginInProgress &&
-                             AccountIdentityHash(account) == g_loginAccountIdentity.load();
-    SetWindowTextW(GetDlgItem(state.hWnd, kAccountSignIn),
-                   selectedSigningIn ? L"Signing in..." :
-                   hasToken ? L"Re-sign" : L"Sign in");
-    EnableWindow(GetDlgItem(state.hWnd, kAccountSignIn),
-                 oauth && !loginInProgress);
-    EnableWindow(GetDlgItem(state.hWnd, kAccountSignOut), oauth && hasToken);
-}
-
-static void RefreshAccountList(SettingsWindowState& state) {
-    std::vector<AccountConfig> accounts;
-    bool historyEnabled;
-    bool skipHiddenPolling;
-    bool historyIdsPendingSave;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        accounts = g_settings.accounts;
-        historyEnabled = g_settings.historyEnabled;
-        skipHiddenPolling = g_settings.skipHiddenPolling;
-        historyIdsPendingSave = g_historyIdsPendingSave.load();
-    }
-    uint64_t selectedIdentity = 0;
-    int selected = SelectedAccountIndex(state);
-    if (selected >= 0) {
-        LVITEMW selectedItem{};
-        selectedItem.mask = LVIF_PARAM;
-        selectedItem.iItem = selected;
-        if (ListView_GetItem(state.accountList, &selectedItem)) {
-            selectedIdentity = (uint64_t)selectedItem.lParam;
-        }
-    }
-    ListView_DeleteAllItems(state.accountList);
-    int restoredSelection = -1;
-    bool loginInProgress = g_loginInProgress.load();
-    uint64_t loginIdentity = g_loginAccountIdentity.load();
-    for (size_t i = 0; i < accounts.size(); i++) {
-        LVITEMW item{};
-        item.mask = LVIF_TEXT | LVIF_PARAM;
-        item.iItem = (int)i;
-        item.pszText = const_cast<PWSTR>(accounts[i].label.c_str());
-        item.lParam = (LPARAM)AccountIdentityHash(accounts[i]);
-        ListView_InsertItem(state.accountList, &item);
-        if ((uint64_t)item.lParam == selectedIdentity) restoredSelection = (int)i;
-        ListView_SetItemText(state.accountList, (int)i, 1,
-                             const_cast<PWSTR>(ProviderDisplayName(accounts[i].provider)));
-        std::wstring bars;
-        if (accounts[i].showBars[kFiveHourBar]) bars += L"5h";
-        if (accounts[i].showBars[kWeeklyBar]) bars += bars.empty() ? L"Week" : L", Week";
-        if (accounts[i].showBars[kFableWeeklyBar]) {
-            bars += bars.empty() ? L"Fable" : L", Fable";
-        }
-        if (accounts[i].showBars[kExtraUsageBar]) {
-            PCWSTR name = accounts[i].provider == L"openai" ? L"Credits" : L"Extra";
-            if (!bars.empty()) bars += L", ";
-            bars += name;
-        }
-        ListView_SetItemText(state.accountList, (int)i, 2, const_cast<PWSTR>(bars.c_str()));
-        std::wstring visible = accounts[i].hidden ? L"No" : L"Yes";
-        ListView_SetItemText(state.accountList, (int)i, 3, visible.data());
-        std::wstring status;
-        if (loginInProgress && AccountIdentityHash(accounts[i]) == loginIdentity) {
-            status = L"Signing in...";
-        } else if (accounts[i].provider == L"antigravity") {
-            status = L"Uses local session";
-        } else {
-            StoredToken token;
-            status = LoadStoredToken(AccountIdentityHash(accounts[i]), &token) ?
-                         L"Signed in" : L"Not signed in";
-        }
-        ListView_SetItemText(state.accountList, (int)i, 4, const_cast<PWSTR>(status.c_str()));
-        PCWSTR recorded = !accounts[i].recordHistory ? L"No" :
-                          !historyEnabled ? L"User off" :
-                          historyIdsPendingSave ? L"Pending save" :
-                          !accounts[i].historyId ? L"Unavailable" :
-                          accounts[i].hidden && skipHiddenPolling ? L"Paused" :
-                          g_historyStorageError ? L"Storage error" : L"Yes";
-        ListView_SetItemText(state.accountList, (int)i, 5, const_cast<PWSTR>(recorded));
-    }
-    if (restoredSelection >= 0) {
-        ListView_SetItemState(state.accountList, restoredSelection, LVIS_SELECTED | LVIS_FOCUSED,
-                              LVIS_SELECTED | LVIS_FOCUSED);
-    }
-    UpdateAccountButtons(state);
-}
-
-static void SetControlInt(SettingsWindowState& state, int id, int value) {
-    wchar_t text[32];
-    swprintf(text, ARRAYSIZE(text), L"%d", value);
-    HWND control = GetDlgItem(state.hWnd, id);
-    SetWindowTextW(control, text);
-    for (const auto& pageRows : state.rows) {
-        for (const auto& row : pageRows) {
-            if (row.control != control) continue;
-            if (row.spin) SendMessageW(row.spin, UDM_SETPOS32, 0, value);
-            if (row.slider) {
-                int maximum = (int)SendMessageW(row.slider, TBM_GETRANGEMAX, 0, 0);
-                SendMessageW(row.slider, TBM_SETPOS, TRUE,
-                             std::clamp(value, row.minimum, maximum));
-            }
-            return;
-        }
-    }
-}
-
-static int GetControlInt(HWND hWnd, int id, int fallback) {
-    wchar_t text[64] = {};
-    GetWindowTextW(GetDlgItem(hWnd, id), text, ARRAYSIZE(text));
-    wchar_t* end = nullptr;
-    long value = wcstol(text, &end, 10);
-    return end && end != text ? (int)value : fallback;
-}
-
-static SettingsRow* FindSettingsRow(SettingsWindowState& state, HWND control) {
-    for (auto& pageRows : state.rows) {
-        for (auto& row : pageRows) {
-            if (row.control == control || row.slider == control || row.spin == control) {
-                return &row;
-            }
-        }
-    }
-    return nullptr;
-}
-
-static void RefreshColorPreviews(SettingsWindowState& state, const Settings& settings) {
-    if (SettingsRow* row = FindSettingsRow(
-            state, GetDlgItem(state.hWnd, kPaceTickColor))) {
-        row->previewColor = settings.paceTickColor;
-        if (row->preview) InvalidateRect(row->preview, nullptr, TRUE);
-    }
-    const int ids[] = {kYellowThreshold, kOrangeThreshold, kRedThreshold};
-    const COLORREF normalColors[] = {RGB(0xFD, 0xD8, 0x35), RGB(0xFB, 0x8C, 0x00),
-                                     RGB(0xE5, 0x39, 0x35)};
-    const COLORREF colorblindColors[] = {RGB(0x56, 0xB4, 0xE9), RGB(0xE6, 0x9F, 0x00),
-                                         RGB(0xD5, 0x5E, 0x00)};
-    for (int i = 0; i < 3; i++) {
-        SettingsRow* row = FindSettingsRow(state, GetDlgItem(state.hWnd, ids[i]));
-        if (!row || !row->preview) continue;
-        row->previewColor = settings.colorblindMode ? colorblindColors[i] : normalColors[i];
-        InvalidateRect(row->preview, nullptr, TRUE);
-    }
-}
-
-static void EnableSettingsRow(SettingsWindowState& state, int id, bool enabled) {
-    HWND control = GetDlgItem(state.hWnd, id);
-    for (const auto& pageRows : state.rows) {
-        for (const auto& row : pageRows) {
-            if (row.control != control) continue;
-            if (row.label) EnableWindow(row.label, enabled);
-            EnableWindow(row.control, enabled);
-            if (row.slider) EnableWindow(row.slider, enabled);
-            if (row.spin) EnableWindow(row.spin, enabled);
-            return;
-        }
-    }
-}
-
-static void UpdateDependentSettingsControls(SettingsWindowState& state) {
-    EnableSettingsRow(state, kMonitorNumber,
-                      SendDlgItemMessageW(state.hWnd, kMonitorMode,
-                                          CB_GETCURSEL, 0, 0) == 2);
-    // Rows the selected layout ignores stay disabled. No selection commits as stacked bars.
-    LRESULT layout = SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0);
-    bool barLayout = layout <= (LRESULT)BarLayout::Vertical;
-    bool ringLayout = layout == (LRESULT)BarLayout::SegmentedRing ||
-                      layout == (LRESULT)BarLayout::ConcentricRings;
-    bool paceMarksShown = layout != (LRESULT)BarLayout::LogoHeadline;
-    EnableSettingsRow(state, kBarLength, barLayout);
-    EnableSettingsRow(state, kBarThickness, barLayout);
-    EnableSettingsRow(state, kBarGap, barLayout);
-    EnableSettingsRow(state, kRingSize, ringLayout);
-    EnableSettingsRow(state, kRingThickness, ringLayout);
-    EnableSettingsRow(state, kLabelPosition, barLayout);
-    bool labelsVisible = barLayout &&
-                         SendDlgItemMessageW(state.hWnd, kLabelPosition,
-                                             CB_GETCURSEL, 0, 0) !=
-                             (LRESULT)LabelPosition::Hidden;
-    EnableSettingsRow(state, kLabelFontSize, labelsVisible);
-    EnableSettingsRow(state, kLabelGap, labelsVisible);
-    EnableSettingsRow(state, kShowBarLabels, barLayout);
-    EnableSettingsRow(state, kPercentTextVisibility, barLayout);
-    LRESULT percentTextVisibility = SendDlgItemMessageW(
-        state.hWnd, kPercentTextVisibility, CB_GETCURSEL, 0, 0);
-    bool percentTextVisible =
-        barLayout && percentTextVisibility > (LRESULT)PercentTextVisibility::Never;
-    bool barTextVisible =
-        percentTextVisible ||
-        (barLayout &&
-         SendDlgItemMessageW(state.hWnd, kShowBarLabels, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    EnableSettingsRow(state, kPercentFontSize, barTextVisible);
-    EnableSettingsRow(state, kPercentTextAlignment, percentTextVisible);
-    EnableSettingsRow(state, kShowExtraBarAmounts, percentTextVisible);
-    EnableSettingsRow(state, kShowPaceTicks, paceMarksShown);
-    bool paceTicksVisible = paceMarksShown &&
-                            SendDlgItemMessageW(state.hWnd, kShowPaceTicks,
-                                                BM_GETCHECK, 0, 0) == BST_CHECKED;
-    EnableSettingsRow(state, kPaceTickStyle, barLayout && paceTicksVisible);
-    EnableSettingsRow(state, kPaceTickColor, paceTicksVisible);
-    EnableSettingsRow(state, kPollMinutes,
-                      SendDlgItemMessageW(state.hWnd, kPollPreset,
-                                          CB_GETCURSEL, 0, 0) == 6);
-    EnableSettingsRow(state, kHistoryRetentionDays,
-                      SendDlgItemMessageW(state.hWnd, kHistoryEnabled,
-                                          BM_GETCHECK, 0, 0) == BST_CHECKED);
-}
-
-static void PopulateMonitorCombo(SettingsWindowState& state, int selectedMonitorNumber) {
-    HWND combo = GetDlgItem(state.hWnd, kMonitorNumber);
-    SendMessageW(combo, CB_RESETCONTENT, 0, 0);
-    auto displays = FindCurrentProcessTaskbarDisplays();
-    int selectedIndex = -1;
-    for (size_t i = 0; i < displays.size(); i++) {
-        const auto& display = displays[i];
-        int width = std::abs(display.rect.right - display.rect.left);
-        int height = std::abs(display.rect.bottom - display.rect.top);
-        wchar_t text[128];
-        swprintf(text, ARRAYSIZE(text), L"Display %d - %dx%d%s", (int)i + 1,
-                 width, height, display.primary ? L" (Primary)" : L"");
-        int item = (int)SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
-        SendMessageW(combo, CB_SETITEMDATA, item, (LPARAM)(i + 1));
-        if ((int)i + 1 == selectedMonitorNumber) selectedIndex = item;
-    }
-    if (selectedIndex < 0) {
-        wchar_t text[96];
-        swprintf(text, ARRAYSIZE(text), L"Display %d - unavailable", selectedMonitorNumber);
-        selectedIndex = (int)SendMessageW(combo, CB_ADDSTRING, 0,
-                                          reinterpret_cast<LPARAM>(text));
-        SendMessageW(combo, CB_SETITEMDATA, selectedIndex, selectedMonitorNumber);
-    }
-    SendMessageW(combo, CB_SETCURSEL, selectedIndex, 0);
-}
-
-static void RefreshSettingsControls(SettingsWindowState& state) {
-    Settings s;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        s = g_settings;
-    }
-    state.updating = true;
-    SendDlgItemMessageW(state.hWnd, kMonitorMode, CB_SETCURSEL,
-                        s.taskbarMonitorMode == TaskbarMonitorMode::All ? 1 :
-                        s.taskbarMonitorMode == TaskbarMonitorMode::Specific ? 2 : 0, 0);
-    PopulateMonitorCombo(state, s.taskbarMonitorNumber);
-    SendDlgItemMessageW(state.hWnd, kBarLayout, CB_SETCURSEL, (int)s.barLayout, 0);
-    SendDlgItemMessageW(state.hWnd, kBarMode, CB_SETCURSEL,
-                        s.barMode == BarMode::Remaining ? 1 : 0, 0);
-    SetControlInt(state, kBarLength, s.barLength);
-    SetControlInt(state, kBarThickness, s.barThickness);
-    SetControlInt(state, kRingSize, s.ringSize);
-    SetControlInt(state, kRingThickness, s.ringThickness);
-    SetControlInt(state, kLabelFontSize, s.labelFontSize);
-    SetControlInt(state, kPercentFontSize, s.percentFontSize);
-    SetControlInt(state, kAccountMargin, s.accountMargin);
-    SetControlInt(state, kLabelGap, s.labelGap);
-    SetControlInt(state, kBarGap, s.barGap);
-    SetControlInt(state, kRightMargin, s.rightMargin);
-
-    auto setCheck = [&](int id, bool checked) {
-        SendDlgItemMessageW(state.hWnd, id, BM_SETCHECK,
-                            checked ? BST_CHECKED : BST_UNCHECKED, 0);
-    };
-    bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
-    setCheck(kVisualTestModeLayout, visualTestMode);
-    setCheck(kVisualTestModeDisplay, visualTestMode);
-    SendDlgItemMessageW(state.hWnd, kLabelPosition, CB_SETCURSEL,
-                        (int)s.labelPosition, 0);
-    setCheck(kShowPaceTicks, s.showPaceTicks);
-    SendDlgItemMessageW(state.hWnd, kPaceTickStyle, CB_SETCURSEL,
-                        (int)s.paceTickStyle, 0);
-    setCheck(kShowBarLabels, s.showBarLabels);
-    SendDlgItemMessageW(state.hWnd, kPercentTextVisibility, CB_SETCURSEL,
-                        (int)s.percentTextVisibility, 0);
-    SendDlgItemMessageW(state.hWnd, kPercentTextAlignment, CB_SETCURSEL,
-                        (int)s.percentTextAlignment, 0);
-    setCheck(kShowExtraBarAmounts, s.showExtraBarAmounts);
-    setCheck(kShowOpenAiExtraLimits, s.showOpenAiExtraLimits);
-    setCheck(kColorblindMode, s.colorblindMode);
-    setCheck(kShowStaleWarning, s.showStaleWarning);
-    SetControlInt(state, kYellowThreshold, s.yellowThreshold);
-    SetControlInt(state, kOrangeThreshold, s.orangeThreshold);
-    SetControlInt(state, kRedThreshold, s.redThreshold);
-
-    setCheck(kShowDetailsOnHover, s.showDetailsOnHover);
-    const int pollPresets[] = {2, 5, 10, 15, 30, 60};
-    int pollPresetIndex = 6;
-    for (int i = 0; i < (int)ARRAYSIZE(pollPresets); i++) {
-        if (s.pollMinutes == pollPresets[i]) {
-            pollPresetIndex = i;
-            break;
-        }
-    }
-    SendDlgItemMessageW(state.hWnd, kPollPreset, CB_SETCURSEL, pollPresetIndex, 0);
-    SetControlInt(state, kPollMinutes, s.pollMinutes);
-    setCheck(kEnableNotifications, s.enableNotifications);
-    setCheck(kHistoryEnabled, s.historyEnabled);
-    SetControlInt(state, kHistoryRetentionDays, s.historyRetentionDays);
-    setCheck(kSkipHiddenPolling, s.skipHiddenPolling);
-    RefreshColorPreviews(state, s);
-    state.updating = false;
-    UpdateDependentSettingsControls(state);
-    RefreshAccountList(state);
-}
-
-static void CommitScalarSettings(SettingsWindowState& state, bool refreshControls = true) {
-    if (state.updating || g_unloading) return;
-    if (!GetDlgItem(state.hWnd, kMonitorMode)) return;
-    KillTimer(state.hWnd, kSettingsAutosaveTimer);
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings s;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        s = g_settings;
-    }
-    auto getBoundedInt = [&](int id, int fallback) {
-        int value = GetControlInt(state.hWnd, id, fallback);
-        if (SettingsRow* row = FindSettingsRow(state, GetDlgItem(state.hWnd, id))) {
-            value = std::clamp(value, row->minimum, row->maximum);
-        }
-        return value;
-    };
-    int selection = (int)SendDlgItemMessageW(state.hWnd, kMonitorMode, CB_GETCURSEL, 0, 0);
-    s.taskbarMonitorMode = selection == 1 ? TaskbarMonitorMode::All :
-                           selection == 2 ? TaskbarMonitorMode::Specific :
-                                            TaskbarMonitorMode::Primary;
-    int monitorSelection = (int)SendDlgItemMessageW(state.hWnd, kMonitorNumber,
-                                                     CB_GETCURSEL, 0, 0);
-    LRESULT monitorNumber = monitorSelection >= 0 ?
-        SendDlgItemMessageW(state.hWnd, kMonitorNumber, CB_GETITEMDATA,
-                            monitorSelection, 0) : CB_ERR;
-    if (monitorNumber != CB_ERR) s.taskbarMonitorNumber = (int)monitorNumber;
-    int barLayout = (int)SendDlgItemMessageW(state.hWnd, kBarLayout, CB_GETCURSEL, 0, 0);
-    s.barLayout = barLayout >= 0 && barLayout <= (int)BarLayout::LogoHeadline ?
-                      (BarLayout)barLayout : BarLayout::Stacked;
-    s.barMode = SendDlgItemMessageW(state.hWnd, kBarMode, CB_GETCURSEL, 0, 0) == 1 ?
-                        BarMode::Remaining : BarMode::Used;
-    s.barLength = getBoundedInt(kBarLength, s.barLength);
-    s.barThickness = getBoundedInt(kBarThickness, s.barThickness);
-    s.ringSize = getBoundedInt(kRingSize, s.ringSize);
-    s.ringThickness = getBoundedInt(kRingThickness, s.ringThickness);
-    s.labelFontSize = getBoundedInt(kLabelFontSize, s.labelFontSize);
-    s.percentFontSize = getBoundedInt(kPercentFontSize, s.percentFontSize);
-    s.accountMargin = getBoundedInt(kAccountMargin, s.accountMargin);
-    s.labelGap = getBoundedInt(kLabelGap, s.labelGap);
-    s.barGap = getBoundedInt(kBarGap, s.barGap);
-    s.rightMargin = getBoundedInt(kRightMargin, s.rightMargin);
-    auto isChecked = [&](int id) {
-        return SendDlgItemMessageW(state.hWnd, id, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    };
-    int labelPosition = (int)SendDlgItemMessageW(state.hWnd, kLabelPosition,
-                                                 CB_GETCURSEL, 0, 0);
-    s.labelPosition = labelPosition >= 0 && labelPosition <= (int)LabelPosition::Bottom ?
-                          (LabelPosition)labelPosition : LabelPosition::Left;
-    s.showPaceTicks = isChecked(kShowPaceTicks);
-    int paceTickStyle = (int)SendDlgItemMessageW(state.hWnd, kPaceTickStyle,
-                                                 CB_GETCURSEL, 0, 0);
-    s.paceTickStyle = paceTickStyle >= 0 && paceTickStyle <= (int)PaceTickStyle::Dot ?
-                          (PaceTickStyle)paceTickStyle : PaceTickStyle::Caret;
-    if (SettingsRow* row = FindSettingsRow(
-            state, GetDlgItem(state.hWnd, kPaceTickColor))) {
-        s.paceTickColor = row->previewColor;
-    }
-    s.showBarLabels = isChecked(kShowBarLabels);
-    int percentTextVisibility = (int)SendDlgItemMessageW(
-        state.hWnd, kPercentTextVisibility, CB_GETCURSEL, 0, 0);
-    s.percentTextVisibility =
-        percentTextVisibility >= 0 &&
-                percentTextVisibility <= (int)PercentTextVisibility::Always ?
-            (PercentTextVisibility)percentTextVisibility : PercentTextVisibility::Hover;
-    int percentTextAlignment = (int)SendDlgItemMessageW(
-        state.hWnd, kPercentTextAlignment, CB_GETCURSEL, 0, 0);
-    s.percentTextAlignment =
-        percentTextAlignment >= 0 && percentTextAlignment <= (int)PercentTextAlignment::Right ?
-            (PercentTextAlignment)percentTextAlignment : PercentTextAlignment::Adaptive;
-    s.showExtraBarAmounts = isChecked(kShowExtraBarAmounts);
-    s.showOpenAiExtraLimits = isChecked(kShowOpenAiExtraLimits);
-    s.colorblindMode = isChecked(kColorblindMode);
-    s.showStaleWarning = isChecked(kShowStaleWarning);
-    s.yellowThreshold = getBoundedInt(kYellowThreshold, s.yellowThreshold);
-    s.orangeThreshold = getBoundedInt(kOrangeThreshold, s.orangeThreshold);
-    s.redThreshold = getBoundedInt(kRedThreshold, s.redThreshold);
-    s.showDetailsOnHover = isChecked(kShowDetailsOnHover);
-    const int pollPresets[] = {2, 5, 10, 15, 30, 60};
-    int pollPresetIndex = (int)SendDlgItemMessageW(state.hWnd, kPollPreset,
-                                                   CB_GETCURSEL, 0, 0);
-    s.pollMinutes = pollPresetIndex >= 0 && pollPresetIndex < (int)ARRAYSIZE(pollPresets) ?
-                        pollPresets[pollPresetIndex] :
-                        getBoundedInt(kPollMinutes, s.pollMinutes);
-    s.enableNotifications = isChecked(kEnableNotifications);
-    s.historyEnabled = isChecked(kHistoryEnabled);
-    s.historyRetentionDays = getBoundedInt(kHistoryRetentionDays, s.historyRetentionDays);
-    s.skipHiddenPolling = isChecked(kSkipHiddenPolling);
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(s));
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not save settings.", L"Taskbar AI Quota Bars",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
-    if (refreshControls) RefreshSettingsControls(state);
-}
-
-// src/settings/account-editor.h
-// Account editor dialog of the classic settings window, and its add, edit, remove, reorder and
-// hide buttons on the shared account commands (settings/account-commands.h).
-
-static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
-    auto sc = [&](int value) { return ScaleForDpi(value, state.dpi); };
-    RECT client{};
-    GetClientRect(hWnd, &client);
-    int width = client.right;
-    int height = client.bottom;
-    int controlX = width < sc(390) ? sc(100) : sc(130);
-    int controlWidth = std::max(sc(120), width - controlX - sc(16));
-    SetWindowPos(GetDlgItem(hWnd, kAccountProviderLabel), nullptr,
-                 sc(16), sc(18), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountProvider), nullptr,
-                 controlX, sc(14), controlWidth, sc(220), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountLabelLabel), nullptr,
-                 sc(16), sc(58), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountLabel), nullptr,
-                 controlX, sc(54), controlWidth, sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountTileIdentityLabel), nullptr,
-                 sc(16), sc(98), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountTileIdentity), nullptr,
-                 controlX, sc(94), controlWidth, sc(220), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountTileTextLabel), nullptr,
-                 sc(16), sc(138), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountTileText), nullptr,
-                 controlX, sc(134), sc(80), sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
-                 sc(16), sc(178), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
-                 sc(16), sc(208), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
-                 sc(16), sc(238), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    // For OpenAI the 4th checkbox reads "Show credits bar, max:" and the max edit follows it.
-    bool openai = SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0) == 1;
-    SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
-                 sc(16), sc(268), openai ? sc(164) : width - sc(32), sc(24),
-                 SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
-                 sc(180), sc(268), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
-                 sc(16), sc(298), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
-                 sc(16), sc(326), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
-    int buttonY = std::max(sc(386), height - sc(46));
-    SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
-                 width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr,
-                 width - sc(96), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
-}
-
-static void RecreateAccountEditorVisuals(HWND hWnd, AccountEditorState& state) {
-    state.dark = IsWindowsDarkMode();
-    if (state.font) DeleteObject(state.font);
-    if (state.backgroundBrush) DeleteObject(state.backgroundBrush);
-    if (state.inputBrush) DeleteObject(state.inputBrush);
-    LOGFONTW lf{};
-    lf.lfHeight = -MulDiv(9, (int)state.dpi, 72);
-    lf.lfQuality = CLEARTYPE_QUALITY;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
-    state.font = CreateFontIndirectW(&lf);
-    state.backgroundBrush = CreateSolidBrush(state.dark ? RGB(32, 32, 32) :
-                                                          GetSysColor(COLOR_BTNFACE));
-    state.inputBrush = CreateSolidBrush(state.dark ? RGB(43, 43, 43) :
-                                                     GetSysColor(COLOR_WINDOW));
-    EnumChildWindows(hWnd, [](HWND child, LPARAM param) -> BOOL {
-        SendMessageW(child, WM_SETFONT, param, TRUE);
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(state.font));
-    ApplyNativeWindowTheme(hWnd, state.dark);
-    RedrawWindow(hWnd, nullptr, nullptr,
-                 RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
-}
-
-static void UpdateAccountEditorProvider(HWND hWnd) {
-    int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
-    bool anthropic = providerIndex == 0;
-    bool openai = providerIndex == 1;
-    HWND fableWeekly = GetDlgItem(hWnd, kAccountFableWeekly);
-    HWND extraUsage = GetDlgItem(hWnd, kAccountExtraUsage);
-    EnableWindow(fableWeekly, anthropic);
-    EnableWindow(extraUsage, anthropic || openai);
-    SetWindowTextW(extraUsage, openai ? L"Show credits bar, max:" :
-                                        L"Show monthly extra-usage bar");
-    ShowWindow(GetDlgItem(hWnd, kAccountCreditsMax), openai ? SW_SHOW : SW_HIDE);
-}
-
-static void UpdateAccountEditorTileText(HWND hWnd) {
-    bool text = SendDlgItemMessageW(hWnd, kAccountTileIdentity, CB_GETCURSEL, 0, 0) ==
-                (LRESULT)TileIdentity::Text;
-    EnableWindow(GetDlgItem(hWnd, kAccountTileTextLabel), text);
-    EnableWindow(GetDlgItem(hWnd, kAccountTileText), text);
-}
-
-static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
-                                             WPARAM wParam, LPARAM lParam) {
-    auto* state = reinterpret_cast<AccountEditorState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
-    switch (message) {
-        case WM_CREATE: {
-            auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
-            state = reinterpret_cast<AccountEditorState*>(create->lpCreateParams);
-            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
-            state->dpi = WindowDpi(hWnd);
-            auto sc = [&](int value) { return ScaleForDpi(value, state->dpi); };
-            HWND providerLabel = CreateWindowExW(0, L"STATIC", L"Provider", WS_CHILD | WS_VISIBLE,
-                                                  sc(16), sc(18), sc(100), sc(22), hWnd,
-                                                  reinterpret_cast<HMENU>(kAccountProviderLabel),
-                                                  GetModuleHandleW(nullptr), nullptr);
-            HWND provider = CreateWindowExW(0, L"COMBOBOX", L"",
-                                             WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
-                                             sc(130), sc(14), sc(240), sc(220), hWnd,
-                                             reinterpret_cast<HMENU>(kAccountProvider),
-                                             GetModuleHandleW(nullptr), nullptr);
-            AddComboItems(provider, {L"Anthropic (Claude)", L"OpenAI (ChatGPT/Codex)",
-                                     L"Google Antigravity"});
-            int providerIndex = state->account.provider == L"openai" ? 1 :
-                                state->account.provider == L"antigravity" ? 2 : 0;
-            SendMessageW(provider, CB_SETCURSEL, providerIndex, 0);
-
-            HWND labelLabel = CreateWindowExW(0, L"STATIC", L"Label", WS_CHILD | WS_VISIBLE,
-                                               sc(16), sc(58), sc(100), sc(22), hWnd,
-                                               reinterpret_cast<HMENU>(kAccountLabelLabel),
-                                               GetModuleHandleW(nullptr), nullptr);
-            state->edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", state->account.label.c_str(),
-                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-                                           sc(130), sc(54), sc(240), sc(26), hWnd,
-                                           reinterpret_cast<HMENU>(kAccountLabel),
-                                           GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(state->edit, EM_SETLIMITTEXT, 64, 0);
-
-            // Tile identity is used only by the ring and logo layouts.
-            CreateWindowExW(0, L"STATIC", L"Tile identity", WS_CHILD | WS_VISIBLE,
-                            sc(16), sc(98), sc(100), sc(22), hWnd,
-                            reinterpret_cast<HMENU>(kAccountTileIdentityLabel),
-                            GetModuleHandleW(nullptr), nullptr);
-            HWND tileIdentity = CreateWindowExW(
-                0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
-                sc(130), sc(94), sc(240), sc(220), hWnd,
-                reinterpret_cast<HMENU>(kAccountTileIdentity), GetModuleHandleW(nullptr), nullptr);
-            AddComboItems(tileIdentity, {L"Logo + number badge", L"Logo only", L"Label text"});
-            SendMessageW(tileIdentity, CB_SETCURSEL, (int)state->account.tileIdentity, 0);
-            CreateWindowExW(0, L"STATIC", L"Short text", WS_CHILD | WS_VISIBLE,
-                            sc(16), sc(138), sc(100), sc(22), hWnd,
-                            reinterpret_cast<HMENU>(kAccountTileTextLabel),
-                            GetModuleHandleW(nullptr), nullptr);
-            HWND tileText = CreateWindowExW(
-                WS_EX_CLIENTEDGE, L"EDIT", state->account.tileText.c_str(),
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-                sc(130), sc(134), sc(80), sc(26), hWnd,
-                reinterpret_cast<HMENU>(kAccountTileText), GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(tileText, EM_SETLIMITTEXT, 4, 0);
-
-            HWND fiveHour = CreateWindowExW(0, L"BUTTON", L"Show 5-hour bar",
-                                             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                             sc(16), sc(178), sc(180), sc(24), hWnd,
-                                             reinterpret_cast<HMENU>(kAccountFiveHour),
-                                             GetModuleHandleW(nullptr), nullptr);
-            HWND weekly = CreateWindowExW(0, L"BUTTON", L"Show weekly bar",
-                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                           sc(16), sc(208), sc(180), sc(24), hWnd,
-                                           reinterpret_cast<HMENU>(kAccountWeekly),
-                                           GetModuleHandleW(nullptr), nullptr);
-            HWND fable = CreateWindowExW(0, L"BUTTON", L"Show Fable weekly bar",
-                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                          sc(16), sc(238), sc(220), sc(24), hWnd,
-                                          reinterpret_cast<HMENU>(kAccountFableWeekly),
-                                          GetModuleHandleW(nullptr), nullptr);
-            HWND extra = CreateWindowExW(0, L"BUTTON", L"Show monthly extra-usage bar",
-                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                                          sc(16), sc(268), sc(260), sc(24), hWnd,
-                                          reinterpret_cast<HMENU>(kAccountExtraUsage),
-                                          GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(fiveHour, BM_SETCHECK,
-                         state->account.showBars[kFiveHourBar] ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendMessageW(weekly, BM_SETCHECK,
-                         state->account.showBars[kWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendMessageW(fable, BM_SETCHECK,
-                         state->account.showBars[kFableWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendMessageW(extra, BM_SETCHECK,
-                         state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
-            // Shown only for OpenAI; UpdateAccountEditorProvider toggles visibility.
-            std::wstring creditsMaxText = state->account.creditsMax > 0 ?
-                std::to_wstring(state->account.creditsMax) : L"";
-            HWND creditsMax = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", creditsMaxText.c_str(),
-                                               WS_CHILD | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL,
-                                               sc(180), sc(268), sc(80), sc(24), hWnd,
-                                               reinterpret_cast<HMENU>(kAccountCreditsMax),
-                                               GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(creditsMax, EM_SETLIMITTEXT, 9, 0);
-
-            HWND recordHistory = CreateWindowExW(
-                0, L"BUTTON", L"Record history", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                sc(16), sc(298), sc(260), sc(24), hWnd,
-                reinterpret_cast<HMENU>(kAccountRecordHistory), GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(recordHistory, BM_SETCHECK,
-                         state->account.recordHistory ? BST_CHECKED : BST_UNCHECKED, 0);
-            CreateWindowExW(0, L"STATIC",
-                L"History follows this entry, even after signing in again. "
-                L"Use a new entry for a different login.",
-                WS_CHILD | WS_VISIBLE | SS_LEFT, 0, 0, 0, 0, hWnd,
-                reinterpret_cast<HMENU>(kAccountHistoryIdentityNote),
-                GetModuleHandleW(nullptr), nullptr);
-            state->toolTip = CreateWindowExW(
-                WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
-                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
-            if (state->toolTip) {
-                SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0, sc(360));
-                auto addToolTip = [&](HWND control, PCWSTR text) {
-                    if (!control) return;
-                    TOOLINFOW info{};
-                    info.cbSize = sizeof(info);
-                    info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-                    info.hwnd = hWnd;
-                    info.uId = reinterpret_cast<UINT_PTR>(control);
-                    info.lpszText = const_cast<PWSTR>(text);
-                    SendMessageW(state->toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&info));
-                };
-                addToolTip(tileIdentity,
-                    L"Applies only to the ring and logo layouts; stacked and vertical bars show "
-                    L"the label instead. The number badge appears only when several accounts "
-                    L"share this provider.");
-                addToolTip(tileText,
-                    L"Up to 4 characters shown by Label text in the ring and logo layouts. "
-                    L"Leave empty to use the label without spaces.");
-                addToolTip(recordHistory,
-                    L"This account preference is shared across Windows users. Records only when "
-                    L"Enable local history is on for the current Windows user in Behavior. "
-                    L"Do not poll hidden accounts overrides this checkbox: hidden accounts are not "
-                    L"polled or recorded while that option is on. History follows this configured "
-                    L"account, not the signed-in login. Use a new account entry for a different login.");
-            }
-
-            HWND ok = CreateWindowExW(0, L"BUTTON", L"OK",
-                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-                                      sc(204), sc(232), sc(80), sc(30), hWnd,
-                                      reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
-            HWND cancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
-                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                          sc(290), sc(232), sc(80), sc(30), hWnd,
-                                          reinterpret_cast<HMENU>(IDCANCEL), GetModuleHandleW(nullptr), nullptr);
-            (void)providerLabel;
-            (void)labelLabel;
-            (void)ok;
-            (void)cancel;
-            RecreateAccountEditorVisuals(hWnd, *state);
-            LayoutAccountEditor(hWnd, *state);
-            UpdateAccountEditorProvider(hWnd);
-            UpdateAccountEditorTileText(hWnd);
-            SetFocus(state->edit);
-            return 0;
-        }
-        case WM_COMMAND:
-            if (!state) break;
-            if (LOWORD(wParam) == kAccountProvider && HIWORD(wParam) == CBN_SELCHANGE) {
-                UpdateAccountEditorProvider(hWnd);
-                LayoutAccountEditor(hWnd, *state);
-                return 0;
-            }
-            if (LOWORD(wParam) == kAccountTileIdentity && HIWORD(wParam) == CBN_SELCHANGE) {
-                UpdateAccountEditorTileText(hWnd);
-                return 0;
-            }
-            if (LOWORD(wParam) == IDOK) {
-                int length = GetWindowTextLengthW(state->edit);
-                std::wstring label(length + 1, L'\0');
-                GetWindowTextW(state->edit, label.data(), length + 1);
-                label.resize(length);
-                size_t first = label.find_first_not_of(L" \t\r\n");
-                size_t last = label.find_last_not_of(L" \t\r\n");
-                label = first == std::wstring::npos ? L"" : label.substr(first, last - first + 1);
-                if (label.empty()) {
-                    SettingsMessageBoxW(hWnd, L"Enter an account label.", L"Account",
-                                MB_OK | MB_ICONWARNING);
-                    SetFocus(state->edit);
-                    return 0;
-                }
-                int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider,
-                                                              CB_GETCURSEL, 0, 0);
-                state->account.provider = providerIndex == 1 ? L"openai" :
-                                          providerIndex == 2 ? L"antigravity" : L"anthropic";
-                state->account.label = std::move(label);
-                int tileIdentity = (int)SendDlgItemMessageW(hWnd, kAccountTileIdentity,
-                                                            CB_GETCURSEL, 0, 0);
-                state->account.tileIdentity =
-                    tileIdentity >= 0 && tileIdentity <= (int)TileIdentity::Text ?
-                        (TileIdentity)tileIdentity : TileIdentity::LogoBadge;
-                // Settings normalization trims and caps the text.
-                wchar_t tileText[16] = {};
-                GetDlgItemTextW(hWnd, kAccountTileText, tileText, ARRAYSIZE(tileText));
-                state->account.tileText = tileText;
-                state->account.recordHistory =
-                    IsDlgButtonChecked(hWnd, kAccountRecordHistory) == BST_CHECKED;
-                state->account.showBars[kFiveHourBar] =
-                    IsDlgButtonChecked(hWnd, kAccountFiveHour) == BST_CHECKED;
-                state->account.showBars[kWeeklyBar] =
-                    IsDlgButtonChecked(hWnd, kAccountWeekly) == BST_CHECKED;
-                state->account.showBars[kFableWeeklyBar] =
-                    state->account.provider == L"anthropic" &&
-                    IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
-                bool openai = state->account.provider == L"openai";
-                state->account.showBars[kExtraUsageBar] =
-                    (state->account.provider == L"anthropic" || openai) &&
-                    IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
-                state->account.creditsMax =
-                    openai ? (int)GetDlgItemInt(hWnd, kAccountCreditsMax, nullptr, FALSE) : 0;
-                if (openai && state->account.showBars[kExtraUsageBar] &&
-                    state->account.creditsMax <= 0) {
-                    SettingsMessageBoxW(hWnd, L"Enter the credits max for the credits bar.",
-                                        L"Account", MB_OK | MB_ICONWARNING);
-                    SetFocus(GetDlgItem(hWnd, kAccountCreditsMax));
-                    return 0;
-                }
-                if (!state->account.showBars[kFiveHourBar] &&
-                    !state->account.showBars[kWeeklyBar] &&
-                    !state->account.showBars[kFableWeeklyBar] &&
-                    !state->account.showBars[kExtraUsageBar]) {
-                    SettingsMessageBoxW(hWnd, L"Select at least one quota bar.", L"Account",
-                                MB_OK | MB_ICONWARNING);
-                    return 0;
-                }
-                bool duplicate;
-                {
-                    std::lock_guard<std::mutex> lk(g_settingsMutex);
-                    duplicate = HasDuplicateAccount(g_settings, state->originalIdentity,
-                                                    state->account);
-                }
-                if (duplicate) {
-                    SettingsMessageBoxW(hWnd,
-                                        L"That provider and label are already configured.",
-                                        L"Account", MB_OK | MB_ICONWARNING);
-                    SetFocus(state->edit);
-                    return 0;
-                }
-                state->accepted = true;
-                DestroyWindow(hWnd);
-                return 0;
-            }
-            if (LOWORD(wParam) == IDCANCEL) {
-                DestroyWindow(hWnd);
-                return 0;
-            }
-            break;
-        case WM_CTLCOLORSTATIC:
-        case WM_CTLCOLORBTN:
-            if (state && state->dark) {
-                SetTextColor(reinterpret_cast<HDC>(wParam), RGB(235, 235, 235));
-                SetBkColor(reinterpret_cast<HDC>(wParam), RGB(32, 32, 32));
-                return reinterpret_cast<LRESULT>(state->backgroundBrush);
-            }
-            break;
-        case WM_CTLCOLOREDIT:
-        case WM_CTLCOLORLISTBOX:
-            if (state && state->dark) {
-                SetTextColor(reinterpret_cast<HDC>(wParam), RGB(235, 235, 235));
-                SetBkColor(reinterpret_cast<HDC>(wParam), RGB(43, 43, 43));
-                return reinterpret_cast<LRESULT>(state->inputBrush);
-            }
-            break;
-        case WM_DPICHANGED:
-            if (state) {
-                state->dpi = HIWORD(wParam);
-                auto* suggested = reinterpret_cast<RECT*>(lParam);
-                MONITORINFO monitorInfo{sizeof(monitorInfo)};
-                GetMonitorInfoW(MonitorFromRect(suggested, MONITOR_DEFAULTTONEAREST),
-                                &monitorInfo);
-                int width = std::min((int)(suggested->right - suggested->left),
-                                     (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
-                int height = std::min((int)(suggested->bottom - suggested->top),
-                                      (int)(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top));
-                int x = std::clamp((int)suggested->left, (int)monitorInfo.rcWork.left,
-                                   (int)monitorInfo.rcWork.right - width);
-                int y = std::clamp((int)suggested->top, (int)monitorInfo.rcWork.top,
-                                   (int)monitorInfo.rcWork.bottom - height);
-                SetWindowPos(hWnd, nullptr, x, y, width, height,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-                RecreateAccountEditorVisuals(hWnd, *state);
-                LayoutAccountEditor(hWnd, *state);
-            }
-            return 0;
-        case WM_SETTINGCHANGE:
-        case WM_THEMECHANGED:
-        case WM_SYSCOLORCHANGE:
-            if (state) RecreateAccountEditorVisuals(hWnd, *state);
-            return 0;
-        case WM_ERASEBKGND:
-            if (state && state->backgroundBrush) {
-                RECT client{};
-                GetClientRect(hWnd, &client);
-                FillRect(reinterpret_cast<HDC>(wParam), &client, state->backgroundBrush);
-                return 1;
-            }
-            break;
-        case WM_CLOSE:
-            DestroyWindow(hWnd);
-            return 0;
-        case WM_DESTROY:
-            if (state) {
-                if (state->font) DeleteObject(state->font);
-                if (state->backgroundBrush) DeleteObject(state->backgroundBrush);
-                if (state->inputBrush) DeleteObject(state->inputBrush);
-                state->font = nullptr;
-                state->backgroundBrush = nullptr;
-                state->inputBrush = nullptr;
-                state->done = true;
-            }
-            return 0;
-    }
-    return DefWindowProcW(hWnd, message, wParam, lParam);
-}
-
-static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
-    AccountEditorState state;
-    state.account = *account;
-    state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
-    UINT dpi = WindowDpi(owner);
-    int width = ScaleForDpi(404, dpi);
-    int height = ScaleForDpi(468, dpi);
-    MONITORINFO monitorInfo{sizeof(monitorInfo)};
-    GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitorInfo);
-    width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
-    height = std::min(height, (int)(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top));
-    RECT ownerRect{};
-    GetWindowRect(owner, &ownerRect);
-    int x = ownerRect.left + ((ownerRect.right - ownerRect.left) - width) / 2;
-    int y = ownerRect.top + ((ownerRect.bottom - ownerRect.top) - height) / 2;
-    x = std::clamp(x, (int)monitorInfo.rcWork.left, (int)monitorInfo.rcWork.right - width);
-    y = std::clamp(y, (int)monitorInfo.rcWork.top, (int)monitorInfo.rcWork.bottom - height);
-    HWND window = CreateWindowExW(WS_EX_DLGMODALFRAME, kAccountEditorClass,
-                                  adding ? L"Add account" : L"Edit account",
-                                  WS_POPUP | WS_CAPTION | WS_SYSMENU,
-                                  x, y, width, height, owner, nullptr,
-                                  GetModuleHandleW(nullptr), &state);
-    if (!window) return false;
-
-    EnableWindow(owner, FALSE);
-    ShowWindow(window, SW_SHOW);
-    MSG message;
-    while (!g_unloading && !g_settingsWindowCancelRequested && !state.done) {
-        int result = GetMessageW(&message, nullptr, 0, 0);
-        if (result == 0) {
-            PostQuitMessage((int)message.wParam);
-            break;
-        }
-        if (result < 0) break;
-        if (!IsDialogMessageW(window, &message)) {
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
-    }
-    if (IsWindow(window)) DestroyWindow(window);
-    if (IsWindow(owner)) {
-        EnableWindow(owner, TRUE);
-        SetForegroundWindow(owner);
-    }
-    if (state.accepted) *account = std::move(state.account);
-    return state.accepted;
-}
-
-// Shows a command's message, if it has one.
-static void ShowAccountCommandResult(const SettingsWindowState& state, const AccountCommandResult& result) {
-    if (!result.message.empty()) {
-        SettingsMessageBoxW(state.hWnd, result.message.c_str(), L"Account", MB_OK | result.icon);
-    }
-}
-
-static AccountTarget SelectedAccountTarget(const SettingsWindowState& state, AccountConfig* account = nullptr) {
-    int index = SelectedAccountIndex(state);
-    std::lock_guard<std::mutex> lk(g_settingsMutex);
-    if (index < 0 || index >= (int)g_settings.accounts.size()) return {};
-    if (account) *account = g_settings.accounts[index];
-    return {g_settings.accounts[index].historyId, AccountIdentityHash(g_settings.accounts[index])};
-}
-
-static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
-    AccountConfig account{L"anthropic", L"A"};
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        for (int suffix = 1;; suffix++) {
-            account.label = suffix == 1 ? L"A" : L"A" + std::to_wstring(suffix);
-            if (!HasDuplicateAccount(g_settings, 0, account)) break;
-        }
-    }
-    if (!ShowAccountEditor(state.hWnd, &account, true)) return;
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
-    std::wstring label = account.label;
-    ShowAccountCommandResult(state, AddAccountCommand(std::move(account), {label}));
-    RefreshSettingsControls(state);
-}
-
-static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
-    AccountConfig oldAccount;
-    AccountTarget target = SelectedAccountTarget(state, &oldAccount);
-    if (!target.identity) return;
-    AccountConfig newAccount = oldAccount;
-    if (!ShowAccountEditor(state.hWnd, &newAccount, false)) return;
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
-
-    bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
-    if (identityChanged && g_loginInProgress.load()) {
-        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
-                    L"Account", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    bool clearOldToken = false;
-    if (identityChanged && oldAccount.provider != newAccount.provider &&
-        oldAccount.provider != L"antigravity") {
-        StoredToken token;
-        if (LoadStoredToken(AccountIdentityHash(oldAccount), &token)) {
-            int result = SettingsMessageBoxW(
-                state.hWnd,
-                L"Changing provider creates a new account identity.\n\n"
-                L"Yes: delete the old stored sign-in\nNo: keep it for later\nCancel: discard this edit",
-                L"Change account provider", MB_YESNOCANCEL | MB_ICONQUESTION);
-            if ((result != IDYES && result != IDNO) || g_unloading ||
-                !IsWindow(state.hWnd)) return;
-            clearOldToken = result == IDYES;
-        }
-    }
-    // The editor's fields replace the fresh account's; the command keeps its visibility and
-    // history ID.
-    AccountCommandResult result = EditAccountCommand(target, [&](AccountConfig& account) {
-        account = newAccount;
-    }, clearOldToken);
-    ShowAccountCommandResult(state, result);
-    RefreshSettingsControls(state);
-}
-
-static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
-    AccountConfig account;
-    AccountTarget target = SelectedAccountTarget(state, &account);
-    if (!target.identity) return;
-    if (g_loginInProgress.load()) {
-        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
-                    L"Account", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    bool deleteToken = false;
-    if (account.provider == L"antigravity") {
-        int result = SettingsMessageBoxW(state.hWnd, L"Remove this account?", L"Remove account",
-                                 MB_YESNO | MB_ICONQUESTION);
-        if (result != IDYES || g_unloading || !IsWindow(state.hWnd)) return;
-    } else {
-        int result = SettingsMessageBoxW(
-            state.hWnd,
-            L"Remove this account?\n\n"
-            L"Yes: remove it and delete its stored sign-in\n"
-            L"No: remove it but retain the sign-in for later\n"
-            L"Cancel: do nothing",
-            L"Remove account", MB_YESNOCANCEL | MB_ICONQUESTION);
-        if ((result != IDYES && result != IDNO) || g_unloading ||
-            !IsWindow(state.hWnd)) return;
-        deleteToken = result == IDYES;
-    }
-    ShowAccountCommandResult(state, RemoveAccountCommand(target, deleteToken));
-    RefreshSettingsControls(state);
-}
-
-static void MoveAccountFromSettingsWindow(SettingsWindowState& state, int direction) {
-    int index = SelectedAccountIndex(state);
-    AccountTarget target = SelectedAccountTarget(state);
-    if (!target.identity || (direction != -1 && direction != 1)) return;
-    ShowAccountCommandResult(state, MoveAccountCommand(target, index + direction));
-    RefreshSettingsControls(state);
-}
-
-static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
-    AccountConfig account;
-    AccountTarget target = SelectedAccountTarget(state, &account);
-    if (!target.identity) return;
-    ShowAccountCommandResult(state, SetAccountHiddenCommand(target, !account.hidden));
-    RefreshSettingsControls(state);
-}
-
 // src/settings/window.h
-// Settings window procedure, thread, and activation.
+// Settings window thread and opener: one window at a time, on its own STA thread.
 
 static UINT GetSettingsActivateMessage() {
     static const UINT message =
@@ -20088,673 +18407,9 @@ static UINT GetSettingsActivateMessage() {
     return message;
 }
 
-static void ResetCurrentSettingsPage(SettingsWindowState& state) {
-    int page = state.currentPage;
-    if (page <= 0 || page >= 4) return;
-    if (SettingsMessageBoxW(state.hWnd,
-                    L"Reset every setting on this page to its default value?",
-                    L"Reset settings", MB_YESNO | MB_ICONQUESTION) != IDYES ||
-        g_unloading || !IsWindow(state.hWnd)) {
-        return;
-    }
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    Settings defaults;
-    if (page == 1) {
-        settings.taskbarMonitorMode = defaults.taskbarMonitorMode;
-        settings.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
-        settings.barLayout = defaults.barLayout;
-        settings.barMode = defaults.barMode;
-        settings.barLength = defaults.barLength;
-        settings.barThickness = defaults.barThickness;
-        settings.ringSize = defaults.ringSize;
-        settings.ringThickness = defaults.ringThickness;
-        settings.labelFontSize = defaults.labelFontSize;
-        settings.percentFontSize = defaults.percentFontSize;
-        settings.accountMargin = defaults.accountMargin;
-        settings.labelGap = defaults.labelGap;
-        settings.barGap = defaults.barGap;
-        settings.rightMargin = defaults.rightMargin;
-    } else if (page == 2) {
-        settings.labelPosition = defaults.labelPosition;
-        settings.showPaceTicks = defaults.showPaceTicks;
-        settings.paceTickStyle = defaults.paceTickStyle;
-        settings.paceTickColor = defaults.paceTickColor;
-        settings.showBarLabels = defaults.showBarLabels;
-        settings.percentTextVisibility = defaults.percentTextVisibility;
-        settings.percentTextAlignment = defaults.percentTextAlignment;
-        settings.showExtraBarAmounts = defaults.showExtraBarAmounts;
-        settings.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
-        settings.colorblindMode = defaults.colorblindMode;
-        settings.showStaleWarning = defaults.showStaleWarning;
-        settings.yellowThreshold = defaults.yellowThreshold;
-        settings.orangeThreshold = defaults.orangeThreshold;
-        settings.redThreshold = defaults.redThreshold;
-    } else {
-        settings.showDetailsOnHover = defaults.showDetailsOnHover;
-        settings.pollMinutes = defaults.pollMinutes;
-        settings.enableNotifications = defaults.enableNotifications;
-        settings.historyEnabled = defaults.historyEnabled;
-        settings.historyRetentionDays = defaults.historyRetentionDays;
-        settings.skipHiddenPolling = defaults.skipHiddenPolling;
-    }
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not reset settings.", L"Reset settings",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
-    RefreshSettingsControls(state);
-}
-
-static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
-                                           WPARAM wParam, LPARAM lParam) {
-    auto* state = reinterpret_cast<SettingsWindowState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
-    if (UINT activateMessage = GetSettingsActivateMessage();
-        activateMessage && message == activateMessage) {
-        if (!g_unloading) {
-            if (IsIconic(hWnd)) ShowWindow(hWnd, SW_RESTORE);
-            HWND target = GetLastActivePopup(hWnd);
-            SetForegroundWindow(IsWindow(target) ? target : hWnd);
-        }
-        return 0;
-    }
-    switch (message) {
-        case WM_CREATE: {
-            auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
-            state = reinterpret_cast<SettingsWindowState*>(create->lpCreateParams);
-            state->hWnd = hWnd;
-            state->dpi = WindowDpi(hWnd);
-            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
-
-            const PCWSTR pageNames[] = {L"Accounts", L"Layout", L"Display", L"Behavior"};
-            const int pageIds[] = {kSettingsPageAccounts, kSettingsPageLayout,
-                                   kSettingsPageDisplay, kSettingsPageBehavior};
-            for (int i = 0; i < 4; i++) {
-                DWORD style = WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                              BS_AUTORADIOBUTTON | BS_PUSHLIKE;
-                if (i == 0) style |= WS_GROUP;
-                state->pageButtons[i] = CreateWindowExW(
-                    0, L"BUTTON", pageNames[i], style, 0, 0, 1, 1, hWnd,
-                    reinterpret_cast<HMENU>((INT_PTR)pageIds[i]),
-                    GetModuleHandleW(nullptr), nullptr);
-            }
-            state->accountList = CreateSettingsControl(
-                *state, 0, WC_LISTVIEWW, L"",
-                WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
-                WS_EX_CLIENTEDGE, kAccountList);
-            ListView_SetExtendedListViewStyle(state->accountList,
-                                              LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
-            if (!SetWindowSubclass(state->accountList, AccountListSubclassProc, 0,
-                                   reinterpret_cast<DWORD_PTR>(state))) {
-                Wh_Log(L"Could not subclass settings account list");
-            }
-            const PCWSTR headers[] = {L"Label", L"Provider", L"Bars", L"Visible", L"Sign-in", L"Recorded"};
-            const int widths[] = {80, 135, 110, 55, 125, 100};
-            for (int i = 0; i < (int)ARRAYSIZE(headers); i++) {
-                LVCOLUMNW column{};
-                column.mask = LVCF_TEXT | LVCF_WIDTH;
-                column.pszText = const_cast<PWSTR>(headers[i]);
-                column.cx = ScaleForDpi(widths[i], state->dpi);
-                ListView_InsertColumn(state->accountList, i, &column);
-            }
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Add...",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountAdd);
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Edit...",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountEdit);
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Remove",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountRemove);
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Up",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountMoveUp);
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Down",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountMoveDown);
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Hide",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountToggleVisible);
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Sign in",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountSignIn);
-            CreateSettingsControl(*state, 0, L"BUTTON", L"Sign out",
-                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountSignOut);
-
-            AddSettingsCheck(*state, 1, L"Preview test data", kVisualTestModeLayout);
-            HWND monitorMode = AddSettingsRow(*state, 1, L"Taskbar monitors",
-                                               L"COMBOBOX", CBS_DROPDOWNLIST, 0, kMonitorMode);
-            AddComboItems(monitorMode, {L"Primary monitor only", L"All monitors",
-                                        L"Specific display"});
-            AddSettingsRow(*state, 1, L"Specific display", L"COMBOBOX",
-                           CBS_DROPDOWNLIST, 0, kMonitorNumber);
-            HWND layout = AddSettingsRow(*state, 1, L"Layout", L"COMBOBOX",
-                                         CBS_DROPDOWNLIST, 0, kBarLayout);
-            AddComboItems(layout, {L"Stacked bars", L"Vertical bars", L"Segmented ring",
-                                   L"Concentric rings", L"Logo + mini bars",
-                                   L"Logo + headline %"});
-            HWND mode = AddSettingsRow(*state, 1, L"Bar mode", L"COMBOBOX",
-                                       CBS_DROPDOWNLIST, 0, kBarMode);
-            AddComboItems(mode, {L"Used", L"Remaining"});
-            AddNumericRow(*state, 1, L"Bar length (px)", kBarLength,
-                          10, 500, true);
-            AddNumericRow(*state, 1, L"Bar thickness (px)", kBarThickness,
-                          2, 50, true);
-            AddNumericRow(*state, 1, L"Ring size (px)", kRingSize,
-                          kRingSizeMin, kRingSizeMax, true);
-            AddNumericRow(*state, 1, L"Ring thickness (px)", kRingThickness,
-                          kRingThicknessMin, kRingThicknessMax, true);
-            AddNumericRow(*state, 1, L"Label font size (px)", kLabelFontSize,
-                          6, 24, true);
-            AddNumericRow(*state, 1, L"Bar text size (px)", kPercentFontSize,
-                          6, 24, true);
-            AddNumericRow(*state, 1, L"Account margin (px)", kAccountMargin, 0, 500);
-            AddNumericRow(*state, 1, L"Label gap (px)", kLabelGap, 0, 500);
-            AddNumericRow(*state, 1, L"Bar gap (px)", kBarGap, 0, 500);
-            AddNumericRow(*state, 1, L"Right tray gap (px)", kRightMargin, 0, 500);
-
-            AddSettingsCheck(*state, 2, L"Preview test data", kVisualTestModeDisplay);
-            HWND labelPosition = AddSettingsRow(*state, 2, L"Label position", L"COMBOBOX",
-                                                CBS_DROPDOWNLIST, 0, kLabelPosition);
-            AddComboItems(labelPosition, {L"Hidden", L"Left", L"Top", L"Right", L"Bottom"});
-            AddSettingsCheck(*state, 2, L"Show quota pace ticks", kShowPaceTicks);
-            HWND paceTickStyle = AddSettingsRow(*state, 2, L"Pace tick style", L"COMBOBOX",
-                                                CBS_DROPDOWNLIST, 0, kPaceTickStyle);
-            AddComboItems(paceTickStyle,
-                          {L"Caret", L"Full line", L"Edge notch", L"Dot"});
-            HWND paceTickColor = AddSettingsRow(*state, 2, L"Pace tick color", L"BUTTON",
-                                                BS_PUSHBUTTON, 0, kPaceTickColor);
-            SetWindowTextW(paceTickColor, L"Choose...");
-            state->rows[2].back().preview = CreateSettingsControl(
-                *state, 2, L"STATIC", L"", WS_VISIBLE | SS_OWNERDRAW, 0, -1);
-            AddSettingsCheck(*state, 2, L"Show bar labels (5h, 7d, Fa, Ex)",
-                             kShowBarLabels);
-            HWND percentTextVisibility = AddSettingsRow(
-                *state, 2, L"Percentage text", L"COMBOBOX",
-                CBS_DROPDOWNLIST, 0, kPercentTextVisibility);
-            AddComboItems(percentTextVisibility,
-                          {L"Never show", L"Show on hover", L"Always show"});
-            HWND percentTextAlignment = AddSettingsRow(
-                *state, 2, L"Percentage text alignment", L"COMBOBOX",
-                CBS_DROPDOWNLIST, 0, kPercentTextAlignment);
-            AddComboItems(percentTextAlignment, {L"Adaptive", L"Left", L"Center", L"Right"});
-            AddSettingsCheck(*state, 2, L"Show amounts on extra/credits bars",
-                             kShowExtraBarAmounts);
-            AddSettingsCheck(*state, 2, L"Show additional OpenAI rate limits",
-                             kShowOpenAiExtraLimits);
-            AddSettingsCheck(*state, 2, L"Use colorblind palette", kColorblindMode);
-            AddSettingsCheck(*state, 2, L"Mark stale data with !", kShowStaleWarning);
-            AddThresholdRow(*state, L"Yellow threshold (%)", kYellowThreshold);
-            AddThresholdRow(*state, L"Orange threshold (%)", kOrangeThreshold);
-            AddThresholdRow(*state, L"Red threshold (%)", kRedThreshold);
-
-            AddSettingsCheck(*state, 3, L"Show details on hover", kShowDetailsOnHover);
-            HWND pollPreset = AddSettingsRow(*state, 3, L"Cloud poll interval",
-                                              L"COMBOBOX", CBS_DROPDOWNLIST, 0, kPollPreset);
-            AddComboItems(pollPreset, {L"2 minutes", L"5 minutes", L"10 minutes",
-                                      L"15 minutes", L"30 minutes", L"60 minutes", L"Custom"});
-            AddNumericRow(*state, 3, L"Custom interval (minutes)",
-                          kPollMinutes, 2, 1440);
-            AddSettingsCheck(*state, 3, L"Show threshold notifications", kEnableNotifications);
-            AddSettingsCheck(*state, 3, L"Enable local history", kHistoryEnabled);
-            AddNumericRow(*state, 3, L"Retention (days)", kHistoryRetentionDays, 1, 3650);
-            AddSettingsCheck(*state, 3, L"Do not poll hidden accounts", kSkipHiddenPolling);
-            HWND historyButton = AddSettingsRow(*state, 3, L"Local usage history", L"BUTTON",
-                                                 BS_PUSHBUTTON, 0, kOpenHistoryWindow);
-            SetWindowTextW(historyButton, L"Usage history...");
-            state->resetPageButton = CreateWindowExW(
-                0, L"BUTTON", L"", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
-                0, 0, 1, 1, hWnd,
-                reinterpret_cast<HMENU>((INT_PTR)kResetPage),
-                GetModuleHandleW(nullptr), nullptr);
-            state->previousRowsButton = CreateWindowExW(
-                0, L"BUTTON", L"Previous", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
-                0, 0, 1, 1, hWnd,
-                reinterpret_cast<HMENU>((INT_PTR)kSettingsRowsPrevious),
-                GetModuleHandleW(nullptr), nullptr);
-            state->rowsPageLabel = CreateWindowExW(
-                0, L"STATIC", L"", WS_CHILD | SS_CENTER | SS_CENTERIMAGE,
-                0, 0, 1, 1, hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
-            state->nextRowsButton = CreateWindowExW(
-                0, L"BUTTON", L"Next", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
-                0, 0, 1, 1, hWnd,
-                reinterpret_cast<HMENU>((INT_PTR)kSettingsRowsNext),
-                GetModuleHandleW(nullptr), nullptr);
-
-            state->toolTip = CreateWindowExW(
-                WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
-                WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
-                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
-            if (state->toolTip) {
-                SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0,
-                             ScaleForDpi(360, state->dpi));
-                AddSettingsToolTip(
-                    *state, kVisualTestModeLayout,
-                    L"Temporarily replaces taskbar accounts with synthetic percentages while this settings window is open.");
-                AddSettingsToolTip(
-                    *state, kVisualTestModeDisplay,
-                    L"Temporarily replaces taskbar accounts with synthetic percentages while this settings window is open.");
-                AddSettingsToolTip(
-                    *state, kShowPaceTicks,
-                    L"Marks elapsed time in each quota reset window so usage can be compared with its expected pace.");
-                AddSettingsToolTip(
-                    *state, kPaceTickStyle,
-                    L"Draws each pace marker as a thin caret, a full-width line, an edge notch, or a centered dot.");
-                AddSettingsToolTip(
-                    *state, kShowExtraBarAmounts,
-                    L"Replaces the percentage on Anthropic extra-usage and OpenAI credits bars with the dollar or credit amount: spent in used mode, left in remaining mode.");
-                AddSettingsToolTip(
-                    *state, kShowOpenAiExtraLimits,
-                    L"Adds every extra OpenAI rate limit (Codex Spark, hidden model lanes such as gpt-reserve) and the Spark plan name to OpenAI account details.");
-                AddSettingsToolTip(
-                    *state, kShowDetailsOnHover,
-                    L"Opens an account's details after the pointer rests on its bars. Clicking the bars always opens them.");
-                AddSettingsToolTip(
-                    *state, kShowStaleWarning,
-                    L"Adds ! when quota data is stale because a refresh failed or is overdue.");
-                AddSettingsToolTip(
-                    *state, kPollPreset,
-                    L"How often Anthropic and OpenAI are polled. Antigravity always polls its local session once per minute.");
-                AddSettingsToolTip(
-                    *state, kPollMinutes,
-                    L"Custom cloud polling interval from 2 to 1440 minutes.");
-                AddSettingsToolTip(
-                    *state, kHistoryEnabled,
-                    L"On by default; applies to this Windows user only. Disabling recording keeps saved history. "
-                    L"Account recording choices, retention, and hidden-account polling settings are shared "
-                    L"across Windows users. Do not poll hidden accounts takes priority for hidden accounts.");
-                AddSettingsToolTip(
-                    *state, kHistoryRetentionDays,
-                    L"Shared across Windows users. Keep local usage history for 1 to 3650 days. Reducing this permanently prunes older "
-                    L"samples at hourly maintenance during recording or viewer refresh. The roughly 60 MB cap can shorten retention.");
-                AddSettingsToolTip(
-                    *state, kSkipHiddenPolling,
-                    L"Shared across Windows users. Skip polling hidden accounts, even if Record history is checked. Turn this off "
-                    L"to allow hidden accounts to keep recording when local history is enabled.");
-                AddSettingsToolTip(
-                    *state, kOpenHistoryWindow,
-                    L"View saved local usage history, including while recording is disabled.");
-                AddSettingsToolTip(
-                    *state, kAccountList,
-                    L"Recorded shows whether history recording is enabled, not whether a poll succeeded. "
-                    L"Storage error means recording is not being saved; open Usage history for details. "
-                    L"User off requires this Windows user's Enable local history in Behavior; Paused means the hidden "
-                    L"account is skipped by Do not poll hidden accounts. Pending save blocks recording "
-                    L"until stable history IDs are saved by the taskbar's Explorer process.");
-            }
-
-            RecreateSettingsVisuals(*state);
-            RefreshSettingsControls(*state);
-            ShowSettingsPage(*state, 0);
-            LayoutSettingsWindow(*state);
-            return 0;
-        }
-        case WM_NOTIFY:
-            if (!state) break;
-            if (reinterpret_cast<NMHDR*>(lParam)->code == UDN_DELTAPOS) {
-                auto* delta = reinterpret_cast<NMUPDOWN*>(lParam);
-                if (SettingsRow* row = FindSettingsRow(*state, delta->hdr.hwndFrom)) {
-                    int id = GetDlgCtrlID(row->control);
-                    int64_t proposed = (int64_t)GetControlInt(hWnd, id, delta->iPos) +
-                                       delta->iDelta;
-                    int value = (int)std::clamp<int64_t>(proposed, row->minimum, row->maximum);
-                    state->updating = true;
-                    SetControlInt(*state, id, value);
-                    state->updating = false;
-                    SetTimer(hWnd, kSettingsAutosaveTimer, 250, nullptr);
-                    return TRUE;
-                }
-            }
-            if (reinterpret_cast<NMHDR*>(lParam)->hwndFrom == state->accountList) {
-                if (reinterpret_cast<NMHDR*>(lParam)->code == LVN_ITEMCHANGED) {
-                    UpdateAccountButtons(*state);
-                } else if (reinterpret_cast<NMHDR*>(lParam)->code == NM_DBLCLK) {
-                    PostMessageW(hWnd, WM_COMMAND,
-                                 MAKEWPARAM(kAccountEdit, BN_CLICKED), 0);
-                }
-            }
-            break;
-        case WM_DRAWITEM:
-            if (state) {
-                auto* draw = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
-                for (const auto& pageRows : state->rows) {
-                    for (const auto& row : pageRows) {
-                        if (!row.preview || draw->hwndItem != row.preview) continue;
-                        HBRUSH brush = (HBRUSH)GetStockObject(DC_BRUSH);
-                        SetDCBrushColor(draw->hDC,
-                                        state->dark ? RGB(105, 105, 105) : RGB(120, 120, 120));
-                        FillRect(draw->hDC, &draw->rcItem, brush);
-                        RECT inner = draw->rcItem;
-                        InflateRect(&inner, -1, -1);
-                        SetDCBrushColor(draw->hDC, row.previewColor);
-                        FillRect(draw->hDC, &inner, brush);
-                        return TRUE;
-                    }
-                }
-            }
-            break;
-        case WM_HSCROLL:
-            if (state && lParam) {
-                HWND slider = reinterpret_cast<HWND>(lParam);
-                if (SettingsRow* row = FindSettingsRow(*state, slider);
-                    row && row->slider == slider) {
-                    int id = GetDlgCtrlID(row->control);
-                    int value = (int)SendMessageW(slider, TBM_GETPOS, 0, 0);
-                    state->updating = true;
-                    SetControlInt(*state, id, value);
-                    state->updating = false;
-                    int action = LOWORD(wParam);
-                    if (action == TB_ENDTRACK) {
-                        CommitScalarSettings(*state);
-                    } else if (action == TB_LINEUP || action == TB_LINEDOWN ||
-                               action == TB_PAGEUP || action == TB_PAGEDOWN ||
-                               action == TB_TOP || action == TB_BOTTOM ||
-                               action == TB_THUMBPOSITION) {
-                        SetTimer(hWnd, kSettingsAutosaveTimer, 250, nullptr);
-                    }
-                    return 0;
-                }
-            }
-            break;
-        case WM_COMMAND:
-            if (!state) break;
-            switch (LOWORD(wParam)) {
-                case kSettingsPageAccounts:
-                case kSettingsPageLayout:
-                case kSettingsPageDisplay:
-                case kSettingsPageBehavior:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        ShowSettingsPage(*state, LOWORD(wParam) - kSettingsPageAccounts);
-                        LayoutSettingsWindow(*state);
-                    }
-                    return 0;
-                case kAccountAdd:
-                    if (HIWORD(wParam) == BN_CLICKED) AddAccountFromSettingsWindow(*state);
-                    return 0;
-                case kAccountEdit:
-                    if (HIWORD(wParam) == BN_CLICKED && IsWindowEnabled(hWnd) &&
-                        IsWindowEnabled(GetDlgItem(hWnd, kAccountEdit)) &&
-                        !g_loginInProgress.load()) {
-                        EditAccountFromSettingsWindow(*state);
-                    }
-                    return 0;
-                case kAccountRemove:
-                    if (HIWORD(wParam) == BN_CLICKED) RemoveAccountFromSettingsWindow(*state);
-                    return 0;
-                case kAccountMoveUp:
-                    if (HIWORD(wParam) == BN_CLICKED) MoveAccountFromSettingsWindow(*state, -1);
-                    return 0;
-                case kAccountMoveDown:
-                    if (HIWORD(wParam) == BN_CLICKED) MoveAccountFromSettingsWindow(*state, 1);
-                    return 0;
-                case kAccountToggleVisible:
-                    if (HIWORD(wParam) == BN_CLICKED) ToggleAccountFromSettingsWindow(*state);
-                    return 0;
-                case kAccountSignIn:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        if (uint64_t identity = SelectedAccountIdentity(*state)) {
-                            StartLoginByIdentity(identity);
-                        }
-                        UpdateAccountButtons(*state);
-                    }
-                    return 0;
-                case kAccountSignOut:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        if (uint64_t identity = SelectedAccountIdentity(*state)) {
-                            if (!SignOutAccountByIdentity(identity)) {
-                                SettingsMessageBoxW(
-                                    state->hWnd,
-                                    L"The stored sign-in could not be deleted and remains "
-                                    L"retained for this account.",
-                                    L"Account", MB_OK | MB_ICONERROR);
-                            }
-                        }
-                    }
-                    return 0;
-                case kResetPage:
-                    if (HIWORD(wParam) == BN_CLICKED) ResetCurrentSettingsPage(*state);
-                    return 0;
-                case kOpenHistoryWindow:
-                    if (HIWORD(wParam) == BN_CLICKED && !g_unloading) {
-                        CommitScalarSettings(*state);
-                        if (!g_unloading && !g_settingsWindowCancelRequested) OpenHistoryWindow();
-                    }
-                    return 0;
-                case kSettingsRowsPrevious:
-                    if (HIWORD(wParam) == BN_CLICKED && state->currentPage > 0) {
-                        state->rowSubpages[state->currentPage]--;
-                        LayoutSettingsWindow(*state);
-                    }
-                    return 0;
-                case kSettingsRowsNext:
-                    if (HIWORD(wParam) == BN_CLICKED && state->currentPage > 0) {
-                        state->rowSubpages[state->currentPage]++;
-                        LayoutSettingsWindow(*state);
-                    }
-                    return 0;
-                case kVisualTestModeLayout:
-                case kVisualTestModeDisplay:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        SetVisualTestMode(
-                            SendMessageW(reinterpret_cast<HWND>(lParam), BM_GETCHECK,
-                                         0, 0) == BST_CHECKED);
-                    }
-                    return 0;
-                case kPaceTickColor:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        SettingsRow* row = FindSettingsRow(
-                            *state, GetDlgItem(hWnd, kPaceTickColor));
-                        if (!row) return 0;
-                        CHOOSECOLORW chooser{};
-                        chooser.lStructSize = sizeof(chooser);
-                        chooser.hwndOwner = hWnd;
-                        chooser.rgbResult = row->previewColor;
-                        chooser.lpCustColors = state->customColors.data();
-                        chooser.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
-                        chooser.lCustData = reinterpret_cast<LPARAM>(state);
-                        chooser.lpfnHook = SettingsColorHookProc;
-                        bool accepted = ChooseColorW(&chooser);
-                        state->colorDialog = nullptr;
-                        if (accepted) {
-                            row->previewColor = chooser.rgbResult;
-                            if (row->preview) InvalidateRect(row->preview, nullptr, TRUE);
-                            CommitScalarSettings(*state);
-                        }
-                    }
-                    return 0;
-                case kPollPreset:
-                    if (HIWORD(wParam) == CBN_SELCHANGE &&
-                        SendDlgItemMessageW(hWnd, kPollPreset, CB_GETCURSEL, 0, 0) == 6) {
-                        UpdateDependentSettingsControls(*state);
-                        SetFocus(GetDlgItem(hWnd, kPollMinutes));
-                    } else if (HIWORD(wParam) == CBN_SELCHANGE) {
-                        CommitScalarSettings(*state);
-                    }
-                    return 0;
-            }
-            if ((HIWORD(wParam) == CBN_SELCHANGE || HIWORD(wParam) == BN_CLICKED ||
-                 HIWORD(wParam) == EN_KILLFOCUS) && LOWORD(wParam) >= kMonitorMode &&
-                LOWORD(wParam) <= kSkipHiddenPolling) {
-                CommitScalarSettings(*state);
-                return 0;
-            }
-            break;
-        case WM_SIZE:
-            if (state) LayoutSettingsWindow(*state);
-            return 0;
-        case WM_TIMER:
-            if (state && wParam == kSettingsAutosaveTimer) {
-                KillTimer(hWnd, kSettingsAutosaveTimer);
-                CommitScalarSettings(*state);
-                return 0;
-            }
-            break;
-        case WM_GETMINMAXINFO: {
-            auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
-            UINT dpi = state ? state->dpi : 96;
-            MONITORINFO monitorInfo{sizeof(monitorInfo)};
-            GetMonitorInfoW(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
-            int workWidth = (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left);
-            int workHeight = (int)(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
-            info->ptMinTrackSize.x = std::min(ScaleForDpi(500, dpi), workWidth);
-            if (state && state->lockedWindowHeight > 0) {
-                int lockedHeight = std::min(state->lockedWindowHeight, workHeight);
-                info->ptMinTrackSize.y = lockedHeight;
-                info->ptMaxTrackSize.y = lockedHeight;
-            } else {
-                info->ptMinTrackSize.y = std::min(ScaleForDpi(400, dpi), workHeight);
-            }
-            return 0;
-        }
-        case WM_ENTERSIZEMOVE:
-            if (state) state->inSizeMove = true;
-            return 0;
-        case WM_DPICHANGED:
-            if (state) {
-                state->dpi = HIWORD(wParam);
-                state->lockedWindowHeight = 0;
-                auto* suggested = reinterpret_cast<RECT*>(lParam);
-                SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
-                             suggested->right - suggested->left,
-                             suggested->bottom - suggested->top,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-                RecreateSettingsVisuals(*state);
-                if (state->toolTip) {
-                    SendMessageW(state->toolTip, TTM_SETMAXTIPWIDTH, 0,
-                                 ScaleForDpi(360, state->dpi));
-                }
-                if (!state->inSizeMove) FitSettingsWindowToContent(*state);
-                LayoutSettingsWindow(*state);
-            }
-            return 0;
-        case WM_SETTINGCHANGE:
-            if (state) {
-                RecreateSettingsVisuals(*state);
-                if (wParam == SPI_SETWORKAREA) {
-                    FitSettingsWindowToContent(*state);
-                    LayoutSettingsWindow(*state);
-                }
-            }
-            return 0;
-        case WM_THEMECHANGED:
-        case WM_SYSCOLORCHANGE:
-            if (state) RecreateSettingsVisuals(*state);
-            return 0;
-        case WM_DISPLAYCHANGE:
-            if (state) {
-                int monitorNumber;
-                {
-                    std::lock_guard<std::mutex> lk(g_settingsMutex);
-                    monitorNumber = g_settings.taskbarMonitorNumber;
-                }
-                state->updating = true;
-                PopulateMonitorCombo(*state, monitorNumber);
-                state->updating = false;
-                UpdateDependentSettingsControls(*state);
-                StartRetryInject(true);
-                FitSettingsWindowToContent(*state);
-                LayoutSettingsWindow(*state);
-            }
-            return 0;
-        case WM_EXITSIZEMOVE:
-            if (state) {
-                state->inSizeMove = false;
-                FitSettingsWindowToContent(*state, false);
-                LayoutSettingsWindow(*state);
-            }
-            return 0;
-        case kExitVisualTestMessage:
-            SetVisualTestMode(false);
-            return 0;
-        case kHistoryConsentChangedMessage:
-        case kSettingsRefreshMessage:
-            if (state) {
-                if (message == kHistoryConsentChangedMessage) {
-                    bool historyEnabled;
-                    {
-                        std::lock_guard lock(g_settingsMutex);
-                        historyEnabled = g_settings.historyEnabled;
-                    }
-                    // Only synchronize the externally changed toggle; don't overwrite
-                    // unrelated edits in an already-open settings window.
-                    bool updating = state->updating;
-                    state->updating = true;
-                    SendDlgItemMessageW(hWnd, kHistoryEnabled, BM_SETCHECK,
-                                        historyEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
-                    UpdateDependentSettingsControls(*state);
-                    state->updating = updating;
-                }
-                bool enabled = g_visualTestMode.load(std::memory_order_acquire);
-                SendDlgItemMessageW(hWnd, kVisualTestModeLayout, BM_SETCHECK,
-                                    enabled ? BST_CHECKED : BST_UNCHECKED, 0);
-                SendDlgItemMessageW(hWnd, kVisualTestModeDisplay, BM_SETCHECK,
-                                    enabled ? BST_CHECKED : BST_UNCHECKED, 0);
-                RefreshAccountList(*state);
-            }
-            return 0;
-        case WM_CTLCOLORSTATIC:
-        case WM_CTLCOLORBTN:
-            if (state && state->dark) {
-                SetTextColor(reinterpret_cast<HDC>(wParam), RGB(235, 235, 235));
-                SetBkColor(reinterpret_cast<HDC>(wParam), RGB(32, 32, 32));
-                return reinterpret_cast<LRESULT>(state->backgroundBrush);
-            }
-            break;
-        case WM_CTLCOLOREDIT:
-        case WM_CTLCOLORLISTBOX:
-            if (state && state->dark) {
-                SetTextColor(reinterpret_cast<HDC>(wParam), RGB(235, 235, 235));
-                SetBkColor(reinterpret_cast<HDC>(wParam), RGB(43, 43, 43));
-                return reinterpret_cast<LRESULT>(state->inputBrush);
-            }
-            break;
-        case WM_ERASEBKGND:
-            if (state && state->backgroundBrush) {
-                RECT client{};
-                GetClientRect(hWnd, &client);
-                FillRect(reinterpret_cast<HDC>(wParam), &client, state->backgroundBrush);
-                return 1;
-            }
-            break;
-        case WM_CLOSE:
-            if (state && state->colorDialog) {
-                PostMessageW(state->colorDialog, WM_COMMAND, IDCANCEL, 0);
-                PostMessageW(hWnd, WM_CLOSE, 0, 0);
-                return 0;
-            }
-            if (g_settingsMessageBoxContext &&
-                IsWindow(g_settingsMessageBoxContext->hWnd)) {
-                g_settingsMessageBoxContext->forced = true;
-                PostMessageW(g_settingsMessageBoxContext->hWnd, WM_COMMAND,
-                             g_settingsMessageBoxContext->forcedResult, 0);
-                PostMessageW(hWnd, WM_CLOSE, 0, 0);
-                return 0;
-            }
-            if (state && !g_unloading) CommitScalarSettings(*state, false);
-            SetVisualTestMode(false);
-            DestroyWindow(hWnd);
-            return 0;
-        case WM_DESTROY:
-            if (state) {
-                if (state->font) DeleteObject(state->font);
-                if (state->backgroundBrush) DeleteObject(state->backgroundBrush);
-                if (state->inputBrush) DeleteObject(state->inputBrush);
-                state->font = nullptr;
-                state->backgroundBrush = nullptr;
-                state->inputBrush = nullptr;
-                state->hWnd = nullptr;
-                state->accountList = nullptr;
-            }
-            g_settingsWindow.store(nullptr);
-            PostQuitMessage(0);
-            return 0;
-    }
-    return DefWindowProcW(hWnd, message, wParam, lParam);
-}
-
-static DWORD WINAPI SettingsWindowThreadProc(LPVOID parameter) {
+// The window keeps its graphics and WinRT objects inside UiHostRun, which returns before the
+// apartment is uninitialized.
+static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
     using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
     if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
         auto setDpi = reinterpret_cast<SetThreadDpiAwarenessContext_t>(
@@ -20767,126 +18422,25 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID parameter) {
         apartmentInitialized = true;
     } catch (...) {}
 
-    // The rebuilt window keeps its graphics and WinRT objects inside UiHostRun, which returns
-    // before the apartment is uninitialized.
-    if (SettingsWindowKind(reinterpret_cast<INT_PTR>(parameter)) == SettingsWindowKind::New) {
-        if (apartmentInitialized && !g_unloading && !g_settingsWindowCancelRequested) {
-            SettingsUiClient client;
-            UiHostConfig config;
-            config.mainClass = kSettingsUiClass;
-            config.viewportClass = kSettingsUiViewportClass;
-            config.popupClass = kSettingsUiPopupClass;
-            config.title = L"Taskbar AI Quota Bars \u2014 Settings";
-            config.activateMessage = GetSettingsActivateMessage();
-            if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
-        }
-        SetVisualTestMode(false);
-        g_settingsWindow.store(nullptr);
-        if (apartmentInitialized) winrt::uninit_apartment();
-        return 0;
-    }
-
-    INITCOMMONCONTROLSEX controls{sizeof(controls),
-                                  ICC_WIN95_CLASSES | ICC_LISTVIEW_CLASSES |
-                                      ICC_BAR_CLASSES | ICC_UPDOWN_CLASS};
-    InitCommonControlsEx(&controls);
-    HINSTANCE instance = GetModuleHandleW(nullptr);
-    WNDCLASSEXW settingsClass{};
-    settingsClass.cbSize = sizeof(settingsClass);
-    settingsClass.lpfnWndProc = SettingsWindowProc;
-    settingsClass.hInstance = instance;
-    settingsClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    settingsClass.lpszClassName = kSettingsWindowClass;
-    settingsClass.hbrBackground = nullptr;
-    WNDCLASSEXW accountClass = settingsClass;
-    accountClass.lpfnWndProc = AccountEditorWndProc;
-    accountClass.lpszClassName = kAccountEditorClass;
-    if (!RegisterClassExW(&settingsClass)) {
-        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS ||
-            !UnregisterClassW(kSettingsWindowClass, instance) ||
-            !RegisterClassExW(&settingsClass)) {
-            if (apartmentInitialized) winrt::uninit_apartment();
-            return 0;
-        }
-    }
-    if (!RegisterClassExW(&accountClass)) {
-        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS ||
-            !UnregisterClassW(kAccountEditorClass, instance) ||
-            !RegisterClassExW(&accountClass)) {
-            UnregisterClassW(kSettingsWindowClass, instance);
-            if (apartmentInitialized) winrt::uninit_apartment();
-            return 0;
-        }
-    }
-    if (g_unloading || g_settingsWindowCancelRequested) {
-        UnregisterClassW(kAccountEditorClass, instance);
-        UnregisterClassW(kSettingsWindowClass, instance);
-        if (apartmentInitialized) winrt::uninit_apartment();
-        return 0;
-    }
-
-    SettingsWindowState state;
-    POINT cursor{};
-    GetCursorPos(&cursor);
-    HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO monitorInfo{sizeof(monitorInfo)};
-    GetMonitorInfoW(monitor, &monitorInfo);
-    UINT dpi = WindowDpi(nullptr);
-    HMODULE shcore = GetModuleHandleW(L"shcore.dll");
-    if (!shcore) {
-        shcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (shcore) {
-        using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-        auto getDpi = reinterpret_cast<GetDpiForMonitor_t>(
-            GetProcAddress(shcore, "GetDpiForMonitor"));
-        UINT monitorDpiX = dpi;
-        UINT monitorDpiY = dpi;
-        if (getDpi && SUCCEEDED(getDpi(monitor, 0, &monitorDpiX, &monitorDpiY))) {
-            dpi = monitorDpiX;
-        }
-    }
-    int width = ScaleForDpi(700, dpi);
-    int height = ScaleForDpi(400, dpi);
-    width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
-    height = std::min(height, (int)(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top));
-    int x = monitorInfo.rcWork.left + (monitorInfo.rcWork.right - monitorInfo.rcWork.left - width) / 2;
-    int y = monitorInfo.rcWork.top + (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - height) / 2;
-    HWND window = CreateWindowExW(WS_EX_APPWINDOW, kSettingsWindowClass,
-                                  L"Taskbar AI Quota Bars - Settings",
-                                  (WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX) |
-                                      WS_CLIPCHILDREN,
-                                  x, y, width, height, nullptr, nullptr, instance, &state);
-    if (window) {
-        FitSettingsWindowToContent(state);
-        LayoutSettingsWindow(state);
-        g_settingsWindow.store(window);
-        if (g_unloading || g_settingsWindowCancelRequested) {
-            PostMessageW(window, WM_CLOSE, 0, 0);
-        } else {
-            ShowWindow(window, SW_SHOW);
-            SetForegroundWindow(window);
-        }
-        MSG message;
-        while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-            if (!IsDialogMessageW(window, &message)) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
-        }
-        if (IsWindow(window)) DestroyWindow(window);
+    if (apartmentInitialized && !g_unloading && !g_settingsWindowCancelRequested) {
+        SettingsUiClient client;
+        UiHostConfig config;
+        config.mainClass = kSettingsUiClass;
+        config.viewportClass = kSettingsUiViewportClass;
+        config.popupClass = kSettingsUiPopupClass;
+        config.title = L"Taskbar AI Quota Bars \u2014 Settings";
+        config.activateMessage = GetSettingsActivateMessage();
+        config.icon = SettingsAppIcon({});
+        if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
     }
     SetVisualTestMode(false);
     g_settingsWindow.store(nullptr);
-    UnregisterClassW(kAccountEditorClass, instance);
-    UnregisterClassW(kSettingsWindowClass, instance);
     if (apartmentInitialized) winrt::uninit_apartment();
     return 0;
 }
 
-// Opens the settings window of `kind`, or activates the one already open (of either kind). The
-// thread picks its window once, at start.
-static void OpenSettingsWindow(SettingsWindowKind kind) {
+// Opens the settings window, or activates the one already open.
+static void OpenSettingsWindow() {
     if (g_unloading) return;
     std::lock_guard<std::mutex> lock(g_settingsWindowMutex);
     if (HWND window = g_settingsWindow.load(); window && IsWindow(window)) {
@@ -20902,8 +18456,7 @@ static void OpenSettingsWindow(SettingsWindowKind kind) {
     }
     if (g_unloading) return;
     g_settingsWindowCancelRequested = false;
-    g_settingsWindowThread = CreateThread(nullptr, 0, SettingsWindowThreadProc,
-                                          reinterpret_cast<LPVOID>(INT_PTR(kind)), 0, nullptr);
+    g_settingsWindowThread = CreateThread(nullptr, 0, SettingsWindowThreadProc, nullptr, 0, nullptr);
     if (!g_settingsWindowThread) Wh_Log(L"Could not create settings window thread");
 }
 

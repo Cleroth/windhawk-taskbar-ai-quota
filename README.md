@@ -22,13 +22,13 @@ It can also fire a Windows notification when an account first crosses the red th
 
 ## Setup
 
-Install **Taskbar AI Quota Bars** from the Windhawk catalog. On a fresh install, click the **AI +** taskbar tile to open the native settings window and add an account. Existing Windhawk settings are imported once when upgrading. Settings autosave; most appearance and behavior edits do not immediately re-query providers, while new or identity-changed accounts and stale accounts made visible can fetch.
+Install **Taskbar AI Quota Bars** from the Windhawk catalog. On a fresh install, click the **AI +** taskbar tile to open the settings window, then choose **Add account** and a provider. Existing Windhawk settings are imported once when upgrading. Settings autosave; most appearance and behavior edits do not immediately re-query providers, while new or identity-changed accounts and stale accounts made visible can fetch.
 
-Configure a provider and label, then select at least one supported quota bar. Each provider-and-label pair must be unique.
+Adding an account creates it at once, with a default label (`A`, `O` or `G`, then `A2`, `A3`, ...; labels that still have a stored sign-in are skipped, so a new account never reuses an old one), and polls it right away: Anthropic and OpenAI accounts show **Sign-in needed** until you sign in, while Antigravity accounts query the local app and record history immediately. Expand the account's card to rename it and choose its taskbar quotas (at least one stays selected). Each provider-and-label pair must be unique. The provider can't be changed later: remove the account and add a new one.
 
 ## Signing In
 
-The mod runs its own OAuth sign-in and refreshes the access token itself, so the bars keep working without re-running any CLI. A column that needs authentication shows "click to sign in"; left-click it to start the flow. You can also sign in from the settings window, or right-click a column, open **Sign in**, and pick the account.
+The mod runs its own OAuth sign-in and refreshes the access token itself, so the bars keep working without re-running any CLI. A column that needs authentication shows "click to sign in"; left-click it to start the flow. You can also click **Sign in** on the account's card in **Settings > Accounts**, or right-click a column, open **Sign in**, and pick the account.
 
 Signing in shows a window instead of launching a browser: **Copy link** lets you paste the sign-in link into any browser or profile (handy when each account lives in a different profile), and **Open in browser** uses the default browser.
 
@@ -36,51 +36,55 @@ Signing in shows a window instead of launching a browser: **Copy link** lets you
 - **OpenAI**: open the link in a browser on this PC. The mod catches the redirect on `localhost:1455` (falling back to `1457`) and the window closes by itself, so there's nothing to paste. The window waits until you approve or click **Cancel**; while it is open the port stays busy, so a Codex CLI sign-in at the same time can fail - finish or cancel one first.
 - **Google Antigravity**: no separate mod sign-in is needed. Keep the signed-in Antigravity app or CLI running so the mod can query its local language server. Older IDE builds also need an open workspace.
 
-Use **Sign out** in the same menu to delete an Anthropic/OpenAI stored token. Renaming a label preserves its stored sign-in when possible. Removing an Anthropic/OpenAI account asks whether to retain or delete its stored sign-in; removing an Antigravity account only confirms the removal.
+Use **Sign out** in the same menu, or on the account's expanded card in Settings, to delete an Anthropic/OpenAI stored token; the card also offers **Sign in again**. Renaming a label preserves its stored sign-in when possible. **Remove account** on an Anthropic/OpenAI card asks whether to retain or delete its stored sign-in; removing an Antigravity account only confirms the removal. Removing an account keeps its recorded usage history.
 
 ## Settings
 
-Right-click any quota column and choose **Settings...**. Useful settings include:
+Right-click any quota column and choose **Settings**. The window follows the Windows light, dark, or high-contrast theme and has six pages:
 
-- provider (Anthropic, OpenAI, or Google Antigravity) per account
-- account labels
-- account ordering and taskbar visibility
-- per-account 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra-usage, and OpenAI credits bar selection
-- OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
-- layout: stacked bars, vertical bars, segmented ring, concentric rings, logo + mini bars, or logo + headline %; settings the chosen layout ignores are greyed out
-- bar length and thickness (bar layouts), ring size and thickness (ring layouts)
-- per-account tile identity for the ring and logo layouts: provider logo with a number badge when several accounts share a provider, logo only, or label text (up to 4 characters of short text, else the label without spaces)
-- bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"); threshold colors always represent consumed quota
-- pace ticks comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles and a configurable color
-- label position: hidden, left, top, right, or bottom
-- account-label and bar-text font sizes
-- account, label, bar, and tray spacing
-- compact bar labels (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default
-- percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
-- amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI) instead of a percentage, following the bar mode
-- optional additional OpenAI rate limits in account details (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
-- show details on hover: resting the pointer on a column opens its details flyout (on by default); clicking always opens it
-- cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
-- local history (on by default, per Windows user), retention in days (90 by default, configurable from 1 to 3650), and per-account recording
-- do not poll hidden accounts (on by default; overrides per-account history recording)
-- taskbar monitor mode: primary, all, or a detected display with its resolution
-- color thresholds with palette-matched previews
-- threshold notifications (toast when an account crosses the red threshold)
-- colorblind palette
-- stale-warning marker
-- temporary threshold-spanning test accounts for previewing current taskbar visuals
+- **Accounts**: **Add account** (Anthropic, OpenAI, or Google Antigravity); drag a card by its handle (or press Alt+Up/Down) to reorder; its switch shows or hides the account on the taskbar (the last visible account can't be hidden). Expand a card for:
+  - label: unique per provider; renaming keeps the sign-in and history
+  - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and monthly extra usage, OpenAI credits; unavailable quotas auto-hide
+  - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
+  - tile identity for the ring and logo styles: provider logo with a number badge when several accounts share a provider, logo only, or label text (up to 4 characters of short text, else the label without spaces)
+  - record history for this account
+  - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
+- **Layout**, with a live preview of the taskbar:
+  - tile style: stacked bars, vertical bars, segmented ring, concentric rings, logo + bars, or headline %; settings the chosen style ignores are hidden or disabled with the reason
+  - bar length, thickness, and gap (bar styles); ring size and thickness (ring styles)
+  - label position (left, right, top, bottom, or hidden), label font size, and label gap
+  - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size
+  - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles on bars and a color from the swatches or **Custom...**
+  - account margin and tray gap
+  - **Show on taskbar**: replaces the taskbar accounts with sample accounts while it is on and the window is open
+- **Display**, with the same preview:
+  - bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"); threshold colors always represent consumed quota
+  - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
+  - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI) instead of a percentage, following the bar mode
+  - colorblind palette, and the yellow, orange, and red thresholds, each with its color
+  - stale-data marker (`!`)
+  - additional OpenAI rate limits in account details (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
+- **Behavior**:
+  - show on: the primary display, all displays, or a detected display with its resolution
+  - show details on hover: resting the pointer on a column opens its details flyout (on by default); clicking always opens it
+  - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
+  - do not poll hidden accounts (on by default; overrides per-account history recording)
+  - threshold notifications (toast when an account crosses the red threshold)
+- **History**: record usage history (on by default, per Windows user, with its live status), retention in days (90 by default, 1 to 3650), **Open usage history**, and the storage folder
+- **About**: version, project links, credits, and license
 
-Bar and ring dimensions and font sizes use sliders with precise numeric spinner controls. Spacing, thresholds, and custom polling use spinners. Concise hover help explains polling, pace ticks, additional OpenAI rate limits, and stale warnings. Each non-account page can be reset independently without removing accounts or credentials.
+Sizes and thresholds combine a slider with a number box; spacing, polling, retention, and credits use number boxes with step buttons. Changes save as you make them; a number or text box saves on Enter or when you leave it, and Esc reverts it. A value that can't be saved stays in its box with the error, and closing the window then asks before discarding it. Layout, Display, Behavior, and History each have a reset that restores that page's defaults without touching accounts or sign-ins.
 
 ## Usage history
 
-Recording is on by default. Turn it off or back on with **Settings > Behavior > Enable local
+Recording is on by default. Turn it off or back on with **Settings > History > Record usage
 history**, or click **Enable recording** in the history window's disabled banner. The choice
 applies to the current Windows user without changing per-account recording selections or
-hidden-account rules. Account recording defaults on; change **Record history** in an account
-editor to exclude it. Recording starts with the next poll. The details flyout's burn-up charts
-use these recordings.
-Use **Usage history...** from the taskbar context menu or Behavior page to open the native viewer.
+hidden-account rules. Account recording defaults on; turn off **Record history** on an account's
+card in **Settings > Accounts** to exclude it. Recording starts with the next poll. The details
+flyout's burn-up charts use these recordings.
+Use **Usage history** from a column's right-click menu or **Open usage history** in
+**Settings > History** to open the native viewer.
 It reads local samples, not provider APIs. **Refresh / F5** updates the displayed snapshot.
 **Info...** explains line styles, statistics, recording rules, and export behavior. Recording
 state and storage errors stay visible in the main window.
@@ -141,11 +145,11 @@ backfilled. With **Do not poll hidden accounts** on, hidden accounts have no new
 it off to poll hidden accounts only when both global and per-account recording are enabled.
 
 History follows the **configured account entry**, not a verified provider login. Renaming keeps
-its history; changing provider starts a new identity. Use a new entry for a different login,
-including an Antigravity login changed in its app. Removing an entry retains anonymous history
-until expiry or Clear; re-adding it starts fresh. Duplicate entries for the same login remain
-separate lines. Antigravity graphs track the displayed limiting pools, which can change; they
-are not cumulative consumption meters.
+its history. Use a new entry for a different provider or login, including an Antigravity login
+changed in its app. Removing an entry retains anonymous history until expiry or Clear; re-adding
+it starts fresh. Duplicate entries for the same login remain separate lines. Antigravity graphs
+track the displayed limiting pools, which can change; they are not cumulative consumption
+meters.
 
 Samples are stored under `%LOCALAPPDATA%\TaskbarAIQuota\<Windhawk mod ID>\usage-history-v1.bin`,
 with the user's inherited folder permissions. The journal contains quota/amount readings,

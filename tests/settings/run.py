@@ -128,7 +128,7 @@ def main():
             ("render", [str(exe), "--render-dir", str(root)]),
             ("host-compile", native + ["-shared", "-I", str(HERE), str(host_cpp), "-o", str(host_dll), *host_libs]),
             ("probe-compile", native + ["-municode", str(HERE / "host-probe.cpp"), "-o", str(probe),
-                                        "-lole32", "-luser32"]),
+                                        "-lole32", "-luser32", "-lgdi32"]),
             ("host-probe", [str(probe), str(host_dll)]),
             *popup_build,
             ("popup-probe", [str(popup_exe)]),

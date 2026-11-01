@@ -65,14 +65,16 @@ regenerates.
   (`render-popup-*`). Client-drawn previews use the production painter. PNGs for review, no pixel
   goldens.
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
-  (`ui/system-theme.h`, `surface.h`, `popup.h`, `text-box.h`, `host.h`, `color-dialog.h`) and a
-  stub client form
-  `ui-host.dll`; `host-probe.cpp` (hand-written) loads it, opens the window on the DLL's worker
-  thread, closes it from another thread, joins and unloads, repeatedly, and checks classes,
-  windows and GDI/USER handle counts; then client creation failure, a conflicting class
-  registration, render-target loss through the production discard path, and an unload close
-  during a message box. On a hidden desktop: the production popup (owned, never active, capture,
-  close triggers, outside press swallowed until release, keys and clicks choosing), the number
+  (`ui/system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
+  `color-dialog.h`) and a stub client with window icons form `ui-host.dll`; `host-probe.cpp`
+  (hand-written) loads it, opens the window on the DLL's worker thread, closes it from another
+  thread, joins and unloads, repeatedly, and checks classes, windows and GDI/USER handle counts;
+  then client creation failure, a conflicting class registration, render-target loss through the
+  production discard path, the window icons (both sizes at the window's DPI, redrawn at the new
+  sizes on synthetic DPI changes with the replaced ones destroyed and no handle growth, destroyed
+  after close), and an unload close during a message box. On a hidden desktop: the production
+  popup (owned, never active, capture, close triggers, outside press swallowed until release,
+  keys and clicks choosing), the number
   box EDIT (kept across rebuilds, text/Enter/Esc/arrow/Tab events, focus loss then rebuild), a
   slider (press jump and focus, drag values, release and capture loss ending the drag, keys; live
   rebuilds once per frame repainting the main window only when named, values compared with the
@@ -114,8 +116,8 @@ extractions, compiles, exactly one successful `RESULT` summary from `model`, `re
 unchanged during the run. A pass covers extracted logic, offscreen rendering and the host's
 window/thread/teardown contract in a test process (the controller against a test store, the
 popup and EDITs against a stub client); Explorer, the settings thread's real client and store,
-DWM caption colors, live theme switches and multi-monitor DPI need the runtime check in the root
-guide. The popup probe's automated part covers thread-local activation and programmatic events
+DWM caption colors, how the title bar and Alt+Tab show the window icon, live theme switches and
+multi-monitor DPI need the runtime check in the root guide. The popup probe's automated part covers thread-local activation and programmatic events
 only; real clicks on other apps or the taskbar, Alt+Tab, Start and wheel routing need the
 interactive mode, and neither runs inside Explorer (where the taskbar shares the process).
 

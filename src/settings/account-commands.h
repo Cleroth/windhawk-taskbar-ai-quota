@@ -1,5 +1,5 @@
-// Account commands shared by the settings windows: add, edit, remove, reorder and show or hide
-// an account, each one transaction on fresh settings under the edit lock, the account resolved
+// Account commands of the settings window: add, edit, remove, reorder and show or hide an
+// account, each one transaction on fresh settings under the edit lock, the account resolved
 // afresh. Settings thread only. They show nothing: the result says what to tell the user.
 
 // Which account: by history ID, else (none generated) by provider+label identity.
@@ -82,11 +82,9 @@ static AccountCommandResult AddAccountCommand(AccountConfig account, const std::
 // Replaces the account with `edit` applied to its fresh settings. Visibility (which a taskbar
 // menu can change meanwhile) and the history ID stay the fresh ones; a provider change starts a
 // new history. A rename moves the stored sign-in to the new identity, blocking epoch-gated token
-// saves across the local copy, settings and delete transaction; `clearOldSignIn` deletes a
-// provider change's old sign-in afterwards.
+// saves across the local copy, settings and delete transaction.
 static AccountCommandResult EditAccountCommand(AccountTarget target,
-                                               const std::function<void(AccountConfig&)>& edit,
-                                               bool clearOldSignIn = false) {
+                                               const std::function<void(AccountConfig&)>& edit) {
     AccountCommandResult result;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     Settings settings;
@@ -186,10 +184,6 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     }
     result.account = PublishedAccountTarget(newIdentity);
     configLock.unlock();
-    bool providerTokenCleared = true;
-    if (clearOldSignIn) {
-        providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
-    }
     if (result.apply == SettingsApplyResult::Changed) {
         // A quota selection change updates in place: bar layouts already hold every bar and
         // only change visibility and spacing; tile layouts regenerate their meter shapes.
@@ -205,11 +199,6 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
             L"The account was renamed, but a duplicate stored sign-in remains under the old "
             L"identity. To delete it, re-add an account with the old provider and label, then "
             L"remove it and choose to delete its stored sign-in.";
-        result.icon = MB_ICONWARNING;
-    } else if (!providerTokenCleared) {
-        result.message =
-            L"The provider was changed, but the old sign-in remains retained. To recover or "
-            L"delete it, re-add an account with the old provider and label.";
         result.icon = MB_ICONWARNING;
     }
     NotifySettingsWindowChanged();

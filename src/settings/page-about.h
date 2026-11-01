@@ -1,26 +1,24 @@
 // Settings > About: app card, links, credits and license (approved mockup about.png). Pure
 // builder.
 
-// App icon (52 DIP view box): four quota arcs on tracks with pace dots, as a segmented ring tile.
-static constexpr PCWSTR kSettingsAboutTracks[4] = {
-    L"M3.103,21.963 A23.25,23.25 0 0 1 21.963,3.103",
-    L"M30.037,3.103 A23.25,23.25 0 0 1 48.897,21.963",
-    L"M48.897,30.037 A23.25,23.25 0 0 1 30.037,48.897",
-    L"M21.963,48.897 A23.25,23.25 0 0 1 3.103,30.037",
-};
-static constexpr PCWSTR kSettingsAboutFills[4] = {
-    L"M3.103,21.963 A23.25,23.25 0 0 1 3.939,18.661",
-    L"M30.037,3.103 A23.25,23.25 0 0 1 48.468,20.022",
-    L"M48.897,30.037 A23.25,23.25 0 0 1 40.757,43.966",
-    L"M21.963,48.897 A23.25,23.25 0 0 1 16.543,47.24",
-};
-static constexpr uint32_t kSettingsAboutFillColors[4] = {0x43A047, 0xE53935, 0xFDD835, 0x43A047};
-static constexpr PCWSTR kSettingsAboutDots[4] = {
-    L"M4.371,14.025a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-    L"M44.374,14.27a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-    L"M36.03,46.074a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-    L"M1.567,30.874a1.7,1.7 0 1 0 3.4,0a1.7,1.7 0 1 0 -3.4,0Z",
-};
+// App icon (16 DIP view box): green, yellow and red quota bars on tracks, as stacked bars. The
+// 4-unit round-capped bars and 2-unit gaps land on whole pixels at 16, 24, 32 and 48 px.
+static constexpr PCWSTR kSettingsAppIconTracks[3] = {L"M3,2H13", L"M3,8H13", L"M3,14H13"};
+static constexpr PCWSTR kSettingsAppIconFills[3] = {L"M3,2H4", L"M3,8H8", L"M3,14H12"};
+static constexpr uint32_t kSettingsAppIconColors[3] = {0x43A047, 0xFDD835, 0xE53935};
+
+// The app icon over `rect`: the About page's, and the settings window's (ui/window-icon.h).
+static UiItem SettingsAppIcon(D2D1_RECT_F rect) {
+    UiItem icon;
+    icon.kind = UiItemKind::Shape;
+    icon.viewBox = 16;
+    icon.rect = rect;
+    for (int i = 0; i < 3; i++) {
+        icon.parts.push_back({kSettingsAppIconTracks[i], {}, UiInk::Primary, 0.2f, 4});
+        icon.parts.push_back({kSettingsAppIconFills[i], UiRgb(kSettingsAppIconColors[i]), UiInk::Inherit, 1, 4});
+    }
+    return icon;
+}
 
 static constexpr PCWSTR kSettingsProjectUrl = L"https://github.com/Cleroth/windhawk-taskbar-ai-quota";
 
@@ -50,20 +48,9 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         card.rect = {x, y, x + width, y + height};
         items.push_back(std::move(card));
 
-        UiItem icon;
+        UiItem icon =
+            SettingsAppIcon({x + 1 + kPadX, center - kIcon / 2, x + 1 + kPadX + kIcon, center + kIcon / 2});
         icon.id = id++;
-        icon.kind = UiItemKind::Shape;
-        icon.viewBox = 52;
-        icon.rect = {x + 1 + kPadX, center - kIcon / 2, x + 1 + kPadX + kIcon, center + kIcon / 2};
-        for (int i = 0; i < 4; i++) {
-            icon.parts.push_back({kSettingsAboutTracks[i], {}, UiInk::Primary, 0.17f, 4.5f});
-            icon.parts.push_back({kSettingsAboutFills[i], UiRgb(kSettingsAboutFillColors[i]),
-                                  UiInk::Inherit, 1, 4.5f});
-        }
-        for (PCWSTR dot : kSettingsAboutDots) {
-            icon.parts.push_back({dot, UiRgb(0xFFFFFF)});
-            icon.parts.push_back({dot, UiRgb(0x000000, 0.55f), UiInk::Inherit, 1, 0.8f});
-        }
         items.push_back(std::move(icon));
 
         float lineTop = top;

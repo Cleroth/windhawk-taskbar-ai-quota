@@ -33,23 +33,26 @@ Optional notifications warn when usage crosses the configured red threshold.
 
 ## Setup
 
-Open the native Settings window from the taskbar to add accounts. Anthropic and OpenAI
-use browser sign-in; tokens are encrypted locally with Windows DPAPI. Antigravity uses
-its signed-in local app or CLI session, which must remain running.
+Click the **AI +** taskbar tile (later: right-click a quota column, **Settings**) and choose
+**Add account**. A new account is polled right away; Anthropic and OpenAI use browser
+sign-in, with tokens encrypted locally with Windows DPAPI. Antigravity uses its signed-in
+local app or CLI session, which must remain running.
 
 ## Settings
 
-- **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
-- **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
-- **Taskbar behavior:** Choose displays, hover details, polling, and alerts.
-- **Usage history:** Local recording is on by default per Windows user; set retention (90 days
-  by default) and choose recording per account independently of taskbar visibility.
-  Hidden accounts stop
-  polling unless you disable **Do not poll hidden accounts** and enable their recording.
+- **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
+  quotas, tile identity, history recording, and sign-in. Removing an account keeps its history.
+- **Layout:** Tile style with a live taskbar preview, sizes, labels, pace markers, and spacing.
+- **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
+- **Behavior:** Choose displays, hover details, polling, and alerts.
+- **History:** Local recording is on by default per Windows user; set retention (90 days by
+  default) and choose recording per account independently of taskbar visibility. Hidden
+  accounts stop polling unless you disable **Do not poll hidden accounts** and enable their
+  recording.
 
 ## Usage history
 
-Open **Usage history...** from the taskbar context menu or Settings > Behavior. Compare raw
+Open **Usage history...** from the taskbar context menu or Settings > History. Compare raw
 quota timelines on one graph with color-coded account lines, overlay the preceding week,
 view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samples;
 history starts when recording starts, with no backfill.
@@ -245,6 +248,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "ui/surface.h"
 
+#include "ui/window-icon.h"
+
 #include "ui/popup.h"
 
 #include "ui/text-box.h"
@@ -284,12 +289,6 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "settings/shell.h"
 
 #include "settings/ui-window.h"
-
-#include "settings/controls.h"
-
-#include "settings/bindings.h"
-
-#include "settings/account-editor.h"
 
 #include "settings/window.h"
 

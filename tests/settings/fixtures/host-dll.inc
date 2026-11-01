@@ -1,6 +1,7 @@
-// Native-host probe DLL: the extracted toolkit host with a stub client, run on its own worker
-// thread like the settings thread (per-monitor v2, STA, host scope ended before the apartment),
-// optionally on a hidden desktop. host-probe.cpp loads it, drives these exports and unloads it.
+// Native-host probe DLL: the extracted toolkit host with a stub client and window icons, run on
+// its own worker thread like the settings thread (per-monitor v2, STA, host scope ended before
+// the apartment), optionally on a hidden desktop. host-probe.cpp loads it, drives these exports
+// and unloads it.
 
 static constexpr PCWSTR kProbeClass = L"AiQuotaProbeUi";
 static constexpr PCWSTR kProbeViewportClass = L"AiQuotaProbeUiView";
@@ -503,6 +504,14 @@ static DWORD WINAPI ProbeThread(LPVOID) {
         config.size = {640, 480};
         config.activate = false;
         config.position = POINT{-12000, -12000};
+        // Window icons: a palette-inked track, a colored arc and a dot.
+        UiItem icon;
+        icon.kind = UiItemKind::Shape;
+        icon.viewBox = 16;
+        icon.parts = {{L"M2,8a6,6 0 1 0 12,0a6,6 0 1 0 -12,0", {}, UiInk::Primary, 0.2f, 2},
+                      {L"M8,2A6,6 0 0 1 14,8", UiRgb(0x43A047), UiInk::Inherit, 1, 2},
+                      {L"M6.5,8a1.5,1.5 0 1 0 3,0a1.5,1.5 0 1 0 -3,0Z", UiRgb(0xE53935)}};
+        config.icon = icon;
         created = UiHostRun(config, client);
     }
     winrt::uninit_apartment();

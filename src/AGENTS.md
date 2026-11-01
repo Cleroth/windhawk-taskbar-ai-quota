@@ -29,14 +29,15 @@ The mod is injected into `explorer.exe`. Execution domains:
   own message loop), which offers the authorize link to copy or open; never launch a browser
   unprompted. Anthropic codes are pasted there; the OpenAI loopback listener (`g_loginSocket`)
   notifies that window via `WSAAsyncSelect`. Network and token storage only; NEVER XAML.
-- **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the native settings window
-  and account editor, persists autosaved configuration to mod LocalStorage and requests taskbar
-  UI rebuilds. It must NEVER touch XAML directly. The rebuilt window (`settings/ui-window.h`)
-  writes settings only through the edit controller (`settings/edits.h`: drafts, revisioned
-  commit queue, navigation and close flushes) and its store (`settings/store.h`, one
-  transaction per edit); notifications reload its baseline and never commit drafts. Account
-  edits and actions of both settings windows run the shared, UI-free account commands
-  (`settings/account-commands.h`: the rename's sign-in move, removal, reorder, visibility).
+- **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the custom-drawn settings
+  window (`settings/ui-window.h`, a client of the `ui/` toolkit host; toolkit rules:
+  [ui/AGENTS.md](ui/AGENTS.md)), persists autosaved configuration to mod LocalStorage and
+  requests taskbar UI rebuilds. It must NEVER touch XAML directly. The window writes settings
+  only through the edit controller (`settings/edits.h`: drafts, revisioned commit queue,
+  navigation and close flushes) and its store (`settings/store.h`, one transaction per edit);
+  notifications reload its baseline and never commit drafts. Account edits and actions run the
+  UI-free account commands (`settings/account-commands.h`: the rename's sign-in move, removal,
+  reorder, visibility).
 - **History thread** (`HistoryWindowThreadProc`): owns the native history window, graph caches and
   export/confirmation dialogs. No XAML. Cancel tracked modal dialogs and join it before unloading.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
@@ -122,11 +123,13 @@ access+refresh tokens, and refreshes/rotates them itself.
 ## Conventions
 
 - Bump `@version` in the mod header on user-facing changes.
-- The native dialog is intentionally the sole settings surface; don't restore or split out a
-  declarative Windhawk settings block unless explicitly requested. Settings are versioned JSON in
-  `settings_v1`; Windhawk settings are legacy import data only. Preserve `LoadLegacySettings`:
-  migration relies on `Wh_Get*Setting` reading persisted legacy keys without a current settings
-  block.
+- The mod's settings window is intentionally the sole settings surface; don't restore or split
+  out a declarative Windhawk settings block unless explicitly requested. Settings are versioned
+  JSON in `settings_v1`; Windhawk settings are legacy import data only. Preserve
+  `LoadLegacySettings`: migration relies on `Wh_Get*Setting` reading persisted legacy keys
+  without a current settings block.
 - Keep a new setting in sync across `Settings`, JSON serialization/deserialization,
-  normalization, the native controls and the [README settings list](../README.md#settings).
+  normalization, the settings window (its `SettingsField` value, assignment, range and page
+  reset in `settings/edits.h`, its page builder) and the
+  [README settings list](../README.md#settings).
 - Wide strings throughout; `swprintf`'s `%s` is wide here.

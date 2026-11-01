@@ -1,8 +1,8 @@
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
 // and its scrolling viewport child, each with its own render target; the dropdown popup and the
-// number boxes' native text boxes; theme, DPI, pointer and keyboard input, focus, scrolling,
-// close paths and teardown. A client supplies the content and the window-specific behavior.
-// Rules: ui/AGENTS.md.
+// number boxes' native text boxes; theme, window icons, DPI, pointer and keyboard input, focus,
+// scrolling, close paths and teardown. A client supplies the content and the window-specific
+// behavior. Rules: ui/AGENTS.md.
 
 struct UiHost;
 
@@ -45,6 +45,7 @@ struct UiHostConfig {
     D2D1_SIZE_F minSize{500, 400};     // Minimum outer size, DIPs.
     bool activate = true;              // Show active and in the foreground.
     std::optional<POINT> position;     // Top-left in pixels; default: centered on the cursor's monitor.
+    std::optional<UiItem> icon;        // Title bar and Alt+Tab icon (a Shape); none: the default.
 };
 
 struct UiHost {
@@ -54,12 +55,14 @@ struct UiHost {
     UiGraphics* graphics = nullptr;
     UiThemeReader* themes = nullptr;
 
-    // Windows, targets, DPI and theme
+    // Windows, targets, DPI and theme; the main window's icons (ICON_SMALL, ICON_BIG), redrawn
+    // for its DPI and palette and destroyed once it is gone
     HWND main = nullptr, viewport = nullptr;
     UiSurface mainSurface, viewSurface;
     UINT dpi = 96;
     UiThemeInput theme;
     UiPalette palette;
+    std::array<HICON, 2> icons{};
 
     // Frame and interaction. The pointer position (item coordinates of its surface) feeds
     // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
@@ -149,6 +152,9 @@ static void UiHostApplyTheme(UiHost& host) {
     host.theme = UiReadTheme(*host.themes);
     host.palette = UiPaletteFor(host.theme);
     UiApplyChrome(host.main, host.palette);
+    if (host.config->icon) {
+        UiSetWindowIcons(host.main, *host.graphics, host.palette, *host.config->icon, host.dpi, host.icons);
+    }
     host.mainSurface.cache.Clear();
     host.viewSurface.cache.Clear();
     host.popup.surface.cache.Clear();
@@ -649,6 +655,9 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.dpi = HIWORD(wParam);
                 UiDiscardSurface(host.mainSurface);
                 UiDiscardSurface(host.viewSurface);
+                if (host.config->icon) {
+                    UiSetWindowIcons(window, *host.graphics, host.palette, *host.config->icon, host.dpi, host.icons);
+                }
                 const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
                 SetWindowPos(window, nullptr, suggested->left, suggested->top,
                              suggested->right - suggested->left, suggested->bottom - suggested->top,
@@ -1390,8 +1399,8 @@ static LRESULT CALLBACK UiHostViewportProc(HWND window, UINT message, WPARAM wPa
 
 // Runs one window on the calling thread (an STA) until it closes: registers the window classes,
 // keeps every graphics and WinRT object in one scope that ends before the caller uninitializes
-// the apartment, destroys the window inside that scope on every path, and unregisters the
-// classes. Returns false when the window could not be created.
+// the apartment, destroys the window (then its icons) inside that scope on every path, and
+// unregisters the classes. Returns false when the window could not be created.
 static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
     HINSTANCE instance = GetModuleHandleW(nullptr);
     // A stale registration of the same name (an instance that never unregistered) is replaced.
@@ -1473,6 +1482,9 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
         if (host.main && IsWindow(host.main)) DestroyWindow(host.main);
         UiPopupClose(host.popup);
         UiReleaseTextBoxes(host.boxes);
+        for (HICON icon : host.icons) {
+            if (icon) DestroyIcon(icon);
+        }
     }
     if (popupRegistered) UnregisterClassW(config.popupClass, instance);
     if (viewportRegistered) UnregisterClassW(config.viewportClass, instance);
