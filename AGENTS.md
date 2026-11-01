@@ -44,6 +44,14 @@ its bundled clang. There is no `.sln`/`.vcxproj`. Do NOT use `msbuild`.
 - A full runtime test requires Windhawk loading the mod into `explorer.exe`; a compile can't test
   it.
 
+## App icon files
+
+`python render-icon.py` regenerates `icon.png` (256 px) and `icon.ico` (16-256 px, PNG entries)
+from `SettingsAppIcon` (`src/settings/page-about.h`); rerun after changing it. It fails on a stale
+generated file, extracts the icon from it, renders each size natively with bundled clang, Direct2D
+and WIC (transparent; tracks in a fixed grey instead of the theme's ink) and assembles the ICO.
+Build files go to `.out/icon/`. Nothing references the two files.
+
 # Testing
 
 - Run `check-mod.ps1` for syntax/metadata and `python tests/history/run.py` for isolated history
