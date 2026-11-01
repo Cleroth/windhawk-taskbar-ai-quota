@@ -113,12 +113,14 @@ struct HistoryCsvFile {
                 // for each provider's supported meters so exports retain gap information.
                 if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
                     (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
-                    (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5)) continue;
+                    (sample.provider == 3 && meter != 0 && meter != 1 && meter != 2 && meter != 4 && meter != 5)) continue;
                 const auto& value = sample.meters[meter];
                 bool present = HistoryHasValue(sample, int(meter));
+                const char* meterId = kHistoryMeterIds[meter];
+                if (sample.provider == 3 && meter == 2) meterId = "argon_weekly";
                 buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
                     id + "," + provider + "," + std::to_string(sample.provider) + "," +
-                    kHistoryMeterIds[meter] + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
+                    meterId + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
                     (present ? WideToUtf8(HistoryNumber(value.value)) : "") + "," + HistoryUtcDate(value.resetMs) + "," +
                     std::to_string(value.resetMs) + "," + std::to_string(value.durationMs) + "," +
                     std::to_string(sample.intervalMs) + "," + session + "," +
@@ -147,7 +149,7 @@ static void HistoryExport(HistoryWindowState& state) {
     for (const auto& sample : state.snapshot.samples) {
         if ((!selectedId || sample.accountId == selectedId) &&
             sample.timeMs >= state.readFrom && sample.timeMs < state.to) {
-            estimatedRows += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 4;
+            estimatedRows += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 5;
         }
     }
     if (estimatedRows > 500000) {

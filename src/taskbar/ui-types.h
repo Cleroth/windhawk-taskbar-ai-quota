@@ -1,12 +1,12 @@
 // Per-taskbar XAML UI instances and the registry that owns them.
 
 struct AppliedState {
-    std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1};
-    std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
-    std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1};
-    std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
-    std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1};
-    std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1, -1, -1, -1};
+    std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0, 0, 0, 0};
+    std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1, -1, -1, -1};
     std::wstring tip;
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
@@ -38,16 +38,11 @@ struct AccountUiRefs {
     winrt::event_token toolTipOpenedToken{};
     DispatcherTimer manualToolTipTimer{nullptr};
     winrt::event_token manualToolTipTimerToken{};
-    std::array<Border, kQuotaBarCount> tracks{
-        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<Grid, kQuotaBarCount> barItems{
-        Grid{nullptr}, Grid{nullptr}, Grid{nullptr}, Grid{nullptr}};
-    std::array<Border, kQuotaBarCount> fills{
-        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<Border, kQuotaBarCount> paceTicks{
-        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<TextBlock, kQuotaBarCount> percents{
-        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<Border, kQuotaBarCount> tracks{};
+    std::array<Grid, kQuotaBarCount> barItems{};
+    std::array<Border, kQuotaBarCount> fills{};
+    std::array<Border, kQuotaBarCount> paceTicks{};
+    std::array<TextBlock, kQuotaBarCount> percents{};
     TextBlock label{nullptr};
     POINT toolTipOpenCursor{};
     bool hasToolTipOpenCursor = false;

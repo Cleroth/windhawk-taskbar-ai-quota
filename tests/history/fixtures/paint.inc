@@ -90,8 +90,8 @@
             }
             HistoryRebuildView(state);
             textCalls.clear(); penCalls.clear(); polylineCalls = 0; HistoryPaintGraph(state);
-            CHECK(Painted(L"Fable weekly")); CHECK(Painted(L"Gemini weekly")); CHECK(Painted(L"Claude/GPT weekly"));
-            CHECK(penCalls.size() == 20); CHECK(polylineCalls == 10);
+            CHECK(Painted(L"Fable weekly")); CHECK(Painted(L"Gemini weekly")); CHECK(Painted(L"Argon weekly")); CHECK(Painted(L"Claude/GPT weekly"));
+            CHECK(penCalls.size() == 24); CHECK(polylineCalls == 12);
             for (size_t i = 0; i < state.visible.size(); ++i) {
                 CHECK(penCalls[2*i].width == DWORD(ScaleForDpi(state.visible[i].stroke, dpi)));
                 CHECK(penCalls[2*i+1].width == penCalls[2*i].width);

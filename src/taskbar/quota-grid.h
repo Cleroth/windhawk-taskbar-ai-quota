@@ -18,9 +18,12 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
         kWeeklyWindowMs,
         kWeeklyWindowMs,
         30ULL * 24 * 60 * 60 * 1000,
+        kWeeklyWindowMs,
+        kFiveHourWindowMs,
+        kWeeklyWindowMs,
     };
     static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
-        0.35, 0.5, 0.6, 0.8,
+        0.35, 0.5, 0.6, 0.8, 0.5, 0.4, 0.7,
     };
 
     accounts->clear();
@@ -42,6 +45,8 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
         std::array<WindowUsage*, kQuotaBarCount> usage = {
             &accountData.win5h, &accountData.winWeek,
             &accountData.fableWeek, &accountData.extraUsage,
+            &accountData.argonWeek, &accountData.antigravityThirdParty5h,
+            &accountData.antigravityThirdPartyWeek,
         };
         for (int w = 0; w < kQuotaBarCount; w++) {
             usage[w]->pct = percentages[i];
@@ -351,7 +356,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 if (showBarLabels) {
                     static constexpr PCWSTR kBarLabels[kQuotaBarCount] = {
-                        L"5h", L"7d", L"Fa", L"Ex"};
+                        L"5h", L"7d", L"Fa", L"Ex", L"Ar", L"C5", L"C7"};
                     ColumnDefinition labelColumn;
                     labelColumn.Width({std::ceil(compactLabelFontSize * 1.4) + 3.0,
                                        GridUnitType::Pixel});

@@ -18,6 +18,11 @@ static bool NormalizeSettings(Settings* s) {
                       a.provider == L"openai" ? L"O" : L"G";
         }
         if (a.provider != L"anthropic") a.showBars[kFableWeeklyBar] = false;
+        if (a.provider != L"antigravity") {
+            a.showBars[kArgonBar] = false;
+            a.showBars[kClaude3p5hBar] = false;
+            a.showBars[kClaude3pWeeklyBar] = false;
+        }
         if (a.provider != L"openai") a.creditsMax = 0;
         a.creditsMax = std::max(a.creditsMax, 0);
         // The extra-usage slot is Anthropic monthly extra usage or OpenAI credits vs. max.
@@ -26,7 +31,10 @@ static bool NormalizeSettings(Settings* s) {
         }
         if (!a.showBars[kFiveHourBar] && !a.showBars[kWeeklyBar] &&
             !a.showBars[kFableWeeklyBar] &&
-            !a.showBars[kExtraUsageBar]) {
+            !a.showBars[kExtraUsageBar] &&
+            !a.showBars[kArgonBar] &&
+            !a.showBars[kClaude3p5hBar] &&
+            !a.showBars[kClaude3pWeeklyBar]) {
             a.showBars[kFiveHourBar] = true;
         }
         bool duplicate = std::any_of(accounts.begin(), accounts.end(),
@@ -115,6 +123,9 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
+            account.SetNamedValue(L"argonWeekly", JsonValue::CreateBooleanValue(a.showBars[kArgonBar]));
+            account.SetNamedValue(L"claudeFiveHour", JsonValue::CreateBooleanValue(a.showBars[kClaude3p5hBar]));
+            account.SetNamedValue(L"claudeWeekly", JsonValue::CreateBooleanValue(a.showBars[kClaude3pWeeklyBar]));
             account.SetNamedValue(L"creditsMax", JsonValue::CreateNumberValue(a.creditsMax));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
             account.SetNamedValue(L"recordHistory", JsonValue::CreateBooleanValue(a.recordHistory));
@@ -210,6 +221,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
                 a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
+                a.showBars[kArgonBar] = getBoolDefault(L"argonWeekly", a.provider == L"antigravity");
+                a.showBars[kClaude3p5hBar] = getBoolDefault(L"claudeFiveHour", false);
+                a.showBars[kClaude3pWeeklyBar] = getBoolDefault(L"claudeWeekly", false);
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
                 a.recordHistory = getBoolDefault(L"recordHistory", true);

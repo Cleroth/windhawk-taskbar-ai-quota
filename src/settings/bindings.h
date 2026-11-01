@@ -95,6 +95,15 @@ static void RefreshAccountList(SettingsWindowState& state) {
         if (accounts[i].showBars[kFableWeeklyBar]) {
             bars += bars.empty() ? L"Fable" : L", Fable";
         }
+        if (accounts[i].showBars[kArgonBar]) {
+            bars += bars.empty() ? L"Argon" : L", Argon";
+        }
+        if (accounts[i].showBars[kClaude3p5hBar]) {
+            bars += bars.empty() ? L"Claude 5h" : L", Claude 5h";
+        }
+        if (accounts[i].showBars[kClaude3pWeeklyBar]) {
+            bars += bars.empty() ? L"Claude Week" : L", Claude Week";
+        }
         if (accounts[i].showBars[kExtraUsageBar]) {
             PCWSTR name = accounts[i].provider == L"openai" ? L"Credits" : L"Extra";
             if (!bars.empty()) bars += L", ";

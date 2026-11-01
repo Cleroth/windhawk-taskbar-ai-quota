@@ -9,7 +9,7 @@ Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ## What It Shows
 
-Each visible account gets one compact taskbar column. Choose among the provider's supported bars: 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra usage, and OpenAI prepaid credits measured against a max you set (the API reports only the balance). Antigravity maps available short-window and weekly Gemini pools to its bars; Claude/GPT pool limits appear in the tooltip. Selected bars auto-hide when the provider does not return that quota.
+Each visible account gets one compact taskbar column. Choose among the provider's supported bars: 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra usage, OpenAI prepaid credits measured against a max you set (the API reports only the balance), and Google Antigravity Gemini 4 Argon weekly or Claude & GPT pools. Antigravity maps available short-window, weekly, dedicated Argon Gemini, and Claude & GPT pools to its bars. Selected bars auto-hide when the provider does not return that quota.
 
 - stacked layout: horizontal bars stack vertically and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
@@ -45,7 +45,7 @@ Right-click any quota column and choose **Settings...**. Useful settings include
 - provider (Anthropic, OpenAI, or Google Antigravity) per account
 - account labels
 - account ordering and taskbar visibility
-- per-account 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra-usage, and OpenAI credits bar selection
+- per-account 5-hour, weekly, Anthropic Fable weekly, Antigravity Argon weekly, Antigravity Claude & GPT, Anthropic monthly extra-usage, and OpenAI credits bar selection
 - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
 - bar length, thickness, and layout
 - bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"); threshold colors always represent consumed quota

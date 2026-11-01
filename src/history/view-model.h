@@ -371,7 +371,8 @@ static void HistoryUpdateHover(HistoryWindowState& state, POINT cursor) {
     }
     POINT screen = cursor;
     ClientToScreen(state.graph, &screen);
-    MONITORINFO monitor{sizeof(monitor)};
+    MONITORINFO monitor{};
+    monitor.cbSize = sizeof(monitor);
     if (!GetMonitorInfoW(MonitorFromPoint(screen, MONITOR_DEFAULTTONEAREST), &monitor))
         monitor.rcWork = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
     int pad = ScaleForDpi(12, state.dpi);
@@ -489,9 +490,14 @@ static void HistoryRebuildView(HistoryWindowState& state) {
         unsigned meters = account.provider < ARRAYSIZE(kHistoryProviderMeters)
             ? kHistoryProviderMeters[account.provider] & kHistoryViewMeters[size_t(view)] : 0;
         // Only Weekly follows taskbar choices; All meters and removed accounts stay unfiltered.
-        if (view == HistoryView::Weekly && account.provider == 1 && account.configured) {
-            if (!account.showWeekly) meters &= ~(1U << 1);
-            if (!account.showFableWeekly) meters &= ~(1U << 2);
+        if (view == HistoryView::Weekly && account.configured) {
+            if (account.provider == 1) {
+                if (!account.showWeekly) meters &= ~(1U << 1);
+                if (!account.showFableWeekly) meters &= ~(1U << 2);
+            } else if (account.provider == 3) {
+                if (!account.showWeekly) meters &= ~(1U << 1);
+                if (!account.showArgonWeekly) meters &= ~(1U << 2);
+            }
         }
         if (!meters) continue;
         size_t firstSeries = state.visible.size();
@@ -523,7 +529,10 @@ static void HistoryRebuildView(HistoryWindowState& state) {
                                    (GetBValue(color) * 3 + 255) / 4);
             }
             std::wstring label = kHistoryMeterNames[meter];
-            if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
+            if (account.provider == 3) {
+                if (meter == 1) label = L"Gemini weekly used (%)";
+                else if (meter == 2) label = L"Gemini 4 Argon weekly used (%)";
+            }
             auto& axis = state.axes[meter < 6 ? 0 : meter - 5];
             if (series.plotted) axis.visible = true;
             ULONGLONG shortDuration = 0;
@@ -632,6 +641,7 @@ static void HistoryLoad(HistoryWindowState& state) {
         account.hidden = config.hidden;
         account.showWeekly = config.showBars[kWeeklyBar];
         account.showFableWeekly = config.showBars[kFableWeeklyBar];
+        account.showArgonWeekly = config.showBars[kArgonBar];
         account.label = config.label;
         account.title = std::wstring(ProviderDisplayName(config.provider)) + L" — " + config.label;
         index.emplace(account.id, state.accounts.size());

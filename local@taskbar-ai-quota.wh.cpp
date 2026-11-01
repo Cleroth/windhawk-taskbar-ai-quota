@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.0.1
+// @version         2.0.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -24,7 +24,7 @@ Supported providers and quotas:
 
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
 - **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
-- **Google Antigravity:** short-window and weekly Gemini pools; Claude/GPT pool limits in the tooltip
+- **Google Antigravity:** short-window, weekly, dedicated Gemini 4 Argon weekly, and Claude & GPT pools
 
 Optional notifications warn when usage crosses the configured red threshold.
 
@@ -159,13 +159,16 @@ enum QuotaBarIndex {
     kWeeklyBar,
     kFableWeeklyBar,
     kExtraUsageBar,
+    kArgonBar,
+    kClaude3p5hBar,
+    kClaude3pWeeklyBar,
     kQuotaBarCount,
 };
 
 struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
-    std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
+    std::array<bool, kQuotaBarCount> showBars{true, true, false, false, false, false, false};
     // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
     // used-percent bar in the extra-usage slot. 0 disables the bar.
     int creditsMax = 0;
@@ -283,6 +286,7 @@ struct AccountData {
     WindowUsage extraUsage;
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;
+    WindowUsage argonWeek;
     std::wstring plan;
     std::wstring openAiExtraLimitLines;
     std::wstring extraLines;
@@ -358,12 +362,12 @@ static ULONGLONG g_historyContinuityGeneration = 0;  // Protected by g_settingsM
 // Per-taskbar XAML UI instances and the registry that owns them.
 
 struct AppliedState {
-    std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1};
-    std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
-    std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1};
-    std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
-    std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1};
-    std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> fillPx{-1, -1, -1, -1, -1, -1, -1};
+    std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0, 0, 0, 0};
+    std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1, -1, -1, -1};
+    std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1, -1, -1, -1};
     std::wstring tip;
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
@@ -395,16 +399,11 @@ struct AccountUiRefs {
     winrt::event_token toolTipOpenedToken{};
     DispatcherTimer manualToolTipTimer{nullptr};
     winrt::event_token manualToolTipTimerToken{};
-    std::array<Border, kQuotaBarCount> tracks{
-        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<Grid, kQuotaBarCount> barItems{
-        Grid{nullptr}, Grid{nullptr}, Grid{nullptr}, Grid{nullptr}};
-    std::array<Border, kQuotaBarCount> fills{
-        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<Border, kQuotaBarCount> paceTicks{
-        Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
-    std::array<TextBlock, kQuotaBarCount> percents{
-        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<Border, kQuotaBarCount> tracks{};
+    std::array<Grid, kQuotaBarCount> barItems{};
+    std::array<Border, kQuotaBarCount> fills{};
+    std::array<Border, kQuotaBarCount> paceTicks{};
+    std::array<TextBlock, kQuotaBarCount> percents{};
     TextBlock label{nullptr};
     POINT toolTipOpenCursor{};
     bool hasToolTipOpenCursor = false;
@@ -2576,7 +2575,8 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
                 ParseAntigravityUserStatus(status.body, &probeData, nullptr) &&
                 (probeData.win5h.pct >= 0 || probeData.winWeek.pct >= 0 ||
                  probeData.antigravityThirdParty5h.pct >= 0 ||
-                 probeData.antigravityThirdPartyWeek.pct >= 0)) {
+                 probeData.antigravityThirdPartyWeek.pct >= 0 ||
+                 probeData.argonWeek.pct >= 0)) {
                 legacyInfo.port = endpoint.port;
                 legacyInfo.secure = endpoint.secure;
                 legacyInfo.csrfToken = *endpoint.csrfToken;
@@ -2699,6 +2699,7 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
             std::transform(dispName.begin(), dispName.end(), dispName.begin(),
                            [](wchar_t ch) { return (wchar_t)towlower(ch); });
             bool geminiGroup = dispName.find(L"gemini") != std::wstring::npos;
+            bool argonGroup = dispName.find(L"argon") != std::wstring::npos;
             bool thirdPartyGroup = dispName.find(L"claude") != std::wstring::npos ||
                                    dispName.find(L"gpt") != std::wstring::npos;
 
@@ -2728,12 +2729,15 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 if (isWeekly) isShort = false;
                 if (!isShort && !isWeekly) continue;
 
-                bool geminiBucket = bucketId.rfind(L"gemini-", 0) == 0 ||
-                                     (bucketId.rfind(L"3p-", 0) != 0 && geminiGroup);
+                bool isArgon = argonGroup || bucketId.find(L"argon") != std::wstring::npos;
+                bool geminiBucket = !isArgon && (bucketId.rfind(L"gemini-", 0) == 0 ||
+                                     (bucketId.rfind(L"3p-", 0) != 0 && geminiGroup));
                 bool thirdPartyBucket = bucketId.rfind(L"3p-", 0) == 0 ||
-                                         (!geminiBucket && thirdPartyGroup);
+                                         (!geminiBucket && !isArgon && thirdPartyGroup);
                 WindowUsage* target = nullptr;
-                if (geminiBucket) {
+                if (isArgon) {
+                    target = isWeekly ? &d->argonWeek : nullptr;
+                } else if (geminiBucket) {
                     target = isShort ? &d->win5h : &d->winWeek;
                 } else if (thirdPartyBucket) {
                     target = isShort ? &d->antigravityThirdParty5h :
@@ -2782,6 +2786,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
     try {
         bool hasSummaryGeminiShort = d->win5h.pct >= 0;
         bool hasSummaryThirdPartyShort = d->antigravityThirdParty5h.pct >= 0;
+        bool hasSummaryArgon = d->argonWeek.pct >= 0;
         auto root = JsonObject::Parse(Utf8ToWide(body));
         JsonObject payload = root;
         if (auto response = GetObj(root, L"response")) payload = response;
@@ -2832,7 +2837,9 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     }
 
                     WindowUsage* target = nullptr;
-                    if (identity.find(L"gemini") != std::wstring::npos) {
+                    if (identity.find(L"argon") != std::wstring::npos) {
+                        target = &d->argonWeek;
+                    } else if (identity.find(L"gemini") != std::wstring::npos) {
                         target = &d->win5h;
                     } else if (identity.find(L"claude") != std::wstring::npos ||
                                identity.find(L"gpt") != std::wstring::npos ||
@@ -2841,7 +2848,8 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     }
                     if (!target || (target == &d->win5h && hasSummaryGeminiShort) ||
                         (target == &d->antigravityThirdParty5h &&
-                         hasSummaryThirdPartyShort)) {
+                         hasSummaryThirdPartyShort) ||
+                        (target == &d->argonWeek && hasSummaryArgon)) {
                         continue;
                     }
 
@@ -2857,7 +2865,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                         target->pct = usedPct;
                         target->resetUnixMs = ParseIso8601Ms(resetTime);
                         // Legacy model quota can mirror either limiting cadence.
-                        target->windowDurationMs = 0;
+                        target->windowDurationMs = (target == &d->argonWeek) ? kWeeklyWindowMs : 0;
                     }
                 }
             }
@@ -2945,7 +2953,8 @@ static void FetchAntigravityAccount(AccountData* d) {
 
         bool parsed = fresh->win5h.pct >= 0 || fresh->winWeek.pct >= 0 ||
                       fresh->antigravityThirdParty5h.pct >= 0 ||
-                      fresh->antigravityThirdPartyWeek.pct >= 0;
+                      fresh->antigravityThirdPartyWeek.pct >= 0 ||
+                      fresh->argonWeek.pct >= 0;
         if (!parsed && parseError->empty()) {
             *parseError = L"no usable Antigravity quota in response";
         }
@@ -3734,11 +3743,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         if (settingsChanged || redState.size() != accounts.size()) {
             redState.assign(accounts.size(),
-                            std::array<int, kQuotaBarCount>{-1, -1, -1, -1});
+                            std::array<int, kQuotaBarCount>{-1, -1, -1, -1, -1, -1, -1});
             for (size_t i = 0; i < accounts.size(); i++) {
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
-                    &results[i].extraUsage};
+                    &results[i].extraUsage, &results[i].argonWeek,
+                    &results[i].antigravityThirdParty5h, &results[i].antigravityThirdPartyWeek};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (usage[w]->pct >= 0) {
                         redState[i][w] = usage[w]->pct >= redThreshold ? 1 : 0;
@@ -3814,7 +3824,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                 results[i].needsLogin;
                 if (!sample.failed) {
                     const std::array<const WindowUsage*, 6> windows = {
-                        &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
+                        &results[i].win5h, &results[i].winWeek,
+                        (accounts[i].provider == L"antigravity" ? &results[i].argonWeek : &results[i].fableWeek),
                         &results[i].extraUsage, &results[i].antigravityThirdParty5h,
                         &results[i].antigravityThirdPartyWeek};
                     for (size_t m = 0; m < windows.size(); ++m) {
@@ -3943,12 +3954,18 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 if (!publishedFetchedOk[i] || publishedAccounts[i].hidden) continue;
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &publishedResults[i].win5h, &publishedResults[i].winWeek,
-                    &publishedResults[i].fableWeek, &publishedResults[i].extraUsage};
+                    &publishedResults[i].fableWeek, &publishedResults[i].extraUsage,
+                    &publishedResults[i].argonWeek,
+                    &publishedResults[i].antigravityThirdParty5h,
+                    &publishedResults[i].antigravityThirdPartyWeek};
                 const std::array<const WindowUsage*, kQuotaBarCount> previousUsage = {
                     generationRaced ? &previousCurrentResults[i].win5h : nullptr,
                     generationRaced ? &previousCurrentResults[i].winWeek : nullptr,
                     generationRaced ? &previousCurrentResults[i].fableWeek : nullptr,
-                    generationRaced ? &previousCurrentResults[i].extraUsage : nullptr};
+                    generationRaced ? &previousCurrentResults[i].extraUsage : nullptr,
+                    generationRaced ? &previousCurrentResults[i].argonWeek : nullptr,
+                    generationRaced ? &previousCurrentResults[i].antigravityThirdParty5h : nullptr,
+                    generationRaced ? &previousCurrentResults[i].antigravityThirdPartyWeek : nullptr};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (!publishedAccounts[i].showBars[w]) continue;
                     const WindowUsage& wu = *usage[w];
@@ -3976,7 +3993,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         PCWSTR quotaName =
                             w == kFiveHourBar ? L"5h" :
                             w == kWeeklyBar ? L"weekly" :
-                            w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra";
+                            w == kFableWeeklyBar ? L"Fable weekly" :
+                            w == kArgonBar ? L"Argon weekly" :
+                            w == kClaude3p5hBar ? L"Claude/GPT 5h" :
+                            w == kClaude3pWeeklyBar ? L"Claude/GPT weekly" : L"monthly extra";
                         if (publishedAccounts[i].provider == L"antigravity") {
                             if (w == kFiveHourBar) {
                                 ULONGLONG duration = publishedResults[i].win5h.windowDurationMs;
@@ -3986,6 +4006,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                                             L"Gemini 5h";
                             } else if (w == kWeeklyBar) {
                                 quotaName = L"Gemini weekly";
+                            } else if (w == kArgonBar) {
+                                quotaName = L"Gemini 4 Argon weekly";
+                            } else if (w == kClaude3p5hBar) {
+                                ULONGLONG duration = publishedResults[i].antigravityThirdParty5h.windowDurationMs;
+                                quotaName = duration == 3ULL * 60 * 60 * 1000 ? L"Claude/GPT 3h" :
+                                            duration == 60ULL * 60 * 1000 ? L"Claude/GPT 1h" :
+                                            duration == 0 ? L"Claude/GPT current limit" :
+                                                            L"Claude/GPT 5h";
+                            } else if (w == kClaude3pWeeklyBar) {
+                                quotaName = L"Claude/GPT weekly";
                             }
                         } else if (publishedAccounts[i].provider == L"openai" &&
                                    w == kExtraUsageBar) {
@@ -4573,6 +4603,11 @@ static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, 
                 labelEnd = 11;
                 labelBold = true;
                 quotaLine = true;
+            } else if (line.rfind(L"Argon week:", 0) == 0) {
+                labelBrush = quotaLabel;
+                labelEnd = 11;
+                labelBold = true;
+                quotaLine = true;
             } else if (line.rfind(L"error:", 0) == 0) {
                 labelBrush = accent;
                 labelEnd = 6;
@@ -4808,9 +4843,12 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
         kWeeklyWindowMs,
         kWeeklyWindowMs,
         30ULL * 24 * 60 * 60 * 1000,
+        kWeeklyWindowMs,
+        kFiveHourWindowMs,
+        kWeeklyWindowMs,
     };
     static constexpr std::array<double, kQuotaBarCount> kRemainingFractions = {
-        0.35, 0.5, 0.6, 0.8,
+        0.35, 0.5, 0.6, 0.8, 0.5, 0.4, 0.7,
     };
 
     accounts->clear();
@@ -4832,6 +4870,8 @@ static void BuildVisualTestSnapshot(int yellowThreshold, int orangeThreshold,
         std::array<WindowUsage*, kQuotaBarCount> usage = {
             &accountData.win5h, &accountData.winWeek,
             &accountData.fableWeek, &accountData.extraUsage,
+            &accountData.argonWeek, &accountData.antigravityThirdParty5h,
+            &accountData.antigravityThirdPartyWeek,
         };
         for (int w = 0; w < kQuotaBarCount; w++) {
             usage[w]->pct = percentages[i];
@@ -5141,7 +5181,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 if (showBarLabels) {
                     static constexpr PCWSTR kBarLabels[kQuotaBarCount] = {
-                        L"5h", L"7d", L"Fa", L"Ex"};
+                        L"5h", L"7d", L"Fa", L"Ex", L"Ar", L"C5", L"C7"};
                     ColumnDefinition labelColumn;
                     labelColumn.Width({std::ceil(compactLabelFontSize * 1.4) + 3.0,
                                        GridUnitType::Pixel});
@@ -5686,7 +5726,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
 
             const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage};
+                &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage, &d.argonWeek,
+                &d.antigravityThirdParty5h, &d.antigravityThirdPartyWeek};
             int barMask = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (accounts[i].showBars[w] && (d.lastSuccessMs == 0 || usage[w]->pct >= 0)) {
@@ -5885,6 +5926,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
                          displayPct(d.winWeek.pct),
                          remainingSuffix, FormatReset(d.winWeek.resetUnixMs).c_str());
+                tip += line;
+            }
+            if (accounts[i].provider == L"antigravity" && d.argonWeek.pct >= 0) {
+                swprintf(line, ARRAYSIZE(line),
+                         L"\nArgon week: %.0f%%%s | resets %s",
+                         displayPct(d.argonWeek.pct), remainingSuffix,
+                         FormatReset(d.argonWeek.resetUnixMs).c_str());
                 tip += line;
             }
             if (accounts[i].provider == L"antigravity" &&
@@ -6549,6 +6597,11 @@ static bool NormalizeSettings(Settings* s) {
                       a.provider == L"openai" ? L"O" : L"G";
         }
         if (a.provider != L"anthropic") a.showBars[kFableWeeklyBar] = false;
+        if (a.provider != L"antigravity") {
+            a.showBars[kArgonBar] = false;
+            a.showBars[kClaude3p5hBar] = false;
+            a.showBars[kClaude3pWeeklyBar] = false;
+        }
         if (a.provider != L"openai") a.creditsMax = 0;
         a.creditsMax = std::max(a.creditsMax, 0);
         // The extra-usage slot is Anthropic monthly extra usage or OpenAI credits vs. max.
@@ -6557,7 +6610,10 @@ static bool NormalizeSettings(Settings* s) {
         }
         if (!a.showBars[kFiveHourBar] && !a.showBars[kWeeklyBar] &&
             !a.showBars[kFableWeeklyBar] &&
-            !a.showBars[kExtraUsageBar]) {
+            !a.showBars[kExtraUsageBar] &&
+            !a.showBars[kArgonBar] &&
+            !a.showBars[kClaude3p5hBar] &&
+            !a.showBars[kClaude3pWeeklyBar]) {
             a.showBars[kFiveHourBar] = true;
         }
         bool duplicate = std::any_of(accounts.begin(), accounts.end(),
@@ -6646,6 +6702,9 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
+            account.SetNamedValue(L"argonWeekly", JsonValue::CreateBooleanValue(a.showBars[kArgonBar]));
+            account.SetNamedValue(L"claudeFiveHour", JsonValue::CreateBooleanValue(a.showBars[kClaude3p5hBar]));
+            account.SetNamedValue(L"claudeWeekly", JsonValue::CreateBooleanValue(a.showBars[kClaude3pWeeklyBar]));
             account.SetNamedValue(L"creditsMax", JsonValue::CreateNumberValue(a.creditsMax));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
             account.SetNamedValue(L"recordHistory", JsonValue::CreateBooleanValue(a.recordHistory));
@@ -6741,6 +6800,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
                 a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
+                a.showBars[kArgonBar] = getBoolDefault(L"argonWeekly", a.provider == L"antigravity");
+                a.showBars[kClaude3p5hBar] = getBoolDefault(L"claudeFiveHour", false);
+                a.showBars[kClaude3pWeeklyBar] = getBoolDefault(L"claudeWeekly", false);
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
                 a.recordHistory = getBoolDefault(L"recordHistory", true);
@@ -7262,6 +7324,8 @@ enum SettingsControlId {
     kAccountWeekly,
     kAccountFableWeekly,
     kAccountExtraUsage,
+    kAccountClaudeFiveHour,
+    kAccountClaudeWeekly,
     kAccountProviderLabel,
     kAccountLabelLabel,
     kAccountCreditsMax,
@@ -8093,6 +8157,15 @@ static void RefreshAccountList(SettingsWindowState& state) {
         if (accounts[i].showBars[kFableWeeklyBar]) {
             bars += bars.empty() ? L"Fable" : L", Fable";
         }
+        if (accounts[i].showBars[kArgonBar]) {
+            bars += bars.empty() ? L"Argon" : L", Argon";
+        }
+        if (accounts[i].showBars[kClaude3p5hBar]) {
+            bars += bars.empty() ? L"Claude 5h" : L", Claude 5h";
+        }
+        if (accounts[i].showBars[kClaude3pWeeklyBar]) {
+            bars += bars.empty() ? L"Claude Week" : L", Claude Week";
+        }
         if (accounts[i].showBars[kExtraUsageBar]) {
             PCWSTR name = accounts[i].provider == L"openai" ? L"Credits" : L"Extra";
             if (!bars.empty()) bars += L", ";
@@ -8442,24 +8515,53 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  sc(16), sc(58), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountLabel), nullptr,
                  controlX, sc(54), controlWidth, sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
-                 sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
-                 sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
-                 sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    // For OpenAI the 4th checkbox reads "Show credits bar, max:" and the max edit follows it.
-    bool openai = SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0) == 1;
-    SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
-                 sc(16), sc(188), openai ? sc(164) : width - sc(32), sc(24),
-                 SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
-                 sc(180), sc(188), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
-                 sc(16), sc(218), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
-                 sc(16), sc(246), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
-    int buttonY = std::max(sc(306), height - sc(46));
+    int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
+    bool openai = providerIndex == 1;
+    bool antigravity = providerIndex == 2;
+
+    if (antigravity) {
+        SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
+                     sc(16), sc(94), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
+                     sc(16), sc(122), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
+                     sc(16), sc(150), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountClaudeFiveHour), nullptr,
+                     sc(16), sc(178), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountClaudeWeekly), nullptr,
+                     sc(16), sc(206), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
+                     sc(16), sc(236), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
+                     sc(16), sc(264), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    } else if (openai) {
+        SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
+                     sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
+                     sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
+                     sc(16), sc(158), sc(164), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
+                     sc(180), sc(158), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
+                     sc(16), sc(194), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
+                     sc(16), sc(222), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    } else {
+        SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
+                     sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
+                     sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
+                     sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
+                     sc(16), sc(188), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
+                     sc(16), sc(218), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
+                     sc(16), sc(246), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    int buttonY = std::max(antigravity ? sc(340) : sc(306), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr,
@@ -8493,13 +8595,71 @@ static void UpdateAccountEditorProvider(HWND hWnd) {
     int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
     bool anthropic = providerIndex == 0;
     bool openai = providerIndex == 1;
+    bool antigravity = providerIndex == 2;
+    HWND fiveHour = GetDlgItem(hWnd, kAccountFiveHour);
+    HWND weekly = GetDlgItem(hWnd, kAccountWeekly);
     HWND fableWeekly = GetDlgItem(hWnd, kAccountFableWeekly);
     HWND extraUsage = GetDlgItem(hWnd, kAccountExtraUsage);
-    EnableWindow(fableWeekly, anthropic);
-    EnableWindow(extraUsage, anthropic || openai);
-    SetWindowTextW(extraUsage, openai ? L"Show credits bar, max:" :
-                                        L"Show monthly extra-usage bar");
-    ShowWindow(GetDlgItem(hWnd, kAccountCreditsMax), openai ? SW_SHOW : SW_HIDE);
+    HWND creditsMax = GetDlgItem(hWnd, kAccountCreditsMax);
+    HWND claude5h = GetDlgItem(hWnd, kAccountClaudeFiveHour);
+    HWND claudeWeekly = GetDlgItem(hWnd, kAccountClaudeWeekly);
+
+    if (anthropic) {
+        SetWindowTextW(fiveHour, L"Show 5-hour bar");
+        SetWindowTextW(weekly, L"Show weekly bar");
+
+        ShowWindow(fableWeekly, SW_SHOW);
+        EnableWindow(fableWeekly, TRUE);
+        SetWindowTextW(fableWeekly, L"Show Fable weekly bar");
+
+        ShowWindow(extraUsage, SW_SHOW);
+        EnableWindow(extraUsage, TRUE);
+        SetWindowTextW(extraUsage, L"Show monthly extra-usage bar");
+        ShowWindow(creditsMax, SW_HIDE);
+        EnableWindow(creditsMax, FALSE);
+
+        ShowWindow(claude5h, SW_HIDE);
+        EnableWindow(claude5h, FALSE);
+        ShowWindow(claudeWeekly, SW_HIDE);
+        EnableWindow(claudeWeekly, FALSE);
+    } else if (openai) {
+        SetWindowTextW(fiveHour, L"Show 5-hour bar");
+        SetWindowTextW(weekly, L"Show weekly bar");
+
+        ShowWindow(fableWeekly, SW_HIDE);
+        EnableWindow(fableWeekly, FALSE);
+
+        ShowWindow(extraUsage, SW_SHOW);
+        EnableWindow(extraUsage, TRUE);
+        SetWindowTextW(extraUsage, L"Show credits bar, max:");
+        ShowWindow(creditsMax, SW_SHOW);
+        EnableWindow(creditsMax, TRUE);
+
+        ShowWindow(claude5h, SW_HIDE);
+        EnableWindow(claude5h, FALSE);
+        ShowWindow(claudeWeekly, SW_HIDE);
+        EnableWindow(claudeWeekly, FALSE);
+    } else if (antigravity) {
+        SetWindowTextW(fiveHour, L"Show Gemini 5-hour bar");
+        SetWindowTextW(weekly, L"Show Gemini weekly bar");
+
+        ShowWindow(fableWeekly, SW_SHOW);
+        EnableWindow(fableWeekly, TRUE);
+        SetWindowTextW(fableWeekly, L"Show Gemini 4 Argon weekly bar");
+
+        ShowWindow(extraUsage, SW_HIDE);
+        EnableWindow(extraUsage, FALSE);
+        ShowWindow(creditsMax, SW_HIDE);
+        EnableWindow(creditsMax, FALSE);
+
+        ShowWindow(claude5h, SW_SHOW);
+        EnableWindow(claude5h, TRUE);
+        SetWindowTextW(claude5h, L"Show Claude && GPT 5-hour bar");
+
+        ShowWindow(claudeWeekly, SW_SHOW);
+        EnableWindow(claudeWeekly, TRUE);
+        SetWindowTextW(claudeWeekly, L"Show Claude && GPT weekly bar");
+    }
 }
 
 static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
@@ -8567,14 +8727,29 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                           sc(16), sc(188), sc(260), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountExtraUsage),
                                           GetModuleHandleW(nullptr), nullptr);
+            HWND claude5h = CreateWindowExW(0, L"BUTTON", L"Show Claude && GPT 5-hour bar",
+                                            WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX,
+                                            sc(16), sc(178), sc(260), sc(24), hWnd,
+                                            reinterpret_cast<HMENU>(kAccountClaudeFiveHour),
+                                            GetModuleHandleW(nullptr), nullptr);
+            HWND claudeWeekly = CreateWindowExW(0, L"BUTTON", L"Show Claude && GPT weekly bar",
+                                                WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX,
+                                                sc(16), sc(206), sc(260), sc(24), hWnd,
+                                                reinterpret_cast<HMENU>(kAccountClaudeWeekly),
+                                                GetModuleHandleW(nullptr), nullptr);
             SendMessageW(fiveHour, BM_SETCHECK,
                          state->account.showBars[kFiveHourBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(weekly, BM_SETCHECK,
                          state->account.showBars[kWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendMessageW(fable, BM_SETCHECK,
-                         state->account.showBars[kFableWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            bool checkSlot3 = state->account.provider == L"antigravity" ?
+                state->account.showBars[kArgonBar] : state->account.showBars[kFableWeeklyBar];
+            SendMessageW(fable, BM_SETCHECK, checkSlot3 ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(extra, BM_SETCHECK,
                          state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageW(claude5h, BM_SETCHECK,
+                         state->account.showBars[kClaude3p5hBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageW(claudeWeekly, BM_SETCHECK,
+                         state->account.showBars[kClaude3pWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             // Shown only for OpenAI; UpdateAccountEditorProvider toggles visibility.
             std::wstring creditsMaxText = state->account.creditsMax > 0 ?
                 std::to_wstring(state->account.creditsMax) : L"";
@@ -8638,8 +8813,49 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
         case WM_COMMAND:
             if (!state) break;
             if (LOWORD(wParam) == kAccountProvider && HIWORD(wParam) == CBN_SELCHANGE) {
+                if (state->account.provider == L"anthropic") {
+                    state->account.showBars[kFableWeeklyBar] =
+                        IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                    state->account.showBars[kExtraUsageBar] =
+                        IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
+                } else if (state->account.provider == L"antigravity") {
+                    state->account.showBars[kArgonBar] =
+                        IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                    state->account.showBars[kClaude3p5hBar] =
+                        IsDlgButtonChecked(hWnd, kAccountClaudeFiveHour) == BST_CHECKED;
+                    state->account.showBars[kClaude3pWeeklyBar] =
+                        IsDlgButtonChecked(hWnd, kAccountClaudeWeekly) == BST_CHECKED;
+                } else if (state->account.provider == L"openai") {
+                    state->account.showBars[kExtraUsageBar] =
+                        IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
+                }
+                int curSel = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
+                state->account.provider = curSel == 1 ? L"openai" :
+                                          curSel == 2 ? L"antigravity" : L"anthropic";
+                if (!state->originalIdentity && state->account.provider == L"antigravity" &&
+                    !state->account.showBars[kArgonBar] &&
+                    !state->account.showBars[kClaude3p5hBar] &&
+                    !state->account.showBars[kClaude3pWeeklyBar]) {
+                    state->account.showBars[kArgonBar] = true;
+                }
                 UpdateAccountEditorProvider(hWnd);
                 LayoutAccountEditor(hWnd, *state);
+                if (state->account.provider == L"antigravity") {
+                    SendMessageW(GetDlgItem(hWnd, kAccountFableWeekly), BM_SETCHECK,
+                                 state->account.showBars[kArgonBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                    SendMessageW(GetDlgItem(hWnd, kAccountClaudeFiveHour), BM_SETCHECK,
+                                 state->account.showBars[kClaude3p5hBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                    SendMessageW(GetDlgItem(hWnd, kAccountClaudeWeekly), BM_SETCHECK,
+                                 state->account.showBars[kClaude3pWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                } else if (state->account.provider == L"anthropic") {
+                    SendMessageW(GetDlgItem(hWnd, kAccountFableWeekly), BM_SETCHECK,
+                                 state->account.showBars[kFableWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                    SendMessageW(GetDlgItem(hWnd, kAccountExtraUsage), BM_SETCHECK,
+                                 state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                } else if (state->account.provider == L"openai") {
+                    SendMessageW(GetDlgItem(hWnd, kAccountExtraUsage), BM_SETCHECK,
+                                 state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                }
                 return 0;
             }
             if (LOWORD(wParam) == IDOK) {
@@ -8670,6 +8886,15 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.showBars[kFableWeeklyBar] =
                     state->account.provider == L"anthropic" &&
                     IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                state->account.showBars[kArgonBar] =
+                    state->account.provider == L"antigravity" &&
+                    IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                state->account.showBars[kClaude3p5hBar] =
+                    state->account.provider == L"antigravity" &&
+                    IsDlgButtonChecked(hWnd, kAccountClaudeFiveHour) == BST_CHECKED;
+                state->account.showBars[kClaude3pWeeklyBar] =
+                    state->account.provider == L"antigravity" &&
+                    IsDlgButtonChecked(hWnd, kAccountClaudeWeekly) == BST_CHECKED;
                 bool openai = state->account.provider == L"openai";
                 state->account.showBars[kExtraUsageBar] =
                     (state->account.provider == L"anthropic" || openai) &&
@@ -8686,7 +8911,10 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 if (!state->account.showBars[kFiveHourBar] &&
                     !state->account.showBars[kWeeklyBar] &&
                     !state->account.showBars[kFableWeeklyBar] &&
-                    !state->account.showBars[kExtraUsageBar]) {
+                    !state->account.showBars[kExtraUsageBar] &&
+                    !state->account.showBars[kArgonBar] &&
+                    !state->account.showBars[kClaude3p5hBar] &&
+                    !state->account.showBars[kClaude3pWeeklyBar]) {
                     SettingsMessageBoxW(hWnd, L"Select at least one quota bar.", L"Account",
                                 MB_OK | MB_ICONWARNING);
                     return 0;
@@ -8787,7 +9015,7 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
     UINT dpi = WindowDpi(owner);
     int width = ScaleForDpi(404, dpi);
-    int height = ScaleForDpi(388, dpi);
+    int height = ScaleForDpi(424, dpi);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitorInfo);
     width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));
@@ -10028,7 +10256,7 @@ static constexpr unsigned kHistoryViewMeters[] = {
 };
 static constexpr unsigned kHistoryProviderMeters[] = {
     0, (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3) | (1U << 6),
-    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 4) | (1U << 5),
+    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 2) | (1U << 4) | (1U << 5),
 };
 static constexpr COLORREF kHistoryColors[] = {
     RGB(0, 80, 230), RGB(220, 100, 0), RGB(0, 140, 40), RGB(200, 0, 160),
@@ -10064,7 +10292,7 @@ struct HistoryUiAccount {
     bool configured = false;
     bool recording = false;
     bool hidden = false;
-    bool showWeekly = true, showFableWeekly = true;
+    bool showWeekly = true, showFableWeekly = true, showArgonWeekly = true;
     std::vector<size_t> rows;
 };
 
@@ -10493,7 +10721,8 @@ static void HistoryUpdateHover(HistoryWindowState& state, POINT cursor) {
     }
     POINT screen = cursor;
     ClientToScreen(state.graph, &screen);
-    MONITORINFO monitor{sizeof(monitor)};
+    MONITORINFO monitor{};
+    monitor.cbSize = sizeof(monitor);
     if (!GetMonitorInfoW(MonitorFromPoint(screen, MONITOR_DEFAULTTONEAREST), &monitor))
         monitor.rcWork = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
     int pad = ScaleForDpi(12, state.dpi);
@@ -10611,9 +10840,14 @@ static void HistoryRebuildView(HistoryWindowState& state) {
         unsigned meters = account.provider < ARRAYSIZE(kHistoryProviderMeters)
             ? kHistoryProviderMeters[account.provider] & kHistoryViewMeters[size_t(view)] : 0;
         // Only Weekly follows taskbar choices; All meters and removed accounts stay unfiltered.
-        if (view == HistoryView::Weekly && account.provider == 1 && account.configured) {
-            if (!account.showWeekly) meters &= ~(1U << 1);
-            if (!account.showFableWeekly) meters &= ~(1U << 2);
+        if (view == HistoryView::Weekly && account.configured) {
+            if (account.provider == 1) {
+                if (!account.showWeekly) meters &= ~(1U << 1);
+                if (!account.showFableWeekly) meters &= ~(1U << 2);
+            } else if (account.provider == 3) {
+                if (!account.showWeekly) meters &= ~(1U << 1);
+                if (!account.showArgonWeekly) meters &= ~(1U << 2);
+            }
         }
         if (!meters) continue;
         size_t firstSeries = state.visible.size();
@@ -10645,7 +10879,10 @@ static void HistoryRebuildView(HistoryWindowState& state) {
                                    (GetBValue(color) * 3 + 255) / 4);
             }
             std::wstring label = kHistoryMeterNames[meter];
-            if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
+            if (account.provider == 3) {
+                if (meter == 1) label = L"Gemini weekly used (%)";
+                else if (meter == 2) label = L"Gemini 4 Argon weekly used (%)";
+            }
             auto& axis = state.axes[meter < 6 ? 0 : meter - 5];
             if (series.plotted) axis.visible = true;
             ULONGLONG shortDuration = 0;
@@ -10754,6 +10991,7 @@ static void HistoryLoad(HistoryWindowState& state) {
         account.hidden = config.hidden;
         account.showWeekly = config.showBars[kWeeklyBar];
         account.showFableWeekly = config.showBars[kFableWeeklyBar];
+        account.showArgonWeekly = config.showBars[kArgonBar];
         account.label = config.label;
         account.title = std::wstring(ProviderDisplayName(config.provider)) + L" — " + config.label;
         index.emplace(account.id, state.accounts.size());
@@ -10914,12 +11152,14 @@ struct HistoryCsvFile {
                 // for each provider's supported meters so exports retain gap information.
                 if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
                     (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
-                    (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5)) continue;
+                    (sample.provider == 3 && meter != 0 && meter != 1 && meter != 2 && meter != 4 && meter != 5)) continue;
                 const auto& value = sample.meters[meter];
                 bool present = HistoryHasValue(sample, int(meter));
+                const char* meterId = kHistoryMeterIds[meter];
+                if (sample.provider == 3 && meter == 2) meterId = "argon_weekly";
                 buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
                     id + "," + provider + "," + std::to_string(sample.provider) + "," +
-                    kHistoryMeterIds[meter] + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
+                    meterId + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
                     (present ? WideToUtf8(HistoryNumber(value.value)) : "") + "," + HistoryUtcDate(value.resetMs) + "," +
                     std::to_string(value.resetMs) + "," + std::to_string(value.durationMs) + "," +
                     std::to_string(sample.intervalMs) + "," + session + "," +
@@ -10948,7 +11188,7 @@ static void HistoryExport(HistoryWindowState& state) {
     for (const auto& sample : state.snapshot.samples) {
         if ((!selectedId || sample.accountId == selectedId) &&
             sample.timeMs >= state.readFrom && sample.timeMs < state.to) {
-            estimatedRows += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 4;
+            estimatedRows += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 5;
         }
     }
     if (estimatedRows > 500000) {

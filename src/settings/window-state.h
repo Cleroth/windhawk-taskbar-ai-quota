@@ -71,6 +71,8 @@ enum SettingsControlId {
     kAccountWeekly,
     kAccountFableWeekly,
     kAccountExtraUsage,
+    kAccountClaudeFiveHour,
+    kAccountClaudeWeekly,
     kAccountProviderLabel,
     kAccountLabelLabel,
     kAccountCreditsMax,

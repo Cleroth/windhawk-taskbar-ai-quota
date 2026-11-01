@@ -39,7 +39,7 @@ static constexpr unsigned kHistoryViewMeters[] = {
 };
 static constexpr unsigned kHistoryProviderMeters[] = {
     0, (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3) | (1U << 6),
-    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 4) | (1U << 5),
+    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 2) | (1U << 4) | (1U << 5),
 };
 static constexpr COLORREF kHistoryColors[] = {
     RGB(0, 80, 230), RGB(220, 100, 0), RGB(0, 140, 40), RGB(200, 0, 160),
@@ -75,7 +75,7 @@ struct HistoryUiAccount {
     bool configured = false;
     bool recording = false;
     bool hidden = false;
-    bool showWeekly = true, showFableWeekly = true;
+    bool showWeekly = true, showFableWeekly = true, showArgonWeekly = true;
     std::vector<size_t> rows;
 };
 

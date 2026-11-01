@@ -5,13 +5,16 @@ enum QuotaBarIndex {
     kWeeklyBar,
     kFableWeeklyBar,
     kExtraUsageBar,
+    kArgonBar,
+    kClaude3p5hBar,
+    kClaude3pWeeklyBar,
     kQuotaBarCount,
 };
 
 struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
-    std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
+    std::array<bool, kQuotaBarCount> showBars{true, true, false, false, false, false, false};
     // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
     // used-percent bar in the extra-usage slot. 0 disables the bar.
     int creditsMax = 0;
@@ -129,6 +132,7 @@ struct AccountData {
     WindowUsage extraUsage;
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;
+    WindowUsage argonWeek;
     std::wstring plan;
     std::wstring openAiExtraLimitLines;
     std::wstring extraLines;

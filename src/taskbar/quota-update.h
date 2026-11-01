@@ -91,7 +91,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
 
             const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage};
+                &d.win5h, &d.winWeek, &d.fableWeek, &d.extraUsage, &d.argonWeek,
+                &d.antigravityThirdParty5h, &d.antigravityThirdPartyWeek};
             int barMask = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (accounts[i].showBars[w] && (d.lastSuccessMs == 0 || usage[w]->pct >= 0)) {
@@ -290,6 +291,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 swprintf(line, ARRAYSIZE(line), L"\n%s: %.0f%%%s | resets %s", label,
                          displayPct(d.winWeek.pct),
                          remainingSuffix, FormatReset(d.winWeek.resetUnixMs).c_str());
+                tip += line;
+            }
+            if (accounts[i].provider == L"antigravity" && d.argonWeek.pct >= 0) {
+                swprintf(line, ARRAYSIZE(line),
+                         L"\nArgon week: %.0f%%%s | resets %s",
+                         displayPct(d.argonWeek.pct), remainingSuffix,
+                         FormatReset(d.argonWeek.resetUnixMs).c_str());
                 tip += line;
             }
             if (accounts[i].provider == L"antigravity" &&

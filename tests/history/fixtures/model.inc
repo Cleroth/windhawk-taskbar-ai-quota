@@ -5,10 +5,10 @@
         CHECK(state.accountView == HistoryView::AllMeters);
         CHECK(state.accounts[0].showWeekly); CHECK(state.accounts[0].showFableWeekly);
         HistoryRebuildView(state);
-        CHECK(state.visible.size() == 5);
+        CHECK(state.visible.size() == 6);
         CHECK((Meters(state, 0) == std::set<int>{1, 2}));
         CHECK((Meters(state, 1) == std::set<int>{1}));
-        CHECK((Meters(state, 2) == std::set<int>{1, 5}));
+        CHECK((Meters(state, 2) == std::set<int>{1, 2, 5}));
         CHECK((controls[state.meterCombo].items == std::vector<std::wstring>{L"Short-term", L"Weekly", L"Extra usage", L"All meters"}));
         CHECK(controls[state.meterCombo].selection == 1);
         CHECK(controls[state.exportButton].text == L"&Export all CSV...");
@@ -20,10 +20,10 @@
         CHECK(controls[state.meterCombo].selection == 3);
         CHECK(controls[state.exportButton].text == L"&Export CSV...");
         SelectAccount(state, -1); SelectView(state, HistoryView::AllMeters);
-        CHECK(state.visible.size() == 12); CHECK(state.noReadings.empty());
+        CHECK(state.visible.size() == 13); CHECK(state.noReadings.empty());
         CHECK((Meters(state, 0) == std::set<int>{0, 1, 2, 3, 6}));
         CHECK((Meters(state, 1) == std::set<int>{0, 1, 7}));
-        CHECK((Meters(state, 2) == std::set<int>{0, 1, 4, 5}));
+        CHECK((Meters(state, 2) == std::set<int>{0, 1, 2, 4, 5}));
         CHECK(controls[state.meterCombo].selection == 3);
         CHECK(controls[state.exportButton].text == L"&Export all CSV...");
     });
@@ -31,7 +31,7 @@
     const std::array<std::array<std::set<int>, 4>, 3> expected{{
         {{{0}, {1, 2}, {3, 6}, {0, 1, 2, 3, 6}}},
         {{{0}, {1}, {7}, {0, 1, 7}}},
-        {{{0, 4}, {1, 5}, {}, {0, 1, 4, 5}}},
+        {{{0, 4}, {1, 2, 5}, {}, {0, 1, 2, 4, 5}}},
     }};
     for (int selected : {-1, 0}) for (uint32_t provider = 1; provider <= 3; ++provider) {
         for (int view = 0; view < 4; ++view) {
@@ -49,7 +49,7 @@
                 }
                 if (provider == 1 && (view == 1 || view == 3)) CHECK(Series(state, 0, 2).title.find(L"Fable weekly") != std::wstring::npos);
                 if (provider == 3 && (view == 1 || view == 3)) {
-                    CHECK(Series(state, 0, 1).title.find(L"Gemini weekly") != std::wstring::npos);
+                    CHECK(Series(state, 0, 1).title.find(L"Gemini weekly") != std::wstring::npos); CHECK(Series(state, 0, 2).title.find(L"Argon weekly") != std::wstring::npos);
                     CHECK(Series(state, 0, 5).title.find(L"Claude/GPT weekly") != std::wstring::npos);
                 }
             });
@@ -159,10 +159,10 @@
             state.accounts[i].showWeekly = weeklyFlags[i].first;
             state.accounts[i].showFableWeekly = weeklyFlags[i].second;
         }
-        state.accounts[4].configured = false;
-        const std::array<std::set<int>, 7> mixedMeters{{{}, {1}, {2}, {1, 2}, {1, 2}, {1}, {1, 5}}};
+        state.accounts[4].configured = false; state.accounts[6].showWeekly = true; state.accounts[6].showArgonWeekly = true;
+        const std::array<std::set<int>, 7> mixedMeters{{{}, {1}, {2}, {1, 2}, {1, 2}, {1}, {1, 2, 5}}};
         SelectView(state, HistoryView::Weekly);
-        CHECK(state.visible.size() == 9); CHECK(state.noReadings.empty());
+        CHECK(state.visible.size() == 10); CHECK(state.noReadings.empty());
         for (size_t i = 0; i < state.accounts.size(); ++i) CHECK(Meters(state, i) == mixedMeters[i]);
         for (size_t i = 0; i < state.accounts.size(); ++i) {
             SelectAccount(state, int(i)); SelectView(state, HistoryView::Weekly);
@@ -253,7 +253,7 @@
         SelectAccount(state, 1); CHECK(state.accountView == HistoryView::ShortTerm);
         CHECK(controls[state.meterCombo].selection == 0);
         SelectAccount(state, -1); CHECK(state.allAccountsView == HistoryView::AllMeters);
-        CHECK(controls[state.meterCombo].selection == 3); CHECK(state.visible.size() == 12);
+        CHECK(controls[state.meterCombo].selection == 3); CHECK(state.visible.size() == 13);
         // Both modes clamp to the same four choices without changing the other memory.
         for (int selected : {-1, 0}) {
             SelectAccount(state, selected);
@@ -443,10 +443,10 @@
         AddRow(state, 0, baseTime + 121000, {}).failed = 1;
         auto original = state.snapshot.samples;
         CapturedCsv baseline; size_t count = 0;
-        CHECK(baseline.WriteSnapshot(state, &count)); CHECK(count == 29);
+        CHECK(baseline.WriteSnapshot(state, &count)); CHECK(count == 31);
         CHECK(baseline.bytes.find("anthropic_extra_used,USD,12.5") != std::string::npos);
         CHECK(baseline.bytes.find("openai_credit_balance,credits,800") != std::string::npos);
-        CHECK(baseline.bytes.find("account-100") == std::string::npos);
+        CHECK(baseline.bytes.find("account-100") == std::string::npos); CHECK(baseline.bytes.find("argon_weekly,percent,30") != std::string::npos); CHECK(baseline.bytes.find("fable_weekly,percent,30") != std::string::npos);
         CHECK(baseline.bytes.find(",1,1\r\n") != std::string::npos);
         SelectAccount(state, 0);
         CapturedCsv single; size_t singleCount = 0;

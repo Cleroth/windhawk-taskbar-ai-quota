@@ -16,24 +16,53 @@ static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
                  sc(16), sc(58), controlX - sc(28), sc(22), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, kAccountLabel), nullptr,
                  controlX, sc(54), controlWidth, sc(26), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
-                 sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
-                 sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
-                 sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    // For OpenAI the 4th checkbox reads "Show credits bar, max:" and the max edit follows it.
-    bool openai = SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0) == 1;
-    SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
-                 sc(16), sc(188), openai ? sc(164) : width - sc(32), sc(24),
-                 SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
-                 sc(180), sc(188), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
-                 sc(16), sc(218), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
-                 sc(16), sc(246), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
-    int buttonY = std::max(sc(306), height - sc(46));
+    int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
+    bool openai = providerIndex == 1;
+    bool antigravity = providerIndex == 2;
+
+    if (antigravity) {
+        SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
+                     sc(16), sc(94), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
+                     sc(16), sc(122), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
+                     sc(16), sc(150), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountClaudeFiveHour), nullptr,
+                     sc(16), sc(178), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountClaudeWeekly), nullptr,
+                     sc(16), sc(206), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
+                     sc(16), sc(236), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
+                     sc(16), sc(264), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    } else if (openai) {
+        SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
+                     sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
+                     sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
+                     sc(16), sc(158), sc(164), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountCreditsMax), nullptr,
+                     sc(180), sc(158), sc(80), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
+                     sc(16), sc(194), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
+                     sc(16), sc(222), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    } else {
+        SetWindowPos(GetDlgItem(hWnd, kAccountFiveHour), nullptr,
+                     sc(16), sc(98), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountWeekly), nullptr,
+                     sc(16), sc(128), sc(180), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountFableWeekly), nullptr,
+                     sc(16), sc(158), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountExtraUsage), nullptr,
+                     sc(16), sc(188), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountRecordHistory), nullptr,
+                     sc(16), sc(218), width - sc(32), sc(24), SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(GetDlgItem(hWnd, kAccountHistoryIdentityNote), nullptr,
+                     sc(16), sc(246), width - sc(32), sc(44), SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    int buttonY = std::max(antigravity ? sc(340) : sc(306), height - sc(46));
     SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr,
                  width - sc(182), buttonY, sc(80), sc(30), SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr,
@@ -67,13 +96,71 @@ static void UpdateAccountEditorProvider(HWND hWnd) {
     int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
     bool anthropic = providerIndex == 0;
     bool openai = providerIndex == 1;
+    bool antigravity = providerIndex == 2;
+    HWND fiveHour = GetDlgItem(hWnd, kAccountFiveHour);
+    HWND weekly = GetDlgItem(hWnd, kAccountWeekly);
     HWND fableWeekly = GetDlgItem(hWnd, kAccountFableWeekly);
     HWND extraUsage = GetDlgItem(hWnd, kAccountExtraUsage);
-    EnableWindow(fableWeekly, anthropic);
-    EnableWindow(extraUsage, anthropic || openai);
-    SetWindowTextW(extraUsage, openai ? L"Show credits bar, max:" :
-                                        L"Show monthly extra-usage bar");
-    ShowWindow(GetDlgItem(hWnd, kAccountCreditsMax), openai ? SW_SHOW : SW_HIDE);
+    HWND creditsMax = GetDlgItem(hWnd, kAccountCreditsMax);
+    HWND claude5h = GetDlgItem(hWnd, kAccountClaudeFiveHour);
+    HWND claudeWeekly = GetDlgItem(hWnd, kAccountClaudeWeekly);
+
+    if (anthropic) {
+        SetWindowTextW(fiveHour, L"Show 5-hour bar");
+        SetWindowTextW(weekly, L"Show weekly bar");
+
+        ShowWindow(fableWeekly, SW_SHOW);
+        EnableWindow(fableWeekly, TRUE);
+        SetWindowTextW(fableWeekly, L"Show Fable weekly bar");
+
+        ShowWindow(extraUsage, SW_SHOW);
+        EnableWindow(extraUsage, TRUE);
+        SetWindowTextW(extraUsage, L"Show monthly extra-usage bar");
+        ShowWindow(creditsMax, SW_HIDE);
+        EnableWindow(creditsMax, FALSE);
+
+        ShowWindow(claude5h, SW_HIDE);
+        EnableWindow(claude5h, FALSE);
+        ShowWindow(claudeWeekly, SW_HIDE);
+        EnableWindow(claudeWeekly, FALSE);
+    } else if (openai) {
+        SetWindowTextW(fiveHour, L"Show 5-hour bar");
+        SetWindowTextW(weekly, L"Show weekly bar");
+
+        ShowWindow(fableWeekly, SW_HIDE);
+        EnableWindow(fableWeekly, FALSE);
+
+        ShowWindow(extraUsage, SW_SHOW);
+        EnableWindow(extraUsage, TRUE);
+        SetWindowTextW(extraUsage, L"Show credits bar, max:");
+        ShowWindow(creditsMax, SW_SHOW);
+        EnableWindow(creditsMax, TRUE);
+
+        ShowWindow(claude5h, SW_HIDE);
+        EnableWindow(claude5h, FALSE);
+        ShowWindow(claudeWeekly, SW_HIDE);
+        EnableWindow(claudeWeekly, FALSE);
+    } else if (antigravity) {
+        SetWindowTextW(fiveHour, L"Show Gemini 5-hour bar");
+        SetWindowTextW(weekly, L"Show Gemini weekly bar");
+
+        ShowWindow(fableWeekly, SW_SHOW);
+        EnableWindow(fableWeekly, TRUE);
+        SetWindowTextW(fableWeekly, L"Show Gemini 4 Argon weekly bar");
+
+        ShowWindow(extraUsage, SW_HIDE);
+        EnableWindow(extraUsage, FALSE);
+        ShowWindow(creditsMax, SW_HIDE);
+        EnableWindow(creditsMax, FALSE);
+
+        ShowWindow(claude5h, SW_SHOW);
+        EnableWindow(claude5h, TRUE);
+        SetWindowTextW(claude5h, L"Show Claude && GPT 5-hour bar");
+
+        ShowWindow(claudeWeekly, SW_SHOW);
+        EnableWindow(claudeWeekly, TRUE);
+        SetWindowTextW(claudeWeekly, L"Show Claude && GPT weekly bar");
+    }
 }
 
 static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
@@ -141,14 +228,29 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                           sc(16), sc(188), sc(260), sc(24), hWnd,
                                           reinterpret_cast<HMENU>(kAccountExtraUsage),
                                           GetModuleHandleW(nullptr), nullptr);
+            HWND claude5h = CreateWindowExW(0, L"BUTTON", L"Show Claude && GPT 5-hour bar",
+                                            WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX,
+                                            sc(16), sc(178), sc(260), sc(24), hWnd,
+                                            reinterpret_cast<HMENU>(kAccountClaudeFiveHour),
+                                            GetModuleHandleW(nullptr), nullptr);
+            HWND claudeWeekly = CreateWindowExW(0, L"BUTTON", L"Show Claude && GPT weekly bar",
+                                                WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX,
+                                                sc(16), sc(206), sc(260), sc(24), hWnd,
+                                                reinterpret_cast<HMENU>(kAccountClaudeWeekly),
+                                                GetModuleHandleW(nullptr), nullptr);
             SendMessageW(fiveHour, BM_SETCHECK,
                          state->account.showBars[kFiveHourBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(weekly, BM_SETCHECK,
                          state->account.showBars[kWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendMessageW(fable, BM_SETCHECK,
-                         state->account.showBars[kFableWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            bool checkSlot3 = state->account.provider == L"antigravity" ?
+                state->account.showBars[kArgonBar] : state->account.showBars[kFableWeeklyBar];
+            SendMessageW(fable, BM_SETCHECK, checkSlot3 ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(extra, BM_SETCHECK,
                          state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageW(claude5h, BM_SETCHECK,
+                         state->account.showBars[kClaude3p5hBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageW(claudeWeekly, BM_SETCHECK,
+                         state->account.showBars[kClaude3pWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
             // Shown only for OpenAI; UpdateAccountEditorProvider toggles visibility.
             std::wstring creditsMaxText = state->account.creditsMax > 0 ?
                 std::to_wstring(state->account.creditsMax) : L"";
@@ -212,8 +314,49 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
         case WM_COMMAND:
             if (!state) break;
             if (LOWORD(wParam) == kAccountProvider && HIWORD(wParam) == CBN_SELCHANGE) {
+                if (state->account.provider == L"anthropic") {
+                    state->account.showBars[kFableWeeklyBar] =
+                        IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                    state->account.showBars[kExtraUsageBar] =
+                        IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
+                } else if (state->account.provider == L"antigravity") {
+                    state->account.showBars[kArgonBar] =
+                        IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                    state->account.showBars[kClaude3p5hBar] =
+                        IsDlgButtonChecked(hWnd, kAccountClaudeFiveHour) == BST_CHECKED;
+                    state->account.showBars[kClaude3pWeeklyBar] =
+                        IsDlgButtonChecked(hWnd, kAccountClaudeWeekly) == BST_CHECKED;
+                } else if (state->account.provider == L"openai") {
+                    state->account.showBars[kExtraUsageBar] =
+                        IsDlgButtonChecked(hWnd, kAccountExtraUsage) == BST_CHECKED;
+                }
+                int curSel = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
+                state->account.provider = curSel == 1 ? L"openai" :
+                                          curSel == 2 ? L"antigravity" : L"anthropic";
+                if (!state->originalIdentity && state->account.provider == L"antigravity" &&
+                    !state->account.showBars[kArgonBar] &&
+                    !state->account.showBars[kClaude3p5hBar] &&
+                    !state->account.showBars[kClaude3pWeeklyBar]) {
+                    state->account.showBars[kArgonBar] = true;
+                }
                 UpdateAccountEditorProvider(hWnd);
                 LayoutAccountEditor(hWnd, *state);
+                if (state->account.provider == L"antigravity") {
+                    SendMessageW(GetDlgItem(hWnd, kAccountFableWeekly), BM_SETCHECK,
+                                 state->account.showBars[kArgonBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                    SendMessageW(GetDlgItem(hWnd, kAccountClaudeFiveHour), BM_SETCHECK,
+                                 state->account.showBars[kClaude3p5hBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                    SendMessageW(GetDlgItem(hWnd, kAccountClaudeWeekly), BM_SETCHECK,
+                                 state->account.showBars[kClaude3pWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                } else if (state->account.provider == L"anthropic") {
+                    SendMessageW(GetDlgItem(hWnd, kAccountFableWeekly), BM_SETCHECK,
+                                 state->account.showBars[kFableWeeklyBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                    SendMessageW(GetDlgItem(hWnd, kAccountExtraUsage), BM_SETCHECK,
+                                 state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                } else if (state->account.provider == L"openai") {
+                    SendMessageW(GetDlgItem(hWnd, kAccountExtraUsage), BM_SETCHECK,
+                                 state->account.showBars[kExtraUsageBar] ? BST_CHECKED : BST_UNCHECKED, 0);
+                }
                 return 0;
             }
             if (LOWORD(wParam) == IDOK) {
@@ -244,6 +387,15 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 state->account.showBars[kFableWeeklyBar] =
                     state->account.provider == L"anthropic" &&
                     IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                state->account.showBars[kArgonBar] =
+                    state->account.provider == L"antigravity" &&
+                    IsDlgButtonChecked(hWnd, kAccountFableWeekly) == BST_CHECKED;
+                state->account.showBars[kClaude3p5hBar] =
+                    state->account.provider == L"antigravity" &&
+                    IsDlgButtonChecked(hWnd, kAccountClaudeFiveHour) == BST_CHECKED;
+                state->account.showBars[kClaude3pWeeklyBar] =
+                    state->account.provider == L"antigravity" &&
+                    IsDlgButtonChecked(hWnd, kAccountClaudeWeekly) == BST_CHECKED;
                 bool openai = state->account.provider == L"openai";
                 state->account.showBars[kExtraUsageBar] =
                     (state->account.provider == L"anthropic" || openai) &&
@@ -260,7 +412,10 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 if (!state->account.showBars[kFiveHourBar] &&
                     !state->account.showBars[kWeeklyBar] &&
                     !state->account.showBars[kFableWeeklyBar] &&
-                    !state->account.showBars[kExtraUsageBar]) {
+                    !state->account.showBars[kExtraUsageBar] &&
+                    !state->account.showBars[kArgonBar] &&
+                    !state->account.showBars[kClaude3p5hBar] &&
+                    !state->account.showBars[kClaude3pWeeklyBar]) {
                     SettingsMessageBoxW(hWnd, L"Select at least one quota bar.", L"Account",
                                 MB_OK | MB_ICONWARNING);
                     return 0;
@@ -361,7 +516,7 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     state.originalIdentity = adding ? 0 : AccountIdentityHash(*account);
     UINT dpi = WindowDpi(owner);
     int width = ScaleForDpi(404, dpi);
-    int height = ScaleForDpi(388, dpi);
+    int height = ScaleForDpi(424, dpi);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitorInfo);
     width = std::min(width, (int)(monitorInfo.rcWork.right - monitorInfo.rcWork.left));

@@ -252,11 +252,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         if (settingsChanged || redState.size() != accounts.size()) {
             redState.assign(accounts.size(),
-                            std::array<int, kQuotaBarCount>{-1, -1, -1, -1});
+                            std::array<int, kQuotaBarCount>{-1, -1, -1, -1, -1, -1, -1});
             for (size_t i = 0; i < accounts.size(); i++) {
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
-                    &results[i].extraUsage};
+                    &results[i].extraUsage, &results[i].argonWeek,
+                    &results[i].antigravityThirdParty5h, &results[i].antigravityThirdPartyWeek};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (usage[w]->pct >= 0) {
                         redState[i][w] = usage[w]->pct >= redThreshold ? 1 : 0;
@@ -332,7 +333,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                 results[i].needsLogin;
                 if (!sample.failed) {
                     const std::array<const WindowUsage*, 6> windows = {
-                        &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
+                        &results[i].win5h, &results[i].winWeek,
+                        (accounts[i].provider == L"antigravity" ? &results[i].argonWeek : &results[i].fableWeek),
                         &results[i].extraUsage, &results[i].antigravityThirdParty5h,
                         &results[i].antigravityThirdPartyWeek};
                     for (size_t m = 0; m < windows.size(); ++m) {
@@ -461,12 +463,18 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 if (!publishedFetchedOk[i] || publishedAccounts[i].hidden) continue;
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &publishedResults[i].win5h, &publishedResults[i].winWeek,
-                    &publishedResults[i].fableWeek, &publishedResults[i].extraUsage};
+                    &publishedResults[i].fableWeek, &publishedResults[i].extraUsage,
+                    &publishedResults[i].argonWeek,
+                    &publishedResults[i].antigravityThirdParty5h,
+                    &publishedResults[i].antigravityThirdPartyWeek};
                 const std::array<const WindowUsage*, kQuotaBarCount> previousUsage = {
                     generationRaced ? &previousCurrentResults[i].win5h : nullptr,
                     generationRaced ? &previousCurrentResults[i].winWeek : nullptr,
                     generationRaced ? &previousCurrentResults[i].fableWeek : nullptr,
-                    generationRaced ? &previousCurrentResults[i].extraUsage : nullptr};
+                    generationRaced ? &previousCurrentResults[i].extraUsage : nullptr,
+                    generationRaced ? &previousCurrentResults[i].argonWeek : nullptr,
+                    generationRaced ? &previousCurrentResults[i].antigravityThirdParty5h : nullptr,
+                    generationRaced ? &previousCurrentResults[i].antigravityThirdPartyWeek : nullptr};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (!publishedAccounts[i].showBars[w]) continue;
                     const WindowUsage& wu = *usage[w];
@@ -494,7 +502,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         PCWSTR quotaName =
                             w == kFiveHourBar ? L"5h" :
                             w == kWeeklyBar ? L"weekly" :
-                            w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra";
+                            w == kFableWeeklyBar ? L"Fable weekly" :
+                            w == kArgonBar ? L"Argon weekly" :
+                            w == kClaude3p5hBar ? L"Claude/GPT 5h" :
+                            w == kClaude3pWeeklyBar ? L"Claude/GPT weekly" : L"monthly extra";
                         if (publishedAccounts[i].provider == L"antigravity") {
                             if (w == kFiveHourBar) {
                                 ULONGLONG duration = publishedResults[i].win5h.windowDurationMs;
@@ -504,6 +515,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                                             L"Gemini 5h";
                             } else if (w == kWeeklyBar) {
                                 quotaName = L"Gemini weekly";
+                            } else if (w == kArgonBar) {
+                                quotaName = L"Gemini 4 Argon weekly";
+                            } else if (w == kClaude3p5hBar) {
+                                ULONGLONG duration = publishedResults[i].antigravityThirdParty5h.windowDurationMs;
+                                quotaName = duration == 3ULL * 60 * 60 * 1000 ? L"Claude/GPT 3h" :
+                                            duration == 60ULL * 60 * 1000 ? L"Claude/GPT 1h" :
+                                            duration == 0 ? L"Claude/GPT current limit" :
+                                                            L"Claude/GPT 5h";
+                            } else if (w == kClaude3pWeeklyBar) {
+                                quotaName = L"Claude/GPT weekly";
                             }
                         } else if (publishedAccounts[i].provider == L"openai" &&
                                    w == kExtraUsageBar) {

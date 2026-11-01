@@ -311,7 +311,8 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
                 ParseAntigravityUserStatus(status.body, &probeData, nullptr) &&
                 (probeData.win5h.pct >= 0 || probeData.winWeek.pct >= 0 ||
                  probeData.antigravityThirdParty5h.pct >= 0 ||
-                 probeData.antigravityThirdPartyWeek.pct >= 0)) {
+                 probeData.antigravityThirdPartyWeek.pct >= 0 ||
+                 probeData.argonWeek.pct >= 0)) {
                 legacyInfo.port = endpoint.port;
                 legacyInfo.secure = endpoint.secure;
                 legacyInfo.csrfToken = *endpoint.csrfToken;
@@ -434,6 +435,7 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
             std::transform(dispName.begin(), dispName.end(), dispName.begin(),
                            [](wchar_t ch) { return (wchar_t)towlower(ch); });
             bool geminiGroup = dispName.find(L"gemini") != std::wstring::npos;
+            bool argonGroup = dispName.find(L"argon") != std::wstring::npos;
             bool thirdPartyGroup = dispName.find(L"claude") != std::wstring::npos ||
                                    dispName.find(L"gpt") != std::wstring::npos;
 
@@ -463,12 +465,15 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 if (isWeekly) isShort = false;
                 if (!isShort && !isWeekly) continue;
 
-                bool geminiBucket = bucketId.rfind(L"gemini-", 0) == 0 ||
-                                     (bucketId.rfind(L"3p-", 0) != 0 && geminiGroup);
+                bool isArgon = argonGroup || bucketId.find(L"argon") != std::wstring::npos;
+                bool geminiBucket = !isArgon && (bucketId.rfind(L"gemini-", 0) == 0 ||
+                                     (bucketId.rfind(L"3p-", 0) != 0 && geminiGroup));
                 bool thirdPartyBucket = bucketId.rfind(L"3p-", 0) == 0 ||
-                                         (!geminiBucket && thirdPartyGroup);
+                                         (!geminiBucket && !isArgon && thirdPartyGroup);
                 WindowUsage* target = nullptr;
-                if (geminiBucket) {
+                if (isArgon) {
+                    target = isWeekly ? &d->argonWeek : nullptr;
+                } else if (geminiBucket) {
                     target = isShort ? &d->win5h : &d->winWeek;
                 } else if (thirdPartyBucket) {
                     target = isShort ? &d->antigravityThirdParty5h :
@@ -517,6 +522,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
     try {
         bool hasSummaryGeminiShort = d->win5h.pct >= 0;
         bool hasSummaryThirdPartyShort = d->antigravityThirdParty5h.pct >= 0;
+        bool hasSummaryArgon = d->argonWeek.pct >= 0;
         auto root = JsonObject::Parse(Utf8ToWide(body));
         JsonObject payload = root;
         if (auto response = GetObj(root, L"response")) payload = response;
@@ -567,7 +573,9 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     }
 
                     WindowUsage* target = nullptr;
-                    if (identity.find(L"gemini") != std::wstring::npos) {
+                    if (identity.find(L"argon") != std::wstring::npos) {
+                        target = &d->argonWeek;
+                    } else if (identity.find(L"gemini") != std::wstring::npos) {
                         target = &d->win5h;
                     } else if (identity.find(L"claude") != std::wstring::npos ||
                                identity.find(L"gpt") != std::wstring::npos ||
@@ -576,7 +584,8 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     }
                     if (!target || (target == &d->win5h && hasSummaryGeminiShort) ||
                         (target == &d->antigravityThirdParty5h &&
-                         hasSummaryThirdPartyShort)) {
+                         hasSummaryThirdPartyShort) ||
+                        (target == &d->argonWeek && hasSummaryArgon)) {
                         continue;
                     }
 
@@ -592,7 +601,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                         target->pct = usedPct;
                         target->resetUnixMs = ParseIso8601Ms(resetTime);
                         // Legacy model quota can mirror either limiting cadence.
-                        target->windowDurationMs = 0;
+                        target->windowDurationMs = (target == &d->argonWeek) ? kWeeklyWindowMs : 0;
                     }
                 }
             }
@@ -680,7 +689,8 @@ static void FetchAntigravityAccount(AccountData* d) {
 
         bool parsed = fresh->win5h.pct >= 0 || fresh->winWeek.pct >= 0 ||
                       fresh->antigravityThirdParty5h.pct >= 0 ||
-                      fresh->antigravityThirdPartyWeek.pct >= 0;
+                      fresh->antigravityThirdPartyWeek.pct >= 0 ||
+                      fresh->argonWeek.pct >= 0;
         if (!parsed && parseError->empty()) {
             *parseError = L"no usable Antigravity quota in response";
         }

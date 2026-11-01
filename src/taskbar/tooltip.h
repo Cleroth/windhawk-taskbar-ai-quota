@@ -97,6 +97,11 @@ static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, 
                 labelEnd = 11;
                 labelBold = true;
                 quotaLine = true;
+            } else if (line.rfind(L"Argon week:", 0) == 0) {
+                labelBrush = quotaLabel;
+                labelEnd = 11;
+                labelBold = true;
+                quotaLine = true;
             } else if (line.rfind(L"error:", 0) == 0) {
                 labelBrush = accent;
                 labelEnd = 6;
