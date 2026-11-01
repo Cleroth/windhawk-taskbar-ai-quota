@@ -233,6 +233,11 @@ struct ProbeClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
     int Command(UiHost& host, int command, int argument) {
+        // Synthetic input is sent with no keys or buttons held. A thread on the hidden desktop
+        // never receives input, so its key state stays the physical keyboard's at the thread's
+        // creation: a Shift the user held then turns End into a selection and Tab into Shift+Tab.
+        BYTE released[256] = {};
+        SetKeyboardState(released);
         UiPopup& popup = host.popup;
         UiTextBox* box = UiFindTextBox(host.boxes, kProbeNumberBox);
         HWND edit = box ? box->window : nullptr;
