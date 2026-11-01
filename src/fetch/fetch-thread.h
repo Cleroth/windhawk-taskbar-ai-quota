@@ -551,6 +551,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
             }
             PostUiUpdate();
+            // The settings window's account statuses follow each publication (a posted message;
+            // no lock is held).
+            NotifySettingsWindowChanged();
         } else if (curvesPublished) {
             PostUiUpdate();
         }

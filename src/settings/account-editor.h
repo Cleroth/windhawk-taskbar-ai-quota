@@ -1,4 +1,5 @@
-// Account editor dialog and the add, edit, remove, reorder, and hide account commands.
+// Account editor dialog of the classic settings window, and its add, edit, remove, reorder and
+// hide buttons on the shared account commands (settings/account-commands.h).
 
 static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
     auto sc = [&](int value) { return ScaleForDpi(value, state.dpi); };
@@ -89,15 +90,6 @@ static void UpdateAccountEditorTileText(HWND hWnd) {
                 (LRESULT)TileIdentity::Text;
     EnableWindow(GetDlgItem(hWnd, kAccountTileTextLabel), text);
     EnableWindow(GetDlgItem(hWnd, kAccountTileText), text);
-}
-
-static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
-                                const AccountConfig& account) {
-    for (const auto& existing : settings.accounts) {
-        if (ignoredIdentity && AccountIdentityHash(existing) == ignoredIdentity) continue;
-        if (existing.provider == account.provider && existing.label == account.label) return true;
-    }
-    return false;
 }
 
 static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
@@ -465,6 +457,21 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     return state.accepted;
 }
 
+// Shows a command's message, if it has one.
+static void ShowAccountCommandResult(const SettingsWindowState& state, const AccountCommandResult& result) {
+    if (!result.message.empty()) {
+        SettingsMessageBoxW(state.hWnd, result.message.c_str(), L"Account", MB_OK | result.icon);
+    }
+}
+
+static AccountTarget SelectedAccountTarget(const SettingsWindowState& state, AccountConfig* account = nullptr) {
+    int index = SelectedAccountIndex(state);
+    std::lock_guard<std::mutex> lk(g_settingsMutex);
+    if (index < 0 || index >= (int)g_settings.accounts.size()) return {};
+    if (account) *account = g_settings.accounts[index];
+    return {g_settings.accounts[index].historyId, AccountIdentityHash(g_settings.accounts[index])};
+}
+
 static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
     AccountConfig account{L"anthropic", L"A"};
     {
@@ -476,52 +483,20 @@ static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
     }
     if (!ShowAccountEditor(state.hWnd, &account, true)) return;
     if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    if (HasDuplicateAccount(settings, 0, account)) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
-                    L"Account", MB_OK | MB_ICONWARNING);
-        return;
-    }
-    settings.accounts.push_back(std::move(account));
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not save the account.", L"Account",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
+    std::wstring label = account.label;
+    ShowAccountCommandResult(state, AddAccountCommand(std::move(account), {label}));
     RefreshSettingsControls(state);
 }
 
 static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
-    int index = SelectedAccountIndex(state);
     AccountConfig oldAccount;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        if (index < 0 || index >= (int)g_settings.accounts.size()) return;
-        oldAccount = g_settings.accounts[index];
-    }
+    AccountTarget target = SelectedAccountTarget(state, &oldAccount);
+    if (!target.identity) return;
     AccountConfig newAccount = oldAccount;
     if (!ShowAccountEditor(state.hWnd, &newAccount, false)) return;
     if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
 
     bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
-    // Tile identity is read only while building tiles, so its edits take the rebuild path.
-    bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
-                                   oldAccount.label == newAccount.label &&
-                                   oldAccount.tileIdentity == newAccount.tileIdentity &&
-                                   oldAccount.tileText == newAccount.tileText &&
-                                   oldAccount.creditsMax == newAccount.creditsMax &&
-                                   oldAccount.recordHistory == newAccount.recordHistory &&
-                                   oldAccount.historyId == newAccount.historyId &&
-                                   oldAccount.showBars != newAccount.showBars;
     if (identityChanged && g_loginInProgress.load()) {
         SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
@@ -542,145 +517,19 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
             clearOldToken = result == IDYES;
         }
     }
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    if (identityChanged && g_loginInProgress.load()) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
-                    L"Account", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    uint64_t oldIdentity = AccountIdentityHash(oldAccount);
-    index = -1;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (AccountIdentityHash(settings.accounts[i]) == oldIdentity) {
-            index = (int)i;
-            break;
-        }
-    }
-    if (index < 0) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"The account was changed from another taskbar window.",
-                    L"Account", MB_OK | MB_ICONWARNING);
-        RefreshSettingsControls(state);
-        return;
-    }
-    if (HasDuplicateAccount(settings, oldIdentity, newAccount)) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
-                    L"Account", MB_OK | MB_ICONWARNING);
-        return;
-    }
-
-    uint64_t newIdentity = AccountIdentityHash(newAccount);
-    bool sameProviderIdentityChange = identityChanged &&
-                                      oldAccount.provider == newAccount.provider;
-    bool sameProviderRename = sameProviderIdentityChange &&
-                              oldAccount.provider != L"antigravity";
-    TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
-    bool oldTokenCleared = true;
-    ULONGLONG oldAuthEpoch = 0;
-    ULONGLONG newAuthEpoch = 0;
-    std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
-    if (sameProviderRename) {
-        // Block epoch-gated saves only across the local copy/settings/delete transaction.
-        authEpochLock.lock();
-        oldAuthEpoch = AuthEpochLocked(oldIdentity);
-        newAuthEpoch = AuthEpochLocked(newIdentity);
-        tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
-        if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
-            tokenCopyResult == TokenCopyResult::Failed) {
-            authEpochLock.unlock();
-            configLock.unlock();
-            SettingsMessageBoxW(
-                state.hWnd,
-                tokenCopyResult == TokenCopyResult::DestinationOccupied ?
-                    L"The renamed account identity already has a retained sign-in. To replace it, "
-                    L"add an account with that provider and label, then remove it and delete its "
-                    L"stored sign-in. The account was not changed." :
-                    L"The stored sign-in could not be copied. The account was not changed.",
-                L"Account", MB_OK | MB_ICONERROR);
-            return;
-        }
-    }
-
-    // Visibility can be toggled from a taskbar menu while the account editor is open.
-    newAccount.hidden = settings.accounts[index].hidden;
-    // Renames retain history; switching providers starts a new series during normalization.
-    newAccount.historyId = oldAccount.provider == newAccount.provider ?
-                               settings.accounts[index].historyId : 0;
-    settings.accounts[index] = newAccount;
-    SettingsApplyResult applyResult = ApplyOwnedSettings(
-        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
-        sameProviderIdentityChange ? newIdentity : 0);
-    if (applyResult == SettingsApplyResult::Failed) {
-        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
-                                  ClearStoredToken(newIdentity);
-        if (authEpochLock.owns_lock()) authEpochLock.unlock();
-        configLock.unlock();
-        SettingsMessageBoxW(
-            state.hWnd,
-            copiedTokenCleared ?
-                L"Could not save the account." :
-                L"Could not save the account. The copied sign-in remains under the attempted "
-                L"new identity. To delete it, add an account with the attempted provider and "
-                L"label, then remove it and choose to delete its stored sign-in.",
-            L"Account", MB_OK | MB_ICONERROR);
-        return;
-    }
-    if (sameProviderRename) {
-        oldTokenCleared = ClearStoredToken(oldIdentity);
-        BumpAuthEpochLocked(oldIdentity);
-        g_authRenameRedirects.push_back(
-            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
-        authEpochLock.unlock();
-    }
-    configLock.unlock();
-    bool providerTokenCleared = true;
-    if (clearOldToken) {
-        providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
-    }
-    if (applyResult == SettingsApplyResult::Changed) {
-        // A quota selection change updates in place: bar layouts already hold every bar and
-        // only change visibility and spacing; tile layouts regenerate their meter shapes.
-        if (onlyBarSelectionChanged) {
-            PostUiUpdate();
-            if (!g_uiInjected.load(std::memory_order_acquire)) StartRetryInject();
-        } else {
-            FinishSettingsApply();
-        }
-    }
-    if (!oldTokenCleared) {
-        SettingsMessageBoxW(
-            state.hWnd,
-            L"The account was renamed, but a duplicate stored sign-in remains under the old "
-            L"identity. To delete it, re-add an account with the old provider and label, then "
-            L"remove it and choose to delete its stored sign-in.",
-            L"Account", MB_OK | MB_ICONWARNING);
-    } else if (!providerTokenCleared) {
-        SettingsMessageBoxW(
-            state.hWnd,
-            L"The provider was changed, but the old sign-in remains retained. To recover or "
-            L"delete it, re-add an account with the old provider and label.",
-            L"Account", MB_OK | MB_ICONWARNING);
-    }
-    NotifySettingsWindowChanged();
+    // The editor's fields replace the fresh account's; the command keeps its visibility and
+    // history ID.
+    AccountCommandResult result = EditAccountCommand(target, [&](AccountConfig& account) {
+        account = newAccount;
+    }, clearOldToken);
+    ShowAccountCommandResult(state, result);
     RefreshSettingsControls(state);
 }
 
 static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
-    int index = SelectedAccountIndex(state);
     AccountConfig account;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        if (index < 0 || index >= (int)g_settings.accounts.size()) return;
-        account = g_settings.accounts[index];
-    }
+    AccountTarget target = SelectedAccountTarget(state, &account);
+    if (!target.identity) return;
     if (g_loginInProgress.load()) {
         SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
@@ -703,127 +552,22 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
             !IsWindow(state.hWnd)) return;
         deleteToken = result == IDYES;
     }
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    if (g_loginInProgress.load()) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
-                    L"Account", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    uint64_t identity = AccountIdentityHash(account);
-    index = -1;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (AccountIdentityHash(settings.accounts[i]) == identity) {
-            index = (int)i;
-            break;
-        }
-    }
-    if (index < 0) {
-        configLock.unlock();
-        RefreshSettingsControls(state);
-        return;
-    }
-    if (deleteToken && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd,
-                    L"The stored sign-in could not be deleted, so the account was not removed.",
-                    L"Account", MB_OK | MB_ICONERROR);
-        return;
-    }
-    settings.accounts.erase(settings.accounts.begin() + index);
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    if (applyResult == SettingsApplyResult::Failed) {
-        configLock.unlock();
-        if (deleteToken) {
-            RefreshQuotaByIdentity(identity);
-            NotifySettingsWindowChanged();
-        }
-        SettingsMessageBoxW(state.hWnd,
-                    deleteToken ?
-                        L"The stored sign-in was deleted, but settings could not be saved. The "
-                        L"account remains configured but signed out." :
-                        L"Could not remove the account.",
-                    L"Account",
-                    MB_OK | MB_ICONERROR);
-        return;
-    }
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Changed) FinishSettingsApply();
+    ShowAccountCommandResult(state, RemoveAccountCommand(target, deleteToken));
     RefreshSettingsControls(state);
 }
 
 static void MoveAccountFromSettingsWindow(SettingsWindowState& state, int direction) {
-    uint64_t identity = SelectedAccountIdentity(state);
-    if (!identity || (direction != -1 && direction != 1)) return;
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = -1;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (AccountIdentityHash(settings.accounts[i]) == identity) {
-            index = (int)i;
-            break;
-        }
-    }
-    int target = index + direction;
-    if (index < 0 || target < 0 || target >= (int)settings.accounts.size()) return;
-    std::swap(settings.accounts[index], settings.accounts[target]);
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not reorder the account.", L"Account",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
+    int index = SelectedAccountIndex(state);
+    AccountTarget target = SelectedAccountTarget(state);
+    if (!target.identity || (direction != -1 && direction != 1)) return;
+    ShowAccountCommandResult(state, MoveAccountCommand(target, index + direction));
     RefreshSettingsControls(state);
 }
 
 static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
-    uint64_t identity = SelectedAccountIdentity(state);
-    if (!identity) return;
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = -1;
-    int visibleCount = 0;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (!settings.accounts[i].hidden) visibleCount++;
-        if (AccountIdentityHash(settings.accounts[i]) == identity) index = (int)i;
-    }
-    if (index < 0 || (!settings.accounts[index].hidden && visibleCount <= 1)) return;
-    settings.accounts[index].hidden = !settings.accounts[index].hidden;
-    SettingsApplyResult applyResult = ApplyOwnedSettings(settings);
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not update account visibility.", L"Account",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        std::wstring hashes;
-        wchar_t buffer[24];
-        for (const auto& account : settings.accounts) {
-            if (!account.hidden) continue;
-            if (!hashes.empty()) hashes += L";";
-            swprintf(buffer, ARRAYSIZE(buffer), L"%016llx",
-                     (unsigned long long)AccountIdentityHash(account));
-            hashes += buffer;
-        }
-        Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
-        FinishSettingsApply();
-    }
+    AccountConfig account;
+    AccountTarget target = SelectedAccountTarget(state, &account);
+    if (!target.identity) return;
+    ShowAccountCommandResult(state, SetAccountHiddenCommand(target, !account.hidden));
     RefreshSettingsControls(state);
 }

@@ -24,6 +24,7 @@ MODEL = [
     ("fragment", "settings/page-history.h"),
     ("fragment", "settings/page-layout.h"),
     ("fragment", "settings/page-display.h"),
+    ("fragment", "settings/page-accounts.h"),
     ("fragment", "settings/shell.h"),
 ]
 

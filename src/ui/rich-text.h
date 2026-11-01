@@ -6,15 +6,17 @@
 // gallery cards, swatches). Number boxes report their native text box: Step (value = delta),
 // and the text events with the box's text. Sliders report Slide (value = the dragged value)
 // and SlideEnd (released); their keys Step. Pan: a preview strip dragged or wheeled sideways.
+// Drag handles report Drag once the pointer moved, then Drop on release or DragCancel (Esc,
+// capture loss); Alt+Up/Down on the handle's owner Step it by one.
 enum class UiActionKind : uint8_t {
     None, Navigate, OpenUrl, Command, Step, TextChange, TextCommit, TextBlur, TextRevert, Slide,
-    SlideEnd, Pan
+    SlideEnd, Pan, Drag, Drop, DragCancel
 };
 
 struct UiAction {
     UiActionKind kind = UiActionKind::None;
     int value = 0;         // Navigate: page; Command: desired value; Step: delta; Slide: value;
-                           // Pan: DIPs the content moves right
+                           // Pan: DIPs the content moves right; Drag: the pointer's content y
     std::wstring text{};   // OpenUrl: the URL; text events: the box's text
     uint32_t target = 0;   // Command, Step and text events: the client's target
     uint64_t key = 0;      // The target's owner (0: global)

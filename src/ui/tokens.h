@@ -31,6 +31,12 @@ static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
             float(rgb & 0xFF) / 255.0f, alpha};
 }
 
+// `top` over an opaque `under`.
+static D2D1_COLOR_F UiOver(D2D1_COLOR_F top, D2D1_COLOR_F under) {
+    auto mix = [&](float a, float b) { return a * top.a + b * (1 - top.a); };
+    return {mix(top.r, under.r), mix(top.g, under.g), mix(top.b, under.b), 1};
+}
+
 // Semantic text colors; items name these, never concrete colors. Muted is the mockups'
 // description gray, between WinUI's secondary and tertiary text.
 enum class UiInk : uint8_t {

@@ -1,12 +1,13 @@
-// Native text boxes of the custom-drawn windows: one single-line EDIT per number-box item, keyed
-// by the item's id, a child of the viewport over the item's text area. Native entry keeps IME,
-// caret, selection, clipboard and undo; rebuilds keep the window and set its text only when the
-// client's text changed. The host creates them and routes their messages (ui/host.h).
+// Native text boxes of the custom-drawn windows: one single-line EDIT per number box or text box
+// item, keyed by the item's id, a child of the viewport over the item's text area. Native entry
+// keeps IME, caret, selection, clipboard and undo; rebuilds keep the window and set its text only
+// when the client's text changed. The host creates them and routes their messages (ui/host.h).
 
 struct UiTextBox {
     uint32_t id = 0;
     HWND window = nullptr;
     std::wstring text;       // What the client last set or was told
+    std::wstring cue;        // The placeholder (cue banner) last set
     bool composing = false;  // IME composition in progress: native handling only
 };
 
@@ -20,6 +21,8 @@ struct UiTextBoxes {
     // Focus is leaving the window (deactivation, a modal), not moving inside it: the box keeps
     // its draft instead of reporting focus loss.
     bool leavingWindow = false;
+    // Their items moved in place: they follow at the viewport's next paint.
+    bool moved = false;
 };
 
 static UiTextBox* UiFindTextBox(UiTextBoxes& boxes, uint32_t id) {
@@ -91,12 +94,6 @@ static HFONT UiTextBoxFont(UiTextBoxes& boxes, UINT dpi) {
 static COLORREF UiColorRef(D2D1_COLOR_F color) {
     auto channel = [](float value) { return BYTE(std::lround(std::clamp(value, 0.0f, 1.0f) * 255)); };
     return RGB(channel(color.r), channel(color.g), channel(color.b));
-}
-
-// `top` over an opaque `under`.
-static D2D1_COLOR_F UiOver(D2D1_COLOR_F top, D2D1_COLOR_F under) {
-    auto mix = [&](float a, float b) { return a * top.a + b * (1 - top.a); };
-    return {mix(top.r, under.r), mix(top.g, under.g), mix(top.b, under.b), 1};
 }
 
 // Text and fill of a box on a card, matching the drawn frame (paint.h): {text, fill}.

@@ -10,12 +10,14 @@ static constexpr PCWSTR kSettingsUiPopupClass = L"AiQuotaSettingsUiPopup_" WH_MO
 static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
 // Debounced number box and slider key steps: this timer id plus the field.
 static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
+// A notification's rebuild waits for an open dropdown or menu to close (a rebuild closes it).
+static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 
 struct SettingsUiClient final : UiHostClient {
-    // Edits; the draft revision each pending step timer may commit (by field)
+    // Edits; the account key and draft revision each pending step timer may commit (by field)
     SettingsProductionStore store;
     SettingsEdits edits{store};
-    std::map<SettingsField, uint64_t> stepRevisions;
+    std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
     // Window state. Custom poll mode sticks once chosen or typed into, so the box doesn't
     // disable itself when a partial number happens to match a preset. The last built view
@@ -25,6 +27,17 @@ struct SettingsUiClient final : UiHostClient {
     float previewScroll = 0;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
+
+    // Accounts: the expanded cards, and the card being dragged: its order meanwhile, where it
+    // started, the pointer's offset from its top, where it is drawn and where the first card
+    // starts (content DIPs).
+    std::vector<uint64_t> expanded;
+    struct Drag {
+        uint64_t key = 0;
+        std::vector<uint64_t> order;
+        size_t from = 0;
+        float grab = 0, top = 0, origin = 0;
+    } drag;
 
     // Reentrancy: messages that arrive inside a modal wait until it returns; close preparation
     // ignores input and drops queue messages (its flush covers them). The color dialog's
@@ -56,14 +69,29 @@ struct SettingsUiClient final : UiHostClient {
         return Modal(host, [&] { return SettingsMessageBoxW(host.main, text, caption, type); });
     }
 
-    // Failed saves keep their drafts with an error; the box says so once.
-    void Report(UiHost& host, int failures) {
-        UiHostRequestRebuild(host, false);
-        if (failures) {
+    // The controller's notices, a message box each. Account operations explain their failures;
+    // other failed saves get the general message.
+    void ShowNotices(UiHost& host, int failures = 0) {
+        std::vector<SettingsNotice> notices = std::exchange(edits.notices, {});
+        int explained = int(std::count_if(notices.begin(), notices.end(),
+                                          [](const SettingsNotice& notice) { return notice.failure; }));
+        if (failures > explained) {
             Ask(host, L"Could not save settings. The change is kept here with its error; "
                       L"change it again to retry.",
                 L"Taskbar AI Quota Bars", MB_OK | MB_ICONERROR);
         }
+        for (const SettingsNotice& notice : notices) {
+            if (Unloading() || host.closing) break;
+            Ask(host, notice.text.c_str(), L"Account",
+                MB_OK | (notice.kind == SettingsNoticeKind::Error   ? MB_ICONERROR :
+                         notice.kind == SettingsNoticeKind::Warning ? MB_ICONWARNING : MB_ICONINFORMATION));
+        }
+    }
+
+    // Failed saves keep their drafts with an error; the box says so once.
+    void Report(UiHost& host, int failures) {
+        UiHostRequestRebuild(host, false);
+        ShowNotices(host, failures);
     }
 
     void Process(UiHost& host) {
@@ -79,14 +107,32 @@ struct SettingsUiClient final : UiHostClient {
     // commits nothing.
     void KillStepTimer(UiHost& host, SettingsField field) {
         KillTimer(host.main, kSettingsStepTimer + UINT_PTR(field));
-        stepRevisions.erase(field);
+        steps.erase(field);
     }
 
     void KillStepTimers(UiHost& host) {
-        while (!stepRevisions.empty()) KillStepTimer(host, stepRevisions.begin()->first);
+        while (!steps.empty()) KillStepTimer(host, steps.begin()->first);
     }
 
-    // The preview's scroll stays within what the built strip can scroll.
+    // An account action on its card: blocked by its drafts, the card opens on its label.
+    SettingsActionResult AccountAction(UiHost& host, uint64_t key, SettingsField action, int value) {
+        KillStepTimers(host);
+        SettingsActionResult result = edits.AccountAction(key, action, value);
+        if (result == SettingsActionResult::Blocked && !Unloading()) ShowLabel(host, key);
+        Report(host, 0);
+        return result;
+    }
+
+    // Expands an account's card and focuses its label.
+    void ShowLabel(UiHost& host, uint64_t key) {
+        if (std::find(expanded.begin(), expanded.end(), key) == expanded.end()) expanded.push_back(key);
+        UiHostRequestFocus(host, {SettingsAccountControlId(edits.SlotOf(key), SettingsField::AccountLabel), -1},
+                           true);
+        UiHostRequestRebuild(host, false);
+    }
+
+    // The preview's scroll stays within what the built strip can scroll. Account cards follow
+    // the projection's order, a dragged card its drag order.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.page = page;
@@ -98,6 +144,34 @@ struct SettingsUiClient final : UiHostClient {
         view.scale = UiHostScale(host);
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
+        for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
+            SettingsViewAccount account;
+            account.key = edits.keys[i];
+            account.slot = edits.SlotOf(account.key);
+            if (i < view.status.accounts.size()) account.status = view.status.accounts[i];
+            account.expanded = std::find(expanded.begin(), expanded.end(), account.key) != expanded.end();
+            view.accounts.push_back(std::move(account));
+        }
+        if (drag.key) {
+            std::vector<AccountConfig> configs;
+            std::vector<SettingsViewAccount> cards;
+            for (uint64_t key : drag.order) {
+                for (size_t i = 0; i < view.accounts.size(); i++) {
+                    if (view.accounts[i].key != key) continue;
+                    configs.push_back(view.settings.accounts[i]);
+                    cards.push_back(view.accounts[i]);
+                }
+            }
+            // Accounts changed meanwhile: the drag ends where it is (another drag restarts it).
+            if (cards.size() == view.accounts.size()) {
+                view.settings.accounts = std::move(configs);
+                view.accounts = std::move(cards);
+                view.dragKey = drag.key;
+                view.dragTop = drag.top;
+            } else {
+                drag = {};
+            }
+        }
         SettingsUiBuildFrame(*host.graphics, view, client, frame);
         for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
             for (const UiItem& item : *items) {
@@ -115,8 +189,9 @@ struct SettingsUiClient final : UiHostClient {
     void Invoke(UiHost& host, UiAction action) override {
         // A modal disables the window: what arrives meanwhile (the focus loss it causes) is ours,
         // except the end of a slider drag its capture loss cut short: that queues its commit,
-        // which runs once the modal returns.
-        if (Unloading() || closePreparation || (modalDepth && action.kind != UiActionKind::SlideEnd)) {
+        // which runs once the modal returns; and a card drag it cancelled.
+        if (Unloading() || closePreparation ||
+            (modalDepth && action.kind != UiActionKind::SlideEnd && action.kind != UiActionKind::DragCancel)) {
             return;
         }
         SettingsField field = SettingsField(action.target);
@@ -222,10 +297,74 @@ struct SettingsUiClient final : UiHostClient {
                         OpenUrl(folder.c_str());
                         break;
                     }
+                    case SettingsField::AccountAdd:
+                        // A provider from the Add account menu (the button itself opens it): the
+                        // account exists at once; its card opens on its label.
+                        if (action.value < 0 || action.value >= int(std::size(kSettingsProviders))) break;
+                        KillStepTimers(host);
+                        if (uint64_t key = edits.AddAccount(kSettingsProviders[action.value])) ShowLabel(host, key);
+                        Report(host, 0);
+                        break;
+                    case SettingsField::AccountExpand:
+                        // Collapsing ends editing in the card: its text commits as on focus loss.
+                        std::erase(expanded, action.key);
+                        if (action.value) {
+                            expanded.push_back(action.key);
+                        } else {
+                            bool queued = false;
+                            for (SettingsField text : {SettingsField::AccountLabel, SettingsField::AccountTileText,
+                                                       SettingsField::AccountCreditsMax}) {
+                                queued |= edits.RequestCommit(action.key, text, true);
+                            }
+                            if (queued) PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
+                        }
+                        UiHostRequestRebuild(host, false);
+                        break;
+                    case SettingsField::AccountHidden:
+                    case SettingsField::AccountSignIn:
+                    case SettingsField::AccountSignOut:
+                    case SettingsField::AccountDashboard:
+                        AccountAction(host, action.key, field, action.value);
+                        break;
+                    case SettingsField::AccountRemove: {
+                        // Its drafts first (an invalid label stops it), then the confirmation:
+                        // Antigravity yes/no; the others whether to delete the stored sign-in.
+                        uint64_t key = action.key;
+                        KillStepTimers(host);
+                        if (edits.FlushAccount(key) != SettingsActionResult::Done) {
+                            ShowLabel(host, key);
+                            Report(host, 0);
+                            break;
+                        }
+                        std::optional<size_t> index = edits.IndexOf(key);
+                        if (!index) break;
+                        if (edits.baseline.status.signInRunning) {
+                            Ask(host, L"Wait for the current sign-in to finish before removing accounts.",
+                                L"Account", MB_OK | MB_ICONINFORMATION);
+                            break;
+                        }
+                        bool antigravity = edits.baseline.settings.accounts[*index].provider == L"antigravity";
+                        int answer = antigravity ?
+                            Ask(host, L"Remove this account?\n\nIts recorded usage history is kept.",
+                                L"Remove account", MB_YESNO | MB_ICONQUESTION) :
+                            Ask(host, L"Remove this account?\n\n"
+                                      L"Yes: remove it and delete its stored sign-in\n"
+                                      L"No: remove it but retain the sign-in for later\n"
+                                      L"Cancel: do nothing\n\n"
+                                      L"Its recorded usage history is kept.",
+                                L"Remove account", MB_YESNOCANCEL | MB_ICONQUESTION);
+                        if ((answer != IDYES && (antigravity || answer != IDNO)) || Unloading() ||
+                            closePreparation || host.closing) {
+                            break;
+                        }
+                        std::erase(expanded, key);
+                        AccountAction(host, key, SettingsField::AccountRemove, !antigravity && answer == IDYES);
+                        break;
+                    }
                     default:
-                        // Toggles, dropdowns, gallery cards and swatches: the desired value,
-                        // committed now.
-                        Report(host, edits.Commit(0, field, action.value));
+                        // Toggles, dropdowns, chips, gallery cards and swatches: the desired
+                        // value, committed now.
+                        Report(host, edits.Commit(action.key, field, action.value));
                         break;
                 }
                 break;
@@ -250,18 +389,36 @@ struct SettingsUiClient final : UiHostClient {
                 edits.Revert(action.key, field);
                 UiHostRequestRebuild(host, false);
                 break;
-            case UiActionKind::Step:
+            case UiActionKind::Step: {
+                // Alt+Up/Down on an account card moves it by one; focus stays on it.
+                if (field == SettingsField::AccountMove) {
+                    std::optional<size_t> index = edits.IndexOf(action.key);
+                    int to = index ? int(*index) + action.value : -1;
+                    if (drag.key || to < 0 || to >= int(edits.keys.size())) break;
+                    if (AccountAction(host, action.key, field, to) != SettingsActionResult::Blocked) {
+                        UiHostRequestFocus(host, {SettingsAccountControlId(edits.SlotOf(action.key),
+                                                                           SettingsField::AccountExpand), -1},
+                                           true);
+                    }
+                    break;
+                }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
-                stepRevisions[field] = edits.Step(action.key, field, action.value);
+                steps[field] = {action.key, edits.Step(action.key, field, action.value)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);
                 break;
-            case UiActionKind::Slide:
-                // A drag only drafts: the preview follows; the release commits.
+            }
+            case UiActionKind::Slide: {
+                // A drag only drafts: the preview follows, the release commits. The page rebuilds
+                // once per frame; the main window repaints only while the preview is pinned there.
                 KillStepTimer(host, field);
                 edits.SetValue(action.key, field, action.value);
-                UiHostRequestRebuild(host, false);
+                UiSurfaceId surface = UiSurfaceId::Content;
+                bool pinned = UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll), &surface) &&
+                              surface == UiSurfaceId::Main;
+                UiHostRequestLiveRebuild(host, pinned);
                 break;
+            }
             case UiActionKind::SlideEnd:
                 KillStepTimer(host, field);
                 if (edits.RequestCommit(action.key, field)) {
@@ -270,12 +427,69 @@ struct SettingsUiClient final : UiHostClient {
                 UiHostRequestRebuild(host, false);
                 break;
             case UiActionKind::Pan: {
-                // Repaints with the new scroll; the next build keeps it in range.
-                const UiItem* strip = UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll));
+                // Repaints the strip's surface with the new scroll; the next build keeps it in range.
+                UiSurfaceId surface = UiSurfaceId::Main;
+                const UiItem* strip =
+                    UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll), &surface);
                 float maximum = strip ? float(strip->maximum) : 0;
                 previewScroll = view.previewScroll =
                     std::clamp(previewScroll + float(action.value), 0.0f, maximum);
-                UiHostInvalidate(host);
+                InvalidateRect(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr, FALSE);
+                break;
+            }
+            case UiActionKind::Drag: {
+                // A card dragged by its handle: placed past every other card whose center is
+                // above the pointer, drawn where the pointer holds it. The first report rebuilds
+                // the page with the card lifted; later ones only move the built cards, so the
+                // pointer's report rate never repaints the whole window. Nothing saves until the
+                // drop.
+                auto panel = [&](uint64_t key) {
+                    return SettingsAccountControlId(edits.SlotOf(key), SettingsField::AccountExpand, 1);
+                };
+                float y = float(action.value);
+                bool start = drag.key != action.key;
+                if (start) {
+                    std::optional<size_t> index = edits.IndexOf(action.key);
+                    const UiItem* card = index ? UiFindItem(host.frame, panel(action.key)) : nullptr;
+                    const UiItem* first = index ? UiFindItem(host.frame, panel(edits.keys.front())) : nullptr;
+                    if (!card || !first) break;
+                    drag = {action.key, edits.keys, *index, y - card->rect.top, card->rect.top, first->rect.top};
+                }
+                std::vector<float> centers;
+                for (uint64_t key : drag.order) {
+                    const UiItem* card = key == drag.key ? nullptr : UiFindItem(host.frame, panel(key));
+                    if (card) centers.push_back((card->rect.top + card->rect.bottom) / 2);
+                }
+                std::erase(drag.order, drag.key);
+                size_t to = std::min(SettingsReorderTarget(centers, y), drag.order.size());
+                drag.order.insert(drag.order.begin() + ptrdiff_t(to), drag.key);
+                drag.top = std::max(y - drag.grab, 0.0f);
+                if (start) {
+                    UiHostRequestRebuild(host, false);
+                    break;
+                }
+                std::vector<uint32_t> panels;
+                for (uint64_t key : drag.order) panels.push_back(panel(key));
+                UiHostMoveContent(host, [&](std::vector<UiItem>& items) {
+                    return SettingsMoveAccountCards(items, panels, panel(drag.key), drag.origin, drag.top);
+                });
+                break;
+            }
+            case UiActionKind::Drop:
+            case UiActionKind::DragCancel: {
+                // A drop is one move to where the card was dropped, after the account's drafts
+                // commit; a cancel puts it back. Notifications the drag deferred reload now.
+                Drag dropped = std::exchange(drag, {});
+                UiHostRequestRebuild(host, false);
+                if (!modalDepth && std::exchange(deferredRefresh, false)) {
+                    PostMessageW(host.main, kSettingsRefreshMessage, 0, 0);
+                }
+                auto at = std::find(dropped.order.begin(), dropped.order.end(), dropped.key);
+                size_t to = size_t(at - dropped.order.begin());
+                if (action.kind == UiActionKind::Drop && dropped.key && at != dropped.order.end() &&
+                    to != dropped.from) {
+                    AccountAction(host, dropped.key, SettingsField::AccountMove, int(to));
+                }
                 break;
             }
             case UiActionKind::None:
@@ -289,23 +503,30 @@ struct SettingsUiClient final : UiHostClient {
             case kSettingsProcessMessage:
                 Process(host);
                 return true;
-            // Sign-in, visibility, history ID, storage and consent notifications reload the
-            // baseline and statuses only; drafts and text boxes stay.
+            // Sign-in, visibility, history ID, storage, consent and poll notifications reload the
+            // baseline and statuses only; drafts and text boxes stay. An open popup stays open
+            // until it closes; a card drag defers them until it ends.
             case kSettingsRefreshMessage:
             case kHistoryConsentChangedMessage:
-                if (modalDepth) {
+                if (modalDepth || (drag.key && host.handleDrag)) {
                     deferredRefresh = true;
                     return true;
                 }
                 edits.Reload();
-                UiHostRequestRebuild(host, false);
+                if (host.popup.open) {
+                    SetTimer(host.main, kSettingsRefreshTimer, 250, nullptr);
+                } else {
+                    UiHostRequestRebuild(host, false);
+                }
+                // A vanished account's dropped drafts.
+                if (!edits.notices.empty() && !closePreparation) ShowNotices(host);
                 return true;
             case kExitVisualTestMessage:
                 SetVisualTestMode(false);
                 return true;
             case WM_DISPLAYCHANGE:
                 // The display list changed (the taskbar re-injects on its own).
-                if (modalDepth) {
+                if (modalDepth || (drag.key && host.handleDrag)) {
                     deferredRefresh = true;
                 } else {
                     edits.Reload();
@@ -313,13 +534,20 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 return false;
             case WM_TIMER: {
+                if (wParam == kSettingsRefreshTimer) {
+                    if (!host.popup.open) {
+                        KillTimer(host.main, kSettingsRefreshTimer);
+                        UiHostRequestRebuild(host, false);
+                    }
+                    return true;
+                }
                 if (wParam < kSettingsStepTimer || wParam > kSettingsStepTimer + 0xFF) return false;
                 KillTimer(host.main, wParam);
                 SettingsField field = SettingsField(wParam - kSettingsStepTimer);
-                auto stepped = stepRevisions.find(field);
-                uint64_t revision = stepped == stepRevisions.end() ? 0 : stepped->second;
-                stepRevisions.erase(field);
-                if (!closePreparation && !host.closing && edits.CommitStep(0, field, revision)) {
+                auto stepped = steps.find(field);
+                auto [key, revision] = stepped == steps.end() ? std::pair<uint64_t, uint64_t>{} : stepped->second;
+                steps.erase(field);
+                if (!closePreparation && !host.closing && edits.CommitStep(key, field, revision)) {
                     Process(host);
                 }
                 UiHostRequestRebuild(host, false);
@@ -359,6 +587,9 @@ struct SettingsUiClient final : UiHostClient {
         KillStepTimers(host);
         SettingsCloseResult result = edits.PrepareClose();
         bool close = result != SettingsCloseResult::Blocked;
+        // What the saves had to say (a sign-in left behind by a rename, why one failed) shows
+        // before the window goes or asks.
+        ShowNotices(host);
         if (!close) {
             UiHostRequestRebuild(host, false);
             close = Ask(host,

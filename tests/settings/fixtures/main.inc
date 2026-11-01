@@ -3,6 +3,7 @@
 #include "logos.inc"
 #include "ui.inc"
 #include "edits.inc"
+#include "accounts.inc"
 #include "layout.inc"
 #include "display.inc"
 #include "render.inc"
@@ -24,6 +25,7 @@ int main(int argc, char** argv) {
         RunUiTests();
         RunEditTests();
         RunPageTests();
+        RunAccountEditTests();
         RunLayoutTests();
         RunDisplayPageTests();
     }

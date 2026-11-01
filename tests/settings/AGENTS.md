@@ -36,7 +36,13 @@ regenerates.
   controls, popup rows/placement/keys, settings shell and pages). The edit controller
   (`settings/edits.h`) runs against `TestStore` (`fixtures/edits.inc`): an in-memory store with
   an operation log, deterministic save failures and unload after N transactions; number parsing
-  and the render projection get their own fixtures. `fixtures/layout.inc`: slider input, the
+  and the render projection get their own fixtures. `fixtures/accounts.inc`: the controller's
+  account edits and actions against the same store (keys and slots, label validation, drafts
+  committed before an account action and an invalid label blocking it, removal invalidation, the
+  Add account label choice skipping stored sign-ins, desired visibility and moves, vanished
+  accounts) and the Accounts page (cards, header controls, expanded rows per provider, empty
+  state, a lifted dragged card, the reorder target, a drag's in-place card moves matching a rebuild
+  of nine accounts). `fixtures/layout.inc`: slider input, the
   Layout fields and reset group, the projection the preview reads, the preview strip model
   (`settings/preview.h`: column geometry, hover, pace marks, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
@@ -44,11 +50,14 @@ regenerates.
   ordering in the projection and after a save (the test store's `normalize` hook), the Display
   page per tile style and what its settings change in the preview strip.
 - `render`: the same executable with `--render-dir` paints the settings client area (1000 x 820
-  DIP, the mockups' window without its caption) into WIC bitmaps: About, Behavior, History, Layout
-  (every tile style; stacked and ring at every DPI), Display (segmented ring, as its mockup) and a
-  placeholder page at 96/144/192 DPI in light, dark and high contrast (Aquatic colors), plus
-  interaction-state sheets (`render-states-*`, `render-controls-*`, `render-history-off-*`,
-  `render-layout-states-*`, `render-display-states-*`), Display at the mockup's full height
+  DIP, the mockups' window without its caption) into WIC bitmaps: About, Accounts (collapsed
+  cards), Behavior, History, Layout (every tile style; stacked and ring at every DPI) and Display
+  (segmented ring, as its mockup) at 96/144/192 DPI in light, dark and high contrast (Aquatic
+  colors), plus interaction-state sheets (`render-states-*`, `render-controls-*`,
+  `render-history-off-*`, `render-layout-states-*`, `render-display-states-*`,
+  `render-accounts-states-*`, `render-accounts-drag-*`), Accounts as its mockups
+  (`render-accounts-expanded-*`, `render-accounts-add-*` with the menu painted where the host
+  opens it, `render-accounts-empty-*`), Display at the mockup's full height
   (`render-display-full-*`, `render-display-bars-*`), the preview's overflow, scrolled and
   unpinned (`render-layout-overflow-*`, `-unpinned-*`), preview strip sheets with one captioned
   row per layout and option (`render-preview-sheet-*`) or per Display option
@@ -65,8 +74,15 @@ regenerates.
   during a message box. On a hidden desktop: the production popup (owned, never active, capture,
   close triggers, outside press swallowed until release, keys and clicks choosing), the number
   box EDIT (kept across rebuilds, text/Enter/Esc/arrow/Tab events, focus loss then rebuild), a
-  slider (press jump and focus, drag values, release and capture loss ending the drag, keys), a
-  preview strip (drag and sideways wheel pan, no focus taken), the color dialog
+  slider (press jump and focus, drag values, release and capture loss ending the drag, keys; live
+  rebuilds once per frame repainting the main window only when named, values compared with the
+  last report, the viewport painted in the main window's cycle), a preview strip (drag and
+  sideways wheel pan, no focus taken), a drag handle (owner focus, drag threshold, drop, Esc and
+  capture loss cancelling, Alt+Up/Down; later drags moving items in place without a rebuild,
+  repainting only the viewport, whose paint moves the text box; a declined close cancelling the
+  drag first; the auto-scroll timer ticking while the pointer moves in the edge zone, and moves
+  there scrolling on time with the timer starved), a free text
+  box (limit, Up/Down native) and a menu button (keys open and choose), the color dialog
   (`ui/color-dialog.h`) cancelled by a user close and by unload's close, and unload with the popup
   open, with a focused EDIT, and during a message box over the popup.
 - `extract-popup`, `popup-compile`, `popup-probe`: the same host as the owner of a probe popup

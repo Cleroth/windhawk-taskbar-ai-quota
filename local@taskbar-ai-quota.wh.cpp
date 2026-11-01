@@ -1351,6 +1351,14 @@ static bool LoadStoredToken(uint64_t idHash, StoredToken* out) {
     }
 }
 
+// Whether a stored sign-in exists for the identity: presence only, never decrypted.
+static bool HasStoredToken(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authMutex);
+    std::vector<wchar_t> stored(16384);
+    Wh_GetStringValue(TokenStorageKey(idHash).c_str(), stored.data(), stored.size());
+    return stored[0] != 0;
+}
+
 static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
     std::lock_guard<std::mutex> lk(g_authMutex);
     std::wstring json;
@@ -4761,6 +4769,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
             }
             PostUiUpdate();
+            // The settings window's account statuses follow each publication (a posted message;
+            // no lock is held).
+            NotifySettingsWindowChanged();
         } else if (curvesPublished) {
             PostUiUpdate();
         }
@@ -9410,6 +9421,12 @@ static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
             float(rgb & 0xFF) / 255.0f, alpha};
 }
 
+// `top` over an opaque `under`.
+static D2D1_COLOR_F UiOver(D2D1_COLOR_F top, D2D1_COLOR_F under) {
+    auto mix = [&](float a, float b) { return a * top.a + b * (1 - top.a); };
+    return {mix(top.r, under.r), mix(top.g, under.g), mix(top.b, under.b), 1};
+}
+
 // Semantic text colors; items name these, never concrete colors. Muted is the mockups'
 // description gray, between WinUI's secondary and tertiary text.
 enum class UiInk : uint8_t {
@@ -10003,15 +10020,17 @@ static ID2D1PathGeometry* UiPathGeometry(UiGraphics& g, PCWSTR data) {
 // gallery cards, swatches). Number boxes report their native text box: Step (value = delta),
 // and the text events with the box's text. Sliders report Slide (value = the dragged value)
 // and SlideEnd (released); their keys Step. Pan: a preview strip dragged or wheeled sideways.
+// Drag handles report Drag once the pointer moved, then Drop on release or DragCancel (Esc,
+// capture loss); Alt+Up/Down on the handle's owner Step it by one.
 enum class UiActionKind : uint8_t {
     None, Navigate, OpenUrl, Command, Step, TextChange, TextCommit, TextBlur, TextRevert, Slide,
-    SlideEnd, Pan
+    SlideEnd, Pan, Drag, Drop, DragCancel
 };
 
 struct UiAction {
     UiActionKind kind = UiActionKind::None;
     int value = 0;         // Navigate: page; Command: desired value; Step: delta; Slide: value;
-                           // Pan: DIPs the content moves right
+                           // Pan: DIPs the content moves right; Drag: the pointer's content y
     std::wstring text{};   // OpenUrl: the URL; text events: the box's text
     uint32_t target = 0;   // Command, Step and text events: the client's target
     uint64_t key = 0;      // The target's owner (0: global)
@@ -10164,24 +10183,26 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // hit testing, focus order and shared layout builders. Pure. Builders read no globals; paint and
 // input work only from the list.
 
-// Toggle: selected = on. Dropdown: text = the chosen option's label, action.value = its value;
-// activating it opens the popup (ui/popup.h). NumberBox: the drawn frame of a native text box
-// (ui/text-box.h) showing `text`, centered without spin buttons when align is center;
-// SpinButton: its up/down buttons (not tab stops). Option: one row of the dropdown popup.
-// Slider: action.value within [minimum, maximum]. Swatch: a color choice, action.value =
-// 0xBBGGRR, selected = current; without an action kind, a color dot. Gallery: a choice card
-// named `text` with a client-drawn thumbnail. Preview: a client-drawn strip that pans sideways
-// (not a tab stop).
+// Card: a raised panel; a subtle one (button = Subtle) only shows the pointer over it, and a
+// selected one is lifted (an accent border). Button: with options, a menu button whose
+// activation opens them in the popup. Toggle: selected = on. Dropdown: text = the chosen
+// option's label, action.value = its value; activating it opens the popup (ui/popup.h).
+// NumberBox: the drawn frame of a native text box (ui/text-box.h) showing `text`, centered
+// without spin buttons when align is center; SpinButton: its up/down buttons (not tab stops).
+// TextBox: the frame of a native text box for free text, `runs` its placeholder while empty,
+// `maximum` its character limit. Option: one row of the popup; with runs, a two-line menu row
+// (title `text`, detail `runs`, an icon from `parts`). Slider: action.value within [minimum,
+// maximum]. Swatch: a color choice, action.value = 0xBBGGRR, selected = current; without an
+// action kind, a color dot. Gallery: a choice card named `text` with a client-drawn thumbnail.
+// Preview: a client-drawn strip that pans sideways (not a tab stop). Chip: a pill named `text`,
+// selected = on; without an action it only shows. Handle: a drag handle (glyph `text`, not a
+// tab stop) for its `owner`, which holds keyboard focus for it. Rule: a 1 px separator along the
+// rectangle's top edge.
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
-    Slider, Swatch, Gallery, Preview
+    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
-
-struct UiOption {
-    std::wstring text;
-    int value = 0;
-};
 
 // One filled or stroked path of a Shape item, in the item's view box. A part with an Inherit
 // ink keeps its own color (illustrations); others follow the theme.
@@ -10193,26 +10214,36 @@ struct UiShapePart {
     float stroke = 0;  // View-box units; 0 fills.
 };
 
+// A dropdown or menu choice; menus give each a detail line and an icon.
+struct UiOption {
+    std::wstring text;
+    int value = 0;
+    std::wstring detail;
+    std::vector<UiShapePart> parts;  // 24 DIP view box
+};
+
 struct UiItem {
     uint32_t id = 0;
     UiItemKind kind = UiItemKind::Text;
     D2D1_RECT_F rect{};
-    UiFont font = UiFont::Body;
+    UiFont font = UiFont::Body;      // Text; Button and Chip labels
     UiInk ink = UiInk::Primary;
     DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
-    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option);
-                                     // Glyph and SpinButton character; NumberBox text
+    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option, Chip);
+                                     // Glyph, SpinButton and Handle character; text box text
     std::wstring icon;               // Nav and Button glyph
-    float iconSize = 16;             // Glyph, Nav and Button glyph size
-    std::vector<UiRun> runs;         // Text, wrapped to the rectangle's width
-    std::vector<UiShapePart> parts;  // Shape
-    std::vector<UiOption> options;   // Dropdown
+    float iconSize = 16;             // Glyph, Nav, Button and Handle glyph size
+    std::vector<UiRun> runs;         // Text, wrapped to the rectangle's width; TextBox
+                                     // placeholder; Option detail
+    std::vector<UiShapePart> parts;  // Shape; Option icon
+    std::vector<UiOption> options;   // Dropdown; menu Button
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
     float opacity = 1;
-    UiButtonStyle button = UiButtonStyle::Standard;
+    UiButtonStyle button = UiButtonStyle::Standard;  // Button; Card (Subtle)
     UiAction action;
-    uint32_t owner = 0;              // SpinButton: its NumberBox
-    int minimum = 0, maximum = 0;    // Slider range; Preview: its sideways scroll range
+    uint32_t owner = 0;              // SpinButton: its NumberBox; Handle: its focus owner
+    int minimum = 0, maximum = 0;    // Slider range; Preview: its sideways scroll range;
+                                     // TextBox: maximum = character limit
     bool selected = false;
     bool enabled = true;
 };
@@ -10242,7 +10273,8 @@ struct UiFocusStop {
 };
 
 static bool UiInteractiveKind(UiItemKind kind) {
-    return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape;
+    return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape &&
+           kind != UiItemKind::Rule;
 }
 
 // Reacts to the pointer and can be activated.
@@ -10251,10 +10283,10 @@ static bool UiActive(const UiItem& item) {
 }
 
 // A tab stop. Spin buttons belong to their number box; options to the dropdown field; a
-// preview strip only pans.
+// preview strip only pans; a drag handle's keys go to its owner.
 static bool UiFocusable(const UiItem& item) {
     return UiActive(item) && item.kind != UiItemKind::SpinButton && item.kind != UiItemKind::Option &&
-           item.kind != UiItemKind::Preview;
+           item.kind != UiItemKind::Preview && item.kind != UiItemKind::Handle;
 }
 
 static const UiItem* UiFindItem(const UiFrame& frame, uint32_t id, UiSurfaceId* surface = nullptr) {
@@ -10303,8 +10335,9 @@ static const UiAction* UiActionOf(const UiFrame& frame, UiFocusRef ref) {
 }
 
 // The interactive element under a point: an inline link, else the topmost interactive item.
-// A disabled interactive item blocks the items below it. A slider takes in its thumb, which
-// overhangs the track's ends by its 10 DIP radius.
+// A disabled interactive item blocks the items below it; an enabled one without an action (a
+// plain card, a chip that only shows) doesn't. A slider takes in its thumb, which overhangs the
+// track's ends by its 10 DIP radius.
 static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D1_POINT_2F point) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const UiItem& item = *it;
@@ -10320,7 +10353,9 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
             if (run && run->action.kind != UiActionKind::None) return {item.id, link};
             continue;
         }
-        if (!UiInteractiveKind(item.kind)) continue;
+        if (!UiInteractiveKind(item.kind) || (item.enabled && item.action.kind == UiActionKind::None)) {
+            continue;
+        }
         return UiActive(item) ? UiFocusRef{item.id, -1} : UiFocusRef{};
     }
     return {};
@@ -10411,7 +10446,9 @@ static float UiAddSection(std::vector<UiItem>& items, uint32_t& id, float x, flo
 // Settings card (mockup .scard): optional leading glyph or color dot, a title, a description and
 // a trailing slot of `trailing` size (or a trailing glyph), vertically centered. With an action
 // the whole card is one interactive item. A disabled card dims its title and may say why (mockup
-// .reason); an error line reports an invalid or unsaved value.
+// .reason); an error line reports an invalid or unsaved value. A nested card is a row of an
+// expanded card (mockup .scard.sub): no panel, a rule along its top, text 56 DIP in from the
+// panel's edge (x and width are the panel's inside its border).
 struct UiCardSpec {
     std::wstring glyph;
     std::optional<COLORREF> dot;  // Mockup .dotsw: a 14 DIP circle, 0xBBGGRR
@@ -10422,6 +10459,7 @@ struct UiCardSpec {
     UiAction action;
     float minHeight = 68;
     bool enabled = true;
+    bool nested = false;
     std::wstring reason, error;
 };
 
@@ -10432,10 +10470,11 @@ struct UiCardLayout {
 static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, float x,
                               float y, float width, const UiCardSpec& spec) {
     constexpr float kBorder = 1, kPadX = 18, kPadY = 12, kGap = 16, kLeadWidth = 22, kDot = 14;
-    constexpr float kDescriptionMax = 470;
+    constexpr float kDescriptionMax = 470, kNestedIndent = 56 - kBorder;
     D2D1_SIZE_F trailing = spec.trailing;
     if (!spec.trailingGlyph.empty()) trailing = {12, 12};
-    float left = x + kBorder + kPadX, right = x + width - kBorder - kPadX;
+    float left = x + (spec.nested ? kNestedIndent : kBorder + kPadX);
+    float right = x + width - (spec.nested ? kPadX : kBorder + kPadX);
     float lead = !spec.glyph.empty() ? kLeadWidth : spec.dot ? kDot : 0;
     float textLeft = left + (lead > 0 ? lead + kGap : 0);
     float textRight = right - (trailing.width > 0 ? trailing.width + kGap : 0);
@@ -10475,7 +10514,7 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
 
     UiItem card;
     card.id = id++;
-    card.kind = UiItemKind::Card;
+    card.kind = spec.nested ? UiItemKind::Rule : UiItemKind::Card;
     card.rect = layout.card;
     card.action = spec.action;
     items.push_back(std::move(card));
@@ -10631,10 +10670,11 @@ static D2D1_SIZE_F UiNumberBoxSize(UiGraphics& g, std::wstring_view unit) {
     return {kUiNumberBoxWidth + 10 + std::max(std::ceil(label), 22.0f), 32};
 }
 
-// Where the box's text sits: after the 11 DIP padding, before the spin buttons; a centered box
-// (no spin buttons) keeps 6 DIP on each side.
+// Where a box's text sits: after the 11 DIP padding, before a number box's spin buttons; a
+// centered box (no spin buttons) keeps 6 DIP on each side, a text box 11 DIP.
 static D2D1_RECT_F UiNumberBoxTextRect(const UiItem& box) {
     const D2D1_RECT_F& r = box.rect;
+    if (box.kind == UiItemKind::TextBox) return {r.left + 11, r.top + 1, r.right - 11, r.bottom - 1};
     if (box.align == DWRITE_TEXT_ALIGNMENT_CENTER) return {r.left + 6, r.top + 1, r.right - 6, r.bottom - 1};
     return {r.left + 11, r.top + 1, r.right - 49, r.bottom - 1};
 }
@@ -10705,39 +10745,53 @@ static D2D1_RECT_F UiGalleryThumbRect(const UiItem& card) {
     return {card.rect.left + 9, card.rect.top + 9, card.rect.right - 9, card.rect.top + 9 + 72};
 }
 
-// The dropdown popup's rows (mockup .dmenu, WinUI combo box items): 32 DIP rows on a 36 DIP
-// pitch, 5 DIP side insets, 2 DIP top and bottom padding; the current value's row selected.
-// Each row's action is the field's, with the row's value. Returns the popup size in DIPs, at
-// least `minWidth` wide.
+// The popup's rows. A dropdown's (WinUI combo box items): 32 DIP rows on a 36 DIP pitch, 5 DIP
+// side insets, 2 DIP top and bottom padding; the current value's row selected. A menu's, when
+// its options have details (mockup .dmenu .dmi): 53 DIP rows inside 4 DIP padding, an 18 DIP
+// icon, the title and its detail line; at least 310 DIP wide. Each row's action is the field's,
+// with the row's value. Returns the popup size in DIPs, at least `minWidth` wide.
 static D2D1_SIZE_F UiLayoutOptions(UiGraphics& g, const std::vector<UiOption>& options,
                                    const UiAction& action, float minWidth,
                                    std::vector<UiItem>& rows) {
-    UiTextStyle body = UiTextStyleFor(UiFont::Body);
-    float width = minWidth;
+    bool menu = std::any_of(options.begin(), options.end(),
+                            [](const UiOption& option) { return !option.detail.empty(); });
+    UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
+    float width = menu ? std::max(minWidth, 310.0f) : minWidth;
     for (const UiOption& option : options) {
-        width = std::max(width, std::ceil(UiLayoutSize(UiLayout(g, option.text, body, 10000,
-                                                                false)).width) + 5 + 12 + 12 + 5);
+        float text = UiLayoutSize(UiLayout(g, option.text, body, 10000, false)).width;
+        if (menu) {
+            text = std::max(text, UiLayoutSize(UiLayout(g, option.detail, caption, 10000, false)).width);
+            width = std::max(width, std::ceil(text) + 4 + 12 + 18 + 14 + 12 + 4);
+        } else {
+            width = std::max(width, std::ceil(text) + 5 + 12 + 12 + 5);
+        }
     }
+    float pitch = menu ? 53 : 36, inset = menu ? 4 : 5, row = menu ? 53 : 32;
     rows.clear();
     for (size_t i = 0; i < options.size(); i++) {
-        UiItem row;
-        row.id = uint32_t(i + 1);
-        row.kind = UiItemKind::Option;
-        float top = 2 + 2 + 36 * float(i);
-        row.rect = {5, top, width - 5, top + 32};
-        row.text = options[i].text;
-        row.selected = options[i].value == action.value;
-        row.action = action;
-        row.action.value = options[i].value;
-        rows.push_back(std::move(row));
+        UiItem item;
+        item.id = uint32_t(i + 1);
+        item.kind = UiItemKind::Option;
+        float y = 4 + pitch * float(i);
+        item.rect = {inset, y, width - inset, y + row};
+        item.text = options[i].text;
+        if (menu) {
+            item.runs.push_back({options[i].detail});
+            item.parts = options[i].parts;
+        }
+        item.selected = options[i].value == action.value;
+        item.action = action;
+        item.action.value = options[i].value;
+        rows.push_back(std::move(item));
     }
-    return {width, 4 + 36 * float(options.size())};
+    return {width, menu ? 8 + pitch * float(options.size()) : 4 + pitch * float(options.size())};
 }
 
 // Where the popup goes, in pixels: below the field, else above it, else on the side with more
-// room; left-aligned with the field and kept inside the work area.
-static POINT UiPopupPlacement(RECT field, SIZE size, RECT work, int gap) {
-    LONG x = std::clamp(field.left, work.left, std::max(work.left, work.right - size.cx));
+// room; aligned with the field's left (a menu's: right) edge and kept inside the work area.
+static POINT UiPopupPlacement(RECT field, SIZE size, RECT work, int gap, bool alignRight = false) {
+    LONG x = std::clamp(alignRight ? field.right - size.cx : field.left, work.left,
+                        std::max(work.left, work.right - size.cx));
     LONG below = field.bottom + gap, above = field.top - gap - size.cy;
     if (below + size.cy <= work.bottom) return {x, below};
     if (above >= work.top) return {x, above};
@@ -10789,9 +10843,33 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
         const bool hot = state.hot == UiFocusRef{item.id, -1};
         const bool pressed = hot && state.pressed == UiFocusRef{item.id, -1};
         switch (item.kind) {
-            // Navigation item and popup option: accent pill when selected, glyph, label.
+            // Navigation item and popup option: accent pill when selected, glyph, label. A menu
+            // row: the pointer's fill, its icon, title and detail line.
             case UiItemKind::Nav:
             case UiItemKind::Option: {
+                if (item.kind == UiItemKind::Option && !item.runs.empty()) {
+                    D2D1_COLOR_F fill = hc      ? (hot ? p.highlight : D2D1_COLOR_F{}) :
+                                        pressed ? p.subtlePressed :
+                                        hot     ? p.subtleHover : D2D1_COLOR_F{};
+                    UiFillRect(target, cache, r, 4, fill, scale);
+                    D2D1_COLOR_F ink = hc && hot ? p.highlightText : p.text;
+                    float s = 18.0f / 24;
+                    D2D1::Matrix3x2F local = D2D1::Matrix3x2F::Scale(s, s) *
+                                             D2D1::Matrix3x2F::Translation(r.left + 12, centerY - 9) * shifted;
+                    target->SetTransform(&local);
+                    for (const UiShapePart& part : item.parts) {
+                        D2D1_COLOR_F color = part.ink == UiInk::Inherit ? part.color : UiFade(ink, part.alpha);
+                        target->FillGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color), nullptr);
+                    }
+                    target->SetTransform(&shifted);
+                    float textWidth = std::max(r.right - r.left - 44 - 12, 0.0f);
+                    UiDrawLayout(target, cache, UiLayout(g, item.text, UiTextStyleFor(UiFont::Body), textWidth, false),
+                                 {r.left + 44, r.top + 8}, ink);
+                    UiDrawLayout(target, cache,
+                                 UiLayout(g, UiRunsText(item.runs), UiTextStyleFor(UiFont::Caption), textWidth, false),
+                                 {r.left + 44, r.top + 28}, hc && hot ? p.highlightText : p.textMuted);
+                    break;
+                }
                 D2D1_COLOR_F fill{};
                 if (hc) {
                     if (item.selected) fill = p.highlight;
@@ -10821,15 +10899,30 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                 break;
             }
-            // Card: a raised panel; interactive cards react to the pointer as a whole.
+            // Card: a raised panel; interactive cards react to the pointer as a whole. A subtle
+            // card shows only the pointer over the panel it lies on; a lifted (selected) one is
+            // opaque with an accent edge, drawn over what it is dragged across.
             case UiItemKind::Card: {
                 bool interactive = UiFocusable(item);
-                D2D1_COLOR_F fill = interactive && pressed ? p.cardPressed :
-                                    interactive && hot     ? p.cardHover : p.card;
-                UiFillRect(target, cache, r, 6, fill, scale);
                 bool hcHot = hc && interactive && hot;
-                UiStrokeRect(target, cache, r, 6, hcHot ? p.highlight : p.cardBorder,
-                             hcHot ? 2.0f : 1.0f, scale);
+                if (item.button == UiButtonStyle::Subtle) {
+                    UiFillRect(target, cache, r, 6,
+                               !interactive || hc ? D2D1_COLOR_F{} : pressed ? p.subtlePressed :
+                               hot ? p.subtleHover : D2D1_COLOR_F{}, scale);
+                    if (hcHot) UiStrokeRect(target, cache, r, 6, p.highlight, 2, scale);
+                    break;
+                }
+                D2D1_COLOR_F fill = item.selected            ? UiOver(p.cardHover, UiOver(p.card, p.background)) :
+                                    interactive && pressed   ? p.cardPressed :
+                                    interactive && hot       ? p.cardHover : p.card;
+                UiFillRect(target, cache, r, 6, fill, scale);
+                if (item.selected) {
+                    UiStrokeRect(target, cache, r, 6, hc ? p.highlight : p.accent,
+                                 std::max(1.0f, std::round(2 * scale)), scale);
+                } else {
+                    UiStrokeRect(target, cache, r, 6, hcHot ? p.highlight : p.cardBorder,
+                                 hcHot ? 2.0f : 1.0f, scale);
+                }
                 break;
             }
             // Rich text wrapped to the item width, inline links colored by pointer state.
@@ -10875,36 +10968,38 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 target->SetTransform(&shifted);
                 break;
             }
-            // Button: standard, accent, subtle or danger; optional glyph before the label.
+            // Button: standard, accent, subtle or danger; optional glyph before the label. A menu
+            // button stays pressed while its popup shows.
             case UiItemKind::Button: {
                 D2D1_COLOR_F fill{}, border{}, ink{};
-                bool active = item.enabled && (hot || pressed);
+                bool down = pressed || (item.enabled && state.open == item.id);
+                bool active = item.enabled && (hot || down);
                 switch (item.button) {
                     case UiButtonStyle::Accent:
-                        fill = !item.enabled ? p.accentDisabled : pressed ? p.accentPressed :
+                        fill = !item.enabled ? p.accentDisabled : down ? p.accentPressed :
                                hot ? p.accentHover : p.accent;
                         border = hc ? p.controlBorder : D2D1_COLOR_F{};
                         ink = item.enabled ? p.textOnAccent : p.textDisabled;
                         break;
                     case UiButtonStyle::Subtle:
-                        fill = !item.enabled ? D2D1_COLOR_F{} : pressed ? p.subtlePressed :
+                        fill = !item.enabled ? D2D1_COLOR_F{} : down ? p.subtlePressed :
                                hot ? p.subtleHover : D2D1_COLOR_F{};
                         border = hc && active ? p.highlight : D2D1_COLOR_F{};
                         ink = item.enabled ? p.text : p.textDisabled;
                         break;
                     default:
-                        fill = !item.enabled ? p.controlDisabled : pressed ? p.controlPressed :
+                        fill = !item.enabled ? p.controlDisabled : down ? p.controlPressed :
                                hot ? p.controlHover : p.control;
                         border = p.controlBorder;
                         ink = !item.enabled                          ? p.textDisabled :
                               hc && active                           ? p.highlightText :
                               item.button == UiButtonStyle::Danger   ? p.danger :
-                              pressed                                ? p.textSecondary : p.text;
+                              down                                   ? p.textSecondary : p.text;
                         break;
                 }
                 UiFillRect(target, cache, r, 4, fill, scale);
                 UiStrokeRect(target, cache, r, 4, border, 1, scale);
-                UiTextStyle label = UiTextStyleFor(UiFont::Body);
+                UiTextStyle label = UiTextStyleFor(item.font);
                 IDWriteTextLayout* text = UiLayout(g, item.text, label, width, false);
                 float textWidth = UiLayoutSize(text).width;
                 float iconWidth = item.icon.empty() ? 0 : item.iconSize + 8;
@@ -10991,10 +11086,12 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                                                               p.textSecondary);
                 break;
             }
-            // Number box frame. Its native text box draws the text on screen; the text drawn
-            // here sits under it (and shows in offscreen renders). Editing: solid fill and a
-            // 2 DIP accent bottom edge.
-            case UiItemKind::NumberBox: {
+            // Number and text box frames. Their native text boxes draw the text on screen; the
+            // text drawn here sits under them (and shows in offscreen renders), a text box's
+            // placeholder while it is empty. Editing: solid fill and a 2 DIP accent bottom edge;
+            // a text box otherwise has a stronger 1 DIP bottom edge.
+            case UiItemKind::NumberBox:
+            case UiItemKind::TextBox: {
                 bool editing = item.enabled && state.editing == item.id;
                 D2D1_COLOR_F fill = !item.enabled ? p.controlDisabled : editing ? p.inputActive :
                                                                          p.control;
@@ -11004,17 +11101,60 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 if (editing) {
                     UiFillRect(target, cache, {r.left + 2, r.bottom - 2, r.right - 2, r.bottom}, 1,
                                p.accent, scale);
+                } else if (item.kind == UiItemKind::TextBox && item.enabled && !hc) {
+                    UiFillRect(target, cache, {r.left + 2, r.bottom - 1 / scale, r.right - 2, r.bottom}, 0,
+                               UiFade(p.controlStrong, 0.75f), scale);
                 }
                 D2D1_RECT_F clip = UiNumberBoxTextRect(item);
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
+                bool placeholder = item.kind == UiItemKind::TextBox && item.text.empty();
                 target->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
                 UiDrawLayout(target, cache,
-                             UiLayout(g, item.text, label, clip.right - clip.left, false, item.align),
+                             UiLayout(g, placeholder ? UiRunsText(item.runs) : item.text, label,
+                                      clip.right - clip.left, false, item.align),
                              {clip.left, centerY - label.lineHeight / 2},
-                             item.enabled ? p.text : p.textDisabled);
+                             !item.enabled ? p.textDisabled : placeholder ? p.textMuted : p.text);
                 target->PopAxisAlignedClip();
                 break;
             }
+            // Chip: a pill. On: an accent tint and edge; off: a faint edge and muted text. Chips
+            // with an action show the pointer.
+            case UiItemKind::Chip: {
+                bool on = item.selected, active = UiActive(item) && hot;
+                D2D1_COLOR_F fill{}, border{}, ink{};
+                if (hc) {
+                    fill = on ? (item.enabled ? p.highlight : p.textDisabled) : D2D1_COLOR_F{};
+                    border = active ? p.highlight : on ? fill : item.enabled ? p.text : p.textDisabled;
+                    ink = on ? p.highlightText : item.enabled ? p.text : p.textDisabled;
+                } else {
+                    fill = on ? UiFade(p.accent, pressed ? 0.12f : active ? 0.24f : 0.16f) :
+                           pressed ? p.subtlePressed : active ? p.subtleHover : D2D1_COLOR_F{};
+                    border = on ? UiFade(p.accent, 0.45f) : UiFade(p.text, 0.14f);
+                    ink = !item.enabled ? p.textDisabled : on ? p.text : p.textMuted;
+                    if (!item.enabled) {
+                        fill = UiFade(fill, 0.4f);
+                        border = UiFade(border, 0.5f);
+                    }
+                }
+                float radius = (r.bottom - r.top) / 2;
+                UiFillRect(target, cache, r, radius, fill, scale);
+                UiStrokeRect(target, cache, r, radius, border, 1, scale);
+                UiTextStyle label = UiTextStyleFor(item.font);
+                UiDrawLayout(target, cache, UiLayout(g, item.text, label, width, false, DWRITE_TEXT_ALIGNMENT_CENTER),
+                             {r.left, centerY - label.lineHeight / 2}, ink);
+                break;
+            }
+            // Drag handle: its glyph, brighter under the pointer.
+            case UiItemKind::Handle:
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, UiIconStyle(item.iconSize), width, false,
+                                      DWRITE_TEXT_ALIGNMENT_CENTER),
+                             {r.left, centerY - item.iconSize / 2},
+                             !item.enabled ? p.textDisabled : hot || pressed ? p.text : p.textMuted);
+                break;
+            case UiItemKind::Rule:
+                UiFillRect(target, cache, {r.left, r.top, r.right, r.top + 1 / scale}, 0, p.cardBorder, scale);
+                break;
             // Spin button: a subtle button with a small chevron.
             case UiItemKind::SpinButton: {
                 if (item.enabled && !hc) {
@@ -11103,14 +11243,16 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
 
     // Focus ring (keyboard focus only): 2 DIP outer and 1 DIP inner band, 3 DIP outside the
     // element; 2 DIP around inline links, between their neighbors; inside for navigation items,
-    // which touch the pane edges; outside a swatch's selection ring. A number box shows focus
-    // with its editing style instead.
+    // which touch the pane edges; outside a swatch's selection ring. Number and text boxes show
+    // focus with their editing style instead.
     if (state.focusVisible && state.focus.id) {
         auto focused = std::find_if(items.begin(), items.end(),
                                     [&](const UiItem& item) { return item.id == state.focus.id; });
-        if (focused != items.end() && focused->kind != UiItemKind::NumberBox) {
+        if (focused != items.end() && focused->kind != UiItemKind::NumberBox &&
+            focused->kind != UiItemKind::TextBox) {
             float radius = state.focus.link >= 0                ? 2 :
                            focused->kind == UiItemKind::Swatch  ? (focused->rect.right - focused->rect.left) / 2 :
+                           focused->kind == UiItemKind::Chip    ? (focused->rect.bottom - focused->rect.top) / 2 :
                            focused->kind == UiItemKind::Card ||
                                focused->kind == UiItemKind::Gallery ? 6 : 4;
             float outside = state.focus.link >= 0             ? 2 :
@@ -11518,15 +11660,16 @@ static bool UiPaintPopup(UiPopup& popup, UiGraphics& g, const UiPalette& palette
 }
 
 // src/ui/text-box.h
-// Native text boxes of the custom-drawn windows: one single-line EDIT per number-box item, keyed
-// by the item's id, a child of the viewport over the item's text area. Native entry keeps IME,
-// caret, selection, clipboard and undo; rebuilds keep the window and set its text only when the
-// client's text changed. The host creates them and routes their messages (ui/host.h).
+// Native text boxes of the custom-drawn windows: one single-line EDIT per number box or text box
+// item, keyed by the item's id, a child of the viewport over the item's text area. Native entry
+// keeps IME, caret, selection, clipboard and undo; rebuilds keep the window and set its text only
+// when the client's text changed. The host creates them and routes their messages (ui/host.h).
 
 struct UiTextBox {
     uint32_t id = 0;
     HWND window = nullptr;
     std::wstring text;       // What the client last set or was told
+    std::wstring cue;        // The placeholder (cue banner) last set
     bool composing = false;  // IME composition in progress: native handling only
 };
 
@@ -11540,6 +11683,8 @@ struct UiTextBoxes {
     // Focus is leaving the window (deactivation, a modal), not moving inside it: the box keeps
     // its draft instead of reporting focus loss.
     bool leavingWindow = false;
+    // Their items moved in place: they follow at the viewport's next paint.
+    bool moved = false;
 };
 
 static UiTextBox* UiFindTextBox(UiTextBoxes& boxes, uint32_t id) {
@@ -11611,12 +11756,6 @@ static HFONT UiTextBoxFont(UiTextBoxes& boxes, UINT dpi) {
 static COLORREF UiColorRef(D2D1_COLOR_F color) {
     auto channel = [](float value) { return BYTE(std::lround(std::clamp(value, 0.0f, 1.0f) * 255)); };
     return RGB(channel(color.r), channel(color.g), channel(color.b));
-}
-
-// `top` over an opaque `under`.
-static D2D1_COLOR_F UiOver(D2D1_COLOR_F top, D2D1_COLOR_F under) {
-    auto mix = [&](float a, float b) { return a * top.a + b * (1 - top.a); };
-    return {mix(top.r, under.r), mix(top.g, under.g), mix(top.b, under.b), 1};
 }
 
 // Text and fill of a box on a card, matching the drawn frame (paint.h): {text, fill}.
@@ -11710,7 +11849,9 @@ struct UiHost {
     UiPalette palette;
 
     // Frame and interaction. The pointer position (item coordinates of its surface) feeds
-    // client-drawn hover; a slider or preview drag keeps its item until release.
+    // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
+    // slider drag reports values that differ from its last report (the frame may lag behind); a
+    // handle's drag starts once the pointer moved (handleMoved) and scrolls while near an edge.
     UiFrame frame;
     std::vector<UiFocusStop> stops;
     UiPointerState pointer;
@@ -11721,8 +11862,12 @@ struct UiHost {
     float scrollDragOffset = 0;
     D2D1_POINT_2F pointerAt{-1e9f, -1e9f};
     UiSurfaceId pointerSurface = UiSurfaceId::Main;
-    uint32_t sliderDrag = 0, panDrag = 0;
-    float dragAnchor = 0;  // Slider: pointer offset from the thumb; preview: last pointer x
+    uint32_t sliderDrag = 0, panDrag = 0, handleDrag = 0;
+    int slideValue = 0;
+    bool handleMoved = false, autoScrolling = false;
+    ULONGLONG autoScrollAt = 0;  // The auto-scroll's last step (or its start)
+    float dragAnchor = 0;  // Slider: pointer offset from the thumb; preview: last pointer x;
+                           // handle: the press's content y
 
     // Dropdown popup and number boxes' text boxes
     UiPopup popup;
@@ -11730,18 +11875,32 @@ struct UiHost {
     UiFocusRef pendingFocus;  // Focused once the next rebuild has built it
     bool pendingFocusVisible = false;
 
-    // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md).
+    // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md); live ones until
+    // the next paint. rebuildMain: the next rebuild repaints the main window.
     int dispatchDepth = 0;
-    bool rebuildPending = false, resetScroll = false;
+    bool rebuildPending = false, resetScroll = false, liveRebuild = false, rebuildMain = false;
     bool closing = false, faulted = false;
 };
 
 static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
                                           UINT_PTR, DWORD_PTR data);
 
+// The viewport's timer that scrolls while a handle is dragged near its top or bottom edge.
+static constexpr UINT_PTR kUiAutoScrollTimer = 0x7E01;
+
 static void UiHostRequestRebuild(UiHost& host, bool resetScroll) {
     host.rebuildPending = true;
+    host.rebuildMain = true;
     host.resetScroll = host.resetScroll || resetScroll;
+}
+
+// A change at the pointer's rate (a slider's drag): the rebuild runs once per frame, before the
+// next paint, and repaints the main window only if `main` changes (or its layout does).
+static void UiHostRequestLiveRebuild(UiHost& host, bool main) {
+    host.liveRebuild = true;
+    host.rebuildMain = host.rebuildMain || main;
+    if (main && host.main) InvalidateRect(host.main, nullptr, FALSE);
+    if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
 // Focuses an element after the next rebuild (one that the rebuild may create or enable).
@@ -11809,15 +11968,17 @@ static void UiHostClosePopup(UiHost& host) {
     UiHostInvalidate(host);
 }
 
-// Opens a dropdown's popup under (or above) its field: owned by the main window, shown without
-// activation, at the DPI of its monitor, holding capture.
+// Opens a dropdown's popup under (or above) its field, or a menu button's under it, right-
+// aligned: owned by the main window, shown without activation, at the DPI of its monitor,
+// holding capture.
 static void UiHostOpenPopup(UiHost& host, uint32_t id) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, id, &surface);
-    if (!item || item->kind != UiItemKind::Dropdown || !item->enabled || item->options.empty() ||
-        !host.config->popupClass || host.closing) {
+    if (!item || (item->kind != UiItemKind::Dropdown && item->kind != UiItemKind::Button) ||
+        !item->enabled || item->options.empty() || !host.config->popupClass || host.closing) {
         return;
     }
+    bool menu = item->kind == UiItemKind::Button;
     UiHostClosePopup(host);
     UiPopup& popup = host.popup;
     float scale = UiHostScale(host);
@@ -11839,7 +12000,7 @@ static void UiHostOpenPopup(UiHost& host, uint32_t id) {
     GetMonitorInfoW(MonitorFromRect(&field, MONITOR_DEFAULTTONEAREST), &monitor);
     auto place = [&](float popupScale) {
         SIZE pixels{LONG(std::lround(size.width * popupScale)), LONG(std::lround(size.height * popupScale))};
-        POINT at = UiPopupPlacement(field, pixels, monitor.rcWork, int(std::lround(4 * scale)));
+        POINT at = UiPopupPlacement(field, pixels, monitor.rcWork, int(std::lround(4 * scale)), menu);
         return RECT{at.x, at.y, at.x + pixels.cx, at.y + pixels.cy};
     };
     RECT rect = place(scale);
@@ -11891,7 +12052,7 @@ static void UiHostItemEvent(UiHost& host, uint32_t id, UiActionKind kind, std::w
 
 // Text boxes -----------------------------------------------------------------------------------
 
-// Text boxes sit over their number boxes' text areas, vertically centered, scrolled with the
+// Native text boxes sit over their items' text areas, vertically centered, scrolled with the
 // content.
 static void UiHostPlaceTextBoxes(UiHost& host) {
     float scale = UiHostScale(host);
@@ -11907,22 +12068,25 @@ static void UiHostPlaceTextBoxes(UiHost& host) {
     }
 }
 
-// After a rebuild: one text box per number box (kept by id), others destroyed; text set only
-// when the client's text changed and no IME composition is running.
+// After a rebuild: one native text box per number box or text box (kept by id), others
+// destroyed; text set only when the client's text changed and no IME composition is running.
+// A text box's limit is its item's maximum; its placeholder shows as the native cue banner.
 static void UiHostSyncTextBoxes(UiHost& host) {
     UiTextBoxes& boxes = host.boxes;
+    auto native = [](const UiItem* item) {
+        return item && (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox);
+    };
     // Removed first, so their focus-loss notifications find no box.
     std::vector<HWND> removed;
     std::erase_if(boxes.boxes, [&](const UiTextBox& box) {
-        const UiItem* item = UiFindItem(host.frame, box.id);
-        if (item && item->kind == UiItemKind::NumberBox && box.window) return false;
+        if (native(UiFindItem(host.frame, box.id)) && box.window) return false;
         if (box.window) removed.push_back(box.window);
         return true;
     });
     for (HWND window : removed) DestroyWindow(window);
     HFONT font = UiTextBoxFont(boxes, host.dpi);
     for (const UiItem& item : host.frame.content) {
-        if (item.kind != UiItemKind::NumberBox) continue;
+        if (!native(&item)) continue;
         UiTextBox* box = UiFindTextBox(boxes, item.id);
         if (!box) {
             DWORD align = item.align == DWRITE_TEXT_ALIGNMENT_CENTER ? ES_CENTER : ES_LEFT;
@@ -11942,9 +12106,13 @@ static void UiHostSyncTextBoxes(UiHost& host) {
             box = &boxes.boxes.back();
             SendMessageW(window, WM_SETFONT, WPARAM(font), FALSE);
             SendMessageW(window, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
-            SendMessageW(window, EM_LIMITTEXT, 64, 0);
+            SendMessageW(window, EM_LIMITTEXT, item.kind == UiItemKind::TextBox ? std::max(item.maximum, 1) : 64, 0);
         } else if (!box->composing && item.text != box->text) {
             UiSetTextBoxText(boxes, *box, item.text);
+        }
+        if (std::wstring cue = UiRunsText(item.runs); item.kind == UiItemKind::TextBox && cue != box->cue) {
+            box->cue = cue;
+            SendMessageW(box->window, EM_SETCUEBANNER, FALSE, reinterpret_cast<LPARAM>(box->cue.c_str()));
         }
         if (bool(IsWindowEnabled(box->window)) != item.enabled) EnableWindow(box->window, item.enabled);
     }
@@ -11953,13 +12121,13 @@ static void UiHostSyncTextBoxes(UiHost& host) {
 
 // Focus and scrolling ----------------------------------------------------------------------------
 
-// The window that holds keyboard focus for an element: a number box's text box, else the
-// element's surface.
+// The window that holds keyboard focus for an element: a number or text box's native text box,
+// else the element's surface.
 static HWND UiHostFocusWindow(UiHost& host, UiFocusRef ref) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
     if (!item) return host.main;
-    if (item->kind == UiItemKind::NumberBox) {
+    if (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox) {
         UiTextBox* box = UiFindTextBox(host.boxes, ref.id);
         if (box && box->window && IsWindowEnabled(box->window)) return box->window;
     }
@@ -12016,18 +12184,20 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
 }
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
-// A dropdown opens its popup; a number box only takes focus (its text box reports edits); a
-// slider and a preview report their drags instead.
+// A dropdown or menu button opens its popup; a number or text box only takes focus (its native
+// text box reports edits); a slider, a preview and a drag handle report their drags instead.
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
     const UiItem* item = UiFindItem(host.frame, ref.id);
-    if (item && ref.link < 0 && item->kind == UiItemKind::Dropdown) {
+    if (item && ref.link < 0 &&
+        (item->kind == UiItemKind::Dropdown || (item->kind == UiItemKind::Button && !item->options.empty()))) {
         UiHostOpenPopup(host, ref.id);
         return;
     }
     if (item && ref.link < 0 &&
-        (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::Slider ||
-         item->kind == UiItemKind::Preview)) {
+        (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox ||
+         item->kind == UiItemKind::Slider || item->kind == UiItemKind::Preview ||
+         item->kind == UiItemKind::Handle)) {
         return;
     }
     const UiAction* action = UiActionOf(host.frame, ref);
@@ -12036,14 +12206,69 @@ static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     host.client->Invoke(host, std::move(copy));
 }
 
-// Deferred structural rebuild, once the outermost dispatch is done with the old items. A
-// rebuild closes the popup; keyboard focus follows the focused element (a requested one, or
-// one whose text box was removed).
+// Drag handles ----------------------------------------------------------------------------------
+
+// A handle drag with the pointer at content y: once it moved 4 DIP from the press it reports
+// where the pointer is, and the viewport scrolls while it is near its top or bottom, a step every
+// 30 ms (up to 20 DIP, faster further out). The timer, started on entering that zone, steps a
+// still pointer; a moving one steps with its reports, since input and paints outrank WM_TIMER.
+static void UiHostDragHandle(UiHost& host, float y) {
+    if (!host.handleMoved && std::abs(y - host.dragAnchor) < 4) return;
+    host.handleMoved = true;
+    float inView = y - host.scroll, height = UiHostViewHeight(host);
+    bool edge = inView < 24 || inView > height - 24;
+    ULONGLONG now = GetTickCount64();
+    if (edge != host.autoScrolling) {
+        host.autoScrolling = edge;
+        host.autoScrollAt = now;
+        if (edge) SetTimer(host.viewport, kUiAutoScrollTimer, 30, nullptr);
+        else KillTimer(host.viewport, kUiAutoScrollTimer);
+    } else if (edge && now - host.autoScrollAt >= 30) {
+        // Steps keep their speed however late they come (up to three at once).
+        float steps = float(std::min<ULONGLONG>(now - host.autoScrollAt, 90)) / 30;
+        host.autoScrollAt = now;
+        float step = inView < 24 ? -std::min(24 - inView, 20.0f) : std::min(inView - height + 24, 20.0f);
+        UiHostScrollTo(host, host.scroll + step * steps);
+        y = inView + host.scroll;
+    }
+    UiHostItemEvent(host, host.handleDrag, UiActionKind::Drag, {}, int(std::lround(y)));
+}
+
+// A drag's live layout: `move` shifts built content items in place and returns whether any
+// moved; only the viewport repaints, without a rebuild, and text boxes follow at its paint.
+// Skipped while a rebuild is pending, which lays out from the client's state anyway.
+template <class Move> static void UiHostMoveContent(UiHost& host, Move&& move) {
+    if (host.rebuildPending || host.closing || !host.viewport || !move(host.frame.content)) return;
+    host.boxes.moved = true;
+    InvalidateRect(host.viewport, nullptr, FALSE);
+}
+
+// Ends a handle drag before its capture goes; one that moved reports `end`.
+static void UiHostEndHandleDrag(UiHost& host, UiActionKind end) {
+    uint32_t handle = std::exchange(host.handleDrag, 0);
+    bool moved = std::exchange(host.handleMoved, false);
+    host.autoScrolling = false;
+    if (host.viewport) KillTimer(host.viewport, kUiAutoScrollTimer);
+    if (handle && moved) UiHostItemEvent(host, handle, end);
+}
+
+// Deferred structural rebuild, once the outermost dispatch is done with the old items. A live
+// one waits for the paint its request caused (which runs it), unless a nested paint (a modal's)
+// consumed that. A rebuild closes the popup; keyboard focus follows the focused element (a
+// requested one, or one whose text box was removed). The main window repaints when requested,
+// when its layout changed or when the pointer's element went.
 static void UiHostRebuildIfPending(UiHost& host) {
+    if (host.liveRebuild && host.dispatchDepth == 1 && host.main && host.viewport &&
+        !GetUpdateRect(host.main, nullptr, FALSE) && !GetUpdateRect(host.viewport, nullptr, FALSE)) {
+        host.rebuildPending = true;
+    }
     for (int pass = 0; pass < 4 && host.dispatchDepth == 1 && host.rebuildPending && host.main &&
                        host.viewport && !host.closing;
          pass++) {
         host.rebuildPending = false;
+        host.liveRebuild = false;
+        D2D1_RECT_F viewport = host.frame.viewport;
+        size_t mainItems = host.frame.main.size();
         UiHostClosePopup(host);
         RECT client{};
         GetClientRect(host.main, &client);
@@ -12061,18 +12286,26 @@ static void UiHostRebuildIfPending(UiHost& host) {
                                     fallback);
         host.frame = std::move(frame);
         host.stops = std::move(stops);
-        if (!UiFindItem(host.frame, host.pointer.hot.id)) host.pointer.hot = {};
-        if (!UiFindItem(host.frame, host.pointer.pressed.id)) host.pointer.pressed = {};
+        const D2D1_RECT_F& v = host.frame.viewport;
+        bool repaintMain = std::exchange(host.rebuildMain, false) || mainItems != host.frame.main.size() ||
+                           v.left != viewport.left || v.top != viewport.top || v.right != viewport.right ||
+                           v.bottom != viewport.bottom;
+        for (UiFocusRef* ref : {&host.pointer.hot, &host.pointer.pressed}) {
+            if (ref->id && !UiFindItem(host.frame, ref->id)) {
+                *ref = {};
+                repaintMain = true;
+            }
+        }
         host.scroll = host.resetScroll ? 0 : host.scroll;
         host.resetScroll = false;
         host.scroll = std::round(UiClampScroll(host.scroll, UiHostViewHeight(host),
                                                host.frame.contentHeight) * scale) / scale;
-        const D2D1_RECT_F& v = host.frame.viewport;
         int left = int(std::lround(v.left * scale)), top = int(std::lround(v.top * scale));
         SetWindowPos(host.viewport, nullptr, left, top, int(std::lround(v.right * scale)) - left,
                      int(std::lround(v.bottom * scale)) - top, SWP_NOZORDER | SWP_NOACTIVATE);
         UiHostSyncTextBoxes(host);
-        UiHostInvalidate(host);
+        if (repaintMain) InvalidateRect(host.main, nullptr, FALSE);
+        InvalidateRect(host.viewport, nullptr, FALSE);
 
         UiFocusRef pending = std::exchange(host.pendingFocus, {});
         bool active = GetActiveWindow() == host.main;
@@ -12127,6 +12360,16 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (!isMain) break;
                 // A tracked modal ends first; the close is retried once its call has unwound.
                 if (host.client->CancelModal()) {
+                    PostMessageW(window, WM_CLOSE, 0, 0);
+                    break;
+                }
+                // So does a handle drag, cancelled with its capture: the close is retried once
+                // the cancel's rebuild has put the content back, whatever the close then decides.
+                if (host.handleDrag) {
+                    UiHostEndHandleDrag(host, UiActionKind::DragCancel);
+                    if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
+                        ReleaseCapture();
+                    }
                     PostMessageW(window, WM_CLOSE, 0, 0);
                     break;
                 }
@@ -12239,6 +12482,19 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                            focused->kind == UiItemKind::Dropdown) {
                     UiHostOpenPopup(host, host.focus.id);  // Alt+Down
                     break;
+                } else if ((wParam == VK_UP || wParam == VK_DOWN) && !host.closing && focused &&
+                           !host.handleDrag) {
+                    // Alt+Up/Down moves an element with a drag handle by one.
+                    auto handle = std::find_if(host.frame.content.begin(), host.frame.content.end(),
+                                               [&](const UiItem& item) {
+                                                   return item.kind == UiItemKind::Handle &&
+                                                          item.owner == host.focus.id && UiActive(item);
+                                               });
+                    if (handle != host.frame.content.end()) {
+                        host.focusVisible = true;
+                        UiHostItemEvent(host, handle->id, UiActionKind::Step, {}, wParam == VK_UP ? -1 : 1);
+                        break;
+                    }
                 }
                 handled = false;
                 break;
@@ -12263,46 +12519,61 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_PAINT: {
-                PAINTSTRUCT paint{};
-                BeginPaint(window, &paint);
-                struct PaintEnd {
-                    HWND window;
-                    PAINTSTRUCT* paint;
-                    ~PaintEnd() { EndPaint(window, paint); }
-                } paintEnd{window, &paint};
-                if (host.faulted) break;
-                ID2D1HwndRenderTarget* target =
-                    UiSurfaceTarget(own, host.graphics->d2d.get(), host.dpi);
-                if (!target) {
-                    UiHostFault(host);
-                    break;
+                // Once per frame, before either surface draws: a live rebuild, and text boxes
+                // whose items a drag moved (a native window move costs a sizeable part of a
+                // frame).
+                if (host.liveRebuild && host.dispatchDepth == 1 && !host.closing) {
+                    host.rebuildPending = true;
+                    UiHostRebuildIfPending(host);
                 }
-                float scale = UiHostScale(host);
-                UiTextBox* editing = UiFindTextBox(host.boxes, GetFocus());
-                UiPaintState state{host.pointer.hot, host.pointer.pressed, host.focus,
-                                   host.focusVisible && GetFocus() == window,
-                                   host.popup.open ? host.popup.field : 0,
-                                   editing ? editing->id : 0};
-                if (host.pointerSurface == surface) state.pointer = host.pointerAt;
-                UiCustomPaint custom = [&](const UiItem& item) {
-                    host.client->PaintCustom(host, target, own.cache, item, state);
-                };
-                target->BeginDraw();
-                D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
-                target->SetTransform(&identity);
-                target->Clear(host.palette.background);
-                if (isMain) {
-                    UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
-                                 state, {0, 0}, scale, -1e9f, 1e9f, &custom);
-                } else {
-                    float height = UiHostViewHeight(host);
-                    UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.content,
-                                 state, {0, -host.scroll}, scale, host.scroll, host.scroll + height,
-                                 &custom);
-                    UiPaintScrollbar(target, own.cache, host.palette, UiHostScrollbar(host),
-                                     host.scrollbarHot || host.scrollDragging, scale);
+                if (!isMain && !host.closing && std::exchange(host.boxes.moved, false)) {
+                    UiHostPlaceTextBoxes(host);
                 }
-                if (!UiSurfaceDrawResult(own, target->EndDraw())) UiHostFault(host);
+                {
+                    PAINTSTRUCT paint{};
+                    BeginPaint(window, &paint);
+                    struct PaintEnd {
+                        HWND window;
+                        PAINTSTRUCT* paint;
+                        ~PaintEnd() { EndPaint(window, paint); }
+                    } paintEnd{window, &paint};
+                    if (host.faulted) break;
+                    ID2D1HwndRenderTarget* target =
+                        UiSurfaceTarget(own, host.graphics->d2d.get(), host.dpi);
+                    if (!target) {
+                        UiHostFault(host);
+                        break;
+                    }
+                    float scale = UiHostScale(host);
+                    UiTextBox* editing = UiFindTextBox(host.boxes, GetFocus());
+                    UiPaintState state{host.pointer.hot, host.pointer.pressed, host.focus,
+                                       host.focusVisible && GetFocus() == window,
+                                       host.popup.open ? host.popup.field : 0,
+                                       editing ? editing->id : 0};
+                    if (host.pointerSurface == surface) state.pointer = host.pointerAt;
+                    UiCustomPaint custom = [&](const UiItem& item) {
+                        host.client->PaintCustom(host, target, own.cache, item, state);
+                    };
+                    target->BeginDraw();
+                    D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
+                    target->SetTransform(&identity);
+                    target->Clear(host.palette.background);
+                    if (isMain) {
+                        UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
+                                     state, {0, 0}, scale, -1e9f, 1e9f, &custom);
+                    } else {
+                        float height = UiHostViewHeight(host);
+                        UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.content,
+                                     state, {0, -host.scroll}, scale, host.scroll, host.scroll + height,
+                                     &custom);
+                        UiPaintScrollbar(target, own.cache, host.palette, UiHostScrollbar(host),
+                                         host.scrollbarHot || host.scrollDragging, scale);
+                    }
+                    if (!UiSurfaceDrawResult(own, target->EndDraw())) UiHostFault(host);
+                }
+                // The viewport paints in the main window's cycle: pointer input arriving during
+                // the main window's present would otherwise have it painted first again and again.
+                if (isMain && host.viewport && !host.closing) UpdateWindow(host.viewport);
                 break;
             }
 
@@ -12319,7 +12590,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (host.sliderDrag) {
                     const UiItem* slider = UiFindItem(host.frame, host.sliderDrag);
                     int value = slider ? UiSliderValueAt(*slider, x - host.dragAnchor) : 0;
-                    if (slider && value != slider->action.value) {
+                    if (slider && value != host.slideValue) {
+                        host.slideValue = value;
                         UiHostItemEvent(host, host.sliderDrag, UiActionKind::Slide, {}, value);
                     }
                     break;
@@ -12330,6 +12602,10 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         host.dragAnchor += float(moved);
                         UiHostItemEvent(host, host.panDrag, UiActionKind::Pan, {}, moved);
                     }
+                    break;
+                }
+                if (host.handleDrag) {
+                    UiHostDragHandle(host, host.pointerAt.y);
                     break;
                 }
                 if (!isMain && host.scrollDragging) {
@@ -12353,11 +12629,15 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_MOUSELEAVE:
+                // While a press or drag holds capture, only this surface's pointer position
+                // changes; outside the window every move reports a leave, so nothing else repaints.
                 if (host.pointerSurface == surface) host.pointerAt = {-1e9f, -1e9f};
-                if (!host.pointer.pressed.id && !host.scrollDragging) {
-                    host.pointer.hot = {};
-                    host.scrollbarHot = false;
+                if (host.pointer.pressed.id || host.scrollDragging) {
+                    InvalidateRect(window, nullptr, FALSE);
+                    break;
                 }
+                host.pointer.hot = {};
+                host.scrollbarHot = false;
                 UiHostInvalidate(host);
                 break;
             case WM_LBUTTONDOWN: {
@@ -12383,30 +12663,37 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.pointer.pressed = hit;
                 if (hit.id) {
                     SetCapture(window);
-                    // A spin button keeps focus on its number box's text box; a preview takes
-                    // no focus.
+                    // A spin button keeps focus on its number box's text box and a drag handle
+                    // gives it to its owner; a preview takes no focus.
                     const UiItem* item = UiFindItem(host.frame, hit.id);
                     UiItemKind kind = item ? item->kind : UiItemKind::Text;
-                    UiFocusRef target = kind == UiItemKind::SpinButton ? UiFocusRef{item->owner, -1} : hit;
-                    if (kind != UiItemKind::Preview &&
+                    UiFocusRef target = kind == UiItemKind::SpinButton || kind == UiItemKind::Handle ?
+                                            UiFocusRef{item->owner, -1} : hit;
+                    if (kind != UiItemKind::Preview && UiFindItem(host.frame, target.id) &&
                         (target != host.focus || GetFocus() != UiHostFocusWindow(host, target))) {
                         UiHostSetFocus(host, target, false);
                     }
                     // Drags: a slider jumps to the press unless it grabs the thumb; a preview
-                    // pans with the pointer.
+                    // pans with the pointer; a handle drags once the pointer moved.
                     float x = float(point.x) / scale;
                     const UiItem* slider = UiFindItem(host.frame, hit.id);
                     if (slider && slider->kind == UiItemKind::Slider) {
                         float offset = x - UiSliderThumbX(*slider);
                         host.sliderDrag = hit.id;
                         host.dragAnchor = std::abs(offset) <= 10 ? offset : 0;
+                        host.slideValue = slider->action.value;
                         int value = UiSliderValueAt(*slider, x - host.dragAnchor);
-                        if (value != slider->action.value) {
+                        if (value != host.slideValue) {
+                            host.slideValue = value;
                             UiHostItemEvent(host, hit.id, UiActionKind::Slide, {}, value);
                         }
                     } else if (kind == UiItemKind::Preview) {
                         host.panDrag = hit.id;
                         host.dragAnchor = x;
+                    } else if (kind == UiItemKind::Handle && GetCapture() == window) {
+                        host.handleDrag = hit.id;
+                        host.handleMoved = host.autoScrolling = false;
+                        host.dragAnchor = float(point.y) / scale + (isMain ? 0 : host.scroll);
                     }
                 } else {
                     host.focusVisible = false;
@@ -12416,27 +12703,51 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_LBUTTONUP: {
-                // A slider drag ends wherever the pointer is: its value commits.
+                // A slider drag ends wherever the pointer is: its value commits. A handle drag
+                // that moved drops there.
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
                 uint32_t slider = std::exchange(host.sliderDrag, 0);
+                uint32_t handle = std::exchange(host.handleDrag, 0);
+                bool dropped = std::exchange(host.handleMoved, false);
                 host.panDrag = 0;
+                if (handle) {
+                    host.autoScrolling = false;
+                    KillTimer(host.viewport, kUiAutoScrollTimer);
+                }
                 UiFocusRef activate = UiPointerRelease(host.pointer, UiHostHit(host, surface, point));
                 host.scrollDragging = false;
                 if (GetCapture() == window) ReleaseCapture();
                 UiHostInvalidate(host);
                 if (slider) UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
+                else if (handle && dropped) UiHostItemEvent(host, handle, UiActionKind::Drop);
                 else if (activate.id) UiHostInvoke(host, activate);
                 break;
             }
             case WM_CAPTURECHANGED:
-                // Losing capture ends a slider drag as a release does.
+                // Losing capture ends a slider drag as a release does, and cancels a handle's.
                 host.pointer.pressed = {};
                 host.scrollDragging = false;
                 host.panDrag = 0;
                 if (uint32_t slider = std::exchange(host.sliderDrag, 0)) {
                     UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
                 }
+                UiHostEndHandleDrag(host, UiActionKind::DragCancel);
                 UiHostInvalidate(host);
+                break;
+            case WM_TIMER:
+                // A handle held near the viewport's top or bottom: its drag steps the scroll
+                // (UiHostDragHandle) with the cursor where it is. Without a cursor position only
+                // the drag's reports step it.
+                if (!isMain && wParam == kUiAutoScrollTimer) {
+                    POINT cursor{};
+                    if (!host.handleDrag || !GetCursorPos(&cursor) || !ScreenToClient(window, &cursor)) {
+                        KillTimer(window, kUiAutoScrollTimer);
+                        break;
+                    }
+                    UiHostDragHandle(host, float(cursor.y) / UiHostScale(host) + host.scroll);
+                    break;
+                }
+                handled = isMain && host.client->Message(host, message, wParam, lParam, result);
                 break;
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL: {
@@ -12485,7 +12796,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 }
                 const UiItem* item = UiFindItem(host.frame, host.pointer.hot.id);
                 bool link = item && (host.pointer.hot.link >= 0 || item->kind == UiItemKind::Link);
-                SetCursor(LoadCursorW(nullptr, link ? IDC_HAND : IDC_ARROW));
+                bool handle = item && item->kind == UiItemKind::Handle;
+                SetCursor(LoadCursorW(nullptr, link ? IDC_HAND : handle ? IDC_SIZENS : IDC_ARROW));
                 result = TRUE;
                 break;
             }
@@ -12493,6 +12805,16 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             // Keyboard and focus. While the popup is open, the field's keys drive it.
             case WM_KEYDOWN: {
                 if (host.closing) break;
+                // Esc cancels a handle drag; other keys wait until it ends.
+                if (host.handleDrag) {
+                    if (wParam == VK_ESCAPE) {
+                        UiHostEndHandleDrag(host, UiActionKind::DragCancel);
+                        if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
+                            ReleaseCapture();
+                        }
+                    }
+                    break;
+                }
                 if (host.popup.open) {
                     UiOptionIntent option = UiOptionKey(int(host.popup.rows.size()),
                                                         host.popup.highlight, UINT(wParam));
@@ -12741,9 +13063,10 @@ static LRESULT CALLBACK UiHostPopupProc(HWND window, UINT message, WPARAM wParam
     return handled ? result : DefWindowProcW(window, message, wParam, lParam);
 }
 
-// A number box's text box: Tab moves focus along the item order, Enter commits, Esc reverts,
-// Up/Down step; focus moving elsewhere in the window reports focus loss. During IME composition
-// every message goes to native handling and the composed text is reported when it ends.
+// A number or text box's native text box: Tab moves focus along the item order, Enter commits,
+// Esc reverts, Up/Down step a number box; focus moving elsewhere in the window reports focus
+// loss. During IME composition every message goes to native handling and the composed text is
+// reported when it ends.
 static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
                                           UINT_PTR, DWORD_PTR data) {
     UiHost& host = *reinterpret_cast<UiHost*>(data);
@@ -12787,9 +13110,15 @@ static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wPar
                         UiHostItemEvent(host, id, UiActionKind::TextRevert);
                         break;
                     case VK_UP:
-                    case VK_DOWN:
+                    case VK_DOWN: {
+                        const UiItem* item = UiFindItem(host.frame, id);
+                        if (!item || item->kind != UiItemKind::NumberBox) {
+                            handled = false;
+                            break;
+                        }
                         UiHostItemEvent(host, id, UiActionKind::Step, {}, wParam == VK_UP ? 1 : -1);
                         break;
+                    }
                     default:
                         handled = false;
                         break;
@@ -13979,6 +14308,341 @@ static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
     }
 }
 
+// src/settings/account-commands.h
+// Account commands shared by the settings windows: add, edit, remove, reorder and show or hide
+// an account, each one transaction on fresh settings under the edit lock, the account resolved
+// afresh. Settings thread only. They show nothing: the result says what to tell the user.
+
+// Which account: by history ID, else (none generated) by provider+label identity.
+struct AccountTarget {
+    uint64_t historyId = 0;
+    uint64_t identity = 0;
+};
+
+struct AccountCommandResult {
+    SettingsApplyResult apply = SettingsApplyResult::Failed;
+    bool missing = false;      // The account isn't configured (any more)
+    std::wstring message;      // For the user, if not empty
+    UINT icon = MB_ICONERROR;  // The message's
+    AccountTarget account;     // The account afterwards: added, renamed or edited
+};
+
+static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
+                                const AccountConfig& account) {
+    for (const auto& existing : settings.accounts) {
+        if (ignoredIdentity && AccountIdentityHash(existing) == ignoredIdentity) continue;
+        if (existing.provider == account.provider && existing.label == account.label) return true;
+    }
+    return false;
+}
+
+static int FindAccountTarget(const Settings& settings, AccountTarget target) {
+    for (size_t i = 0; i < settings.accounts.size(); i++) {
+        const AccountConfig& account = settings.accounts[i];
+        if (target.historyId ? account.historyId == target.historyId :
+                               AccountIdentityHash(account) == target.identity) {
+            return int(i);
+        }
+    }
+    return -1;
+}
+
+// The published account with an identity, as normalization left it (its history ID). Called
+// under the edit lock.
+static AccountTarget PublishedAccountTarget(uint64_t identity) {
+    std::lock_guard<std::mutex> lk(g_settingsMutex);
+    for (const AccountConfig& account : g_settings.accounts) {
+        if (AccountIdentityHash(account) == identity) return {account.historyId, identity};
+    }
+    return {0, identity};
+}
+
+// Adds `account` labelled with the first of `labels` its provider doesn't use yet.
+static AccountCommandResult AddAccountCommand(AccountConfig account, const std::vector<std::wstring>& labels) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    auto label = std::find_if(labels.begin(), labels.end(), [&](const std::wstring& candidate) {
+        AccountConfig labelled = account;
+        labelled.label = candidate;
+        return !HasDuplicateAccount(settings, 0, labelled);
+    });
+    if (label == labels.end()) {
+        result.message = L"That provider and label are already configured.";
+        result.icon = MB_ICONWARNING;
+        return result;
+    }
+    account.label = *label;
+    uint64_t identity = AccountIdentityHash(account);
+    settings.accounts.push_back(std::move(account));
+    result.apply = ApplyOwnedSettings(std::move(settings));
+    if (result.apply != SettingsApplyResult::Failed) result.account = PublishedAccountTarget(identity);
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        result.message = L"Could not save the account.";
+    } else if (result.apply == SettingsApplyResult::Changed) {
+        FinishSettingsApply();
+    }
+    return result;
+}
+
+// Replaces the account with `edit` applied to its fresh settings. Visibility (which a taskbar
+// menu can change meanwhile) and the history ID stay the fresh ones; a provider change starts a
+// new history. A rename moves the stored sign-in to the new identity, blocking epoch-gated token
+// saves across the local copy, settings and delete transaction; `clearOldSignIn` deletes a
+// provider change's old sign-in afterwards.
+static AccountCommandResult EditAccountCommand(AccountTarget target,
+                                               const std::function<void(AccountConfig&)>& edit,
+                                               bool clearOldSignIn = false) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        result.message = L"The account was changed from another taskbar window.";
+        result.icon = MB_ICONWARNING;
+        return result;
+    }
+    AccountConfig oldAccount = settings.accounts[index];
+    AccountConfig newAccount = oldAccount;
+    edit(newAccount);
+    uint64_t oldIdentity = AccountIdentityHash(oldAccount);
+    uint64_t newIdentity = AccountIdentityHash(newAccount);
+    bool identityChanged = oldIdentity != newIdentity;
+    if (identityChanged && g_loginInProgress.load()) {
+        result.message = L"Wait for the current sign-in to finish before changing identity.";
+        result.icon = MB_ICONINFORMATION;
+        return result;
+    }
+    if (HasDuplicateAccount(settings, oldIdentity, newAccount)) {
+        result.message = L"That provider and label are already configured.";
+        result.icon = MB_ICONWARNING;
+        return result;
+    }
+    // Tile identity is read only while building tiles, so its edits take the rebuild path.
+    bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
+                                   oldAccount.label == newAccount.label &&
+                                   oldAccount.tileIdentity == newAccount.tileIdentity &&
+                                   oldAccount.tileText == newAccount.tileText &&
+                                   oldAccount.creditsMax == newAccount.creditsMax &&
+                                   oldAccount.recordHistory == newAccount.recordHistory &&
+                                   oldAccount.historyId == newAccount.historyId &&
+                                   oldAccount.showBars != newAccount.showBars;
+
+    bool sameProviderIdentityChange = identityChanged &&
+                                      oldAccount.provider == newAccount.provider;
+    bool sameProviderRename = sameProviderIdentityChange &&
+                              oldAccount.provider != L"antigravity";
+    TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
+    bool oldTokenCleared = true;
+    ULONGLONG oldAuthEpoch = 0;
+    ULONGLONG newAuthEpoch = 0;
+    std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
+    if (sameProviderRename) {
+        // Block epoch-gated saves only across the local copy/settings/delete transaction.
+        authEpochLock.lock();
+        oldAuthEpoch = AuthEpochLocked(oldIdentity);
+        newAuthEpoch = AuthEpochLocked(newIdentity);
+        tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
+        if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
+            tokenCopyResult == TokenCopyResult::Failed) {
+            authEpochLock.unlock();
+            configLock.unlock();
+            result.message =
+                tokenCopyResult == TokenCopyResult::DestinationOccupied ?
+                    L"The renamed account identity already has a retained sign-in. To replace it, "
+                    L"add an account with that provider and label, then remove it and delete its "
+                    L"stored sign-in. The account was not changed." :
+                    L"The stored sign-in could not be copied. The account was not changed.";
+            return result;
+        }
+    }
+
+    // Visibility can be toggled from a taskbar menu meanwhile.
+    newAccount.hidden = oldAccount.hidden;
+    // Renames retain history; switching providers starts a new series during normalization.
+    newAccount.historyId = oldAccount.provider == newAccount.provider ? oldAccount.historyId : 0;
+    settings.accounts[index] = newAccount;
+    result.apply = ApplyOwnedSettings(
+        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
+        sameProviderIdentityChange ? newIdentity : 0);
+    if (result.apply == SettingsApplyResult::Failed) {
+        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
+                                  ClearStoredToken(newIdentity);
+        if (authEpochLock.owns_lock()) authEpochLock.unlock();
+        configLock.unlock();
+        result.message =
+            copiedTokenCleared ?
+                L"Could not save the account." :
+                L"Could not save the account. The copied sign-in remains under the attempted "
+                L"new identity. To delete it, add an account with the attempted provider and "
+                L"label, then remove it and choose to delete its stored sign-in.";
+        return result;
+    }
+    if (sameProviderRename) {
+        oldTokenCleared = ClearStoredToken(oldIdentity);
+        BumpAuthEpochLocked(oldIdentity);
+        g_authRenameRedirects.push_back(
+            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
+        authEpochLock.unlock();
+    }
+    result.account = PublishedAccountTarget(newIdentity);
+    configLock.unlock();
+    bool providerTokenCleared = true;
+    if (clearOldSignIn) {
+        providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
+    }
+    if (result.apply == SettingsApplyResult::Changed) {
+        // A quota selection change updates in place: bar layouts already hold every bar and
+        // only change visibility and spacing; tile layouts regenerate their meter shapes.
+        if (onlyBarSelectionChanged) {
+            PostUiUpdate();
+            if (!g_uiInjected.load(std::memory_order_acquire)) StartRetryInject();
+        } else {
+            FinishSettingsApply();
+        }
+    }
+    if (!oldTokenCleared) {
+        result.message =
+            L"The account was renamed, but a duplicate stored sign-in remains under the old "
+            L"identity. To delete it, re-add an account with the old provider and label, then "
+            L"remove it and choose to delete its stored sign-in.";
+        result.icon = MB_ICONWARNING;
+    } else if (!providerTokenCleared) {
+        result.message =
+            L"The provider was changed, but the old sign-in remains retained. To recover or "
+            L"delete it, re-add an account with the old provider and label.";
+        result.icon = MB_ICONWARNING;
+    }
+    NotifySettingsWindowChanged();
+    return result;
+}
+
+// Removes the account, deleting its stored sign-in first when asked. Not during a sign-in.
+static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteSignIn) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    if (g_loginInProgress.load()) {
+        result.message = L"Wait for the current sign-in to finish before removing accounts.";
+        result.icon = MB_ICONINFORMATION;
+        return result;
+    }
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        return result;
+    }
+    uint64_t identity = AccountIdentityHash(settings.accounts[index]);
+    if (deleteSignIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
+        result.message = L"The stored sign-in could not be deleted, so the account was not removed.";
+        return result;
+    }
+    settings.accounts.erase(settings.accounts.begin() + index);
+    result.apply = ApplyOwnedSettings(std::move(settings));
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        if (deleteSignIn) {
+            RefreshQuotaByIdentity(identity);
+            NotifySettingsWindowChanged();
+        }
+        result.message = deleteSignIn ?
+            L"The stored sign-in was deleted, but settings could not be saved. The account "
+            L"remains configured but signed out." :
+            L"Could not remove the account.";
+        return result;
+    }
+    if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
+    return result;
+}
+
+// Moves the account to `to` in the account order (clamped).
+static AccountCommandResult MoveAccountCommand(AccountTarget target, int to) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        return result;
+    }
+    to = std::clamp(to, 0, int(settings.accounts.size()) - 1);
+    if (to == index) {
+        result.apply = SettingsApplyResult::Unchanged;
+        return result;
+    }
+    AccountConfig moved = std::move(settings.accounts[index]);
+    settings.accounts.erase(settings.accounts.begin() + index);
+    settings.accounts.insert(settings.accounts.begin() + to, std::move(moved));
+    result.apply = ApplyOwnedSettings(std::move(settings));
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        result.message = L"Could not reorder the account.";
+    } else if (result.apply == SettingsApplyResult::Changed) {
+        FinishSettingsApply();
+    }
+    return result;
+}
+
+// Shows or hides the account on the taskbar (the desired state), keeping one visible, and
+// persists the hidden set as the taskbar menu does.
+static AccountCommandResult SetAccountHiddenCommand(AccountTarget target, bool hidden) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        return result;
+    }
+    int visibleCount = int(std::count_if(settings.accounts.begin(), settings.accounts.end(),
+                                         [](const AccountConfig& account) { return !account.hidden; }));
+    if (hidden && !settings.accounts[index].hidden && visibleCount <= 1) {
+        result.apply = SettingsApplyResult::Unchanged;
+        return result;
+    }
+    settings.accounts[index].hidden = hidden;
+    result.apply = ApplyOwnedSettings(settings);
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        result.message = L"Could not update account visibility.";
+    } else if (result.apply == SettingsApplyResult::Changed) {
+        std::wstring hashes;
+        wchar_t buffer[24];
+        for (const auto& account : settings.accounts) {
+            if (!account.hidden) continue;
+            if (!hashes.empty()) hashes += L";";
+            swprintf(buffer, ARRAYSIZE(buffer), L"%016llx",
+                     (unsigned long long)AccountIdentityHash(account));
+            hashes += buffer;
+        }
+        Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
+        FinishSettingsApply();
+    }
+    return result;
+}
+
 // src/settings/edits.h
 // Edit controller of the settings window: drafts, the render projection, the commit queue and
 // the navigation and close flushes. Pure: it talks to a SettingsStore (production:
@@ -13987,6 +14651,12 @@ static void ApplyNativeWindowTheme(HWND hWnd, bool dark) {
 // Drafts are keyed by account key (0: global settings) and field. Every change bumps a revision;
 // a commit request carries the revision it was made for and is skipped once the draft is gone
 // or newer. The drafts, not the queue, are the source of truth.
+//
+// An account's key is its history ID, which survives renames, reorders and visibility; one
+// without (ID generation failed) gets a session key by identity, moved along by this window's
+// renames. Account actions (sign in, sign out, dashboard, visibility, reorder, remove) commit
+// that account's drafts first: an invalid label blocks them, so nothing runs under an identity
+// about to change.
 
 enum class SettingsField : uint8_t {
     None,
@@ -14027,6 +14697,20 @@ enum class SettingsField : uint8_t {
     RedThreshold,
     ShowStaleWarning,
     ShowOpenAiExtraLimits,
+    // Accounts: fields of the account a draft's key names
+    AccountLabel,         // Text, trimmed; unique per provider
+    AccountTileIdentity,  // A TileIdentity
+    AccountTileText,      // Text, up to 4 characters
+    AccountBars,          // The quotas shown: bit i = QuotaBarIndex i
+    AccountCreditsMax,    // OpenAI credits that count as 100%; 0 hides the credits bar
+    AccountRecordHistory,
+    // Account actions: each commits the account's drafts first
+    AccountHidden,     // Desired: 1 hidden
+    AccountMove,       // To this index
+    AccountRemove,     // 1: also delete the stored sign-in
+    AccountSignIn,
+    AccountSignOut,
+    AccountDashboard,
     // Operation groups: page resets
     ResetBehavior,
     ResetHistory,
@@ -14038,7 +14722,14 @@ enum class SettingsField : uint8_t {
     PaceTickColorCustom,  // The color dialog
     ShowOnTaskbar,        // Visual test mode
     PreviewScroll,        // The preview strip's sideways scroll
+    AccountAdd,           // The Add account menu: 0 Anthropic, 1 OpenAI, 2 Antigravity
+    AccountExpand,        // Desired: 1 expanded
 };
+
+static constexpr int kSettingsLabelLimit = 64;
+static constexpr int kSettingsTileTextLimit = 4;
+static constexpr int kSettingsCreditsLimit = 999999999;
+static constexpr PCWSTR kSettingsProviders[] = {L"anthropic", L"openai", L"antigravity"};
 
 struct SettingsNumberRange {
     int minimum = 0, maximum = 0;
@@ -14061,6 +14752,7 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::YellowThreshold:
         case SettingsField::OrangeThreshold:
         case SettingsField::RedThreshold: return SettingsNumberRange{0, 100};
+        case SettingsField::AccountCreditsMax: return SettingsNumberRange{0, kSettingsCreditsLimit};
         default: return std::nullopt;
     }
 }
@@ -14299,6 +14991,48 @@ static std::wstring SettingsRangeError(SettingsNumberRange range) {
            std::to_wstring(range.maximum) + L".";
 }
 
+// Account fields ---------------------------------------------------------------------------------
+
+static int SettingsAccountValue(const AccountConfig& a, SettingsField field) {
+    switch (field) {
+        case SettingsField::AccountTileIdentity: return int(a.tileIdentity);
+        case SettingsField::AccountBars: {
+            int mask = 0;
+            for (int i = 0; i < kQuotaBarCount; i++) mask |= a.showBars[size_t(i)] ? 1 << i : 0;
+            return mask;
+        }
+        case SettingsField::AccountCreditsMax: return a.creditsMax;
+        case SettingsField::AccountRecordHistory: return a.recordHistory;
+        case SettingsField::AccountHidden: return a.hidden;
+        default: return 0;
+    }
+}
+
+// Sets one account field to its desired value: `text` for the label and short text, else
+// `value`, clamped to its choices or range. Normalization follows when settings are saved.
+static void SettingsAccountAssign(AccountConfig& a, SettingsField field, int value, const std::wstring& text) {
+    switch (field) {
+        case SettingsField::AccountLabel: a.label = text; break;
+        case SettingsField::AccountTileText: a.tileText = text; break;
+        case SettingsField::AccountTileIdentity:
+            a.tileIdentity = TileIdentity(std::clamp(value, int(TileIdentity::LogoBadge), int(TileIdentity::Text)));
+            break;
+        case SettingsField::AccountBars:
+            for (int i = 0; i < kQuotaBarCount; i++) a.showBars[size_t(i)] = (value >> i) & 1;
+            break;
+        case SettingsField::AccountCreditsMax: a.creditsMax = std::clamp(value, 0, kSettingsCreditsLimit); break;
+        case SettingsField::AccountRecordHistory: a.recordHistory = value != 0; break;
+        case SettingsField::AccountHidden: a.hidden = value != 0; break;
+        default: break;
+    }
+}
+
+// A label as saved: surrounding spaces trimmed.
+static std::wstring SettingsTrimLabel(std::wstring_view text) {
+    size_t first = text.find_first_not_of(L" \t\r\n"), last = text.find_last_not_of(L" \t\r\n");
+    return first == std::wstring_view::npos ? std::wstring() : std::wstring(text.substr(first, last - first + 1));
+}
+
 // Store ------------------------------------------------------------------------------------------
 
 struct SettingsDisplay {
@@ -14310,6 +15044,16 @@ struct SettingsDisplay {
 // Recording state while consent is on.
 enum class SettingsRecording : uint8_t { Recording, PendingSave, StorageError };
 
+// What is known about an account beside its settings: its last poll and its sign-in.
+struct SettingsAccountStatus {
+    std::wstring plan;         // Empty if unknown
+    std::wstring error;        // The last poll's
+    bool polled = false;       // A poll has succeeded
+    bool signedIn = false;     // A sign-in is stored (Anthropic, OpenAI)
+    bool needsSignIn = false;  // The last poll asked for one
+    bool signingIn = false;    // Its sign-in window is open
+};
+
 struct SettingsStatus {
     std::vector<SettingsDisplay> displays;
     SettingsRecording recording = SettingsRecording::Recording;
@@ -14317,6 +15061,8 @@ struct SettingsStatus {
     wchar_t groupSeparator = L',';
     double taskbarHeight = 0;  // The primary taskbar's, in DIPs at its own DPI; 0 if unknown
     bool visualTest = false;   // The taskbar shows the sample accounts
+    std::vector<SettingsAccountStatus> accounts;  // Parallel to the settings' accounts
+    bool signInRunning = false;                   // Some account's sign-in window is open
 };
 
 struct SettingsBaseline {
@@ -14326,11 +15072,39 @@ struct SettingsBaseline {
 
 enum class SettingsSaveResult : uint8_t { Changed, Unchanged, Failed };
 
-// What the controller reads and writes. Each Apply is one transaction on fresh settings.
+// How the store finds an account in fresh settings: by its history ID, else (none) by its
+// provider+label identity.
+struct SettingsAccountRef {
+    uint64_t historyId = 0;
+    uint64_t identity = 0;
+};
+
+enum class SettingsNoticeKind : uint8_t { Error, Warning, Information };
+
+struct SettingsAccountResult {
+    SettingsSaveResult save = SettingsSaveResult::Unchanged;
+    bool missing = false;  // No such account (any more)
+    std::wstring notice;   // What the window tells the user, if anything
+    SettingsNoticeKind kind = SettingsNoticeKind::Error;
+    SettingsAccountRef account;  // The account afterwards: added or renamed
+};
+
+// What the controller reads and writes. Each Apply, Account and AddAccount is one transaction on
+// fresh settings.
 struct SettingsStore {
     virtual SettingsBaseline Load() = 0;
     // A field (or a group's fields) set to `value`, saved and published.
     virtual SettingsSaveResult Apply(SettingsField field, int value) = 0;
+    // An account field set to its desired value (`text` for the label and short text), or an
+    // account action, on the account freshly resolved from `account`.
+    virtual SettingsAccountResult Account(SettingsAccountRef account, SettingsField field, int value,
+                                          const std::wstring& text) = 0;
+    // A new account of `provider`, labelled with the first of `labels` no account of its
+    // provider uses.
+    virtual SettingsAccountResult AddAccount(const std::wstring& provider,
+                                             const std::vector<std::wstring>& labels) = 0;
+    // Whether a sign-in is stored for an identity (presence only).
+    virtual bool HasStoredSignIn(uint64_t identity) = 0;
     // Unload or cancellation: stop committing.
     virtual bool Unloading() = 0;
 
@@ -14355,11 +15129,23 @@ struct SettingsDraft {
 struct SettingsRequest {
     uint64_t key = 0;
     SettingsField field = SettingsField::None;
-    uint64_t revision = 0;  // 0: a group, which has no draft
+    uint64_t revision = 0;  // 0: a group or an account action, which have no draft
     int value = 0;
+    std::wstring text;      // The label or short text to save
 };
 
 enum class SettingsCloseResult : uint8_t { Saved, Unloading, Blocked };
+
+// Blocked: one of the account's drafts stopped the action (an invalid label keeps its error; a
+// failed save has its notice). Failed: the action itself failed (its notice says why).
+enum class SettingsActionResult : uint8_t { Done, Blocked, Failed };
+
+// A message box the window owes the user. A failure's explains a failed save.
+struct SettingsNotice {
+    std::wstring text;
+    SettingsNoticeKind kind = SettingsNoticeKind::Error;
+    bool failure = false;
+};
 
 struct SettingsEdits {
     explicit SettingsEdits(SettingsStore& store) : store(&store) {}
@@ -14373,16 +15159,63 @@ struct SettingsEdits {
     std::deque<SettingsRequest> queue;
     uint64_t revisions = 0;
 
-    // Baseline and statuses only: drafts, requests and text boxes stay as they are.
-    void Reload() { baseline = store->Load(); }
+    // Accounts: keys parallel to the baseline's accounts, the session keys of accounts without a
+    // history ID (identity, key), and a control slot per key ever seen (never reused)
+    std::vector<uint64_t> keys;
+    std::vector<std::pair<uint64_t, uint64_t>> sessionKeys;
+    std::map<uint64_t, uint32_t> slots;
+    uint64_t sessions = 0;
 
-    // What builders and previews see: the baseline with each draft's desired value. Thresholds
-    // stay ordered as saving orders them (settings/storage.h): each at least the one before, so
-    // an unordered draft shows what it will save.
+    // Messages for the window to show once the current operation is done
+    std::vector<SettingsNotice> notices;
+
+    // Baseline and statuses: drafts, requests and text boxes stay as they are, except those of
+    // an account that is gone, which go with a notice. A session key lasts for the window, also
+    // once a later save generated the account's history ID.
+    void Reload() {
+        baseline = store->Load();
+        keys.clear();
+        for (const AccountConfig& account : baseline.settings.accounts) {
+            uint64_t identity = AccountIdentityHash(account);
+            auto session = std::find_if(sessionKeys.begin(), sessionKeys.end(),
+                                        [&](const auto& entry) { return entry.first == identity; });
+            uint64_t key = session != sessionKeys.end() ? session->second : account.historyId;
+            if (!key) {
+                sessionKeys.emplace_back(identity, (1ULL << 63) | ++sessions);
+                key = sessionKeys.back().second;
+            }
+            keys.push_back(key);
+            slots.try_emplace(key, uint32_t(slots.size() + 1));
+        }
+        size_t before = drafts.size();
+        std::erase_if(drafts, [&](const SettingsDraft& d) { return d.key && !IndexOf(d.key); });
+        std::erase_if(queue, [&](const SettingsRequest& r) { return r.key && !IndexOf(r.key); });
+        if (drafts.size() != before) {
+            notices.push_back({L"An account is no longer configured; its unsaved changes were dropped.",
+                               SettingsNoticeKind::Warning, false});
+        }
+    }
+
+    // What builders and previews see: the baseline with each draft's desired value; a label
+    // only while it is valid. Thresholds stay ordered as saving orders them
+    // (settings/storage.h): each at least the one before, so an unordered draft shows what it
+    // will save.
     Settings Projection() const {
         Settings s = baseline.settings;
         for (const SettingsDraft& draft : drafts) {
-            if (!draft.key) SettingsAssign(s, draft.field, draft.value);
+            if (!draft.key) {
+                SettingsAssign(s, draft.field, draft.value);
+                continue;
+            }
+            std::optional<size_t> index = IndexOf(draft.key);
+            if (!index) continue;
+            AccountConfig& account = s.accounts[*index];
+            if (draft.field == SettingsField::AccountLabel) {
+                std::wstring label = SettingsTrimLabel(draft.raw);
+                if (LabelError(draft.key, label).empty()) account.label = std::move(label);
+            } else {
+                SettingsAccountAssign(account, draft.field, draft.value, draft.raw);
+            }
         }
         s.orangeThreshold = std::max(s.orangeThreshold, s.yellowThreshold);
         s.redThreshold = std::max(s.redThreshold, s.orangeThreshold);
@@ -14396,14 +15229,49 @@ struct SettingsEdits {
         return nullptr;
     }
 
-    // A text box's text (every change). Text that doesn't parse keeps the last valid value.
+    std::optional<size_t> IndexOf(uint64_t key) const {
+        auto at = std::find(keys.begin(), keys.end(), key);
+        if (!key || at == keys.end() || size_t(at - keys.begin()) >= baseline.settings.accounts.size()) {
+            return std::nullopt;
+        }
+        return size_t(at - keys.begin());
+    }
+
+    uint32_t SlotOf(uint64_t key) const {
+        auto slot = slots.find(key);
+        return slot == slots.end() ? 0 : slot->second;
+    }
+
+    // Empty when `label` (trimmed) can be the account's: not empty, and no other account of its
+    // provider uses it.
+    std::wstring LabelError(uint64_t key, const std::wstring& label) const {
+        if (label.empty()) return L"Enter a label.";
+        std::optional<size_t> index = IndexOf(key);
+        if (!index) return {};
+        const std::vector<AccountConfig>& accounts = baseline.settings.accounts;
+        for (size_t i = 0; i < accounts.size(); i++) {
+            if (i != *index && accounts[i].provider == accounts[*index].provider && accounts[i].label == label) {
+                return L"Another account of this provider uses this label.";
+            }
+        }
+        return {};
+    }
+
+    // A text box's text (every change). Number text that doesn't parse keeps the last valid
+    // value; a label is checked against the other accounts.
     void SetText(uint64_t key, SettingsField field, std::wstring text) {
         std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
-        if (!range) return;
+        bool free = field == SettingsField::AccountLabel || field == SettingsField::AccountTileText;
+        if (!range && !free) return;
         SettingsDraft& draft = Touch(key, field);
-        SettingsParsedNumber parsed = SettingsParseNumber(text, *range, baseline.status.groupSeparator);
         draft.text = true;
         draft.raw = std::move(text);
+        if (free) {
+            draft.valid = field != SettingsField::AccountLabel ||
+                          LabelError(key, SettingsTrimLabel(draft.raw)).empty();
+            return;
+        }
+        SettingsParsedNumber parsed = SettingsParseNumber(draft.raw, *range, baseline.status.groupSeparator);
         draft.valid = parsed.ok;
         if (parsed.ok) draft.value = parsed.value;
     }
@@ -14436,10 +15304,8 @@ struct SettingsEdits {
     bool RequestCommit(uint64_t key, SettingsField field, bool focusLoss = false) {
         SettingsDraft* draft = Find(key, field);
         if (!draft || (focusLoss && draft->failed)) return false;
-        if (!draft->valid) {
-            if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
-                draft->error = SettingsRangeError(*range);
-            }
+        if (!Valid(*draft)) {
+            draft->error = InvalidError(*draft);
             return false;
         }
         draft->failed = false;
@@ -14447,7 +15313,7 @@ struct SettingsEdits {
         bool queued = std::any_of(queue.begin(), queue.end(), [&](const SettingsRequest& request) {
             return request.key == key && request.field == field && request.revision == draft->revision;
         });
-        if (!queued) queue.push_back({key, field, draft->revision, draft->value});
+        if (!queued) queue.push_back(RequestFor(*draft));
         return true;
     }
 
@@ -14510,15 +15376,15 @@ struct SettingsEdits {
     int Navigate() {
         queue.clear();
         int failures = 0;
-        for (const auto& [key, field] : Keys()) {
+        for (const auto& [key, field] : DraftKeys()) {
             SettingsDraft* draft = Find(key, field);
             if (!draft || draft->failed) continue;
-            if (!draft->valid) {
+            if (!Valid(*draft)) {
                 Revert(key, field);
                 continue;
             }
             if (store->Unloading()) break;
-            if (!Run({key, field, draft->revision, draft->value})) failures++;
+            if (!Run(RequestFor(*draft))) failures++;
         }
         return failures;
     }
@@ -14528,17 +15394,15 @@ struct SettingsEdits {
     // unless the user discards.
     SettingsCloseResult PrepareClose() {
         queue.clear();
-        for (const auto& [key, field] : Keys()) {
+        for (const auto& [key, field] : DraftKeys()) {
             SettingsDraft* draft = Find(key, field);
             if (!draft) continue;
             if (store->Unloading()) return SettingsCloseResult::Unloading;
-            if (!draft->valid) {
-                if (std::optional<SettingsNumberRange> range = SettingsFieldRange(field)) {
-                    draft->error = SettingsRangeError(*range);
-                }
+            if (!Valid(*draft)) {
+                draft->error = InvalidError(*draft);
                 return SettingsCloseResult::Blocked;
             }
-            if (!Run({key, field, draft->revision, draft->value})) return SettingsCloseResult::Blocked;
+            if (!Run(RequestFor(*draft))) return SettingsCloseResult::Blocked;
         }
         return SettingsCloseResult::Saved;
     }
@@ -14546,6 +15410,77 @@ struct SettingsEdits {
     void Discard() {
         drafts.clear();
         queue.clear();
+    }
+
+    // Accounts --------------------------------------------------------------------------------
+
+    // Before an action on an account: its drafts commit, one transaction each, its queued
+    // requests included. An invalid label blocks before anything saves, with its error; so does
+    // a failed save. Other invalid drafts stay as they are.
+    SettingsActionResult FlushAccount(uint64_t key) {
+        std::erase_if(queue, [&](const SettingsRequest& request) { return request.key == key; });
+        if (SettingsDraft* label = Find(key, SettingsField::AccountLabel); label && !Valid(*label)) {
+            label->error = InvalidError(*label);
+            return SettingsActionResult::Blocked;
+        }
+        for (const auto& [draftKey, field] : DraftKeys()) {
+            SettingsDraft* draft = draftKey == key ? Find(key, field) : nullptr;
+            if (!draft || !draft->valid) continue;
+            if (store->Unloading() || !Run(RequestFor(*draft))) return SettingsActionResult::Blocked;
+        }
+        return SettingsActionResult::Done;
+    }
+
+    // An account action (sign in or out, dashboard, visibility, reorder, remove) with its
+    // desired value, after the account's drafts committed; the account is resolved again
+    // afterwards. A removal drops the account's drafts and requests.
+    SettingsActionResult AccountAction(uint64_t key, SettingsField action, int value) {
+        if (SettingsActionResult flushed = FlushAccount(key); flushed != SettingsActionResult::Done) {
+            return flushed;
+        }
+        if (store->Unloading()) return SettingsActionResult::Blocked;
+        std::optional<size_t> index = IndexOf(key);
+        SettingsAccountResult result;
+        result.missing = !index;
+        if (index) result = store->Account(AccountRef(*index), action, value, {});
+        if (action == SettingsField::AccountRemove &&
+            (result.missing || result.save == SettingsSaveResult::Changed)) {
+            DropAccount(key);
+            if (!result.notice.empty()) notices.push_back({result.notice, result.kind, false});
+            Reload();
+            return SettingsActionResult::Done;
+        }
+        return Settle({key, action, 0, value}, result) ? SettingsActionResult::Done : SettingsActionResult::Failed;
+    }
+
+    // The Add account menu: an account of `provider`, created at once. Its label is the first
+    // default (A, A2, A3, ...; O and G for the others) whose identity has no stored sign-in, so
+    // it never adopts an old one; the store takes the first of those no account of the provider
+    // uses. Returns its key; 0 when none was added.
+    uint64_t AddAccount(const std::wstring& provider) {
+        if (store->Unloading()) return 0;
+        std::wstring base = provider == L"openai" ? L"O" : provider == L"antigravity" ? L"G" : L"A";
+        std::vector<std::wstring> labels;
+        size_t wanted = baseline.settings.accounts.size() + 8;
+        for (int n = 1; labels.size() < wanted && n <= 10000; n++) {
+            AccountConfig candidate;
+            candidate.provider = provider;
+            candidate.label = n == 1 ? base : base + std::to_wstring(n);
+            if (!store->HasStoredSignIn(AccountIdentityHash(candidate))) labels.push_back(std::move(candidate.label));
+        }
+        SettingsAccountResult result = store->AddAccount(provider, labels);
+        bool added = result.save == SettingsSaveResult::Changed;
+        if (!result.notice.empty()) notices.push_back({result.notice, result.kind, !added});
+        if (!added) return 0;
+        Reload();
+        for (size_t i = 0; i < keys.size(); i++) {
+            SettingsAccountRef ref = AccountRef(i);
+            if (result.account.historyId ? ref.historyId == result.account.historyId :
+                                           ref.identity == result.account.identity) {
+                return keys[i];
+            }
+        }
+        return 0;
     }
 
 private:
@@ -14556,7 +15491,10 @@ private:
             SettingsDraft created;
             created.key = key;
             created.field = field;
-            created.value = SettingsFieldValue(Projection(), field);
+            Settings projection = Projection();
+            std::optional<size_t> index = IndexOf(key);
+            created.value = !key  ? SettingsFieldValue(projection, field) :
+                            index ? SettingsAccountValue(projection.accounts[*index], field) : 0;
             drafts.push_back(std::move(created));
             draft = &drafts.back();
         }
@@ -14566,15 +15504,54 @@ private:
         return *draft;
     }
 
-    std::vector<std::pair<uint64_t, SettingsField>> Keys() const {
-        std::vector<std::pair<uint64_t, SettingsField>> keys;
-        for (const SettingsDraft& draft : drafts) keys.emplace_back(draft.key, draft.field);
-        return keys;
+    std::vector<std::pair<uint64_t, SettingsField>> DraftKeys() const {
+        std::vector<std::pair<uint64_t, SettingsField>> list;
+        for (const SettingsDraft& draft : drafts) list.emplace_back(draft.key, draft.field);
+        return list;
+    }
+
+    // A label's validity follows the other accounts, which may have changed since it was typed.
+    bool Valid(SettingsDraft& draft) const {
+        if (draft.field == SettingsField::AccountLabel) {
+            draft.valid = LabelError(draft.key, SettingsTrimLabel(draft.raw)).empty();
+        }
+        return draft.valid;
+    }
+
+    std::wstring InvalidError(const SettingsDraft& draft) const {
+        if (draft.field == SettingsField::AccountLabel) return LabelError(draft.key, SettingsTrimLabel(draft.raw));
+        std::optional<SettingsNumberRange> range = SettingsFieldRange(draft.field);
+        return range ? SettingsRangeError(*range) : std::wstring();
+    }
+
+    SettingsRequest RequestFor(const SettingsDraft& draft) const {
+        std::wstring text = draft.field == SettingsField::AccountLabel    ? SettingsTrimLabel(draft.raw) :
+                            draft.field == SettingsField::AccountTileText ? draft.raw : std::wstring();
+        return {draft.key, draft.field, draft.revision, draft.value, std::move(text)};
+    }
+
+    SettingsAccountRef AccountRef(size_t index) const {
+        const AccountConfig& account = baseline.settings.accounts[index];
+        return {account.historyId, AccountIdentityHash(account)};
+    }
+
+    // A removed (or vanished) account: its drafts, requests and session key go.
+    void DropAccount(uint64_t key) {
+        std::erase_if(drafts, [&](const SettingsDraft& d) { return d.key == key; });
+        std::erase_if(queue, [&](const SettingsRequest& r) { return r.key == key; });
+        std::erase_if(sessionKeys, [&](const auto& entry) { return entry.second == key; });
     }
 
     // One transaction. Saved (or already so): the draft it was made for is done and the
     // baseline reloads. Failed: that draft keeps its value with the error.
     bool Run(const SettingsRequest& request) {
+        if (request.key) {
+            std::optional<size_t> index = IndexOf(request.key);
+            SettingsAccountResult result;
+            result.missing = !index;
+            if (index) result = store->Account(AccountRef(*index), request.field, request.value, request.text);
+            return Settle(request, result);
+        }
         SettingsSaveResult result = store->Apply(request.field, request.value);
         auto same = [&](const SettingsDraft& d) {
             return d.key == request.key && d.field == request.field && d.revision == request.revision;
@@ -14593,23 +15570,88 @@ private:
         Reload();
         return true;
     }
+
+    // An account transaction's outcome, as Run's: its notice goes to the window (a failure
+    // always has one). A missing account's drafts go; a renamed session key follows its account.
+    bool Settle(const SettingsRequest& request, const SettingsAccountResult& result) {
+        if (result.missing) {
+            DropAccount(request.key);
+            notices.push_back({L"This account is no longer configured; its unsaved changes were dropped.",
+                               SettingsNoticeKind::Warning, true});
+            Reload();
+            return false;
+        }
+        bool failed = result.save == SettingsSaveResult::Failed;
+        if (!result.notice.empty()) {
+            notices.push_back({result.notice, result.kind, failed});
+        } else if (failed) {
+            notices.push_back({L"Could not save the account. The change is kept here with its error; change it "
+                               L"again to retry.", SettingsNoticeKind::Error, true});
+        }
+        auto same = [&](const SettingsDraft& d) {
+            return d.key == request.key && d.field == request.field && d.revision == request.revision;
+        };
+        if (failed) {
+            auto draft = request.revision ? std::find_if(drafts.begin(), drafts.end(), same) : drafts.end();
+            if (draft != drafts.end()) {
+                draft->failed = true;
+                draft->error = L"This change couldn't be saved.";
+            }
+            return false;
+        }
+        if (request.revision) std::erase_if(drafts, same);
+        for (auto& [identity, key] : sessionKeys) {
+            if (key == request.key && result.account.identity) identity = result.account.identity;
+        }
+        Reload();
+        return true;
+    }
 };
 
 // src/settings/store.h
 // Production store of the settings window's edit controller (settings/edits.h): the published
-// settings and statuses, and one transaction per edit. Settings thread only.
+// settings and statuses, and one transaction per edit. Account edits and actions go through the
+// shared account commands (settings/account-commands.h), sign-ins through auth/login.h. Settings
+// thread only.
 
 struct SettingsProductionStore final : SettingsStore {
     SettingsBaseline Load() override {
         SettingsBaseline baseline;
+        std::vector<AccountData> data;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             baseline.settings = g_settings;
+            std::lock_guard<std::mutex> dataLock(g_dataMutex);
+            data = g_data;
         }
         SettingsStatus& status = baseline.status;
         status.recording = g_historyIdsPendingSave ? SettingsRecording::PendingSave :
                            g_historyStorageError   ? SettingsRecording::StorageError :
                                                      SettingsRecording::Recording;
+        // Each account's last poll (published in account order) and its sign-in: stored (only
+        // its presence is read) and whether its sign-in window is open. OpenAI's Spark plan name
+        // shows only with its extra limits, as in the details flyout.
+        bool signingIn = g_loginInProgress.load();
+        uint64_t signingInIdentity = g_loginAccountIdentity.load();
+        status.signInRunning = signingIn;
+        for (size_t i = 0; i < baseline.settings.accounts.size(); i++) {
+            const AccountConfig& account = baseline.settings.accounts[i];
+            uint64_t identity = AccountIdentityHash(account);
+            SettingsAccountStatus& accountStatus = status.accounts.emplace_back();
+            if (i < data.size()) {
+                accountStatus.plan = data[i].plan;
+                accountStatus.error = data[i].error;
+                accountStatus.polled = data[i].lastSuccessMs != 0;
+                accountStatus.needsSignIn = data[i].needsLogin;
+            }
+            if (account.provider == L"openai" && !baseline.settings.showOpenAiExtraLimits &&
+                (accountStatus.plan.find(L"Spark") != std::wstring::npos ||
+                 accountStatus.plan.find(L"spark") != std::wstring::npos)) {
+                accountStatus.plan.clear();
+            }
+            accountStatus.signedIn = account.provider != L"antigravity" && HasStoredToken(identity);
+            accountStatus.signingIn = signingIn && signingInIdentity == identity;
+        }
         // Display N is the Nth taskbar in the order the taskbar code targets (primary first).
         // The preview takes the primary taskbar's height, converted with that taskbar's DPI.
         std::vector<TaskbarDisplayInfo> taskbars = FindCurrentProcessTaskbarDisplays();
@@ -14656,7 +15698,66 @@ struct SettingsProductionStore final : SettingsStore {
         return SettingsSaveResult::Changed;
     }
 
+    SettingsAccountResult Account(SettingsAccountRef account, SettingsField field, int value,
+                                  const std::wstring& text) override {
+        AccountTarget target{account.historyId, account.identity};
+        // Sign-ins, sign-outs and the dashboard act on the account's current identity.
+        if (field == SettingsField::AccountSignIn || field == SettingsField::AccountSignOut ||
+            field == SettingsField::AccountDashboard) {
+            uint64_t identity = 0;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                int index = FindAccountTarget(g_settings, target);
+                if (index >= 0) identity = AccountIdentityHash(g_settings.accounts[index]);
+            }
+            SettingsAccountResult result;
+            result.missing = !identity;
+            if (!identity) return result;
+            if (field == SettingsField::AccountSignIn) {
+                StartLoginByIdentity(identity);
+            } else if (field == SettingsField::AccountDashboard) {
+                OpenDashboardForIdentity(identity);
+            } else if (!SignOutAccountByIdentity(identity)) {
+                result.save = SettingsSaveResult::Failed;
+                result.notice = L"The stored sign-in could not be deleted and remains retained for this account.";
+            }
+            return result;
+        }
+        AccountCommandResult command =
+            field == SettingsField::AccountRemove ? RemoveAccountCommand(target, value != 0) :
+            field == SettingsField::AccountMove   ? MoveAccountCommand(target, value) :
+            field == SettingsField::AccountHidden ? SetAccountHiddenCommand(target, value != 0) :
+            EditAccountCommand(target, [&](AccountConfig& edited) {
+                SettingsAccountAssign(edited, field, value, text);
+            });
+        return Result(command);
+    }
+
+    SettingsAccountResult AddAccount(const std::wstring& provider,
+                                     const std::vector<std::wstring>& labels) override {
+        AccountConfig account;
+        account.provider = provider;
+        return Result(AddAccountCommand(std::move(account), labels));
+    }
+
+    bool HasStoredSignIn(uint64_t identity) override { return HasStoredToken(identity); }
+
     bool Unloading() override { return g_unloading || g_settingsWindowCancelRequested; }
+
+private:
+    static SettingsAccountResult Result(const AccountCommandResult& command) {
+        SettingsAccountResult result;
+        result.save = command.apply == SettingsApplyResult::Failed    ? SettingsSaveResult::Failed :
+                      command.apply == SettingsApplyResult::Unchanged ? SettingsSaveResult::Unchanged :
+                                                                         SettingsSaveResult::Changed;
+        result.missing = command.missing;
+        result.notice = command.message;
+        result.kind = command.icon == MB_ICONWARNING     ? SettingsNoticeKind::Warning :
+                      command.icon == MB_ICONINFORMATION ? SettingsNoticeKind::Information :
+                                                           SettingsNoticeKind::Error;
+        result.account = {command.account.historyId, command.account.identity};
+        return result;
+    }
 };
 
 // src/settings/view.h
@@ -14666,12 +15767,24 @@ struct SettingsProductionStore final : SettingsStore {
 
 enum class SettingsUiPage : int { Accounts, Layout, Display, Behavior, History, About, Count };
 
+// An account card's state, beside its projected settings: its key (settings/edits.h), its control
+// slot, what is known about it and whether it is expanded.
+struct SettingsViewAccount {
+    uint64_t key = 0;
+    uint32_t slot = 0;
+    SettingsAccountStatus status;
+    bool expanded = false;
+};
+
 struct SettingsView {
     SettingsUiPage page = SettingsUiPage::Accounts;
     std::wstring version;
     Settings settings;                  // Render projection (SettingsEdits::Projection)
     SettingsStatus status;
-    std::vector<SettingsDraft> drafts;  // Number box text and errors
+    std::vector<SettingsDraft> drafts;  // Text box text and errors
+    std::vector<SettingsViewAccount> accounts;  // Parallel to settings.accounts
+    uint64_t dragKey = 0;               // The account card being dragged, drawn lifted at dragTop
+    float dragTop = 0;                  // Content DIPs
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
@@ -14682,6 +15795,11 @@ struct SettingsView {
 // Other items take running ids below 0x10000.
 static uint32_t SettingsControlId(SettingsField field, uint32_t part = 0) {
     return 0x10000u + uint32_t(field) * 16 + part;
+}
+
+// An account's controls: by its slot, so they follow the account across reorders.
+static uint32_t SettingsAccountControlId(uint32_t slot, SettingsField field, uint32_t part = 0) {
+    return 0x100000u + slot * 0x1000u + uint32_t(field) * 16 + part;
 }
 
 static const SettingsDraft* SettingsViewDraft(const SettingsView& view, SettingsField field) {
@@ -16218,10 +17336,477 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay, L"Reset");
 }
 
+// src/settings/page-accounts.h
+// Settings > Accounts: one expander card per account in taskbar order, or the empty state
+// (approved mockups set-accounts.png, accounts-expanded-openai.png, accounts-empty.png). The
+// title, its note and the Add account menu (accounts-add.png) are in the shell's pinned header.
+// Pure builder.
+
+static constexpr PCWSTR kSettingsEmptyCircle = L"M0,28a28,28 0 1 0 56,0a28,28 0 1 0 -56,0Z";
+
+// Where a dragged card goes: past every other card whose center is above the pointer (content
+// DIPs). `centers` are the other cards' centers, in order.
+static size_t SettingsReorderTarget(const std::vector<float>& centers, float pointer) {
+    return size_t(std::count_if(centers.begin(), centers.end(), [&](float center) { return center < pointer; }));
+}
+
+// A drag's live layout of the built page, without rebuilding it: the cards (each its panel, then
+// the items after it up to the next panel) restacked in `order` (panel ids) from content y `top`,
+// 4 DIP apart as the builder stacks them, the dragged card's place left empty and the card itself
+// (built lifted, last) moved to `dragTop`. Returns whether anything moved.
+static bool SettingsMoveAccountCards(std::vector<UiItem>& items, const std::vector<uint32_t>& order,
+                                     uint32_t dragged, float top, float dragTop) {
+    std::vector<size_t> starts;
+    for (size_t i = 0; i < items.size(); i++) {
+        if (std::find(order.begin(), order.end(), items[i].id) != order.end()) starts.push_back(i);
+    }
+    bool moved = false;
+    for (uint32_t panel : order) {
+        auto start = std::find_if(starts.begin(), starts.end(), [&](size_t i) { return items[i].id == panel; });
+        if (start == starts.end()) continue;
+        size_t end = start + 1 == starts.end() ? items.size() : start[1];
+        D2D1_RECT_F card = items[*start].rect;
+        float dy = (panel == dragged ? dragTop : top) - card.top;
+        top += card.bottom - card.top + 4;
+        if (dy == 0) continue;
+        moved = true;
+        for (size_t i = *start; i < end; i++) {
+            items[i].rect.top += dy;
+            items[i].rect.bottom += dy;
+        }
+    }
+    return moved;
+}
+
+// Lays out the page from content y; returns the bottom of the last card. A dragged card is
+// built in its new place, then lifted to view.dragTop and drawn over the others.
+static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
+                                     uint32_t& id, float x, float y, float width) {
+    const Settings& s = view.settings;
+    auto textWidth = [&](std::wstring_view text, UiFont font) {
+        return std::ceil(UiLayoutSize(UiLayout(g, text, UiTextStyleFor(font), 10000, false)).width);
+    };
+
+    // Empty state (mockup .emptycard): an icon in a circle, a title, two centered paragraphs.
+    if (s.accounts.empty()) {
+        constexpr float kPadTop = 44, kPadBottom = 48, kIcon = 56, kGap = 8;
+        float top = y + 14, center = x + width / 2;
+        float lines = std::clamp(width - 120, 40.0f, 440.0f);
+        std::vector<UiRun> first = {{L"Select "}, {L"Add account", UiRunStyle::Strong},
+                                    {L" to show an Anthropic, OpenAI or Google Antigravity account on the "
+                                     L"taskbar."}};
+        std::vector<UiRun> second = {{L"Anthropic and OpenAI sign in through your browser. Google Antigravity "
+                                      L"uses its signed-in app or CLI, which must keep running."}};
+        float firstHeight = UiLayoutSize(UiRichLayout(g, first, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
+        float secondHeight = UiLayoutSize(UiRichLayout(g, second, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
+        float bottom = top + 1 + kPadTop + kIcon + 6 + kGap + 26 + kGap + firstHeight + kGap + secondHeight +
+                       kPadBottom + 1;
+        UiItem card;
+        card.id = id++;
+        card.kind = UiItemKind::Card;
+        card.rect = {x, top, x + width, bottom};
+        items.push_back(std::move(card));
+        float at = top + 1 + kPadTop;
+        UiItem circle;
+        circle.id = id++;
+        circle.kind = UiItemKind::Shape;
+        circle.viewBox = kIcon;
+        circle.rect = {center - kIcon / 2, at, center + kIcon / 2, at + kIcon};
+        circle.parts.push_back({kSettingsEmptyCircle, {}, UiInk::Primary, 0.06f});
+        items.push_back(std::move(circle));
+        UiItem glyph;
+        glyph.id = id++;
+        glyph.kind = UiItemKind::Glyph;
+        glyph.text = L"\uE716";
+        glyph.iconSize = 26;
+        glyph.ink = UiInk::Secondary;
+        glyph.rect = {center - 14, at + 14, center + 14, at + 42};
+        items.push_back(std::move(glyph));
+        at += kIcon + 6 + kGap;
+        auto addText = [&](std::vector<UiRun> runs, UiFont font, UiInk ink, float height) {
+            UiItem text;
+            text.id = id++;
+            text.kind = UiItemKind::Text;
+            text.font = font;
+            text.ink = ink;
+            text.align = DWRITE_TEXT_ALIGNMENT_CENTER;
+            float span = font == UiFont::Subtitle ? width - 2 : lines;
+            text.rect = {center - span / 2, at, center + span / 2, at + height};
+            text.runs = std::move(runs);
+            items.push_back(std::move(text));
+            at += height + kGap;
+        };
+        addText({{L"No accounts yet"}}, UiFont::Subtitle, UiInk::Primary, 26);
+        addText(std::move(first), UiFont::Note, UiInk::Muted, firstHeight);
+        addText(std::move(second), UiFont::Note, UiInk::Muted, secondHeight);
+        return bottom;
+    }
+
+    int visible = int(std::count_if(s.accounts.begin(), s.accounts.end(),
+                                    [](const AccountConfig& account) { return !account.hidden; }));
+    std::vector<UiItem> lifted;
+    float top = y + 14;
+    for (size_t i = 0; i < s.accounts.size() && i < view.accounts.size(); i++) {
+        const AccountConfig& account = s.accounts[i];
+        const SettingsViewAccount& card = view.accounts[i];
+        const SettingsAccountStatus& status = card.status;
+        const uint64_t key = card.key;
+        auto control = [&](SettingsField field, uint32_t part = 0) {
+            return SettingsAccountControlId(card.slot, field, part);
+        };
+        auto command = [&](SettingsField field, int value = 0) {
+            return UiAction{UiActionKind::Command, value, {}, uint32_t(field), key};
+        };
+        auto draftOf = [&](SettingsField field) -> const SettingsDraft* {
+            for (const SettingsDraft& draft : view.drafts) {
+                if (draft.key == key && draft.field == field) return &draft;
+            }
+            return nullptr;
+        };
+        const bool anthropic = account.provider == L"anthropic", openai = account.provider == L"openai";
+        const bool oauth = anthropic || openai;
+        const bool notPolled = account.hidden && (s.skipHiddenPolling || !s.historyEnabled || !account.recordHistory);
+        const bool signInNeeded = oauth && !status.signingIn && (!status.signedIn || status.needsSignIn);
+        const int bars = SettingsAccountValue(account, SettingsField::AccountBars);
+        std::vector<UiItem> cardItems;
+        auto push = [&](UiItem item) { cardItems.push_back(std::move(item)); };
+
+        // Panel, lifted while dragged; the header (mockup .ahead, 68 DIP) expands it.
+        constexpr float kHeader = 68;
+        const float cy = top + kHeader / 2;
+        UiItem panel;
+        panel.id = control(SettingsField::AccountExpand, 1);
+        panel.kind = UiItemKind::Card;
+        panel.rect = {x, top, x + width, top + kHeader};
+        panel.selected = key == view.dragKey;
+        push(panel);
+        UiItem header;
+        header.id = control(SettingsField::AccountExpand);
+        header.kind = UiItemKind::Card;
+        header.button = UiButtonStyle::Subtle;
+        header.rect = {x, top, x + width, top + kHeader};
+        header.action = command(SettingsField::AccountExpand, !card.expanded);
+        push(header);
+
+        // Grip, logo; then, laid out from the right but in reading (and focus) order: Sign in,
+        // quota keys, visibility, chevron.
+        UiItem handle;
+        handle.id = control(SettingsField::AccountMove);
+        handle.kind = UiItemKind::Handle;
+        handle.text = L"\uE784";
+        handle.iconSize = 14;
+        handle.rect = {x + 5, cy - 20, x + 35, cy + 20};
+        handle.owner = header.id;
+        handle.action = command(SettingsField::AccountMove);
+        push(handle);
+        UiItem logo;
+        logo.id = id++;
+        logo.kind = UiItemKind::Shape;
+        logo.rect = {x + 41, cy - 11, x + 63, cy + 11};
+        logo.parts.push_back({anthropic ? kClaudeLogoPath : openai ? kOpenAiLogoPath : kGeminiLogoPath, {},
+                              UiInk::Primary});
+        push(logo);
+        float right = x + width - 17;
+        std::vector<UiItem> trailing;
+        UiItem chevron;
+        chevron.id = id++;
+        chevron.kind = UiItemKind::Glyph;
+        chevron.text = card.expanded ? L"\uE70E" : L"\uE70D";
+        chevron.iconSize = 12;
+        chevron.ink = UiInk::Secondary;
+        chevron.rect = {right - 16, cy - 6, right, cy + 6};
+        trailing.push_back(std::move(chevron));
+        right -= 16 + 14;
+        // The last visible account stays visible: its switch can't turn off.
+        UiAddToggle(trailing, control(SettingsField::AccountHidden), {right - 40, cy - 16, right, cy + 16},
+                    !account.hidden, account.hidden || visible > 1,
+                    command(SettingsField::AccountHidden, !account.hidden));
+        trailing.back().text.clear();
+        right -= 40 + 14;
+        static constexpr PCWSTR kKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
+        for (int bar = kQuotaBarCount - 1; bar >= 0; bar--) {
+            if (!((bars >> bar) & 1)) continue;
+            PCWSTR text = openai && bar == kExtraUsageBar ? L"Cr" : kKeys[bar];
+            float chipWidth = textWidth(text, UiFont::Caption) + 18;
+            UiItem chip;
+            chip.id = id++;
+            chip.kind = UiItemKind::Chip;
+            chip.font = UiFont::Caption;
+            chip.text = text;
+            chip.selected = true;
+            chip.rect = {right - chipWidth, cy - 10, right, cy + 10};
+            trailing.push_back(std::move(chip));
+            right -= chipWidth + 4;
+        }
+        right -= 10;
+        if (signInNeeded) {
+            float buttonWidth = textWidth(L"Sign in", UiFont::Note) + 24;
+            UiItem signIn;
+            signIn.id = control(SettingsField::AccountSignIn);
+            signIn.kind = UiItemKind::Button;
+            signIn.button = UiButtonStyle::Accent;
+            signIn.font = UiFont::Note;
+            signIn.text = L"Sign in";
+            signIn.rect = {right - buttonWidth, cy - 14, right, cy + 14};
+            signIn.enabled = !view.status.signInRunning;
+            signIn.action = command(SettingsField::AccountSignIn);
+            trailing.push_back(std::move(signIn));
+            right -= buttonWidth + 14;
+        }
+        for (auto item = trailing.rbegin(); item != trailing.rend(); ++item) push(std::move(*item));
+
+        // Label and "Provider · plan · status".
+        std::wstring stateText;
+        UiInk stateInk = UiInk::Success;
+        std::wstring error = status.error.size() > 60 ? status.error.substr(0, 59) + L"\u2026" : status.error;
+        if (!error.empty()) error[0] = wchar_t(towupper(error[0]));
+        if (status.signingIn) {
+            stateText = L"Signing in\u2026";
+            stateInk = UiInk::Accent;
+        } else if (signInNeeded) {
+            stateText = L"Sign-in needed";
+            stateInk = UiInk::Caution;
+        } else if (notPolled) {
+            stateText = L"Hidden, not polled";
+            stateInk = UiInk::Secondary;
+        } else if (!error.empty()) {
+            stateText = !oauth && status.error == L"Antigravity not running" ? L"Local app not running" : error;
+            stateInk = UiInk::Caution;
+        } else if (!oauth) {
+            stateText = status.polled ? L"Local app running" : L"Waiting for the local app";
+            stateInk = status.polled ? UiInk::Success : UiInk::Secondary;
+        } else {
+            stateText = L"Signed in";
+        }
+        std::wstring details = anthropic ? L"Anthropic \u00B7 " : openai ? L"OpenAI \u00B7 " : L"Antigravity \u00B7 ";
+        if (!status.plan.empty()) details += status.plan + L" \u00B7 ";
+        float textRight = std::max(right, x + 77 + 40);
+        UiItem title;
+        title.id = id++;
+        title.kind = UiItemKind::Text;
+        title.rect = {x + 77, cy - 18, textRight, cy + 2};
+        title.runs.push_back({account.label});
+        push(title);
+        UiItem state;
+        state.id = id++;
+        state.kind = UiItemKind::Text;
+        state.font = UiFont::Caption;
+        state.ink = UiInk::Muted;
+        state.rect = {x + 77, cy + 2, textRight, cy + 18};
+        state.runs = {{details}, {stateText, UiRunStyle::Normal, stateInk}};
+        push(state);
+
+        // Expanded rows (mockup .scard.sub).
+        float bottom = top + kHeader;
+        auto row = [&](UiCardSpec spec) {
+            spec.nested = true;
+            spec.minHeight = 60;
+            UiCardLayout layout = UiAddCard(g, cardItems, id, x + 1, bottom, width - 2, spec);
+            bottom = layout.card.bottom;
+            return layout;
+        };
+        if (card.expanded) {
+            {
+                const SettingsDraft* draft = draftOf(SettingsField::AccountLabel);
+                UiCardSpec spec;
+                spec.title = L"Label";
+                spec.description = {{L"Shown next to bars and in details. Unique per provider; renaming keeps "
+                                     L"the sign-in and history."}};
+                spec.trailing = {200, 32};
+                if (draft) spec.error = draft->error;
+                UiCardLayout layout = row(spec);
+                UiItem box;
+                box.id = control(SettingsField::AccountLabel);
+                box.kind = UiItemKind::TextBox;
+                box.rect = layout.trailing;
+                box.text = draft ? draft->raw : account.label;
+                box.maximum = kSettingsLabelLimit;
+                box.action = command(SettingsField::AccountLabel);
+                push(box);
+            }
+            {
+                // Chips: the desired selection with this quota flipped; the last one stays.
+                struct Quota {
+                    int bar;
+                    PCWSTR name;
+                };
+                std::vector<Quota> quotas = {{kFiveHourBar, oauth ? L"5-hour" : L"Short window"},
+                                             {kWeeklyBar, L"Weekly"}};
+                if (anthropic) {
+                    quotas.push_back({kFableWeeklyBar, L"Fable weekly"});
+                    quotas.push_back({kExtraUsageBar, L"Extra usage"});
+                } else if (openai) {
+                    quotas.push_back({kExtraUsageBar, L"Credits"});
+                }
+                float chipsWidth = 0;
+                for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;
+                UiCardSpec spec;
+                spec.title = L"Quotas on taskbar";
+                spec.description = {{L"Unavailable quotas hide automatically. At least one stays selected."}};
+                spec.trailing = {chipsWidth - 4, 26};
+                if (openai && !account.creditsMax) spec.reason = L"Set Credits max to show the Credits bar.";
+                UiCardLayout layout = row(spec);
+                float left = layout.trailing.left;
+                for (const Quota& quota : quotas) {
+                    bool on = (bars >> quota.bar) & 1;
+                    int desired = bars ^ (1 << quota.bar);
+                    float chipWidth = textWidth(quota.name, UiFont::Note) + 26;
+                    UiItem chip;
+                    chip.id = control(SettingsField::AccountBars, uint32_t(quota.bar));
+                    chip.kind = UiItemKind::Chip;
+                    chip.font = UiFont::Note;
+                    chip.text = quota.name;
+                    chip.selected = on;
+                    chip.enabled = !(openai && quota.bar == kExtraUsageBar && !account.creditsMax);
+                    chip.rect = {left, layout.trailing.top, left + chipWidth, layout.trailing.bottom};
+                    chip.action = command(SettingsField::AccountBars, desired ? desired : bars);
+                    push(chip);
+                    left += chipWidth + 4;
+                }
+            }
+            if (openai) {
+                const SettingsDraft* draft = draftOf(SettingsField::AccountCreditsMax);
+                UiCardSpec spec;
+                spec.title = L"Credits max";
+                spec.description = {{L"The balance the Credits bar treats as 100%. OpenAI reports only the "
+                                     L"balance."}};
+                spec.trailing = UiNumberBoxSize(g, L"credits");
+                if (draft && draft->text) spec.error = draft->error;
+                UiCardLayout layout = row(spec);
+                UiAddNumberBox(cardItems, control(SettingsField::AccountCreditsMax), layout.trailing,
+                               draft && draft->text ? draft->raw :
+                                                      SettingsFormatNumber(account.creditsMax, view.status.groupSeparator),
+                               L"credits", true, command(SettingsField::AccountCreditsMax));
+            }
+            {
+                UiCardSpec spec;
+                spec.title = L"Tile identity";
+                spec.description = {{L"Ring and logo tile styles. The number badge appears only when several "
+                                     L"accounts share a provider."}};
+                spec.trailing = {220, 32};
+                if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
+                UiCardLayout layout = row(spec);
+                UiAddDropdown(cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
+                              {{L"Logo + number badge", int(TileIdentity::LogoBadge)},
+                               {L"Logo only", int(TileIdentity::Logo)},
+                               {L"Label text", int(TileIdentity::Text)}},
+                              true, command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
+            }
+            {
+                // Its placeholder is what the tile shows without it: the label without spaces.
+                bool used = account.tileIdentity == TileIdentity::Text;
+                const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
+                UiCardSpec spec;
+                spec.title = L"Short text";
+                spec.description = {{L"Up to 4 characters. Empty uses the label without spaces."}};
+                spec.trailing = {96, 32};
+                spec.enabled = used;
+                if (!used) spec.reason = L"Used when Tile identity is Label text.";
+                if (draft) spec.error = draft->error;
+                UiCardLayout layout = row(spec);
+                UiItem box;
+                box.id = control(SettingsField::AccountTileText);
+                box.kind = UiItemKind::TextBox;
+                box.rect = layout.trailing;
+                box.text = draft ? draft->raw : account.tileText;
+                std::wstring placeholder;
+                std::copy_if(account.label.begin(), account.label.end(), std::back_inserter(placeholder),
+                             [](wchar_t ch) { return !iswspace(ch); });
+                box.runs.push_back({std::move(placeholder)});
+                box.maximum = kSettingsTileTextLimit;
+                box.enabled = used;
+                box.action = command(SettingsField::AccountTileText);
+                push(box);
+            }
+            {
+                // Whether it records: this entry's choice, this Windows user's consent, then the
+                // recorder's state.
+                struct Recording {
+                    PCWSTR mark;
+                    UiInk ink;
+                };
+                Recording recording =
+                    !account.recordHistory ? Recording{L"\u25CB Off", UiInk::Secondary} :
+                    !s.historyEnabled ? Recording{L"\u25CB Off for this Windows user", UiInk::Secondary} :
+                    view.status.recording == SettingsRecording::PendingSave ? Recording{L"\u25CF Waiting", UiInk::Caution} :
+                    !account.historyId ? Recording{L"\u25CF Unavailable", UiInk::Caution} :
+                    account.hidden && s.skipHiddenPolling ? Recording{L"\u25CF Paused while hidden", UiInk::Caution} :
+                    view.status.recording == SettingsRecording::StorageError ? Recording{L"\u25CF Not saving", UiInk::Danger} :
+                    Recording{L"\u25CF Recording", UiInk::Success};
+                UiCardSpec spec;
+                spec.title = L"Record history";
+                spec.description = {{recording.mark, UiRunStyle::Normal, recording.ink},
+                                    {L" \u00B7 History follows this entry, even after signing in again. Use a new "
+                                     L"entry for a different login."}};
+                spec.trailing = UiToggleSize(g);
+                UiCardLayout layout = row(spec);
+                UiAddToggle(cardItems, control(SettingsField::AccountRecordHistory), layout.trailing,
+                            account.recordHistory, true,
+                            command(SettingsField::AccountRecordHistory, !account.recordHistory));
+            }
+
+            // Actions (mockup .aact): dashboard and sign-in buttons, Remove account at the right.
+            // Sign in again is the header's Sign in when no sign-in is needed (its own id).
+            UiItem rule;
+            rule.id = id++;
+            rule.kind = UiItemKind::Rule;
+            rule.rect = {x + 1, bottom, x + width - 1, bottom + 1};
+            push(rule);
+            float buttonTop = bottom + 12, left = x + 56;
+            auto addButton = [&](SettingsField field, PCWSTR text, PCWSTR icon, UiButtonStyle style, bool enabled,
+                                 bool trailing) {
+                float buttonWidth = textWidth(text, UiFont::Body) + 28 + (icon[0] ? 12 + 8 : 0);
+                float buttonLeft = trailing ? x + width - 19 - buttonWidth : left;
+                UiItem button;
+                button.id = control(field, 1);
+                button.kind = UiItemKind::Button;
+                button.button = style;
+                button.text = text;
+                button.icon = icon;
+                button.iconSize = 12;
+                button.rect = {buttonLeft, buttonTop, buttonLeft + buttonWidth, buttonTop + 32};
+                button.enabled = enabled;
+                button.action = command(field);
+                push(button);
+                if (!trailing) left += buttonWidth + 8;
+            };
+            if (oauth) {
+                addButton(SettingsField::AccountDashboard, L"Open dashboard", L"\uE8A7", UiButtonStyle::Standard, true,
+                          false);
+                if (status.signedIn && !signInNeeded) {
+                    addButton(SettingsField::AccountSignIn, L"Sign in again", L"", UiButtonStyle::Standard,
+                              !view.status.signInRunning, false);
+                }
+                if (status.signedIn) {
+                    addButton(SettingsField::AccountSignOut, L"Sign out", L"", UiButtonStyle::Standard, true, false);
+                }
+            }
+            addButton(SettingsField::AccountRemove, L"Remove account", L"", UiButtonStyle::Danger, true, true);
+            bottom += 12 + 32 + 14;
+        }
+        cardItems.front().rect.bottom = bottom;
+
+        if (panel.selected) {
+            float dy = view.dragTop - top;
+            for (UiItem& item : cardItems) {
+                item.rect.top += dy;
+                item.rect.bottom += dy;
+                lifted.push_back(std::move(item));
+            }
+        } else {
+            for (UiItem& item : cardItems) items.push_back(std::move(item));
+        }
+        top = bottom + 4;
+    }
+    for (UiItem& item : lifted) items.push_back(std::move(item));
+    return top - 4;
+}
+
 // src/settings/shell.h
 // Settings window shell: navigation pane, pinned page header (with the Layout and Display
-// preview) and page content, built from an explicit view snapshot (settings/view.h; approved
-// mockups: nav and header of layout-v2.png). Pure. Pages not rebuilt yet show a placeholder card.
+// preview, or Accounts' note and Add account menu) and page content, built from an explicit view
+// snapshot (settings/view.h; approved mockups: nav and header of layout-v2.png, accounts-add.png).
+// Pure.
 
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
@@ -16267,6 +17852,43 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     // content's top.
     uint32_t id = uint32_t(page + 1) << 12;
     float header = kSettingsHeaderHeight, contentTop = 0;
+    // Accounts: Add account (mockup .btn.accent: 14 DIP padding, 12 DIP glyph) at the title row's
+    // right opens the provider menu; while accounts exist, a note under the title.
+    if (SettingsUiPage(page) == SettingsUiPage::Accounts) {
+        PCWSTR label = L"Add account";
+        float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
+        float right = kSettingsNavWidth + left + std::max(width, 1.0f);
+        UiItem add;
+        add.id = SettingsControlId(SettingsField::AccountAdd);
+        add.kind = UiItemKind::Button;
+        add.button = UiButtonStyle::Accent;
+        add.rect = {right - std::ceil(labelWidth) - 28 - 12 - 8, 14, right, 46};
+        add.text = label;
+        add.icon = L"\uE710";
+        add.iconSize = 12;
+        add.action = SettingsCommand(SettingsField::AccountAdd, -1);
+        add.options = {
+            {L"Anthropic (Claude)", 0, L"Sign in with your browser", {{kClaudeLogoPath, {}, UiInk::Primary}}},
+            {L"OpenAI (ChatGPT/Codex)", 1, L"Sign in with your browser", {{kOpenAiLogoPath, {}, UiInk::Primary}}},
+            {L"Google Antigravity", 2, L"Uses the signed-in Antigravity app or CLI",
+             {{kGeminiLogoPath, {}, UiInk::Primary}}},
+        };
+        frame.main.push_back(std::move(add));
+        if (!view.settings.accounts.empty()) {
+            UiItem note;
+            note.id = 101;
+            note.kind = UiItemKind::Text;
+            note.font = UiFont::Note;
+            note.ink = UiInk::Muted;
+            note.rect = {kSettingsNavWidth + left, 50, right, 69};
+            note.runs.push_back({view.settings.skipHiddenPolling ?
+                                     L"Drag to reorder. Toggle hides an account from the taskbar; hidden "
+                                     L"accounts are not polled." :
+                                     L"Drag to reorder. Toggle hides an account from the taskbar."});
+            frame.main.push_back(std::move(note));
+            header = 69;
+        }
+    }
     if (SettingsUiPage(page) == SettingsUiPage::Layout || SettingsUiPage(page) == SettingsUiPage::Display) {
         std::vector<UiItem> preview;
         float height = SettingsAddPreviewCard(g, view, preview, id, 0, 0, std::max(width, 1.0f));
@@ -16282,8 +17904,11 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
                       std::max(client.height, header)};
 
     // Content, in viewport coordinates.
-    float bottom;
+    float bottom = 0;
     switch (SettingsUiPage(page)) {
+        case SettingsUiPage::Accounts:
+            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width);
+            break;
         case SettingsUiPage::About:
             bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
             break;
@@ -16299,15 +17924,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
         case SettingsUiPage::Display:
             bottom = SettingsUiBuildDisplay(g, view, frame.content, id, left, contentTop, width);
             break;
-        default: {
-            UiCardSpec spec;
-            spec.glyph = L"\uE946";
-            spec.title = L"Not built yet";
-            spec.description = {{L"This page is still in the classic Settings window. Close this "
-                                 L"window and open Settings from the taskbar menu to change it."}};
-            bottom = UiAddCard(g, frame.content, id, left, 2, width, spec).card.bottom;
+        case SettingsUiPage::Count:
             break;
-        }
     }
     frame.contentHeight = bottom + 28;
 }
@@ -16325,12 +17943,14 @@ static constexpr PCWSTR kSettingsUiPopupClass = L"AiQuotaSettingsUiPopup_" WH_MO
 static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
 // Debounced number box and slider key steps: this timer id plus the field.
 static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
+// A notification's rebuild waits for an open dropdown or menu to close (a rebuild closes it).
+static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 
 struct SettingsUiClient final : UiHostClient {
-    // Edits; the draft revision each pending step timer may commit (by field)
+    // Edits; the account key and draft revision each pending step timer may commit (by field)
     SettingsProductionStore store;
     SettingsEdits edits{store};
-    std::map<SettingsField, uint64_t> stepRevisions;
+    std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
     // Window state. Custom poll mode sticks once chosen or typed into, so the box doesn't
     // disable itself when a partial number happens to match a preset. The last built view
@@ -16340,6 +17960,17 @@ struct SettingsUiClient final : UiHostClient {
     float previewScroll = 0;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
+
+    // Accounts: the expanded cards, and the card being dragged: its order meanwhile, where it
+    // started, the pointer's offset from its top, where it is drawn and where the first card
+    // starts (content DIPs).
+    std::vector<uint64_t> expanded;
+    struct Drag {
+        uint64_t key = 0;
+        std::vector<uint64_t> order;
+        size_t from = 0;
+        float grab = 0, top = 0, origin = 0;
+    } drag;
 
     // Reentrancy: messages that arrive inside a modal wait until it returns; close preparation
     // ignores input and drops queue messages (its flush covers them). The color dialog's
@@ -16371,14 +18002,29 @@ struct SettingsUiClient final : UiHostClient {
         return Modal(host, [&] { return SettingsMessageBoxW(host.main, text, caption, type); });
     }
 
-    // Failed saves keep their drafts with an error; the box says so once.
-    void Report(UiHost& host, int failures) {
-        UiHostRequestRebuild(host, false);
-        if (failures) {
+    // The controller's notices, a message box each. Account operations explain their failures;
+    // other failed saves get the general message.
+    void ShowNotices(UiHost& host, int failures = 0) {
+        std::vector<SettingsNotice> notices = std::exchange(edits.notices, {});
+        int explained = int(std::count_if(notices.begin(), notices.end(),
+                                          [](const SettingsNotice& notice) { return notice.failure; }));
+        if (failures > explained) {
             Ask(host, L"Could not save settings. The change is kept here with its error; "
                       L"change it again to retry.",
                 L"Taskbar AI Quota Bars", MB_OK | MB_ICONERROR);
         }
+        for (const SettingsNotice& notice : notices) {
+            if (Unloading() || host.closing) break;
+            Ask(host, notice.text.c_str(), L"Account",
+                MB_OK | (notice.kind == SettingsNoticeKind::Error   ? MB_ICONERROR :
+                         notice.kind == SettingsNoticeKind::Warning ? MB_ICONWARNING : MB_ICONINFORMATION));
+        }
+    }
+
+    // Failed saves keep their drafts with an error; the box says so once.
+    void Report(UiHost& host, int failures) {
+        UiHostRequestRebuild(host, false);
+        ShowNotices(host, failures);
     }
 
     void Process(UiHost& host) {
@@ -16394,14 +18040,32 @@ struct SettingsUiClient final : UiHostClient {
     // commits nothing.
     void KillStepTimer(UiHost& host, SettingsField field) {
         KillTimer(host.main, kSettingsStepTimer + UINT_PTR(field));
-        stepRevisions.erase(field);
+        steps.erase(field);
     }
 
     void KillStepTimers(UiHost& host) {
-        while (!stepRevisions.empty()) KillStepTimer(host, stepRevisions.begin()->first);
+        while (!steps.empty()) KillStepTimer(host, steps.begin()->first);
     }
 
-    // The preview's scroll stays within what the built strip can scroll.
+    // An account action on its card: blocked by its drafts, the card opens on its label.
+    SettingsActionResult AccountAction(UiHost& host, uint64_t key, SettingsField action, int value) {
+        KillStepTimers(host);
+        SettingsActionResult result = edits.AccountAction(key, action, value);
+        if (result == SettingsActionResult::Blocked && !Unloading()) ShowLabel(host, key);
+        Report(host, 0);
+        return result;
+    }
+
+    // Expands an account's card and focuses its label.
+    void ShowLabel(UiHost& host, uint64_t key) {
+        if (std::find(expanded.begin(), expanded.end(), key) == expanded.end()) expanded.push_back(key);
+        UiHostRequestFocus(host, {SettingsAccountControlId(edits.SlotOf(key), SettingsField::AccountLabel), -1},
+                           true);
+        UiHostRequestRebuild(host, false);
+    }
+
+    // The preview's scroll stays within what the built strip can scroll. Account cards follow
+    // the projection's order, a dragged card its drag order.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.page = page;
@@ -16413,6 +18077,34 @@ struct SettingsUiClient final : UiHostClient {
         view.scale = UiHostScale(host);
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
+        for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
+            SettingsViewAccount account;
+            account.key = edits.keys[i];
+            account.slot = edits.SlotOf(account.key);
+            if (i < view.status.accounts.size()) account.status = view.status.accounts[i];
+            account.expanded = std::find(expanded.begin(), expanded.end(), account.key) != expanded.end();
+            view.accounts.push_back(std::move(account));
+        }
+        if (drag.key) {
+            std::vector<AccountConfig> configs;
+            std::vector<SettingsViewAccount> cards;
+            for (uint64_t key : drag.order) {
+                for (size_t i = 0; i < view.accounts.size(); i++) {
+                    if (view.accounts[i].key != key) continue;
+                    configs.push_back(view.settings.accounts[i]);
+                    cards.push_back(view.accounts[i]);
+                }
+            }
+            // Accounts changed meanwhile: the drag ends where it is (another drag restarts it).
+            if (cards.size() == view.accounts.size()) {
+                view.settings.accounts = std::move(configs);
+                view.accounts = std::move(cards);
+                view.dragKey = drag.key;
+                view.dragTop = drag.top;
+            } else {
+                drag = {};
+            }
+        }
         SettingsUiBuildFrame(*host.graphics, view, client, frame);
         for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
             for (const UiItem& item : *items) {
@@ -16430,8 +18122,9 @@ struct SettingsUiClient final : UiHostClient {
     void Invoke(UiHost& host, UiAction action) override {
         // A modal disables the window: what arrives meanwhile (the focus loss it causes) is ours,
         // except the end of a slider drag its capture loss cut short: that queues its commit,
-        // which runs once the modal returns.
-        if (Unloading() || closePreparation || (modalDepth && action.kind != UiActionKind::SlideEnd)) {
+        // which runs once the modal returns; and a card drag it cancelled.
+        if (Unloading() || closePreparation ||
+            (modalDepth && action.kind != UiActionKind::SlideEnd && action.kind != UiActionKind::DragCancel)) {
             return;
         }
         SettingsField field = SettingsField(action.target);
@@ -16537,10 +18230,74 @@ struct SettingsUiClient final : UiHostClient {
                         OpenUrl(folder.c_str());
                         break;
                     }
+                    case SettingsField::AccountAdd:
+                        // A provider from the Add account menu (the button itself opens it): the
+                        // account exists at once; its card opens on its label.
+                        if (action.value < 0 || action.value >= int(std::size(kSettingsProviders))) break;
+                        KillStepTimers(host);
+                        if (uint64_t key = edits.AddAccount(kSettingsProviders[action.value])) ShowLabel(host, key);
+                        Report(host, 0);
+                        break;
+                    case SettingsField::AccountExpand:
+                        // Collapsing ends editing in the card: its text commits as on focus loss.
+                        std::erase(expanded, action.key);
+                        if (action.value) {
+                            expanded.push_back(action.key);
+                        } else {
+                            bool queued = false;
+                            for (SettingsField text : {SettingsField::AccountLabel, SettingsField::AccountTileText,
+                                                       SettingsField::AccountCreditsMax}) {
+                                queued |= edits.RequestCommit(action.key, text, true);
+                            }
+                            if (queued) PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
+                        }
+                        UiHostRequestRebuild(host, false);
+                        break;
+                    case SettingsField::AccountHidden:
+                    case SettingsField::AccountSignIn:
+                    case SettingsField::AccountSignOut:
+                    case SettingsField::AccountDashboard:
+                        AccountAction(host, action.key, field, action.value);
+                        break;
+                    case SettingsField::AccountRemove: {
+                        // Its drafts first (an invalid label stops it), then the confirmation:
+                        // Antigravity yes/no; the others whether to delete the stored sign-in.
+                        uint64_t key = action.key;
+                        KillStepTimers(host);
+                        if (edits.FlushAccount(key) != SettingsActionResult::Done) {
+                            ShowLabel(host, key);
+                            Report(host, 0);
+                            break;
+                        }
+                        std::optional<size_t> index = edits.IndexOf(key);
+                        if (!index) break;
+                        if (edits.baseline.status.signInRunning) {
+                            Ask(host, L"Wait for the current sign-in to finish before removing accounts.",
+                                L"Account", MB_OK | MB_ICONINFORMATION);
+                            break;
+                        }
+                        bool antigravity = edits.baseline.settings.accounts[*index].provider == L"antigravity";
+                        int answer = antigravity ?
+                            Ask(host, L"Remove this account?\n\nIts recorded usage history is kept.",
+                                L"Remove account", MB_YESNO | MB_ICONQUESTION) :
+                            Ask(host, L"Remove this account?\n\n"
+                                      L"Yes: remove it and delete its stored sign-in\n"
+                                      L"No: remove it but retain the sign-in for later\n"
+                                      L"Cancel: do nothing\n\n"
+                                      L"Its recorded usage history is kept.",
+                                L"Remove account", MB_YESNOCANCEL | MB_ICONQUESTION);
+                        if ((answer != IDYES && (antigravity || answer != IDNO)) || Unloading() ||
+                            closePreparation || host.closing) {
+                            break;
+                        }
+                        std::erase(expanded, key);
+                        AccountAction(host, key, SettingsField::AccountRemove, !antigravity && answer == IDYES);
+                        break;
+                    }
                     default:
-                        // Toggles, dropdowns, gallery cards and swatches: the desired value,
-                        // committed now.
-                        Report(host, edits.Commit(0, field, action.value));
+                        // Toggles, dropdowns, chips, gallery cards and swatches: the desired
+                        // value, committed now.
+                        Report(host, edits.Commit(action.key, field, action.value));
                         break;
                 }
                 break;
@@ -16565,18 +18322,36 @@ struct SettingsUiClient final : UiHostClient {
                 edits.Revert(action.key, field);
                 UiHostRequestRebuild(host, false);
                 break;
-            case UiActionKind::Step:
+            case UiActionKind::Step: {
+                // Alt+Up/Down on an account card moves it by one; focus stays on it.
+                if (field == SettingsField::AccountMove) {
+                    std::optional<size_t> index = edits.IndexOf(action.key);
+                    int to = index ? int(*index) + action.value : -1;
+                    if (drag.key || to < 0 || to >= int(edits.keys.size())) break;
+                    if (AccountAction(host, action.key, field, to) != SettingsActionResult::Blocked) {
+                        UiHostRequestFocus(host, {SettingsAccountControlId(edits.SlotOf(action.key),
+                                                                           SettingsField::AccountExpand), -1},
+                                           true);
+                    }
+                    break;
+                }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
-                stepRevisions[field] = edits.Step(action.key, field, action.value);
+                steps[field] = {action.key, edits.Step(action.key, field, action.value)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);
                 break;
-            case UiActionKind::Slide:
-                // A drag only drafts: the preview follows; the release commits.
+            }
+            case UiActionKind::Slide: {
+                // A drag only drafts: the preview follows, the release commits. The page rebuilds
+                // once per frame; the main window repaints only while the preview is pinned there.
                 KillStepTimer(host, field);
                 edits.SetValue(action.key, field, action.value);
-                UiHostRequestRebuild(host, false);
+                UiSurfaceId surface = UiSurfaceId::Content;
+                bool pinned = UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll), &surface) &&
+                              surface == UiSurfaceId::Main;
+                UiHostRequestLiveRebuild(host, pinned);
                 break;
+            }
             case UiActionKind::SlideEnd:
                 KillStepTimer(host, field);
                 if (edits.RequestCommit(action.key, field)) {
@@ -16585,12 +18360,69 @@ struct SettingsUiClient final : UiHostClient {
                 UiHostRequestRebuild(host, false);
                 break;
             case UiActionKind::Pan: {
-                // Repaints with the new scroll; the next build keeps it in range.
-                const UiItem* strip = UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll));
+                // Repaints the strip's surface with the new scroll; the next build keeps it in range.
+                UiSurfaceId surface = UiSurfaceId::Main;
+                const UiItem* strip =
+                    UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll), &surface);
                 float maximum = strip ? float(strip->maximum) : 0;
                 previewScroll = view.previewScroll =
                     std::clamp(previewScroll + float(action.value), 0.0f, maximum);
-                UiHostInvalidate(host);
+                InvalidateRect(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr, FALSE);
+                break;
+            }
+            case UiActionKind::Drag: {
+                // A card dragged by its handle: placed past every other card whose center is
+                // above the pointer, drawn where the pointer holds it. The first report rebuilds
+                // the page with the card lifted; later ones only move the built cards, so the
+                // pointer's report rate never repaints the whole window. Nothing saves until the
+                // drop.
+                auto panel = [&](uint64_t key) {
+                    return SettingsAccountControlId(edits.SlotOf(key), SettingsField::AccountExpand, 1);
+                };
+                float y = float(action.value);
+                bool start = drag.key != action.key;
+                if (start) {
+                    std::optional<size_t> index = edits.IndexOf(action.key);
+                    const UiItem* card = index ? UiFindItem(host.frame, panel(action.key)) : nullptr;
+                    const UiItem* first = index ? UiFindItem(host.frame, panel(edits.keys.front())) : nullptr;
+                    if (!card || !first) break;
+                    drag = {action.key, edits.keys, *index, y - card->rect.top, card->rect.top, first->rect.top};
+                }
+                std::vector<float> centers;
+                for (uint64_t key : drag.order) {
+                    const UiItem* card = key == drag.key ? nullptr : UiFindItem(host.frame, panel(key));
+                    if (card) centers.push_back((card->rect.top + card->rect.bottom) / 2);
+                }
+                std::erase(drag.order, drag.key);
+                size_t to = std::min(SettingsReorderTarget(centers, y), drag.order.size());
+                drag.order.insert(drag.order.begin() + ptrdiff_t(to), drag.key);
+                drag.top = std::max(y - drag.grab, 0.0f);
+                if (start) {
+                    UiHostRequestRebuild(host, false);
+                    break;
+                }
+                std::vector<uint32_t> panels;
+                for (uint64_t key : drag.order) panels.push_back(panel(key));
+                UiHostMoveContent(host, [&](std::vector<UiItem>& items) {
+                    return SettingsMoveAccountCards(items, panels, panel(drag.key), drag.origin, drag.top);
+                });
+                break;
+            }
+            case UiActionKind::Drop:
+            case UiActionKind::DragCancel: {
+                // A drop is one move to where the card was dropped, after the account's drafts
+                // commit; a cancel puts it back. Notifications the drag deferred reload now.
+                Drag dropped = std::exchange(drag, {});
+                UiHostRequestRebuild(host, false);
+                if (!modalDepth && std::exchange(deferredRefresh, false)) {
+                    PostMessageW(host.main, kSettingsRefreshMessage, 0, 0);
+                }
+                auto at = std::find(dropped.order.begin(), dropped.order.end(), dropped.key);
+                size_t to = size_t(at - dropped.order.begin());
+                if (action.kind == UiActionKind::Drop && dropped.key && at != dropped.order.end() &&
+                    to != dropped.from) {
+                    AccountAction(host, dropped.key, SettingsField::AccountMove, int(to));
+                }
                 break;
             }
             case UiActionKind::None:
@@ -16604,23 +18436,30 @@ struct SettingsUiClient final : UiHostClient {
             case kSettingsProcessMessage:
                 Process(host);
                 return true;
-            // Sign-in, visibility, history ID, storage and consent notifications reload the
-            // baseline and statuses only; drafts and text boxes stay.
+            // Sign-in, visibility, history ID, storage, consent and poll notifications reload the
+            // baseline and statuses only; drafts and text boxes stay. An open popup stays open
+            // until it closes; a card drag defers them until it ends.
             case kSettingsRefreshMessage:
             case kHistoryConsentChangedMessage:
-                if (modalDepth) {
+                if (modalDepth || (drag.key && host.handleDrag)) {
                     deferredRefresh = true;
                     return true;
                 }
                 edits.Reload();
-                UiHostRequestRebuild(host, false);
+                if (host.popup.open) {
+                    SetTimer(host.main, kSettingsRefreshTimer, 250, nullptr);
+                } else {
+                    UiHostRequestRebuild(host, false);
+                }
+                // A vanished account's dropped drafts.
+                if (!edits.notices.empty() && !closePreparation) ShowNotices(host);
                 return true;
             case kExitVisualTestMessage:
                 SetVisualTestMode(false);
                 return true;
             case WM_DISPLAYCHANGE:
                 // The display list changed (the taskbar re-injects on its own).
-                if (modalDepth) {
+                if (modalDepth || (drag.key && host.handleDrag)) {
                     deferredRefresh = true;
                 } else {
                     edits.Reload();
@@ -16628,13 +18467,20 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 return false;
             case WM_TIMER: {
+                if (wParam == kSettingsRefreshTimer) {
+                    if (!host.popup.open) {
+                        KillTimer(host.main, kSettingsRefreshTimer);
+                        UiHostRequestRebuild(host, false);
+                    }
+                    return true;
+                }
                 if (wParam < kSettingsStepTimer || wParam > kSettingsStepTimer + 0xFF) return false;
                 KillTimer(host.main, wParam);
                 SettingsField field = SettingsField(wParam - kSettingsStepTimer);
-                auto stepped = stepRevisions.find(field);
-                uint64_t revision = stepped == stepRevisions.end() ? 0 : stepped->second;
-                stepRevisions.erase(field);
-                if (!closePreparation && !host.closing && edits.CommitStep(0, field, revision)) {
+                auto stepped = steps.find(field);
+                auto [key, revision] = stepped == steps.end() ? std::pair<uint64_t, uint64_t>{} : stepped->second;
+                steps.erase(field);
+                if (!closePreparation && !host.closing && edits.CommitStep(key, field, revision)) {
                     Process(host);
                 }
                 UiHostRequestRebuild(host, false);
@@ -16674,6 +18520,9 @@ struct SettingsUiClient final : UiHostClient {
         KillStepTimers(host);
         SettingsCloseResult result = edits.PrepareClose();
         bool close = result != SettingsCloseResult::Blocked;
+        // What the saves had to say (a sign-in left behind by a rename, why one failed) shows
+        // before the window goes or asks.
+        ShowNotices(host);
         if (!close) {
             UiHostRequestRebuild(host, false);
             close = Ask(host,
@@ -17656,7 +19505,8 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
 }
 
 // src/settings/account-editor.h
-// Account editor dialog and the add, edit, remove, reorder, and hide account commands.
+// Account editor dialog of the classic settings window, and its add, edit, remove, reorder and
+// hide buttons on the shared account commands (settings/account-commands.h).
 
 static void LayoutAccountEditor(HWND hWnd, const AccountEditorState& state) {
     auto sc = [&](int value) { return ScaleForDpi(value, state.dpi); };
@@ -17747,15 +19597,6 @@ static void UpdateAccountEditorTileText(HWND hWnd) {
                 (LRESULT)TileIdentity::Text;
     EnableWindow(GetDlgItem(hWnd, kAccountTileTextLabel), text);
     EnableWindow(GetDlgItem(hWnd, kAccountTileText), text);
-}
-
-static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
-                                const AccountConfig& account) {
-    for (const auto& existing : settings.accounts) {
-        if (ignoredIdentity && AccountIdentityHash(existing) == ignoredIdentity) continue;
-        if (existing.provider == account.provider && existing.label == account.label) return true;
-    }
-    return false;
 }
 
 static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
@@ -18123,6 +19964,21 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     return state.accepted;
 }
 
+// Shows a command's message, if it has one.
+static void ShowAccountCommandResult(const SettingsWindowState& state, const AccountCommandResult& result) {
+    if (!result.message.empty()) {
+        SettingsMessageBoxW(state.hWnd, result.message.c_str(), L"Account", MB_OK | result.icon);
+    }
+}
+
+static AccountTarget SelectedAccountTarget(const SettingsWindowState& state, AccountConfig* account = nullptr) {
+    int index = SelectedAccountIndex(state);
+    std::lock_guard<std::mutex> lk(g_settingsMutex);
+    if (index < 0 || index >= (int)g_settings.accounts.size()) return {};
+    if (account) *account = g_settings.accounts[index];
+    return {g_settings.accounts[index].historyId, AccountIdentityHash(g_settings.accounts[index])};
+}
+
 static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
     AccountConfig account{L"anthropic", L"A"};
     {
@@ -18134,52 +19990,20 @@ static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
     }
     if (!ShowAccountEditor(state.hWnd, &account, true)) return;
     if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    if (HasDuplicateAccount(settings, 0, account)) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
-                    L"Account", MB_OK | MB_ICONWARNING);
-        return;
-    }
-    settings.accounts.push_back(std::move(account));
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not save the account.", L"Account",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
+    std::wstring label = account.label;
+    ShowAccountCommandResult(state, AddAccountCommand(std::move(account), {label}));
     RefreshSettingsControls(state);
 }
 
 static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
-    int index = SelectedAccountIndex(state);
     AccountConfig oldAccount;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        if (index < 0 || index >= (int)g_settings.accounts.size()) return;
-        oldAccount = g_settings.accounts[index];
-    }
+    AccountTarget target = SelectedAccountTarget(state, &oldAccount);
+    if (!target.identity) return;
     AccountConfig newAccount = oldAccount;
     if (!ShowAccountEditor(state.hWnd, &newAccount, false)) return;
     if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
 
     bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
-    // Tile identity is read only while building tiles, so its edits take the rebuild path.
-    bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
-                                   oldAccount.label == newAccount.label &&
-                                   oldAccount.tileIdentity == newAccount.tileIdentity &&
-                                   oldAccount.tileText == newAccount.tileText &&
-                                   oldAccount.creditsMax == newAccount.creditsMax &&
-                                   oldAccount.recordHistory == newAccount.recordHistory &&
-                                   oldAccount.historyId == newAccount.historyId &&
-                                   oldAccount.showBars != newAccount.showBars;
     if (identityChanged && g_loginInProgress.load()) {
         SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
@@ -18200,145 +20024,19 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
             clearOldToken = result == IDYES;
         }
     }
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    if (identityChanged && g_loginInProgress.load()) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before changing identity.",
-                    L"Account", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    uint64_t oldIdentity = AccountIdentityHash(oldAccount);
-    index = -1;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (AccountIdentityHash(settings.accounts[i]) == oldIdentity) {
-            index = (int)i;
-            break;
-        }
-    }
-    if (index < 0) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"The account was changed from another taskbar window.",
-                    L"Account", MB_OK | MB_ICONWARNING);
-        RefreshSettingsControls(state);
-        return;
-    }
-    if (HasDuplicateAccount(settings, oldIdentity, newAccount)) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"That provider and label are already configured.",
-                    L"Account", MB_OK | MB_ICONWARNING);
-        return;
-    }
-
-    uint64_t newIdentity = AccountIdentityHash(newAccount);
-    bool sameProviderIdentityChange = identityChanged &&
-                                      oldAccount.provider == newAccount.provider;
-    bool sameProviderRename = sameProviderIdentityChange &&
-                              oldAccount.provider != L"antigravity";
-    TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
-    bool oldTokenCleared = true;
-    ULONGLONG oldAuthEpoch = 0;
-    ULONGLONG newAuthEpoch = 0;
-    std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
-    if (sameProviderRename) {
-        // Block epoch-gated saves only across the local copy/settings/delete transaction.
-        authEpochLock.lock();
-        oldAuthEpoch = AuthEpochLocked(oldIdentity);
-        newAuthEpoch = AuthEpochLocked(newIdentity);
-        tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
-        if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
-            tokenCopyResult == TokenCopyResult::Failed) {
-            authEpochLock.unlock();
-            configLock.unlock();
-            SettingsMessageBoxW(
-                state.hWnd,
-                tokenCopyResult == TokenCopyResult::DestinationOccupied ?
-                    L"The renamed account identity already has a retained sign-in. To replace it, "
-                    L"add an account with that provider and label, then remove it and delete its "
-                    L"stored sign-in. The account was not changed." :
-                    L"The stored sign-in could not be copied. The account was not changed.",
-                L"Account", MB_OK | MB_ICONERROR);
-            return;
-        }
-    }
-
-    // Visibility can be toggled from a taskbar menu while the account editor is open.
-    newAccount.hidden = settings.accounts[index].hidden;
-    // Renames retain history; switching providers starts a new series during normalization.
-    newAccount.historyId = oldAccount.provider == newAccount.provider ?
-                               settings.accounts[index].historyId : 0;
-    settings.accounts[index] = newAccount;
-    SettingsApplyResult applyResult = ApplyOwnedSettings(
-        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
-        sameProviderIdentityChange ? newIdentity : 0);
-    if (applyResult == SettingsApplyResult::Failed) {
-        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
-                                  ClearStoredToken(newIdentity);
-        if (authEpochLock.owns_lock()) authEpochLock.unlock();
-        configLock.unlock();
-        SettingsMessageBoxW(
-            state.hWnd,
-            copiedTokenCleared ?
-                L"Could not save the account." :
-                L"Could not save the account. The copied sign-in remains under the attempted "
-                L"new identity. To delete it, add an account with the attempted provider and "
-                L"label, then remove it and choose to delete its stored sign-in.",
-            L"Account", MB_OK | MB_ICONERROR);
-        return;
-    }
-    if (sameProviderRename) {
-        oldTokenCleared = ClearStoredToken(oldIdentity);
-        BumpAuthEpochLocked(oldIdentity);
-        g_authRenameRedirects.push_back(
-            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
-        authEpochLock.unlock();
-    }
-    configLock.unlock();
-    bool providerTokenCleared = true;
-    if (clearOldToken) {
-        providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
-    }
-    if (applyResult == SettingsApplyResult::Changed) {
-        // A quota selection change updates in place: bar layouts already hold every bar and
-        // only change visibility and spacing; tile layouts regenerate their meter shapes.
-        if (onlyBarSelectionChanged) {
-            PostUiUpdate();
-            if (!g_uiInjected.load(std::memory_order_acquire)) StartRetryInject();
-        } else {
-            FinishSettingsApply();
-        }
-    }
-    if (!oldTokenCleared) {
-        SettingsMessageBoxW(
-            state.hWnd,
-            L"The account was renamed, but a duplicate stored sign-in remains under the old "
-            L"identity. To delete it, re-add an account with the old provider and label, then "
-            L"remove it and choose to delete its stored sign-in.",
-            L"Account", MB_OK | MB_ICONWARNING);
-    } else if (!providerTokenCleared) {
-        SettingsMessageBoxW(
-            state.hWnd,
-            L"The provider was changed, but the old sign-in remains retained. To recover or "
-            L"delete it, re-add an account with the old provider and label.",
-            L"Account", MB_OK | MB_ICONWARNING);
-    }
-    NotifySettingsWindowChanged();
+    // The editor's fields replace the fresh account's; the command keeps its visibility and
+    // history ID.
+    AccountCommandResult result = EditAccountCommand(target, [&](AccountConfig& account) {
+        account = newAccount;
+    }, clearOldToken);
+    ShowAccountCommandResult(state, result);
     RefreshSettingsControls(state);
 }
 
 static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
-    int index = SelectedAccountIndex(state);
     AccountConfig account;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        if (index < 0 || index >= (int)g_settings.accounts.size()) return;
-        account = g_settings.accounts[index];
-    }
+    AccountTarget target = SelectedAccountTarget(state, &account);
+    if (!target.identity) return;
     if (g_loginInProgress.load()) {
         SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
                     L"Account", MB_OK | MB_ICONINFORMATION);
@@ -18361,128 +20059,23 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
             !IsWindow(state.hWnd)) return;
         deleteToken = result == IDYES;
     }
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    if (g_loginInProgress.load()) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd, L"Wait for the current sign-in to finish before removing accounts.",
-                    L"Account", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    uint64_t identity = AccountIdentityHash(account);
-    index = -1;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (AccountIdentityHash(settings.accounts[i]) == identity) {
-            index = (int)i;
-            break;
-        }
-    }
-    if (index < 0) {
-        configLock.unlock();
-        RefreshSettingsControls(state);
-        return;
-    }
-    if (deleteToken && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
-        configLock.unlock();
-        SettingsMessageBoxW(state.hWnd,
-                    L"The stored sign-in could not be deleted, so the account was not removed.",
-                    L"Account", MB_OK | MB_ICONERROR);
-        return;
-    }
-    settings.accounts.erase(settings.accounts.begin() + index);
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    if (applyResult == SettingsApplyResult::Failed) {
-        configLock.unlock();
-        if (deleteToken) {
-            RefreshQuotaByIdentity(identity);
-            NotifySettingsWindowChanged();
-        }
-        SettingsMessageBoxW(state.hWnd,
-                    deleteToken ?
-                        L"The stored sign-in was deleted, but settings could not be saved. The "
-                        L"account remains configured but signed out." :
-                        L"Could not remove the account.",
-                    L"Account",
-                    MB_OK | MB_ICONERROR);
-        return;
-    }
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Changed) FinishSettingsApply();
+    ShowAccountCommandResult(state, RemoveAccountCommand(target, deleteToken));
     RefreshSettingsControls(state);
 }
 
 static void MoveAccountFromSettingsWindow(SettingsWindowState& state, int direction) {
-    uint64_t identity = SelectedAccountIdentity(state);
-    if (!identity || (direction != -1 && direction != 1)) return;
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = -1;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (AccountIdentityHash(settings.accounts[i]) == identity) {
-            index = (int)i;
-            break;
-        }
-    }
-    int target = index + direction;
-    if (index < 0 || target < 0 || target >= (int)settings.accounts.size()) return;
-    std::swap(settings.accounts[index], settings.accounts[target]);
-    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not reorder the account.", L"Account",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
+    int index = SelectedAccountIndex(state);
+    AccountTarget target = SelectedAccountTarget(state);
+    if (!target.identity || (direction != -1 && direction != 1)) return;
+    ShowAccountCommandResult(state, MoveAccountCommand(target, index + direction));
     RefreshSettingsControls(state);
 }
 
 static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
-    uint64_t identity = SelectedAccountIdentity(state);
-    if (!identity) return;
-
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = -1;
-    int visibleCount = 0;
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        if (!settings.accounts[i].hidden) visibleCount++;
-        if (AccountIdentityHash(settings.accounts[i]) == identity) index = (int)i;
-    }
-    if (index < 0 || (!settings.accounts[index].hidden && visibleCount <= 1)) return;
-    settings.accounts[index].hidden = !settings.accounts[index].hidden;
-    SettingsApplyResult applyResult = ApplyOwnedSettings(settings);
-    configLock.unlock();
-    if (applyResult == SettingsApplyResult::Failed) {
-        SettingsMessageBoxW(state.hWnd, L"Could not update account visibility.", L"Account",
-                    MB_OK | MB_ICONERROR);
-    } else if (applyResult == SettingsApplyResult::Changed) {
-        std::wstring hashes;
-        wchar_t buffer[24];
-        for (const auto& account : settings.accounts) {
-            if (!account.hidden) continue;
-            if (!hashes.empty()) hashes += L";";
-            swprintf(buffer, ARRAYSIZE(buffer), L"%016llx",
-                     (unsigned long long)AccountIdentityHash(account));
-            hashes += buffer;
-        }
-        Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
-        FinishSettingsApply();
-    }
+    AccountConfig account;
+    AccountTarget target = SelectedAccountTarget(state, &account);
+    if (!target.identity) return;
+    ShowAccountCommandResult(state, SetAccountHiddenCommand(target, !account.hidden));
     RefreshSettingsControls(state);
 }
 

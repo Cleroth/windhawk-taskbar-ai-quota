@@ -62,7 +62,9 @@ struct UiHost {
     UiPalette palette;
 
     // Frame and interaction. The pointer position (item coordinates of its surface) feeds
-    // client-drawn hover; a slider or preview drag keeps its item until release.
+    // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
+    // slider drag reports values that differ from its last report (the frame may lag behind); a
+    // handle's drag starts once the pointer moved (handleMoved) and scrolls while near an edge.
     UiFrame frame;
     std::vector<UiFocusStop> stops;
     UiPointerState pointer;
@@ -73,8 +75,12 @@ struct UiHost {
     float scrollDragOffset = 0;
     D2D1_POINT_2F pointerAt{-1e9f, -1e9f};
     UiSurfaceId pointerSurface = UiSurfaceId::Main;
-    uint32_t sliderDrag = 0, panDrag = 0;
-    float dragAnchor = 0;  // Slider: pointer offset from the thumb; preview: last pointer x
+    uint32_t sliderDrag = 0, panDrag = 0, handleDrag = 0;
+    int slideValue = 0;
+    bool handleMoved = false, autoScrolling = false;
+    ULONGLONG autoScrollAt = 0;  // The auto-scroll's last step (or its start)
+    float dragAnchor = 0;  // Slider: pointer offset from the thumb; preview: last pointer x;
+                           // handle: the press's content y
 
     // Dropdown popup and number boxes' text boxes
     UiPopup popup;
@@ -82,18 +88,32 @@ struct UiHost {
     UiFocusRef pendingFocus;  // Focused once the next rebuild has built it
     bool pendingFocusVisible = false;
 
-    // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md).
+    // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md); live ones until
+    // the next paint. rebuildMain: the next rebuild repaints the main window.
     int dispatchDepth = 0;
-    bool rebuildPending = false, resetScroll = false;
+    bool rebuildPending = false, resetScroll = false, liveRebuild = false, rebuildMain = false;
     bool closing = false, faulted = false;
 };
 
 static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
                                           UINT_PTR, DWORD_PTR data);
 
+// The viewport's timer that scrolls while a handle is dragged near its top or bottom edge.
+static constexpr UINT_PTR kUiAutoScrollTimer = 0x7E01;
+
 static void UiHostRequestRebuild(UiHost& host, bool resetScroll) {
     host.rebuildPending = true;
+    host.rebuildMain = true;
     host.resetScroll = host.resetScroll || resetScroll;
+}
+
+// A change at the pointer's rate (a slider's drag): the rebuild runs once per frame, before the
+// next paint, and repaints the main window only if `main` changes (or its layout does).
+static void UiHostRequestLiveRebuild(UiHost& host, bool main) {
+    host.liveRebuild = true;
+    host.rebuildMain = host.rebuildMain || main;
+    if (main && host.main) InvalidateRect(host.main, nullptr, FALSE);
+    if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
 // Focuses an element after the next rebuild (one that the rebuild may create or enable).
@@ -161,15 +181,17 @@ static void UiHostClosePopup(UiHost& host) {
     UiHostInvalidate(host);
 }
 
-// Opens a dropdown's popup under (or above) its field: owned by the main window, shown without
-// activation, at the DPI of its monitor, holding capture.
+// Opens a dropdown's popup under (or above) its field, or a menu button's under it, right-
+// aligned: owned by the main window, shown without activation, at the DPI of its monitor,
+// holding capture.
 static void UiHostOpenPopup(UiHost& host, uint32_t id) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, id, &surface);
-    if (!item || item->kind != UiItemKind::Dropdown || !item->enabled || item->options.empty() ||
-        !host.config->popupClass || host.closing) {
+    if (!item || (item->kind != UiItemKind::Dropdown && item->kind != UiItemKind::Button) ||
+        !item->enabled || item->options.empty() || !host.config->popupClass || host.closing) {
         return;
     }
+    bool menu = item->kind == UiItemKind::Button;
     UiHostClosePopup(host);
     UiPopup& popup = host.popup;
     float scale = UiHostScale(host);
@@ -191,7 +213,7 @@ static void UiHostOpenPopup(UiHost& host, uint32_t id) {
     GetMonitorInfoW(MonitorFromRect(&field, MONITOR_DEFAULTTONEAREST), &monitor);
     auto place = [&](float popupScale) {
         SIZE pixels{LONG(std::lround(size.width * popupScale)), LONG(std::lround(size.height * popupScale))};
-        POINT at = UiPopupPlacement(field, pixels, monitor.rcWork, int(std::lround(4 * scale)));
+        POINT at = UiPopupPlacement(field, pixels, monitor.rcWork, int(std::lround(4 * scale)), menu);
         return RECT{at.x, at.y, at.x + pixels.cx, at.y + pixels.cy};
     };
     RECT rect = place(scale);
@@ -243,7 +265,7 @@ static void UiHostItemEvent(UiHost& host, uint32_t id, UiActionKind kind, std::w
 
 // Text boxes -----------------------------------------------------------------------------------
 
-// Text boxes sit over their number boxes' text areas, vertically centered, scrolled with the
+// Native text boxes sit over their items' text areas, vertically centered, scrolled with the
 // content.
 static void UiHostPlaceTextBoxes(UiHost& host) {
     float scale = UiHostScale(host);
@@ -259,22 +281,25 @@ static void UiHostPlaceTextBoxes(UiHost& host) {
     }
 }
 
-// After a rebuild: one text box per number box (kept by id), others destroyed; text set only
-// when the client's text changed and no IME composition is running.
+// After a rebuild: one native text box per number box or text box (kept by id), others
+// destroyed; text set only when the client's text changed and no IME composition is running.
+// A text box's limit is its item's maximum; its placeholder shows as the native cue banner.
 static void UiHostSyncTextBoxes(UiHost& host) {
     UiTextBoxes& boxes = host.boxes;
+    auto native = [](const UiItem* item) {
+        return item && (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox);
+    };
     // Removed first, so their focus-loss notifications find no box.
     std::vector<HWND> removed;
     std::erase_if(boxes.boxes, [&](const UiTextBox& box) {
-        const UiItem* item = UiFindItem(host.frame, box.id);
-        if (item && item->kind == UiItemKind::NumberBox && box.window) return false;
+        if (native(UiFindItem(host.frame, box.id)) && box.window) return false;
         if (box.window) removed.push_back(box.window);
         return true;
     });
     for (HWND window : removed) DestroyWindow(window);
     HFONT font = UiTextBoxFont(boxes, host.dpi);
     for (const UiItem& item : host.frame.content) {
-        if (item.kind != UiItemKind::NumberBox) continue;
+        if (!native(&item)) continue;
         UiTextBox* box = UiFindTextBox(boxes, item.id);
         if (!box) {
             DWORD align = item.align == DWRITE_TEXT_ALIGNMENT_CENTER ? ES_CENTER : ES_LEFT;
@@ -294,9 +319,13 @@ static void UiHostSyncTextBoxes(UiHost& host) {
             box = &boxes.boxes.back();
             SendMessageW(window, WM_SETFONT, WPARAM(font), FALSE);
             SendMessageW(window, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
-            SendMessageW(window, EM_LIMITTEXT, 64, 0);
+            SendMessageW(window, EM_LIMITTEXT, item.kind == UiItemKind::TextBox ? std::max(item.maximum, 1) : 64, 0);
         } else if (!box->composing && item.text != box->text) {
             UiSetTextBoxText(boxes, *box, item.text);
+        }
+        if (std::wstring cue = UiRunsText(item.runs); item.kind == UiItemKind::TextBox && cue != box->cue) {
+            box->cue = cue;
+            SendMessageW(box->window, EM_SETCUEBANNER, FALSE, reinterpret_cast<LPARAM>(box->cue.c_str()));
         }
         if (bool(IsWindowEnabled(box->window)) != item.enabled) EnableWindow(box->window, item.enabled);
     }
@@ -305,13 +334,13 @@ static void UiHostSyncTextBoxes(UiHost& host) {
 
 // Focus and scrolling ----------------------------------------------------------------------------
 
-// The window that holds keyboard focus for an element: a number box's text box, else the
-// element's surface.
+// The window that holds keyboard focus for an element: a number or text box's native text box,
+// else the element's surface.
 static HWND UiHostFocusWindow(UiHost& host, UiFocusRef ref) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
     if (!item) return host.main;
-    if (item->kind == UiItemKind::NumberBox) {
+    if (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox) {
         UiTextBox* box = UiFindTextBox(host.boxes, ref.id);
         if (box && box->window && IsWindowEnabled(box->window)) return box->window;
     }
@@ -368,18 +397,20 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
 }
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
-// A dropdown opens its popup; a number box only takes focus (its text box reports edits); a
-// slider and a preview report their drags instead.
+// A dropdown or menu button opens its popup; a number or text box only takes focus (its native
+// text box reports edits); a slider, a preview and a drag handle report their drags instead.
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
     const UiItem* item = UiFindItem(host.frame, ref.id);
-    if (item && ref.link < 0 && item->kind == UiItemKind::Dropdown) {
+    if (item && ref.link < 0 &&
+        (item->kind == UiItemKind::Dropdown || (item->kind == UiItemKind::Button && !item->options.empty()))) {
         UiHostOpenPopup(host, ref.id);
         return;
     }
     if (item && ref.link < 0 &&
-        (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::Slider ||
-         item->kind == UiItemKind::Preview)) {
+        (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox ||
+         item->kind == UiItemKind::Slider || item->kind == UiItemKind::Preview ||
+         item->kind == UiItemKind::Handle)) {
         return;
     }
     const UiAction* action = UiActionOf(host.frame, ref);
@@ -388,14 +419,69 @@ static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     host.client->Invoke(host, std::move(copy));
 }
 
-// Deferred structural rebuild, once the outermost dispatch is done with the old items. A
-// rebuild closes the popup; keyboard focus follows the focused element (a requested one, or
-// one whose text box was removed).
+// Drag handles ----------------------------------------------------------------------------------
+
+// A handle drag with the pointer at content y: once it moved 4 DIP from the press it reports
+// where the pointer is, and the viewport scrolls while it is near its top or bottom, a step every
+// 30 ms (up to 20 DIP, faster further out). The timer, started on entering that zone, steps a
+// still pointer; a moving one steps with its reports, since input and paints outrank WM_TIMER.
+static void UiHostDragHandle(UiHost& host, float y) {
+    if (!host.handleMoved && std::abs(y - host.dragAnchor) < 4) return;
+    host.handleMoved = true;
+    float inView = y - host.scroll, height = UiHostViewHeight(host);
+    bool edge = inView < 24 || inView > height - 24;
+    ULONGLONG now = GetTickCount64();
+    if (edge != host.autoScrolling) {
+        host.autoScrolling = edge;
+        host.autoScrollAt = now;
+        if (edge) SetTimer(host.viewport, kUiAutoScrollTimer, 30, nullptr);
+        else KillTimer(host.viewport, kUiAutoScrollTimer);
+    } else if (edge && now - host.autoScrollAt >= 30) {
+        // Steps keep their speed however late they come (up to three at once).
+        float steps = float(std::min<ULONGLONG>(now - host.autoScrollAt, 90)) / 30;
+        host.autoScrollAt = now;
+        float step = inView < 24 ? -std::min(24 - inView, 20.0f) : std::min(inView - height + 24, 20.0f);
+        UiHostScrollTo(host, host.scroll + step * steps);
+        y = inView + host.scroll;
+    }
+    UiHostItemEvent(host, host.handleDrag, UiActionKind::Drag, {}, int(std::lround(y)));
+}
+
+// A drag's live layout: `move` shifts built content items in place and returns whether any
+// moved; only the viewport repaints, without a rebuild, and text boxes follow at its paint.
+// Skipped while a rebuild is pending, which lays out from the client's state anyway.
+template <class Move> static void UiHostMoveContent(UiHost& host, Move&& move) {
+    if (host.rebuildPending || host.closing || !host.viewport || !move(host.frame.content)) return;
+    host.boxes.moved = true;
+    InvalidateRect(host.viewport, nullptr, FALSE);
+}
+
+// Ends a handle drag before its capture goes; one that moved reports `end`.
+static void UiHostEndHandleDrag(UiHost& host, UiActionKind end) {
+    uint32_t handle = std::exchange(host.handleDrag, 0);
+    bool moved = std::exchange(host.handleMoved, false);
+    host.autoScrolling = false;
+    if (host.viewport) KillTimer(host.viewport, kUiAutoScrollTimer);
+    if (handle && moved) UiHostItemEvent(host, handle, end);
+}
+
+// Deferred structural rebuild, once the outermost dispatch is done with the old items. A live
+// one waits for the paint its request caused (which runs it), unless a nested paint (a modal's)
+// consumed that. A rebuild closes the popup; keyboard focus follows the focused element (a
+// requested one, or one whose text box was removed). The main window repaints when requested,
+// when its layout changed or when the pointer's element went.
 static void UiHostRebuildIfPending(UiHost& host) {
+    if (host.liveRebuild && host.dispatchDepth == 1 && host.main && host.viewport &&
+        !GetUpdateRect(host.main, nullptr, FALSE) && !GetUpdateRect(host.viewport, nullptr, FALSE)) {
+        host.rebuildPending = true;
+    }
     for (int pass = 0; pass < 4 && host.dispatchDepth == 1 && host.rebuildPending && host.main &&
                        host.viewport && !host.closing;
          pass++) {
         host.rebuildPending = false;
+        host.liveRebuild = false;
+        D2D1_RECT_F viewport = host.frame.viewport;
+        size_t mainItems = host.frame.main.size();
         UiHostClosePopup(host);
         RECT client{};
         GetClientRect(host.main, &client);
@@ -413,18 +499,26 @@ static void UiHostRebuildIfPending(UiHost& host) {
                                     fallback);
         host.frame = std::move(frame);
         host.stops = std::move(stops);
-        if (!UiFindItem(host.frame, host.pointer.hot.id)) host.pointer.hot = {};
-        if (!UiFindItem(host.frame, host.pointer.pressed.id)) host.pointer.pressed = {};
+        const D2D1_RECT_F& v = host.frame.viewport;
+        bool repaintMain = std::exchange(host.rebuildMain, false) || mainItems != host.frame.main.size() ||
+                           v.left != viewport.left || v.top != viewport.top || v.right != viewport.right ||
+                           v.bottom != viewport.bottom;
+        for (UiFocusRef* ref : {&host.pointer.hot, &host.pointer.pressed}) {
+            if (ref->id && !UiFindItem(host.frame, ref->id)) {
+                *ref = {};
+                repaintMain = true;
+            }
+        }
         host.scroll = host.resetScroll ? 0 : host.scroll;
         host.resetScroll = false;
         host.scroll = std::round(UiClampScroll(host.scroll, UiHostViewHeight(host),
                                                host.frame.contentHeight) * scale) / scale;
-        const D2D1_RECT_F& v = host.frame.viewport;
         int left = int(std::lround(v.left * scale)), top = int(std::lround(v.top * scale));
         SetWindowPos(host.viewport, nullptr, left, top, int(std::lround(v.right * scale)) - left,
                      int(std::lround(v.bottom * scale)) - top, SWP_NOZORDER | SWP_NOACTIVATE);
         UiHostSyncTextBoxes(host);
-        UiHostInvalidate(host);
+        if (repaintMain) InvalidateRect(host.main, nullptr, FALSE);
+        InvalidateRect(host.viewport, nullptr, FALSE);
 
         UiFocusRef pending = std::exchange(host.pendingFocus, {});
         bool active = GetActiveWindow() == host.main;
@@ -479,6 +573,16 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (!isMain) break;
                 // A tracked modal ends first; the close is retried once its call has unwound.
                 if (host.client->CancelModal()) {
+                    PostMessageW(window, WM_CLOSE, 0, 0);
+                    break;
+                }
+                // So does a handle drag, cancelled with its capture: the close is retried once
+                // the cancel's rebuild has put the content back, whatever the close then decides.
+                if (host.handleDrag) {
+                    UiHostEndHandleDrag(host, UiActionKind::DragCancel);
+                    if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
+                        ReleaseCapture();
+                    }
                     PostMessageW(window, WM_CLOSE, 0, 0);
                     break;
                 }
@@ -591,6 +695,19 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                            focused->kind == UiItemKind::Dropdown) {
                     UiHostOpenPopup(host, host.focus.id);  // Alt+Down
                     break;
+                } else if ((wParam == VK_UP || wParam == VK_DOWN) && !host.closing && focused &&
+                           !host.handleDrag) {
+                    // Alt+Up/Down moves an element with a drag handle by one.
+                    auto handle = std::find_if(host.frame.content.begin(), host.frame.content.end(),
+                                               [&](const UiItem& item) {
+                                                   return item.kind == UiItemKind::Handle &&
+                                                          item.owner == host.focus.id && UiActive(item);
+                                               });
+                    if (handle != host.frame.content.end()) {
+                        host.focusVisible = true;
+                        UiHostItemEvent(host, handle->id, UiActionKind::Step, {}, wParam == VK_UP ? -1 : 1);
+                        break;
+                    }
                 }
                 handled = false;
                 break;
@@ -615,46 +732,61 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_PAINT: {
-                PAINTSTRUCT paint{};
-                BeginPaint(window, &paint);
-                struct PaintEnd {
-                    HWND window;
-                    PAINTSTRUCT* paint;
-                    ~PaintEnd() { EndPaint(window, paint); }
-                } paintEnd{window, &paint};
-                if (host.faulted) break;
-                ID2D1HwndRenderTarget* target =
-                    UiSurfaceTarget(own, host.graphics->d2d.get(), host.dpi);
-                if (!target) {
-                    UiHostFault(host);
-                    break;
+                // Once per frame, before either surface draws: a live rebuild, and text boxes
+                // whose items a drag moved (a native window move costs a sizeable part of a
+                // frame).
+                if (host.liveRebuild && host.dispatchDepth == 1 && !host.closing) {
+                    host.rebuildPending = true;
+                    UiHostRebuildIfPending(host);
                 }
-                float scale = UiHostScale(host);
-                UiTextBox* editing = UiFindTextBox(host.boxes, GetFocus());
-                UiPaintState state{host.pointer.hot, host.pointer.pressed, host.focus,
-                                   host.focusVisible && GetFocus() == window,
-                                   host.popup.open ? host.popup.field : 0,
-                                   editing ? editing->id : 0};
-                if (host.pointerSurface == surface) state.pointer = host.pointerAt;
-                UiCustomPaint custom = [&](const UiItem& item) {
-                    host.client->PaintCustom(host, target, own.cache, item, state);
-                };
-                target->BeginDraw();
-                D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
-                target->SetTransform(&identity);
-                target->Clear(host.palette.background);
-                if (isMain) {
-                    UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
-                                 state, {0, 0}, scale, -1e9f, 1e9f, &custom);
-                } else {
-                    float height = UiHostViewHeight(host);
-                    UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.content,
-                                 state, {0, -host.scroll}, scale, host.scroll, host.scroll + height,
-                                 &custom);
-                    UiPaintScrollbar(target, own.cache, host.palette, UiHostScrollbar(host),
-                                     host.scrollbarHot || host.scrollDragging, scale);
+                if (!isMain && !host.closing && std::exchange(host.boxes.moved, false)) {
+                    UiHostPlaceTextBoxes(host);
                 }
-                if (!UiSurfaceDrawResult(own, target->EndDraw())) UiHostFault(host);
+                {
+                    PAINTSTRUCT paint{};
+                    BeginPaint(window, &paint);
+                    struct PaintEnd {
+                        HWND window;
+                        PAINTSTRUCT* paint;
+                        ~PaintEnd() { EndPaint(window, paint); }
+                    } paintEnd{window, &paint};
+                    if (host.faulted) break;
+                    ID2D1HwndRenderTarget* target =
+                        UiSurfaceTarget(own, host.graphics->d2d.get(), host.dpi);
+                    if (!target) {
+                        UiHostFault(host);
+                        break;
+                    }
+                    float scale = UiHostScale(host);
+                    UiTextBox* editing = UiFindTextBox(host.boxes, GetFocus());
+                    UiPaintState state{host.pointer.hot, host.pointer.pressed, host.focus,
+                                       host.focusVisible && GetFocus() == window,
+                                       host.popup.open ? host.popup.field : 0,
+                                       editing ? editing->id : 0};
+                    if (host.pointerSurface == surface) state.pointer = host.pointerAt;
+                    UiCustomPaint custom = [&](const UiItem& item) {
+                        host.client->PaintCustom(host, target, own.cache, item, state);
+                    };
+                    target->BeginDraw();
+                    D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
+                    target->SetTransform(&identity);
+                    target->Clear(host.palette.background);
+                    if (isMain) {
+                        UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
+                                     state, {0, 0}, scale, -1e9f, 1e9f, &custom);
+                    } else {
+                        float height = UiHostViewHeight(host);
+                        UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.content,
+                                     state, {0, -host.scroll}, scale, host.scroll, host.scroll + height,
+                                     &custom);
+                        UiPaintScrollbar(target, own.cache, host.palette, UiHostScrollbar(host),
+                                         host.scrollbarHot || host.scrollDragging, scale);
+                    }
+                    if (!UiSurfaceDrawResult(own, target->EndDraw())) UiHostFault(host);
+                }
+                // The viewport paints in the main window's cycle: pointer input arriving during
+                // the main window's present would otherwise have it painted first again and again.
+                if (isMain && host.viewport && !host.closing) UpdateWindow(host.viewport);
                 break;
             }
 
@@ -671,7 +803,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (host.sliderDrag) {
                     const UiItem* slider = UiFindItem(host.frame, host.sliderDrag);
                     int value = slider ? UiSliderValueAt(*slider, x - host.dragAnchor) : 0;
-                    if (slider && value != slider->action.value) {
+                    if (slider && value != host.slideValue) {
+                        host.slideValue = value;
                         UiHostItemEvent(host, host.sliderDrag, UiActionKind::Slide, {}, value);
                     }
                     break;
@@ -682,6 +815,10 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         host.dragAnchor += float(moved);
                         UiHostItemEvent(host, host.panDrag, UiActionKind::Pan, {}, moved);
                     }
+                    break;
+                }
+                if (host.handleDrag) {
+                    UiHostDragHandle(host, host.pointerAt.y);
                     break;
                 }
                 if (!isMain && host.scrollDragging) {
@@ -705,11 +842,15 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_MOUSELEAVE:
+                // While a press or drag holds capture, only this surface's pointer position
+                // changes; outside the window every move reports a leave, so nothing else repaints.
                 if (host.pointerSurface == surface) host.pointerAt = {-1e9f, -1e9f};
-                if (!host.pointer.pressed.id && !host.scrollDragging) {
-                    host.pointer.hot = {};
-                    host.scrollbarHot = false;
+                if (host.pointer.pressed.id || host.scrollDragging) {
+                    InvalidateRect(window, nullptr, FALSE);
+                    break;
                 }
+                host.pointer.hot = {};
+                host.scrollbarHot = false;
                 UiHostInvalidate(host);
                 break;
             case WM_LBUTTONDOWN: {
@@ -735,30 +876,37 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.pointer.pressed = hit;
                 if (hit.id) {
                     SetCapture(window);
-                    // A spin button keeps focus on its number box's text box; a preview takes
-                    // no focus.
+                    // A spin button keeps focus on its number box's text box and a drag handle
+                    // gives it to its owner; a preview takes no focus.
                     const UiItem* item = UiFindItem(host.frame, hit.id);
                     UiItemKind kind = item ? item->kind : UiItemKind::Text;
-                    UiFocusRef target = kind == UiItemKind::SpinButton ? UiFocusRef{item->owner, -1} : hit;
-                    if (kind != UiItemKind::Preview &&
+                    UiFocusRef target = kind == UiItemKind::SpinButton || kind == UiItemKind::Handle ?
+                                            UiFocusRef{item->owner, -1} : hit;
+                    if (kind != UiItemKind::Preview && UiFindItem(host.frame, target.id) &&
                         (target != host.focus || GetFocus() != UiHostFocusWindow(host, target))) {
                         UiHostSetFocus(host, target, false);
                     }
                     // Drags: a slider jumps to the press unless it grabs the thumb; a preview
-                    // pans with the pointer.
+                    // pans with the pointer; a handle drags once the pointer moved.
                     float x = float(point.x) / scale;
                     const UiItem* slider = UiFindItem(host.frame, hit.id);
                     if (slider && slider->kind == UiItemKind::Slider) {
                         float offset = x - UiSliderThumbX(*slider);
                         host.sliderDrag = hit.id;
                         host.dragAnchor = std::abs(offset) <= 10 ? offset : 0;
+                        host.slideValue = slider->action.value;
                         int value = UiSliderValueAt(*slider, x - host.dragAnchor);
-                        if (value != slider->action.value) {
+                        if (value != host.slideValue) {
+                            host.slideValue = value;
                             UiHostItemEvent(host, hit.id, UiActionKind::Slide, {}, value);
                         }
                     } else if (kind == UiItemKind::Preview) {
                         host.panDrag = hit.id;
                         host.dragAnchor = x;
+                    } else if (kind == UiItemKind::Handle && GetCapture() == window) {
+                        host.handleDrag = hit.id;
+                        host.handleMoved = host.autoScrolling = false;
+                        host.dragAnchor = float(point.y) / scale + (isMain ? 0 : host.scroll);
                     }
                 } else {
                     host.focusVisible = false;
@@ -768,27 +916,51 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             case WM_LBUTTONUP: {
-                // A slider drag ends wherever the pointer is: its value commits.
+                // A slider drag ends wherever the pointer is: its value commits. A handle drag
+                // that moved drops there.
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
                 uint32_t slider = std::exchange(host.sliderDrag, 0);
+                uint32_t handle = std::exchange(host.handleDrag, 0);
+                bool dropped = std::exchange(host.handleMoved, false);
                 host.panDrag = 0;
+                if (handle) {
+                    host.autoScrolling = false;
+                    KillTimer(host.viewport, kUiAutoScrollTimer);
+                }
                 UiFocusRef activate = UiPointerRelease(host.pointer, UiHostHit(host, surface, point));
                 host.scrollDragging = false;
                 if (GetCapture() == window) ReleaseCapture();
                 UiHostInvalidate(host);
                 if (slider) UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
+                else if (handle && dropped) UiHostItemEvent(host, handle, UiActionKind::Drop);
                 else if (activate.id) UiHostInvoke(host, activate);
                 break;
             }
             case WM_CAPTURECHANGED:
-                // Losing capture ends a slider drag as a release does.
+                // Losing capture ends a slider drag as a release does, and cancels a handle's.
                 host.pointer.pressed = {};
                 host.scrollDragging = false;
                 host.panDrag = 0;
                 if (uint32_t slider = std::exchange(host.sliderDrag, 0)) {
                     UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
                 }
+                UiHostEndHandleDrag(host, UiActionKind::DragCancel);
                 UiHostInvalidate(host);
+                break;
+            case WM_TIMER:
+                // A handle held near the viewport's top or bottom: its drag steps the scroll
+                // (UiHostDragHandle) with the cursor where it is. Without a cursor position only
+                // the drag's reports step it.
+                if (!isMain && wParam == kUiAutoScrollTimer) {
+                    POINT cursor{};
+                    if (!host.handleDrag || !GetCursorPos(&cursor) || !ScreenToClient(window, &cursor)) {
+                        KillTimer(window, kUiAutoScrollTimer);
+                        break;
+                    }
+                    UiHostDragHandle(host, float(cursor.y) / UiHostScale(host) + host.scroll);
+                    break;
+                }
+                handled = isMain && host.client->Message(host, message, wParam, lParam, result);
                 break;
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL: {
@@ -837,7 +1009,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 }
                 const UiItem* item = UiFindItem(host.frame, host.pointer.hot.id);
                 bool link = item && (host.pointer.hot.link >= 0 || item->kind == UiItemKind::Link);
-                SetCursor(LoadCursorW(nullptr, link ? IDC_HAND : IDC_ARROW));
+                bool handle = item && item->kind == UiItemKind::Handle;
+                SetCursor(LoadCursorW(nullptr, link ? IDC_HAND : handle ? IDC_SIZENS : IDC_ARROW));
                 result = TRUE;
                 break;
             }
@@ -845,6 +1018,16 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             // Keyboard and focus. While the popup is open, the field's keys drive it.
             case WM_KEYDOWN: {
                 if (host.closing) break;
+                // Esc cancels a handle drag; other keys wait until it ends.
+                if (host.handleDrag) {
+                    if (wParam == VK_ESCAPE) {
+                        UiHostEndHandleDrag(host, UiActionKind::DragCancel);
+                        if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
+                            ReleaseCapture();
+                        }
+                    }
+                    break;
+                }
                 if (host.popup.open) {
                     UiOptionIntent option = UiOptionKey(int(host.popup.rows.size()),
                                                         host.popup.highlight, UINT(wParam));
@@ -1093,9 +1276,10 @@ static LRESULT CALLBACK UiHostPopupProc(HWND window, UINT message, WPARAM wParam
     return handled ? result : DefWindowProcW(window, message, wParam, lParam);
 }
 
-// A number box's text box: Tab moves focus along the item order, Enter commits, Esc reverts,
-// Up/Down step; focus moving elsewhere in the window reports focus loss. During IME composition
-// every message goes to native handling and the composed text is reported when it ends.
+// A number or text box's native text box: Tab moves focus along the item order, Enter commits,
+// Esc reverts, Up/Down step a number box; focus moving elsewhere in the window reports focus
+// loss. During IME composition every message goes to native handling and the composed text is
+// reported when it ends.
 static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
                                           UINT_PTR, DWORD_PTR data) {
     UiHost& host = *reinterpret_cast<UiHost*>(data);
@@ -1139,9 +1323,15 @@ static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wPar
                         UiHostItemEvent(host, id, UiActionKind::TextRevert);
                         break;
                     case VK_UP:
-                    case VK_DOWN:
+                    case VK_DOWN: {
+                        const UiItem* item = UiFindItem(host.frame, id);
+                        if (!item || item->kind != UiItemKind::NumberBox) {
+                            handled = false;
+                            break;
+                        }
                         UiHostItemEvent(host, id, UiActionKind::Step, {}, wParam == VK_UP ? 1 : -1);
                         break;
+                    }
                     default:
                         handled = false;
                         break;

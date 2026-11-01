@@ -7,6 +7,7 @@
 // user's screen.
 // Usage: host-probe.exe <ui-host.dll>
 #include <windows.h>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <stdexcept>
@@ -20,7 +21,8 @@ using UnloadFn = void (*)();
 using JoinFn = int (*)(DWORD);
 
 // Mirrors the DLL's counters and messages.
-enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult };
+enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult,
+                    kCloses, kClosesDragging, kAutoScrolls };
 static constexpr UINT kProbePing = WM_APP + 70;
 static constexpr UINT kProbeLoseTarget = WM_APP + 71;
 static constexpr UINT kProbeModal = WM_APP + 72;
@@ -29,16 +31,21 @@ static constexpr UINT kProbeColor = WM_APP + 74;
 static constexpr LRESULT kProbeMagic = 0x51A7E;
 enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, kAction, kFocus,
                     kEditState, kEditWindow, kEditChar, kEditKey, kEditText, kRebuild, kScroll,
-                    kFocusedItem, kDropFocus, kSliderMouse, kPreviewMouse, kPreviewWheel, kDropCapture };
+                    kFocusedItem, kDropFocus, kSliderMouse, kPreviewMouse, kPreviewWheel, kDropCapture,
+                    kHandleMouse, kSysKey, kTextBoxLimit, kTextBoxChar, kTextBoxKey, kItemTop, kTextBoxTop,
+                    kPaintNow, kSliderSweep, kSliderValue, kLiveMain, kPaintMain, kDeclineClose, kViewHeight,
+                    kScrollTop, kStopAutoScroll };
+enum ProbeUpdate { kMainUpdate = 1, kViewportUpdate = 2 };
 enum ProbeState { kWindow = 1, kVisible = 2, kCaptured = 4, kNoActivate = 8, kOwned = 16,
                   kNotActive = 32, kOpen = 64, kAnyCapture = 128 };
 enum ProbeEdit { kEditExists = 1, kEditFocused = 2, kEditEnabled = 4 };
-static constexpr int kDropdown = 500, kNumberBox = 600, kSlider = 700;
+static constexpr int kDropdown = 500, kNumberBox = 600, kSlider = 700, kCard = 900, kHandle = 901,
+                     kTextBox = 910, kMenu = 920;
 static constexpr int kOpenState = kWindow | kVisible | kCaptured | kNoActivate | kOwned | kNotActive |
                                   kOpen | kAnyCapture;
 // UiActionKind values the probe client records.
 enum ActionKind { kNone, kNavigate, kOpenUrl, kCommand, kStep, kTextChange, kTextCommit, kTextBlur,
-                  kTextRevert, kSlide, kSlideEnd, kPan };
+                  kTextRevert, kSlide, kSlideEnd, kPan, kDrag, kDrop, kDragCancel };
 static constexpr DWORD kTimeout = 15000;
 
 static int passed = 0, failed = 0, assertions = 0;
@@ -434,6 +441,194 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(probe.Call(kAction, 0) == actions);  // The release activates nothing
         probe.Call(kPreviewWheel);
         CHECK(probe.Call(kAction, 1) == kPan && probe.Call(kAction, 2) == -48);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("drag handle: a press focuses its owner; past 4 DIP the move reports drags, the release a drop; "
+        "a click does nothing; Esc and capture loss cancel; Alt+Up/Down on the owner step it", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        probe.Call(kHandleMouse, 0);
+        CHECK(probe.Call(kFocusedItem) == kCard);
+        int actions = probe.Call(kAction, 0);
+        probe.Call(kHandleMouse, 1000 + 2);
+        CHECK(probe.Call(kAction, 0) == actions);
+        probe.Call(kHandleMouse, 1000 + 20);
+        CHECK(probe.Call(kAction, 1) == kDrag && probe.Call(kAction, 4) == 12 && probe.Call(kAction, 2) > 0);
+        int first = probe.Call(kAction, 2);
+        probe.Call(kHandleMouse, 1000 + 40);
+        CHECK(probe.Call(kAction, 1) == kDrag && probe.Call(kAction, 2) - first >= 19);  // Content DIPs
+        probe.Call(kHandleMouse, 2000);
+        CHECK(probe.Call(kAction, 1) == kDrop);
+        actions = probe.Call(kAction, 0);
+        probe.Call(kHandleMouse, 0);
+        probe.Call(kHandleMouse, 2000);
+        CHECK(probe.Call(kAction, 0) == actions);
+        probe.Call(kHandleMouse, 0);
+        probe.Call(kHandleMouse, 1000 + 20);
+        probe.Call(kFieldKey, VK_ESCAPE);
+        CHECK(probe.Call(kAction, 1) == kDragCancel);
+        actions = probe.Call(kAction, 0);
+        probe.Call(kHandleMouse, 1000 + 40);
+        probe.Call(kHandleMouse, 2000);
+        CHECK(probe.Call(kAction, 0) == actions);  // Over: neither drags nor drops
+        probe.Call(kHandleMouse, 0);
+        probe.Call(kHandleMouse, 1000 + 20);
+        probe.Call(kDropCapture);
+        CHECK(probe.Call(kAction, 1) == kDragCancel);
+        CHECK(probe.Call(kFocus, kCard) == 1);
+        probe.Call(kSysKey, VK_DOWN);
+        CHECK(probe.Call(kAction, 1) == kStep && probe.Call(kAction, 2) == 1 && probe.Call(kAction, 4) == 12);
+        probe.Call(kSysKey, VK_UP);
+        CHECK(probe.Call(kAction, 1) == kStep && probe.Call(kAction, 2) == -1);
+        CHECK(probe.Call(kFocusedItem) == kCard);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("drag handle: later drags move the built items in place without a rebuild, repainting only the "
+        "viewport, whose paint brings the text box along; the drop rebuilds", [&] {
+        CHECK(desktop);
+        Probe probe;
+        HWND hwnd = probe.Open(desktop);
+        double scale = GetDpiForWindow(hwnd) / 96.0;
+        probe.Call(kHandleMouse, 0);
+        probe.Call(kHandleMouse, 1000 + 20);
+        CHECK(probe.Call(kAction, 1) == kDrag);
+        int builds = probe.count(kBuilds), from = probe.Call(kAction, 2);
+        int card = probe.Call(kItemTop, kCard), box = probe.Call(kTextBoxTop);
+        CHECK(probe.Call(kPaintNow) == 0);
+        CHECK(probe.Call(kHandleMouse, 1000 + 60) == kViewportUpdate);
+        int moved = probe.Call(kAction, 2) - from;
+        CHECK(probe.Call(kAction, 1) == kDrag && moved >= 39);
+        CHECK(probe.count(kBuilds) == builds);
+        CHECK(probe.Call(kItemTop, kCard) - card == moved);
+        probe.Call(kPaintNow);
+        CHECK(std::abs(probe.Call(kTextBoxTop) - box - moved * scale) <= 1);
+        probe.Call(kHandleMouse, 2000);
+        CHECK(probe.Call(kAction, 1) == kDrop && probe.count(kBuilds) == builds + 1);
+        CHECK(probe.Call(kItemTop, kCard) == card);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("drag handle: a close cancels the drag first (capture released, content back), then asks; kept "
+        "open, Alt+Down steps the card", [&] {
+        CHECK(desktop);
+        Probe probe;
+        HWND hwnd = probe.Open(desktop);
+        probe.Call(kHandleMouse, 0);
+        int card = probe.Call(kItemTop, kCard);
+        probe.Call(kHandleMouse, 1000 + 20);
+        probe.Call(kHandleMouse, 1000 + 60);
+        CHECK(probe.Call(kItemTop, kCard) != card);
+        probe.Call(kDeclineClose);
+        probe.Call(kSendMain, WM_CLOSE);  // Nested in a dispatch, as Alt+F4's close is
+        for (DWORD waited = 0; probe.count(kCloses) < 1 && waited < kTimeout; waited += 10) Sleep(10);
+        CHECK(probe.count(kCloses) == 1 && probe.count(kClosesDragging) == 0);
+        CHECK(probe.Call(kAction, 1) == kDragCancel && !(probe.Call(kPopupState) & kAnyCapture));
+        CHECK(probe.Call(kItemTop, kCard) == card && probe.Call(kFocusedItem) == kCard);
+        probe.Call(kSysKey, VK_DOWN);
+        CHECK(probe.Call(kAction, 1) == kStep && probe.Call(kAction, 2) == 1);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("drag handle: the auto-scroll timer keeps ticking while the pointer moves within the edge zone", [&] {
+        CHECK(desktop);
+        Probe probe;
+        HWND hwnd = probe.Open(desktop);
+        probe.Call(kHandleMouse, 0);
+        int at = probe.Call(kItemTop, kHandle) + 20 - probe.Call(kScrollTop);  // The press, in the viewport
+        probe.Call(kHandleMouse, 1000 + 20);
+        int below = probe.Call(kViewHeight) - 24 - at + 6;
+        CHECK(below > 20 && below < 990);
+        int ticks = probe.count(kAutoScrolls);
+        for (int i = 0; i < 30; i++) {
+            probe.Call(kHandleMouse, 1000 + below + (i & 1));
+            Sleep(8);
+        }
+        CHECK(probe.count(kAutoScrolls) > ticks);
+        probe.Call(kHandleMouse, 2000);
+        CHECK(probe.Call(kAction, 1) == kDrop);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("drag handle: with the auto-scroll timer starved, moves within the edge zone still scroll on time", [&] {
+        CHECK(desktop);
+        Probe probe;
+        HWND hwnd = probe.Open(desktop);
+        probe.Call(kHandleMouse, 0);
+        int above = probe.Call(kItemTop, kHandle) + 20 - probe.Call(kScrollTop) - 5;  // To 5 DIP: the top zone
+        CHECK(above > 20 && above < 990);
+        probe.Call(kHandleMouse, 3000 + above);
+        probe.Call(kStopAutoScroll);
+        int scroll = probe.Call(kScrollTop);
+        CHECK(scroll > 100);
+        for (int i = 0; i < 6; i++) {
+            Sleep(40);
+            probe.Call(kHandleMouse, 3000 + above + (i & 1));
+        }
+        CHECK(probe.Call(kScrollTop) < scroll);
+        probe.Call(kHandleMouse, 2000);
+        CHECK(probe.Call(kAction, 1) == kDrop);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("slider drags rebuild once per frame, at the paint, repainting the main window only when named; "
+        "values repeat against the last report; the main window's paint brings the viewport's", [&] {
+        CHECK(desktop);
+        Probe probe;
+        HWND hwnd = probe.Open(desktop);
+        probe.Call(kSliderMouse, 0 * 1000 + 25);
+        CHECK(probe.Call(kAction, 1) == kSlide && probe.Call(kAction, 2) == 25);
+        probe.Call(kPaintNow);
+        CHECK(probe.Call(kSliderValue) == 25);
+        // To 75 and back to the built 25: both reported; only the viewport waits for its paint,
+        // the missed rebuild runs once at the dispatch end and repaints only the viewport.
+        int sweep = probe.Call(kSliderSweep, 75 * 1000 + 25);
+        CHECK((sweep & 3) == kViewportUpdate && ((sweep >> 2) & 3) == kViewportUpdate && (sweep >> 4) == 1);
+        CHECK(probe.Call(kAction, 1) == kSlide && probe.Call(kAction, 2) == 25 && probe.Call(kSliderValue) == 25);
+        // Named: both surfaces.
+        probe.Call(kLiveMain, 1);
+        sweep = probe.Call(kSliderSweep, 90 * 1000 + 80);
+        CHECK((sweep & 3) == (kMainUpdate | kViewportUpdate) && (sweep >> 4) == 1);
+        CHECK(probe.Call(kSliderValue) == 80);
+        CHECK(probe.Call(kPaintMain) == 0);
+        probe.Call(kSliderMouse, 2 * 1000 + 80);
+        CHECK(probe.Call(kAction, 1) == kSlideEnd);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("free text box: its limit; typing and Esc reach the client, Up/Down stay native; a menu button "
+        "opens its menu with nothing chosen, keys choose", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        CHECK(probe.Call(kFocus, kTextBox) == 1);
+        CHECK(probe.Call(kTextBoxLimit) == 4);
+        probe.Call(kTextBoxChar, L'7');
+        CHECK(probe.Call(kAction, 1) == kTextChange && probe.Call(kAction, 4) == 13 && probe.Call(kAction, 3) == 7);
+        int actions = probe.Call(kAction, 0);
+        probe.Call(kTextBoxKey, VK_UP);
+        probe.Call(kTextBoxKey, VK_DOWN);
+        CHECK(probe.Call(kAction, 0) == actions);
+        probe.Call(kTextBoxKey, VK_ESCAPE);
+        CHECK(probe.Call(kAction, 1) == kTextRevert);
+        CHECK(probe.Call(kFocus, kMenu) == 1);
+        probe.Call(kFieldKey, VK_RETURN);
+        CHECK(probe.Call(kPopupState) == kOpenState);
+        actions = probe.Call(kAction, 0);
+        probe.Call(kFieldKey, VK_DOWN);
+        probe.Call(kFieldKey, VK_RETURN);
+        CHECK(probe.Call(kPopupState) == 0);
+        CHECK(probe.Call(kAction, 0) == actions + 1 && probe.Call(kAction, 1) == kCommand &&
+              probe.Call(kAction, 2) == 0 && probe.Call(kAction, 4) == 14);
         PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
         probe.Closed();
     });

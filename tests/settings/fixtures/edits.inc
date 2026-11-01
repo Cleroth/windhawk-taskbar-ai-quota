@@ -1,14 +1,21 @@
 // Edit controller, number parsing, projection and the Behavior/History pages: the real
 // settings/edits.h against an in-memory store with deterministic failure injection.
 
-// In-memory store: settings, statuses, an operation log, failures and unload on demand.
+// In-memory store: settings, statuses, stored sign-ins, an operation log, failures and unload on
+// demand. Account operations resolve the account afresh (by history ID, else identity), as the
+// production store does, and a rename moves the account's stored sign-in.
 struct TestStore final : SettingsStore {
     Settings settings;
     SettingsStatus status;
-    std::vector<std::wstring> log;  // "load", "apply <field>=<value>"
-    int failNext = 0;               // The next N applies fail
-    int unloadAfter = -1;           // Unloading once this many applies ran
+    std::vector<std::wstring> log;  // "load", "apply <field>=<value>",
+                                    // "account <field> <label>=<value or text>", "add <provider> <label>"
+    std::vector<uint64_t> signIns;  // Identities with a stored sign-in
+    int failNext = 0;               // The next N applies, account operations and adds fail
+    int unloadAfter = -1;           // Unloading once this many of them ran
     int applies = 0;
+    int presenceChecks = 0;
+    uint64_t nextHistoryId = 0x100;
+    bool generateHistoryIds = false;  // An account edit gives accounts without one a history ID
     std::function<void(Settings&)> normalize;  // What saving does after the assignment, if set
 
     SettingsBaseline Load() override {
@@ -28,6 +35,115 @@ struct TestStore final : SettingsStore {
         bool changed = !(next == settings);
         settings = std::move(next);
         return changed ? SettingsSaveResult::Changed : SettingsSaveResult::Unchanged;
+    }
+    SettingsAccountResult Account(SettingsAccountRef ref, SettingsField field, int value,
+                                  const std::wstring& text) override {
+        std::vector<AccountConfig>& accounts = settings.accounts;
+        auto at = std::find_if(accounts.begin(), accounts.end(), [&](const AccountConfig& account) {
+            return ref.historyId ? account.historyId == ref.historyId : AccountIdentityHash(account) == ref.identity;
+        });
+        log.push_back(L"account " + std::to_wstring(int(field)) + L" " + (at == accounts.end() ? L"?" : at->label) +
+                      L"=" + (text.empty() ? std::to_wstring(value) : text));
+        applies++;
+        SettingsAccountResult result;
+        if (at == accounts.end()) {
+            result.missing = true;
+            return result;
+        }
+        if (failNext > 0) {
+            failNext--;
+            result.save = SettingsSaveResult::Failed;
+            result.notice = L"Injected failure.";
+            return result;
+        }
+        uint64_t identity = AccountIdentityHash(*at);
+        size_t index = size_t(at - accounts.begin());
+        result.account = {at->historyId, identity};
+        switch (field) {
+            case SettingsField::AccountSignIn:
+            case SettingsField::AccountDashboard:
+                return result;
+            case SettingsField::AccountSignOut:
+                std::erase(signIns, identity);
+                return result;
+            case SettingsField::AccountRemove:
+                if (value) std::erase(signIns, identity);
+                accounts.erase(at);
+                result.save = SettingsSaveResult::Changed;
+                return result;
+            case SettingsField::AccountMove: {
+                size_t to = size_t(std::clamp(value, 0, int(accounts.size()) - 1));
+                AccountConfig moved = accounts[index];
+                accounts.erase(accounts.begin() + ptrdiff_t(index));
+                accounts.insert(accounts.begin() + ptrdiff_t(to), moved);
+                result.save = to == index ? SettingsSaveResult::Unchanged : SettingsSaveResult::Changed;
+                return result;
+            }
+            case SettingsField::AccountHidden: {
+                long visible = std::count_if(accounts.begin(), accounts.end(),
+                                             [](const AccountConfig& account) { return !account.hidden; });
+                if (value && !at->hidden && visible <= 1) return result;
+                result.save = at->hidden != (value != 0) ? SettingsSaveResult::Changed : SettingsSaveResult::Unchanged;
+                at->hidden = value != 0;
+                return result;
+            }
+            default: {
+                AccountConfig next = *at;
+                SettingsAccountAssign(next, field, value, text);
+                bool duplicate = std::any_of(accounts.begin(), accounts.end(), [&](const AccountConfig& other) {
+                    return &other != &*at && other.provider == next.provider && other.label == next.label;
+                });
+                if (duplicate) {
+                    result.save = SettingsSaveResult::Failed;
+                    result.notice = L"That provider and label are already configured.";
+                    return result;
+                }
+                uint64_t renamed = AccountIdentityHash(next);
+                if (renamed != identity && std::erase(signIns, identity)) signIns.push_back(renamed);
+                result.save = next == *at ? SettingsSaveResult::Unchanged : SettingsSaveResult::Changed;
+                *at = std::move(next);
+                for (AccountConfig& account : accounts) {
+                    if (generateHistoryIds && !account.historyId) account.historyId = nextHistoryId++;
+                }
+                result.account = {at->historyId, renamed};
+                return result;
+            }
+        }
+    }
+    SettingsAccountResult AddAccount(const std::wstring& provider, const std::vector<std::wstring>& labels) override {
+        applies++;
+        SettingsAccountResult result;
+        if (failNext > 0) {
+            failNext--;
+            log.push_back(L"add " + provider + L" failed");
+            result.save = SettingsSaveResult::Failed;
+            result.notice = L"Injected failure.";
+            return result;
+        }
+        for (const std::wstring& label : labels) {
+            if (std::any_of(settings.accounts.begin(), settings.accounts.end(), [&](const AccountConfig& account) {
+                    return account.provider == provider && account.label == label;
+                })) {
+                continue;
+            }
+            AccountConfig account;
+            account.provider = provider;
+            account.label = label;
+            account.historyId = nextHistoryId++;
+            settings.accounts.push_back(account);
+            log.push_back(L"add " + provider + L" " + label);
+            result.save = SettingsSaveResult::Changed;
+            result.account = {account.historyId, AccountIdentityHash(account)};
+            return result;
+        }
+        log.push_back(L"add " + provider + L" none");
+        result.save = SettingsSaveResult::Failed;
+        result.notice = L"That provider and label are already configured.";
+        return result;
+    }
+    bool HasStoredSignIn(uint64_t identity) override {
+        presenceChecks++;
+        return std::find(signIns.begin(), signIns.end(), identity) != signIns.end();
     }
     bool Unloading() override { return unloadAfter >= 0 && applies >= unloadAfter; }
 

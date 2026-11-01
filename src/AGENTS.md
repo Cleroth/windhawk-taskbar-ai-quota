@@ -34,7 +34,9 @@ The mod is injected into `explorer.exe`. Execution domains:
   UI rebuilds. It must NEVER touch XAML directly. The rebuilt window (`settings/ui-window.h`)
   writes settings only through the edit controller (`settings/edits.h`: drafts, revisioned
   commit queue, navigation and close flushes) and its store (`settings/store.h`, one
-  transaction per edit); notifications reload its baseline and never commit drafts.
+  transaction per edit); notifications reload its baseline and never commit drafts. Account
+  edits and actions of both settings windows run the shared, UI-free account commands
+  (`settings/account-commands.h`: the rename's sign-in move, removal, reorder, visibility).
 - **History thread** (`HistoryWindowThreadProc`): owns the native history window, graph caches and
   export/confirmation dialogs. No XAML. Cancel tracked modal dialogs and join it before unloading.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf

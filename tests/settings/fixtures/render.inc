@@ -88,12 +88,15 @@ static winrt::com_ptr<ID2D1RenderTarget> RenderTarget(UiGraphics& g, IWICBitmap*
     return target;
 }
 
+// Drawn over a render in client DIPs: a popup where the host would open it.
+using RenderOverlay = std::function<void(ID2D1RenderTarget*, UiTargetCache&, const UiPalette&)>;
+
 // The host's composition; `view` paints the client-drawn preview items, as the settings client
 // does. The pointer (state.pointer) is in the coordinates of `pointerContent` ? content : main.
 static void RenderFrame(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
                         const UiFrame& frame, const SettingsView& view, D2D1_SIZE_F client, UINT dpi,
                         const UiThemeInput& theme, UiPaintState state, float scroll,
-                        bool scrollbarExpanded, bool pointerContent = true) {
+                        bool scrollbarExpanded, bool pointerContent = true, const RenderOverlay& overlay = {}) {
     float scale = float(dpi) / 96;
     winrt::com_ptr<IWICBitmap> bitmap = RenderBitmap(wic, client, dpi);
     winrt::com_ptr<ID2D1RenderTarget> target = RenderTarget(g, bitmap.get(), dpi);
@@ -122,6 +125,7 @@ static void RenderFrame(UiGraphics& g, IWICImagingFactory* wic, const std::wstri
     D2D1::Matrix3x2F identity = D2D1::Matrix3x2F::Identity();
     target->SetTransform(&identity);
     target->PopAxisAlignedClip();
+    if (overlay) overlay(target.get(), cache, palette);
     winrt::check_hresult(target->EndDraw());
     cache.Clear();
     SaveRender(wic, bitmap.get(), path);
@@ -313,13 +317,13 @@ static void RunRenders(const std::wstring& directory) {
         for (const RenderTheme& theme : RenderThemes()) {
             for (UINT dpi : {96u, 144u, 192u}) {
                 const std::pair<SettingsUiPage, const char*> pages[] = {
-                    {SettingsUiPage::About, "about"}, {SettingsUiPage::Accounts, "placeholder"},
+                    {SettingsUiPage::About, "about"}, {SettingsUiPage::Accounts, "accounts"},
                     {SettingsUiPage::Behavior, "behavior"}, {SettingsUiPage::History, "history"}};
                 for (auto [page, pageName] : pages) {
                     std::string name = std::string("render-") + pageName + "-" + theme.name + "-" +
                                        std::to_string(dpi) + ".png";
                     Run(name, [&] {
-                        SettingsView view = TestView(page);
+                        SettingsView view = page == SettingsUiPage::Accounts ? AccountsView() : TestView(page);
                         view.version = L"2.0.1";
                         UiFrame frame;
                         SettingsUiBuildFrame(g, view, client, frame);
@@ -405,6 +409,78 @@ static void RunRenders(const std::wstring& directory) {
                 RenderFrame(g, wic.get(), path(states), frame, view, tall, 144, theme.input, state, 0, false);
                 CHECK(Control(frame, SettingsField::RedThreshold).text == L"60" &&
                       Control(frame, SettingsField::RedThreshold, 1).action.value == 75);
+            });
+
+            // Accounts at 144 DPI as the mockups: OpenAI expanded (the mockup's 1000 x 953 window);
+            // the Add account menu open with OpenAI under the pointer, painted where the host opens
+            // it; no accounts. Then the states: CC 1 expanded with a duplicate label typed (its box
+            // editing, its error), the pointer on a chip and the focus ring on Remove account; Go
+            // dragged by its handle between OAI and CC 1, lifted under the pointer.
+            std::string expanded = std::string("render-accounts-expanded-") + theme.name + "-144.png";
+            Run(expanded, [&] {
+                const D2D1_SIZE_F tall{1000, 913};
+                SettingsView view = AccountsView({0});
+                UiFrame frame;
+                SettingsUiBuildFrame(g, view, tall, frame);
+                RenderFrame(g, wic.get(), path(expanded), frame, view, tall, 144, theme.input, {}, 0, false);
+
+                view = AccountsView();
+                frame = {};
+                SettingsUiBuildFrame(g, view, client, frame);
+                const UiItem& add = *UiFindItem(frame, SettingsControlId(SettingsField::AccountAdd));
+                std::vector<UiItem> rows;
+                D2D1_SIZE_F size = UiLayoutOptions(g, add.options, add.action, add.rect.right - add.rect.left, rows);
+                D2D1_RECT_F box{add.rect.right - size.width, add.rect.bottom + 4, add.rect.right,
+                                add.rect.bottom + 4 + size.height};
+                RenderOverlay menu = [&](ID2D1RenderTarget* target, UiTargetCache& cache, const UiPalette& palette) {
+                    UiFillRect(target, cache, box, 8, palette.popup, 1.5f);
+                    UiStrokeRect(target, cache, box, 8, palette.controlBorder, 1, 1.5f);
+                    UiPaintState hover;
+                    hover.hot = {2};
+                    UiPaintItems(target, g, cache, palette, rows, hover, {box.left, box.top}, 1.5f, -1e9f, 1e9f);
+                };
+                UiPaintState state;
+                state.open = add.id;
+                state.focus = {add.id};
+                std::string menuName = std::string("render-accounts-add-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(menuName), frame, view, client, 144, theme.input, state, 0, false, true,
+                            menu);
+
+                view = TestView(SettingsUiPage::Accounts);
+                frame = {};
+                SettingsUiBuildFrame(g, view, client, frame);
+                std::string empty = std::string("render-accounts-empty-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(empty), frame, view, client, 144, theme.input, {}, 0, false);
+
+                view = AccountsView({1});
+                view.drafts.push_back({12, SettingsField::AccountLabel, 1, true, L"CC 2", 0, false, false,
+                                       L"Another account of this provider uses this label."});
+                frame = {};
+                SettingsUiBuildFrame(g, view, client, frame);
+                state = {};
+                state.editing = AccountId(2, SettingsField::AccountLabel);
+                state.hot = {AccountId(2, SettingsField::AccountBars, kFableWeeklyBar)};
+                state.focus = {AccountId(2, SettingsField::AccountRemove, 1)};
+                state.focusVisible = true;
+                std::string states = std::string("render-accounts-states-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(states), frame, view, client, 144, theme.input, state, 0, false);
+
+                view = AccountsView();
+                std::rotate(view.settings.accounts.begin() + 1, view.settings.accounts.begin() + 3,
+                            view.settings.accounts.end());
+                std::rotate(view.accounts.begin() + 1, view.accounts.begin() + 3, view.accounts.end());
+                view.dragKey = 14;
+                view.dragTop = 14 + 72 + 30;
+                frame = {};
+                SettingsUiBuildFrame(g, view, client, frame);
+                state = {};
+                state.hot = {AccountId(4, SettingsField::AccountMove)};
+                state.pressed = state.hot;
+                state.focus = {AccountId(4, SettingsField::AccountExpand)};
+                state.focusVisible = true;
+                std::string dragged = std::string("render-accounts-drag-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(dragged), frame, view, client, 144, theme.input, state, 0, false);
+                CHECK(rows.size() == 3 && UiFindItem(frame, AccountId(4, SettingsField::AccountExpand, 1))->selected);
             });
 
             // Layout states at 144 DPI. Ring: the taskbar showing the sample (switch on), the

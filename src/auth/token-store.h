@@ -67,6 +67,14 @@ static bool LoadStoredToken(uint64_t idHash, StoredToken* out) {
     }
 }
 
+// Whether a stored sign-in exists for the identity: presence only, never decrypted.
+static bool HasStoredToken(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authMutex);
+    std::vector<wchar_t> stored(16384);
+    Wh_GetStringValue(TokenStorageKey(idHash).c_str(), stored.data(), stored.size());
+    return stored[0] != 0;
+}
+
 static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
     std::lock_guard<std::mutex> lk(g_authMutex);
     std::wstring json;

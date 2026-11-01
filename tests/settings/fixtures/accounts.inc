@@ -1,0 +1,546 @@
+// Accounts: the real edit controller's account edits and actions against the test store
+// (fixtures/edits.inc), and the Accounts page builder.
+
+static AccountConfig TestAccount(PCWSTR provider, PCWSTR label, uint64_t historyId,
+                                 std::array<bool, kQuotaBarCount> bars = {true, true, false, false}) {
+    AccountConfig account;
+    account.provider = provider;
+    account.label = label;
+    account.historyId = historyId;
+    account.showBars = bars;
+    return account;
+}
+
+static uint64_t Identity(PCWSTR provider, PCWSTR label) {
+    return AccountIdentityHash(TestAccount(provider, label, 0));
+}
+
+// OAI (OpenAI, 2,500 credits max), CC 1 and CC 2 (Anthropic), Go (Antigravity): history IDs 11-14.
+static void AddTestAccounts(Settings& settings) {
+    settings.accounts = {TestAccount(L"openai", L"OAI", 11, {true, true, false, true}),
+                         TestAccount(L"anthropic", L"CC 1", 12),
+                         TestAccount(L"anthropic", L"CC 2", 13, {true, true, true, true}),
+                         TestAccount(L"antigravity", L"Go", 14)};
+    settings.accounts[0].creditsMax = 2500;
+}
+
+static std::wstring AccountOp(SettingsField field, std::wstring label, std::wstring value) {
+    return L"account " + std::to_wstring(int(field)) + L" " + label + L"=" + value;
+}
+
+// The store's account operations and adds, in order.
+static std::vector<std::wstring> AccountOps(const TestStore& store) {
+    std::vector<std::wstring> ops;
+    for (const std::wstring& entry : store.log) {
+        if (entry.starts_with(L"account ") || entry.starts_with(L"add ")) ops.push_back(entry);
+    }
+    return ops;
+}
+
+static const SettingsDraft* DraftOf(const SettingsEdits& edits, uint64_t key, SettingsField field) {
+    for (const SettingsDraft& draft : edits.drafts) {
+        if (draft.key == key && draft.field == field) return &draft;
+    }
+    return nullptr;
+}
+
+static constexpr SettingsField kLabel = SettingsField::AccountLabel;
+
+// The Accounts page as the mockups show it: OAI signed in (Plus), CC 1 needing a sign-in (Pro),
+// CC 2 signed in (Max 20x), Go with its local app running (AI Pro).
+static SettingsView AccountsView(std::initializer_list<int> expanded = {}) {
+    SettingsView view = TestView(SettingsUiPage::Accounts);
+    AddTestAccounts(view.settings);
+    const SettingsAccountStatus statuses[] = {
+        {L"Plus", L"", true, true, false, false},
+        {L"Pro", L"not signed in - click to sign in", false, false, true, false},
+        {L"Max 20x", L"", true, true, false, false},
+        {L"AI Pro", L"", true, false, false, false},
+    };
+    for (int i = 0; i < 4; i++) {
+        SettingsViewAccount account;
+        account.key = view.settings.accounts[size_t(i)].historyId;
+        account.slot = uint32_t(i + 1);
+        account.status = statuses[i];
+        account.expanded = std::find(expanded.begin(), expanded.end(), i) != expanded.end();
+        view.accounts.push_back(account);
+    }
+    return view;
+}
+
+static uint32_t AccountId(uint32_t slot, SettingsField field, uint32_t part = 0) {
+    return SettingsAccountControlId(slot, field, part);
+}
+
+// Nine accounts of every provider with long labels, plans and errors: history IDs (keys) 21-29,
+// slots 1-9, cards in `order` (indexes into that list), the listed ones expanded.
+static SettingsView NineAccountsView(std::vector<size_t> order, std::initializer_list<size_t> expanded) {
+    struct Entry {
+        PCWSTR provider, label;
+        SettingsAccountStatus status;
+    };
+    const Entry entries[] = {
+        {L"anthropic", L"Claude Max (personal)", {L"Max 20x", L"", true, true, false, false}},
+        {L"anthropic", L"Work", {L"Team", L"", true, true, false, false}},
+        {L"openai", L"ChatGPT Pro", {L"Pro", L"", true, true, false, false}},
+        {L"anthropic", L"Old login", {L"Pro", L"not signed in - click to sign in", false, false, true, false}},
+        {L"antigravity", L"Gemini desktop", {L"AI Pro", L"", true, false, false, false}},
+        {L"openai", L"Codex (team seat)", {L"Plus", L"", true, true, false, false}},
+        {L"anthropic", L"Side project", {L"Max 5x", L"HTTP 429: rate limited, retrying in 5 minutes", true, true, false, false}},
+        {L"openai", L"Business", {L"Business", L"", true, true, false, false}},
+        {L"antigravity", L"Laptop", {L"", L"Antigravity not running", false, false, false, false}},
+    };
+    SettingsView view = TestView(SettingsUiPage::Accounts);
+    for (size_t i : order) {
+        view.settings.accounts.push_back(TestAccount(entries[i].provider, entries[i].label, 21 + i,
+                                                     {true, true, i % 3 == 0, i % 2 == 0}));
+        view.settings.accounts.back().creditsMax = i == 2 ? 5000 : 0;
+        SettingsViewAccount account;
+        account.key = 21 + i;
+        account.slot = uint32_t(i + 1);
+        account.status = entries[i].status;
+        account.expanded = std::find(expanded.begin(), expanded.end(), i) != expanded.end();
+        view.accounts.push_back(account);
+    }
+    return view;
+}
+
+static void RunAccountEditTests() {
+    Run("accounts: keys are history IDs; one without gets a session key that follows its rename", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        store.settings.accounts[1].historyId = 0;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.keys.size() == 4 && edits.keys[0] == 11 && edits.keys[3] == 14);
+        uint64_t session = edits.keys[1];
+        CHECK((session >> 63) == 1 && edits.SlotOf(session) == 2 && edits.SlotOf(14) == 4);
+        edits.SetText(session, kLabel, L"CC 7");
+        CHECK(edits.RequestCommit(session, kLabel) && edits.Process() == 0);
+        CHECK(store.settings.accounts[1].label == L"CC 7" && edits.keys[1] == session);
+        edits.Reload();
+        CHECK(edits.keys[1] == session && edits.SlotOf(session) == 2);
+        // A move keeps every key's slot.
+        CHECK(edits.AccountAction(14, SettingsField::AccountMove, 0) == SettingsActionResult::Done);
+        CHECK(edits.keys[0] == 14 && edits.SlotOf(14) == 4 && edits.keys[2] == session);
+        // Its first save generates its history ID: the session key stays, so the close flush still
+        // finds and saves its other drafts, and an action after a rename finds the account.
+        store.generateHistoryIds = true;
+        edits.SetText(session, SettingsField::AccountTileText, L"C7");
+        edits.SetText(session, kLabel, L"CC 8");
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Saved && edits.drafts.empty());
+        CHECK(store.settings.accounts[2].historyId && store.settings.accounts[2].tileText == L"C7" &&
+              store.settings.accounts[2].label == L"CC 8");
+        CHECK(edits.keys[2] == session && edits.SlotOf(session) == 2);
+        edits.SetText(session, kLabel, L"CC 9");
+        CHECK(edits.AccountAction(session, SettingsField::AccountSignIn, 0) == SettingsActionResult::Done);
+        CHECK(AccountOps(store).back() == AccountOp(SettingsField::AccountSignIn, L"CC 9", L"0"));
+        CHECK(edits.notices.empty());
+    });
+
+    Run("accounts: empty and duplicate labels get errors and never queue; spaces trim; other providers may share one", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(12, kLabel, L"   ");
+        CHECK(!edits.RequestCommit(12, kLabel) && edits.queue.empty());
+        CHECK(DraftOf(edits, 12, kLabel)->error == L"Enter a label.");
+        edits.SetText(12, kLabel, L"CC 2");
+        CHECK(DraftOf(edits, 12, kLabel)->error.empty());  // Typing clears it
+        CHECK(!edits.RequestCommit(12, kLabel, true) && edits.queue.empty());
+        CHECK(DraftOf(edits, 12, kLabel)->error == L"Another account of this provider uses this label.");
+        CHECK(edits.Projection().accounts[1].label == L"CC 1");  // An invalid label doesn't show
+        edits.SetText(12, kLabel, L"  OAI ");  // OpenAI's label: fine for Anthropic
+        CHECK(edits.Projection().accounts[1].label == L"OAI");
+        CHECK(edits.RequestCommit(12, kLabel) && edits.Process() == 0);
+        CHECK(AccountOps(store) == std::vector<std::wstring>{AccountOp(kLabel, L"CC 1", L"OAI")});
+        CHECK(store.settings.accounts[1].label == L"OAI" && edits.drafts.empty());
+        // Esc after a deferred commit skips it.
+        edits.SetText(13, kLabel, L"CC 9");
+        CHECK(edits.RequestCommit(13, kLabel, true));
+        edits.Revert(13, kLabel);
+        CHECK(edits.Process() == 0 && AccountOps(store).size() == 1);
+    });
+
+    Run("accounts: Sign in after a blurred rename renames first, then signs in under the new identity", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        store.signIns = {Identity(L"anthropic", L"CC 1")};
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(12, kLabel, L"CC 3");
+        CHECK(edits.RequestCommit(12, kLabel, true));  // Focus moved to the button: queued
+        CHECK(edits.AccountAction(12, SettingsField::AccountSignIn, 0) == SettingsActionResult::Done);
+        CHECK((AccountOps(store) == std::vector<std::wstring>{AccountOp(kLabel, L"CC 1", L"CC 3"),
+                                                               AccountOp(SettingsField::AccountSignIn, L"CC 3", L"0")}));
+        CHECK(store.signIns == std::vector<uint64_t>{Identity(L"anthropic", L"CC 3")});
+        CHECK(edits.queue.empty() && edits.Process() == 0 && AccountOps(store).size() == 2);
+    });
+
+    Run("accounts: an invalid label, queued or not, blocks Sign in; a failed rename blocks it until it saves", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(12, kLabel, L"");  // Typed, never committed
+        CHECK(edits.AccountAction(12, SettingsField::AccountSignIn, 0) == SettingsActionResult::Blocked);
+        CHECK(AccountOps(store).empty() && DraftOf(edits, 12, kLabel)->error == L"Enter a label.");
+        // Valid once, then another account takes the label: blocked again, not sent.
+        edits.SetText(12, kLabel, L"CC 4");
+        store.settings.accounts[2].label = L"CC 4";
+        edits.Reload();
+        CHECK(edits.AccountAction(12, SettingsField::AccountSignOut, 0) == SettingsActionResult::Blocked);
+        CHECK(AccountOps(store).empty());
+        edits.SetText(12, kLabel, L"CC 5");
+        store.failNext = 1;
+        CHECK(edits.AccountAction(12, SettingsField::AccountSignIn, 0) == SettingsActionResult::Blocked);
+        CHECK(AccountOps(store) == std::vector<std::wstring>{AccountOp(kLabel, L"CC 1", L"CC 5")});
+        const SettingsDraft* failed = DraftOf(edits, 12, kLabel);
+        CHECK(failed && failed->failed && failed->error == L"This change couldn't be saved.");
+        CHECK(edits.notices.size() == 1 && edits.notices[0].failure && edits.notices[0].text == L"Injected failure.");
+        CHECK(edits.Process() == 0 && AccountOps(store).size() == 1);  // Not retried by itself
+        CHECK(edits.AccountAction(12, SettingsField::AccountSignIn, 0) == SettingsActionResult::Done);
+        CHECK(AccountOps(store).back() == AccountOp(SettingsField::AccountSignIn, L"CC 5", L"0"));
+    });
+
+    Run("accounts: removal drops the account's drafts and requests; other accounts keep theirs", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        store.signIns = {Identity(L"openai", L"OAI"), Identity(L"anthropic", L"CC 2")};
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(11, kLabel, L"OAI 2");
+        CHECK(edits.RequestCommit(11, kLabel, true));
+        edits.SetText(11, SettingsField::AccountCreditsMax, L"12a");  // Invalid: stays through the flush
+        edits.SetText(13, SettingsField::AccountTileText, L"C2");
+        CHECK(edits.AccountAction(11, SettingsField::AccountRemove, 1) == SettingsActionResult::Done);
+        CHECK((AccountOps(store) == std::vector<std::wstring>{AccountOp(kLabel, L"OAI", L"OAI 2"),
+                                                               AccountOp(SettingsField::AccountRemove, L"OAI 2", L"1")}));
+        CHECK(store.settings.accounts.size() == 3 && !edits.IndexOf(11));
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].key == 13 && edits.queue.empty());
+        CHECK(store.signIns == std::vector<uint64_t>{Identity(L"anthropic", L"CC 2")});
+    });
+
+    Run("accounts: Add takes the first default label without a stored sign-in or a configured account", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        store.settings.accounts.push_back(TestAccount(L"anthropic", L"A3", 15));
+        store.signIns = {Identity(L"anthropic", L"A"), Identity(L"anthropic", L"A2"), Identity(L"anthropic", L"A5")};
+        SettingsEdits edits(store);
+        edits.Reload();
+        uint64_t key = edits.AddAccount(L"anthropic");
+        CHECK(AccountOps(store) == std::vector<std::wstring>{L"add anthropic A4"});
+        std::optional<size_t> index = edits.IndexOf(key);
+        CHECK(index && *index == 5 && edits.baseline.settings.accounts[*index].label == L"A4");
+        CHECK(store.presenceChecks > 0);
+        // A5 has a stored sign-in: the next one skips it.
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"anthropic")))].label == L"A6");
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"openai")))].label == L"O");
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"antigravity")))].label == L"G");
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"openai")))].label == L"O2");
+        store.failNext = 1;
+        CHECK(edits.AddAccount(L"openai") == 0);
+        CHECK(edits.notices.size() == 1 && edits.notices[0].failure);
+    });
+
+    Run("accounts: actions take desired values on the fresh account; the last visible stays; moves go to an index", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.AccountAction(11, SettingsField::AccountHidden, 1) == SettingsActionResult::Done);
+        CHECK(edits.AccountAction(11, SettingsField::AccountHidden, 1) == SettingsActionResult::Done);
+        CHECK(store.settings.accounts[0].hidden);  // Desired, not toggled
+        edits.AccountAction(12, SettingsField::AccountHidden, 1);
+        edits.AccountAction(13, SettingsField::AccountHidden, 1);
+        edits.AccountAction(14, SettingsField::AccountHidden, 1);
+        CHECK(!store.settings.accounts[3].hidden);
+        CHECK(edits.AccountAction(14, SettingsField::AccountMove, 1) == SettingsActionResult::Done);
+        CHECK(store.settings.accounts[1].label == L"Go" && edits.keys[1] == 14 && edits.keys[3] == 13);
+        // A taskbar menu shows OAI while CC 1's label is being typed: the draft stays, and its
+        // save keeps the fresh visibility.
+        edits.SetText(12, kLabel, L"CC 8");
+        store.settings.accounts[0].hidden = false;
+        store.settings.accounts[2].hidden = false;
+        edits.Reload();
+        CHECK(DraftOf(edits, 12, kLabel) && edits.Projection().accounts[2].label == L"CC 8");
+        CHECK(!edits.Projection().accounts[2].hidden);
+        CHECK(edits.RequestCommit(12, kLabel) && edits.Process() == 0);
+        CHECK(store.settings.accounts[2].label == L"CC 8" && !store.settings.accounts[2].hidden);
+    });
+
+    Run("accounts: a vanished account's drafts go with a notice; discrete edits and credit steps save", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(12, kLabel, L"CC 6");
+        CHECK(edits.RequestCommit(12, kLabel));
+        store.settings.accounts.erase(store.settings.accounts.begin() + 1);
+        CHECK(edits.Process() == 1 && edits.drafts.empty());
+        CHECK(edits.notices.size() == 1 && edits.notices[0].kind == SettingsNoticeKind::Warning);
+        edits.notices.clear();
+        // An invalid label of an account that vanishes goes at the next reload; it can't block
+        // closing.
+        edits.SetText(13, kLabel, L"");
+        AccountConfig gone = store.settings.accounts[1];
+        store.settings.accounts.erase(store.settings.accounts.begin() + 1);
+        edits.Reload();
+        CHECK(edits.drafts.empty() && edits.notices.size() == 1 && !edits.notices[0].failure);
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Saved);
+        store.settings.accounts.insert(store.settings.accounts.begin() + 1, gone);
+        edits.Reload();
+        edits.notices.clear();
+        CHECK(edits.Commit(11, SettingsField::AccountBars, 0b0011) == 0);
+        CHECK(!store.settings.accounts[0].showBars[kExtraUsageBar]);
+        CHECK(edits.Commit(13, SettingsField::AccountTileIdentity, int(TileIdentity::Text)) == 0);
+        CHECK(edits.Commit(13, SettingsField::AccountRecordHistory, 0) == 0);
+        CHECK(store.settings.accounts[1].tileIdentity == TileIdentity::Text && !store.settings.accounts[1].recordHistory);
+        uint64_t stepped = edits.Step(11, SettingsField::AccountCreditsMax, 1);
+        CHECK(DraftOf(edits, 11, SettingsField::AccountCreditsMax)->raw == L"2,501");
+        CHECK(edits.CommitStep(11, SettingsField::AccountCreditsMax, stepped) && edits.Process() == 0);
+        CHECK(store.settings.accounts[0].creditsMax == 2501);
+        edits.SetText(11, SettingsField::AccountCreditsMax, L"1,000,000,000");
+        CHECK(edits.Projection().accounts[0].creditsMax == 999999999);
+        edits.SetText(13, SettingsField::AccountTileText, L"C2");
+        CHECK(edits.RequestCommit(13, SettingsField::AccountTileText) && edits.Process() == 0);
+        CHECK(store.settings.accounts[1].tileText == L"C2");
+    });
+
+    Run("accounts: unload during the drafts' saves stops the action and Add", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(12, kLabel, L"CC 3");
+        store.unloadAfter = 1;
+        CHECK(edits.AccountAction(12, SettingsField::AccountHidden, 1) == SettingsActionResult::Blocked);
+        CHECK(AccountOps(store) == std::vector<std::wstring>{AccountOp(kLabel, L"CC 1", L"CC 3")});
+        CHECK(!store.settings.accounts[1].hidden);
+        CHECK(edits.AccountAction(13, SettingsField::AccountRemove, 1) == SettingsActionResult::Blocked);
+        CHECK(edits.AddAccount(L"openai") == 0 && AccountOps(store).size() == 1 && store.settings.accounts.size() == 4);
+    });
+
+    Run("accounts: navigation reverts an invalid label; close preparation blocks on one", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(12, kLabel, L"");
+        edits.SetText(13, kLabel, L"CC 3");
+        CHECK(edits.Navigate() == 0);
+        CHECK(AccountOps(store) == std::vector<std::wstring>{AccountOp(kLabel, L"CC 2", L"CC 3")});
+        CHECK(edits.drafts.empty() && store.settings.accounts[1].label == L"CC 1");
+        edits.SetText(12, kLabel, L"CC 3");
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Blocked);
+        CHECK(DraftOf(edits, 12, kLabel)->error == L"Another account of this provider uses this label.");
+    });
+
+    Run("reorder target: past every other card whose center is above the pointer", [] {
+        std::vector<float> centers = {34, 106, 178};
+        CHECK(SettingsReorderTarget(centers, 10) == 0);
+        CHECK(SettingsReorderTarget(centers, 40) == 1);
+        CHECK(SettingsReorderTarget(centers, 177) == 2);
+        CHECK(SettingsReorderTarget(centers, 500) == 3);
+        CHECK(SettingsReorderTarget({}, 50) == 0);
+    });
+
+    Run("accounts page: cards with logo, label, status and quota keys; Sign in where needed; ids by slot", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = AccountsView();
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        // Pinned header: title, Add account (right-aligned in the column), the note.
+        const UiItem* add = UiFindItem(frame, SettingsControlId(SettingsField::AccountAdd));
+        CHECK(add && add->kind == UiItemKind::Button && add->button == UiButtonStyle::Accent && add->options.size() == 3);
+        CHECK_NEAR(add->rect.right, 260 + 20 + 680);
+        CHECK_NEAR(add->rect.top, 14);
+        CHECK(add->options[2].detail == L"Uses the signed-in Antigravity app or CLI" && add->action.value == -1);
+        CHECK_NEAR(frame.viewport.top, 69);
+        // Cards: 68 DIP collapsed, 4 DIP apart from 14 DIP down.
+        for (uint32_t slot = 1; slot <= 4; slot++) {
+            const UiItem* panel = UiFindItem(frame, AccountId(slot, SettingsField::AccountExpand, 1));
+            const UiItem* header = UiFindItem(frame, AccountId(slot, SettingsField::AccountExpand));
+            CHECK(panel && header && header->button == UiButtonStyle::Subtle && header->action.value == 1);
+            CHECK_NEAR(panel->rect.top, 14 + 72.0f * float(slot - 1));
+            CHECK_NEAR(panel->rect.bottom - panel->rect.top, 68);
+            CHECK(header->action.key == view.accounts[slot - 1].key);
+            const UiItem* handle = UiFindItem(frame, AccountId(slot, SettingsField::AccountMove));
+            CHECK(handle && handle->kind == UiItemKind::Handle && handle->owner == header->id);
+            const UiItem* visible = UiFindItem(frame, AccountId(slot, SettingsField::AccountHidden));
+            CHECK(visible && visible->kind == UiItemKind::Toggle && visible->selected && visible->action.value == 1);
+        }
+        CHECK(HasText(frame, L"Signed in") && HasText(frame, L"Sign-in needed") && HasText(frame, L"Local app running"));
+        CHECK(HasText(frame, L"Anthropic \u00B7 Max 20x \u00B7 "));
+        // Only CC 1 offers Sign in in its header.
+        CHECK(UiFindItem(frame, AccountId(2, SettingsField::AccountSignIn)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)));
+        std::vector<std::wstring> keys;
+        for (const UiItem& item : frame.content) {
+            if (item.kind == UiItemKind::Chip && item.rect.top < 14 + 68) keys.push_back(item.text);
+        }
+        CHECK((keys == std::vector<std::wstring>{L"5h", L"7d", L"Cr"}));
+        // Chips that only show pass the pointer to the header.
+        const UiItem* chip = &*std::find_if(frame.content.begin(), frame.content.end(),
+                                            [](const UiItem& item) { return item.kind == UiItemKind::Chip; });
+        D2D1_POINT_2F onChip{(chip->rect.left + chip->rect.right) / 2, (chip->rect.top + chip->rect.bottom) / 2};
+        CHECK(UiHitTest(g, frame.content, onChip).id == AccountId(1, SettingsField::AccountExpand));
+        // Focus order of a card: header, (Sign in), visibility.
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        CHECK(stops.size() == 6 + 1 + 4 * 2 + 1);
+        auto stop = [&](uint32_t id) {
+            return std::find_if(stops.begin(), stops.end(), [&](const UiFocusStop& s) { return s.ref.id == id; }) -
+                   stops.begin();
+        };
+        CHECK(stop(AccountId(2, SettingsField::AccountExpand)) + 1 == stop(AccountId(2, SettingsField::AccountSignIn)));
+        CHECK(stop(AccountId(2, SettingsField::AccountSignIn)) + 1 == stop(AccountId(2, SettingsField::AccountHidden)));
+        // The last visible account's switch can't turn off.
+        for (int i = 0; i < 3; i++) view.settings.accounts[size_t(i)].hidden = true;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(!UiFindItem(frame, AccountId(4, SettingsField::AccountHidden))->enabled);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountHidden))->enabled);
+        CHECK(HasText(frame, L"Hidden, not polled"));
+    });
+
+    Run("accounts page: an expanded card's rows per provider; Short text needs Label text; chips keep one", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = AccountsView({0, 3});
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        const UiItem* label = UiFindItem(frame, AccountId(1, SettingsField::AccountLabel));
+        CHECK(label && label->kind == UiItemKind::TextBox && label->text == L"OAI" && label->maximum == 64);
+        CHECK_NEAR(label->rect.right - label->rect.left, 200);
+        const UiItem* credits = UiFindItem(frame, AccountId(1, SettingsField::AccountCreditsMax));
+        CHECK(credits && credits->kind == UiItemKind::NumberBox && credits->text == L"2,500");
+        const UiItem* identity = UiFindItem(frame, AccountId(1, SettingsField::AccountTileIdentity));
+        CHECK(identity && identity->text == L"Logo + number badge");
+        const UiItem* shortText = UiFindItem(frame, AccountId(1, SettingsField::AccountTileText));
+        CHECK(shortText && !shortText->enabled && shortText->maximum == 4 && UiRunsText(shortText->runs) == L"OAI");
+        CHECK(HasText(frame, L"Used when Tile identity is Label text."));
+        CHECK(HasText(frame, L"\u25CF Recording"));
+        // OpenAI chips: 5-hour, Weekly, Credits, each the desired mask with itself flipped.
+        const UiItem* weekly = UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kWeeklyBar));
+        CHECK(weekly && weekly->selected && weekly->action.value == 0b1001 && weekly->text == L"Weekly");
+        CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kFableWeeklyBar)));
+        // Footer: dashboard, Sign in again, Sign out, Remove account at the right.
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountDashboard, 1))->icon == L"\uE8A7");
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn, 1))->text == L"Sign in again");
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignOut, 1)));
+        const UiItem* remove = UiFindItem(frame, AccountId(1, SettingsField::AccountRemove, 1));
+        CHECK(remove && remove->button == UiButtonStyle::Danger);
+        CHECK_NEAR(remove->rect.right, 680 + 20 - 19);
+        // Antigravity: no dashboard or sign-in; its first quota is the short window.
+        CHECK(!UiFindItem(frame, AccountId(4, SettingsField::AccountDashboard, 1)) &&
+              UiFindItem(frame, AccountId(4, SettingsField::AccountRemove, 1)));
+        CHECK(UiFindItem(frame, AccountId(4, SettingsField::AccountBars, kFiveHourBar))->text == L"Short window");
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountExpand))->action.value == 0);
+
+        // An expired sign-in (stored, rejected): the header's Sign in only; every id unique.
+        view.accounts[0].status.needsSignIn = true;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn, 1)) &&
+              UiFindItem(frame, AccountId(1, SettingsField::AccountSignOut, 1)));
+        std::vector<uint32_t> ids;
+        for (const std::vector<UiItem>* list : {&frame.main, &frame.content}) {
+            for (const UiItem& item : *list) ids.push_back(item.id);
+        }
+        std::sort(ids.begin(), ids.end());
+        CHECK(std::adjacent_find(ids.begin(), ids.end()) == ids.end());
+        view.accounts[0].status.needsSignIn = false;
+
+        // Label text enables Short text; the last chip can't clear; no credits max disables Credits.
+        view.settings.accounts[0].tileIdentity = TileIdentity::Text;
+        view.settings.accounts[0].showBars = {false, true, false, false};
+        view.settings.accounts[0].creditsMax = 0;
+        view.drafts.push_back({11, kLabel, 1, true, L"", 0, false, false, L"Enter a label."});
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountTileText))->enabled);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kWeeklyBar))->action.value == 0b0010);
+        CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kExtraUsageBar))->enabled);
+        CHECK(HasText(frame, L"Set Credits max to show the Credits bar."));
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountLabel))->text.empty() && HasText(frame, L"Enter a label."));
+    });
+
+    Run("accounts page: empty state; a dragged card is lifted and drawn last", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = TestView(SettingsUiPage::Accounts);
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK_NEAR(frame.viewport.top, 56);
+        CHECK(HasText(frame, L"No accounts yet") && HasText(frame, L"Add account"));
+        CHECK(frame.content.front().kind == UiItemKind::Card);
+        CHECK_NEAR(frame.content.front().rect.top, 14);
+        CHECK(UiFindItem(frame, SettingsControlId(SettingsField::AccountAdd)));
+
+        view = AccountsView();
+        std::swap(view.settings.accounts[0], view.settings.accounts[2]);
+        std::swap(view.accounts[0], view.accounts[2]);
+        view.dragKey = 11;
+        view.dragTop = 100;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        const UiItem* lifted = UiFindItem(frame, AccountId(1, SettingsField::AccountExpand, 1));
+        CHECK(lifted && lifted->selected);
+        CHECK_NEAR(lifted->rect.top, 100);
+        CHECK_NEAR(UiFindItem(frame, AccountId(3, SettingsField::AccountExpand, 1))->rect.top, 14);
+        CHECK(frame.content.back().rect.top >= 100 && frame.content.back().rect.bottom <= 100 + 68);
+    });
+
+    Run("accounts page: a drag's later reports move the built cards where a rebuild puts them", [] {
+        UiGraphics& g = TestGraphics();
+        auto build = [&](const SettingsView& view) {
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            return frame;
+        };
+        auto panel = [](size_t account) { return AccountId(uint32_t(account + 1), SettingsField::AccountExpand, 1); };
+        // Nine cards; Work (index 1, its own text boxes included), ChatGPT Pro and Side project
+        // expanded. Work is lifted at 100 in its place, then dragged past three cards to 420.
+        std::initializer_list<size_t> expanded = {1, 2, 6};
+        std::vector<size_t> start = {0, 1, 2, 3, 4, 5, 6, 7, 8}, later = {0, 2, 3, 4, 1, 5, 6, 7, 8};
+        float origin = UiFindItem(build(NineAccountsView(start, expanded)), panel(0))->rect.top;
+        SettingsView first = NineAccountsView(start, expanded), moved = NineAccountsView(later, expanded);
+        first.dragKey = moved.dragKey = 22;
+        first.dragTop = 100;
+        moved.dragTop = 420;
+        UiFrame live = build(first), rebuilt = build(moved);
+        std::vector<uint32_t> panels;
+        for (size_t account : later) panels.push_back(panel(account));
+        CHECK(SettingsMoveAccountCards(live.content, panels, panel(1), origin, 420));
+        // Every item where the rebuild puts it (running ids differ: compared by kind, text and box).
+        CHECK(live.content.size() == rebuilt.content.size());
+        std::vector<bool> used(rebuilt.content.size());
+        size_t matched = 0;
+        for (const UiItem& item : live.content) {
+            for (size_t j = 0; j < rebuilt.content.size(); j++) {
+                const UiItem& other = rebuilt.content[j];
+                const D2D1_RECT_F &a = item.rect, &b = other.rect;
+                if (used[j] || other.kind != item.kind || other.text != item.text ||
+                    UiRunsText(other.runs) != UiRunsText(item.runs) || std::abs(a.left - b.left) > 1e-3f ||
+                    std::abs(a.top - b.top) > 1e-3f || std::abs(a.right - b.right) > 1e-3f ||
+                    std::abs(a.bottom - b.bottom) > 1e-3f) {
+                    continue;
+                }
+                used[j] = true;
+                matched++;
+                break;
+            }
+        }
+        CHECK(matched == live.content.size());
+        // The lifted card (its label box too) at 420 and still drawn last; ChatGPT Pro moved up
+        // into Work's place under the first card.
+        const UiItem* lifted = UiFindItem(live, panel(1));
+        CHECK(lifted->selected && std::abs(lifted->rect.top - 420) < 1e-3f);
+        CHECK(live.content.back().rect.top >= 419 && live.content.back().rect.bottom <= lifted->rect.bottom);
+        CHECK(UiFindItem(live, AccountId(2, SettingsField::AccountLabel))->rect.top > 420);
+        const UiItem* firstCard = UiFindItem(live, panel(0));
+        CHECK(std::abs(UiFindItem(live, panel(2))->rect.top - (firstCard->rect.bottom + 4)) < 1e-3f);
+        // Reported again where it is: nothing moves.
+        CHECK(!SettingsMoveAccountCards(live.content, panels, panel(1), origin, 420));
+    });
+}

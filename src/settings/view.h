@@ -4,12 +4,24 @@
 
 enum class SettingsUiPage : int { Accounts, Layout, Display, Behavior, History, About, Count };
 
+// An account card's state, beside its projected settings: its key (settings/edits.h), its control
+// slot, what is known about it and whether it is expanded.
+struct SettingsViewAccount {
+    uint64_t key = 0;
+    uint32_t slot = 0;
+    SettingsAccountStatus status;
+    bool expanded = false;
+};
+
 struct SettingsView {
     SettingsUiPage page = SettingsUiPage::Accounts;
     std::wstring version;
     Settings settings;                  // Render projection (SettingsEdits::Projection)
     SettingsStatus status;
-    std::vector<SettingsDraft> drafts;  // Number box text and errors
+    std::vector<SettingsDraft> drafts;  // Text box text and errors
+    std::vector<SettingsViewAccount> accounts;  // Parallel to settings.accounts
+    uint64_t dragKey = 0;               // The account card being dragged, drawn lifted at dragTop
+    float dragTop = 0;                  // Content DIPs
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
@@ -20,6 +32,11 @@ struct SettingsView {
 // Other items take running ids below 0x10000.
 static uint32_t SettingsControlId(SettingsField field, uint32_t part = 0) {
     return 0x10000u + uint32_t(field) * 16 + part;
+}
+
+// An account's controls: by its slot, so they follow the account across reorders.
+static uint32_t SettingsAccountControlId(uint32_t slot, SettingsField field, uint32_t part = 0) {
+    return 0x100000u + slot * 0x1000u + uint32_t(field) * 16 + part;
 }
 
 static const SettingsDraft* SettingsViewDraft(const SettingsView& view, SettingsField field) {

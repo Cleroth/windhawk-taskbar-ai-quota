@@ -229,21 +229,18 @@ static void RunUiTests() {
             CHECK_NEAR(item.rect.bottom - item.rect.top, 38);
         }
         CHECK(navs == 6);
-        CHECK(frame.main.back().runs[0].text == L"Accounts");
+        CHECK(UiFindItem(frame, 100)->runs[0].text == L"Accounts");
         CHECK_NEAR(frame.viewport.left, 260);
         CHECK_NEAR(frame.viewport.top, 56);
         CHECK_NEAR(frame.viewport.bottom, 820);
         CHECK(frame.content.front().kind == UiItemKind::Card);
         CHECK_NEAR(frame.content.front().rect.left, 20);
         CHECK_NEAR(frame.content.front().rect.right, 700);  // 740 - 40
-        bool placeholder = std::any_of(frame.content.begin(), frame.content.end(),
-            [](const UiItem& item) { return !item.runs.empty() && item.runs[0].text == L"Not built yet"; });
-        CHECK(placeholder);
         frame = {};
         SettingsUiBuildFrame(g, view, {2000, 820}, frame);
         CHECK_NEAR(frame.content.front().rect.left, 360);   // 20 + (1740 - 60 - 1000) / 2
         CHECK_NEAR(frame.content.front().rect.right, 1360);
-        CHECK_NEAR(frame.main.back().rect.left, 260 + 360);
+        CHECK_NEAR(UiFindItem(frame, 100)->rect.left, 260 + 360);
     });
 
     Run("about page: cards stack, links open their pages", [] {
@@ -410,5 +407,58 @@ static void RunUiTests() {
         CHECK(stops.size() == 2 && stops[0].ref == (UiFocusRef{777, 0}) && stops[1].ref == (UiFocusRef{777, 1}));
         CHECK(UiActionOf(frame, {777, 1})->value == 3);
         CHECK(frame.content[1].ink == UiInk::Accent);
+    });
+
+    Run("menus, nested cards, text boxes, chips and drag handles", [] {
+        UiGraphics& g = TestGraphics();
+        // A menu's options have details: 53 DIP two-line rows in 4 DIP padding, 310 DIP wide,
+        // nothing selected; it opens right-aligned under its button.
+        std::vector<UiItem> rows;
+        UiAction add{UiActionKind::Command, -1, {}, 4};
+        D2D1_SIZE_F size = UiLayoutOptions(g, {{L"First", 0, L"Detail line", {{kClaudeLogoPath}}},
+                                               {L"Second", 1, L"Another detail", {{kOpenAiLogoPath}}}},
+                                           add, 131, rows);
+        CHECK_NEAR(size.width, 310);
+        CHECK_NEAR(size.height, 8 + 2 * 53);
+        CHECK(rows.size() == 2 && !rows[0].selected && !rows[1].selected && rows[1].action.value == 1);
+        CHECK_NEAR(rows[1].rect.top, 4 + 53);
+        CHECK_NEAR(rows[1].rect.left, 4);
+        CHECK(UiRunsText(rows[1].runs) == L"Another detail" && rows[1].parts.size() == 1);
+        POINT right = UiPopupPlacement({700, 100, 831, 132}, {310, 114}, {0, 0, 1000, 800}, 4, true);
+        CHECK(right.x == 831 - 310 && right.y == 136);
+        // A nested card: a rule instead of a panel, text 56 DIP in from the panel's edge.
+        UiCardSpec spec;
+        spec.title = L"Label";
+        spec.trailing = {200, 32};
+        spec.nested = true;
+        spec.minHeight = 60;
+        std::vector<UiItem> items;
+        uint32_t id = 1;
+        UiCardLayout nested = UiAddCard(g, items, id, 21, 100, 678, spec);
+        CHECK(items[0].kind == UiItemKind::Rule && items[1].kind == UiItemKind::Text);
+        CHECK_NEAR(items[1].rect.left, 20 + 56);
+        CHECK_NEAR(nested.trailing.right, 700 - 19);
+        CHECK_NEAR(nested.card.bottom - nested.card.top, 60);
+        // A text box's text area keeps 11 DIP on both sides; it is a tab stop, a handle isn't.
+        UiFrame frame;
+        frame.content.push_back(TestItem(10, UiItemKind::Card, {0, 0, 400, 68}, kTestOpen));
+        frame.content.back().button = UiButtonStyle::Subtle;
+        UiItem handle = TestItem(11, UiItemKind::Handle, {5, 14, 35, 54}, {UiActionKind::Command, 0, {}, 5});
+        handle.owner = 10;
+        frame.content.push_back(handle);
+        UiItem shown = TestItem(12, UiItemKind::Chip, {300, 24, 330, 44});
+        frame.content.push_back(shown);
+        UiItem box = TestItem(13, UiItemKind::TextBox, {100, 80, 300, 112}, {UiActionKind::Command, 0, {}, 6});
+        box.maximum = 4;
+        frame.content.push_back(box);
+        D2D1_RECT_F text = UiNumberBoxTextRect(box);
+        CHECK_NEAR(text.left, 111);
+        CHECK_NEAR(text.right, 289);
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        CHECK(stops.size() == 2 && stops[0].ref == UiFocusRef{10} && stops[1].ref == UiFocusRef{13});
+        CHECK(UiHitTest(g, frame.content, {20, 30}) == UiFocusRef{11});
+        CHECK(UiHitTest(g, frame.content, {310, 30}) == UiFocusRef{10});  // A shown chip passes through
+        frame.content[2].enabled = false;
+        CHECK(UiHitTest(g, frame.content, {310, 30}).id == 0);  // A disabled one blocks
     });
 }

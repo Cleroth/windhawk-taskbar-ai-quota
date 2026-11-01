@@ -1,6 +1,7 @@
 // Settings window shell: navigation pane, pinned page header (with the Layout and Display
-// preview) and page content, built from an explicit view snapshot (settings/view.h; approved
-// mockups: nav and header of layout-v2.png). Pure. Pages not rebuilt yet show a placeholder card.
+// preview, or Accounts' note and Add account menu) and page content, built from an explicit view
+// snapshot (settings/view.h; approved mockups: nav and header of layout-v2.png, accounts-add.png).
+// Pure.
 
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
@@ -46,6 +47,43 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     // content's top.
     uint32_t id = uint32_t(page + 1) << 12;
     float header = kSettingsHeaderHeight, contentTop = 0;
+    // Accounts: Add account (mockup .btn.accent: 14 DIP padding, 12 DIP glyph) at the title row's
+    // right opens the provider menu; while accounts exist, a note under the title.
+    if (SettingsUiPage(page) == SettingsUiPage::Accounts) {
+        PCWSTR label = L"Add account";
+        float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
+        float right = kSettingsNavWidth + left + std::max(width, 1.0f);
+        UiItem add;
+        add.id = SettingsControlId(SettingsField::AccountAdd);
+        add.kind = UiItemKind::Button;
+        add.button = UiButtonStyle::Accent;
+        add.rect = {right - std::ceil(labelWidth) - 28 - 12 - 8, 14, right, 46};
+        add.text = label;
+        add.icon = L"\uE710";
+        add.iconSize = 12;
+        add.action = SettingsCommand(SettingsField::AccountAdd, -1);
+        add.options = {
+            {L"Anthropic (Claude)", 0, L"Sign in with your browser", {{kClaudeLogoPath, {}, UiInk::Primary}}},
+            {L"OpenAI (ChatGPT/Codex)", 1, L"Sign in with your browser", {{kOpenAiLogoPath, {}, UiInk::Primary}}},
+            {L"Google Antigravity", 2, L"Uses the signed-in Antigravity app or CLI",
+             {{kGeminiLogoPath, {}, UiInk::Primary}}},
+        };
+        frame.main.push_back(std::move(add));
+        if (!view.settings.accounts.empty()) {
+            UiItem note;
+            note.id = 101;
+            note.kind = UiItemKind::Text;
+            note.font = UiFont::Note;
+            note.ink = UiInk::Muted;
+            note.rect = {kSettingsNavWidth + left, 50, right, 69};
+            note.runs.push_back({view.settings.skipHiddenPolling ?
+                                     L"Drag to reorder. Toggle hides an account from the taskbar; hidden "
+                                     L"accounts are not polled." :
+                                     L"Drag to reorder. Toggle hides an account from the taskbar."});
+            frame.main.push_back(std::move(note));
+            header = 69;
+        }
+    }
     if (SettingsUiPage(page) == SettingsUiPage::Layout || SettingsUiPage(page) == SettingsUiPage::Display) {
         std::vector<UiItem> preview;
         float height = SettingsAddPreviewCard(g, view, preview, id, 0, 0, std::max(width, 1.0f));
@@ -61,8 +99,11 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
                       std::max(client.height, header)};
 
     // Content, in viewport coordinates.
-    float bottom;
+    float bottom = 0;
     switch (SettingsUiPage(page)) {
+        case SettingsUiPage::Accounts:
+            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width);
+            break;
         case SettingsUiPage::About:
             bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
             break;
@@ -78,15 +119,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
         case SettingsUiPage::Display:
             bottom = SettingsUiBuildDisplay(g, view, frame.content, id, left, contentTop, width);
             break;
-        default: {
-            UiCardSpec spec;
-            spec.glyph = L"\uE946";
-            spec.title = L"Not built yet";
-            spec.description = {{L"This page is still in the classic Settings window. Close this "
-                                 L"window and open Settings from the taskbar menu to change it."}};
-            bottom = UiAddCard(g, frame.content, id, left, 2, width, spec).card.bottom;
+        case SettingsUiPage::Count:
             break;
-        }
     }
     frame.contentHeight = bottom + 28;
 }
