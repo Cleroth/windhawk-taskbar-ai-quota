@@ -330,7 +330,7 @@ static HistorySnapshot ReadHistorySnapshot(ULONGLONG fromMs) {
     LoadHistoryLocked();
     HistorySnapshot snapshot;
     snapshot.status = g_historyStatus;
-    if (g_historyCapped) snapshot.status += L" Storage cap reached; oldest samples were pruned.";
+    snapshot.capped = g_historyCapped;
     for (const auto& sample : g_historySamples) {
         if (sample.timeMs >= fromMs) snapshot.samples.push_back(sample);
     }

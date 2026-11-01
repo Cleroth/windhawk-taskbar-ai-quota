@@ -2,11 +2,14 @@
 #include "meter.inc"
 #include "logos.inc"
 #include "ui.inc"
+#include "controls.inc"
 #include "edits.inc"
 #include "accounts.inc"
 #include "layout.inc"
 #include "display.inc"
+#include "render-support.inc"
 #include "render.inc"
+#include "render-controls.inc"
 
 int main(int argc, char** argv) {
     bool render = argc == 3 && std::string(argv[1]) == "--render-dir";
@@ -19,10 +22,12 @@ int main(int argc, char** argv) {
         directory.resize(size_t(std::max(
             MultiByteToWideChar(CP_ACP, 0, argv[2], -1, directory.data(), int(directory.size())) - 1, 0)));
         RunRenders(directory);
+        RunControlRenders(directory);
     } else {
         RunMeterTests();
         RunLogoTests();
         RunUiTests();
+        RunControlTests();
         RunEditTests();
         RunPageTests();
         RunAccountEditTests();

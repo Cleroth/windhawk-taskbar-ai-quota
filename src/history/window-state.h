@@ -14,7 +14,6 @@ static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
 static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
 static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
 static constexpr int kHistorySeriesHeight = 90;
-static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
 
 enum HistoryControlId {
     kHistoryAccountCombo = 2800, kHistoryMeterCombo, kHistoryRangeCombo,

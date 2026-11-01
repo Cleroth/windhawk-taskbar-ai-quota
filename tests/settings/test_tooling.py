@@ -46,17 +46,20 @@ class ToolingTests(unittest.TestCase):
             code = run.main()
         return code, json.loads(saved.call_args.args[0]), [call.args[1] for call in phases.call_args_list]
 
-    PHASES = ["extract", "extract-host", "model-compile", "model", "render", "host-compile",
-              "probe-compile", "host-probe", "extract-popup", "popup-compile", "popup-probe"]
+    PHASES = ["extract", "extract-history", "extract-host", "model-compile", "model", "render",
+              "history-compile", "history", "history-render", "host-compile", "probe-compile", "host-probe",
+              "extract-popup", "popup-compile", "popup-probe"]
 
     def test_default_phases_and_summary_required(self):
         reads = []
         code, results, names = self.invoke_runner(model_output=self.PASSING, reads=reads)
         self.assertEqual(code, 0)
         self.assertEqual(names, ["tooling", "freshness", *self.PHASES])
-        self.assertEqual(reads, ["settings.manifest.json", "ui-host.manifest.json", "popup.manifest.json"])
+        self.assertEqual(reads, ["settings.manifest.json", "history.manifest.json", "ui-host.manifest.json",
+                                 "popup.manifest.json"])
         self.assertEqual(results["phases"][-1]["tests"], {"passed": 3, "failed": 0, "assertions": 9})
-        self.assertEqual(results["renders"], ["render-a.png"])
+        # Both render phases report theirs: the settings window's, then the history window's.
+        self.assertEqual(results["renders"], ["render-a.png", "render-a.png"])
         code, results, _ = self.invoke_runner()
         self.assertEqual(code, 1)
         self.assertIn("evidence_error", results["phases"][-1])

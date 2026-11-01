@@ -14,7 +14,12 @@ static constexpr UINT kProbeColor = WM_APP + 74;       // The tracked color dial
 static constexpr LRESULT kProbeMagic = 0x51A7E;
 static constexpr uint32_t kProbeDropdown = 500, kProbeNumberBox = 600, kProbeSlider = 700,
                           kProbePreview = 800, kProbeCard = 900, kProbeHandle = 901, kProbeTextBox = 910,
-                          kProbeMenu = 920;
+                          kProbeMenu = 920, kProbeSegments = 1000, kProbeSegmentsOff = 1001, kProbeNav = 2000;
+// The activation request (UiHostConfig::activateMessage), registered by name in both processes.
+static UINT ProbeActivateMessage() {
+    static const UINT message = RegisterWindowMessageW(L"AiQuotaProbeUiActivate");
+    return message;
+}
 
 // kColorResult: 1 cancelled (or ended by a close), 2 chosen. kCloses: PrepareClose calls,
 // kClosesDragging: those that found a handle drag or capture; kAutoScrolls: the viewport's
@@ -66,6 +71,26 @@ enum ProbeCommand {
     kViewHeight,   // The viewport's height, DIPs
     kScrollTop,    // The content's scroll, DIPs rounded
     kStopAutoScroll, // Kills the auto-scroll timer, as if paints and input starved it
+    kHistoryMode,  // `argument` > 0: history-like frame (navigation pane of that many entries, segmented
+                   // controls in the header); returns the builds so far
+    kNavScroll,    // The navigation pane's scroll, DIPs rounded
+    kNavRange,     // Its scroll range, DIPs rounded
+    kNavVisible,   // 1 if entry `argument` lies wholly inside the pane at its scroll
+    kWheel,        // A wheel notch to the main window: argument / 10: 0 over the pane, 1 over the
+                   // content; % 10: 0 down, 1 up
+    kNavMouse,     // argument / 10000: 0 move, 1 left down, 2 up at x 100 DIP, y % 10000 DIPs (main);
+                   // returns the pointer's element right after it (kHot), before the leave that
+                   // follows (the real cursor is elsewhere)
+    kNavBar,       // argument / 1000: 0 move over the pane's scrollbar thumb, 1 move there and press, 2
+                   // move % 1000 pixels below the press, 3 release; returns navBarHot | navBarDragging
+                   // << 1 | an element hot << 2 right after it
+    kSelectNav,    // Selects entry `argument` (as a client handling a request) and rebuilds
+    kHot,          // The pointer's element: id * 16 + link + 1
+    kSegmentMouse, // argument / 100: 0 the segmented control, 1 the disabled one; / 10 % 10: the
+                   // segment; % 10: 0 move, 1 left down, 2 up (main window, the segment's center);
+                   // returns the pointer's element right after it (kHot)
+    kClientKeys,   // 0: WM_KEYDOWN the client saw, 1: the last one's key, 2: activation requests
+                   // seen, 3: 1 if the popup was still open when the last request arrived
 };
 // The surfaces with something to repaint, read in the same command as the event (a paint may
 // follow as soon as the command returns).
@@ -105,9 +130,12 @@ static LRESULT CALLBACK ProbeModalHook(int code, WPARAM wParam, LPARAM lParam) {
 // and a menu button. Choices, typing, reverts, slides and focus loss behave like a settings
 // client's drafts: they change what the next build shows, then request a rebuild. A handle
 // drag's first report rebuilds; later ones move the card and what follows it in place, like the
-// settings window's card drag. The color dialog is tracked like the settings client's.
+// settings window's card drag. The color dialog is tracked like the settings client's. In
+// history mode (kHistoryMode) the navigation is a scrolling pane of entries, selected by their
+// activation, and the header holds a segmented control and a disabled one. Keys and activation
+// requests the host passes on are recorded.
 struct ProbeClient final : UiHostClient {
-    int choice = 0, sliderValue = 50;
+    int choice = 0, sliderValue = 50, segment = 0;
     std::wstring boxText = L"10", freeText;
     int actions = 0;
     UiAction last;
@@ -118,18 +146,46 @@ struct ProbeClient final : UiHostClient {
     float dragShift = 0;
     bool liveMain = false;              // A slide's live rebuild names the main window
     int declineCloses = 0;
+    int navEntries = 0, navSelected = 0;
+    POINT barPress{};                   // Main pixels of the last press on the pane's scrollbar
+    int keys = 0, activations = 0;
+    WPARAM lastKey = 0;
+    bool popupAtActivation = false;
 
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         g_counters[kBuilds]++;
-        UiItem nav;
-        nav.id = 1;
-        nav.kind = UiItemKind::Nav;
-        nav.rect = {8, 6, 192, 44};
-        nav.text = L"Probe";
-        nav.icon = L"\uE946";
-        nav.selected = true;
-        nav.action = {UiActionKind::Navigate, 0};
-        frame.main.push_back(nav);
+        if (navEntries) {
+            frame.navPane = {0, 0, 200, std::max(client.height, 1.0f)};
+            for (int i = 0; i < navEntries; i++) {
+                UiItem entry;
+                entry.id = kProbeNav + uint32_t(i);
+                entry.kind = UiItemKind::Nav;
+                entry.rect = {8, 6 + 41.0f * float(i), 192, 44 + 41.0f * float(i)};
+                entry.text = L"Entry " + std::to_wstring(i);
+                entry.runs.push_back({std::to_wstring(i) + L"%"});
+                entry.selected = i == navSelected;
+                entry.action = {UiActionKind::Navigate, i};
+                frame.nav.push_back(std::move(entry));
+            }
+            frame.navHeight = 6 + 41.0f * float(navEntries) - 3 + 6;
+            const std::vector<UiOption> segments = {{L"One", 0}, {L"Two", 1}, {L"Three", 2}, {L"Four", 3}};
+            const std::vector<UiOption> off = {{L"A", 0}, {L"B", 1}};
+            float width = UiSegmentedSize(*host.graphics, segments).width;
+            UiAddSegmented(frame.main, kProbeSegments, {210, 4, 210 + width, 36}, segments, true,
+                           {UiActionKind::Command, segment, {}, 15});
+            UiAddSegmented(frame.main, kProbeSegmentsOff, {220 + width, 4, 220 + width + 70, 36}, off, false,
+                           {UiActionKind::Command, 0, {}, 16});
+        } else {
+            UiItem nav;
+            nav.id = 1;
+            nav.kind = UiItemKind::Nav;
+            nav.rect = {8, 6, 192, 44};
+            nav.text = L"Probe";
+            nav.icon = L"\uE946";
+            nav.selected = true;
+            nav.action = {UiActionKind::Navigate, 0};
+            frame.main.push_back(nav);
+        }
         frame.viewport = {200, 40, std::max(client.width, 200.0f), std::max(client.height, 40.0f)};
         UiAddDropdown(frame.content, kProbeDropdown, {20, 0, 280, 32},
                       {{L"First", 0}, {L"Second", 1}, {L"Third", 2}}, true,
@@ -195,7 +251,8 @@ struct ProbeClient final : UiHostClient {
     void Invoke(UiHost& host, UiAction action) override {
         actions++;
         switch (action.kind) {
-            case UiActionKind::Command: choice = action.value; break;
+            case UiActionKind::Navigate: navSelected = action.value; break;
+            case UiActionKind::Command: (action.target == 15 ? segment : choice) = action.value; break;
             case UiActionKind::TextChange: (action.target == 13 ? freeText : boxText) = action.text; break;
             case UiActionKind::TextRevert: (action.target == 13 ? freeText : boxText) = action.target == 13 ? L"" : L"10"; break;
             case UiActionKind::Slide:
@@ -245,6 +302,7 @@ struct ProbeClient final : UiHostClient {
             return (GetUpdateRect(host.main, nullptr, FALSE) ? kMainUpdate : 0) |
                    (GetUpdateRect(host.viewport, nullptr, FALSE) ? kViewportUpdate : 0);
         };
+        auto hot = [&] { return int(host.pointer.hot.id) * 16 + host.pointer.hot.link + 1; };
         switch (command) {
             case kOpenPopup:
                 UiHostOpenPopup(host, kProbeDropdown);
@@ -422,11 +480,93 @@ struct ProbeClient final : UiHostClient {
             case kStopAutoScroll:
                 KillTimer(host.viewport, kUiAutoScrollTimer);
                 return 0;
+            case kHistoryMode:
+                navEntries = argument;
+                UiHostRequestRebuild(host, true);
+                return g_counters[kBuilds];
+            case kNavScroll:
+                return int(std::lround(host.navScroll));
+            case kNavRange: {
+                const D2D1_RECT_F& pane = host.frame.navPane;
+                return int(std::lround(std::max(host.frame.navHeight - (pane.bottom - pane.top), 0.0f)));
+            }
+            case kNavVisible: {
+                const UiItem* entry = UiFindItem(host.frame, kProbeNav + uint32_t(argument));
+                const D2D1_RECT_F& pane = host.frame.navPane;
+                return entry && entry->rect.top - host.navScroll >= pane.top &&
+                       entry->rect.bottom - host.navScroll <= pane.bottom;
+            }
+            case kWheel: {
+                // Screen pixels at the middle of the pane or of the viewport.
+                RECT client{};
+                HWND over = argument / 10 ? host.viewport : host.main;
+                GetClientRect(over, &client);
+                POINT at{argument / 10 ? client.right / 2 : LONG(std::lround(100 * UiHostScale(host))),
+                         client.bottom / 2};
+                ClientToScreen(over, &at);
+                SendMessageW(host.main, WM_MOUSEWHEEL, MAKEWPARAM(0, argument % 10 ? WHEEL_DELTA : -WHEEL_DELTA),
+                             MAKELPARAM(at.x, at.y));
+                return 1;
+            }
+            case kNavMouse: {
+                float scale = UiHostScale(host);
+                int kind = argument / 10000;
+                POINT at{LONG(std::lround(100 * scale)), LONG(std::lround(float(argument % 10000) * scale))};
+                UINT message = kind == 0 ? WM_MOUSEMOVE : kind == 1 ? WM_LBUTTONDOWN : WM_LBUTTONUP;
+                SendMessageW(host.main, message, kind == 1 ? MK_LBUTTON : 0, MAKELPARAM(at.x, at.y));
+                return hot();
+            }
+            case kNavBar: {
+                float scale = UiHostScale(host);
+                int kind = argument / 1000;
+                UiScrollbar bar = UiNavScrollbar(host.frame, host.navScroll, true);
+                if (kind < 2) {
+                    barPress = {LONG(std::lround((bar.thumb.left + bar.thumb.right) / 2 * scale)),
+                                LONG(std::lround((bar.thumb.top + bar.thumb.bottom) / 2 * scale))};
+                }
+                POINT at{barPress.x, barPress.y + (kind == 2 ? argument % 1000 : 0)};
+                if (kind == 1) SendMessageW(host.main, WM_MOUSEMOVE, 0, MAKELPARAM(at.x, at.y));
+                UINT message = kind == 1 ? WM_LBUTTONDOWN : kind == 3 ? WM_LBUTTONUP : WM_MOUSEMOVE;
+                SendMessageW(host.main, message, kind == 1 || kind == 2 ? MK_LBUTTON : 0, MAKELPARAM(at.x, at.y));
+                return int(host.navBarHot) | int(host.navBarDragging) << 1 | int(host.pointer.hot.id != 0) << 2;
+            }
+            case kSelectNav:
+                navSelected = argument;
+                UiHostRequestRebuild(host, false);
+                return 0;
+            case kHot:
+                return hot();
+            case kSegmentMouse: {
+                const UiItem* item = UiFindItem(host.frame, argument / 100 ? kProbeSegmentsOff : kProbeSegments);
+                if (!item) return -1;
+                std::vector<D2D1_RECT_F> rects = UiSegmentRects(*host.graphics, *item);
+                size_t index = size_t(argument / 10 % 10);
+                if (index >= rects.size()) return -1;
+                float scale = UiHostScale(host);
+                POINT at{LONG(std::lround((rects[index].left + rects[index].right) / 2 * scale)),
+                         LONG(std::lround((rects[index].top + rects[index].bottom) / 2 * scale))};
+                int kind = argument % 10;
+                UINT message = kind == 0 ? WM_MOUSEMOVE : kind == 1 ? WM_LBUTTONDOWN : WM_LBUTTONUP;
+                SendMessageW(host.main, message, kind == 1 ? MK_LBUTTON : 0, MAKELPARAM(at.x, at.y));
+                return hot();
+            }
+            case kClientKeys:
+                return argument == 0 ? keys : argument == 1 ? int(lastKey) :
+                       argument == 2 ? activations : int(popupAtActivation);
         }
         return -1;
     }
     bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) override {
+        if (message == ProbeActivateMessage()) {
+            activations++;
+            popupAtActivation = host.popup.window != nullptr;
+            return true;
+        }
         switch (message) {
+            case WM_KEYDOWN:
+                keys++;
+                lastKey = wParam;
+                return false;
             case kProbePing:
                 result = kProbeMagic;
                 return true;
@@ -508,6 +648,7 @@ static DWORD WINAPI ProbeThread(LPVOID) {
         config.title = L"Native-host probe";
         config.size = {640, 480};
         config.activate = false;
+        config.activateMessage = ProbeActivateMessage();
         config.position = POINT{-12000, -12000};
         // Window icons: a palette-inked track, a colored arc and a dot.
         UiItem icon;

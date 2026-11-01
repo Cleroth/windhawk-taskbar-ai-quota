@@ -1,14 +1,5 @@
 // Toolkit and settings shell: synthetic item lists with hand-derived expectations.
 
-static UiGraphics& TestGraphics() {
-    static UiGraphics graphics = [] {
-        UiGraphics created;
-        UiCreateGraphics(created);
-        return created;
-    }();
-    return graphics;
-}
-
 static UiItem TestItem(uint32_t id, UiItemKind kind, D2D1_RECT_F rect, UiAction action = {}) {
     UiItem item;
     item.id = id;

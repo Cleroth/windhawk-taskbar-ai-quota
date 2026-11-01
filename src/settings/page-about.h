@@ -7,7 +7,8 @@ static constexpr PCWSTR kSettingsAppIconTracks[3] = {L"M3,2H13", L"M3,8H13", L"M
 static constexpr PCWSTR kSettingsAppIconFills[3] = {L"M3,2H4", L"M3,8H8", L"M3,14H12"};
 static constexpr uint32_t kSettingsAppIconColors[3] = {0x43A047, 0xFDD835, 0xE53935};
 
-// The app icon over `rect`: the About page's, and the settings window's (ui/window-icon.h).
+// The app icon over `rect`: the About page's, and the settings and usage history windows'
+// (ui/window-icon.h).
 static UiItem SettingsAppIcon(D2D1_RECT_F rect) {
     UiItem icon;
     icon.kind = UiItemKind::Shape;

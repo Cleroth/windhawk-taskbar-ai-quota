@@ -2,8 +2,9 @@
 // the extracted toolkit host, opens its window on the DLL's worker thread, closes it from this
 // thread, joins and unloads, repeatedly; then failed creation, a conflicting class, render-target
 // loss, window icons across DPI changes and an unload close during a message box. Windows are
-// off-screen and never activated; the message box shows briefly. The dropdown popup and text box
-// cases run on a hidden desktop this probe creates and never switches to, so their focus, capture
+// off-screen and never activated; the message box shows briefly. The dropdown popup, text box,
+// segmented control, key forwarding, activation request and navigation pane cases run on a
+// hidden desktop this probe creates and never switches to, so their focus, capture, foreground
 // and message box stay off the user's screen.
 // Usage: host-probe.exe <ui-host.dll>
 #include <windows.h>
@@ -34,13 +35,14 @@ enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, 
                     kFocusedItem, kDropFocus, kSliderMouse, kPreviewMouse, kPreviewWheel, kDropCapture,
                     kHandleMouse, kSysKey, kTextBoxLimit, kTextBoxChar, kTextBoxKey, kItemTop, kTextBoxTop,
                     kPaintNow, kSliderSweep, kSliderValue, kLiveMain, kPaintMain, kDeclineClose, kViewHeight,
-                    kScrollTop, kStopAutoScroll };
+                    kScrollTop, kStopAutoScroll, kHistoryMode, kNavScroll, kNavRange, kNavVisible, kWheel,
+                    kNavMouse, kNavBar, kSelectNav, kHot, kSegmentMouse, kClientKeys };
 enum ProbeUpdate { kMainUpdate = 1, kViewportUpdate = 2 };
 enum ProbeState { kWindow = 1, kVisible = 2, kCaptured = 4, kNoActivate = 8, kOwned = 16,
                   kNotActive = 32, kOpen = 64, kAnyCapture = 128 };
 enum ProbeEdit { kEditExists = 1, kEditFocused = 2, kEditEnabled = 4 };
 static constexpr int kDropdown = 500, kNumberBox = 600, kSlider = 700, kCard = 900, kHandle = 901,
-                     kTextBox = 910, kMenu = 920;
+                     kTextBox = 910, kMenu = 920, kSegments = 1000, kSegmentsOff = 1001, kNav = 2000;
 static constexpr int kOpenState = kWindow | kVisible | kCaptured | kNoActivate | kOwned | kNotActive |
                                   kOpen | kAnyCapture;
 // UiActionKind values the probe client records.
@@ -701,6 +703,150 @@ int wmain(int argc, wchar_t** argv) {
             CHECK(probe.count(kCancels) >= 1 && probe.count(kColorResult) == 1);
             CHECK(!IsWindow(dialog));
         }
+    });
+
+    Run("segmented control: one tab stop; its keys select through the host and stay with it; a click "
+        "selects the segment under the pointer and focuses the control; the selected segment, a press "
+        "released elsewhere and a disabled control do nothing", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        probe.Call(kHistoryMode, 24);
+        CHECK(probe.Call(kFocus, kSegments) == 1);
+        int keys = probe.Call(kClientKeys, 0);
+        auto key = [&](int vk) { probe.Call(kSendMain, MAKELONG(WM_KEYDOWN, vk)); };
+        key(VK_RIGHT);
+        CHECK(probe.Call(kAction, 1) == kCommand && probe.Call(kAction, 4) == 15 && probe.Call(kAction, 2) == 1);
+        key(VK_END);
+        CHECK(probe.Call(kAction, 2) == 3);
+        int actions = probe.Call(kAction, 0);
+        key(VK_RIGHT);  // At the end: nothing to select
+        key(VK_END);
+        CHECK(probe.Call(kAction, 0) == actions);
+        key(VK_HOME);
+        CHECK(probe.Call(kAction, 2) == 0 && probe.Call(kAction, 0) == actions + 1);
+        key(VK_LEFT);
+        CHECK(probe.Call(kAction, 0) == actions + 1);
+        CHECK(probe.Call(kClientKeys, 0) == keys && probe.Call(kFocusedItem) == kSegments);
+        CHECK(probe.Call(kSegmentMouse, 20) == kSegments * 16 + 3);  // Over the third segment
+        probe.Call(kSegmentMouse, 21);
+        CHECK(probe.Call(kFocusedItem) == kSegments);
+        probe.Call(kSegmentMouse, 22);
+        CHECK(probe.Call(kAction, 2) == 2 && probe.Call(kAction, 4) == 15);
+        actions = probe.Call(kAction, 0);
+        probe.Call(kSegmentMouse, 21);  // The selected segment
+        probe.Call(kSegmentMouse, 22);
+        probe.Call(kSegmentMouse, 11);  // Pressed on the second, released on the fourth
+        probe.Call(kSegmentMouse, 32);
+        CHECK(probe.Call(kAction, 0) == actions);
+        CHECK(probe.Call(kSegmentMouse, 100) == 0);  // The disabled control: nothing hot
+        probe.Call(kSegmentMouse, 101);
+        probe.Call(kSegmentMouse, 102);
+        CHECK(probe.Call(kAction, 0) == actions && probe.Call(kFocusedItem) == kSegments);
+        key(VK_TAB);  // One stop: Tab leaves it for the content's first
+        CHECK(probe.Call(kFocusedItem) == kDropdown);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("keys neither surface uses reach the client from the main window and the viewport; keys the "
+        "popup, the focus order or a control uses don't", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        auto keys = [&] { return probe.Call(kClientKeys, 0); };
+        int count = keys();
+        probe.Call(kSendMain, MAKELONG(WM_KEYDOWN, VK_F5));
+        CHECK(keys() == count + 1 && probe.Call(kClientKeys, 1) == VK_F5);
+        CHECK(probe.Call(kFocus, kDropdown) == 1);
+        probe.Call(kFieldKey, VK_F5);  // The viewport
+        CHECK(keys() == count + 2 && probe.Call(kClientKeys, 1) == VK_F5);
+        probe.Call(kFieldKey, 'R');
+        CHECK(keys() == count + 3 && probe.Call(kClientKeys, 1) == 'R');
+        probe.Call(kFieldKey, VK_ESCAPE);
+        CHECK(keys() == count + 4 && probe.Call(kClientKeys, 1) == VK_ESCAPE);
+        CHECK(probe.Call(kOpenPopup) == 1);
+        probe.Call(kFieldKey, VK_DOWN);
+        probe.Call(kFieldKey, VK_ESCAPE);  // Closes the popup only
+        CHECK(probe.Call(kPopupState) == 0 && keys() == count + 4);
+        probe.Call(kFieldKey, VK_TAB);
+        probe.Call(kFieldKey, VK_NEXT);
+        CHECK(probe.Call(kScrollTop) > 0 && keys() == count + 4);
+        CHECK(probe.Call(kFocus, kSlider) == 1);
+        probe.Call(kFieldKey, VK_RIGHT);
+        CHECK(probe.Call(kAction, 1) == kStep && keys() == count + 4);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("activation request: the popup closes and the window comes back, then the client sees it; "
+        "theme changes rebuild", [&] {
+        CHECK(desktop);
+        Probe probe;
+        HWND hwnd = probe.Open(desktop);
+        UINT activate = RegisterWindowMessageW(L"AiQuotaProbeUiActivate");
+        CHECK(activate);
+        CHECK(probe.Call(kFocus, kDropdown) == 1);
+        CHECK(probe.Call(kOpenPopup) == 1);
+        PostMessageW(hwnd, activate, 0, 0);
+        for (DWORD waited = 0; probe.Call(kClientKeys, 2) < 1 && waited < kTimeout; waited += 10) Sleep(10);
+        CHECK(probe.Call(kClientKeys, 2) == 1 && probe.Call(kClientKeys, 3) == 0);
+        CHECK(probe.Call(kPopupState) == 0);
+        for (int message : {WM_THEMECHANGED, WM_SYSCOLORCHANGE, WM_DWMCOLORIZATIONCOLORCHANGED}) {
+            int builds = probe.count(kBuilds);
+            probe.Call(kSendMain, message);
+            CHECK(probe.count(kBuilds) == builds + 1);
+        }
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("navigation pane: the wheel scrolls it over it and the content over the page; the pointer hits "
+        "entries at its scroll; keyboard focus and a new selection scroll entries into view; its "
+        "scrollbar widens under the pointer and its thumb drags it", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        probe.Call(kHistoryMode, 24);
+        int range = probe.Call(kNavRange);
+        CHECK(range > 100);
+        CHECK(probe.Call(kNavScroll) == 0 && probe.Call(kScrollTop) == 0);
+        probe.Call(kWheel, 0);
+        int nav = probe.Call(kNavScroll);
+        CHECK(nav > 0 && probe.Call(kScrollTop) == 0);
+        probe.Call(kWheel, 10);
+        CHECK(probe.Call(kScrollTop) > 0 && probe.Call(kNavScroll) == nav);
+        probe.Call(kWheel, 11);
+        CHECK(probe.Call(kScrollTop) == 0);
+        // The middle of the first entry wholly below y 60 at the pane's scroll.
+        int entry = (60 + nav - 6) / 41 + 1, y = 6 + 41 * entry + 19 - nav;
+        CHECK(probe.Call(kNavMouse, y) == (kNav + entry) * 16);
+        probe.Call(kNavMouse, 10000 + y);
+        probe.Call(kNavMouse, 20000 + y);
+        CHECK(probe.Call(kAction, 1) == kNavigate && probe.Call(kAction, 2) == entry);
+        CHECK(probe.Call(kFocusedItem) == kNav + entry && probe.Call(kNavScroll) == nav);
+        probe.Call(kSendMain, MAKELONG(WM_KEYDOWN, VK_END));
+        CHECK(probe.Call(kFocusedItem) == kNav + 23 && probe.Call(kNavVisible, 23));
+        CHECK(std::abs(probe.Call(kNavScroll) - range) <= 1);
+        int end = probe.Call(kNavScroll);
+        probe.Call(kSendMain, MAKELONG(WM_KEYDOWN, VK_UP));
+        CHECK(probe.Call(kFocusedItem) == kNav + 22 && probe.Call(kNavScroll) == end);
+        probe.Call(kSendMain, MAKELONG(WM_KEYDOWN, VK_HOME));
+        CHECK(probe.Call(kFocusedItem) == kNav && probe.Call(kNavScroll) == 0);
+        // A selection the client makes scrolls its entry into view once.
+        probe.Call(kSelectNav, 20);
+        CHECK(probe.Call(kNavVisible, 20) && probe.Call(kNavScroll) > 0);
+        for (int i = 0; i < 40 && probe.Call(kNavScroll) > 0; i++) probe.Call(kWheel, 1);
+        probe.Call(kRebuild);
+        CHECK(probe.Call(kNavScroll) == 0);
+        CHECK(probe.Call(kNavBar, 0) == 1);  // Hot, no element under it
+        CHECK(probe.Call(kNavBar, 1000) == 3);
+        probe.Call(kNavBar, 2000 + 60);
+        int dragged = probe.Call(kNavScroll);
+        CHECK(dragged > 0);
+        CHECK(probe.Call(kNavBar, 3000) == 1 && probe.Call(kNavScroll) == dragged);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
     });
 
     Run("unload during a message box opened over the popup", [&] {

@@ -285,7 +285,9 @@ static void HistoryUpdateHover(HistoryWindowState& state, POINT cursor) {
 static void HistorySetStatus(HistoryWindowState& state, const std::wstring& message) {
     // Keep operational failures visible; explanatory text lives behind Info.
     std::wstring text = message.empty() ? state.snapshotStatus : message;
-    if (!state.snapshot.status.empty()) text += L"\r\n" + state.snapshot.status;
+    std::wstring journal = state.snapshot.status;
+    if (state.snapshot.capped) journal += L" Storage cap reached; oldest samples were pruned.";
+    if (!journal.empty()) text += L"\r\n" + journal;
     SetWindowTextW(state.status, text.c_str());
 }
 

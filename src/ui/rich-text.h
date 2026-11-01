@@ -24,11 +24,14 @@ struct UiAction {
 
 enum class UiRunStyle : uint8_t { Normal, Strong, Link };
 
+// color: a concrete color the client derived from the theme (a usage color), over the ink;
+// high contrast ignores it.
 struct UiRun {
     std::wstring text;
     UiRunStyle style = UiRunStyle::Normal;
     UiInk ink = UiInk::Inherit;
     UiAction action{};  // Link runs
+    std::optional<D2D1_COLOR_F> color{};
 };
 
 static std::wstring UiRunsText(const std::vector<UiRun>& runs) {
@@ -56,9 +59,9 @@ static const UiRun* UiLinkRun(const std::vector<UiRun>& runs, int link) {
 }
 
 static std::wstring UiRichKey(const std::vector<UiRun>& runs, UiFont font, float width,
-                              DWRITE_TEXT_ALIGNMENT align) {
+                              DWRITE_TEXT_ALIGNMENT align, bool trim) {
     std::wstring key = std::to_wstring(int(font)) + L'|' + std::to_wstring(width) + L'|' +
-                       std::to_wstring(int(align));
+                       std::to_wstring(int(align)) + (trim ? L"t" : L"");
     for (const UiRun& run : runs) {
         key += L'|';
         key += wchar_t(L'0' + int(run.style));
@@ -72,7 +75,7 @@ static std::wstring UiRichKey(const std::vector<UiRun>& runs, UiFont font, float
 static winrt::com_ptr<IDWriteTextLayout> UiCreateRichLayout(UiGraphics& g,
                                                             const std::vector<UiRun>& runs,
                                                             UiFont font, float width,
-                                                            DWRITE_TEXT_ALIGNMENT align) {
+                                                            DWRITE_TEXT_ALIGNMENT align, bool trim) {
     std::wstring text = UiRunsText(runs);
     winrt::com_ptr<IDWriteTextLayout> layout;
     winrt::check_hresult(g.dwrite->CreateTextLayout(text.c_str(), UINT32(text.size()),
@@ -80,6 +83,7 @@ static winrt::com_ptr<IDWriteTextLayout> UiCreateRichLayout(UiGraphics& g,
                                                     std::max(width, 0.0f), 100000.0f,
                                                     layout.put()));
     layout->SetTextAlignment(align);
+    if (trim) UiTrimLayout(g, layout.get(), UiTextStyleFor(font));
     UINT32 at = 0;
     for (const UiRun& run : runs) {
         if (run.style == UiRunStyle::Strong) {
@@ -90,12 +94,13 @@ static winrt::com_ptr<IDWriteTextLayout> UiCreateRichLayout(UiGraphics& g,
     return layout;
 }
 
-// The shared, effect-free layout: measuring and link hit testing.
+// The shared, effect-free layout: measuring and link hit testing. trim: one line, ellipsized.
 static IDWriteTextLayout* UiRichLayout(UiGraphics& g, const std::vector<UiRun>& runs, UiFont font,
                                        float width,
-                                       DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING) {
-    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align)];
-    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align);
+                                       DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
+                                       bool trim = false) {
+    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align, trim)];
+    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     return layout.get();
 }
 
@@ -142,14 +147,15 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
                                         UiGraphics& g, const std::vector<UiRun>& runs, UiFont font,
                                         float width, DWRITE_TEXT_ALIGNMENT align,
                                         const UiPalette& palette, UiInk baseInk, int hotLink,
-                                        int pressedLink) {
-    auto& layout = cache.layouts[UiRichKey(runs, font, width, align)];
-    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align);
+                                        int pressedLink, bool trim = false) {
+    auto& layout = cache.layouts[UiRichKey(runs, font, width, align, trim)];
+    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     UINT32 at = 0;
     int link = 0;
     for (const UiRun& run : runs) {
         DWRITE_TEXT_RANGE range{at, UINT32(run.text.size())};
-        D2D1_COLOR_F color = UiInkColor(palette, run.ink == UiInk::Inherit ? baseInk : run.ink);
+        D2D1_COLOR_F color = run.color && palette.kind != UiThemeKind::HighContrast ?
+                                 *run.color : UiInkColor(palette, run.ink == UiInk::Inherit ? baseInk : run.ink);
         bool underline = false;
         if (run.style == UiRunStyle::Link) {
             color = link == pressedLink ? palette.linkPressed :

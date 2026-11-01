@@ -58,8 +58,10 @@ Build files go to `.out/icon/`. Nothing references the two files.
   regressions and native-control probes (`--capture` saves rendered images). The suite uses
   bundled clang, not `msbuild`/`vstest.console`.
 - `python tests/settings/run.py` tests the extracted meter model, UI toolkit, settings edit
-  controller (against an in-memory store with failure injection) and settings builders the same
-  way, renders the settings window and its taskbar preview offscreen, probes the toolkit's native
+  controller (against an in-memory store with failure injection), settings builders and the usage
+  history window's view, controller (against in-memory ops) and frame builders the same way,
+  renders both windows (and the settings
+  taskbar preview) offscreen, probes the toolkit's native
   window host (popup, text boxes, sliders and the color dialog included) and the dropdown popup's
   capture/activation (`--popup-interactive`: by hand); guide:
   [tests/settings/AGENTS.md](tests/settings/AGENTS.md).

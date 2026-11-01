@@ -1,20 +1,24 @@
 # Custom-drawn window toolkit
 
-Direct2D 1.0 + DirectWrite windows for the settings thread (and the history thread later). Never
-XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
+Direct2D 1.0 + DirectWrite windows for the settings thread and the history thread's custom-drawn
+window. Never XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 
 ## Pure vs native
 
-- Pure (`tokens.h`, `draw.h`, `svg-path.h`, `rich-text.h`, `items.h`, `paint.h`, `input.h`, and
-  the settings page/shell builders): explicit inputs only; no HWND, registry, WinRT, globals or
-  `Wh_Log`. `tests/settings` extracts and renders them; fix impurities here, never in tests.
+- Pure (`tokens.h`, `draw.h`, `svg-path.h`, `rich-text.h`, `items.h`, `paint.h`, `input.h`, the
+  settings page/shell builders and the history window's `history/view.h`, `controller.h`,
+  `content.h`, `shell.h`): explicit inputs only; no HWND, registry, WinRT, globals or `Wh_Log`.
+  `tests/settings` extracts and renders them; fix impurities here, never in tests.
 - Native (`system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
   `color-dialog.h`): window, registry and WinRT calls; covered by the `tests/settings`
   native-host probe DLL, never by the render harness. `popup.h` and `text-box.h` hold component
   state and mechanics; their window procedures live in `host.h`, which routes everything to them.
 - Client-drawn items (`Preview`, a `Gallery` card's thumbnail) paint through
   `UiHostClient::PaintCustom` with the target in item coordinates; the settings window's painter is
-  pure (`settings/preview.h`) and the render harness calls it directly.
+  pure (`settings/preview.h`) and the render harness calls it directly. Navigation pane items are
+  never client-drawn.
+- Colors a client derives from the theme (`UiRun::color`, a usage color) are built content: a
+  theme change rebuilds the frame. High contrast ignores them.
 
 ## Lifetime and teardown
 
@@ -32,7 +36,8 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - Window icons (`UiHostConfig::icon`): drawn by the host at the window's DPI and in its palette,
   redrawn on DPI and theme changes (each replaced icon destroyed after its successor is set),
   destroyed in `UiHostRun` after the window, never while it can still show them.
-- Window classes are host-specific (`AiQuotaSettingsUi*_<mod id>`); another host uses its own.
+- Window classes are host-specific (`AiQuotaSettingsUi*_<mod id>`, `AiQuotaHistoryUi*_<mod id>`);
+  another host uses its own.
 
 ## Reentrancy and close paths
 
@@ -49,8 +54,23 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 ## Input
 
 - Focus owner is the focused HWND (main, viewport or a number box's EDIT); no `IsDialogMessage`.
-  Tab follows item order across surfaces; the focus ring shows only after keyboard input.
+  Tab follows item order across surfaces (navigation pane, main, content); the focus ring shows
+  only after keyboard input.
 - Interactive controls keep fixed item ids across rebuilds: focus and EDITs follow ids.
+- `WM_KEYDOWN` that neither surface uses (no focus move, scroll, activation, popup, drag or
+  control key) goes to `UiHostClient::Message` before default handling: window shortcuts (F5,
+  Esc) live in the client. The activation request reaches the client after the host closed the
+  popup and brought the window (or its modal) back.
+- Navigation pane (`UiFrame::nav`, `navPane`, `navHeight`; surface `Nav`): main-surface items in
+  main coordinates at offset 0, clipped to the pane, with its own pixel-aligned scroll and thin
+  scrollbar (widened under the pointer, thumb drag, page on the track). Inside the pane the
+  pointer hits only its items, at its scroll; the vertical wheel over it scrolls it, elsewhere in
+  the page column the content. Keyboard focus scrolls an entry into view (6 DIP margin), and so
+  does a rebuild whose selected entry changed; its scroll closes the popup and re-targets the
+  pointer, like the content's.
+- Segmented control: one tab stop; the pointer targets each segment (`UiFocusRef::link`), a press
+  focuses the control as a whole; Left/Right (stopping at the ends) and Home/End select; the
+  selected segment's activation reports nothing.
 - Dropdown popup: owned, `WS_EX_NOACTIVATE`, shown without activation, holding capture; keyboard
   focus stays on the field, whose keys drive it. `UiPopupClose` is the only close routine
   (closed first, capture released only if still held, never restores focus or foreground).
@@ -66,7 +86,9 @@ XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
   own. Never commit inside the focus-loss notification. A text box's limit is its item's maximum,
   its placeholder the native cue banner.
 - A Button with options is a menu button: activating it opens the dropdown popup (same rules),
-  right-aligned under it.
+  right-aligned under it. Options with glyphs make one-line menu rows; a separator belongs to
+  the row under it (`UiOption::separator`), never a row of its own, so the popup's keys and
+  pointer only ever reach choosable rows.
 - Drag handles (not tab stops): a press focuses the handle's owner; past 4 DIP the drag reports
   Drag (the pointer's content y), then Drop on release, or DragCancel on Esc, capture loss or
   `WM_CANCELMODE`; near the viewport's top or bottom it scrolls a step every 30 ms: a viewport

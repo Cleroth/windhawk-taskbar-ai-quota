@@ -98,6 +98,10 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenHistoryWindow();
                 }));
+            menu.Items().Append(menuItem(L"Usage history (new)", L"\uE81C",
+                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                    OpenHistoryWindow(0, HistoryWindowKind::Custom);
+                }));
             menu.Items().Append(menuItem(L"Settings", L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
@@ -485,6 +489,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     [historyId](winrt::Windows::Foundation::IInspectable const&,
                                 RoutedEventArgs const&) {
                         OpenHistoryWindow(historyId);
+                    }));
+                menu.Items().Append(menuItem(L"Usage history (new)", L"\uE81C",
+                    [historyId](winrt::Windows::Foundation::IInspectable const&,
+                                RoutedEventArgs const&) {
+                        OpenHistoryWindow(historyId, HistoryWindowKind::Custom);
                     }));
                 // Sign in or out with the mod's own OAuth. The Opening handler picks the label,
                 // which decides the action.

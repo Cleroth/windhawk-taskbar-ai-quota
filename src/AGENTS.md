@@ -38,8 +38,13 @@ The mod is injected into `explorer.exe`. Execution domains:
   notifications reload its baseline and never commit drafts. Account edits and actions run the
   UI-free account commands (`settings/account-commands.h`: the rename's sign-in move, removal,
   reorder, visibility).
-- **History thread** (`HistoryWindowThreadProc`): owns the native history window, graph caches and
-  export/confirmation dialogs. No XAML. Cancel tracked modal dialogs and join it before unloading.
+- **History thread** (one at a time, its kind fixed when `OpenHistoryWindow` starts it; an open
+  window of either kind takes every open request): `HistoryWindowThreadProc` owns the classic
+  native history window, graph caches and export/confirmation dialogs; `HistoryUiThreadProc` runs
+  the custom-drawn window (`history/ui-window.h`, a client of the `ui/` toolkit host), whose
+  controller (`history/controller.h`) owns all window state and reaches the journal, settings and
+  live readings only through the stateless ops in `history/ops.h`. No XAML. Cancel tracked modal
+  dialogs and join it before unloading.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
   `g_urlLaunchMutex`): `ShellExecuteExW` in an STA with error dialogs suppressed. `Wh_ModUninit`
   joins them after the login thread, which can start them; a stuck launch delays unload.

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <charconv>
 #include <climits>
 #include <cmath>
 #include <cstdint>
@@ -23,6 +24,7 @@
 #include <iterator>
 #include <limits>
 #include <map>
+#include <memory>
 #include <numbers>
 #include <optional>
 #include <stdexcept>

@@ -2,24 +2,34 @@
 // hit testing, focus order and shared layout builders. Pure. Builders read no globals; paint and
 // input work only from the list.
 
-// Card: a raised panel; a subtle one (button = Subtle) only shows the pointer over it, and a
-// selected one is lifted (an accent border). Button: with options, a menu button whose
-// activation opens them in the popup. Toggle: selected = on. Dropdown: text = the chosen
+// Nav: a navigation entry: a glyph (`icon`) or a shape (`parts`, a 24 DIP view box drawn at 16
+// DIP), its label `text` in `ink` (ellipsized) and a trailing value (`runs`: semibold caption in
+// its first run's color or ink). Card: a raised panel; a subtle one (button = Subtle) only shows
+// the pointer over it, and a selected one is lifted (an accent border); a Caution or Danger ink
+// tints it as an info bar of that severity. Text: rich text wrapped to the rectangle's width,
+// or one line ellipsized at it (`trim`). Button: an optional glyph (`icon`) before its label,
+// centered alone without one; with options, a menu button whose activation opens them in the
+// popup. Toggle: selected = on; its label ("On"/"Off", or `text`) leads the
+// switch, or follows a leading switch when align is trailing. Dropdown: text = the chosen
 // option's label, action.value = its value; activating it opens the popup (ui/popup.h).
 // NumberBox: the drawn frame of a native text box (ui/text-box.h) showing `text`, centered
 // without spin buttons when align is center; SpinButton: its up/down buttons (not tab stops).
 // TextBox: the frame of a native text box for free text, `runs` its placeholder while empty,
 // `maximum` its character limit. Option: one row of the popup; with runs, a two-line menu row
-// (title `text`, detail `runs`, an icon from `parts`). Slider: action.value within [minimum,
+// (title `text`, detail `runs`, an icon from `parts`); with a glyph (`icon`), a one-line menu row,
+// a separator line above it when `separator` is set. Slider: action.value within [minimum,
 // maximum]. Swatch: a color choice, action.value = 0xBBGGRR, selected = current; without an
 // action kind, a color dot. Gallery: a choice card named `text` with a client-drawn thumbnail.
 // Preview: a client-drawn strip that pans sideways (not a tab stop). Chip: a pill named `text`,
 // selected = on; without an action it only shows. Handle: a drag handle (glyph `text`, not a
 // tab stop) for its `owner`, which holds keyboard focus for it. Rule: a 1 px separator along the
-// rectangle's top edge.
+// rectangle's top edge. Segmented: one tab stop choosing among `options` (action.value = the
+// selected one's value); the pointer targets each segment (UiFocusRef::link = its index).
+// Pill: a status chip tinted with its `ink`, a dot (hollow unless selected) before `text`; never
+// interactive.
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
-    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule
+    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -33,12 +43,15 @@ struct UiShapePart {
     float stroke = 0;  // View-box units; 0 fills.
 };
 
-// A dropdown or menu choice; menus give each a detail line and an icon.
+// A dropdown or menu choice. Menus give each a detail line and an icon (two-line rows), or a glyph
+// (one-line rows), optionally after a separator.
 struct UiOption {
     std::wstring text;
     int value = 0;
     std::wstring detail;
     std::vector<UiShapePart> parts;  // 24 DIP view box
+    std::wstring icon;               // Glyph of a one-line menu row
+    bool separator = false;          // A separator line above it (one-line menus)
 };
 
 struct UiItem {
@@ -48,14 +61,14 @@ struct UiItem {
     UiFont font = UiFont::Body;      // Text; Button and Chip labels
     UiInk ink = UiInk::Primary;
     DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
-    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option, Chip);
-                                     // Glyph, SpinButton and Handle character; text box text
-    std::wstring icon;               // Nav and Button glyph
+    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option, Chip,
+                                     // Pill); Glyph, SpinButton and Handle character; text box text
+    std::wstring icon;               // Nav, Button and one-line menu row glyph
     float iconSize = 16;             // Glyph, Nav, Button and Handle glyph size
     std::vector<UiRun> runs;         // Text, wrapped to the rectangle's width; TextBox
-                                     // placeholder; Option detail
-    std::vector<UiShapePart> parts;  // Shape; Option icon
-    std::vector<UiOption> options;   // Dropdown; menu Button
+                                     // placeholder; Option detail; Nav value
+    std::vector<UiShapePart> parts;  // Shape; Option and Nav icon
+    std::vector<UiOption> options;   // Dropdown; menu Button; Segmented
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;  // Button; Card (Subtle)
@@ -65,6 +78,8 @@ struct UiItem {
                                      // TextBox: maximum = character limit
     bool selected = false;
     bool enabled = true;
+    bool trim = false;               // Text: one line, ellipsized
+    bool separator = false;          // Option: a menu separator line above it
 };
 
 // A focus or pointer target: an item, or one inline link (link >= 0) of a Text item. id 0 = none.
@@ -74,16 +89,26 @@ struct UiFocusRef {
     bool operator==(const UiFocusRef&) const = default;
 };
 
-enum class UiSurfaceId : uint8_t { Main, Content };
+// Nav: the main surface's scrolling navigation pane (UiFrame::nav); Content: the viewport's.
+enum class UiSurfaceId : uint8_t { Main, Content, Nav };
 
 // One built window state, in DIPs: main-surface items (navigation, pinned header), the
 // viewport's rectangle in the main client, and the scrolling content at scroll offset 0.
+// Optionally a scrolling navigation pane on the main surface: `nav` items in main coordinates at
+// scroll offset 0, clipped to `navPane`, whose content is `navHeight` tall from the pane's top.
 struct UiFrame {
     std::vector<UiItem> main;
     D2D1_RECT_F viewport{};
     std::vector<UiItem> content;
     float contentHeight = 0;
+    std::vector<UiItem> nav;
+    D2D1_RECT_F navPane{};
+    float navHeight = 0;
 };
+
+static const std::vector<UiItem>& UiSurfaceItems(const UiFrame& frame, UiSurfaceId surface) {
+    return surface == UiSurfaceId::Main ? frame.main : surface == UiSurfaceId::Nav ? frame.nav : frame.content;
+}
 
 struct UiFocusStop {
     UiFocusRef ref;
@@ -93,7 +118,7 @@ struct UiFocusStop {
 
 static bool UiInteractiveKind(UiItemKind kind) {
     return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape &&
-           kind != UiItemKind::Rule;
+           kind != UiItemKind::Rule && kind != UiItemKind::Pill;
 }
 
 // Reacts to the pointer and can be activated.
@@ -110,24 +135,22 @@ static bool UiFocusable(const UiItem& item) {
 
 static const UiItem* UiFindItem(const UiFrame& frame, uint32_t id, UiSurfaceId* surface = nullptr) {
     if (!id) return nullptr;
-    for (const UiItem& item : frame.main) {
-        if (item.id != id) continue;
-        if (surface) *surface = UiSurfaceId::Main;
-        return &item;
-    }
-    for (const UiItem& item : frame.content) {
-        if (item.id != id) continue;
-        if (surface) *surface = UiSurfaceId::Content;
-        return &item;
+    for (UiSurfaceId in : {UiSurfaceId::Nav, UiSurfaceId::Main, UiSurfaceId::Content}) {
+        for (const UiItem& item : UiSurfaceItems(frame, in)) {
+            if (item.id != id) continue;
+            if (surface) *surface = in;
+            return &item;
+        }
     }
     return nullptr;
 }
 
-// Item order is focus order: main surface first, then content; inline links in text order.
+// Item order is focus order: the navigation pane, the main surface, then content; inline links
+// in text order.
 static std::vector<UiFocusStop> UiFocusStops(const UiFrame& frame) {
     std::vector<UiFocusStop> stops;
-    for (UiSurfaceId surface : {UiSurfaceId::Main, UiSurfaceId::Content}) {
-        for (const UiItem& item : surface == UiSurfaceId::Main ? frame.main : frame.content) {
+    for (UiSurfaceId surface : {UiSurfaceId::Nav, UiSurfaceId::Main, UiSurfaceId::Content}) {
+        for (const UiItem& item : UiSurfaceItems(frame, surface)) {
             if (item.kind == UiItemKind::Text) {
                 int link = 0;
                 for (const UiRun& run : item.runs) {
@@ -153,10 +176,32 @@ static const UiAction* UiActionOf(const UiFrame& frame, UiFocusRef ref) {
     return run && run->action.kind != UiActionKind::None ? &run->action : nullptr;
 }
 
-// The interactive element under a point: an inline link, else the topmost interactive item.
-// A disabled interactive item blocks the items below it; an enabled one without an action (a
-// plain card, a chip that only shows) doesn't. A slider takes in its thumb, which overhangs the
-// track's ends by its 10 DIP radius.
+// A segmented control's segments (mockup .segctl, .segi): 13 DIP labels with 12 DIP padding,
+// side by side inside its 1 DIP border and 2 DIP padding. Paint, hit testing and focus share it.
+static std::vector<D2D1_RECT_F> UiSegmentRects(UiGraphics& g, const UiItem& item) {
+    std::vector<D2D1_RECT_F> rects;
+    float x = item.rect.left + 3;
+    for (const UiOption& option : item.options) {
+        float width = std::ceil(UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Note), 10000,
+                                                      false)).width) + 24;
+        rects.push_back({x, item.rect.top + 3, x + width, item.rect.bottom - 3});
+        x += width;
+    }
+    return rects;
+}
+
+// The selected segment's index (its value is action.value), or -1.
+static int UiSelectedSegment(const UiItem& item) {
+    for (size_t i = 0; i < item.options.size(); i++) {
+        if (item.options[i].value == item.action.value) return int(i);
+    }
+    return -1;
+}
+
+// The interactive element under a point: an inline link or a segment, else the topmost
+// interactive item. A disabled interactive item blocks the items below it; an enabled one
+// without an action (a plain card, a chip that only shows) doesn't. A slider takes in its thumb,
+// which overhangs the track's ends by its 10 DIP radius.
 static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D1_POINT_2F point) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const UiItem& item = *it;
@@ -166,7 +211,7 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
         if (item.kind == UiItemKind::Text) {
             if (!item.enabled || UiLinkRanges(item.runs).empty()) continue;
             int link = UiLinkAt(UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left,
-                                             item.align),
+                                             item.align, item.trim),
                                 item.runs, {point.x - item.rect.left, point.y - item.rect.top});
             const UiRun* run = link >= 0 ? UiLinkRun(item.runs, link) : nullptr;
             if (run && run->action.kind != UiActionKind::None) return {item.id, link};
@@ -175,16 +220,27 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
         if (!UiInteractiveKind(item.kind) || (item.enabled && item.action.kind == UiActionKind::None)) {
             continue;
         }
-        return UiActive(item) ? UiFocusRef{item.id, -1} : UiFocusRef{};
+        if (!UiActive(item)) return {};
+        if (item.kind == UiItemKind::Segmented) {
+            std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, item);
+            for (size_t i = 0; i < segments.size(); i++) {
+                if (UiContains(segments[i], point)) return {item.id, int(i)};
+            }
+        }
+        return {item.id, -1};
     }
     return {};
 }
 
-// Focus ring boxes: the item, or each line box of an inline link.
+// Focus ring boxes: the item, its selected segment, or each line box of an inline link.
 static std::vector<D2D1_RECT_F> UiFocusBounds(UiGraphics& g, const UiItem& item, int link) {
+    if (item.kind == UiItemKind::Segmented) {
+        int selected = UiSelectedSegment(item);
+        return {selected >= 0 ? UiSegmentRects(g, item)[size_t(selected)] : item.rect};
+    }
     if (link < 0) return {item.rect};
     std::vector<D2D1_RECT_F> rects = UiLinkRects(
-        UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left, item.align),
+        UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left, item.align, item.trim),
         item.runs, link);
     for (D2D1_RECT_F& rect : rects) {
         rect = {rect.left + item.rect.left, rect.top + item.rect.top, rect.right + item.rect.left,
@@ -244,6 +300,17 @@ static UiScrollbar UiScrollbarFor(D2D1_SIZE_F viewport, float offset, float cont
     float top = bar.track.top + (trackHeight - length) * std::clamp(offset / range, 0.0f, 1.0f);
     float width = expanded ? 6.0f : 2.0f;
     bar.thumb = {viewport.width - 3 - width, top, viewport.width - 3, top + length};
+    return bar;
+}
+
+// The same scrollbar at the navigation pane's right edge (mockup .nbar), in main DIPs.
+static UiScrollbar UiNavScrollbar(const UiFrame& frame, float offset, bool expanded) {
+    const D2D1_RECT_F& pane = frame.navPane;
+    UiScrollbar bar = UiScrollbarFor({pane.right - pane.left, pane.bottom - pane.top}, offset,
+                                     frame.navHeight, expanded);
+    for (D2D1_RECT_F* rect : {&bar.track, &bar.thumb}) {
+        *rect = {rect->left + pane.left, rect->top + pane.top, rect->right + pane.left, rect->bottom + pane.top};
+    }
     return bar;
 }
 
@@ -409,59 +476,155 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
     return layout;
 }
 
-// Info bar (mockup .infobar): an accent info glyph and wrapped rich text on a card. The text
-// item takes `textId`, which stays the same across rebuilds so a focused link keeps its focus.
+// Info bar (mockup .infobar; severities and the button: history mockup .ibar): a severity icon
+// and wrapped rich text on a card, tinted for caution and error, with an optional trailing
+// button (28 DIP, 10 DIP from the bar's edges; the text centered against it). The text item
+// takes `textId`, the button its own id; both stay the same across rebuilds so focus stays.
+enum class UiSeverity : uint8_t { Info, Caution, Error };
+
+struct UiInfoButton {
+    uint32_t id = 0;
+    std::wstring text;
+    UiAction action;
+    bool enabled = true;
+};
+
 static float UiAddInfoBar(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, uint32_t textId,
-                          float x, float y, float width, std::vector<UiRun> runs) {
+                          float x, float y, float width, std::vector<UiRun> runs,
+                          UiSeverity severity = UiSeverity::Info,
+                          const std::optional<UiInfoButton>& button = std::nullopt) {
     constexpr float kInset = 1 + 13, kPadX = 1 + 18, kIcon = 16, kGap = 12;
+    constexpr float kButton = 28, kButtonInset = 1 + 9, kButtonRight = 1 + 12;
+    UiTextStyle note = UiTextStyleFor(UiFont::Note);
+    float buttonWidth = button ? std::ceil(UiLayoutSize(UiLayout(g, button->text, note, 1000, false)).width) + 24 : 0;
+    float right = button ? x + width - kButtonRight - buttonWidth - kGap : x + width - kPadX;
     float textLeft = x + kPadX + kIcon + kGap;
-    float textWidth = std::max(x + width - kPadX - textLeft, 40.0f);
+    float textWidth = std::max(right - textLeft, 40.0f);
     float textHeight = UiLayoutSize(UiRichLayout(g, runs, UiFont::Note, textWidth)).height;
+    float height = std::max(textHeight + 2 * kInset, button ? kButton + 2 * kButtonInset : 0.0f);
+    float textTop = y + (height - textHeight) / 2;
     UiItem card;
     card.id = id++;
     card.kind = UiItemKind::Card;
-    card.rect = {x, y, x + width, y + textHeight + 2 * kInset};
+    card.rect = {x, y, x + width, y + height};
+    card.ink = severity == UiSeverity::Caution ? UiInk::Caution :
+               severity == UiSeverity::Error   ? UiInk::Danger : UiInk::Primary;
     items.push_back(card);
-    UiItem icon;
-    icon.id = id++;
-    icon.kind = UiItemKind::Glyph;
-    icon.text = L"\uF167";  // InfoSolid
-    icon.ink = UiInk::Accent;
-    icon.rect = {x + kPadX, y + kInset + 1.5f, x + kPadX + kIcon, y + kInset + 1.5f + kIcon};
-    items.push_back(std::move(icon));
+    // Info: InfoSolid in the accent; caution and error (WinUI InfoBar): a filled circle in the
+    // severity's color under its mark.
+    D2D1_RECT_F iconRect{x + kPadX, textTop + 1.5f, x + kPadX + kIcon, textTop + 1.5f + kIcon};
+    auto glyph = [&](PCWSTR text, UiInk ink) {
+        UiItem icon;
+        icon.id = id++;
+        icon.kind = UiItemKind::Glyph;
+        icon.text = text;
+        icon.ink = ink;
+        icon.rect = iconRect;
+        items.push_back(std::move(icon));
+    };
+    if (severity == UiSeverity::Info) {
+        glyph(L"\uF167", UiInk::Accent);
+    } else {
+        glyph(L"\uF136", card.ink);
+        glyph(severity == UiSeverity::Caution ? L"\uF13C" : L"\uF13D", UiInk::OnAccent);
+    }
     UiItem text;
     text.id = textId;
     text.kind = UiItemKind::Text;
     text.font = UiFont::Note;
     text.ink = UiInk::Secondary;
-    text.rect = {textLeft, y + kInset, textLeft + textWidth, y + kInset + textHeight};
+    text.rect = {textLeft, textTop, textLeft + textWidth, textTop + textHeight};
     text.runs = std::move(runs);
     items.push_back(std::move(text));
+    if (button) {
+        UiItem action;
+        action.id = button->id;
+        action.kind = UiItemKind::Button;
+        action.font = UiFont::Note;
+        action.text = button->text;
+        float center = y + height / 2, buttonRight = x + width - kButtonRight;
+        action.rect = {buttonRight - buttonWidth, center - kButton / 2, buttonRight, center + kButton / 2};
+        action.enabled = button->enabled;
+        action.action = button->action;
+        items.push_back(std::move(action));
+    }
     return card.rect.bottom;
 }
 
 // Controls placed in a card's trailing slot (mockup .ctl). Interactive controls take explicit
 // ids that stay the same across rebuilds: focus and native text boxes follow them.
 
-// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch.
-static D2D1_SIZE_F UiToggleSize(UiGraphics& g) {
+// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch. With a label
+// (history mockup .cmpt): the switch first, 8 DIP gap, the 13 DIP label; the label toggles too.
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g, std::wstring_view label = {}) {
+    if (!label.empty()) {
+        return {40 + 8 + std::ceil(UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Note), 1000, false)).width),
+                32};
+    }
     UiTextStyle body = UiTextStyleFor(UiFont::Body);
-    float label = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
+    float state = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
                            UiLayoutSize(UiLayout(g, L"Off", body, 1000, false)).width);
-    return {std::ceil(label) + 12 + 40, 32};
+    return {std::ceil(state) + 12 + 40, 32};
 }
 
 static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
-                        bool enabled, UiAction action) {
+                        bool enabled, UiAction action, std::wstring label = {}) {
     UiItem toggle;
     toggle.id = id;
     toggle.kind = UiItemKind::Toggle;
     toggle.rect = slot;
-    toggle.text = on ? L"On" : L"Off";
+    if (label.empty()) {
+        toggle.text = on ? L"On" : L"Off";
+    } else {
+        toggle.text = std::move(label);
+        toggle.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
+    }
     toggle.selected = on;
     toggle.enabled = enabled;
     toggle.action = std::move(action);
     items.push_back(std::move(toggle));
+}
+
+// Segmented control (history mockup .segctl): 32 DIP tall, as wide as its segments.
+[[maybe_unused]] static D2D1_SIZE_F UiSegmentedSize(UiGraphics& g, const std::vector<UiOption>& options) {
+    UiItem control;
+    control.options = options;
+    std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, control);
+    return {(segments.empty() ? 3 : segments.back().right) + 3, 32};
+}
+
+// The selected option is the one whose value is action.value.
+[[maybe_unused]] static void UiAddSegmented(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+                           std::vector<UiOption> options, bool enabled, UiAction action) {
+    UiItem control;
+    control.id = id;
+    control.kind = UiItemKind::Segmented;
+    control.rect = slot;
+    control.options = std::move(options);
+    control.enabled = enabled;
+    control.action = std::move(action);
+    items.push_back(std::move(control));
+}
+
+// Status pill (history mockup .pill): 20 DIP tall, 9 DIP padding, a 6 DIP dot and 4 DIP gap
+// before caption text.
+[[maybe_unused]] static D2D1_SIZE_F UiPillSize(UiGraphics& g, std::wstring_view text) {
+    float width = UiLayoutSize(UiLayout(g, text, UiTextStyleFor(UiFont::Caption), 1000, false)).width;
+    return {9 + 6 + 4 + std::ceil(width) + 9, 20};
+}
+
+// ink: Success, Caution or Danger for a state, Secondary for off; on: a filled dot.
+[[maybe_unused]] static void UiAddPill(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, std::wstring text,
+                      UiInk ink, bool on) {
+    UiItem pill;
+    pill.id = id;
+    pill.kind = UiItemKind::Pill;
+    pill.rect = slot;
+    pill.font = UiFont::Caption;
+    pill.text = std::move(text);
+    pill.ink = ink;
+    pill.selected = on;
+    items.push_back(std::move(pill));
 }
 
 // Dropdown field (mockup .combo): the option whose value is action.value.
@@ -567,13 +730,18 @@ static D2D1_RECT_F UiGalleryThumbRect(const UiItem& card) {
 // The popup's rows. A dropdown's (WinUI combo box items): 32 DIP rows on a 36 DIP pitch, 5 DIP
 // side insets, 2 DIP top and bottom padding; the current value's row selected. A menu's, when
 // its options have details (mockup .dmenu .dmi): 53 DIP rows inside 4 DIP padding, an 18 DIP
-// icon, the title and its detail line; at least 310 DIP wide. Each row's action is the field's,
-// with the row's value. Returns the popup size in DIPs, at least `minWidth` wide.
+// icon, the title and its detail line; at least 310 DIP wide. A one-line menu's, when its
+// options have glyphs (history mockup .pmenu.small .pmi): dropdown rows with a 16 DIP glyph 12
+// DIP in and the label 12 DIP after it, 28 DIP after the widest label; a separator adds 5 DIP
+// above its row (a line 4 DIP under the previous row). Each row's action is the field's, with the
+// row's value. Returns the popup size in DIPs, at least `minWidth` wide.
 static D2D1_SIZE_F UiLayoutOptions(UiGraphics& g, const std::vector<UiOption>& options,
                                    const UiAction& action, float minWidth,
                                    std::vector<UiItem>& rows) {
     bool menu = std::any_of(options.begin(), options.end(),
                             [](const UiOption& option) { return !option.detail.empty(); });
+    bool glyphs = !menu && std::any_of(options.begin(), options.end(),
+                                       [](const UiOption& option) { return !option.icon.empty(); });
     UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
     float width = menu ? std::max(minWidth, 310.0f) : minWidth;
     for (const UiOption& option : options) {
@@ -582,28 +750,32 @@ static D2D1_SIZE_F UiLayoutOptions(UiGraphics& g, const std::vector<UiOption>& o
             text = std::max(text, UiLayoutSize(UiLayout(g, option.detail, caption, 10000, false)).width);
             width = std::max(width, std::ceil(text) + 4 + 12 + 18 + 14 + 12 + 4);
         } else {
-            width = std::max(width, std::ceil(text) + 5 + 12 + 12 + 5);
+            width = std::max(width, std::ceil(text) + 5 + 12 + (glyphs ? 16 + 12 + 28 : 12) + 5);
         }
     }
-    float pitch = menu ? 53 : 36, inset = menu ? 4 : 5, row = menu ? 53 : 32;
+    float pitch = menu ? 53 : 36, inset = menu ? 4 : 5, row = menu ? 53 : 32, y = 4;
     rows.clear();
     for (size_t i = 0; i < options.size(); i++) {
         UiItem item;
         item.id = uint32_t(i + 1);
         item.kind = UiItemKind::Option;
-        float y = 4 + pitch * float(i);
+        item.separator = glyphs && i > 0 && options[i].separator;
+        if (item.separator) y += 5;
         item.rect = {inset, y, width - inset, y + row};
         item.text = options[i].text;
         if (menu) {
             item.runs.push_back({options[i].detail});
             item.parts = options[i].parts;
+        } else if (glyphs) {
+            item.icon = options[i].icon;
         }
         item.selected = options[i].value == action.value;
         item.action = action;
         item.action.value = options[i].value;
         rows.push_back(std::move(item));
+        y += pitch;
     }
-    return {width, menu ? 8 + pitch * float(options.size()) : 4 + pitch * float(options.size())};
+    return {width, y + (menu ? 4 : 0)};
 }
 
 // Where the popup goes, in pixels: below the field, else above it, else on the side with more

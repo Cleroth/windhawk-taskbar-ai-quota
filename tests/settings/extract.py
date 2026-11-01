@@ -28,6 +28,25 @@ MODEL = [
     ("fragment", "settings/shell.h"),
 ]
 
+# The usage history window's view, formats, controller and frame builders on the shared history
+# model: tests and offscreen renders. No journal, settings storage, production ops or window code.
+HISTORY = [
+    ("fragment", "core/model.h"),
+    ("definition", "ApplyCreditsMax"),
+    ("definition", "Utf8ToWide"),
+    ("definition", "ProviderDisplayName"),
+    ("fragment", "taskbar/logo-paths.h"),
+    ("fragment", "taskbar/meter-model.h"),
+    *UI_PURE,
+    ("fragment", "history/types.h"),
+    ("fragment", "history/continuity.h"),
+    ("fragment", "history/series.h"),
+    ("fragment", "history/view.h"),
+    ("fragment", "history/controller.h"),
+    ("fragment", "history/content.h"),
+    ("fragment", "history/shell.h"),
+]
+
 # Toolkit with its native host (window icons, popup, text boxes and color dialog included): the
 # probe DLL. No settings, storage or account code.
 HOST = [
@@ -44,6 +63,7 @@ HOST = [
 
 TARGETS = {
     "model": (MODEL, "harness.hpp", "fixtures/main.inc"),
+    "history": (HISTORY, "harness.hpp", "fixtures/history-main.inc"),
     "host": (HOST, "host.hpp", "fixtures/host-dll.inc"),
     # The same host as the owner window of the capture/foreground popup probe.
     "popup": (HOST, "host.hpp", "fixtures/popup-probe.inc"),

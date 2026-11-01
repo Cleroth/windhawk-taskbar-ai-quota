@@ -4,6 +4,7 @@
 // Fixed-width records contain no credentials, account labels, or server response text.
 static constexpr size_t kHistoryMeterCount = 8;
 static constexpr ULONGLONG kHistoryDayMs = 24ULL * 60 * 60 * 1000;
+static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
 struct HistoryValue {
     double value = -1;
     ULONGLONG resetMs = 0;
@@ -23,5 +24,6 @@ struct HistorySample {
 static_assert(sizeof(HistorySample) == 240);
 struct HistorySnapshot {
     std::vector<HistorySample> samples;
-    std::wstring status;
+    std::wstring status;  // The journal's error status; empty while healthy
+    bool capped = false;  // The storage cap pruned the oldest samples
 };

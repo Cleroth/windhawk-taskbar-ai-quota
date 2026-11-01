@@ -3,8 +3,9 @@
 // DIPs; targets carry the window DPI.
 
 // Device-independent resources shared by every target of one UI thread: font collections and
-// resolved families, text formats, effect-free layouts (measuring and plain drawing) and path
-// geometries. Owned by that thread's graphics scope, released before the apartment is.
+// resolved families, text formats with their ellipsis signs, effect-free layouts (measuring and
+// plain drawing) and path geometries. Owned by that thread's graphics scope, released before the
+// apartment is.
 struct UiGraphics {
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
@@ -12,6 +13,7 @@ struct UiGraphics {
     winrt::com_ptr<IDWriteFontCollection> fonts, typographicFonts;
     std::array<std::wstring, std::size(kUiFamilyNames)> families;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextFormat>> formats;
+    std::map<std::wstring, winrt::com_ptr<IDWriteInlineObject>> ellipses;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
     std::map<PCWSTR, winrt::com_ptr<ID2D1PathGeometry>> paths;
 };
@@ -99,11 +101,13 @@ static UiFontMetrics UiFontMetricsFor(UiGraphics& g, const UiTextStyle& style) {
             float(metrics.lineGap) * unit, float(metrics.capHeight) * unit};
 }
 
+static std::wstring UiStyleKey(const UiTextStyle& style) {
+    return std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) + L'|' +
+           std::to_wstring(style.lineHeight) + L'|' + std::to_wstring(int(style.weight));
+}
+
 static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
-    std::wstring key = std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) +
-                       L'|' + std::to_wstring(style.lineHeight) + L'|' +
-                       std::to_wstring(int(style.weight));
-    auto& format = g.formats[key];
+    auto& format = g.formats[UiStyleKey(style)];
     if (format) return format.get();
 
     IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
@@ -128,14 +132,24 @@ static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
     return format.get();
 }
 
-// A shared, effect-free layout of plain text. maxWidth bounds wrapping (or alignment without it).
+// Cuts a layout to one line that ends in an ellipsis where it overflows its width; text that
+// fits is unchanged. The sign is the style's, one per format.
+static void UiTrimLayout(UiGraphics& g, IDWriteTextLayout* layout, const UiTextStyle& style) {
+    auto& sign = g.ellipses[UiStyleKey(style)];
+    if (!sign) winrt::check_hresult(g.dwrite->CreateEllipsisTrimmingSign(UiFormat(g, style), sign.put()));
+    DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+    layout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    layout->SetTrimming(&trimming, sign.get());
+}
+
+// A shared, effect-free layout of plain text. maxWidth bounds wrapping (or alignment without it);
+// trim: one line, ellipsized past maxWidth.
 static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const UiTextStyle& style,
                                    float maxWidth, bool wrap = true,
-                                   DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING) {
-    std::wstring key = std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) +
-                       L'|' + std::to_wstring(style.lineHeight) + L'|' +
-                       std::to_wstring(int(style.weight)) + L'|' + std::to_wstring(maxWidth) +
-                       L'|' + (wrap ? L'w' : L'n') + std::to_wstring(int(align)) + L'|';
+                                   DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
+                                   bool trim = false) {
+    std::wstring key = UiStyleKey(style) + L'|' + std::to_wstring(maxWidth) + L'|' +
+                       (trim ? L't' : wrap ? L'w' : L'n') + std::to_wstring(int(align)) + L'|';
     key += text;
     auto& layout = g.layouts[key];
     if (layout) return layout.get();
@@ -144,6 +158,7 @@ static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const 
                                                     100000.0f, layout.put()));
     layout->SetWordWrapping(wrap ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
     layout->SetTextAlignment(align);
+    if (trim) UiTrimLayout(g, layout.get(), style);
     return layout.get();
 }
 

@@ -46,16 +46,17 @@ enum class UiInk : uint8_t {
 struct UiPalette {
     UiThemeKind kind = UiThemeKind::Dark;
 
-    // Surfaces
+    // Surfaces; caution and error info bars (WinUI InfoBar backgrounds)
     D2D1_COLOR_F background{}, card{}, cardHover{}, cardPressed{}, cardBorder{};
+    D2D1_COLOR_F cautionBackground{}, dangerBackground{};
 
     // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills; the strong
-    // stroke of an off toggle and a slider track, a slider thumb, a focused text box and the
-    // dropdown popup's surface
+    // stroke of an off toggle and a slider track, a slider thumb, a focused text box, the
+    // dropdown popup's surface and a segmented control's selected segment with its edge
     D2D1_COLOR_F control{}, controlHover{}, controlPressed{}, controlDisabled{}, controlBorder{};
     D2D1_COLOR_F subtleHover{}, subtlePressed{};
     D2D1_COLOR_F accent{}, accentHover{}, accentPressed{}, accentDisabled{};
-    D2D1_COLOR_F controlStrong{}, controlSolid{}, inputActive{}, popup{};
+    D2D1_COLOR_F controlStrong{}, controlSolid{}, inputActive{}, popup{}, segment{}, segmentBorder{};
 
     // Text
     D2D1_COLOR_F text{}, textSecondary{}, textMuted{}, textDisabled{}, textOnAccent{};
@@ -77,6 +78,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
     if (theme.kind == UiThemeKind::HighContrast) {
         const UiSystemColors& s = theme.system;
         p.background = p.card = p.cardHover = p.cardPressed = UiRgb(s.window);
+        p.cautionBackground = p.dangerBackground = UiRgb(s.window);
         p.cardBorder = UiRgb(s.windowText);
         p.control = p.controlDisabled = UiRgb(s.buttonFace);
         p.controlHover = p.controlPressed = UiRgb(s.highlight);
@@ -87,6 +89,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.controlStrong = UiRgb(s.windowText);
         p.controlSolid = UiRgb(s.buttonFace);
         p.inputActive = p.popup = UiRgb(s.window);
+        p.segment = UiRgb(s.highlight);
         p.text = p.textSecondary = p.textMuted = UiRgb(s.windowText);
         p.textDisabled = UiRgb(s.grayText);
         p.textOnAccent = UiRgb(s.highlightText);
@@ -106,6 +109,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.cardHover = UiRgb(0xFFFFFF, 0.082f);
         p.cardPressed = UiRgb(0xFFFFFF, 0.03f);
         p.cardBorder = UiRgb(0x000000, 0.25f);
+        p.cautionBackground = UiRgb(0x433519);
+        p.dangerBackground = UiRgb(0x442726);
         p.control = UiRgb(0xFFFFFF, 0.06f);
         p.controlHover = UiRgb(0xFFFFFF, 0.082f);
         p.controlPressed = UiRgb(0xFFFFFF, 0.03f);
@@ -121,6 +126,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.controlSolid = UiRgb(0x454545);
         p.inputActive = UiRgb(0x1E1E1E, 0.7f);
         p.popup = UiRgb(0x2C2C2C);
+        p.segment = UiRgb(0xFFFFFF, 0.1f);
         p.text = UiRgb(0xFFFFFF);
         p.textSecondary = UiRgb(0xFFFFFF, 0.786f);
         p.textMuted = UiRgb(0xFFFFFF, 0.6f);
@@ -141,6 +147,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.cardHover = UiRgb(0xF9F9F9, 0.5f);
         p.cardPressed = UiRgb(0xF9F9F9, 0.3f);
         p.cardBorder = UiRgb(0x000000, 0.06f);
+        p.cautionBackground = UiRgb(0xFFF4CE);
+        p.dangerBackground = UiRgb(0xFDE7E9);
         p.control = UiRgb(0xFFFFFF, 0.7f);
         p.controlHover = UiRgb(0xF9F9F9, 0.5f);
         p.controlPressed = UiRgb(0xF9F9F9, 0.3f);
@@ -156,6 +164,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.controlSolid = UiRgb(0xFFFFFF);
         p.inputActive = UiRgb(0xFFFFFF);
         p.popup = UiRgb(0xF9F9F9);
+        p.segment = UiRgb(0xFFFFFF);
+        p.segmentBorder = UiRgb(0x000000, 0.06f);
         p.text = UiRgb(0x000000, 0.894f);
         p.textSecondary = UiRgb(0x000000, 0.62f);
         p.textMuted = UiRgb(0x000000, 0.58f);

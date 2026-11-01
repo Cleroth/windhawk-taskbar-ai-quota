@@ -2,21 +2,6 @@
 // into WIC bitmaps: PNG evidence for review, no pixel goldens. The composition mirrors the host:
 // main items, then the content clipped to the viewport at the scroll offset, then the scrollbar.
 
-struct RenderTheme {
-    const char* name;
-    UiThemeInput input;
-};
-
-// The taskbar (Windows mode) follows the app mode here; high contrast: Aquatic system colors.
-static std::vector<RenderTheme> RenderThemes() {
-    UiThemeInput light, dark, hc;
-    light.kind = UiThemeKind::Light;
-    light.systemLight = true;
-    dark.kind = UiThemeKind::Dark;
-    hc.kind = UiThemeKind::HighContrast;
-    return {{"light", light}, {"dark", dark}, {"hc", hc}};
-}
-
 // A row of buttons in every style and state, for the states sheet.
 static void AddButtonRow(std::vector<UiItem>& items, uint32_t& id, float x, float y) {
     struct Sample {
@@ -47,49 +32,6 @@ static void AddButtonRow(std::vector<UiItem>& items, uint32_t& id, float x, floa
         x += width + 8;
     }
 }
-
-static void SaveRender(IWICImagingFactory* wic, IWICBitmap* bitmap, const std::wstring& path) {
-    UINT width = 0, height = 0;
-    winrt::check_hresult(bitmap->GetSize(&width, &height));
-    winrt::com_ptr<IWICStream> stream;
-    winrt::check_hresult(wic->CreateStream(stream.put()));
-    winrt::check_hresult(stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE));
-    winrt::com_ptr<IWICBitmapEncoder> encoder;
-    winrt::check_hresult(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, encoder.put()));
-    winrt::check_hresult(encoder->Initialize(stream.get(), WICBitmapEncoderNoCache));
-    winrt::com_ptr<IWICBitmapFrameEncode> frame;
-    winrt::check_hresult(encoder->CreateNewFrame(frame.put(), nullptr));
-    winrt::check_hresult(frame->Initialize(nullptr));
-    winrt::check_hresult(frame->SetSize(width, height));
-    WICPixelFormatGUID format = GUID_WICPixelFormat32bppPBGRA;
-    winrt::check_hresult(frame->SetPixelFormat(&format));
-    winrt::check_hresult(frame->WriteSource(bitmap, nullptr));
-    winrt::check_hresult(frame->Commit());
-    winrt::check_hresult(encoder->Commit());
-}
-
-static winrt::com_ptr<IWICBitmap> RenderBitmap(IWICImagingFactory* wic, D2D1_SIZE_F size, UINT dpi) {
-    float scale = float(dpi) / 96;
-    winrt::com_ptr<IWICBitmap> bitmap;
-    winrt::check_hresult(wic->CreateBitmap(UINT(std::lround(size.width * scale)),
-                                           UINT(std::lround(size.height * scale)),
-                                           GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad,
-                                           bitmap.put()));
-    return bitmap;
-}
-
-static winrt::com_ptr<ID2D1RenderTarget> RenderTarget(UiGraphics& g, IWICBitmap* bitmap, UINT dpi) {
-    D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
-        D2D1_RENDER_TARGET_TYPE_DEFAULT,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), float(dpi),
-        float(dpi));
-    winrt::com_ptr<ID2D1RenderTarget> target;
-    winrt::check_hresult(g.d2d->CreateWicBitmapRenderTarget(bitmap, &properties, target.put()));
-    return target;
-}
-
-// Drawn over a render in client DIPs: a popup where the host would open it.
-using RenderOverlay = std::function<void(ID2D1RenderTarget*, UiTargetCache&, const UiPalette&)>;
 
 // The host's composition; `view` paints the client-drawn preview items, as the settings client
 // does. The pointer (state.pointer) is in the coordinates of `pointerContent` ? content : main.

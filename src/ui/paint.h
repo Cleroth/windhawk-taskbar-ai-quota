@@ -42,7 +42,12 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
         const bool pressed = hot && state.pressed == UiFocusRef{item.id, -1};
         switch (item.kind) {
             // Navigation item and popup option: accent pill when selected, glyph, label. A menu
-            // row: the pointer's fill, its icon, title and detail line.
+            // row: the pointer's fill, its icon, title and detail line. A navigation item's shape
+            // icon follows its label's ink (history mockup .nitem.acc: 10 DIP gap), its label
+            // ends in an ellipsis 30 DIP before its trailing value (.npct), which keeps its color
+            // except in high contrast and on a selected item there, and fades when disabled. A
+            // one-line menu row (history mockup .pmi): its glyph 12 DIP in, the label 12 DIP
+            // after it; a separator (.psep) across the popup 5 DIP above it.
             case UiItemKind::Nav:
             case UiItemKind::Option: {
                 if (item.kind == UiItemKind::Option && !item.runs.empty()) {
@@ -82,24 +87,67 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                     UiFillRect(target, cache, {r.left, centerY - 8, r.left + 3, centerY + 8}, 1.5f,
                                hc ? p.highlightText : p.accent, scale);
                 }
+                if (item.separator) {
+                    UiFillRect(target, cache, {r.left - 5, r.top - 5, r.right + 5, r.top - 5 + 1 / scale}, 0,
+                               p.controlBorder, scale);
+                }
                 D2D1_COLOR_F ink = !item.enabled ? p.textDisabled :
-                                   hc && item.selected ? p.highlightText : p.text;
+                                   hc && item.selected ? p.highlightText : UiInkColor(p, item.ink);
                 float labelLeft = 12;
                 if (!item.icon.empty()) {
+                    bool row = item.kind == UiItemKind::Option;
                     UiDrawLayout(target, cache,
                                  UiLayout(g, item.icon, UiIconStyle(item.iconSize), 16, false,
                                           DWRITE_TEXT_ALIGNMENT_CENTER),
-                                 {r.left + 14, centerY - item.iconSize / 2}, ink);
-                    labelLeft = 44;
+                                 {r.left + (row ? 12 : 14), centerY - item.iconSize / 2}, ink);
+                    labelLeft = row ? 40 : 44;
+                } else if (!item.parts.empty()) {
+                    float s = 16.0f / 24;
+                    D2D1::Matrix3x2F local = D2D1::Matrix3x2F::Scale(s, s) *
+                                             D2D1::Matrix3x2F::Translation(r.left + 14, centerY - 8) * shifted;
+                    target->SetTransform(&local);
+                    for (const UiShapePart& part : item.parts) {
+                        D2D1_COLOR_F color = part.ink == UiInk::Inherit ? part.color : UiFade(ink, part.alpha);
+                        if (part.stroke > 0) {
+                            target->DrawGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color),
+                                                 part.stroke, g.roundCaps.get());
+                        } else {
+                            target->FillGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color), nullptr);
+                        }
+                    }
+                    target->SetTransform(&shifted);
+                    labelLeft = 40;
                 }
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, width - labelLeft, false),
+                if (item.kind == UiItemKind::Option) {
+                    UiDrawLayout(target, cache, UiLayout(g, item.text, label, width - labelLeft, false),
+                                 {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
+                    break;
+                }
+                float labelRight = r.right - 14;
+                if (!item.runs.empty()) {
+                    const UiRun& run = item.runs.front();
+                    UiTextStyle value = UiTextStyleFor(UiFont::Caption);
+                    value.weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
+                    IDWriteTextLayout* text = UiLayout(g, UiRunsText(item.runs), value, 10000, false);
+                    float valueLeft = r.right - 14 - UiLayoutSize(text).width;
+                    D2D1_COLOR_F color = hc && item.selected      ? ink :
+                                         run.color && !hc         ? *run.color :
+                                         run.ink != UiInk::Inherit ? UiInkColor(p, run.ink) : ink;
+                    UiDrawLayout(target, cache, text, {valueLeft, centerY - value.lineHeight / 2},
+                                 item.enabled ? color : UiFade(color, 0.45f));
+                    labelRight = valueLeft - 30;
+                }
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, std::max(labelRight - r.left - labelLeft, 0.0f), false,
+                                      DWRITE_TEXT_ALIGNMENT_LEADING, true),
                              {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                 break;
             }
             // Card: a raised panel; interactive cards react to the pointer as a whole. A subtle
             // card shows only the pointer over the panel it lies on; a lifted (selected) one is
-            // opaque with an accent edge, drawn over what it is dragged across.
+            // opaque with an accent edge, drawn over what it is dragged across. A caution or
+            // error info bar's panel takes its severity's background.
             case UiItemKind::Card: {
                 bool interactive = UiFocusable(item);
                 bool hcHot = hc && interactive && hot;
@@ -110,9 +158,11 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                     if (hcHot) UiStrokeRect(target, cache, r, 6, p.highlight, 2, scale);
                     break;
                 }
-                D2D1_COLOR_F fill = item.selected            ? UiOver(p.cardHover, UiOver(p.card, p.background)) :
-                                    interactive && pressed   ? p.cardPressed :
-                                    interactive && hot       ? p.cardHover : p.card;
+                D2D1_COLOR_F fill = item.selected              ? UiOver(p.cardHover, UiOver(p.card, p.background)) :
+                                    interactive && pressed     ? p.cardPressed :
+                                    interactive && hot         ? p.cardHover :
+                                    item.ink == UiInk::Caution ? p.cautionBackground :
+                                    item.ink == UiInk::Danger  ? p.dangerBackground : p.card;
                 UiFillRect(target, cache, r, 6, fill, scale);
                 if (item.selected) {
                     UiStrokeRect(target, cache, r, 6, hc ? p.highlight : p.accent,
@@ -123,7 +173,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 }
                 break;
             }
-            // Rich text wrapped to the item width, inline links colored by pointer state.
+            // Rich text wrapped to the item width (or cut to one line), inline links colored by
+            // pointer state.
             case UiItemKind::Text: {
                 int hotLink = state.hot.id == item.id ? state.hot.link : -1;
                 int pressedLink =
@@ -131,7 +182,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiInk ink = item.enabled ? item.ink : UiInk::Disabled;
                 IDWriteTextLayout* layout =
                     UiInkedLayout(target, cache, g, item.runs, item.font, width, item.align, p, ink,
-                                  hotLink, pressedLink);
+                                  hotLink, pressedLink, item.trim);
                 UiDrawLayout(target, cache, layout, {r.left, r.top},
                              UiFade(UiInkColor(p, ink), item.opacity));
                 break;
@@ -166,8 +217,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 target->SetTransform(&shifted);
                 break;
             }
-            // Button: standard, accent, subtle or danger; optional glyph before the label. A menu
-            // button stays pressed while its popup shows.
+            // Button: standard, accent, subtle or danger; optional glyph 8 DIP before the label,
+            // or centered alone. A menu button stays pressed while its popup shows.
             case UiItemKind::Button: {
                 D2D1_COLOR_F fill{}, border{}, ink{};
                 bool down = pressed || (item.enabled && state.open == item.id);
@@ -200,7 +251,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiTextStyle label = UiTextStyleFor(item.font);
                 IDWriteTextLayout* text = UiLayout(g, item.text, label, width, false);
                 float textWidth = UiLayoutSize(text).width;
-                float iconWidth = item.icon.empty() ? 0 : item.iconSize + 8;
+                float iconWidth = item.icon.empty() ? 0 : item.iconSize + (item.text.empty() ? 0 : 8);
                 float x = r.left + (width - textWidth - iconWidth) / 2;
                 if (!item.icon.empty()) {
                     UiDrawLayout(target, cache,
@@ -226,11 +277,14 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              hot ? p.linkHover : p.link);
                 break;
             }
-            // Toggle switch at the right end, "On"/"Off" before it. On: accent track, knob in
-            // the text-on-accent color; off: strong outline. The knob grows under the pointer.
+            // Toggle switch at the right end, "On"/"Off" before it; or at the left end, its label
+            // after it (align trailing). On: accent track, knob in the text-on-accent color; off:
+            // strong outline. The knob grows under the pointer.
             case UiItemKind::Toggle: {
                 bool on = item.selected, active = item.enabled && hot;
-                D2D1_RECT_F track{r.right - 40, centerY - 10, r.right, centerY + 10};
+                bool leading = item.align == DWRITE_TEXT_ALIGNMENT_TRAILING;
+                D2D1_RECT_F track = leading ? D2D1_RECT_F{r.left, centerY - 10, r.left + 40, centerY + 10} :
+                                              D2D1_RECT_F{r.right - 40, centerY - 10, r.right, centerY + 10};
                 D2D1_COLOR_F fill{}, border{}, knob{};
                 if (!item.enabled) {
                     fill = on ? p.accentDisabled : D2D1_COLOR_F{};
@@ -252,6 +306,15 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiFillRect(target, cache,
                            {knobX - size / 2, centerY - size / 2, knobX + size / 2, centerY + size / 2},
                            size / 2, knob, scale);
+                if (leading) {
+                    UiTextStyle label = UiTextStyleFor(UiFont::Note);
+                    UiDrawLayout(target, cache,
+                                 UiLayout(g, item.text, label, std::max(r.right - track.right - 8, 0.0f), false,
+                                          DWRITE_TEXT_ALIGNMENT_LEADING, true),
+                                 {track.right + 8, centerY - label.lineHeight / 2},
+                                 item.enabled ? p.text : p.textDisabled);
+                    break;
+                }
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
                 UiDrawLayout(target, cache,
                              UiLayout(g, item.text, label, std::max(track.left - 12 - r.left, 0.0f),
@@ -338,8 +401,64 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiFillRect(target, cache, r, radius, fill, scale);
                 UiStrokeRect(target, cache, r, radius, border, 1, scale);
                 UiTextStyle label = UiTextStyleFor(item.font);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, width, false, DWRITE_TEXT_ALIGNMENT_CENTER),
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, width, false, DWRITE_TEXT_ALIGNMENT_CENTER, true),
                              {r.left, centerY - label.lineHeight / 2}, ink);
+                break;
+            }
+            // Status pill (history mockup .pill): its ink on a 10% tint of it, a dot (a ring when
+            // not selected) before the caption text. High contrast: text color, with a border.
+            case UiItemKind::Pill: {
+                D2D1_COLOR_F ink = hc ? p.text : UiInkColor(p, item.ink);
+                float radius = (r.bottom - r.top) / 2;
+                UiFillRect(target, cache, r, radius, hc ? D2D1_COLOR_F{} : UiFade(ink, 0.1f), scale);
+                if (hc) UiStrokeRect(target, cache, r, radius, ink, 1, scale);
+                D2D1_RECT_F dot{r.left + 9, centerY - 3, r.left + 15, centerY + 3};
+                if (item.selected) UiFillRect(target, cache, dot, 3, ink, scale);
+                else UiStrokeRect(target, cache, dot, 3, ink, std::max(1.0f, std::round(scale)), scale);
+                UiTextStyle label = UiTextStyleFor(item.font);
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, std::max(r.right - 9 - (r.left + 19), 0.0f), false,
+                                      DWRITE_TEXT_ALIGNMENT_LEADING, true),
+                             {r.left + 19, centerY - label.lineHeight / 2}, ink);
+                break;
+            }
+            // Segmented control (history mockup .segctl): a control panel; the selected segment
+            // raised with primary text and a 2 DIP accent underline (high contrast: the
+            // selection colors), the others in secondary text under the pointer's subtle fill.
+            // Disabled: dimmed, the underline grey.
+            case UiItemKind::Segmented: {
+                UiFillRect(target, cache, r, 4, item.enabled ? p.card : p.controlDisabled, scale);
+                UiStrokeRect(target, cache, r, 4, hc && !item.enabled ? p.textDisabled : p.controlBorder, 1, scale);
+                std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, item);
+                int selected = UiSelectedSegment(item);
+                int over = item.enabled && state.hot.id == item.id ? state.hot.link : -1;
+                bool down = over >= 0 && state.pressed == state.hot;
+                UiTextStyle label = UiTextStyleFor(UiFont::Note);
+                for (size_t i = 0; i < segments.size(); i++) {
+                    const D2D1_RECT_F& s = segments[i];
+                    bool chosen = int(i) == selected;
+                    D2D1_COLOR_F fill{}, ink = !item.enabled ? p.textDisabled : chosen ? p.text : p.textSecondary;
+                    if (chosen && hc) {
+                        fill = item.enabled ? p.segment : p.textDisabled;
+                        ink = item.enabled ? p.highlightText : p.background;
+                    } else if (chosen) {
+                        fill = item.enabled ? p.segment : p.card;
+                    } else if (int(i) == over && !hc) {
+                        fill = down ? p.subtlePressed : p.subtleHover;
+                    }
+                    UiFillRect(target, cache, s, 3, fill, scale);
+                    if (chosen && item.enabled) UiStrokeRect(target, cache, s, 3, p.segmentBorder, 1, scale);
+                    if (hc && int(i) == over && !chosen) UiStrokeRect(target, cache, s, 3, p.highlight, 1, scale);
+                    if (chosen && !hc) {
+                        UiFillRect(target, cache, {s.left, s.bottom - 2, s.right, s.bottom}, 1,
+                                   item.enabled ? p.accent : p.accentDisabled, scale);
+                    }
+                    UiDrawLayout(target, cache,
+                                 UiLayout(g, item.options[i].text, label, s.right - s.left, false,
+                                          DWRITE_TEXT_ALIGNMENT_CENTER),
+                                 {s.left, centerY - label.lineHeight / 2}, ink);
+                }
                 break;
             }
             // Drag handle: its glyph, brighter under the pointer.
@@ -440,17 +559,18 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
     }
 
     // Focus ring (keyboard focus only): 2 DIP outer and 1 DIP inner band, 3 DIP outside the
-    // element; 2 DIP around inline links, between their neighbors; inside for navigation items,
-    // which touch the pane edges; outside a swatch's selection ring. Number and text boxes show
-    // focus with their editing style instead.
+    // element (a segmented control's selected segment); 2 DIP around inline links, between their
+    // neighbors; inside for navigation items, which touch the pane edges; outside a swatch's
+    // selection ring. Number and text boxes show focus with their editing style instead.
     if (state.focusVisible && state.focus.id) {
         auto focused = std::find_if(items.begin(), items.end(),
                                     [&](const UiItem& item) { return item.id == state.focus.id; });
         if (focused != items.end() && focused->kind != UiItemKind::NumberBox &&
             focused->kind != UiItemKind::TextBox) {
-            float radius = state.focus.link >= 0                ? 2 :
-                           focused->kind == UiItemKind::Swatch  ? (focused->rect.right - focused->rect.left) / 2 :
-                           focused->kind == UiItemKind::Chip    ? (focused->rect.bottom - focused->rect.top) / 2 :
+            float radius = state.focus.link >= 0                  ? 2 :
+                           focused->kind == UiItemKind::Swatch    ? (focused->rect.right - focused->rect.left) / 2 :
+                           focused->kind == UiItemKind::Chip      ? (focused->rect.bottom - focused->rect.top) / 2 :
+                           focused->kind == UiItemKind::Segmented ? 3 :
                            focused->kind == UiItemKind::Card ||
                                focused->kind == UiItemKind::Gallery ? 6 : 4;
             float outside = state.focus.link >= 0             ? 2 :
@@ -475,4 +595,18 @@ static void UiPaintScrollbar(ID2D1RenderTarget* target, UiTargetCache& cache, co
     if (!bar.visible) return;
     if (expanded) UiFillRect(target, cache, bar.track, 6, p.scrollTrack, scale);
     UiFillRect(target, cache, bar.thumb, (bar.thumb.right - bar.thumb.left) / 2, p.scrollThumb, scale);
+}
+
+// The navigation pane on the main surface (untransformed target, main DIPs): its items at the
+// pixel-aligned `offset`, clipped to the pane, then its scrollbar.
+static void UiPaintNavPane(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache, const UiPalette& p,
+                           const UiFrame& frame, UiPaintState state, float offset, bool expanded, float scale) {
+    const D2D1_RECT_F& pane = frame.navPane;
+    if (frame.nav.empty() || pane.right <= pane.left || pane.bottom <= pane.top) return;
+    target->PushAxisAlignedClip(&pane, D2D1_ANTIALIAS_MODE_ALIASED);
+    state.pointer.y += offset;
+    UiPaintItems(target, g, cache, p, frame.nav, state, {0, -offset}, scale, pane.top + offset,
+                 pane.bottom + offset);
+    UiPaintScrollbar(target, cache, p, UiNavScrollbar(frame, offset, expanded), expanded, scale);
+    target->PopAxisAlignedClip();
 }

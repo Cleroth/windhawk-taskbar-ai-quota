@@ -298,6 +298,18 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "history/window-state.h"
 
+#include "history/view.h"
+
+#include "history/controller.h"
+
+#include "history/content.h"
+
+#include "history/shell.h"
+
+#include "history/ops.h"
+
+#include "history/ui-window.h"
+
 #include "history/view-model.h"
 
 #include "history/export.h"

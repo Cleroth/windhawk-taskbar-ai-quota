@@ -16,6 +16,19 @@ static void Run(const std::string& name, const std::function<void()>& body) {
     catch (const std::exception& e) { ++failed; std::cout << "FAIL " << name << ": " << e.what() << '\n'; }
 }
 
+static UiGraphics& TestGraphics() {
+    static UiGraphics graphics = [] {
+        UiGraphics created;
+        UiCreateGraphics(created);
+        return created;
+    }();
+    return graphics;
+}
+
+static float TestTextWidth(PCWSTR text, UiFont font) {
+    return std::ceil(UiLayoutSize(UiLayout(TestGraphics(), text, UiTextStyleFor(font), 10000, false)).width);
+}
+
 static MeterDisplay Display(const Settings& settings = {}, double scale = 1, double taskbar = 48) {
     return MeterDisplayFor(settings, kNow, scale, taskbar);
 }

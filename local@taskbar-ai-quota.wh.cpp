@@ -355,6 +355,7 @@ static uint64_t AccountIdentityHash(const AccountConfig& a) {
 // Fixed-width records contain no credentials, account labels, or server response text.
 static constexpr size_t kHistoryMeterCount = 8;
 static constexpr ULONGLONG kHistoryDayMs = 24ULL * 60 * 60 * 1000;
+static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
 struct HistoryValue {
     double value = -1;
     ULONGLONG resetMs = 0;
@@ -374,7 +375,8 @@ struct HistorySample {
 static_assert(sizeof(HistorySample) == 240);
 struct HistorySnapshot {
     std::vector<HistorySample> samples;
-    std::wstring status;
+    std::wstring status;  // The journal's error status; empty while healthy
+    bool capped = false;  // The storage cap pruned the oldest samples
 };
 
 // src/history/state.h
@@ -697,7 +699,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state);
 static void CloseAccountFlyout(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
-static void OpenHistoryWindow(uint64_t historyId = 0);
+// The usage history window a new history thread runs: native controls or custom-drawn.
+enum class HistoryWindowKind : uint8_t { Classic, Custom };
+static void OpenHistoryWindow(uint64_t historyId = 0, HistoryWindowKind kind = HistoryWindowKind::Classic);
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
                             uint64_t newIdentity = 0);
@@ -3648,7 +3652,7 @@ static HistorySnapshot ReadHistorySnapshot(ULONGLONG fromMs) {
     LoadHistoryLocked();
     HistorySnapshot snapshot;
     snapshot.status = g_historyStatus;
-    if (g_historyCapped) snapshot.status += L" Storage cap reached; oldest samples were pruned.";
+    snapshot.capped = g_historyCapped;
     for (const auto& sample : g_historySamples) {
         if (sample.timeMs >= fromMs) snapshot.samples.push_back(sample);
     }
@@ -8069,6 +8073,10 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenHistoryWindow();
                 }));
+            menu.Items().Append(menuItem(L"Usage history (new)", L"\uE81C",
+                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                    OpenHistoryWindow(0, HistoryWindowKind::Custom);
+                }));
             menu.Items().Append(menuItem(L"Settings", L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
@@ -8456,6 +8464,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     [historyId](winrt::Windows::Foundation::IInspectable const&,
                                 RoutedEventArgs const&) {
                         OpenHistoryWindow(historyId);
+                    }));
+                menu.Items().Append(menuItem(L"Usage history (new)", L"\uE81C",
+                    [historyId](winrt::Windows::Foundation::IInspectable const&,
+                                RoutedEventArgs const&) {
+                        OpenHistoryWindow(historyId, HistoryWindowKind::Custom);
                     }));
                 // Sign in or out with the mod's own OAuth. The Opening handler picks the label,
                 // which decides the action.
@@ -9430,16 +9443,17 @@ enum class UiInk : uint8_t {
 struct UiPalette {
     UiThemeKind kind = UiThemeKind::Dark;
 
-    // Surfaces
+    // Surfaces; caution and error info bars (WinUI InfoBar backgrounds)
     D2D1_COLOR_F background{}, card{}, cardHover{}, cardPressed{}, cardBorder{};
+    D2D1_COLOR_F cautionBackground{}, dangerBackground{};
 
     // Controls: standard fills, subtle (navigation, subtle buttons) and accent fills; the strong
-    // stroke of an off toggle and a slider track, a slider thumb, a focused text box and the
-    // dropdown popup's surface
+    // stroke of an off toggle and a slider track, a slider thumb, a focused text box, the
+    // dropdown popup's surface and a segmented control's selected segment with its edge
     D2D1_COLOR_F control{}, controlHover{}, controlPressed{}, controlDisabled{}, controlBorder{};
     D2D1_COLOR_F subtleHover{}, subtlePressed{};
     D2D1_COLOR_F accent{}, accentHover{}, accentPressed{}, accentDisabled{};
-    D2D1_COLOR_F controlStrong{}, controlSolid{}, inputActive{}, popup{};
+    D2D1_COLOR_F controlStrong{}, controlSolid{}, inputActive{}, popup{}, segment{}, segmentBorder{};
 
     // Text
     D2D1_COLOR_F text{}, textSecondary{}, textMuted{}, textDisabled{}, textOnAccent{};
@@ -9461,6 +9475,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
     if (theme.kind == UiThemeKind::HighContrast) {
         const UiSystemColors& s = theme.system;
         p.background = p.card = p.cardHover = p.cardPressed = UiRgb(s.window);
+        p.cautionBackground = p.dangerBackground = UiRgb(s.window);
         p.cardBorder = UiRgb(s.windowText);
         p.control = p.controlDisabled = UiRgb(s.buttonFace);
         p.controlHover = p.controlPressed = UiRgb(s.highlight);
@@ -9471,6 +9486,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.controlStrong = UiRgb(s.windowText);
         p.controlSolid = UiRgb(s.buttonFace);
         p.inputActive = p.popup = UiRgb(s.window);
+        p.segment = UiRgb(s.highlight);
         p.text = p.textSecondary = p.textMuted = UiRgb(s.windowText);
         p.textDisabled = UiRgb(s.grayText);
         p.textOnAccent = UiRgb(s.highlightText);
@@ -9490,6 +9506,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.cardHover = UiRgb(0xFFFFFF, 0.082f);
         p.cardPressed = UiRgb(0xFFFFFF, 0.03f);
         p.cardBorder = UiRgb(0x000000, 0.25f);
+        p.cautionBackground = UiRgb(0x433519);
+        p.dangerBackground = UiRgb(0x442726);
         p.control = UiRgb(0xFFFFFF, 0.06f);
         p.controlHover = UiRgb(0xFFFFFF, 0.082f);
         p.controlPressed = UiRgb(0xFFFFFF, 0.03f);
@@ -9505,6 +9523,7 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.controlSolid = UiRgb(0x454545);
         p.inputActive = UiRgb(0x1E1E1E, 0.7f);
         p.popup = UiRgb(0x2C2C2C);
+        p.segment = UiRgb(0xFFFFFF, 0.1f);
         p.text = UiRgb(0xFFFFFF);
         p.textSecondary = UiRgb(0xFFFFFF, 0.786f);
         p.textMuted = UiRgb(0xFFFFFF, 0.6f);
@@ -9525,6 +9544,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.cardHover = UiRgb(0xF9F9F9, 0.5f);
         p.cardPressed = UiRgb(0xF9F9F9, 0.3f);
         p.cardBorder = UiRgb(0x000000, 0.06f);
+        p.cautionBackground = UiRgb(0xFFF4CE);
+        p.dangerBackground = UiRgb(0xFDE7E9);
         p.control = UiRgb(0xFFFFFF, 0.7f);
         p.controlHover = UiRgb(0xF9F9F9, 0.5f);
         p.controlPressed = UiRgb(0xF9F9F9, 0.3f);
@@ -9540,6 +9561,8 @@ static UiPalette UiPaletteFor(const UiThemeInput& theme) {
         p.controlSolid = UiRgb(0xFFFFFF);
         p.inputActive = UiRgb(0xFFFFFF);
         p.popup = UiRgb(0xF9F9F9);
+        p.segment = UiRgb(0xFFFFFF);
+        p.segmentBorder = UiRgb(0x000000, 0.06f);
         p.text = UiRgb(0x000000, 0.894f);
         p.textSecondary = UiRgb(0x000000, 0.62f);
         p.textMuted = UiRgb(0x000000, 0.58f);
@@ -9620,8 +9643,9 @@ static UiTextStyle UiIconStyle(float size) {
 // DIPs; targets carry the window DPI.
 
 // Device-independent resources shared by every target of one UI thread: font collections and
-// resolved families, text formats, effect-free layouts (measuring and plain drawing) and path
-// geometries. Owned by that thread's graphics scope, released before the apartment is.
+// resolved families, text formats with their ellipsis signs, effect-free layouts (measuring and
+// plain drawing) and path geometries. Owned by that thread's graphics scope, released before the
+// apartment is.
 struct UiGraphics {
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
@@ -9629,6 +9653,7 @@ struct UiGraphics {
     winrt::com_ptr<IDWriteFontCollection> fonts, typographicFonts;
     std::array<std::wstring, std::size(kUiFamilyNames)> families;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextFormat>> formats;
+    std::map<std::wstring, winrt::com_ptr<IDWriteInlineObject>> ellipses;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
     std::map<PCWSTR, winrt::com_ptr<ID2D1PathGeometry>> paths;
 };
@@ -9716,11 +9741,13 @@ static UiFontMetrics UiFontMetricsFor(UiGraphics& g, const UiTextStyle& style) {
             float(metrics.lineGap) * unit, float(metrics.capHeight) * unit};
 }
 
+static std::wstring UiStyleKey(const UiTextStyle& style) {
+    return std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) + L'|' +
+           std::to_wstring(style.lineHeight) + L'|' + std::to_wstring(int(style.weight));
+}
+
 static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
-    std::wstring key = std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) +
-                       L'|' + std::to_wstring(style.lineHeight) + L'|' +
-                       std::to_wstring(int(style.weight));
-    auto& format = g.formats[key];
+    auto& format = g.formats[UiStyleKey(style)];
     if (format) return format.get();
 
     IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
@@ -9745,14 +9772,24 @@ static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
     return format.get();
 }
 
-// A shared, effect-free layout of plain text. maxWidth bounds wrapping (or alignment without it).
+// Cuts a layout to one line that ends in an ellipsis where it overflows its width; text that
+// fits is unchanged. The sign is the style's, one per format.
+static void UiTrimLayout(UiGraphics& g, IDWriteTextLayout* layout, const UiTextStyle& style) {
+    auto& sign = g.ellipses[UiStyleKey(style)];
+    if (!sign) winrt::check_hresult(g.dwrite->CreateEllipsisTrimmingSign(UiFormat(g, style), sign.put()));
+    DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+    layout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    layout->SetTrimming(&trimming, sign.get());
+}
+
+// A shared, effect-free layout of plain text. maxWidth bounds wrapping (or alignment without it);
+// trim: one line, ellipsized past maxWidth.
 static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const UiTextStyle& style,
                                    float maxWidth, bool wrap = true,
-                                   DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING) {
-    std::wstring key = std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) +
-                       L'|' + std::to_wstring(style.lineHeight) + L'|' +
-                       std::to_wstring(int(style.weight)) + L'|' + std::to_wstring(maxWidth) +
-                       L'|' + (wrap ? L'w' : L'n') + std::to_wstring(int(align)) + L'|';
+                                   DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
+                                   bool trim = false) {
+    std::wstring key = UiStyleKey(style) + L'|' + std::to_wstring(maxWidth) + L'|' +
+                       (trim ? L't' : wrap ? L'w' : L'n') + std::to_wstring(int(align)) + L'|';
     key += text;
     auto& layout = g.layouts[key];
     if (layout) return layout.get();
@@ -9761,6 +9798,7 @@ static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const 
                                                     100000.0f, layout.put()));
     layout->SetWordWrapping(wrap ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
     layout->SetTextAlignment(align);
+    if (trim) UiTrimLayout(g, layout.get(), style);
     return layout.get();
 }
 
@@ -10032,11 +10070,14 @@ struct UiAction {
 
 enum class UiRunStyle : uint8_t { Normal, Strong, Link };
 
+// color: a concrete color the client derived from the theme (a usage color), over the ink;
+// high contrast ignores it.
 struct UiRun {
     std::wstring text;
     UiRunStyle style = UiRunStyle::Normal;
     UiInk ink = UiInk::Inherit;
     UiAction action{};  // Link runs
+    std::optional<D2D1_COLOR_F> color{};
 };
 
 static std::wstring UiRunsText(const std::vector<UiRun>& runs) {
@@ -10064,9 +10105,9 @@ static const UiRun* UiLinkRun(const std::vector<UiRun>& runs, int link) {
 }
 
 static std::wstring UiRichKey(const std::vector<UiRun>& runs, UiFont font, float width,
-                              DWRITE_TEXT_ALIGNMENT align) {
+                              DWRITE_TEXT_ALIGNMENT align, bool trim) {
     std::wstring key = std::to_wstring(int(font)) + L'|' + std::to_wstring(width) + L'|' +
-                       std::to_wstring(int(align));
+                       std::to_wstring(int(align)) + (trim ? L"t" : L"");
     for (const UiRun& run : runs) {
         key += L'|';
         key += wchar_t(L'0' + int(run.style));
@@ -10080,7 +10121,7 @@ static std::wstring UiRichKey(const std::vector<UiRun>& runs, UiFont font, float
 static winrt::com_ptr<IDWriteTextLayout> UiCreateRichLayout(UiGraphics& g,
                                                             const std::vector<UiRun>& runs,
                                                             UiFont font, float width,
-                                                            DWRITE_TEXT_ALIGNMENT align) {
+                                                            DWRITE_TEXT_ALIGNMENT align, bool trim) {
     std::wstring text = UiRunsText(runs);
     winrt::com_ptr<IDWriteTextLayout> layout;
     winrt::check_hresult(g.dwrite->CreateTextLayout(text.c_str(), UINT32(text.size()),
@@ -10088,6 +10129,7 @@ static winrt::com_ptr<IDWriteTextLayout> UiCreateRichLayout(UiGraphics& g,
                                                     std::max(width, 0.0f), 100000.0f,
                                                     layout.put()));
     layout->SetTextAlignment(align);
+    if (trim) UiTrimLayout(g, layout.get(), UiTextStyleFor(font));
     UINT32 at = 0;
     for (const UiRun& run : runs) {
         if (run.style == UiRunStyle::Strong) {
@@ -10098,12 +10140,13 @@ static winrt::com_ptr<IDWriteTextLayout> UiCreateRichLayout(UiGraphics& g,
     return layout;
 }
 
-// The shared, effect-free layout: measuring and link hit testing.
+// The shared, effect-free layout: measuring and link hit testing. trim: one line, ellipsized.
 static IDWriteTextLayout* UiRichLayout(UiGraphics& g, const std::vector<UiRun>& runs, UiFont font,
                                        float width,
-                                       DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING) {
-    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align)];
-    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align);
+                                       DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
+                                       bool trim = false) {
+    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align, trim)];
+    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     return layout.get();
 }
 
@@ -10150,14 +10193,15 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
                                         UiGraphics& g, const std::vector<UiRun>& runs, UiFont font,
                                         float width, DWRITE_TEXT_ALIGNMENT align,
                                         const UiPalette& palette, UiInk baseInk, int hotLink,
-                                        int pressedLink) {
-    auto& layout = cache.layouts[UiRichKey(runs, font, width, align)];
-    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align);
+                                        int pressedLink, bool trim = false) {
+    auto& layout = cache.layouts[UiRichKey(runs, font, width, align, trim)];
+    if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     UINT32 at = 0;
     int link = 0;
     for (const UiRun& run : runs) {
         DWRITE_TEXT_RANGE range{at, UINT32(run.text.size())};
-        D2D1_COLOR_F color = UiInkColor(palette, run.ink == UiInk::Inherit ? baseInk : run.ink);
+        D2D1_COLOR_F color = run.color && palette.kind != UiThemeKind::HighContrast ?
+                                 *run.color : UiInkColor(palette, run.ink == UiInk::Inherit ? baseInk : run.ink);
         bool underline = false;
         if (run.style == UiRunStyle::Link) {
             color = link == pressedLink ? palette.linkPressed :
@@ -10177,24 +10221,34 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // hit testing, focus order and shared layout builders. Pure. Builders read no globals; paint and
 // input work only from the list.
 
-// Card: a raised panel; a subtle one (button = Subtle) only shows the pointer over it, and a
-// selected one is lifted (an accent border). Button: with options, a menu button whose
-// activation opens them in the popup. Toggle: selected = on. Dropdown: text = the chosen
+// Nav: a navigation entry: a glyph (`icon`) or a shape (`parts`, a 24 DIP view box drawn at 16
+// DIP), its label `text` in `ink` (ellipsized) and a trailing value (`runs`: semibold caption in
+// its first run's color or ink). Card: a raised panel; a subtle one (button = Subtle) only shows
+// the pointer over it, and a selected one is lifted (an accent border); a Caution or Danger ink
+// tints it as an info bar of that severity. Text: rich text wrapped to the rectangle's width,
+// or one line ellipsized at it (`trim`). Button: an optional glyph (`icon`) before its label,
+// centered alone without one; with options, a menu button whose activation opens them in the
+// popup. Toggle: selected = on; its label ("On"/"Off", or `text`) leads the
+// switch, or follows a leading switch when align is trailing. Dropdown: text = the chosen
 // option's label, action.value = its value; activating it opens the popup (ui/popup.h).
 // NumberBox: the drawn frame of a native text box (ui/text-box.h) showing `text`, centered
 // without spin buttons when align is center; SpinButton: its up/down buttons (not tab stops).
 // TextBox: the frame of a native text box for free text, `runs` its placeholder while empty,
 // `maximum` its character limit. Option: one row of the popup; with runs, a two-line menu row
-// (title `text`, detail `runs`, an icon from `parts`). Slider: action.value within [minimum,
+// (title `text`, detail `runs`, an icon from `parts`); with a glyph (`icon`), a one-line menu row,
+// a separator line above it when `separator` is set. Slider: action.value within [minimum,
 // maximum]. Swatch: a color choice, action.value = 0xBBGGRR, selected = current; without an
 // action kind, a color dot. Gallery: a choice card named `text` with a client-drawn thumbnail.
 // Preview: a client-drawn strip that pans sideways (not a tab stop). Chip: a pill named `text`,
 // selected = on; without an action it only shows. Handle: a drag handle (glyph `text`, not a
 // tab stop) for its `owner`, which holds keyboard focus for it. Rule: a 1 px separator along the
-// rectangle's top edge.
+// rectangle's top edge. Segmented: one tab stop choosing among `options` (action.value = the
+// selected one's value); the pointer targets each segment (UiFocusRef::link = its index).
+// Pill: a status chip tinted with its `ink`, a dot (hollow unless selected) before `text`; never
+// interactive.
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
-    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule
+    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -10208,12 +10262,15 @@ struct UiShapePart {
     float stroke = 0;  // View-box units; 0 fills.
 };
 
-// A dropdown or menu choice; menus give each a detail line and an icon.
+// A dropdown or menu choice. Menus give each a detail line and an icon (two-line rows), or a glyph
+// (one-line rows), optionally after a separator.
 struct UiOption {
     std::wstring text;
     int value = 0;
     std::wstring detail;
     std::vector<UiShapePart> parts;  // 24 DIP view box
+    std::wstring icon;               // Glyph of a one-line menu row
+    bool separator = false;          // A separator line above it (one-line menus)
 };
 
 struct UiItem {
@@ -10223,14 +10280,14 @@ struct UiItem {
     UiFont font = UiFont::Body;      // Text; Button and Chip labels
     UiInk ink = UiInk::Primary;
     DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
-    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option, Chip);
-                                     // Glyph, SpinButton and Handle character; text box text
-    std::wstring icon;               // Nav and Button glyph
+    std::wstring text;               // Label (Nav, Button, Link, Toggle, Dropdown, Option, Chip,
+                                     // Pill); Glyph, SpinButton and Handle character; text box text
+    std::wstring icon;               // Nav, Button and one-line menu row glyph
     float iconSize = 16;             // Glyph, Nav, Button and Handle glyph size
     std::vector<UiRun> runs;         // Text, wrapped to the rectangle's width; TextBox
-                                     // placeholder; Option detail
-    std::vector<UiShapePart> parts;  // Shape; Option icon
-    std::vector<UiOption> options;   // Dropdown; menu Button
+                                     // placeholder; Option detail; Nav value
+    std::vector<UiShapePart> parts;  // Shape; Option and Nav icon
+    std::vector<UiOption> options;   // Dropdown; menu Button; Segmented
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;  // Button; Card (Subtle)
@@ -10240,6 +10297,8 @@ struct UiItem {
                                      // TextBox: maximum = character limit
     bool selected = false;
     bool enabled = true;
+    bool trim = false;               // Text: one line, ellipsized
+    bool separator = false;          // Option: a menu separator line above it
 };
 
 // A focus or pointer target: an item, or one inline link (link >= 0) of a Text item. id 0 = none.
@@ -10249,16 +10308,26 @@ struct UiFocusRef {
     bool operator==(const UiFocusRef&) const = default;
 };
 
-enum class UiSurfaceId : uint8_t { Main, Content };
+// Nav: the main surface's scrolling navigation pane (UiFrame::nav); Content: the viewport's.
+enum class UiSurfaceId : uint8_t { Main, Content, Nav };
 
 // One built window state, in DIPs: main-surface items (navigation, pinned header), the
 // viewport's rectangle in the main client, and the scrolling content at scroll offset 0.
+// Optionally a scrolling navigation pane on the main surface: `nav` items in main coordinates at
+// scroll offset 0, clipped to `navPane`, whose content is `navHeight` tall from the pane's top.
 struct UiFrame {
     std::vector<UiItem> main;
     D2D1_RECT_F viewport{};
     std::vector<UiItem> content;
     float contentHeight = 0;
+    std::vector<UiItem> nav;
+    D2D1_RECT_F navPane{};
+    float navHeight = 0;
 };
+
+static const std::vector<UiItem>& UiSurfaceItems(const UiFrame& frame, UiSurfaceId surface) {
+    return surface == UiSurfaceId::Main ? frame.main : surface == UiSurfaceId::Nav ? frame.nav : frame.content;
+}
 
 struct UiFocusStop {
     UiFocusRef ref;
@@ -10268,7 +10337,7 @@ struct UiFocusStop {
 
 static bool UiInteractiveKind(UiItemKind kind) {
     return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape &&
-           kind != UiItemKind::Rule;
+           kind != UiItemKind::Rule && kind != UiItemKind::Pill;
 }
 
 // Reacts to the pointer and can be activated.
@@ -10285,24 +10354,22 @@ static bool UiFocusable(const UiItem& item) {
 
 static const UiItem* UiFindItem(const UiFrame& frame, uint32_t id, UiSurfaceId* surface = nullptr) {
     if (!id) return nullptr;
-    for (const UiItem& item : frame.main) {
-        if (item.id != id) continue;
-        if (surface) *surface = UiSurfaceId::Main;
-        return &item;
-    }
-    for (const UiItem& item : frame.content) {
-        if (item.id != id) continue;
-        if (surface) *surface = UiSurfaceId::Content;
-        return &item;
+    for (UiSurfaceId in : {UiSurfaceId::Nav, UiSurfaceId::Main, UiSurfaceId::Content}) {
+        for (const UiItem& item : UiSurfaceItems(frame, in)) {
+            if (item.id != id) continue;
+            if (surface) *surface = in;
+            return &item;
+        }
     }
     return nullptr;
 }
 
-// Item order is focus order: main surface first, then content; inline links in text order.
+// Item order is focus order: the navigation pane, the main surface, then content; inline links
+// in text order.
 static std::vector<UiFocusStop> UiFocusStops(const UiFrame& frame) {
     std::vector<UiFocusStop> stops;
-    for (UiSurfaceId surface : {UiSurfaceId::Main, UiSurfaceId::Content}) {
-        for (const UiItem& item : surface == UiSurfaceId::Main ? frame.main : frame.content) {
+    for (UiSurfaceId surface : {UiSurfaceId::Nav, UiSurfaceId::Main, UiSurfaceId::Content}) {
+        for (const UiItem& item : UiSurfaceItems(frame, surface)) {
             if (item.kind == UiItemKind::Text) {
                 int link = 0;
                 for (const UiRun& run : item.runs) {
@@ -10328,10 +10395,32 @@ static const UiAction* UiActionOf(const UiFrame& frame, UiFocusRef ref) {
     return run && run->action.kind != UiActionKind::None ? &run->action : nullptr;
 }
 
-// The interactive element under a point: an inline link, else the topmost interactive item.
-// A disabled interactive item blocks the items below it; an enabled one without an action (a
-// plain card, a chip that only shows) doesn't. A slider takes in its thumb, which overhangs the
-// track's ends by its 10 DIP radius.
+// A segmented control's segments (mockup .segctl, .segi): 13 DIP labels with 12 DIP padding,
+// side by side inside its 1 DIP border and 2 DIP padding. Paint, hit testing and focus share it.
+static std::vector<D2D1_RECT_F> UiSegmentRects(UiGraphics& g, const UiItem& item) {
+    std::vector<D2D1_RECT_F> rects;
+    float x = item.rect.left + 3;
+    for (const UiOption& option : item.options) {
+        float width = std::ceil(UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Note), 10000,
+                                                      false)).width) + 24;
+        rects.push_back({x, item.rect.top + 3, x + width, item.rect.bottom - 3});
+        x += width;
+    }
+    return rects;
+}
+
+// The selected segment's index (its value is action.value), or -1.
+static int UiSelectedSegment(const UiItem& item) {
+    for (size_t i = 0; i < item.options.size(); i++) {
+        if (item.options[i].value == item.action.value) return int(i);
+    }
+    return -1;
+}
+
+// The interactive element under a point: an inline link or a segment, else the topmost
+// interactive item. A disabled interactive item blocks the items below it; an enabled one
+// without an action (a plain card, a chip that only shows) doesn't. A slider takes in its thumb,
+// which overhangs the track's ends by its 10 DIP radius.
 static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D1_POINT_2F point) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const UiItem& item = *it;
@@ -10341,7 +10430,7 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
         if (item.kind == UiItemKind::Text) {
             if (!item.enabled || UiLinkRanges(item.runs).empty()) continue;
             int link = UiLinkAt(UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left,
-                                             item.align),
+                                             item.align, item.trim),
                                 item.runs, {point.x - item.rect.left, point.y - item.rect.top});
             const UiRun* run = link >= 0 ? UiLinkRun(item.runs, link) : nullptr;
             if (run && run->action.kind != UiActionKind::None) return {item.id, link};
@@ -10350,16 +10439,27 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
         if (!UiInteractiveKind(item.kind) || (item.enabled && item.action.kind == UiActionKind::None)) {
             continue;
         }
-        return UiActive(item) ? UiFocusRef{item.id, -1} : UiFocusRef{};
+        if (!UiActive(item)) return {};
+        if (item.kind == UiItemKind::Segmented) {
+            std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, item);
+            for (size_t i = 0; i < segments.size(); i++) {
+                if (UiContains(segments[i], point)) return {item.id, int(i)};
+            }
+        }
+        return {item.id, -1};
     }
     return {};
 }
 
-// Focus ring boxes: the item, or each line box of an inline link.
+// Focus ring boxes: the item, its selected segment, or each line box of an inline link.
 static std::vector<D2D1_RECT_F> UiFocusBounds(UiGraphics& g, const UiItem& item, int link) {
+    if (item.kind == UiItemKind::Segmented) {
+        int selected = UiSelectedSegment(item);
+        return {selected >= 0 ? UiSegmentRects(g, item)[size_t(selected)] : item.rect};
+    }
     if (link < 0) return {item.rect};
     std::vector<D2D1_RECT_F> rects = UiLinkRects(
-        UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left, item.align),
+        UiRichLayout(g, item.runs, item.font, item.rect.right - item.rect.left, item.align, item.trim),
         item.runs, link);
     for (D2D1_RECT_F& rect : rects) {
         rect = {rect.left + item.rect.left, rect.top + item.rect.top, rect.right + item.rect.left,
@@ -10419,6 +10519,17 @@ static UiScrollbar UiScrollbarFor(D2D1_SIZE_F viewport, float offset, float cont
     float top = bar.track.top + (trackHeight - length) * std::clamp(offset / range, 0.0f, 1.0f);
     float width = expanded ? 6.0f : 2.0f;
     bar.thumb = {viewport.width - 3 - width, top, viewport.width - 3, top + length};
+    return bar;
+}
+
+// The same scrollbar at the navigation pane's right edge (mockup .nbar), in main DIPs.
+static UiScrollbar UiNavScrollbar(const UiFrame& frame, float offset, bool expanded) {
+    const D2D1_RECT_F& pane = frame.navPane;
+    UiScrollbar bar = UiScrollbarFor({pane.right - pane.left, pane.bottom - pane.top}, offset,
+                                     frame.navHeight, expanded);
+    for (D2D1_RECT_F* rect : {&bar.track, &bar.thumb}) {
+        *rect = {rect->left + pane.left, rect->top + pane.top, rect->right + pane.left, rect->bottom + pane.top};
+    }
     return bar;
 }
 
@@ -10584,59 +10695,155 @@ static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_
     return layout;
 }
 
-// Info bar (mockup .infobar): an accent info glyph and wrapped rich text on a card. The text
-// item takes `textId`, which stays the same across rebuilds so a focused link keeps its focus.
+// Info bar (mockup .infobar; severities and the button: history mockup .ibar): a severity icon
+// and wrapped rich text on a card, tinted for caution and error, with an optional trailing
+// button (28 DIP, 10 DIP from the bar's edges; the text centered against it). The text item
+// takes `textId`, the button its own id; both stay the same across rebuilds so focus stays.
+enum class UiSeverity : uint8_t { Info, Caution, Error };
+
+struct UiInfoButton {
+    uint32_t id = 0;
+    std::wstring text;
+    UiAction action;
+    bool enabled = true;
+};
+
 static float UiAddInfoBar(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, uint32_t textId,
-                          float x, float y, float width, std::vector<UiRun> runs) {
+                          float x, float y, float width, std::vector<UiRun> runs,
+                          UiSeverity severity = UiSeverity::Info,
+                          const std::optional<UiInfoButton>& button = std::nullopt) {
     constexpr float kInset = 1 + 13, kPadX = 1 + 18, kIcon = 16, kGap = 12;
+    constexpr float kButton = 28, kButtonInset = 1 + 9, kButtonRight = 1 + 12;
+    UiTextStyle note = UiTextStyleFor(UiFont::Note);
+    float buttonWidth = button ? std::ceil(UiLayoutSize(UiLayout(g, button->text, note, 1000, false)).width) + 24 : 0;
+    float right = button ? x + width - kButtonRight - buttonWidth - kGap : x + width - kPadX;
     float textLeft = x + kPadX + kIcon + kGap;
-    float textWidth = std::max(x + width - kPadX - textLeft, 40.0f);
+    float textWidth = std::max(right - textLeft, 40.0f);
     float textHeight = UiLayoutSize(UiRichLayout(g, runs, UiFont::Note, textWidth)).height;
+    float height = std::max(textHeight + 2 * kInset, button ? kButton + 2 * kButtonInset : 0.0f);
+    float textTop = y + (height - textHeight) / 2;
     UiItem card;
     card.id = id++;
     card.kind = UiItemKind::Card;
-    card.rect = {x, y, x + width, y + textHeight + 2 * kInset};
+    card.rect = {x, y, x + width, y + height};
+    card.ink = severity == UiSeverity::Caution ? UiInk::Caution :
+               severity == UiSeverity::Error   ? UiInk::Danger : UiInk::Primary;
     items.push_back(card);
-    UiItem icon;
-    icon.id = id++;
-    icon.kind = UiItemKind::Glyph;
-    icon.text = L"\uF167";  // InfoSolid
-    icon.ink = UiInk::Accent;
-    icon.rect = {x + kPadX, y + kInset + 1.5f, x + kPadX + kIcon, y + kInset + 1.5f + kIcon};
-    items.push_back(std::move(icon));
+    // Info: InfoSolid in the accent; caution and error (WinUI InfoBar): a filled circle in the
+    // severity's color under its mark.
+    D2D1_RECT_F iconRect{x + kPadX, textTop + 1.5f, x + kPadX + kIcon, textTop + 1.5f + kIcon};
+    auto glyph = [&](PCWSTR text, UiInk ink) {
+        UiItem icon;
+        icon.id = id++;
+        icon.kind = UiItemKind::Glyph;
+        icon.text = text;
+        icon.ink = ink;
+        icon.rect = iconRect;
+        items.push_back(std::move(icon));
+    };
+    if (severity == UiSeverity::Info) {
+        glyph(L"\uF167", UiInk::Accent);
+    } else {
+        glyph(L"\uF136", card.ink);
+        glyph(severity == UiSeverity::Caution ? L"\uF13C" : L"\uF13D", UiInk::OnAccent);
+    }
     UiItem text;
     text.id = textId;
     text.kind = UiItemKind::Text;
     text.font = UiFont::Note;
     text.ink = UiInk::Secondary;
-    text.rect = {textLeft, y + kInset, textLeft + textWidth, y + kInset + textHeight};
+    text.rect = {textLeft, textTop, textLeft + textWidth, textTop + textHeight};
     text.runs = std::move(runs);
     items.push_back(std::move(text));
+    if (button) {
+        UiItem action;
+        action.id = button->id;
+        action.kind = UiItemKind::Button;
+        action.font = UiFont::Note;
+        action.text = button->text;
+        float center = y + height / 2, buttonRight = x + width - kButtonRight;
+        action.rect = {buttonRight - buttonWidth, center - kButton / 2, buttonRight, center + kButton / 2};
+        action.enabled = button->enabled;
+        action.action = button->action;
+        items.push_back(std::move(action));
+    }
     return card.rect.bottom;
 }
 
 // Controls placed in a card's trailing slot (mockup .ctl). Interactive controls take explicit
 // ids that stay the same across rebuilds: focus and native text boxes follow them.
 
-// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch.
-static D2D1_SIZE_F UiToggleSize(UiGraphics& g) {
+// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch. With a label
+// (history mockup .cmpt): the switch first, 8 DIP gap, the 13 DIP label; the label toggles too.
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g, std::wstring_view label = {}) {
+    if (!label.empty()) {
+        return {40 + 8 + std::ceil(UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Note), 1000, false)).width),
+                32};
+    }
     UiTextStyle body = UiTextStyleFor(UiFont::Body);
-    float label = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
+    float state = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
                            UiLayoutSize(UiLayout(g, L"Off", body, 1000, false)).width);
-    return {std::ceil(label) + 12 + 40, 32};
+    return {std::ceil(state) + 12 + 40, 32};
 }
 
 static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
-                        bool enabled, UiAction action) {
+                        bool enabled, UiAction action, std::wstring label = {}) {
     UiItem toggle;
     toggle.id = id;
     toggle.kind = UiItemKind::Toggle;
     toggle.rect = slot;
-    toggle.text = on ? L"On" : L"Off";
+    if (label.empty()) {
+        toggle.text = on ? L"On" : L"Off";
+    } else {
+        toggle.text = std::move(label);
+        toggle.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
+    }
     toggle.selected = on;
     toggle.enabled = enabled;
     toggle.action = std::move(action);
     items.push_back(std::move(toggle));
+}
+
+// Segmented control (history mockup .segctl): 32 DIP tall, as wide as its segments.
+[[maybe_unused]] static D2D1_SIZE_F UiSegmentedSize(UiGraphics& g, const std::vector<UiOption>& options) {
+    UiItem control;
+    control.options = options;
+    std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, control);
+    return {(segments.empty() ? 3 : segments.back().right) + 3, 32};
+}
+
+// The selected option is the one whose value is action.value.
+[[maybe_unused]] static void UiAddSegmented(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+                           std::vector<UiOption> options, bool enabled, UiAction action) {
+    UiItem control;
+    control.id = id;
+    control.kind = UiItemKind::Segmented;
+    control.rect = slot;
+    control.options = std::move(options);
+    control.enabled = enabled;
+    control.action = std::move(action);
+    items.push_back(std::move(control));
+}
+
+// Status pill (history mockup .pill): 20 DIP tall, 9 DIP padding, a 6 DIP dot and 4 DIP gap
+// before caption text.
+[[maybe_unused]] static D2D1_SIZE_F UiPillSize(UiGraphics& g, std::wstring_view text) {
+    float width = UiLayoutSize(UiLayout(g, text, UiTextStyleFor(UiFont::Caption), 1000, false)).width;
+    return {9 + 6 + 4 + std::ceil(width) + 9, 20};
+}
+
+// ink: Success, Caution or Danger for a state, Secondary for off; on: a filled dot.
+[[maybe_unused]] static void UiAddPill(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, std::wstring text,
+                      UiInk ink, bool on) {
+    UiItem pill;
+    pill.id = id;
+    pill.kind = UiItemKind::Pill;
+    pill.rect = slot;
+    pill.font = UiFont::Caption;
+    pill.text = std::move(text);
+    pill.ink = ink;
+    pill.selected = on;
+    items.push_back(std::move(pill));
 }
 
 // Dropdown field (mockup .combo): the option whose value is action.value.
@@ -10742,13 +10949,18 @@ static D2D1_RECT_F UiGalleryThumbRect(const UiItem& card) {
 // The popup's rows. A dropdown's (WinUI combo box items): 32 DIP rows on a 36 DIP pitch, 5 DIP
 // side insets, 2 DIP top and bottom padding; the current value's row selected. A menu's, when
 // its options have details (mockup .dmenu .dmi): 53 DIP rows inside 4 DIP padding, an 18 DIP
-// icon, the title and its detail line; at least 310 DIP wide. Each row's action is the field's,
-// with the row's value. Returns the popup size in DIPs, at least `minWidth` wide.
+// icon, the title and its detail line; at least 310 DIP wide. A one-line menu's, when its
+// options have glyphs (history mockup .pmenu.small .pmi): dropdown rows with a 16 DIP glyph 12
+// DIP in and the label 12 DIP after it, 28 DIP after the widest label; a separator adds 5 DIP
+// above its row (a line 4 DIP under the previous row). Each row's action is the field's, with the
+// row's value. Returns the popup size in DIPs, at least `minWidth` wide.
 static D2D1_SIZE_F UiLayoutOptions(UiGraphics& g, const std::vector<UiOption>& options,
                                    const UiAction& action, float minWidth,
                                    std::vector<UiItem>& rows) {
     bool menu = std::any_of(options.begin(), options.end(),
                             [](const UiOption& option) { return !option.detail.empty(); });
+    bool glyphs = !menu && std::any_of(options.begin(), options.end(),
+                                       [](const UiOption& option) { return !option.icon.empty(); });
     UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
     float width = menu ? std::max(minWidth, 310.0f) : minWidth;
     for (const UiOption& option : options) {
@@ -10757,28 +10969,32 @@ static D2D1_SIZE_F UiLayoutOptions(UiGraphics& g, const std::vector<UiOption>& o
             text = std::max(text, UiLayoutSize(UiLayout(g, option.detail, caption, 10000, false)).width);
             width = std::max(width, std::ceil(text) + 4 + 12 + 18 + 14 + 12 + 4);
         } else {
-            width = std::max(width, std::ceil(text) + 5 + 12 + 12 + 5);
+            width = std::max(width, std::ceil(text) + 5 + 12 + (glyphs ? 16 + 12 + 28 : 12) + 5);
         }
     }
-    float pitch = menu ? 53 : 36, inset = menu ? 4 : 5, row = menu ? 53 : 32;
+    float pitch = menu ? 53 : 36, inset = menu ? 4 : 5, row = menu ? 53 : 32, y = 4;
     rows.clear();
     for (size_t i = 0; i < options.size(); i++) {
         UiItem item;
         item.id = uint32_t(i + 1);
         item.kind = UiItemKind::Option;
-        float y = 4 + pitch * float(i);
+        item.separator = glyphs && i > 0 && options[i].separator;
+        if (item.separator) y += 5;
         item.rect = {inset, y, width - inset, y + row};
         item.text = options[i].text;
         if (menu) {
             item.runs.push_back({options[i].detail});
             item.parts = options[i].parts;
+        } else if (glyphs) {
+            item.icon = options[i].icon;
         }
         item.selected = options[i].value == action.value;
         item.action = action;
         item.action.value = options[i].value;
         rows.push_back(std::move(item));
+        y += pitch;
     }
-    return {width, menu ? 8 + pitch * float(options.size()) : 4 + pitch * float(options.size())};
+    return {width, y + (menu ? 4 : 0)};
 }
 
 // Where the popup goes, in pixels: below the field, else above it, else on the side with more
@@ -10838,7 +11054,12 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
         const bool pressed = hot && state.pressed == UiFocusRef{item.id, -1};
         switch (item.kind) {
             // Navigation item and popup option: accent pill when selected, glyph, label. A menu
-            // row: the pointer's fill, its icon, title and detail line.
+            // row: the pointer's fill, its icon, title and detail line. A navigation item's shape
+            // icon follows its label's ink (history mockup .nitem.acc: 10 DIP gap), its label
+            // ends in an ellipsis 30 DIP before its trailing value (.npct), which keeps its color
+            // except in high contrast and on a selected item there, and fades when disabled. A
+            // one-line menu row (history mockup .pmi): its glyph 12 DIP in, the label 12 DIP
+            // after it; a separator (.psep) across the popup 5 DIP above it.
             case UiItemKind::Nav:
             case UiItemKind::Option: {
                 if (item.kind == UiItemKind::Option && !item.runs.empty()) {
@@ -10878,24 +11099,67 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                     UiFillRect(target, cache, {r.left, centerY - 8, r.left + 3, centerY + 8}, 1.5f,
                                hc ? p.highlightText : p.accent, scale);
                 }
+                if (item.separator) {
+                    UiFillRect(target, cache, {r.left - 5, r.top - 5, r.right + 5, r.top - 5 + 1 / scale}, 0,
+                               p.controlBorder, scale);
+                }
                 D2D1_COLOR_F ink = !item.enabled ? p.textDisabled :
-                                   hc && item.selected ? p.highlightText : p.text;
+                                   hc && item.selected ? p.highlightText : UiInkColor(p, item.ink);
                 float labelLeft = 12;
                 if (!item.icon.empty()) {
+                    bool row = item.kind == UiItemKind::Option;
                     UiDrawLayout(target, cache,
                                  UiLayout(g, item.icon, UiIconStyle(item.iconSize), 16, false,
                                           DWRITE_TEXT_ALIGNMENT_CENTER),
-                                 {r.left + 14, centerY - item.iconSize / 2}, ink);
-                    labelLeft = 44;
+                                 {r.left + (row ? 12 : 14), centerY - item.iconSize / 2}, ink);
+                    labelLeft = row ? 40 : 44;
+                } else if (!item.parts.empty()) {
+                    float s = 16.0f / 24;
+                    D2D1::Matrix3x2F local = D2D1::Matrix3x2F::Scale(s, s) *
+                                             D2D1::Matrix3x2F::Translation(r.left + 14, centerY - 8) * shifted;
+                    target->SetTransform(&local);
+                    for (const UiShapePart& part : item.parts) {
+                        D2D1_COLOR_F color = part.ink == UiInk::Inherit ? part.color : UiFade(ink, part.alpha);
+                        if (part.stroke > 0) {
+                            target->DrawGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color),
+                                                 part.stroke, g.roundCaps.get());
+                        } else {
+                            target->FillGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color), nullptr);
+                        }
+                    }
+                    target->SetTransform(&shifted);
+                    labelLeft = 40;
                 }
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, width - labelLeft, false),
+                if (item.kind == UiItemKind::Option) {
+                    UiDrawLayout(target, cache, UiLayout(g, item.text, label, width - labelLeft, false),
+                                 {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
+                    break;
+                }
+                float labelRight = r.right - 14;
+                if (!item.runs.empty()) {
+                    const UiRun& run = item.runs.front();
+                    UiTextStyle value = UiTextStyleFor(UiFont::Caption);
+                    value.weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
+                    IDWriteTextLayout* text = UiLayout(g, UiRunsText(item.runs), value, 10000, false);
+                    float valueLeft = r.right - 14 - UiLayoutSize(text).width;
+                    D2D1_COLOR_F color = hc && item.selected      ? ink :
+                                         run.color && !hc         ? *run.color :
+                                         run.ink != UiInk::Inherit ? UiInkColor(p, run.ink) : ink;
+                    UiDrawLayout(target, cache, text, {valueLeft, centerY - value.lineHeight / 2},
+                                 item.enabled ? color : UiFade(color, 0.45f));
+                    labelRight = valueLeft - 30;
+                }
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, std::max(labelRight - r.left - labelLeft, 0.0f), false,
+                                      DWRITE_TEXT_ALIGNMENT_LEADING, true),
                              {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                 break;
             }
             // Card: a raised panel; interactive cards react to the pointer as a whole. A subtle
             // card shows only the pointer over the panel it lies on; a lifted (selected) one is
-            // opaque with an accent edge, drawn over what it is dragged across.
+            // opaque with an accent edge, drawn over what it is dragged across. A caution or
+            // error info bar's panel takes its severity's background.
             case UiItemKind::Card: {
                 bool interactive = UiFocusable(item);
                 bool hcHot = hc && interactive && hot;
@@ -10906,9 +11170,11 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                     if (hcHot) UiStrokeRect(target, cache, r, 6, p.highlight, 2, scale);
                     break;
                 }
-                D2D1_COLOR_F fill = item.selected            ? UiOver(p.cardHover, UiOver(p.card, p.background)) :
-                                    interactive && pressed   ? p.cardPressed :
-                                    interactive && hot       ? p.cardHover : p.card;
+                D2D1_COLOR_F fill = item.selected              ? UiOver(p.cardHover, UiOver(p.card, p.background)) :
+                                    interactive && pressed     ? p.cardPressed :
+                                    interactive && hot         ? p.cardHover :
+                                    item.ink == UiInk::Caution ? p.cautionBackground :
+                                    item.ink == UiInk::Danger  ? p.dangerBackground : p.card;
                 UiFillRect(target, cache, r, 6, fill, scale);
                 if (item.selected) {
                     UiStrokeRect(target, cache, r, 6, hc ? p.highlight : p.accent,
@@ -10919,7 +11185,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 }
                 break;
             }
-            // Rich text wrapped to the item width, inline links colored by pointer state.
+            // Rich text wrapped to the item width (or cut to one line), inline links colored by
+            // pointer state.
             case UiItemKind::Text: {
                 int hotLink = state.hot.id == item.id ? state.hot.link : -1;
                 int pressedLink =
@@ -10927,7 +11194,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiInk ink = item.enabled ? item.ink : UiInk::Disabled;
                 IDWriteTextLayout* layout =
                     UiInkedLayout(target, cache, g, item.runs, item.font, width, item.align, p, ink,
-                                  hotLink, pressedLink);
+                                  hotLink, pressedLink, item.trim);
                 UiDrawLayout(target, cache, layout, {r.left, r.top},
                              UiFade(UiInkColor(p, ink), item.opacity));
                 break;
@@ -10962,8 +11229,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 target->SetTransform(&shifted);
                 break;
             }
-            // Button: standard, accent, subtle or danger; optional glyph before the label. A menu
-            // button stays pressed while its popup shows.
+            // Button: standard, accent, subtle or danger; optional glyph 8 DIP before the label,
+            // or centered alone. A menu button stays pressed while its popup shows.
             case UiItemKind::Button: {
                 D2D1_COLOR_F fill{}, border{}, ink{};
                 bool down = pressed || (item.enabled && state.open == item.id);
@@ -10996,7 +11263,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiTextStyle label = UiTextStyleFor(item.font);
                 IDWriteTextLayout* text = UiLayout(g, item.text, label, width, false);
                 float textWidth = UiLayoutSize(text).width;
-                float iconWidth = item.icon.empty() ? 0 : item.iconSize + 8;
+                float iconWidth = item.icon.empty() ? 0 : item.iconSize + (item.text.empty() ? 0 : 8);
                 float x = r.left + (width - textWidth - iconWidth) / 2;
                 if (!item.icon.empty()) {
                     UiDrawLayout(target, cache,
@@ -11022,11 +11289,14 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              hot ? p.linkHover : p.link);
                 break;
             }
-            // Toggle switch at the right end, "On"/"Off" before it. On: accent track, knob in
-            // the text-on-accent color; off: strong outline. The knob grows under the pointer.
+            // Toggle switch at the right end, "On"/"Off" before it; or at the left end, its label
+            // after it (align trailing). On: accent track, knob in the text-on-accent color; off:
+            // strong outline. The knob grows under the pointer.
             case UiItemKind::Toggle: {
                 bool on = item.selected, active = item.enabled && hot;
-                D2D1_RECT_F track{r.right - 40, centerY - 10, r.right, centerY + 10};
+                bool leading = item.align == DWRITE_TEXT_ALIGNMENT_TRAILING;
+                D2D1_RECT_F track = leading ? D2D1_RECT_F{r.left, centerY - 10, r.left + 40, centerY + 10} :
+                                              D2D1_RECT_F{r.right - 40, centerY - 10, r.right, centerY + 10};
                 D2D1_COLOR_F fill{}, border{}, knob{};
                 if (!item.enabled) {
                     fill = on ? p.accentDisabled : D2D1_COLOR_F{};
@@ -11048,6 +11318,15 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiFillRect(target, cache,
                            {knobX - size / 2, centerY - size / 2, knobX + size / 2, centerY + size / 2},
                            size / 2, knob, scale);
+                if (leading) {
+                    UiTextStyle label = UiTextStyleFor(UiFont::Note);
+                    UiDrawLayout(target, cache,
+                                 UiLayout(g, item.text, label, std::max(r.right - track.right - 8, 0.0f), false,
+                                          DWRITE_TEXT_ALIGNMENT_LEADING, true),
+                                 {track.right + 8, centerY - label.lineHeight / 2},
+                                 item.enabled ? p.text : p.textDisabled);
+                    break;
+                }
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
                 UiDrawLayout(target, cache,
                              UiLayout(g, item.text, label, std::max(track.left - 12 - r.left, 0.0f),
@@ -11134,8 +11413,64 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiFillRect(target, cache, r, radius, fill, scale);
                 UiStrokeRect(target, cache, r, radius, border, 1, scale);
                 UiTextStyle label = UiTextStyleFor(item.font);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, width, false, DWRITE_TEXT_ALIGNMENT_CENTER),
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, width, false, DWRITE_TEXT_ALIGNMENT_CENTER, true),
                              {r.left, centerY - label.lineHeight / 2}, ink);
+                break;
+            }
+            // Status pill (history mockup .pill): its ink on a 10% tint of it, a dot (a ring when
+            // not selected) before the caption text. High contrast: text color, with a border.
+            case UiItemKind::Pill: {
+                D2D1_COLOR_F ink = hc ? p.text : UiInkColor(p, item.ink);
+                float radius = (r.bottom - r.top) / 2;
+                UiFillRect(target, cache, r, radius, hc ? D2D1_COLOR_F{} : UiFade(ink, 0.1f), scale);
+                if (hc) UiStrokeRect(target, cache, r, radius, ink, 1, scale);
+                D2D1_RECT_F dot{r.left + 9, centerY - 3, r.left + 15, centerY + 3};
+                if (item.selected) UiFillRect(target, cache, dot, 3, ink, scale);
+                else UiStrokeRect(target, cache, dot, 3, ink, std::max(1.0f, std::round(scale)), scale);
+                UiTextStyle label = UiTextStyleFor(item.font);
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, std::max(r.right - 9 - (r.left + 19), 0.0f), false,
+                                      DWRITE_TEXT_ALIGNMENT_LEADING, true),
+                             {r.left + 19, centerY - label.lineHeight / 2}, ink);
+                break;
+            }
+            // Segmented control (history mockup .segctl): a control panel; the selected segment
+            // raised with primary text and a 2 DIP accent underline (high contrast: the
+            // selection colors), the others in secondary text under the pointer's subtle fill.
+            // Disabled: dimmed, the underline grey.
+            case UiItemKind::Segmented: {
+                UiFillRect(target, cache, r, 4, item.enabled ? p.card : p.controlDisabled, scale);
+                UiStrokeRect(target, cache, r, 4, hc && !item.enabled ? p.textDisabled : p.controlBorder, 1, scale);
+                std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, item);
+                int selected = UiSelectedSegment(item);
+                int over = item.enabled && state.hot.id == item.id ? state.hot.link : -1;
+                bool down = over >= 0 && state.pressed == state.hot;
+                UiTextStyle label = UiTextStyleFor(UiFont::Note);
+                for (size_t i = 0; i < segments.size(); i++) {
+                    const D2D1_RECT_F& s = segments[i];
+                    bool chosen = int(i) == selected;
+                    D2D1_COLOR_F fill{}, ink = !item.enabled ? p.textDisabled : chosen ? p.text : p.textSecondary;
+                    if (chosen && hc) {
+                        fill = item.enabled ? p.segment : p.textDisabled;
+                        ink = item.enabled ? p.highlightText : p.background;
+                    } else if (chosen) {
+                        fill = item.enabled ? p.segment : p.card;
+                    } else if (int(i) == over && !hc) {
+                        fill = down ? p.subtlePressed : p.subtleHover;
+                    }
+                    UiFillRect(target, cache, s, 3, fill, scale);
+                    if (chosen && item.enabled) UiStrokeRect(target, cache, s, 3, p.segmentBorder, 1, scale);
+                    if (hc && int(i) == over && !chosen) UiStrokeRect(target, cache, s, 3, p.highlight, 1, scale);
+                    if (chosen && !hc) {
+                        UiFillRect(target, cache, {s.left, s.bottom - 2, s.right, s.bottom}, 1,
+                                   item.enabled ? p.accent : p.accentDisabled, scale);
+                    }
+                    UiDrawLayout(target, cache,
+                                 UiLayout(g, item.options[i].text, label, s.right - s.left, false,
+                                          DWRITE_TEXT_ALIGNMENT_CENTER),
+                                 {s.left, centerY - label.lineHeight / 2}, ink);
+                }
                 break;
             }
             // Drag handle: its glyph, brighter under the pointer.
@@ -11236,17 +11571,18 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
     }
 
     // Focus ring (keyboard focus only): 2 DIP outer and 1 DIP inner band, 3 DIP outside the
-    // element; 2 DIP around inline links, between their neighbors; inside for navigation items,
-    // which touch the pane edges; outside a swatch's selection ring. Number and text boxes show
-    // focus with their editing style instead.
+    // element (a segmented control's selected segment); 2 DIP around inline links, between their
+    // neighbors; inside for navigation items, which touch the pane edges; outside a swatch's
+    // selection ring. Number and text boxes show focus with their editing style instead.
     if (state.focusVisible && state.focus.id) {
         auto focused = std::find_if(items.begin(), items.end(),
                                     [&](const UiItem& item) { return item.id == state.focus.id; });
         if (focused != items.end() && focused->kind != UiItemKind::NumberBox &&
             focused->kind != UiItemKind::TextBox) {
-            float radius = state.focus.link >= 0                ? 2 :
-                           focused->kind == UiItemKind::Swatch  ? (focused->rect.right - focused->rect.left) / 2 :
-                           focused->kind == UiItemKind::Chip    ? (focused->rect.bottom - focused->rect.top) / 2 :
+            float radius = state.focus.link >= 0                  ? 2 :
+                           focused->kind == UiItemKind::Swatch    ? (focused->rect.right - focused->rect.left) / 2 :
+                           focused->kind == UiItemKind::Chip      ? (focused->rect.bottom - focused->rect.top) / 2 :
+                           focused->kind == UiItemKind::Segmented ? 3 :
                            focused->kind == UiItemKind::Card ||
                                focused->kind == UiItemKind::Gallery ? 6 : 4;
             float outside = state.focus.link >= 0             ? 2 :
@@ -11271,6 +11607,20 @@ static void UiPaintScrollbar(ID2D1RenderTarget* target, UiTargetCache& cache, co
     if (!bar.visible) return;
     if (expanded) UiFillRect(target, cache, bar.track, 6, p.scrollTrack, scale);
     UiFillRect(target, cache, bar.thumb, (bar.thumb.right - bar.thumb.left) / 2, p.scrollThumb, scale);
+}
+
+// The navigation pane on the main surface (untransformed target, main DIPs): its items at the
+// pixel-aligned `offset`, clipped to the pane, then its scrollbar.
+static void UiPaintNavPane(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache, const UiPalette& p,
+                           const UiFrame& frame, UiPaintState state, float offset, bool expanded, float scale) {
+    const D2D1_RECT_F& pane = frame.navPane;
+    if (frame.nav.empty() || pane.right <= pane.left || pane.bottom <= pane.top) return;
+    target->PushAxisAlignedClip(&pane, D2D1_ANTIALIAS_MODE_ALIASED);
+    state.pointer.y += offset;
+    UiPaintItems(target, g, cache, p, frame.nav, state, {0, -offset}, scale, pane.top + offset,
+                 pane.bottom + offset);
+    UiPaintScrollbar(target, cache, p, UiNavScrollbar(frame, offset, expanded), expanded, scale);
+    target->PopAxisAlignedClip();
 }
 
 // src/ui/input.h
@@ -11393,6 +11743,21 @@ static UiOptionIntent UiOptionKey(int count, int highlight, UINT key) {
     return {};
 }
 
+// A focused segmented control's keys: Left/Right select the neighboring segment (stopping at the
+// ends), Home/End the first and last; the segment to select, which may be the selected one.
+// Without a selection either arrow selects the first. Other keys aren't the control's.
+static std::optional<int> UiSegmentKey(const UiItem& control, UINT key) {
+    int count = int(control.options.size()), selected = UiSelectedSegment(control);
+    if (!count) return std::nullopt;
+    switch (key) {
+        case VK_LEFT: return selected < 0 ? 0 : std::max(selected - 1, 0);
+        case VK_RIGHT: return selected < 0 ? 0 : std::min(selected + 1, count - 1);
+        case VK_HOME: return 0;
+        case VK_END: return count - 1;
+    }
+    return std::nullopt;
+}
+
 // Sliders: the value under a pointer x (rounded to whole steps, clamped), and what keys step it
 // by: arrows 1, Page Up/Down a tenth of the range, Home/End all of it (the step clamps).
 static int UiSliderValueAt(const UiItem& slider, float x) {
@@ -11429,6 +11794,15 @@ static float UiScrollIntoView(float offset, float viewportHeight, float top, flo
         return std::min(top - margin, bottom + margin - viewportHeight);
     }
     return offset;
+}
+
+// The navigation pane's offset that shows `rect` (main DIPs at offset 0) with 6 DIP around it,
+// the pane's own padding, within its scroll range.
+static float UiNavScrollTo(const UiFrame& frame, float offset, D2D1_RECT_F rect) {
+    float height = frame.navPane.bottom - frame.navPane.top;
+    return UiClampScroll(UiScrollIntoView(offset, height, rect.top - frame.navPane.top,
+                                          rect.bottom - frame.navPane.top, 6),
+                         height, frame.navHeight);
 }
 
 // The scroll offset that puts the thumb's top edge at `thumbTop` (track coordinates).
@@ -11862,10 +12236,10 @@ static void UiReleaseTextBoxes(UiTextBoxes& boxes) {
 
 // src/ui/host.h
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
-// and its scrolling viewport child, each with its own render target; the dropdown popup and the
-// number boxes' native text boxes; theme, window icons, DPI, pointer and keyboard input, focus,
-// scrolling, close paths and teardown. A client supplies the content and the window-specific
-// behavior. Rules: ui/AGENTS.md.
+// and its scrolling viewport child, each with its own render target, the main window optionally
+// with a scrolling navigation pane; the dropdown popup and the number boxes' native text boxes;
+// theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths and
+// teardown. A client supplies the content and the window-specific behavior. Rules: ui/AGENTS.md.
 
 struct UiHost;
 
@@ -11877,7 +12251,8 @@ struct UiHostClient {
     virtual void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) = 0;
     // Item and link activations, dropdown choices, number box steps and text events.
     virtual void Invoke(UiHost& host, UiAction action) = 0;
-    // Main window messages the host doesn't handle; true if handled.
+    // Main window messages the host doesn't handle, WM_KEYDOWN that neither surface uses, and
+    // the activation request once the host brought the window back; true if handled.
     virtual bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam,
                          LRESULT& result) = 0;
     // End of the main window's WM_CREATE; false fails creation.
@@ -11931,13 +12306,14 @@ struct UiHost {
     // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
     // slider drag reports values that differ from its last report (the frame may lag behind); a
     // handle's drag starts once the pointer moved (handleMoved) and scrolls while near an edge.
+    // The navigation pane scrolls on its own, with its own scrollbar.
     UiFrame frame;
     std::vector<UiFocusStop> stops;
     UiPointerState pointer;
     UiFocusRef focus;
     bool focusVisible = false;
-    float scroll = 0;
-    bool scrollbarHot = false, scrollDragging = false;
+    float scroll = 0, navScroll = 0;
+    bool scrollbarHot = false, scrollDragging = false, navBarHot = false, navBarDragging = false;
     float scrollDragOffset = 0;
     D2D1_POINT_2F pointerAt{-1e9f, -1e9f};
     UiSurfaceId pointerSurface = UiSurfaceId::Main;
@@ -12033,13 +12409,21 @@ static UiScrollbar UiHostScrollbar(const UiHost& host) {
                           host.frame.contentHeight, host.scrollbarHot || host.scrollDragging);
 }
 
-// The element under a client point (pixels) of a surface.
+static UiScrollbar UiHostNavScrollbar(const UiHost& host) {
+    return UiNavScrollbar(host.frame, host.navScroll, host.navBarHot || host.navBarDragging);
+}
+
+// The element under a client point (pixels) of a surface: on the main surface, inside the
+// navigation pane only its items, at the pane's scroll.
 static UiFocusRef UiHostHit(UiHost& host, UiSurfaceId surface, POINT point) {
     float scale = UiHostScale(host);
     D2D1_POINT_2F at{float(point.x) / scale, float(point.y) / scale};
+    if (surface == UiSurfaceId::Main && UiContains(host.frame.navPane, at)) {
+        surface = UiSurfaceId::Nav;
+        at.y += host.navScroll;
+    }
     if (surface == UiSurfaceId::Content) at.y += host.scroll;
-    return UiHitTest(*host.graphics, surface == UiSurfaceId::Main ? host.frame.main : host.frame.content,
-                     at);
+    return UiHitTest(*host.graphics, UiSurfaceItems(host.frame, surface), at);
 }
 
 // Dropdown popup -------------------------------------------------------------------------------
@@ -12066,12 +12450,12 @@ static void UiHostOpenPopup(UiHost& host, uint32_t id) {
     float scale = UiHostScale(host);
     D2D1_SIZE_F size = UiLayoutOptions(*host.graphics, item->options, item->action,
                                        item->rect.right - item->rect.left, popup.rows);
-    float shift = surface == UiSurfaceId::Content ? -host.scroll : 0;
+    float shift = surface == UiSurfaceId::Content ? -host.scroll : surface == UiSurfaceId::Nav ? -host.navScroll : 0;
     RECT field{LONG(std::lround(item->rect.left * scale)),
                LONG(std::lround((item->rect.top + shift) * scale)),
                LONG(std::lround(item->rect.right * scale)),
                LONG(std::lround((item->rect.bottom + shift) * scale))};
-    MapWindowPoints(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr,
+    MapWindowPoints(surface == UiSurfaceId::Content ? host.viewport : host.main, nullptr,
                     reinterpret_cast<POINT*>(&field), 2);
     popup.highlight = -1;
     for (size_t i = 0; i < popup.rows.size(); i++) {
@@ -12129,6 +12513,19 @@ static void UiHostItemEvent(UiHost& host, uint32_t id, UiActionKind kind, std::w
     action.kind = kind;
     action.text = std::move(text);
     action.value = value;
+    host.client->Invoke(host, std::move(action));
+}
+
+// A segment chosen by the pointer or the keys: the control's action with that segment's value;
+// the selected one changes nothing.
+static void UiHostSelectSegment(UiHost& host, uint32_t id, int segment) {
+    const UiItem* item = UiFindItem(host.frame, id);
+    if (host.closing || !item || item->kind != UiItemKind::Segmented || !UiActive(*item) || segment < 0 ||
+        segment >= int(item->options.size()) || segment == UiSelectedSegment(*item)) {
+        return;
+    }
+    UiAction action = item->action;
+    action.value = item->options[size_t(segment)].value;
     host.client->Invoke(host, std::move(action));
 }
 
@@ -12213,7 +12610,7 @@ static HWND UiHostFocusWindow(UiHost& host, UiFocusRef ref) {
         UiTextBox* box = UiFindTextBox(host.boxes, ref.id);
         if (box && box->window && IsWindowEnabled(box->window)) return box->window;
     }
-    return surface == UiSurfaceId::Main ? host.main : host.viewport;
+    return surface == UiSurfaceId::Content ? host.viewport : host.main;
 }
 
 // Scrolls to a pixel-aligned offset and re-targets the pointer, whose element moved under it.
@@ -12238,8 +12635,30 @@ static void UiHostScrollTo(UiHost& host, float offset) {
     InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
-// Moves focus to an element (keyboard focus to its window), scrolling content into view when
-// the move came from the keyboard. Focus leaving the popup's field closes the popup.
+// The navigation pane's scroll, as UiHostScrollTo: pixel-aligned, closing the popup and
+// re-targeting a pointer over the main window.
+static void UiHostScrollNav(UiHost& host, float offset) {
+    float scale = UiHostScale(host);
+    const D2D1_RECT_F& pane = host.frame.navPane;
+    offset = UiClampScroll(offset, pane.bottom - pane.top, host.frame.navHeight);
+    offset = std::round(offset * scale) / scale;
+    if (offset == host.navScroll) return;
+    UiHostClosePopup(host);
+    host.navScroll = offset;
+    POINT cursor{};
+    RECT client{};
+    if (!host.pointer.pressed.id && !host.navBarHot && GetCursorPos(&cursor) &&
+        ScreenToClient(host.main, &cursor) && GetClientRect(host.main, &client) && PtInRect(&client, cursor)) {
+        UiPointerMove(host.pointer, UiHostHit(host, UiSurfaceId::Main, cursor));
+        host.pointerSurface = UiSurfaceId::Main;
+        host.pointerAt = {float(cursor.x) / scale, float(cursor.y) / scale};
+    }
+    InvalidateRect(host.main, nullptr, FALSE);
+}
+
+// Moves focus to an element (keyboard focus to its window), scrolling content or the
+// navigation pane into view when the move came from the keyboard. Focus leaving the popup's
+// field closes the popup.
 static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
@@ -12254,6 +12673,9 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
                                                   bounds.front().top, bounds.back().bottom, 12));
         }
     }
+    if (surface == UiSurfaceId::Nav && visible) {
+        UiHostScrollNav(host, UiNavScrollTo(host.frame, host.navScroll, item->rect));
+    }
     HWND target = UiHostFocusWindow(host, ref);
     if (GetFocus() != target) {
         SetFocus(target);
@@ -12267,10 +12689,15 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
 // A dropdown or menu button opens its popup; a number or text box only takes focus (its native
-// text box reports edits); a slider, a preview and a drag handle report their drags instead.
+// text box reports edits); a slider, a preview and a drag handle report their drags instead; a
+// segmented control selects the activated segment (its keys select the others).
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
     const UiItem* item = UiFindItem(host.frame, ref.id);
+    if (item && item->kind == UiItemKind::Segmented) {
+        UiHostSelectSegment(host, ref.id, ref.link);
+        return;
+    }
     if (item && ref.link < 0 &&
         (item->kind == UiItemKind::Dropdown || (item->kind == UiItemKind::Button && !item->options.empty()))) {
         UiHostOpenPopup(host, ref.id);
@@ -12338,8 +12765,15 @@ static void UiHostEndHandleDrag(UiHost& host, UiActionKind end) {
 // one waits for the paint its request caused (which runs it), unless a nested paint (a modal's)
 // consumed that. A rebuild closes the popup; keyboard focus follows the focused element (a
 // requested one, or one whose text box was removed). The main window repaints when requested,
-// when its layout changed or when the pointer's element went.
+// when its layout changed or when the pointer's element went. A newly selected entry of the
+// navigation pane scrolls into view.
 static void UiHostRebuildIfPending(UiHost& host) {
+    auto selectedNav = [](const std::vector<UiItem>& items) {
+        auto at = std::find_if(items.begin(), items.end(), [](const UiItem& item) {
+            return item.kind == UiItemKind::Nav && item.selected;
+        });
+        return at != items.end() ? at->id : 0;
+    };
     if (host.liveRebuild && host.dispatchDepth == 1 && host.main && host.viewport &&
         !GetUpdateRect(host.main, nullptr, FALSE) && !GetUpdateRect(host.viewport, nullptr, FALSE)) {
         host.rebuildPending = true;
@@ -12350,7 +12784,8 @@ static void UiHostRebuildIfPending(UiHost& host) {
         host.rebuildPending = false;
         host.liveRebuild = false;
         D2D1_RECT_F viewport = host.frame.viewport;
-        size_t mainItems = host.frame.main.size();
+        size_t mainItems = host.frame.main.size() + host.frame.nav.size();
+        uint32_t paneSelected = selectedNav(host.frame.nav);
         UiHostClosePopup(host);
         RECT client{};
         GetClientRect(host.main, &client);
@@ -12359,19 +12794,24 @@ static void UiHostRebuildIfPending(UiHost& host) {
         UiFrame frame;
         host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
-        UiFocusRef fallback;
-        for (const UiItem& item : frame.main) {
-            if (item.kind == UiItemKind::Nav && item.selected) fallback = {item.id, -1};
-        }
+        UiFocusRef fallback{selectedNav(frame.nav) ? selectedNav(frame.nav) : selectedNav(frame.main), -1};
         // Keyboard focus starts on the selected navigation item, without a ring.
         host.focus = UiResolveFocus(host.stops, stops, host.focus.id ? host.focus : fallback,
                                     fallback);
         host.frame = std::move(frame);
         host.stops = std::move(stops);
         const D2D1_RECT_F& v = host.frame.viewport;
-        bool repaintMain = std::exchange(host.rebuildMain, false) || mainItems != host.frame.main.size() ||
+        bool repaintMain = std::exchange(host.rebuildMain, false) ||
+                           mainItems != host.frame.main.size() + host.frame.nav.size() ||
                            v.left != viewport.left || v.top != viewport.top || v.right != viewport.right ||
                            v.bottom != viewport.bottom;
+        const D2D1_RECT_F& pane = host.frame.navPane;
+        host.navScroll = std::round(UiClampScroll(host.navScroll, pane.bottom - pane.top, host.frame.navHeight) *
+                                    scale) / scale;
+        if (const UiItem* entry = UiFindItem(host.frame, selectedNav(host.frame.nav));
+            entry && entry->id != paneSelected) {
+            UiHostScrollNav(host, UiNavScrollTo(host.frame, host.navScroll, entry->rect));
+        }
         for (UiFocusRef* ref : {&host.pointer.hot, &host.pointer.pressed}) {
             if (ref->id && !UiFindItem(host.frame, ref->id)) {
                 *ref = {};
@@ -12528,18 +12968,24 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 UiHostRequestRebuild(host, false);
                 break;
             }
+            // A theme change also rebuilds: built content may hold colors the client derived
+            // from the theme.
             case WM_SETTINGCHANGE:
                 if (isMain && (wParam == SPI_SETHIGHCONTRAST ||
                                (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam),
                                                  L"ImmersiveColorSet") == 0))) {
                     UiHostApplyTheme(host);
+                    UiHostRequestRebuild(host, false);
                 }
                 handled = false;
                 break;
             case WM_THEMECHANGED:
             case WM_SYSCOLORCHANGE:
             case WM_DWMCOLORIZATIONCOLORCHANGED:
-                if (isMain) UiHostApplyTheme(host);
+                if (isMain) {
+                    UiHostApplyTheme(host);
+                    UiHostRequestRebuild(host, false);
+                }
                 handled = false;
                 break;
 
@@ -12646,6 +13092,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     if (isMain) {
                         UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
                                      state, {0, 0}, scale, -1e9f, 1e9f, &custom);
+                        UiPaintNavPane(target, *host.graphics, own.cache, host.palette, host.frame, state,
+                                       host.navScroll, host.navBarHot || host.navBarDragging, scale);
                     } else {
                         float height = UiHostViewHeight(host);
                         UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.content,
@@ -12700,13 +13148,24 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                                                           host.frame.contentHeight));
                     break;
                 }
+                const D2D1_RECT_F& pane = host.frame.navPane;
+                if (isMain && host.navBarDragging) {
+                    UiHostScrollNav(host, UiScrollForThumb(UiHostNavScrollbar(host),
+                                                           float(point.y) / scale - host.scrollDragOffset,
+                                                           pane.bottom - pane.top, host.frame.navHeight));
+                    break;
+                }
+                // Each scrollbar takes the pointer within 16 DIP of its pane's right edge.
                 bool overBar = !isMain && UiHostScrollbar(host).visible &&
                                float(point.x) / scale >= host.frame.viewport.right -
                                                              host.frame.viewport.left - 16;
-                bool changed = overBar != host.scrollbarHot;
+                bool overNavBar = isMain && UiHostNavScrollbar(host).visible &&
+                                  UiContains({pane.right - 16, pane.top, pane.right, pane.bottom}, host.pointerAt);
+                bool changed = overBar != host.scrollbarHot || overNavBar != host.navBarHot;
                 host.scrollbarHot = overBar;
-                changed |= UiPointerMove(host.pointer, overBar ? UiFocusRef{} :
-                                                                 UiHostHit(host, surface, point));
+                host.navBarHot = overNavBar;
+                changed |= UiPointerMove(host.pointer, overBar || overNavBar ? UiFocusRef{} :
+                                                                               UiHostHit(host, surface, point));
                 // A preview's hover follows the pointer within it.
                 const UiItem* hot = UiFindItem(host.frame, host.pointer.hot.id);
                 if (changed) UiHostInvalidate(host);
@@ -12717,12 +13176,12 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 // While a press or drag holds capture, only this surface's pointer position
                 // changes; outside the window every move reports a leave, so nothing else repaints.
                 if (host.pointerSurface == surface) host.pointerAt = {-1e9f, -1e9f};
-                if (host.pointer.pressed.id || host.scrollDragging) {
+                if (host.pointer.pressed.id || host.scrollDragging || host.navBarDragging) {
                     InvalidateRect(window, nullptr, FALSE);
                     break;
                 }
                 host.pointer.hot = {};
-                host.scrollbarHot = false;
+                host.scrollbarHot = host.navBarHot = false;
                 UiHostInvalidate(host);
                 break;
             case WM_LBUTTONDOWN: {
@@ -12743,17 +13202,32 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     InvalidateRect(window, nullptr, FALSE);
                     break;
                 }
+                if (UiScrollbar navBar = UiHostNavScrollbar(host); isMain && host.navBarHot && navBar.visible) {
+                    float y = float(point.y) / scale;
+                    if (y >= navBar.thumb.top && y < navBar.thumb.bottom) {
+                        host.navBarDragging = true;
+                        host.scrollDragOffset = y - navBar.thumb.top;
+                        SetCapture(window);
+                    } else {
+                        float page = host.frame.navPane.bottom - host.frame.navPane.top - 40;
+                        UiHostScrollNav(host, host.navScroll + (y < navBar.thumb.top ? -page : page));
+                    }
+                    InvalidateRect(window, nullptr, FALSE);
+                    break;
+                }
                 UiFocusRef hit = UiHostHit(host, surface, point);
                 host.pointer.hot = hit;
                 host.pointer.pressed = hit;
                 if (hit.id) {
                     SetCapture(window);
                     // A spin button keeps focus on its number box's text box and a drag handle
-                    // gives it to its owner; a preview takes no focus.
+                    // gives it to its owner; a preview takes no focus; a segmented control takes
+                    // it as a whole.
                     const UiItem* item = UiFindItem(host.frame, hit.id);
                     UiItemKind kind = item ? item->kind : UiItemKind::Text;
                     UiFocusRef target = kind == UiItemKind::SpinButton || kind == UiItemKind::Handle ?
-                                            UiFocusRef{item->owner, -1} : hit;
+                                            UiFocusRef{item->owner, -1} :
+                                        kind == UiItemKind::Segmented ? UiFocusRef{hit.id, -1} : hit;
                     if (kind != UiItemKind::Preview && UiFindItem(host.frame, target.id) &&
                         (target != host.focus || GetFocus() != UiHostFocusWindow(host, target))) {
                         UiHostSetFocus(host, target, false);
@@ -12800,7 +13274,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     KillTimer(host.viewport, kUiAutoScrollTimer);
                 }
                 UiFocusRef activate = UiPointerRelease(host.pointer, UiHostHit(host, surface, point));
-                host.scrollDragging = false;
+                host.scrollDragging = host.navBarDragging = false;
                 if (GetCapture() == window) ReleaseCapture();
                 UiHostInvalidate(host);
                 if (slider) UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
@@ -12811,7 +13285,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_CAPTURECHANGED:
                 // Losing capture ends a slider drag as a release does, and cancels a handle's.
                 host.pointer.pressed = {};
-                host.scrollDragging = false;
+                host.scrollDragging = host.navBarDragging = false;
                 host.panDrag = 0;
                 if (uint32_t slider = std::exchange(host.sliderDrag, 0)) {
                     UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
@@ -12838,8 +13312,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_MOUSEHWHEEL: {
                 // With the popup open, a wheel over it does nothing and one elsewhere closes it.
                 // Otherwise a sideways wheel (or Shift) over a preview pans it, 48 DIPs a notch,
-                // and the vertical wheel over the page column (header or content) scrolls the
-                // content.
+                // and the vertical wheel scrolls the navigation pane over it, or the content
+                // over the page column (header or content).
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
                 if (host.popup.open) {
                     RECT popup{};
@@ -12867,11 +13341,15 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     handled = false;
                     break;
                 }
-                if (float(point.x) / scale < host.frame.viewport.left) break;
+                const D2D1_RECT_F& pane = host.frame.navPane;
+                bool nav = UiContains(pane, {float(point.x) / scale, float(point.y) / scale});
+                if (!nav && float(point.x) / scale < host.frame.viewport.left) break;
                 UINT lines = 3;
                 SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
-                float step = lines == WHEEL_PAGESCROLL ? UiHostViewHeight(host) - 40 : float(lines) * 16;
-                UiHostScrollTo(host, host.scroll - notches * step);
+                float page = nav ? pane.bottom - pane.top - 40 : UiHostViewHeight(host) - 40;
+                float step = lines == WHEEL_PAGESCROLL ? page : float(lines) * 16;
+                if (nav) UiHostScrollNav(host, host.navScroll - notches * step);
+                else UiHostScrollTo(host, host.scroll - notches * step);
                 break;
             }
             case WM_SETCURSOR: {
@@ -12880,7 +13358,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     break;
                 }
                 const UiItem* item = UiFindItem(host.frame, host.pointer.hot.id);
-                bool link = item && (host.pointer.hot.link >= 0 || item->kind == UiItemKind::Link);
+                bool link = item && ((host.pointer.hot.link >= 0 && item->kind == UiItemKind::Text) ||
+                                     item->kind == UiItemKind::Link);
                 bool handle = item && item->kind == UiItemKind::Handle;
                 SetCursor(LoadCursorW(nullptr, link ? IDC_HAND : handle ? IDC_SIZENS : IDC_ARROW));
                 result = TRUE;
@@ -12925,11 +13404,20 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     UiHostOpenPopup(host, host.focus.id);
                     break;
                 }
-                // A focused slider's arrows, Page Up/Down and Home/End step its value.
+                // A focused slider's arrows, Page Up/Down and Home/End step its value; a focused
+                // segmented control's arrows and Home/End select.
                 if (focused && focused->kind == UiItemKind::Slider && focused->enabled) {
                     if (std::optional<int> step = UiSliderKey(*focused, UINT(wParam))) {
                         host.focusVisible = true;
                         UiHostItemEvent(host, host.focus.id, UiActionKind::Step, {}, *step);
+                        break;
+                    }
+                }
+                if (focused && focused->kind == UiItemKind::Segmented && focused->enabled) {
+                    if (std::optional<int> segment = UiSegmentKey(*focused, UINT(wParam))) {
+                        host.focusVisible = true;
+                        InvalidateRect(window, nullptr, FALSE);
+                        UiHostSelectSegment(host, host.focus.id, *segment);
                         break;
                     }
                 }
@@ -12952,7 +13440,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         UiHostScrollTo(host, intent.scroll);
                         break;
                     case UiIntentKind::None:
-                        handled = false;
+                        // Keys the window doesn't use (F5, Esc, shortcuts) are the client's.
+                        handled = host.client->Message(host, message, wParam, lParam, result);
                         break;
                 }
                 break;
@@ -13012,7 +13501,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (!isMain) break;
                 if (host.config->activateMessage && message == host.config->activateMessage) {
                     // Brings back the window, or the enabled visible modal it owns; never
-                    // anything else it owns (the popup closes first).
+                    // anything else it owns (the popup closes first). Then the client sees the
+                    // request (a selection it carries).
                     handled = true;
                     if (host.closing || host.client->Unloading()) break;
                     UiHostClosePopup(host);
@@ -13022,6 +13512,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         target = window;
                     }
                     SetForegroundWindow(target);
+                    if (!host.closing) host.client->Message(host, message, wParam, lParam, result);
                 } else {
                     handled = host.client->Message(host, message, wParam, lParam, result);
                 }
@@ -16517,7 +17008,8 @@ static constexpr PCWSTR kSettingsAppIconTracks[3] = {L"M3,2H13", L"M3,8H13", L"M
 static constexpr PCWSTR kSettingsAppIconFills[3] = {L"M3,2H4", L"M3,8H8", L"M3,14H12"};
 static constexpr uint32_t kSettingsAppIconColors[3] = {0x43A047, 0xFDD835, 0xE53935};
 
-// The app icon over `rect`: the About page's, and the settings window's (ui/window-icon.h).
+// The app icon over `rect`: the About page's, and the settings and usage history windows'
+// (ui/window-icon.h).
 static UiItem SettingsAppIcon(D2D1_RECT_F rect) {
     UiItem icon;
     icon.kind = UiItemKind::Shape;
@@ -18555,8 +19047,11 @@ struct HistorySeriesQuery {
 
 struct HistorySeriesSet {
     std::vector<HistorySeries> series;
+    // Accounts without readings: each one's title with its status, and its account index.
     std::vector<std::wstring> noReadings;
+    std::vector<size_t> noReadingAccounts;
     std::array<HistoryAxis, 3> axes;  // Percent, USD, credits; never share unlike units.
+    int redThreshold = 90;  // The threshold the statistics' near-limit times used
 };
 
 // Formatting stays independent of locale for exact values/CSV.
@@ -18691,6 +19186,7 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                            const HistorySeriesQuery& query,
                                            const std::function<bool()>& cancelled) {
     HistorySeriesSet result;
+    result.redThreshold = query.redThreshold;
     result.axes[0].high = 100;
     // Keep percentages on the left even if only dollar/credit readings are available.
     result.axes[0].visible = true;
@@ -18779,7 +19275,10 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             if (result.series.size() == firstSeries) series.title += status;
             result.series.push_back(std::move(series));
         }
-        if (result.series.size() == firstSeries) result.noReadings.push_back(account.title + status);
+        if (result.series.size() == firstSeries) {
+            result.noReadings.push_back(account.title + status);
+            result.noReadingAccounts.push_back(i);
+        }
     }
     return result;
 }
@@ -18858,7 +19357,6 @@ static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
 static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
 static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
 static constexpr int kHistorySeriesHeight = 90;
-static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
 
 enum HistoryControlId {
     kHistoryAccountCombo = 2800, kHistoryMeterCombo, kHistoryRangeCombo,
@@ -18905,6 +19403,997 @@ struct HistoryWindowState {
 };
 
 static void HistoryLayout(HistoryWindowState& state, bool newFont);
+
+// src/history/view.h
+// Usage history window view: the explicit snapshot its frame builders read (history/shell.h,
+// content.h), the ids and commands of its controls, the compact display formats and the summary
+// cards built from a series set (history/series.h). Pure.
+
+// Range segments: 24 hours, 7, 30 and 90 days, and every retained day.
+enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
+static constexpr PCWSTR kHistoryUiRangeNames[] = {L"24h", L"7d", L"30d", L"90d", L"All"};
+
+// The header's status pill: Recording (with the retention), Waiting (recording on while the
+// taskbar hasn't saved account IDs yet or no sample is in range), Not saving (a storage error),
+// Off (this user's recording is off). Before the first load it follows the settings alone.
+enum class HistoryUiPill : uint8_t { Recording, Waiting, NotSaving, Off };
+
+// An account as the window lists it, parallel to the collected accounts (HistoryCollectAccounts):
+// its navigation entry, header and recording state, and its latest poll.
+struct HistoryUiViewAccount {
+    uint64_t historyId = 0;
+    uint32_t slot = 0;          // Session-stable per history ID (below 0xFF000): its entry's item id
+    uint32_t provider = 0;      // 1 Anthropic, 2 OpenAI, 3 Antigravity; else unknown
+    std::wstring label;         // Removed accounts: account_<16 hex digits>, without "removed "
+    bool removed = false;
+    bool recordingOff = false;  // Its Record history is off
+    bool paused = false;        // Hidden while hidden accounts aren't polled
+    double weeklyPct = -1;      // The latest poll's weekly used %; < 0 unknown
+    bool stale = false;         // That poll is stale: the value shows muted, cards never say "now"
+    ULONGLONG lastPollMs = 0;   // The latest successful poll; 0 none
+};
+
+// A summary card (approved Q10 a): a series' chip name and line, a headline with the current
+// period's latest value ("now" when it is the account's latest fresh poll, else its time), then
+// the classic lines. Details-only dollar spending has no line.
+struct HistoryUiCard {
+    std::wstring title;
+    std::wstring status;        // After the title, muted: the account's recording status
+    COLORREF color = 0;         // The series' line color (history/series.h palette)
+    bool detailsOnly = false;
+    std::wstring value, when;   // Empty without a current reading
+    std::vector<std::wstring> lines;
+};
+
+// An account without readings in range: its logo, label and provider (with its status).
+struct HistoryUiNoReadings {
+    uint32_t provider = 0;
+    std::wstring label, detail;
+};
+
+struct HistoryUiView {
+    UiThemeKind theme = UiThemeKind::Dark;   // Built content follows it: value inks, card lines
+
+    // Accounts and controls; the view is the current mode's (All accounts or one account)
+    std::vector<HistoryUiViewAccount> accounts;
+    int selected = -1;                       // Account index; -1: All accounts
+    HistoryView view = HistoryView::Weekly;
+    HistoryUiRange range = HistoryUiRange::Week;
+    bool compare = false;                    // Shows the range as 7 days, disabled
+
+    // Settings: recording (and whether the banner's Enable recording can run; else it shows
+    // disabled), retention and the usage colors of navigation values
+    bool recordingEnabled = true;
+    bool canEnableRecording = false;
+    int retentionDays = 90;
+    int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
+    bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
+
+    // Status: the pill, the header's status text ("Updated Sat 31 Oct 14:32"; empty before the
+    // first load) and the journal's state (its status without the cap note, the cap)
+    HistoryUiPill pill = HistoryUiPill::Recording;
+    std::wstring status;
+    std::wstring storageError;
+    bool storageCapped = false;
+
+    // Content: the loading state before the first load, then cards (HistoryUiSetCards)
+    bool loading = true;
+    std::vector<HistoryUiCard> cards;
+    std::vector<HistoryUiNoReadings> noReadings;
+};
+
+// Interactive items keep these ids across rebuilds, so focus follows them; an account's entry
+// takes kHistoryUiNavAccount + its slot. Other items take running ids from kHistoryUiFirstRunning.
+enum HistoryUiControl : uint32_t {
+    kHistoryUiNavAll = 1, kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore, kHistoryUiViews,
+    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording,
+    kHistoryUiNavAccount = 0x1000,
+    kHistoryUiFirstRunning = 0x100000,
+};
+
+// What an item's action asks for (UiAction::target): Select (key = history ID, 0: All accounts),
+// View (value = HistoryView), Range (value = HistoryUiRange), Compare (value = the desired state),
+// Refresh, Export, Menu (value = HistoryUiMenuItem), EnableRecording.
+enum class HistoryUiCommand : uint32_t {
+    None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording
+};
+enum class HistoryUiMenuItem : int { Settings };
+
+static UiAction HistoryUiAction(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
+    return {UiActionKind::Command, value, {}, uint32_t(command), key};
+}
+
+static PCWSTR HistoryUiProviderName(uint32_t provider) {
+    return provider == 1 ? L"Anthropic" : provider == 2 ? L"OpenAI" :
+           provider == 3 ? L"Google Antigravity" : L"Unknown provider";
+}
+
+// A provider's logo path (taskbar/logo-paths.h, 24 DIP view box), or nullptr.
+static PCWSTR HistoryUiLogo(uint32_t provider) {
+    return provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
+           provider == 3 ? kGeminiLogoPath : nullptr;
+}
+
+// Compact display formats (approved with the phase-3 mockups), English and independent of the
+// locale like the CSV. Local times read `Sat 31 Oct 14:31`, with the year only outside the
+// current one; `localTime` converts a Unix ms time with the user's clock and zone.
+using HistoryUiLocalTime = std::function<SYSTEMTIME(ULONGLONG)>;
+
+static std::wstring HistoryUiTime(ULONGLONG ms, ULONGLONG now, const HistoryUiLocalTime& localTime) {
+    static constexpr PCWSTR kDays[] = {L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
+    static constexpr PCWSTR kMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
+                                         L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
+    static constexpr int kMonthOffsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+    SYSTEMTIME t = localTime(ms);
+    if (t.wMonth < 1 || t.wMonth > 12 || t.wDay < 1 || t.wDay > 31) return L"\u2014";
+    // The weekday from the date (Sakamoto's method), whatever the conversion filled in.
+    int year = t.wYear - (t.wMonth < 3);
+    int weekday = (year + year / 4 - year / 100 + year / 400 + kMonthOffsets[t.wMonth - 1] + t.wDay) % 7;
+    wchar_t clock[8];
+    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
+    std::wstring text = std::wstring(kDays[weekday]) + L' ' + std::to_wstring(t.wDay) + L' ' +
+                        kMonths[t.wMonth - 1];
+    if (t.wYear != localTime(now).wYear) text += L' ' + std::to_wstring(t.wYear);
+    return text + L' ' + clock;
+}
+
+// `decimals` places below 10,000 after rounding; past that one decimal with a suffix (12.3K,
+// 1.2M). Rounding carries into the next magnitude: 9999.996 at two places prints 10.0K, 999950
+// prints 1.0M. Journal values stay within 1e12 (1.0T).
+static std::wstring HistoryUiNumber(double value, int decimals) {
+    static constexpr PCWSTR kSuffixes[] = {L"", L"K", L"M", L"G", L"T"};
+    if (!std::isfinite(value)) return L"\u2014";
+    char text[64];
+    for (size_t level = 0;; level++) {
+        auto [end, error] = std::to_chars(text, text + sizeof(text), value / std::pow(1000.0, double(level)),
+                                          std::chars_format::fixed, level ? 1 : decimals);
+        if (error != std::errc{}) return L"?";
+        std::string_view printed(text, end);
+        size_t digits = std::min(printed.find('.'), printed.size()) - (printed.front() == '-');
+        if (digits <= (level ? 3u : 4u) || level + 1 == std::size(kSuffixes)) {
+            return std::wstring(printed.begin(), printed.end()) + kSuffixes[level];
+        }
+    }
+}
+
+// Hours to a tenth without a trailing zero: `166 h`, `0.4 h`.
+static std::wstring HistoryUiHours(double ms) {
+    char text[32];
+    auto [end, error] = std::to_chars(text, text + sizeof(text), ms / 3600000.0, std::chars_format::fixed, 1);
+    if (error != std::errc{}) return L"? h";
+    std::string_view printed(text, end);
+    if (printed.ends_with(".0")) printed.remove_suffix(2);
+    return std::wstring(printed.begin(), printed.end()) + L" h";
+}
+
+// A meter's value with its unit: percentages with `percentDecimals` places (cards whole, the
+// readout and shares one), dollars and credits with two.
+static std::wstring HistoryUiValue(int meter, double value, int percentDecimals) {
+    if (meter == 6) return L"USD " + HistoryUiNumber(value, 2);
+    if (meter == 7) return HistoryUiNumber(value, 2) + L" credits";
+    return HistoryUiNumber(value, percentDecimals) + L"%";
+}
+
+// The summary cards of a series set over [from, to), one per series in its order, and its
+// accounts without readings, from the view's accounts (parallel to `collected`), selection,
+// comparison and consent. Classic parity: every peak and its time, coverage with its share, time
+// at or above the red threshold the set was analyzed with for percentages, dollar spending's last
+// and peak readings, and an account's recording status once (in All accounts, on its first card).
+static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set,
+                              const std::vector<HistoryUiAccount>& collected, ULONGLONG from, ULONGLONG to,
+                              ULONGLONG now, const HistoryUiLocalTime& localTime) {
+    view.cards.clear();
+    view.noReadings.clear();
+    auto status = [&](size_t account) -> std::wstring {
+        const HistoryUiViewAccount& a = view.accounts[account];
+        if (a.removed || !view.recordingEnabled) return {};
+        return a.recordingOff ? L"recording off" : a.paused ? L"paused" : L"";
+    };
+    double duration = double(to > from ? to - from : 0);
+    size_t previousAccount = SIZE_MAX;
+    for (const HistorySeries& series : set.series) {
+        if (series.account >= view.accounts.size() || series.account >= collected.size()) continue;
+        const HistoryUiViewAccount& account = view.accounts[series.account];
+        HistoryUiCard card;
+        // All accounts names the account by its label in the view (a removed one's without the
+        // collected "removed " prefix).
+        card.title = series.legendTitle;
+        if (const std::wstring& collectedLabel = collected[series.account].label;
+            view.selected < 0 && card.title.starts_with(collectedLabel)) {
+            card.title = account.label + card.title.substr(collectedLabel.size());
+        }
+        if (!series.plotted) card.title += L" \u2014 details only";
+        if (view.selected < 0 && series.account != previousAccount) card.status = status(series.account);
+        previousAccount = series.account;
+        card.color = series.color;
+        card.detailsOnly = !series.plotted;
+        auto reading = [&](double value, ULONGLONG time) {
+            return HistoryUiValue(series.meter, value, 0) + L" \u00B7 " + HistoryUiTime(time, now, localTime);
+        };
+        const HistoryStatistics& current = series.current;
+        if (current.hasValue) {
+            card.value = HistoryUiValue(series.meter, current.latest, 0);
+            bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
+            card.when = latestPoll ? L"now" : HistoryUiTime(current.latestTime, now, localTime);
+        }
+        // Per period (comparing: current, then previous, each first line prefixed). The headline
+        // holds the current period's last dollar reading.
+        for (int period = 0; period < (view.compare ? 2 : 1); period++) {
+            const HistoryStatistics& stats = period ? series.previous : series.current;
+            std::wstring prefix = !view.compare ? L"" : period ? L"Previous: " : L"Current: ";
+            auto line = [&](std::wstring text) { card.lines.push_back(std::exchange(prefix, {}) + text); };
+            if (!stats.hasValue) {
+                line(series.plotted ? L"Peak \u2014" : L"No dollar readings in this period.");
+                continue;
+            }
+            if (!series.plotted && period) line(L"Last recorded spend: " + reading(stats.latest, stats.latestTime));
+            line(L"Peak " + reading(stats.peak, stats.peakTime));
+            if (!series.plotted) continue;
+            line(L"Coverage " + HistoryUiHours(stats.coverageMs) + L" (" +
+                 HistoryUiNumber(duration > 0 ? 100 * stats.coverageMs / duration : 0, 1) + L"%)");
+            if (series.meter < 6) {
+                line(L"Est. \u2265" + std::to_wstring(set.redThreshold) + L"%: " +
+                     (stats.coverageMs ? HistoryUiHours(stats.nearLimitMs) : L"\u2014"));
+            }
+        }
+        view.cards.push_back(std::move(card));
+    }
+
+    // Accounts without readings, in account order.
+    for (size_t i : set.noReadingAccounts) {
+        if (i >= view.accounts.size()) continue;
+        std::wstring detail = HistoryUiProviderName(view.accounts[i].provider);
+        if (std::wstring s = status(i); !s.empty()) detail += L" \u00B7 " + s;
+        view.noReadings.push_back({view.accounts[i].provider, view.accounts[i].label, std::move(detail)});
+    }
+}
+
+// src/history/controller.h
+// Usage history window controller: the selection by history ID, each mode's view, the range and
+// the week comparison, explicit loads with the open request they take, and the view the frame
+// builders read (history/view.h). Pure, like the settings edit controller: it talks to HistoryOps
+// (production: history/ops.h; tests: in-memory ops) and reads no globals.
+
+// What ReadSettings returns: the published settings (with this user's recording consent),
+// whether the taskbar has yet to save account history IDs, the journal's storage error flag, and
+// the published polls, parallel to the settings' accounts (possibly shorter).
+struct HistorySettingsSnapshot {
+    Settings settings;
+    bool idsPendingSave = false;
+    bool storageError = false;
+    std::vector<AccountData> polls;
+};
+
+// What the controller reads and asks for. Production ops are stateless adapters: every request,
+// load and close state is the controller's.
+struct HistoryOps {
+    // The latest open request's history ID (0: none), cleared.
+    virtual uint64_t TakeRequest() = 0;
+    // Prunes the journal to the retention, then reads its samples from `from` on; may initialize
+    // or retry the storage.
+    virtual HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) = 0;
+    virtual HistorySettingsSnapshot ReadSettings() = 0;
+    virtual void OpenSettings() = 0;
+    // Unload or cancellation: nothing loads or acts any more.
+    virtual bool Unloading() = 0;
+    // Unix ms, and one as the user's local clock and zone (zero on failure).
+    virtual ULONGLONG Now() = 0;
+    virtual SYSTEMTIME LocalTime(ULONGLONG ms) = 0;
+
+protected:
+    ~HistoryOps() = default;
+};
+
+struct HistoryController {
+    explicit HistoryController(HistoryOps& ops) : ops(&ops) {}
+
+    // Ops, and the view the frame is built from (all but its theme), recomposed by each event
+    HistoryOps* ops;
+    HistoryUiView view;
+
+    // Selection (0: All accounts), each mode's view, the range and the week comparison (it forces
+    // 7 days; the range stays for afterwards)
+    uint64_t selectedId = 0;
+    HistoryView allView = HistoryView::Weekly, accountView = HistoryView::AllMeters;
+    HistoryUiRange range = HistoryUiRange::Week;
+    bool compare = false;
+
+    // The last settings read and explicit load: its sorted snapshot (none before the first load),
+    // the times it covers ([readFrom, from) is the previous week while comparing) and the accounts
+    // collected over them, whose rows index the snapshot
+    HistorySettingsSnapshot settings;
+    std::shared_ptr<const HistorySnapshot> snapshot;
+    ULONGLONG from = 0, to = 0, readFrom = 0;
+    std::vector<HistoryUiAccount> accounts;
+
+    // Navigation slots by history ID, for the session (never reused)
+    std::map<uint64_t, uint32_t> slots;
+
+    // Set once the window closes: nothing loads or acts any more
+    bool closeRequested = false;
+
+    // The window opened: until the first load, the pill and the configured accounts come from the
+    // settings alone. The open request waits for that load.
+    void Open() {
+        if (closeRequested || ops->Unloading()) return;
+        settings = ops->ReadSettings();
+        accounts = HistoryCollectAccounts(settings.settings.accounts, {}, 0, 0, [this] { return ops->Unloading(); });
+        Compose();
+    }
+
+    // An explicit load (the first one, activation, refresh, a range or comparison change): takes
+    // the open request, reads the settings and the journal from the range's start (and the week
+    // before it while comparing) and collects the accounts over them. A listed request selects
+    // its account; otherwise the selection stays while it is listed, else All accounts.
+    void Load() {
+        if (closeRequested || ops->Unloading()) return;
+        uint64_t request = ops->TakeRequest();
+        HistorySettingsSnapshot read = ops->ReadSettings();
+        static constexpr int kDays[] = {1, 7, 30, 90};
+        int retention = read.settings.historyRetentionDays;
+        ULONGLONG now = ops->Now();
+        ULONGLONG span = (compare                         ? 7 :
+                          range == HistoryUiRange::All    ? ULONGLONG(std::max(1, retention)) :
+                                                            ULONGLONG(kDays[int(range)])) * kHistoryDayMs;
+        ULONGLONG start = now > span ? now - span : 0;
+        ULONGLONG readStart = compare && start > kHistoryWeekMs ? start - kHistoryWeekMs : start;
+        auto loaded = std::make_shared<HistorySnapshot>(ops->ExplicitSnapshot(readStart, retention));
+        std::stable_sort(loaded->samples.begin(), loaded->samples.end(),
+                         [](const HistorySample& a, const HistorySample& b) { return a.timeMs < b.timeMs; });
+        std::vector<HistoryUiAccount> collected = HistoryCollectAccounts(
+            read.settings.accounts, loaded->samples, readStart, now, [this] { return ops->Unloading(); });
+        if (ops->Unloading()) return;
+        int selected = HistoryResolveSelection(collected, selectedId, request);
+        selectedId = selected >= 0 ? collected[size_t(selected)].id : 0;
+        settings = std::move(read);
+        snapshot = std::move(loaded);
+        from = start;
+        to = now;
+        readFrom = readStart;
+        accounts = std::move(collected);
+        Compose();
+    }
+
+    // A control's command (history/view.h): the selection and the view recompose; the range, the
+    // comparison and Refresh load; the More menu's Settings opens the settings window.
+    void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
+        if (closeRequested || ops->Unloading()) return;
+        switch (command) {
+            case HistoryUiCommand::Select:
+                selectedId = key;
+                Compose();
+                break;
+            case HistoryUiCommand::View:
+                (view.selected < 0 ? allView : accountView) =
+                    HistoryView(std::clamp(value, 0, int(HistoryView::AllMeters)));
+                Compose();
+                break;
+            case HistoryUiCommand::Range:
+                range = HistoryUiRange(std::clamp(value, 0, int(HistoryUiRange::All)));
+                Load();
+                break;
+            case HistoryUiCommand::Compare:
+                compare = value != 0;
+                Load();
+                break;
+            case HistoryUiCommand::Refresh:
+                Load();
+                break;
+            case HistoryUiCommand::Menu:
+                if (value == int(HistoryUiMenuItem::Settings)) ops->OpenSettings();
+                break;
+            case HistoryUiCommand::None:
+            case HistoryUiCommand::Export:
+            case HistoryUiCommand::EnableRecording:
+                break;
+        }
+    }
+
+    // The window is closing (its close path's first step): requests stay with the opener.
+    void RequestClose() { closeRequested = true; }
+
+    // The view from the state: the accounts with their slots, recording state and latest polls
+    // (a removed one named by its journal ID), the current mode's view, the settings, the pill and
+    // status, then the summary cards once loaded. A selection that isn't listed is All accounts.
+    void Compose() {
+        const Settings& s = settings.settings;
+        ULONGLONG now = ops->Now();
+        MeterDisplay display = MeterDisplayFor(s, now, 1, 0);
+        std::map<uint64_t, size_t> configured;
+        for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
+        HistoryUiView v;
+        for (const HistoryUiAccount& a : accounts) {
+            HistoryUiViewAccount& account = v.accounts.emplace_back();
+            account.historyId = a.id;
+            account.slot = slots.try_emplace(a.id, uint32_t(slots.size())).first->second;
+            account.provider = a.provider;
+            account.label = a.configured ? a.label : Utf8ToWide(HistoryCsvId("account_", a.id));
+            account.removed = !a.configured;
+            account.recordingOff = a.configured && !a.recording;
+            account.paused = a.hidden && s.skipHiddenPolling;
+            // The flyout's weekly row: the latest poll's weekly used % and its staleness.
+            auto index = a.configured ? configured.find(a.id) : configured.end();
+            if (index != configured.end() && index->second < settings.polls.size()) {
+                const AccountData& poll = settings.polls[index->second];
+                account.weeklyPct = poll.winWeek.pct;
+                account.stale = AccountMeterState(display, s.barLayout, s.accounts[index->second], poll, 0, 0).stale;
+                account.lastPollMs = poll.lastSuccessMs;
+            }
+            if (a.id == selectedId) v.selected = int(v.accounts.size()) - 1;
+        }
+        if (v.selected < 0) selectedId = 0;
+        v.view = v.selected < 0 ? allView : accountView;
+        v.range = range;
+        v.compare = compare;
+        v.recordingEnabled = s.historyEnabled;
+        v.retentionDays = s.historyRetentionDays;
+        v.yellowThreshold = display.yellowThreshold;
+        v.orangeThreshold = display.orangeThreshold;
+        v.redThreshold = display.redThreshold;
+        v.colorblind = s.colorblindMode;
+        v.remaining = s.barMode == BarMode::Remaining;
+        // Not saving: the loaded journal's error (before the first load, the storage flag);
+        // waiting: account IDs not saved yet, or no sample in range.
+        bool storageError = snapshot ? !snapshot->status.empty() : settings.storageError;
+        bool waiting = settings.idsPendingSave || (snapshot && snapshot->samples.empty());
+        v.pill = !s.historyEnabled ? HistoryUiPill::Off :
+                 storageError      ? HistoryUiPill::NotSaving :
+                 waiting           ? HistoryUiPill::Waiting : HistoryUiPill::Recording;
+        v.loading = !snapshot;
+        if (snapshot) {
+            HistoryUiLocalTime localTime = [this](ULONGLONG ms) { return ops->LocalTime(ms); };
+            v.status = L"Updated " + HistoryUiTime(to, now, localTime);
+            v.storageError = snapshot->status;
+            v.storageCapped = snapshot->capped;
+            HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, s.historyEnabled,
+                                     s.skipHiddenPolling, v.redThreshold};
+            HistorySeriesSet set =
+                HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
+            HistoryUiSetCards(v, set, accounts, from, to, now, localTime);
+        }
+        view = std::move(v);
+    }
+};
+
+// src/history/content.h
+// Usage history window content (approved mockups s-light, s-account, s-compare, s-states,
+// s-empty): info bars, the chart's card or an empty state, the summary cards and the No readings
+// card, from the view snapshot (history/view.h). Pure builder.
+
+// Lays out the content from y in a column of `width`; the viewport's height sizes the chart's
+// card. Returns the bottom of the last card.
+static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std::vector<UiItem>& items,
+                                   uint32_t& id, float x, float y, float width, float viewHeight) {
+    const bool hc = view.theme == UiThemeKind::HighContrast, light = view.theme == UiThemeKind::Light;
+    auto text = [&](D2D1_RECT_F rect, std::vector<UiRun> runs, UiFont font, UiInk ink, bool trim) {
+        UiItem item;
+        item.id = id++;
+        item.kind = UiItemKind::Text;
+        item.rect = rect;
+        item.font = font;
+        item.ink = ink;
+        item.runs = std::move(runs);
+        item.trim = trim;
+        items.push_back(std::move(item));
+    };
+    auto shape = [&](D2D1_RECT_F rect, float viewBox, std::vector<UiShapePart> parts) {
+        UiItem item;
+        item.id = id++;
+        item.kind = UiItemKind::Shape;
+        item.rect = rect;
+        item.viewBox = viewBox;
+        item.parts = std::move(parts);
+        items.push_back(std::move(item));
+    };
+    auto panel = [&](D2D1_RECT_F rect) {
+        UiItem card;
+        card.id = id++;
+        card.kind = UiItemKind::Card;
+        card.rect = rect;
+        items.push_back(std::move(card));
+    };
+
+    // Info bars (mockup .ibar), 10 DIP apart: this user's recording off (caution, with Enable
+    // recording), a storage error, the storage cap (caution), then the selected account's own
+    // recording off or pause (info).
+    if (!view.recordingEnabled) {
+        y = UiAddInfoBar(g, items, id, id++, x, y, width,
+                         {{L"History recording is off. Saved history stays; nothing new is recorded."}},
+                         UiSeverity::Caution,
+                         UiInfoButton{kHistoryUiEnableRecording, L"Enable recording",
+                                      HistoryUiAction(HistoryUiCommand::EnableRecording),
+                                      view.canEnableRecording}) + 10;
+    }
+    if (!view.storageError.empty()) {
+        y = UiAddInfoBar(g, items, id, id++, x, y, width, {{view.storageError}}, UiSeverity::Error) + 10;
+    }
+    if (view.storageCapped) {
+        y = UiAddInfoBar(g, items, id, id++, x, y, width, {{L"Storage cap reached; oldest samples were pruned."}},
+                         UiSeverity::Caution) + 10;
+    }
+    if (view.selected >= 0 && size_t(view.selected) < view.accounts.size() && view.recordingEnabled) {
+        const HistoryUiViewAccount& account = view.accounts[size_t(view.selected)];
+        if (!account.removed && (account.recordingOff || account.paused)) {
+            y = UiAddInfoBar(g, items, id, id++, x, y, width,
+                             {{account.recordingOff ?
+                                   L"Recording is off for this account. Its saved history stays; turn on Record "
+                                   L"history in Settings > Accounts to record new polls." :
+                                   L"Recording is paused for this account: it is hidden from the taskbar, and hidden "
+                                   L"accounts are not polled."}}) + 10;
+        }
+    }
+
+    // The chart's card (mockup .gcardh), as tall as the graph card with its legend and key line,
+    // its plot between 200 and 300 DIP by the viewport's height. Without a plotted line it holds a
+    // message instead: the first load, no accounts, a view no account supports (a shorter empty
+    // card), no readings in range or dollars only (a plot without legend).
+    bool plotted = std::any_of(view.cards.begin(), view.cards.end(),
+                               [](const HistoryUiCard& card) { return !card.detailsOnly; });
+    float plot = std::clamp(viewHeight - 212, 200.0f, 300.0f), height = plot + 68;
+    PCWSTR message = view.loading                                     ? L"Loading local history\u2026" :
+                     view.accounts.empty()                            ? L"No accounts to display." :
+                     view.cards.empty() && view.noReadings.empty() ?
+                         (view.selected >= 0 ? L"This account has no meters in this view." :
+                                               L"No accounts support this view.") : nullptr;
+    if (message) {
+        height = plot + 40;
+    } else if (!plotted) {
+        message = view.cards.empty() ? L"No readings in this range." :
+                                       L"No percentage readings to plot. Dollar spending is shown below.";
+        height = plot + 20;
+    }
+    panel({x, y, x + width, y + height});
+    if (message) {
+        // Centered (mockup .pmsg), the first load's progress ring 8 DIP before it.
+        float textWidth = std::ceil(UiLayoutSize(UiLayout(g, message, UiTextStyleFor(UiFont::Note), 10000, false)).width);
+        float ring = view.loading ? 16 + 8 : 0;
+        float left = x + std::max((width - textWidth - ring) / 2, 0.0f), center = y + height / 2;
+        if (view.loading) {
+            shape({left, center - 8, left + 16, center + 8}, 16,
+                  {{L"M8 1.5A6.5 6.5 0 1 1 8 14.5A6.5 6.5 0 1 1 8 1.5", {}, UiInk::Disabled, hc ? 1.0f : 0.45f, 2},
+                   {L"M8 1.5A6.5 6.5 0 0 1 14.5 8", {}, UiInk::Accent, 1, 2}});
+        }
+        text({left + ring, center - 9.5f, left + ring + textWidth + 1, center + 9.5f}, {{message}}, UiFont::Note,
+             UiInk::Secondary, false);
+    }
+    y += height + 10;
+
+    // Summary cards (mockup .stats, .stcard): up to three columns at least 240 DIP wide (two while
+    // comparing, whose cards hold both periods), 8 DIP apart, each row as tall as its tallest card;
+    // the No readings card last. A card: 11 DIP (border and padding) around a 16 DIP head, the
+    // headline row (4 DIP above it, 30, 2 below) and 16 DIP lines; No readings: 24 DIP rows 4 DIP
+    // under its head.
+    std::vector<float> heights;
+    for (const HistoryUiCard& card : view.cards) {
+        heights.push_back(11 + 16 + (card.value.empty() ? 4 : 36) + 16 * float(card.lines.size()) + 11);
+    }
+    if (!view.noReadings.empty()) heights.push_back(11 + 16 + 4 + 24 * float(view.noReadings.size()) + 11);
+    if (heights.empty()) return y - 10;
+    size_t columns = size_t(std::clamp(int((width + 8) / 248), 1, view.compare ? 2 : 3));
+    float cardWidth = (width - 8 * float(columns - 1)) / float(columns);
+    // A card's line (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in the
+    // theme: the series palette's hues as the mockups draw them, dark and light (a scoped quota's
+    // tint toward the text color kept); high contrast alternates text and link.
+    static constexpr uint32_t kHues[][2] = {
+        {0x4F95FF, 0x2A6FD6}, {0xF0923F, 0xC8621A}, {0x4CC38A, 0x1F8F5A}, {0xE36BD0, 0xB8389F},
+        {0xA184FF, 0x6F4FE6}, {0x33C3A6, 0x0E8F78}, {0xD9B44A, 0x9A7A12}, {0xFF7A70, 0xD0463C},
+    };
+    static_assert(std::size(kHues) == std::size(kHistoryColors));
+    for (size_t first = 0; first < heights.size(); first += columns) {
+        size_t last = std::min(first + columns, heights.size());
+        float rowHeight = *std::max_element(heights.begin() + ptrdiff_t(first), heights.begin() + ptrdiff_t(last));
+        for (size_t i = first; i < last; i++) {
+            float cx = x + (cardWidth + 8) * float(i - first), left = cx + 13, right = cx + cardWidth - 13;
+            panel({cx, y, cx + cardWidth, y + rowHeight});
+            if (i == view.cards.size()) {
+                text({left, y + 11, right, y + 27}, {{L"No readings in range"}}, UiFont::Caption, UiInk::Primary, true);
+                float row = y + 31;
+                for (const HistoryUiNoReadings& entry : view.noReadings) {
+                    if (PCWSTR logo = HistoryUiLogo(entry.provider)) {
+                        shape({left, row + 4, left + 16, row + 20}, 24, {{logo, {}, UiInk::Primary}});
+                    }
+                    float labelLeft = left + 24;
+                    float labelWidth = std::min(
+                        std::ceil(UiLayoutSize(UiLayout(g, entry.label, UiTextStyleFor(UiFont::Note), 10000, false)).width),
+                        std::max(right - labelLeft, 0.0f));
+                    text({labelLeft, row + 2.5f, labelLeft + labelWidth, row + 21.5f}, {{entry.label}}, UiFont::Note,
+                         UiInk::Primary, true);
+                    if (right - (labelLeft + labelWidth + 8) >= 16) {
+                        text({labelLeft + labelWidth + 8, row + 4, right, row + 20}, {{entry.detail}}, UiFont::Caption,
+                             UiInk::Muted, true);
+                    }
+                    row += 24;
+                }
+                continue;
+            }
+            const HistoryUiCard& card = view.cards[i];
+            float titleLeft = left;
+            if (!card.detailsOnly) {
+                UiShapePart line{L"M1 4H15", {}, UiInk::Inherit, 1, 3};
+                if (hc) {
+                    line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
+                } else {
+                    COLORREF c = card.color;
+                    line.color = {float(GetRValue(c)) / 255, float(GetGValue(c)) / 255, float(GetBValue(c)) / 255, 1};
+                    for (size_t k = 0; k < std::size(kHistoryColors); k++) {
+                        COLORREF base = kHistoryColors[k];
+                        COLORREF tint = RGB((GetRValue(base) * 3 + 255) / 4, (GetGValue(base) * 3 + 255) / 4,
+                                            (GetBValue(base) * 3 + 255) / 4);
+                        if (c != base && c != tint) continue;
+                        line.color = UiRgb(kHues[k][light]);
+                        if (c != base) line.color = UiOver(UiRgb(light ? 0x000000 : 0xFFFFFF, 0.25f), line.color);
+                        break;
+                    }
+                }
+                shape({left, y + 15, left + 16, y + 23}, 16, {line});
+                titleLeft = left + 24;
+            }
+            std::vector<UiRun> title{{card.title}};
+            if (!card.status.empty()) title.push_back({L" \u00B7 " + card.status, UiRunStyle::Normal, UiInk::Muted});
+            text({titleLeft, y + 11, right, y + 27}, std::move(title), UiFont::Caption, UiInk::Primary, true);
+            float lineTop = y + 31;
+            if (!card.value.empty()) {
+                // Headline (mockup .stnum, .stunit): the value in display type, then its time in
+                // caption type 5 DIP after it, on the value's baseline.
+                UiTextStyle number = UiTextStyleFor(UiFont::Subtitle), caption = UiTextStyleFor(UiFont::Caption);
+                UiFontMetrics a = UiFontMetricsFor(g, number), b = UiFontMetricsFor(g, caption);
+                float numberTop = y + 33;
+                float whenTop = numberTop + (number.lineHeight - a.ascent - a.descent) / 2 + a.ascent -
+                                (caption.lineHeight - b.ascent - b.descent) / 2 - b.ascent;
+                float numberRight = std::min(
+                    left + std::ceil(UiLayoutSize(UiLayout(g, card.value, number, 10000, false)).width) + 1, right);
+                text({left, numberTop, numberRight, numberTop + number.lineHeight}, {{card.value}}, UiFont::Subtitle,
+                     UiInk::Primary, true);
+                if (right - (numberRight + 5) >= 16) {
+                    text({numberRight + 5, whenTop, right, whenTop + caption.lineHeight}, {{card.when}}, UiFont::Caption,
+                         UiInk::Muted, true);
+                }
+                lineTop = y + 63;
+            }
+            for (const std::wstring& line : card.lines) {
+                text({left, lineTop, right, lineTop + 16}, {{line}}, UiFont::Caption, UiInk::Muted, true);
+                lineTop += 16;
+            }
+        }
+        y += rowHeight + 8;
+    }
+    return y - 8;
+}
+
+// src/history/shell.h
+// Usage history window shell: the scrolling navigation pane, the pinned header (title, status,
+// pill, icon buttons, view and range segments, Compare) and the content, built from the view
+// snapshot (history/view.h; approved mockups s-light, s-min, s-menu, q13b-scroll). Pure.
+
+static constexpr float kHistoryUiNavWidth = 260;
+
+static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_SIZE_F client, UiFrame& frame) {
+    uint32_t id = kHistoryUiFirstRunning;
+    const bool light = view.theme == UiThemeKind::Light;
+    const HistoryUiViewAccount* selected =
+        view.selected >= 0 && size_t(view.selected) < view.accounts.size() ? &view.accounts[size_t(view.selected)] :
+                                                                              nullptr;
+
+    // Navigation pane (mockup .nav, .nitem): 38 DIP entries on a 41 DIP pitch, scrolling on its
+    // own. All accounts; configured accounts with their logo, label and weekly value (as their
+    // flyout's weekly row: used or remaining, in the usage color, muted while stale, a dash while
+    // unknown); then the Removed group (mockup .ngroup: a 36 DIP header), muted and without values.
+    frame.navPane = {0, 0, kHistoryUiNavWidth, std::max(client.height, 0.0f)};
+    float y = 6;
+    UiItem all;
+    all.id = kHistoryUiNavAll;
+    all.kind = UiItemKind::Nav;
+    all.rect = {8, y, kHistoryUiNavWidth - 8, y + 38};
+    all.text = L"All accounts";
+    all.icon = L"\uE716";
+    all.selected = !selected;
+    all.action = HistoryUiAction(HistoryUiCommand::Select);
+    frame.nav.push_back(std::move(all));
+    y += 41;
+    bool removedHeader = false;
+    for (size_t i = 0; i < view.accounts.size(); i++) {
+        const HistoryUiViewAccount& account = view.accounts[i];
+        if (account.removed && !std::exchange(removedHeader, true)) {
+            UiItem header;
+            header.id = id++;
+            header.kind = UiItemKind::Text;
+            header.font = UiFont::Caption;
+            header.ink = UiInk::Muted;
+            header.rect = {22, y + 12, kHistoryUiNavWidth - 8, y + 28};
+            header.runs = {{L"Removed", UiRunStyle::Strong}};
+            frame.nav.push_back(std::move(header));
+            y += 36;
+        }
+        UiItem entry;
+        entry.id = kHistoryUiNavAccount + account.slot;
+        entry.kind = UiItemKind::Nav;
+        entry.rect = {8, y, kHistoryUiNavWidth - 8, y + 38};
+        entry.text = account.label;
+        if (PCWSTR logo = HistoryUiLogo(account.provider)) entry.parts = {{logo, {}, UiInk::Primary}};
+        entry.ink = account.removed ? UiInk::Muted : UiInk::Primary;
+        entry.selected = selected == &account;
+        entry.action = HistoryUiAction(HistoryUiCommand::Select, 0, account.historyId);
+        if (!account.removed) {
+            UiRun value{L"\u2014", UiRunStyle::Normal, UiInk::Muted};
+            if (account.weeklyPct >= 0) {
+                double shown = view.remaining ? std::clamp(100 - account.weeklyPct, 0.0, 100.0) : account.weeklyPct;
+                value.text = HistoryUiNumber(shown, 0) + L"%";
+                if (!account.stale) {
+                    // Light theme: darker variants of the usage colors, readable on its surface.
+                    static constexpr uint32_t kLightInks[][2] = {
+                        {0xE53935, 0xC42B1C}, {0xFB8C00, 0xB35C00}, {0xFDD835, 0x876A00}, {0x43A047, 0x1D7A35},
+                        {0xD55E00, 0xB75100}, {0xE69F00, 0x946700}, {0x56B4E9, 0x387597},
+                    };
+                    uint32_t rgb = UsageColor(account.weeklyPct, false, view.yellowThreshold, view.orangeThreshold,
+                                              view.redThreshold, view.colorblind) & 0xFFFFFF;
+                    for (const auto& ink : kLightInks) {
+                        if (light && ink[0] == rgb) rgb = ink[1];
+                    }
+                    value.ink = UiInk::Inherit;
+                    value.color = UiRgb(rgb);
+                }
+            }
+            entry.runs.push_back(std::move(value));
+        }
+        frame.nav.push_back(std::move(entry));
+        y += 41;
+    }
+    frame.navHeight = y - 3 + 6;
+
+    // Header (mockup .hhead): 12 DIP from the pane, 24 DIP from the right edge.
+    float left = kHistoryUiNavWidth + 12, right = std::max(client.width - 24, left + 1), width = right - left;
+
+    // Icon buttons (mockup .ibtn: 32 x 30 DIP, 4 apart) at the title row's right: Refresh,
+    // Export and the More menu.
+    struct IconButton {
+        uint32_t id;
+        PCWSTR glyph;
+        HistoryUiCommand command;
+        bool enabled;
+    };
+    const IconButton buttons[] = {{kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, true},
+                                  {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, false},
+                                  {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, true}};
+    float x = right - 3 * 32 - 2 * 4;
+    for (const IconButton& spec : buttons) {
+        UiItem button;
+        button.id = spec.id;
+        button.kind = UiItemKind::Button;
+        button.button = UiButtonStyle::Subtle;
+        button.rect = {x, 8, x + 32, 38};
+        button.icon = spec.glyph;
+        button.iconSize = 15;
+        button.enabled = spec.enabled;
+        button.action = HistoryUiAction(spec.command, spec.command == HistoryUiCommand::Menu ? -1 : 0);
+        if (spec.command == HistoryUiCommand::Menu) {
+            button.options = {{L"Settings", int(HistoryUiMenuItem::Settings), {}, {}, L"\uE713"}};
+        }
+        frame.main.push_back(std::move(button));
+        x += 36;
+    }
+
+    // Status and pill (mockup .hstat, .pill) 12 DIP before the buttons. The status stays on the
+    // title row while it holds the whole title too; otherwise it joins the line under the title.
+    struct Pill {
+        std::wstring text;
+        UiInk ink;
+        bool on;
+    };
+    Pill pill = view.pill == HistoryUiPill::Off       ? Pill{L"Off", UiInk::Secondary, false} :
+                view.pill == HistoryUiPill::NotSaving ? Pill{L"Not saving", UiInk::Danger, true} :
+                view.pill == HistoryUiPill::Waiting   ? Pill{L"Waiting", UiInk::Caution, true} :
+                Pill{L"Recording \u00B7 " + std::to_wstring(view.retentionDays) +
+                         (view.retentionDays == 1 ? L" day" : L" days"), UiInk::Success, true};
+    PCWSTR title = selected ? selected->label.c_str() : L"All accounts";
+    D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
+    float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, UiTextStyleFor(UiFont::Title), 100000, false)).width);
+    float statusWidth = view.status.empty() ? 0 :
+        std::ceil(UiLayoutSize(UiLayout(g, view.status, UiTextStyleFor(UiFont::Caption), 10000, false)).width);
+    bool narrow = statusWidth > 0 && titleWidth + 12 + statusWidth + 12 + pillSize.width + 12 + 104 > width;
+    float pillRight = right - 104 - 12, titleRight = pillRight - pillSize.width - 12;
+    UiAddPill(frame.main, id++, {titleRight + 12, 14, pillRight, 34}, pill.text, pill.ink, pill.on);
+    if (statusWidth > 0 && !narrow) {
+        UiItem status;
+        status.id = id++;
+        status.kind = UiItemKind::Text;
+        status.font = UiFont::Caption;
+        status.ink = UiInk::Muted;
+        status.rect = {titleRight - statusWidth, 16, titleRight, 32};
+        status.runs = {{view.status}};
+        frame.main.push_back(std::move(status));
+        titleRight -= statusWidth + 12;
+    }
+    UiItem heading;
+    heading.id = id++;
+    heading.kind = UiItemKind::Text;
+    heading.font = UiFont::Title;
+    heading.rect = {left, 6, std::max(titleRight, left + 1), 42};
+    heading.runs = {{title}};
+    heading.trim = true;
+    frame.main.push_back(std::move(heading));
+
+    // Under the title (mockup .psub): one account's provider and recording, then a status that
+    // didn't fit the title row.
+    std::wstring subtitle;
+    if (selected) {
+        subtitle = std::wstring(HistoryUiProviderName(selected->provider)) + L" \u00B7 " +
+                   (selected->removed                                    ? L"Removed" :
+                    !view.recordingEnabled || selected->recordingOff ? L"Recording off" :
+                    selected->paused                                     ? L"Paused" : L"Recording");
+    }
+    if (narrow) subtitle += (subtitle.empty() ? L"" : L" \u00B7 ") + view.status;
+    float top = 56;
+    if (!subtitle.empty()) {
+        UiItem line;
+        line.id = id++;
+        line.kind = UiItemKind::Text;
+        line.font = UiFont::Note;
+        line.ink = UiInk::Muted;
+        line.rect = {left, 42, right, 61};
+        line.runs = {{subtitle}};
+        line.trim = true;
+        frame.main.push_back(std::move(line));
+        top = 70;
+    }
+
+    // Command bar (mockup .cmdbar): View and Range segments and the Compare switch (4 DIP more
+    // before it), 10 DIP apart, wrapping into rows 10 DIP apart. Comparing shows Range as 7 days,
+    // disabled.
+    std::vector<UiOption> views, ranges;
+    for (int i = 0; i < int(std::size(kHistoryViewNames)); i++) views.push_back({kHistoryViewNames[i], i});
+    for (int i = 0; i < int(std::size(kHistoryUiRangeNames)); i++) ranges.push_back({kHistoryUiRangeNames[i], i});
+    float cx = left;
+    auto place = [&](D2D1_SIZE_F size) {
+        if (cx > left && cx + size.width > right) {
+            cx = left;
+            top += 32 + 10;
+        }
+        D2D1_RECT_F rect{cx, top, cx + size.width, top + 32};
+        cx += size.width + 10;
+        return rect;
+    };
+    D2D1_SIZE_F viewsSize = UiSegmentedSize(g, views), rangesSize = UiSegmentedSize(g, ranges);
+    UiAddSegmented(frame.main, kHistoryUiViews, place(viewsSize), std::move(views), true,
+                   HistoryUiAction(HistoryUiCommand::View, int(view.view)));
+    UiAddSegmented(frame.main, kHistoryUiRanges, place(rangesSize), std::move(ranges), !view.compare,
+                   HistoryUiAction(HistoryUiCommand::Range,
+                                   int(view.compare ? HistoryUiRange::Week : view.range)));
+    PCWSTR compare = L"Compare previous week";
+    D2D1_SIZE_F compareSize = UiToggleSize(g, compare);
+    D2D1_RECT_F compareSlot = place({4 + compareSize.width, 32});
+    UiAddToggle(frame.main, kHistoryUiCompare, {compareSlot.left + 4, compareSlot.top, compareSlot.right, compareSlot.bottom},
+                view.compare, true, HistoryUiAction(HistoryUiCommand::Compare, !view.compare), compare);
+    float header = top + 32 + 10;
+
+    // Content (mockup .hcont), in viewport coordinates: the header's column, 20 DIP below the end.
+    frame.viewport = {kHistoryUiNavWidth, header, std::max(client.width, kHistoryUiNavWidth),
+                      std::max(client.height, header)};
+    float bottom = HistoryUiBuildContent(g, view, frame.content, id, 12, 0, width,
+                                         frame.viewport.bottom - frame.viewport.top);
+    frame.contentHeight = bottom + 20;
+}
+
+// src/history/ops.h
+// Production ops of the usage history window's controller (history/controller.h): stateless
+// adapters over the open request, the journal, the published settings and polls, and the settings
+// window. History thread only.
+
+struct HistoryProductionOps final : HistoryOps {
+    uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
+
+    // As the classic window's load: an explicit viewer read also prunes retained history while
+    // recording is off. Each call holds only the history leaf lock.
+    HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) override {
+        MaintainHistory(retentionDays);
+        return ReadHistorySnapshot(from);
+    }
+
+    // Settings, then the polls published in account order, in lock order; never inside the
+    // history lock.
+    HistorySettingsSnapshot ReadSettings() override {
+        HistorySettingsSnapshot snapshot;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            snapshot.settings = g_settings;
+            std::lock_guard<std::mutex> dataLock(g_dataMutex);
+            snapshot.polls = g_data;
+        }
+        snapshot.idsPendingSave = g_historyIdsPendingSave.load();
+        snapshot.storageError = g_historyStorageError.load();
+        return snapshot;
+    }
+
+    void OpenSettings() override { OpenSettingsWindow(); }
+
+    bool Unloading() override { return g_unloading || g_historyWindowCancelRequested; }
+
+    ULONGLONG Now() override { return NowUnixMs(); }
+
+    SYSTEMTIME LocalTime(ULONGLONG ms) override {
+        SYSTEMTIME local{};
+        return UnixMsToLocalSystemTime(ms, &local) ? local : SYSTEMTIME{};
+    }
+};
+
+// src/history/ui-window.h
+// The custom-drawn usage history window: the history client of the window host (ui/host.h), run
+// on the history thread (history/window.h); never touches XAML. It only translates: host
+// callbacks into controller events (history/controller.h, on its production ops), the
+// controller's view into frames (history/shell.h), rebuilds and focus requests.
+
+static constexpr PCWSTR kHistoryUiClass = L"AiQuotaHistoryUi_" WH_MOD_ID;
+static constexpr PCWSTR kHistoryUiViewportClass = L"AiQuotaHistoryUiView_" WH_MOD_ID;
+static constexpr PCWSTR kHistoryUiPopupClass = L"AiQuotaHistoryUiPopup_" WH_MOD_ID;
+
+struct HistoryUiClient final : UiHostClient {
+    HistoryProductionOps ops;
+    HistoryController controller{ops};
+
+    void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
+        HistoryUiView view = controller.view;
+        view.theme = host.theme.kind;
+        HistoryUiBuildFrame(*host.graphics, view, client, frame);
+    }
+
+    // A new selection or view scrolls the content back to its top.
+    void Invoke(UiHost& host, UiAction action) override {
+        if (Unloading() || action.kind != UiActionKind::Command) return;
+        uint64_t selected = controller.selectedId;
+        HistoryView shown = controller.view.view;
+        controller.Command(HistoryUiCommand(action.target), action.value, action.key);
+        UiHostRequestRebuild(host, controller.selectedId != selected || controller.view.view != shown);
+    }
+
+    // Explicit loads: the first one, the activation request (once the host brought the window
+    // back), F5 and Ctrl+R from either surface. A load that changed the selection (its request, or
+    // the account no longer listed) moves focus to the selected entry. Esc closes.
+    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
+        result = 0;
+        bool load = message == kHistoryLoadMessage || message == kHistoryActivateMessage;
+        if (message == WM_KEYDOWN) {
+            if (wParam == VK_ESCAPE) {
+                PostMessageW(host.main, WM_CLOSE, 0, 0);
+                return true;
+            }
+            load = wParam == VK_F5 || (wParam == 'R' && GetKeyState(VK_CONTROL) < 0);
+        }
+        if (!load) return false;
+        uint64_t selected = controller.selectedId;
+        controller.Load();
+        bool moved = controller.selectedId != selected;
+        if (moved) {
+            const HistoryUiView& view = controller.view;
+            uint32_t entry = view.selected >= 0 ? kHistoryUiNavAccount + view.accounts[size_t(view.selected)].slot :
+                                                  kHistoryUiNavAll;
+            UiHostRequestFocus(host, {entry, -1}, false);
+        }
+        UiHostRequestRebuild(host, moved);
+        return true;
+    }
+
+    // The window is published before its first load is posted: an open request stored before
+    // either is taken by that load, a later one by its activation.
+    bool Attach(UiHost& host) override {
+        controller.Open();
+        g_historyWindow.store(host.main);
+        PostMessageW(host.main, kHistoryLoadMessage, 0, 0);
+        return true;
+    }
+
+    // Every close starts here: the controller's close latch. No modal runs in this window.
+    bool CancelModal() override {
+        controller.RequestClose();
+        return false;
+    }
+
+    bool Unloading() override { return ops.Unloading(); }
+
+    bool PrepareClose(UiHost&) override { return true; }
+
+    void Destroying() override { g_historyWindow.store(nullptr); }
+
+    void Destroyed() override {}
+};
 
 // src/history/view-model.h
 // Classic history window over the shared model (history/series.h): dates, render cache, hover
@@ -19194,7 +20683,9 @@ static void HistoryUpdateHover(HistoryWindowState& state, POINT cursor) {
 static void HistorySetStatus(HistoryWindowState& state, const std::wstring& message) {
     // Keep operational failures visible; explanatory text lives behind Info.
     std::wstring text = message.empty() ? state.snapshotStatus : message;
-    if (!state.snapshot.status.empty()) text += L"\r\n" + state.snapshot.status;
+    std::wstring journal = state.snapshot.status;
+    if (state.snapshot.capped) journal += L" Storage cap reached; oldest samples were pruned.";
+    if (!journal.empty()) text += L"\r\n" + journal;
     SetWindowTextW(state.status, text.c_str());
 }
 
@@ -19831,7 +21322,8 @@ static void HistoryPaintGraph(HistoryWindowState& state) {
 }
 
 // src/history/window.h
-// History window layout, procedures, thread, and open/close.
+// History windows: the classic window's layout, procedures and thread, the custom-drawn window's
+// thread, and open/close for both (one history thread at a time, its kind fixed at its start).
 
 static void HistoryLayout(HistoryWindowState& state, bool newFont) {
     HistoryClearHover(state);
@@ -20365,9 +21857,45 @@ static DWORD WINAPI HistoryWindowThreadProc(LPVOID) {
     return 0;
 }
 
-// Opens or activates the window, selecting the account with `historyId` if it is listed; 0 keeps
-// the current selection.
-static void OpenHistoryWindow(uint64_t historyId) {
+// The custom-drawn window (history/ui-window.h). Its graphics and WinRT objects live inside
+// UiHostRun, which returns before the apartment is uninitialized.
+static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
+    using SetThreadDpi_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        auto setDpi = reinterpret_cast<SetThreadDpi_t>(GetProcAddress(user32, "SetThreadDpiAwarenessContext"));
+        if (setDpi) setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::single_threaded);
+        apartmentInitialized = true;
+    } catch (...) {}
+    if (apartmentInitialized && !g_unloading && !g_historyWindowCancelRequested) {
+        try {
+            HistoryUiClient client;
+            UiHostConfig config;
+            config.mainClass = kHistoryUiClass;
+            config.viewportClass = kHistoryUiViewportClass;
+            config.popupClass = kHistoryUiPopupClass;
+            config.title = L"Taskbar AI Quota Bars \u2014 Usage history";
+            config.activateMessage = kHistoryActivateMessage;
+            config.size = {1100, 830};
+            config.minSize = {800, 590};
+            config.icon = SettingsAppIcon({});
+            if (!UiHostRun(config, client)) Wh_Log(L"Could not open the usage history window");
+        } catch (...) {
+            Wh_Log(L"History worker failed");
+        }
+    }
+    g_historyDialog.store(nullptr);
+    g_historyWindow.store(nullptr);
+    if (apartmentInitialized) winrt::uninit_apartment();
+    return 0;
+}
+
+// Opens a window of `kind`, or activates the open one of either kind, selecting the account with
+// `historyId` if it is listed; 0 keeps the current selection.
+static void OpenHistoryWindow(uint64_t historyId, HistoryWindowKind kind) {
     if (g_unloading) return;
     std::lock_guard lock(g_historyWindowMutex);
     // Recheck under the same lock as close/thread publication; never spawn during unload.
@@ -20385,12 +21913,14 @@ static void OpenHistoryWindow(uint64_t historyId) {
         CloseHandle(g_historyWindowThread);
         g_historyWindowThread = nullptr;
     }
-    g_historyWindowThread = CreateThread(nullptr, 0, HistoryWindowThreadProc, nullptr, 0, nullptr);
+    g_historyWindowThread = CreateThread(
+        nullptr, 0, kind == HistoryWindowKind::Custom ? HistoryUiThreadProc : HistoryWindowThreadProc, nullptr, 0,
+        nullptr);
     if (!g_historyWindowThread) Wh_Log(L"Could not create history window thread: %lu", GetLastError());
 }
 
-// Lifecycle API: call from the unload thread, after g_unloading=true. Never from this
-// window's thread and never while holding settings/history/auth locks.
+// Lifecycle API for either kind: call from the unload thread, after g_unloading=true. Never from
+// the window's thread and never while holding settings/history/auth locks.
 static void CloseHistoryWindow() {
     HANDLE thread = nullptr;
     {

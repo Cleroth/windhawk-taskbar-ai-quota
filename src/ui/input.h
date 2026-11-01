@@ -117,6 +117,21 @@ static UiOptionIntent UiOptionKey(int count, int highlight, UINT key) {
     return {};
 }
 
+// A focused segmented control's keys: Left/Right select the neighboring segment (stopping at the
+// ends), Home/End the first and last; the segment to select, which may be the selected one.
+// Without a selection either arrow selects the first. Other keys aren't the control's.
+static std::optional<int> UiSegmentKey(const UiItem& control, UINT key) {
+    int count = int(control.options.size()), selected = UiSelectedSegment(control);
+    if (!count) return std::nullopt;
+    switch (key) {
+        case VK_LEFT: return selected < 0 ? 0 : std::max(selected - 1, 0);
+        case VK_RIGHT: return selected < 0 ? 0 : std::min(selected + 1, count - 1);
+        case VK_HOME: return 0;
+        case VK_END: return count - 1;
+    }
+    return std::nullopt;
+}
+
 // Sliders: the value under a pointer x (rounded to whole steps, clamped), and what keys step it
 // by: arrows 1, Page Up/Down a tenth of the range, Home/End all of it (the step clamps).
 static int UiSliderValueAt(const UiItem& slider, float x) {
@@ -153,6 +168,15 @@ static float UiScrollIntoView(float offset, float viewportHeight, float top, flo
         return std::min(top - margin, bottom + margin - viewportHeight);
     }
     return offset;
+}
+
+// The navigation pane's offset that shows `rect` (main DIPs at offset 0) with 6 DIP around it,
+// the pane's own padding, within its scroll range.
+static float UiNavScrollTo(const UiFrame& frame, float offset, D2D1_RECT_F rect) {
+    float height = frame.navPane.bottom - frame.navPane.top;
+    return UiClampScroll(UiScrollIntoView(offset, height, rect.top - frame.navPane.top,
+                                          rect.bottom - frame.navPane.top, 6),
+                         height, frame.navHeight);
 }
 
 // The scroll offset that puts the thumb's top edge at `thumbTop` (track coordinates).

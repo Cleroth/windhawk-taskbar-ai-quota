@@ -1,10 +1,12 @@
 # Settings verification
 
-Source-extracted tests of the pure fragments shared by the taskbar and the settings window (meter
-model, `src/ui/` toolkit, the settings edit controller, shell and page builders), offscreen
-renders of the settings window, a native-host probe of the toolkit's window host (with its
-dropdown popup and number box text boxes), and a capture/foreground probe for the dropdown popup.
-Not a Windhawk, Explorer or XAML test.
+Source-extracted tests of the pure fragments behind both custom-drawn windows (meter model,
+`src/ui/` toolkit, the settings edit controller, shell and page builders; the usage history
+window's view, controller and frame builders on the shared history model), offscreen renders of
+both windows, a native-host probe of the toolkit's window host (with its dropdown popup and
+number box text boxes), and a capture/foreground probe for the dropdown popup. Not a Windhawk,
+Explorer or XAML test. The history domain (journal, series, continuity, burn-up, the classic window) stays in
+`tests/history`.
 
 ## Run
 
@@ -33,7 +35,10 @@ regenerates.
 ## Phases
 
 - `model`: pure fixtures (meter model, logos, toolkit palette/input/focus/hit testing/scroll,
-  controls, popup rows/placement/keys, settings shell and pages). The edit controller
+  controls, popup rows/placement/keys, settings shell and pages). `fixtures/controls.inc`: the
+  toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
+  trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,
+  status pills, info bar severities with a button). The edit controller
   (`settings/edits.h`) runs against `TestStore` (`fixtures/edits.inc`): an in-memory store with
   an operation log, deterministic save failures and unload after N transactions; number parsing
   and the render projection get their own fixtures. `fixtures/accounts.inc`: the controller's
@@ -62,8 +67,40 @@ regenerates.
   unpinned (`render-layout-overflow-*`, `-unpinned-*`), preview strip sheets with one captioned
   row per layout and option (`render-preview-sheet-*`) or per Display option
   (`render-display-preview-sheet-*`; 1:1 at 100/125/150%) and the dropdown popup's rows
-  (`render-popup-*`). Client-drawn previews use the production painter. PNGs for review, no pixel
-  goldens.
+  (`render-popup-*`). Client-drawn previews use the production painter. The history window's
+  controls sheet (`render-controls-history-*`, every theme at 96/144/192 DPI,
+  `fixtures/render-controls.inc`): two scrolled navigation panes through the production pane
+  painter (logos, usage-colored values, a cut label, selected, disabled, the Removed group,
+  focus, hover, thin and expanded scrollbars), then segmented controls (hover, focus, pressed,
+  disabled), leading switches, pills, a cut label, info bar severities with buttons and an
+  icon-only menu button holding its one-line menu open (glyph rows, a separator). PNGs for
+  review, no pixel goldens. Shared render support (themes, WIC targets, PNG output):
+  `fixtures/render-support.inc`.
+- `extract-history`, `history-compile`, `history`, `history-render`: the history window's own
+  executable (`history.cpp`, `fixtures/history-main.inc`) on `core/model.h`, the meter model,
+  logos, the pure toolkit, `history/types.h`, `continuity.h`, `series.h`, `view.h`,
+  `controller.h`, `content.h` and `shell.h`. `history` runs `fixtures/history-view.inc` (compact
+  formats in synthetic time zones, number rounding and abbreviation with carry, hours; summary
+  cards and No readings entries built through `HistoryCollectAccounts` and `HistoryBuildSeries`
+  from synthetic readings, as the window's controller does), `fixtures/history-controller.inc`
+  (the controller against `TestHistoryOps`: in-memory request, journal, settings with polls,
+  clock and unload, with an operation log; open requests before and after the window is
+  published, repeated and unlisted requests, removed accounts, per-mode views, the range under
+  week comparison, close and unload with a request pending, and the view it fills; orchestration
+  only, never the production ops or the opener-to-window bridge) and
+  `fixtures/history-frame.inc` (the frame per
+  state: navigation entries and their ids per history ID, values and inks, the Removed group;
+  header title, status, pill, icon buttons, the narrow rule; segments, Compare disabling range;
+  info bars; the chart's placeholder and empty states; card grid and contents; one-line menu
+  rows with separators; an icon-only button's centered glyph, measured in pixels).
+  `history-render` paints `render-history-*` (every theme at 96/144/192 DPI,
+  `fixtures/history-render.inc`) as the host composes the window (main surface, navigation pane
+  at its scroll, viewport, scrollbar, the More menu where the host opens it), modeled on the
+  approved phase-3 mockups: `default` (s-light), `account` (s-account), `compare`, `states`
+  (recording off, storage failing, waiting with focus and hover), `empty` (loading, no accounts,
+  unsupported view), `empty-readings` (no readings, dollars only, the No readings card beside
+  cards), `menu`, `min` (the minimum window scrolled), `nav` (the scrolled sidebar) and `band`
+  (above 100%). The chart's card is an empty placeholder of its size.
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
   (`ui/system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
   `color-dialog.h`) and a stub client with window icons form `ui-host.dll`; `host-probe.cpp`
@@ -86,7 +123,14 @@ regenerates.
   there scrolling on time with the timer starved), a free text
   box (limit, Up/Down native) and a menu button (keys open and choose), the color dialog
   (`ui/color-dialog.h`) cancelled by a user close and by unload's close, and unload with the popup
-  open, with a focused EDIT, and during a message box over the popup.
+  open, with a focused EDIT, and during a message box over the popup. In the probe client's
+  history mode (a navigation pane, segmented controls in the header): segment keys and clicks
+  through the host (one stop, ends, the selected segment, a disabled control), keys the host
+  doesn't use reaching the client from either surface (not the popup's, focus moves or control
+  keys), the activation request reaching the client after the popup closed, theme messages
+  rebuilding, and the pane's wheel routing, hits at its scroll, keyboard and selection
+  scroll-into-view and scrollbar drag. Pointer state is read in the command that moved the
+  pointer: the real cursor is elsewhere, so a leave follows.
 - `extract-popup`, `popup-compile`, `popup-probe`: the same host as the owner of a probe popup
   (owned, `WS_EX_NOACTIVATE`, shown without activation; `fixtures/popup-*.inc`, hand-written).
   Thread-local message hooks record what each window receives while capture is on the popup, on
@@ -98,8 +142,8 @@ regenerates.
 
 ## Outputs and side effects
 
-Each run creates a retained `.out/run-.../` with the extracted `settings.cpp`, `ui-host.cpp` and
-`popup.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
+Each run creates a retained `.out/run-.../` with the extracted `settings.cpp`, `history.cpp`,
+`ui-host.cpp` and `popup.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
 `render-*.png`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe
 shows off-screen, never-activated windows and briefly a message box, and reads the user's theme
 (registry, `UISettings`); its popup, text box, slider, preview and color dialog cases, like the
@@ -111,13 +155,15 @@ exits. No storage, network, credential or Explorer access.
 ## Success and evidence limits
 
 Exit 0 requires every phase to pass: tooling self-tests, freshness (default source), the
-extractions, compiles, exactly one successful `RESULT` summary from `model`, `render`,
-`host-probe` and `popup-probe`, every reported render present as a PNG, and source and harness
-unchanged during the run. A pass covers extracted logic, offscreen rendering and the host's
+extractions, compiles, exactly one successful `RESULT` summary from `model`, `render`, `history`,
+`history-render`, `host-probe` and `popup-probe`, every reported render present as a PNG, and
+source and harness unchanged during the run. A pass covers extracted logic, offscreen rendering and the host's
 window/thread/teardown contract in a test process (the controller against a test store, the
 popup and EDITs against a stub client); Explorer, the settings thread's real client and store,
 DWM caption colors, how the title bar and Alt+Tab show the window icon, live theme switches and
-multi-monitor DPI need the runtime check in the root guide. The popup probe's automated part covers thread-local activation and programmatic events
+multi-monitor DPI need the runtime check in the root guide. The history controller fills
+its view from in-memory ops: the production ops (journal, settings and poll reads), the opener,
+the window client and its activation path are outside this suite. The popup probe's automated part covers thread-local activation and programmatic events
 only; real clicks on other apps or the taskbar, Alt+Tab, Start and wheel routing need the
 interactive mode, and neither runs inside Explorer (where the taskbar shares the process).
 
@@ -125,10 +171,12 @@ interactive mode, and neither runs inside Explorer (where the taskbar shares the
 
 - `extract.py` takes whole fragments between `// src/<path>` marker lines of the generated file,
   plus named definitions; it refuses missing or ambiguous boundaries and source changes.
-  Model-target fragments must stay pure (no XAML, WinRT, window, registry, storage or global
-  state): fix impurities in `src/`, never patch extracted code. The only stub allowed is
-  `Wh_Log`, in the host target.
-- Never extract the production store, storage, auth, account commands or settings client.
+  Model- and history-target fragments must stay pure (no XAML, WinRT, window, registry, storage
+  or global state): fix impurities in `src/`, never patch extracted code. The only stub allowed
+  is `Wh_Log`, in the host target.
+- Never extract the production store, storage, auth, account commands, settings client, history
+  journal, history ops (`history/ops.h`) or history window code (`history/ui-window.h`,
+  `window.h`).
 - Fixtures live by domain under `fixtures/`: synthetic inputs with hand-derived expected values,
   not copies of production rules.
 - Keep generated artifacts under `.out/`.

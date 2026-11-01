@@ -17,7 +17,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DEFAULT_SOURCE = REPO / "local@taskbar-ai-quota.wh.cpp"
 DEFAULT_COMPILER = Path(r"C:\Program Files\Windhawk\Compiler\bin\clang++.exe")
-SUMMARY_PHASES = ("model", "render", "host-probe", "popup-probe")
+SUMMARY_PHASES = ("model", "render", "history", "history-render", "host-probe", "popup-probe")
+RENDER_PHASES = ("render", "history-render")
 
 
 def hashes():
@@ -96,6 +97,7 @@ def main():
         results["source_sha256_before"] = hashlib.sha256(source.read_bytes()).hexdigest()
         results["harness_sha256_before"] = hashes()
         cpp, exe = root / "settings.cpp", root / "settings.exe"
+        history_cpp, history_exe = root / "history.cpp", root / "history.exe"
         host_cpp, host_dll, probe = root / "ui-host.cpp", root / "ui-host.dll", root / "host-probe.exe"
         popup_cpp, popup_exe = root / "popup.cpp", root / "popup-probe.exe"
         flags = [str(compiler), "--target=x86_64-w64-mingw32", "-std=c++23", "-DUNICODE", "-D_UNICODE",
@@ -118,14 +120,18 @@ def main():
             ("popup-compile", native + ["-municode", "-I", str(HERE), str(popup_cpp), "-o", str(popup_exe),
                                         *host_libs]),
         ]
+        render_libs = ["-ld2d1", "-ldwrite", "-lwindowscodecs", "-lole32", "-loleaut32", "-lruntimeobject"]
         commands = [*setup, *popup_build] if args.popup_interactive else [
             *setup,
             ("extract", extract + ["--output", str(cpp)]),
+            ("extract-history", extract + ["--output", str(history_cpp), "--target", "history"]),
             ("extract-host", extract + ["--output", str(host_cpp), "--target", "host"]),
-            ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), "-ld2d1", "-ldwrite",
-                                       "-lwindowscodecs", "-lole32", "-loleaut32", "-lruntimeobject"]),
+            ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), *render_libs]),
             ("model", [str(exe)]),
             ("render", [str(exe), "--render-dir", str(root)]),
+            ("history-compile", flags + ["-I", str(HERE), str(history_cpp), "-o", str(history_exe), *render_libs]),
+            ("history", [str(history_exe)]),
+            ("history-render", [str(history_exe), "--render-dir", str(root)]),
             ("host-compile", native + ["-shared", "-I", str(HERE), str(host_cpp), "-o", str(host_dll), *host_libs]),
             ("probe-compile", native + ["-municode", str(HERE / "host-probe.cpp"), "-o", str(probe),
                                         "-lole32", "-luser32", "-lgdi32"]),
@@ -139,8 +145,8 @@ def main():
             if name in SUMMARY_PHASES:
                 try:
                     step["tests"] = summary(name, text)
-                    if name == "render":
-                        results["renders"] = renders(root, text)
+                    if name in RENDER_PHASES:
+                        results.setdefault("renders", []).extend(renders(root, text))
                     if name.endswith("-probe"):
                         step["observations"] = re.findall(r"^(?:HANDLES|LOSS|LOG|CONTEXT|OBSERVE|NOTE) [^\n]+",
                                                           text, re.M)
@@ -148,7 +154,8 @@ def main():
                     step.update(ok=False, evidence_error=str(error))
                     print(error, flush=True)
             if name.startswith("extract") and step["ok"]:
-                extracted = {"extract": cpp, "extract-host": host_cpp, "extract-popup": popup_cpp}[name]
+                extracted = {"extract": cpp, "extract-history": history_cpp, "extract-host": host_cpp,
+                             "extract-popup": popup_cpp}[name]
                 manifest = extracted.with_suffix(".manifest.json")
                 results.setdefault("extraction", {})[name] = json.loads(manifest.read_text(encoding="utf-8"))
             if not step["ok"]:

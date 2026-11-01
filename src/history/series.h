@@ -89,8 +89,11 @@ struct HistorySeriesQuery {
 
 struct HistorySeriesSet {
     std::vector<HistorySeries> series;
+    // Accounts without readings: each one's title with its status, and its account index.
     std::vector<std::wstring> noReadings;
+    std::vector<size_t> noReadingAccounts;
     std::array<HistoryAxis, 3> axes;  // Percent, USD, credits; never share unlike units.
+    int redThreshold = 90;  // The threshold the statistics' near-limit times used
 };
 
 // Formatting stays independent of locale for exact values/CSV.
@@ -225,6 +228,7 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                            const HistorySeriesQuery& query,
                                            const std::function<bool()>& cancelled) {
     HistorySeriesSet result;
+    result.redThreshold = query.redThreshold;
     result.axes[0].high = 100;
     // Keep percentages on the left even if only dollar/credit readings are available.
     result.axes[0].visible = true;
@@ -313,7 +317,10 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             if (result.series.size() == firstSeries) series.title += status;
             result.series.push_back(std::move(series));
         }
-        if (result.series.size() == firstSeries) result.noReadings.push_back(account.title + status);
+        if (result.series.size() == firstSeries) {
+            result.noReadings.push_back(account.title + status);
+            result.noReadingAccounts.push_back(i);
+        }
     }
     return result;
 }

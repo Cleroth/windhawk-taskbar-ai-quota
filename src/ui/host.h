@@ -1,8 +1,8 @@
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
-// and its scrolling viewport child, each with its own render target; the dropdown popup and the
-// number boxes' native text boxes; theme, window icons, DPI, pointer and keyboard input, focus,
-// scrolling, close paths and teardown. A client supplies the content and the window-specific
-// behavior. Rules: ui/AGENTS.md.
+// and its scrolling viewport child, each with its own render target, the main window optionally
+// with a scrolling navigation pane; the dropdown popup and the number boxes' native text boxes;
+// theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths and
+// teardown. A client supplies the content and the window-specific behavior. Rules: ui/AGENTS.md.
 
 struct UiHost;
 
@@ -14,7 +14,8 @@ struct UiHostClient {
     virtual void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) = 0;
     // Item and link activations, dropdown choices, number box steps and text events.
     virtual void Invoke(UiHost& host, UiAction action) = 0;
-    // Main window messages the host doesn't handle; true if handled.
+    // Main window messages the host doesn't handle, WM_KEYDOWN that neither surface uses, and
+    // the activation request once the host brought the window back; true if handled.
     virtual bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam,
                          LRESULT& result) = 0;
     // End of the main window's WM_CREATE; false fails creation.
@@ -68,13 +69,14 @@ struct UiHost {
     // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
     // slider drag reports values that differ from its last report (the frame may lag behind); a
     // handle's drag starts once the pointer moved (handleMoved) and scrolls while near an edge.
+    // The navigation pane scrolls on its own, with its own scrollbar.
     UiFrame frame;
     std::vector<UiFocusStop> stops;
     UiPointerState pointer;
     UiFocusRef focus;
     bool focusVisible = false;
-    float scroll = 0;
-    bool scrollbarHot = false, scrollDragging = false;
+    float scroll = 0, navScroll = 0;
+    bool scrollbarHot = false, scrollDragging = false, navBarHot = false, navBarDragging = false;
     float scrollDragOffset = 0;
     D2D1_POINT_2F pointerAt{-1e9f, -1e9f};
     UiSurfaceId pointerSurface = UiSurfaceId::Main;
@@ -170,13 +172,21 @@ static UiScrollbar UiHostScrollbar(const UiHost& host) {
                           host.frame.contentHeight, host.scrollbarHot || host.scrollDragging);
 }
 
-// The element under a client point (pixels) of a surface.
+static UiScrollbar UiHostNavScrollbar(const UiHost& host) {
+    return UiNavScrollbar(host.frame, host.navScroll, host.navBarHot || host.navBarDragging);
+}
+
+// The element under a client point (pixels) of a surface: on the main surface, inside the
+// navigation pane only its items, at the pane's scroll.
 static UiFocusRef UiHostHit(UiHost& host, UiSurfaceId surface, POINT point) {
     float scale = UiHostScale(host);
     D2D1_POINT_2F at{float(point.x) / scale, float(point.y) / scale};
+    if (surface == UiSurfaceId::Main && UiContains(host.frame.navPane, at)) {
+        surface = UiSurfaceId::Nav;
+        at.y += host.navScroll;
+    }
     if (surface == UiSurfaceId::Content) at.y += host.scroll;
-    return UiHitTest(*host.graphics, surface == UiSurfaceId::Main ? host.frame.main : host.frame.content,
-                     at);
+    return UiHitTest(*host.graphics, UiSurfaceItems(host.frame, surface), at);
 }
 
 // Dropdown popup -------------------------------------------------------------------------------
@@ -203,12 +213,12 @@ static void UiHostOpenPopup(UiHost& host, uint32_t id) {
     float scale = UiHostScale(host);
     D2D1_SIZE_F size = UiLayoutOptions(*host.graphics, item->options, item->action,
                                        item->rect.right - item->rect.left, popup.rows);
-    float shift = surface == UiSurfaceId::Content ? -host.scroll : 0;
+    float shift = surface == UiSurfaceId::Content ? -host.scroll : surface == UiSurfaceId::Nav ? -host.navScroll : 0;
     RECT field{LONG(std::lround(item->rect.left * scale)),
                LONG(std::lround((item->rect.top + shift) * scale)),
                LONG(std::lround(item->rect.right * scale)),
                LONG(std::lround((item->rect.bottom + shift) * scale))};
-    MapWindowPoints(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr,
+    MapWindowPoints(surface == UiSurfaceId::Content ? host.viewport : host.main, nullptr,
                     reinterpret_cast<POINT*>(&field), 2);
     popup.highlight = -1;
     for (size_t i = 0; i < popup.rows.size(); i++) {
@@ -266,6 +276,19 @@ static void UiHostItemEvent(UiHost& host, uint32_t id, UiActionKind kind, std::w
     action.kind = kind;
     action.text = std::move(text);
     action.value = value;
+    host.client->Invoke(host, std::move(action));
+}
+
+// A segment chosen by the pointer or the keys: the control's action with that segment's value;
+// the selected one changes nothing.
+static void UiHostSelectSegment(UiHost& host, uint32_t id, int segment) {
+    const UiItem* item = UiFindItem(host.frame, id);
+    if (host.closing || !item || item->kind != UiItemKind::Segmented || !UiActive(*item) || segment < 0 ||
+        segment >= int(item->options.size()) || segment == UiSelectedSegment(*item)) {
+        return;
+    }
+    UiAction action = item->action;
+    action.value = item->options[size_t(segment)].value;
     host.client->Invoke(host, std::move(action));
 }
 
@@ -350,7 +373,7 @@ static HWND UiHostFocusWindow(UiHost& host, UiFocusRef ref) {
         UiTextBox* box = UiFindTextBox(host.boxes, ref.id);
         if (box && box->window && IsWindowEnabled(box->window)) return box->window;
     }
-    return surface == UiSurfaceId::Main ? host.main : host.viewport;
+    return surface == UiSurfaceId::Content ? host.viewport : host.main;
 }
 
 // Scrolls to a pixel-aligned offset and re-targets the pointer, whose element moved under it.
@@ -375,8 +398,30 @@ static void UiHostScrollTo(UiHost& host, float offset) {
     InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
-// Moves focus to an element (keyboard focus to its window), scrolling content into view when
-// the move came from the keyboard. Focus leaving the popup's field closes the popup.
+// The navigation pane's scroll, as UiHostScrollTo: pixel-aligned, closing the popup and
+// re-targeting a pointer over the main window.
+static void UiHostScrollNav(UiHost& host, float offset) {
+    float scale = UiHostScale(host);
+    const D2D1_RECT_F& pane = host.frame.navPane;
+    offset = UiClampScroll(offset, pane.bottom - pane.top, host.frame.navHeight);
+    offset = std::round(offset * scale) / scale;
+    if (offset == host.navScroll) return;
+    UiHostClosePopup(host);
+    host.navScroll = offset;
+    POINT cursor{};
+    RECT client{};
+    if (!host.pointer.pressed.id && !host.navBarHot && GetCursorPos(&cursor) &&
+        ScreenToClient(host.main, &cursor) && GetClientRect(host.main, &client) && PtInRect(&client, cursor)) {
+        UiPointerMove(host.pointer, UiHostHit(host, UiSurfaceId::Main, cursor));
+        host.pointerSurface = UiSurfaceId::Main;
+        host.pointerAt = {float(cursor.x) / scale, float(cursor.y) / scale};
+    }
+    InvalidateRect(host.main, nullptr, FALSE);
+}
+
+// Moves focus to an element (keyboard focus to its window), scrolling content or the
+// navigation pane into view when the move came from the keyboard. Focus leaving the popup's
+// field closes the popup.
 static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
     UiSurfaceId surface = UiSurfaceId::Main;
     const UiItem* item = UiFindItem(host.frame, ref.id, &surface);
@@ -391,6 +436,9 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
                                                   bounds.front().top, bounds.back().bottom, 12));
         }
     }
+    if (surface == UiSurfaceId::Nav && visible) {
+        UiHostScrollNav(host, UiNavScrollTo(host.frame, host.navScroll, item->rect));
+    }
     HWND target = UiHostFocusWindow(host, ref);
     if (GetFocus() != target) {
         SetFocus(target);
@@ -404,10 +452,15 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
 // A dropdown or menu button opens its popup; a number or text box only takes focus (its native
-// text box reports edits); a slider, a preview and a drag handle report their drags instead.
+// text box reports edits); a slider, a preview and a drag handle report their drags instead; a
+// segmented control selects the activated segment (its keys select the others).
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
     const UiItem* item = UiFindItem(host.frame, ref.id);
+    if (item && item->kind == UiItemKind::Segmented) {
+        UiHostSelectSegment(host, ref.id, ref.link);
+        return;
+    }
     if (item && ref.link < 0 &&
         (item->kind == UiItemKind::Dropdown || (item->kind == UiItemKind::Button && !item->options.empty()))) {
         UiHostOpenPopup(host, ref.id);
@@ -475,8 +528,15 @@ static void UiHostEndHandleDrag(UiHost& host, UiActionKind end) {
 // one waits for the paint its request caused (which runs it), unless a nested paint (a modal's)
 // consumed that. A rebuild closes the popup; keyboard focus follows the focused element (a
 // requested one, or one whose text box was removed). The main window repaints when requested,
-// when its layout changed or when the pointer's element went.
+// when its layout changed or when the pointer's element went. A newly selected entry of the
+// navigation pane scrolls into view.
 static void UiHostRebuildIfPending(UiHost& host) {
+    auto selectedNav = [](const std::vector<UiItem>& items) {
+        auto at = std::find_if(items.begin(), items.end(), [](const UiItem& item) {
+            return item.kind == UiItemKind::Nav && item.selected;
+        });
+        return at != items.end() ? at->id : 0;
+    };
     if (host.liveRebuild && host.dispatchDepth == 1 && host.main && host.viewport &&
         !GetUpdateRect(host.main, nullptr, FALSE) && !GetUpdateRect(host.viewport, nullptr, FALSE)) {
         host.rebuildPending = true;
@@ -487,7 +547,8 @@ static void UiHostRebuildIfPending(UiHost& host) {
         host.rebuildPending = false;
         host.liveRebuild = false;
         D2D1_RECT_F viewport = host.frame.viewport;
-        size_t mainItems = host.frame.main.size();
+        size_t mainItems = host.frame.main.size() + host.frame.nav.size();
+        uint32_t paneSelected = selectedNav(host.frame.nav);
         UiHostClosePopup(host);
         RECT client{};
         GetClientRect(host.main, &client);
@@ -496,19 +557,24 @@ static void UiHostRebuildIfPending(UiHost& host) {
         UiFrame frame;
         host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
-        UiFocusRef fallback;
-        for (const UiItem& item : frame.main) {
-            if (item.kind == UiItemKind::Nav && item.selected) fallback = {item.id, -1};
-        }
+        UiFocusRef fallback{selectedNav(frame.nav) ? selectedNav(frame.nav) : selectedNav(frame.main), -1};
         // Keyboard focus starts on the selected navigation item, without a ring.
         host.focus = UiResolveFocus(host.stops, stops, host.focus.id ? host.focus : fallback,
                                     fallback);
         host.frame = std::move(frame);
         host.stops = std::move(stops);
         const D2D1_RECT_F& v = host.frame.viewport;
-        bool repaintMain = std::exchange(host.rebuildMain, false) || mainItems != host.frame.main.size() ||
+        bool repaintMain = std::exchange(host.rebuildMain, false) ||
+                           mainItems != host.frame.main.size() + host.frame.nav.size() ||
                            v.left != viewport.left || v.top != viewport.top || v.right != viewport.right ||
                            v.bottom != viewport.bottom;
+        const D2D1_RECT_F& pane = host.frame.navPane;
+        host.navScroll = std::round(UiClampScroll(host.navScroll, pane.bottom - pane.top, host.frame.navHeight) *
+                                    scale) / scale;
+        if (const UiItem* entry = UiFindItem(host.frame, selectedNav(host.frame.nav));
+            entry && entry->id != paneSelected) {
+            UiHostScrollNav(host, UiNavScrollTo(host.frame, host.navScroll, entry->rect));
+        }
         for (UiFocusRef* ref : {&host.pointer.hot, &host.pointer.pressed}) {
             if (ref->id && !UiFindItem(host.frame, ref->id)) {
                 *ref = {};
@@ -665,18 +731,24 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 UiHostRequestRebuild(host, false);
                 break;
             }
+            // A theme change also rebuilds: built content may hold colors the client derived
+            // from the theme.
             case WM_SETTINGCHANGE:
                 if (isMain && (wParam == SPI_SETHIGHCONTRAST ||
                                (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam),
                                                  L"ImmersiveColorSet") == 0))) {
                     UiHostApplyTheme(host);
+                    UiHostRequestRebuild(host, false);
                 }
                 handled = false;
                 break;
             case WM_THEMECHANGED:
             case WM_SYSCOLORCHANGE:
             case WM_DWMCOLORIZATIONCOLORCHANGED:
-                if (isMain) UiHostApplyTheme(host);
+                if (isMain) {
+                    UiHostApplyTheme(host);
+                    UiHostRequestRebuild(host, false);
+                }
                 handled = false;
                 break;
 
@@ -783,6 +855,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     if (isMain) {
                         UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
                                      state, {0, 0}, scale, -1e9f, 1e9f, &custom);
+                        UiPaintNavPane(target, *host.graphics, own.cache, host.palette, host.frame, state,
+                                       host.navScroll, host.navBarHot || host.navBarDragging, scale);
                     } else {
                         float height = UiHostViewHeight(host);
                         UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.content,
@@ -837,13 +911,24 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                                                           host.frame.contentHeight));
                     break;
                 }
+                const D2D1_RECT_F& pane = host.frame.navPane;
+                if (isMain && host.navBarDragging) {
+                    UiHostScrollNav(host, UiScrollForThumb(UiHostNavScrollbar(host),
+                                                           float(point.y) / scale - host.scrollDragOffset,
+                                                           pane.bottom - pane.top, host.frame.navHeight));
+                    break;
+                }
+                // Each scrollbar takes the pointer within 16 DIP of its pane's right edge.
                 bool overBar = !isMain && UiHostScrollbar(host).visible &&
                                float(point.x) / scale >= host.frame.viewport.right -
                                                              host.frame.viewport.left - 16;
-                bool changed = overBar != host.scrollbarHot;
+                bool overNavBar = isMain && UiHostNavScrollbar(host).visible &&
+                                  UiContains({pane.right - 16, pane.top, pane.right, pane.bottom}, host.pointerAt);
+                bool changed = overBar != host.scrollbarHot || overNavBar != host.navBarHot;
                 host.scrollbarHot = overBar;
-                changed |= UiPointerMove(host.pointer, overBar ? UiFocusRef{} :
-                                                                 UiHostHit(host, surface, point));
+                host.navBarHot = overNavBar;
+                changed |= UiPointerMove(host.pointer, overBar || overNavBar ? UiFocusRef{} :
+                                                                               UiHostHit(host, surface, point));
                 // A preview's hover follows the pointer within it.
                 const UiItem* hot = UiFindItem(host.frame, host.pointer.hot.id);
                 if (changed) UiHostInvalidate(host);
@@ -854,12 +939,12 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 // While a press or drag holds capture, only this surface's pointer position
                 // changes; outside the window every move reports a leave, so nothing else repaints.
                 if (host.pointerSurface == surface) host.pointerAt = {-1e9f, -1e9f};
-                if (host.pointer.pressed.id || host.scrollDragging) {
+                if (host.pointer.pressed.id || host.scrollDragging || host.navBarDragging) {
                     InvalidateRect(window, nullptr, FALSE);
                     break;
                 }
                 host.pointer.hot = {};
-                host.scrollbarHot = false;
+                host.scrollbarHot = host.navBarHot = false;
                 UiHostInvalidate(host);
                 break;
             case WM_LBUTTONDOWN: {
@@ -880,17 +965,32 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     InvalidateRect(window, nullptr, FALSE);
                     break;
                 }
+                if (UiScrollbar navBar = UiHostNavScrollbar(host); isMain && host.navBarHot && navBar.visible) {
+                    float y = float(point.y) / scale;
+                    if (y >= navBar.thumb.top && y < navBar.thumb.bottom) {
+                        host.navBarDragging = true;
+                        host.scrollDragOffset = y - navBar.thumb.top;
+                        SetCapture(window);
+                    } else {
+                        float page = host.frame.navPane.bottom - host.frame.navPane.top - 40;
+                        UiHostScrollNav(host, host.navScroll + (y < navBar.thumb.top ? -page : page));
+                    }
+                    InvalidateRect(window, nullptr, FALSE);
+                    break;
+                }
                 UiFocusRef hit = UiHostHit(host, surface, point);
                 host.pointer.hot = hit;
                 host.pointer.pressed = hit;
                 if (hit.id) {
                     SetCapture(window);
                     // A spin button keeps focus on its number box's text box and a drag handle
-                    // gives it to its owner; a preview takes no focus.
+                    // gives it to its owner; a preview takes no focus; a segmented control takes
+                    // it as a whole.
                     const UiItem* item = UiFindItem(host.frame, hit.id);
                     UiItemKind kind = item ? item->kind : UiItemKind::Text;
                     UiFocusRef target = kind == UiItemKind::SpinButton || kind == UiItemKind::Handle ?
-                                            UiFocusRef{item->owner, -1} : hit;
+                                            UiFocusRef{item->owner, -1} :
+                                        kind == UiItemKind::Segmented ? UiFocusRef{hit.id, -1} : hit;
                     if (kind != UiItemKind::Preview && UiFindItem(host.frame, target.id) &&
                         (target != host.focus || GetFocus() != UiHostFocusWindow(host, target))) {
                         UiHostSetFocus(host, target, false);
@@ -937,7 +1037,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     KillTimer(host.viewport, kUiAutoScrollTimer);
                 }
                 UiFocusRef activate = UiPointerRelease(host.pointer, UiHostHit(host, surface, point));
-                host.scrollDragging = false;
+                host.scrollDragging = host.navBarDragging = false;
                 if (GetCapture() == window) ReleaseCapture();
                 UiHostInvalidate(host);
                 if (slider) UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
@@ -948,7 +1048,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_CAPTURECHANGED:
                 // Losing capture ends a slider drag as a release does, and cancels a handle's.
                 host.pointer.pressed = {};
-                host.scrollDragging = false;
+                host.scrollDragging = host.navBarDragging = false;
                 host.panDrag = 0;
                 if (uint32_t slider = std::exchange(host.sliderDrag, 0)) {
                     UiHostItemEvent(host, slider, UiActionKind::SlideEnd);
@@ -975,8 +1075,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_MOUSEHWHEEL: {
                 // With the popup open, a wheel over it does nothing and one elsewhere closes it.
                 // Otherwise a sideways wheel (or Shift) over a preview pans it, 48 DIPs a notch,
-                // and the vertical wheel over the page column (header or content) scrolls the
-                // content.
+                // and the vertical wheel scrolls the navigation pane over it, or the content
+                // over the page column (header or content).
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
                 if (host.popup.open) {
                     RECT popup{};
@@ -1004,11 +1104,15 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     handled = false;
                     break;
                 }
-                if (float(point.x) / scale < host.frame.viewport.left) break;
+                const D2D1_RECT_F& pane = host.frame.navPane;
+                bool nav = UiContains(pane, {float(point.x) / scale, float(point.y) / scale});
+                if (!nav && float(point.x) / scale < host.frame.viewport.left) break;
                 UINT lines = 3;
                 SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
-                float step = lines == WHEEL_PAGESCROLL ? UiHostViewHeight(host) - 40 : float(lines) * 16;
-                UiHostScrollTo(host, host.scroll - notches * step);
+                float page = nav ? pane.bottom - pane.top - 40 : UiHostViewHeight(host) - 40;
+                float step = lines == WHEEL_PAGESCROLL ? page : float(lines) * 16;
+                if (nav) UiHostScrollNav(host, host.navScroll - notches * step);
+                else UiHostScrollTo(host, host.scroll - notches * step);
                 break;
             }
             case WM_SETCURSOR: {
@@ -1017,7 +1121,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     break;
                 }
                 const UiItem* item = UiFindItem(host.frame, host.pointer.hot.id);
-                bool link = item && (host.pointer.hot.link >= 0 || item->kind == UiItemKind::Link);
+                bool link = item && ((host.pointer.hot.link >= 0 && item->kind == UiItemKind::Text) ||
+                                     item->kind == UiItemKind::Link);
                 bool handle = item && item->kind == UiItemKind::Handle;
                 SetCursor(LoadCursorW(nullptr, link ? IDC_HAND : handle ? IDC_SIZENS : IDC_ARROW));
                 result = TRUE;
@@ -1062,11 +1167,20 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     UiHostOpenPopup(host, host.focus.id);
                     break;
                 }
-                // A focused slider's arrows, Page Up/Down and Home/End step its value.
+                // A focused slider's arrows, Page Up/Down and Home/End step its value; a focused
+                // segmented control's arrows and Home/End select.
                 if (focused && focused->kind == UiItemKind::Slider && focused->enabled) {
                     if (std::optional<int> step = UiSliderKey(*focused, UINT(wParam))) {
                         host.focusVisible = true;
                         UiHostItemEvent(host, host.focus.id, UiActionKind::Step, {}, *step);
+                        break;
+                    }
+                }
+                if (focused && focused->kind == UiItemKind::Segmented && focused->enabled) {
+                    if (std::optional<int> segment = UiSegmentKey(*focused, UINT(wParam))) {
+                        host.focusVisible = true;
+                        InvalidateRect(window, nullptr, FALSE);
+                        UiHostSelectSegment(host, host.focus.id, *segment);
                         break;
                     }
                 }
@@ -1089,7 +1203,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         UiHostScrollTo(host, intent.scroll);
                         break;
                     case UiIntentKind::None:
-                        handled = false;
+                        // Keys the window doesn't use (F5, Esc, shortcuts) are the client's.
+                        handled = host.client->Message(host, message, wParam, lParam, result);
                         break;
                 }
                 break;
@@ -1149,7 +1264,8 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (!isMain) break;
                 if (host.config->activateMessage && message == host.config->activateMessage) {
                     // Brings back the window, or the enabled visible modal it owns; never
-                    // anything else it owns (the popup closes first).
+                    // anything else it owns (the popup closes first). Then the client sees the
+                    // request (a selection it carries).
                     handled = true;
                     if (host.closing || host.client->Unloading()) break;
                     UiHostClosePopup(host);
@@ -1159,6 +1275,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                         target = window;
                     }
                     SetForegroundWindow(target);
+                    if (!host.closing) host.client->Message(host, message, wParam, lParam, result);
                 } else {
                     handled = host.client->Message(host, message, wParam, lParam, result);
                 }

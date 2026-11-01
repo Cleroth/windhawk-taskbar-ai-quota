@@ -1,4 +1,5 @@
-// History window layout, procedures, thread, and open/close.
+// History windows: the classic window's layout, procedures and thread, the custom-drawn window's
+// thread, and open/close for both (one history thread at a time, its kind fixed at its start).
 
 static void HistoryLayout(HistoryWindowState& state, bool newFont) {
     HistoryClearHover(state);
@@ -532,9 +533,45 @@ static DWORD WINAPI HistoryWindowThreadProc(LPVOID) {
     return 0;
 }
 
-// Opens or activates the window, selecting the account with `historyId` if it is listed; 0 keeps
-// the current selection.
-static void OpenHistoryWindow(uint64_t historyId) {
+// The custom-drawn window (history/ui-window.h). Its graphics and WinRT objects live inside
+// UiHostRun, which returns before the apartment is uninitialized.
+static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
+    using SetThreadDpi_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        auto setDpi = reinterpret_cast<SetThreadDpi_t>(GetProcAddress(user32, "SetThreadDpiAwarenessContext"));
+        if (setDpi) setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::single_threaded);
+        apartmentInitialized = true;
+    } catch (...) {}
+    if (apartmentInitialized && !g_unloading && !g_historyWindowCancelRequested) {
+        try {
+            HistoryUiClient client;
+            UiHostConfig config;
+            config.mainClass = kHistoryUiClass;
+            config.viewportClass = kHistoryUiViewportClass;
+            config.popupClass = kHistoryUiPopupClass;
+            config.title = L"Taskbar AI Quota Bars \u2014 Usage history";
+            config.activateMessage = kHistoryActivateMessage;
+            config.size = {1100, 830};
+            config.minSize = {800, 590};
+            config.icon = SettingsAppIcon({});
+            if (!UiHostRun(config, client)) Wh_Log(L"Could not open the usage history window");
+        } catch (...) {
+            Wh_Log(L"History worker failed");
+        }
+    }
+    g_historyDialog.store(nullptr);
+    g_historyWindow.store(nullptr);
+    if (apartmentInitialized) winrt::uninit_apartment();
+    return 0;
+}
+
+// Opens a window of `kind`, or activates the open one of either kind, selecting the account with
+// `historyId` if it is listed; 0 keeps the current selection.
+static void OpenHistoryWindow(uint64_t historyId, HistoryWindowKind kind) {
     if (g_unloading) return;
     std::lock_guard lock(g_historyWindowMutex);
     // Recheck under the same lock as close/thread publication; never spawn during unload.
@@ -552,12 +589,14 @@ static void OpenHistoryWindow(uint64_t historyId) {
         CloseHandle(g_historyWindowThread);
         g_historyWindowThread = nullptr;
     }
-    g_historyWindowThread = CreateThread(nullptr, 0, HistoryWindowThreadProc, nullptr, 0, nullptr);
+    g_historyWindowThread = CreateThread(
+        nullptr, 0, kind == HistoryWindowKind::Custom ? HistoryUiThreadProc : HistoryWindowThreadProc, nullptr, 0,
+        nullptr);
     if (!g_historyWindowThread) Wh_Log(L"Could not create history window thread: %lu", GetLastError());
 }
 
-// Lifecycle API: call from the unload thread, after g_unloading=true. Never from this
-// window's thread and never while holding settings/history/auth locks.
+// Lifecycle API for either kind: call from the unload thread, after g_unloading=true. Never from
+// the window's thread and never while holding settings/history/auth locks.
 static void CloseHistoryWindow() {
     HANDLE thread = nullptr;
     {
