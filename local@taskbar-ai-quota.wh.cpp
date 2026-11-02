@@ -20544,8 +20544,8 @@ struct HistoryUiLine {
     bool operator==(const HistoryUiLine&) const = default;
 };
 
-// An operation's result shown inline (approved Q3 a, s-states): failures as errors, successes and
-// cancellations as information, until the next operation or a selection change.
+// An operation's result shown inline (approved Q3 a, s-states): failures as errors, successes as
+// information, until the next operation or a selection change. A cancelled operation shows none.
 struct HistoryUiNotice {
     std::wstring text;
     UiSeverity severity = UiSeverity::Info;
@@ -21477,8 +21477,8 @@ struct HistorySeriesKey {
 // dialog chose a file), Clear (its confirmation, then the clear).
 enum class HistoryOperation : uint8_t { None, Export, Writing, Clear };
 
-// Operation notices shared by several of their ends.
-static constexpr PCWSTR kHistoryExportCancelled = L"CSV export cancelled; no file written.";
+// Operation notices shared by several of their ends. A cancelled operation shows none.
+static constexpr PCWSTR kHistoryExportNotStarted = L"CSV export could not start; no file written.";
 static constexpr PCWSTR kHistoryUntracked = L"Cannot track native dialogs safely; operation cancelled.";
 
 // Samples in time order, journal order among equal times. The journal keeps that order, so
@@ -21722,7 +21722,7 @@ struct HistoryController {
                              L"Large history export", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
             if (Stopped()) return;
             if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
-            if (answer != IDOK) return Finish({kHistoryExportCancelled});
+            if (answer != IDOK) return Finish({});
         }
         ModalBegan();
         HistoryDestination chosen = ops->ChooseDestination(
@@ -21734,7 +21734,7 @@ struct HistoryController {
             case HistoryDialogResult::Chosen:
                 break;
             case HistoryDialogResult::Cancelled:
-                return Finish({kHistoryExportCancelled});
+                return Finish({});
             case HistoryDialogResult::Failed:
                 return Finish({L"Save dialog failed (code " + std::to_wstring(chosen.error) + L").", UiSeverity::Error});
             case HistoryDialogResult::Untracked:
@@ -21744,7 +21744,7 @@ struct HistoryController {
         destination = std::move(chosen.path);
         exported = 0;
         operation = HistoryOperation::Writing;
-        if (!ops->PostWrite()) return Finish({L"CSV export could not start; no file written.", UiSeverity::Error});
+        if (!ops->PostWrite()) return Finish({kHistoryExportNotStarted, UiSeverity::Error});
         Compose();
     }
 
@@ -21754,7 +21754,7 @@ struct HistoryController {
     // nothing else. Its notice: the rows and where they went, or why the destination is unchanged.
     void Write(bool shown, const std::function<void()>& repaint) {
         if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return;
-        if (!shown) return Finish({kHistoryExportCancelled});
+        if (!shown) return Finish({kHistoryExportNotStarted, UiSeverity::Error});
         HistoryCsvResult result = ops->WriteCsv(*exportScope, destination, [&](size_t rows) {
             exported = rows;
             repaint();
@@ -21786,7 +21786,7 @@ struct HistoryController {
                          L"Clear all usage history", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
         if (Stopped()) return;
         if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
-        if (answer != IDOK) return Finish({L"Clear history cancelled."});
+        if (answer != IDOK) return Finish({});
         std::wstring error;
         bool cleared = ops->Clear(error);
         ops->InvalidateCurves();

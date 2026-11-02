@@ -129,8 +129,8 @@ static void RunHistoryOperationsTests() {
         CHECK(ops.log.empty());
     });
 
-    Run("history export: cancelled at the warning or in the save dialog, nothing is written; a failed save dialog, "
-        "dialogs that can't be tracked and a write that can't be posted say so; each ends the operation", [] {
+    Run("history export: cancelled at the warning or in the save dialog, nothing is written or shown; a failed save "
+        "dialog, dialogs that can't be tracked and a write that can't be posted say so; each ends the operation", [] {
         struct Case {
             std::deque<int> answers;
             HistoryDialogResult result;
@@ -140,11 +140,10 @@ static void RunHistoryOperationsTests() {
             TestLog log;
         };
         const Case cases[] = {
-            {{IDCANCEL}, HistoryDialogResult::Chosen, false, L"CSV export cancelled; no file written.",
-             UiSeverity::Info, {L"ask Large history export"}},
+            {{IDCANCEL}, HistoryDialogResult::Chosen, false, L"", UiSeverity::Info, {L"ask Large history export"}},
             {{0}, HistoryDialogResult::Chosen, false, L"Cannot track native dialogs safely; operation cancelled.",
              UiSeverity::Error, {L"ask Large history export"}},
-            {{}, HistoryDialogResult::Cancelled, false, L"CSV export cancelled; no file written.", UiSeverity::Info,
+            {{}, HistoryDialogResult::Cancelled, false, L"", UiSeverity::Info,
              {L"ask Large history export", kTestExportOne}},
             {{}, HistoryDialogResult::Failed, false, L"Save dialog failed (code 12291).", UiSeverity::Error,
              {L"ask Large history export", kTestExportOne}},
@@ -212,7 +211,8 @@ static void RunHistoryOperationsTests() {
             if (close) c.RequestClose();
             c.Write(close, [] {});
             CHECK(ops.log.empty() && ops.written.empty() && c.operation == HistoryOperation::None);
-            CHECK(c.view.notice.text == (close ? L"" : L"CSV export cancelled; no file written."));
+            CHECK(c.view.notice.text == (close ? L"" : L"CSV export could not start; no file written."));
+            CHECK(c.view.notice.severity == (close ? UiSeverity::Info : UiSeverity::Error));
         }
     });
 
@@ -356,8 +356,7 @@ static void RunHistoryOperationsTests() {
             ops.answers = {answer};
             c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Clear));
             CHECK(ops.log == TestLog{L"ask Clear all usage history"});
-            CHECK(c.view.notice.text == (answer ? L"Clear history cancelled." :
-                                                  L"Cannot track native dialogs safely; operation cancelled."));
+            CHECK(c.view.notice.text == (answer ? L"" : L"Cannot track native dialogs safely; operation cancelled."));
             CHECK(c.view.notice.severity == (answer ? UiSeverity::Info : UiSeverity::Error));
         }
     });

@@ -278,12 +278,10 @@ static void RunHistoryRenders(const std::wstring& directory) {
     for (auto [caption, text, severity] :
          {std::tuple{L"Export done", L"Exported 12,345 meter rows (all accounts) to C:\\Users\\clero\\Documents\\"
                                      L"usage-history.csv. Labels omitted; times UTC.", UiSeverity::Info},
-          std::tuple{L"Export cancelled", L"CSV export cancelled; no file written.", UiSeverity::Info},
           std::tuple{L"Export failed", L"CSV export failed (Windows error 5). Existing destination unchanged.",
                      UiSeverity::Error},
           std::tuple{L"Clear done", L"All local history cleared. Future polls can start recording again.",
                      UiSeverity::Info},
-          std::tuple{L"Clear cancelled", L"Clear history cancelled.", UiSeverity::Info},
           std::tuple{L"Clear failed", L"Could not clear all history. History storage is in use by another Explorer "
                                       L"session, or is inaccessible.", UiSeverity::Error},
           std::tuple{L"Nothing recorded yet (Open history folder)", L"Nothing has been recorded yet. The folder is "

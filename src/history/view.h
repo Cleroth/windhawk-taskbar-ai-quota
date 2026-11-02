@@ -64,8 +64,8 @@ struct HistoryUiLine {
     bool operator==(const HistoryUiLine&) const = default;
 };
 
-// An operation's result shown inline (approved Q3 a, s-states): failures as errors, successes and
-// cancellations as information, until the next operation or a selection change.
+// An operation's result shown inline (approved Q3 a, s-states): failures as errors, successes as
+// information, until the next operation or a selection change. A cancelled operation shows none.
 struct HistoryUiNotice {
     std::wstring text;
     UiSeverity severity = UiSeverity::Info;
