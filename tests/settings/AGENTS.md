@@ -4,7 +4,8 @@ Source-extracted tests of the pure fragments behind both custom-drawn windows (m
 `src/ui/` toolkit, the settings edit controller, shell and page builders; the usage history
 window's view, chart, controller and frame builders on the shared history model), offscreen renders of
 both windows, a native-host probe of the toolkit's window host (with its dropdown popup, tooltip
-and number box text boxes), and a capture/foreground probe for the dropdown popup. Not a Windhawk,
+and number box text boxes, and the history window's dialog scope), and a capture/foreground probe
+for the dropdown popup. Not a Windhawk,
 Explorer or XAML test. The history domain (journal, series, continuity, burn-up, the classic window) stays in
 `tests/history`.
 
@@ -94,8 +95,8 @@ regenerates.
   `fixtures/render-support.inc`.
 - `extract-history`, `history-compile`, `history`, `history-render`: the history window's own
   executable (`history.cpp`, `fixtures/history-main.inc`) on `core/model.h`, the meter model,
-  logos, the pure toolkit, `history/types.h`, `continuity.h`, `series.h`, `view.h`, `chart.h`,
-  `controller.h`, `chart-paint.h`, `content.h` and `shell.h`. `history` runs
+  logos, the pure toolkit, `history/types.h`, `continuity.h`, `series.h`, `csv.h`, `view.h`,
+  `chart.h`, `controller.h`, `chart-paint.h`, `content.h` and `shell.h`. `history` runs
   `fixtures/history-view.inc` (compact
   formats in synthetic time zones, number rounding and abbreviation with carry, hours; summary
   cards and No readings entries built through `HistoryCollectAccounts` and `HistoryBuildSeries`
@@ -113,14 +114,21 @@ regenerates.
   their resume paths and the no-stranding invariant after every event, explicit loads clearing the
   work, raw rows rebuilt with a replacement while the laid-out chart keeps its own snapshot,
   unload during collection changing nothing;
-  Enable recording's success, failure notice, and unload or close during it) and
+  Enable recording's success, failure notice, and unload or close during it),
+  `fixtures/history-operations.inc` (the test ops' dialogs, write, Clear and folder: Export's scope
+  frozen across an activation, a poll and clicks delivered inside the large-export warning and the
+  save dialog, the write posted with its progress shown, progress reports changing only the row
+  count, cancellations, failed dialogs and writes, the close latch or unload inside each dialog and
+  during the write; Clear's success, failure (curves dropped either way, no load), cancel and
+  waiting loads; About these charts; one operation at a time with only the legend acting) and
   `fixtures/history-frame.inc` (the frame per
   state: navigation entries and their ids per history ID, values and inks, the Removed group;
   header title, status, pill, icon buttons, the narrow rule; segments, Compare disabling range;
   info bars; the chart's card (legend chips with their ids, actions and tooltips, wrapping; the
   key line; the chart item) and the empty states; card grid and contents; one-line menu rows
-  with separators; an icon-only button's centered glyph, measured in pixels; the icon buttons'
-  tooltips), `fixtures/history-tooltip.inc` (the single-account readout guarantee: the widest
+  with separators and the More menu; an icon-only button's centered glyph, measured in pixels;
+  the icon buttons' tooltips; an export's progress in the status slot with every control but the
+  chips disabled), `fixtures/history-tooltip.inc` (the single-account readout guarantee: the widest
   mandatory parts the production readout rows print, then ten such rows placed at every pointer
   position of an 800 x 590 DIP work area with 32 and 256 DIP pointers at 96 and 144 DPI;
   complete-text tooltips placed whole there; `OBSERVE` lines report widths and capacities) and
@@ -134,7 +142,8 @@ regenerates.
   shows them; the chart and its chips by the production painter, laid out by a controller over
   a synthetic journal), modeled on the approved phase-3 mockups: `default` (s-light), `account`
   (s-account), `compare`, `states` (recording off, Enable recording's failure notice, storage
-  failing, waiting with focus and hover), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings,
+  failing, waiting with focus and hover, an export's progress, also at the minimum width),
+  `notices` (each operation's notice), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings,
   dollars only, the No readings card beside cards), `menu`, `min` (the minimum window scrolled),
   `nav` (the scrolled sidebar), `band` (above 100%), `chart-views` (every view, both extra axes),
   `chart-ticks` (each range's ticks) and `chart-states` (comparing, above 100%, every line hidden,
@@ -145,7 +154,8 @@ regenerates.
   buttons').
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
   (`ui/system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
-  `color-dialog.h`) and a stub client with window icons form `ui-host.dll`; `host-probe.cpp`
+  `color-dialog.h`), the history window's dialog scope (`history/modal.h`) and a stub client with
+  window icons form `ui-host.dll`; `host-probe.cpp`
   (hand-written) loads it, opens the window on the DLL's worker thread, closes it from another
   thread, joins and unloads, repeatedly, and checks classes, windows and GDI/USER handle counts;
   then client creation failure, a conflicting class registration, render-target loss through the
@@ -185,8 +195,15 @@ regenerates.
   disabled; the delayed item tooltip and what cancels it; target loss; repeated shows without
   USER/GDI handle growth; unload with the readout showing (gone before the main window's
   `WM_NCDESTROY`); creation failure and retry; a conflicting class registration; thread message
-  hooks count mouse and activation messages that reach the tooltip. Off the hidden desktop: the
-  cursor rectangle of the real cursor (read only) without GDI handle growth.
+  hooks count mouse and activation messages that reach the tooltip. The progress mode: a
+  client-drawn main item repainted from inside a handler through `UiHostPaintNow` (found by id
+  each time, no rebuild, a lost target recreated, nothing after a fault). The dialog mode (the
+  client latches and cancels as the history client does): message boxes in the production scope
+  ended by unload's close from the driver thread (as `CloseHistoryWindow`), a Yes/No box inside
+  one (Cancel alone ignored, observed; No through the scope), a box activated after the latch, a
+  user close during an OK box, scopes refused once cancelled or nested; last, the save dialog as
+  an observation. Off the hidden desktop: the cursor rectangle of the real cursor (read only)
+  without GDI handle growth.
 - `extract-popup`, `popup-compile`, `popup-probe`: the same host as the owner of a probe popup
   (owned, `WS_EX_NOACTIVATE`, shown without activation; `fixtures/popup-*.inc`, hand-written).
   Thread-local message hooks record what each window receives while capture is on the popup, on

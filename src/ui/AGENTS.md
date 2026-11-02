@@ -53,6 +53,10 @@ window. Never XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AG
 - `WM_CLOSE`: cancel a tracked modal (message box, `UiChooseColor`'s dialog) or a handle drag
   (DragCancel, capture released) and retry; fault and unload close without saving; a deliberate
   close asks the client (`PrepareClose`). Nothing commits once `WM_DESTROY` starts.
+- A handler that keeps the thread busy (the history window's CSV write) shows progress only
+  through `UiHostPaintNow`: a main-surface item found by id each time and painted nested (never
+  a rebuild; a lost target is recreated), nothing once closing or faulted. Keep no item
+  reference across it.
 
 ## Input
 

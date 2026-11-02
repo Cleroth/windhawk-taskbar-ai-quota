@@ -1,13 +1,31 @@
 // Usage history chart painting (pure): the history window's client-drawn items, its chart (the
-// scene of history/chart.h) and the chart's legend chips, on a Direct2D target in the items'
-// coordinates. Stroke styles and path geometries are factory-bound (UiGraphics); brushes and
-// colored layouts live in the surface's cache.
+// scene of history/chart.h), the chart's legend chips and an export's progress, on a Direct2D
+// target in the items' coordinates. Stroke styles and path geometries are factory-bound
+// (UiGraphics); brushes and colored layouts live in the surface's cache.
 
 // Paints the chart item or one of its legend chips, the emphasis from the paint state and the
-// chart's picks (HistoryChartEmphasis).
+// chart's picks (HistoryChartEmphasis), or the progress of an export that wrote `exported` rows.
 static void HistoryUiPaintCustom(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache, const UiPalette& p,
-                                 const HistoryChart& chart, const std::vector<size_t>& picked, const UiItem& item,
-                                 const UiPaintState& state, float scale) {
+                                 const HistoryChart& chart, const std::vector<size_t>& picked, size_t exported,
+                                 const UiItem& item, const UiPaintState& state, float scale) {
+    // The progress (s-states .upd): its line in the item's font, muted, after a 16 DIP ring and 6
+    // DIP gap, at the item's leading or trailing end, centered on it vertically.
+    if (item.id == kHistoryUiProgress) {
+        const bool hc = p.kind == UiThemeKind::HighContrast;
+        UiTextStyle style = UiTextStyleFor(item.font);
+        IDWriteTextLayout* layout = UiLayout(g, HistoryUiProgressText(exported), style, 10000, false);
+        float width = std::ceil(UiLayoutSize(layout).width), middle = (item.rect.top + item.rect.bottom) / 2;
+        float x = item.align == DWRITE_TEXT_ALIGNMENT_TRAILING ? item.rect.right - width - 22 : item.rect.left;
+        UiDrawLayout(target, cache, layout, {x + 22, middle - style.lineHeight / 2}, p.textMuted);
+        UiItem ring;
+        ring.kind = UiItemKind::Shape;
+        ring.rect = {x, middle - 8, x + 16, middle + 8};
+        ring.viewBox = 16;
+        ring.parts = {{L"M8 1.5A6.5 6.5 0 1 1 8 14.5A6.5 6.5 0 1 1 8 1.5", {}, UiInk::Disabled, hc ? 1.0f : 0.45f, 2},
+                      {L"M8 1.5A6.5 6.5 0 0 1 14.5 8", {}, UiInk::Accent, 1, 2}};
+        UiPaintItems(target, g, cache, p, {ring}, {}, {0, 0}, scale, -1e9f, 1e9f);
+        return;
+    }
     std::vector<size_t> emphasis = HistoryChartEmphasis(chart.lines, picked, state);
 
     // The chart: its scene's prims in order, the lines inside the plot's clip.

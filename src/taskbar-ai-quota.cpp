@@ -301,6 +301,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "history/series.h"
 
+#include "history/csv.h"
+
 #include "history/window-state.h"
 
 #include "history/view.h"
@@ -314,6 +316,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "history/content.h"
 
 #include "history/shell.h"
+
+#include "history/modal.h"
 
 #include "history/ops.h"
 

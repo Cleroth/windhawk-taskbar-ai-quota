@@ -104,9 +104,9 @@ def generate(source, output, expected_hash):
         chunks.append(f'\n#line {line} {json.dumps(source.as_posix())}\n{code}\n')
 
     # Every section is bounded by its own fragment. Pure fragments are taken whole: the account
-    # model, sample types, continuity rules, the flyout's burn-up curves and the shared history
-    # model; so is the journal's coordination state (a lock, counters and flags). Journal, store
-    # and window fragments only contribute named definitions.
+    # model, sample types, continuity rules, the flyout's burn-up curves, the shared history
+    # model and its CSV writer; so is the journal's coordination state (a lock, counters and
+    # flags). Journal, store and window fragments only contribute named definitions.
     emit("core/model.h", fragment(text, "core/model.h"))
     emit("history/types.h", fragment(text, "history/types.h"))
     # The journal's memory-only parts: its in-memory state (never the storage state after it),
@@ -121,17 +121,18 @@ def generate(source, output, expected_hash):
     for name in ["Utf8ToWide", "WideToUtf8", "UnixMsToLocalSystemTime", "ProviderDisplayName"]:
         emit(name, within(text, "core/helpers.h", definition, name))
     emit("ScaleForDpi", within(text, "settings/native.h", definition, "ScaleForDpi"))
-    for path in ["history/continuity.h", "history/burn-up.h", "history/series.h"]:
+    for path in ["history/continuity.h", "history/burn-up.h", "history/series.h", "history/csv.h"]:
         emit(path, fragment(text, path))
     # Classic window: its view types, then view-model, export, paint and window definitions.
     view = "history/view-model.h"
     emit("history view definitions", within(text, "history/window-state.h", between, "static constexpr int kHistorySeriesHeight", "static void HistoryLayout(HistoryWindowState& state, bool newFont);"))
-    for name in ["HistoryLocalDate", "HistoryUtcDate", "HistoryReducePeriod", "HistoryPlotRightPadding", "HistoryClearHover", "HistoryPlotPoint", "HistoryLineColor", "HistoryRebuildRenderCache"]:
+    for name in ["HistoryLocalDate", "HistoryReducePeriod", "HistoryPlotRightPadding", "HistoryClearHover", "HistoryPlotPoint", "HistoryLineColor", "HistoryRebuildRenderCache"]:
         emit(name, within(text, view, definition, name))
     emit("HistoryHoverHit", within(text, view, between, "struct HistoryHoverHit {", "// Picking boundary:"))
     for name in ["HistoryHitTest", "HistoryUpdateHover", "HistoryScroll", "HistoryRebuildView"]:
         emit(name, within(text, view, definition, name))
-    # Storage/export dialogs are not linked. Only the serializer writes to this memory sink.
+    # Storage/export dialogs are not linked. Only the classic serializer adapter writes to this
+    # memory sink.
     chunks.append('\n#line 1 "harness-csv-wrapper"\nstruct CapturedCsv {\nstd::string bytes;\nbool Write(const std::string& text) { bytes += text; return true; }\n')
     emit("HistoryCsvFile::WriteSnapshot", within(text, "history/export.h", definition, "WriteSnapshot", True))
     chunks.append("\n};\n")

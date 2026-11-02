@@ -46,7 +46,9 @@ The mod is injected into `explorer.exe`. Execution domains:
   live readings only through the stateless ops in `history/ops.h`. `NotifySettingsWindowChanged`
   also reaches the custom-drawn window (never the classic one): its refresh reads the journal
   only through the memory-only `PeekHistorySnapshot`; only its explicit loads may initialize or
-  retry storage. No XAML. Cancel tracked modal dialogs and join it before unloading.
+  retry storage. Its dialogs run in the scope of `history/modal.h` (the close latch, then unload,
+  ends them, nested and late ones included); a Yes/No prompt ignores Cancel, so the scope answers
+  No there. No XAML. Cancel tracked modal dialogs and join it before unloading.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
   `g_urlLaunchMutex`): `ShellExecuteExW` in an STA with error dialogs suppressed. `Wh_ModUninit`
   joins them after the login thread, which can start them; a stuck launch delays unload.

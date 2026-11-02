@@ -7,6 +7,9 @@
 // segmented control, key forwarding, activation request, navigation pane, chart and tooltip
 // cases run on a hidden desktop this probe creates and never switches to, so their focus,
 // capture, foreground, tooltips and message box stay off the user's screen.
+// The history window's dialog scope (history/modal.h, extracted into the DLL) runs on the hidden
+// desktop too: message boxes ended by unload's close from this thread and by a close, a nested
+// Yes/No box, one activated after the close latch, and the save dialog as an observation, last.
 // Usage: host-probe.exe <ui-host.dll>
 //        host-probe.exe <ui-host.dll> --tooltip-interactive --log <file>  (by hand, on the user's
 //        desktop: tooltip pointer routing; F9 ends a step, F8 skips it)
@@ -31,12 +34,16 @@ using JoinFn = int (*)(DWORD);
 enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult,
                     kCloses, kClosesDragging, kAutoScrolls, kChartHovers, kChartLeaves, kChartRepaints,
                     kTipShows, kTipHides, kTipMouse, kTipActivate, kWindowPresses, kTipAlive, kThemeMessages,
-                    kSetIcons, kGdiAtDestroyed, kUserAtDestroyed };
+                    kSetIcons, kGdiAtDestroyed, kUserAtDestroyed, kOuterAnswer, kNestedAnswer, kScopeLeft,
+                    kProgressPaints };
 static constexpr UINT kProbePing = WM_APP + 70;
 static constexpr UINT kProbeLoseTarget = WM_APP + 71;
 static constexpr UINT kProbeModal = WM_APP + 72;
 static constexpr UINT kProbeCommand = WM_APP + 73;
 static constexpr UINT kProbeColor = WM_APP + 74;
+static constexpr UINT kProbeHistoryDialog = WM_APP + 75;
+static constexpr UINT kProbeNested = WM_APP + 76;
+enum ProbeDialogKind { kAskBox, kNestedBox, kInfoBox, kSaveDialog, kTwoScopes };
 static constexpr LRESULT kProbeMagic = 0x51A7E;
 enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, kAction, kFocus,
                     kEditState, kEditWindow, kEditChar, kEditKey, kEditText, kRebuild, kScroll,
@@ -46,7 +53,8 @@ enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, 
                     kScrollTop, kStopAutoScroll, kHistoryMode, kNavScroll, kNavRange, kNavVisible, kWheel,
                     kNavMouse, kNavBar, kSelectNav, kHot, kSegmentMouse, kClientKeys, kTipMode, kChartMouse,
                     kTipButton, kTipState, kTipRect, kTipKey, kTipNcHit, kTipFromPoint, kTipUnregister,
-                    kTipRegister, kEnableMain, kTipLoseTarget, kMoveMain, kSendView, kCursorWidth, kHandles };
+                    kTipRegister, kEnableMain, kTipLoseTarget, kMoveMain, kSendView, kCursorWidth, kHandles,
+                    kDialogMode, kLatch, kProgressMode, kProgressLoop };
 enum ProbeTip { kTipWindow = 1, kTipVisible = 2, kTipOwned = 4, kTipNoActivate = 8, kTipNotActive = 16,
                 kTipNoCapture = 32, kTipClear = 64, kTipReadout = 128, kTipText = 256, kTipPending = 512 };
 static constexpr int kTipShown = kTipWindow | kTipVisible | kTipOwned | kTipNoActivate | kTipNotActive |
@@ -1357,6 +1365,163 @@ int wmain(int argc, wchar_t** argv) {
         probe.unload();
         probe.Closed();
         CHECK(probe.count(kCancels) >= 1);
+    });
+
+    // An export's progress: repainted from inside a handler that keeps the thread busy.
+    Run("nested progress repaint: a client-drawn main item repainted ten times from inside a handler through "
+        "UiHostPaintNow, found by id each time (a moved item paints where it is now), no rebuild meanwhile; a "
+        "lost target is recreated by the next repaint; once the host faults the rest are skipped", [&] {
+        CHECK(desktop);
+        for (int variant = 0; variant < 4; variant++) {
+            Probe probe;
+            probe.Open(desktop);
+            int builds = probe.Call(kProgressMode, 1);
+            for (DWORD waited = 0; probe.count(kBuilds) == builds && waited < kTimeout; waited += 10) Sleep(10);
+            probe.Call(kPaintMain);
+            int result = probe.Call(kProgressLoop, variant);
+            int painted = result & 0xFF, paints = result >> 8 & 0xFF, rebuilt = result >> 16 & 0xFF,
+                created = result >> 24 & 0xF;
+            bool current = result >> 28 & 1, last = result >> 29 & 1;
+            std::printf("OBSERVE progress variant %d: repaints %d, paints %d, builds %d, targets created %d\n", variant,
+                        painted, paints, rebuilt, created);
+            CHECK(rebuilt == 0 && current);
+            if (variant == 2) {
+                CHECK(painted == 5 && paints == 5 && !last);
+                probe.Closed();  // The fault closes the window
+            } else {
+                CHECK(painted == 10 && paints == 10 && last && created == (variant == 1));
+                PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+                probe.Closed();
+            }
+        }
+    });
+
+    // The history window's dialogs in its scope (history/modal.h), as its ops and client run them.
+    using DialogFn = HWND (*)();
+    using CloseFn = void (*)();
+    struct HistoryDialogs {
+        Probe& probe;
+        DialogFn dialog;
+        CloseFn close;
+        explicit HistoryDialogs(Probe& p) : probe(p) {
+            dialog = reinterpret_cast<DialogFn>(GetProcAddress(probe.module, "ProbeHistoryDialog"));
+            close = reinterpret_cast<CloseFn>(GetProcAddress(probe.module, "ProbeCloseHistory"));
+            CHECK(dialog && close);
+            probe.Call(kDialogMode, 1);
+        }
+        // The published dialog once it differs from `previous`, or nullptr on timeout.
+        HWND Await(HWND previous = nullptr, DWORD timeout = kTimeout) {
+            HWND shown = nullptr;
+            for (DWORD waited = 0; (!(shown = dialog()) || shown == previous) && waited < timeout; waited += 10) Sleep(10);
+            return shown != previous ? shown : nullptr;
+        }
+    };
+
+    Run("history dialogs: unload's close from another thread (as CloseHistoryWindow) ends an OK/Cancel message "
+        "box; the hook and the published dialog are gone, no dialog left", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        HistoryDialogs dialogs(probe);
+        PostMessageW(probe.hwnd_, kProbeHistoryDialog, kAskBox, 0);
+        HWND box = dialogs.Await();
+        CHECK(box);
+        dialogs.close();
+        probe.Closed();
+        CHECK(probe.count(kOuterAnswer) == IDCANCEL && probe.count(kScopeLeft) == 0 && !dialogs.dialog());
+        CHECK(!IsWindow(box));
+    });
+
+    Run("history dialogs: a Yes/No box opened inside the first (as the save dialog's overwrite prompt) and the "
+        "box under it both end from unload's close: No, then Cancel", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        HistoryDialogs dialogs(probe);
+        PostMessageW(probe.hwnd_, kProbeHistoryDialog, kNestedBox, 0);
+        HWND outer = dialogs.Await();
+        HWND nested = dialogs.Await(outer);
+        CHECK(outer && nested && GetWindow(nested, GW_OWNER) == outer);
+        // Cancel alone, as unload posts it to the published dialog: observed, not relied on.
+        PostMessageW(nested, WM_COMMAND, IDCANCEL, 0);
+        Sleep(300);
+        std::printf("OBSERVE a Yes/No box %s Cancel posted to it\n", IsWindow(nested) ? "ignores" : "ends on");
+        dialogs.close();
+        probe.Closed();
+        std::printf("OBSERVE nested answer %d, outer answer %d, cancels %d\n", probe.count(kNestedAnswer),
+                    probe.count(kOuterAnswer), probe.count(kCancels));
+        CHECK((probe.count(kNestedAnswer) == IDNO || probe.count(kNestedAnswer) == IDCANCEL) &&
+              probe.count(kOuterAnswer) == IDCANCEL);
+        CHECK(probe.count(kScopeLeft) == 0 && !IsWindow(nested) && !IsWindow(outer));
+    });
+
+    Run("history dialogs: a box activated after the close latch ends at once, and the box under it follows; the "
+        "window stays until it is closed", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        HistoryDialogs dialogs(probe);
+        PostMessageW(probe.hwnd_, kProbeHistoryDialog, kAskBox, 0);
+        HWND outer = dialogs.Await();
+        CHECK(outer);
+        probe.Call(kLatch);
+        ULONGLONG start = GetTickCount64();
+        PostMessageW(probe.hwnd_, kProbeNested, 0, 0);
+        for (DWORD waited = 0; !probe.count(kOuterAnswer) && waited < kTimeout; waited += 5) Sleep(5);
+        std::printf("OBSERVE latched boxes ended within %lu ms\n", static_cast<unsigned long>(GetTickCount64() - start));
+        CHECK(probe.count(kNestedAnswer) == IDNO && probe.count(kOuterAnswer) == IDCANCEL);
+        probe.Call(kLatch);  // Once its handler is done: the scope ended with it
+        CHECK(IsWindow(probe.hwnd_) && !dialogs.dialog() && !ThreadDialog(probe.hwnd_) && !IsWindow(outer));
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+        CHECK(probe.count(kScopeLeft) == 0);
+    });
+
+    Run("history dialogs: a user close during an OK box (About) latches, ends it as OK and closes once it has "
+        "unwound; a scope refuses to show once cancelled and while another runs on the thread", [&] {
+        CHECK(desktop);
+        {
+            Probe probe;
+            probe.Open(desktop);
+            HistoryDialogs dialogs(probe);
+            PostMessageW(probe.hwnd_, kProbeHistoryDialog, kInfoBox, 0);
+            CHECK(dialogs.Await());
+            PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+            probe.Closed();
+            CHECK(probe.count(kOuterAnswer) == IDOK && probe.count(kCancels) >= 1 && probe.count(kScopeLeft) == 0);
+        }
+        Probe probe;
+        probe.Open(desktop);
+        HistoryDialogs dialogs(probe);
+        DWORD_PTR answer = 0;
+        CHECK(SendMessageTimeoutW(probe.hwnd_, kProbeHistoryDialog, kTwoScopes, 0, SMTO_BLOCK, kTimeout, &answer));
+        CHECK(probe.count(kOuterAnswer) == 7);
+        probe.Call(kLatch);
+        CHECK(SendMessageTimeoutW(probe.hwnd_, kProbeHistoryDialog, kAskBox, 0, SMTO_BLOCK, kTimeout, &answer));
+        CHECK(probe.count(kOuterAnswer) == -1 && !dialogs.dialog());
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    // Last: the save dialog may not come up on a hidden desktop, or not end; an observation only.
+    Run("history dialogs (observation): the save dialog in the scope under a WinRT STA on the hidden desktop, "
+        "ended by unload's close", [&] {
+        CHECK(desktop);
+        Probe probe;
+        probe.Open(desktop);
+        HistoryDialogs dialogs(probe);
+        PostMessageW(probe.hwnd_, kProbeHistoryDialog, kSaveDialog, 0);
+        ULONGLONG start = GetTickCount64();
+        HWND shown = dialogs.Await(nullptr, 8000);
+        std::printf("OBSERVE save dialog %s after %lu ms\n", shown ? "published" : "not published",
+                    static_cast<unsigned long>(GetTickCount64() - start));
+        start = GetTickCount64();
+        dialogs.close();
+        int joined = probe.join(kTimeout);
+        std::printf("OBSERVE save dialog ended: join %d after %lu ms, result %d (1 chosen, 100 + error), scope left %d\n",
+                    joined, static_cast<unsigned long>(GetTickCount64() - start), probe.count(kOuterAnswer),
+                    probe.count(kScopeLeft));
+        CHECK(true);
     });
     if (desktop) CloseDesktop(desktop);
 

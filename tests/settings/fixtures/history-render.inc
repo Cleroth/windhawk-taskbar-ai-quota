@@ -1,9 +1,9 @@
 // Offscreen renders of the history window's client area (the approved mockups' 1100 x 830 window
-// without its 40 DIP caption) as the host composes it: main items, the navigation pane at its
-// scroll, the content clipped to the viewport at its scroll with its scrollbar (the chart and its
-// legend chips through the production painter, as the client draws them), the More menu and a
-// chart's readout where the host shows them. Sheets stack captioned frames (or their top parts).
-// PNG evidence for review, no pixel goldens.
+// without its 40 DIP caption) as the host composes it: main items (an export's progress), the
+// navigation pane at its scroll, the content clipped to the viewport at its scroll with its
+// scrollbar (the chart and its legend chips through the production painter, as the client draws
+// them), the More menu and a chart's readout where the host shows them. Sheets stack captioned
+// frames (or their top parts). PNG evidence for review, no pixel goldens.
 
 struct HistoryRenderPart {
     std::wstring caption;
@@ -13,7 +13,8 @@ struct HistoryRenderPart {
     UiPaintState state{};
     float scroll = 0;      // The content's; negative: that far above its end
     bool navEnd = false;   // The navigation pane scrolled to its end
-    bool menu = false;     // The More menu open, the pointer on its first row
+    bool menu = false;     // The More menu open, the pointer on Open history folder (s-menu)
+    size_t exported = 0;   // The rows a running export wrote (view.exporting)
     // The chart: a controller over a synthetic journal (history-chart.inc) lays it out for the
     // frame's chart item and draws it; its lines replace the view's (`chartView`: its whole view
     // does). `hover`: the pointer on the laid out chart (content coordinates), its readout shown
@@ -79,7 +80,14 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
         UiFillRect(target.get(), cache, bounds, 0, palette.background, scale);
         UiPaintState state = part.state;
         if (part.menu) state.open = kHistoryUiMore;
-        UiPaintItems(target.get(), g, cache, palette, frame.main, state, {0, 0}, scale, -1e9f, 1e9f);
+        const HistoryChart none;
+        const std::vector<size_t> picked;
+        UiCustomPaint custom = [&](const UiItem& item) {
+            if (!controller && item.id != kHistoryUiProgress) return;
+            HistoryUiPaintCustom(target.get(), g, cache, palette, controller ? controller->chart : none,
+                                 controller ? controller->picked : picked, part.exported, item, state, scale);
+        };
+        UiPaintItems(target.get(), g, cache, palette, frame.main, state, {0, 0}, scale, -1e9f, 1e9f, &custom);
         const D2D1_RECT_F& pane = frame.navPane;
         float navScroll = part.navEnd ? std::max(frame.navHeight - (pane.bottom - pane.top), 0.0f) : 0;
         UiPaintNavPane(target.get(), g, cache, palette, frame, state, std::round(navScroll * scale) / scale, false,
@@ -89,12 +97,6 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
         float scroll = part.scroll >= 0 ? part.scroll : frame.contentHeight - viewHeight + part.scroll;
         scroll = std::round(UiClampScroll(scroll, viewHeight, frame.contentHeight) * scale) / scale;
         target->PushAxisAlignedClip(&v, D2D1_ANTIALIAS_MODE_ALIASED);
-        UiCustomPaint custom = [&](const UiItem& item) {
-            if (controller) {
-                HistoryUiPaintCustom(target.get(), g, cache, palette, controller->chart, controller->picked, item, state,
-                                     scale);
-            }
-        };
         UiPaintItems(target.get(), g, cache, palette, frame.content, state, {v.left, v.top - scroll}, scale, scroll,
                      scroll + viewHeight, &custom);
         D2D1::Matrix3x2F shift = D2D1::Matrix3x2F::Translation(v.left, v.top) * at;
@@ -115,7 +117,7 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
                          palette.kind == UiThemeKind::HighContrast ? palette.cardBorder : palette.controlBorder, 1,
                          scale);
             UiPaintState hover;
-            hover.hot = {1};
+            hover.hot = {2};
             UiPaintItems(target.get(), g, cache, palette, rows, hover, {box.left, box.top}, scale, -1e9f, 1e9f);
         }
         if (readout.key) {
@@ -259,7 +261,39 @@ static void RunHistoryRenders(const std::wstring& directory) {
     waiting.state.focus = {kHistoryUiRanges};
     waiting.state.focusVisible = true;
     waiting.state.hot = {kHistoryUiRefresh};
-    off.chart = consent.chart = storage.chart = waiting.chart = week;
+    // An export writing: its progress in the status slot, every control but the chips disabled;
+    // at the minimum width, under the title.
+    HistoryRenderPart exporting{L"Export running: progress in the status slot; every control but the chips disabled",
+                                weekly(), {1100, 790}, 250};
+    exporting.view.exporting = true;
+    exporting.exported = 12345;
+    HistoryRenderPart exportingMin{L"Export running at the minimum width: progress under the title", weekly(),
+                                   {800, 550}, 250};
+    exportingMin.view.exporting = true;
+    exportingMin.exported = 1234567;
+    off.chart = consent.chart = storage.chart = waiting.chart = exporting.chart = exportingMin.chart = week;
+
+    // s-states: each operation notice (Q3 a) above the chart's card.
+    std::vector<HistoryRenderPart> notices;
+    for (auto [caption, text, severity] :
+         {std::tuple{L"Export done", L"Exported 12,345 meter rows (all accounts) to C:\\Users\\clero\\Documents\\"
+                                     L"usage-history.csv. Labels omitted; times UTC.", UiSeverity::Info},
+          std::tuple{L"Export cancelled", L"CSV export cancelled; no file written.", UiSeverity::Info},
+          std::tuple{L"Export failed", L"CSV export failed (Windows error 5). Existing destination unchanged.",
+                     UiSeverity::Error},
+          std::tuple{L"Clear done", L"All local history cleared. Future polls can start recording again.",
+                     UiSeverity::Info},
+          std::tuple{L"Clear cancelled", L"Clear history cancelled.", UiSeverity::Info},
+          std::tuple{L"Clear failed", L"Could not clear all history. History storage is in use by another Explorer "
+                                      L"session, or is inaccessible.", UiSeverity::Error},
+          std::tuple{L"Nothing recorded yet (Open history folder)", L"Nothing has been recorded yet. The folder is "
+                                                                    L"created with the first recorded sample.",
+                     UiSeverity::Info}}) {
+        HistoryRenderPart part{caption, weekly(), {1100, 790}, 190};
+        part.view.notice = {text, severity};
+        part.chart = week;
+        notices.push_back(std::move(part));
+    }
 
     // s-empty: loading (no status yet), no accounts, a view no account supports (one account,
     // All accounts); then no readings in range with the No readings card, dollars only, and the
@@ -301,7 +335,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     std::erase_if(some, [](const HistorySample& s) { return s.accountId == 0xC1 || s.accountId == 0x60; });
     partial.chart = TestChartOf(some);
 
-    // s-menu: the More menu open (Settings), the pointer on it.
+    // s-menu: the More menu open, the pointer on Open history folder.
     HistoryRenderPart menu{L"", weekly(), {1100, 790}, 330};
     menu.menu = true;
     menu.chart = week;
@@ -427,7 +461,8 @@ static void RunHistoryRenders(const std::wstring& directory) {
         {"default", {defaults}},
         {"account", {oai, cc1}},
         {"compare", {compare}},
-        {"states", {off, consent, storage, waiting}},
+        {"states", {off, consent, storage, waiting, exporting, exportingMin}},
+        {"notices", notices},
         {"empty", {loading, none, unsupported, unsupportedAll}},
         {"empty-readings", {noReadings, dollars, partial}},
         {"menu", {menu}},

@@ -99,6 +99,11 @@ struct HistoryUiView {
     bool storageCapped = false;
     HistoryUiNotice notice;
 
+    // Export: whether it can start (once loaded), and whether its write runs (s-states: its
+    // progress in the status slot, every control but the legend's chips disabled)
+    bool canExport = false;
+    bool exporting = false;
+
     // Content: the loading state before the first load, then cards (HistoryUiSetCards) and the
     // chart's lines
     bool loading = true;
@@ -108,12 +113,13 @@ struct HistoryUiView {
     bool operator==(const HistoryUiView&) const = default;
 };
 
-// Interactive items keep these ids across rebuilds, so focus follows them; an account's entry
-// takes kHistoryUiNavAccount + its slot, a legend chip kHistoryUiChip + 8 x its account's slot +
-// its meter. Other items take running ids from kHistoryUiFirstRunning.
+// Interactive items (and the export's progress, painted by id) keep these ids across rebuilds, so
+// focus follows them; an account's entry takes kHistoryUiNavAccount + its slot, a legend chip
+// kHistoryUiChip + 8 x its account's slot + its meter. Other items take running ids from
+// kHistoryUiFirstRunning.
 enum HistoryUiControl : uint32_t {
     kHistoryUiNavAll = 1, kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore, kHistoryUiViews,
-    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording, kHistoryUiChart,
+    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording, kHistoryUiChart, kHistoryUiProgress,
     kHistoryUiNavAccount = 0x1000,
     kHistoryUiFirstRunning = 0x100000,
     kHistoryUiChip = 0x800000,
@@ -126,7 +132,8 @@ enum HistoryUiControl : uint32_t {
 enum class HistoryUiCommand : uint32_t {
     None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording, Line
 };
-enum class HistoryUiMenuItem : int { Settings };
+// The More menu (approved Q9 a, s-menu).
+enum class HistoryUiMenuItem : int { Settings, Folder, About, Clear };
 
 static UiAction HistoryUiAction(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
     return {UiActionKind::Command, value, {}, uint32_t(command), key};
@@ -183,6 +190,19 @@ static std::wstring HistoryUiNumber(double value, int decimals) {
             return std::wstring(printed.begin(), printed.end()) + kSuffixes[level];
         }
     }
+}
+
+// A count with thousands separators: `12,345`.
+static std::wstring HistoryUiCount(size_t count) {
+    std::wstring text = std::to_wstring(count);
+    for (size_t at = text.size(); at > 3; at -= 3) text.insert(at - 3, 1, L',');
+    return text;
+}
+
+// An export's progress line: `Exporting 12,345 rows…`. Digits are tabular: a count's width
+// bounds every smaller one's.
+static std::wstring HistoryUiProgressText(size_t rows) {
+    return L"Exporting " + HistoryUiCount(rows) + L" rows\u2026";
 }
 
 // Hours to a tenth without a trailing zero: `166 h`, `0.4 h`.

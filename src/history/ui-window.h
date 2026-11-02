@@ -1,8 +1,9 @@
 // The custom-drawn usage history window: the history client of the window host (ui/host.h), run
 // on the history thread (history/window.h); never touches XAML. It only translates: host
 // callbacks and notifications into controller events (history/controller.h, on its production
-// ops), the controller's view into frames (history/shell.h) and its chart into paints (history/
-// chart-paint.h) and readouts, rebuilds and focus requests. It holds no D2D objects.
+// ops), the controller's view into frames (history/shell.h) and its chart and an export's
+// progress into paints (history/chart-paint.h) and readouts, rebuilds and focus requests. It
+// holds no D2D objects.
 
 static constexpr PCWSTR kHistoryUiClass = L"AiQuotaHistoryUi_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryUiViewportClass = L"AiQuotaHistoryUiView_" WH_MOD_ID;
@@ -25,8 +26,8 @@ struct HistoryUiClient final : UiHostClient {
 
     void PaintCustom(UiHost& host, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
                      const UiPaintState& state) override {
-        HistoryUiPaintCustom(target, *host.graphics, cache, host.palette, controller.chart, controller.picked, item,
-                             state, UiHostScale(host));
+        HistoryUiPaintCustom(target, *host.graphics, cache, host.palette, controller.chart, controller.picked,
+                             controller.exported, item, state, UiHostScale(host));
     }
 
     // Only a change of the picked lines repaints the chart's surface; the readout's rows change
@@ -39,21 +40,30 @@ struct HistoryUiClient final : UiHostClient {
     }
 
     // A new selection or view scrolls the content back to its top; a successful Enable recording
-    // focuses the selected entry.
+    // focuses the selected entry, and so does a load that waited for a command's dialogs (Export,
+    // the More menu's) and changed the selection, as an activation's load does. Those commands
+    // return once their dialogs are done; an export's write then waits for its posted message.
     void Invoke(UiHost& host, UiAction action) override {
         if (Unloading() || action.kind != UiActionKind::Command) return;
         uint64_t selected = controller.selectedId;
         HistoryView shown = controller.view.view;
-        controller.Command(HistoryUiCommand(action.target), action.value, action.key);
-        if (std::exchange(controller.focusSelected, false)) UiHostRequestFocus(host, SelectedEntry(), false);
+        HistoryUiCommand command = HistoryUiCommand(action.target);
+        controller.Command(command, action.value, action.key);
+        bool waited = command == HistoryUiCommand::Export || command == HistoryUiCommand::Menu;
+        if (std::exchange(controller.focusSelected, false) || (waited && controller.selectedId != selected)) {
+            UiHostRequestFocus(host, SelectedEntry(), false);
+        }
         UiHostRequestRebuild(host, controller.selectedId != selected || controller.view.view != shown);
     }
 
     // Explicit loads: the first one, the activation request (once the host brought the window
-    // back), F5 and Ctrl+R from either surface. Notifications become one posted refresh, which
-    // holds what it must while the popup is open (the deferral timer checks it) or the pointer
-    // inspects the chart. A load or refresh that changed the selection (its request, or the
-    // account no longer listed) moves focus to the selected entry. Esc closes.
+    // back), F5 and Ctrl+R from either surface; during a dialog or an operation they wait for its
+    // end. Notifications become one posted refresh, which holds what it must while the popup is
+    // open (the deferral timer checks it), the pointer inspects the chart, or a dialog or an
+    // operation runs. A load or refresh that changed the selection (its request, or the account no
+    // longer listed) moves focus to the selected entry. Esc closes. An export's write runs once
+    // the frame with its progress was published by the command's rebuild: painted first (else it
+    // writes nothing), then repainted as rows are written, the item found again each time.
     bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
         result = 0;
         uint64_t selected = controller.selectedId;
@@ -61,7 +71,7 @@ struct HistoryUiClient final : UiHostClient {
         switch (message) {
             case kHistoryLoadMessage:
             case kHistoryActivateMessage:
-                controller.Load();
+                controller.RequestLoad();
                 break;
             case WM_KEYDOWN:
                 if (wParam == VK_ESCAPE) {
@@ -69,7 +79,7 @@ struct HistoryUiClient final : UiHostClient {
                     return true;
                 }
                 if (wParam != VK_F5 && !(wParam == 'R' && GetKeyState(VK_CONTROL) < 0)) return false;
-                controller.Load();
+                controller.RequestLoad();
                 break;
             case kSettingsRefreshMessage:
             case kHistoryConsentChangedMessage:
@@ -77,6 +87,10 @@ struct HistoryUiClient final : UiHostClient {
                 return true;
             case kHistoryRefreshMessage:
                 rebuild = controller.ProcessRefresh(host.popup.open, PointerOnChart(host));
+                break;
+            case kHistoryWriteMessage:
+                controller.Write(UiHostPaintNow(host, kHistoryUiProgress),
+                                 [&host] { UiHostPaintNow(host, kHistoryUiProgress); });
                 break;
             case WM_TIMER:
                 if (wParam != kHistoryDeferralTimer) return false;
@@ -93,8 +107,11 @@ struct HistoryUiClient final : UiHostClient {
 
     // The window is published before its first load is posted: an open request stored before
     // either is taken by that load, a later one by its activation. Notifications reach it from
-    // then on.
+    // then on. Its dialogs publish themselves where unload cancels them (g_historyDialog) and end
+    // once the close latch or unload says so.
     bool Attach(UiHost& host) override {
+        ops.host = &host;
+        ops.dialogs = {&g_historyDialog, [this] { return controller.closeRequested || ops.Unloading(); }};
         controller.Open();
         g_historyWindow.store(host.main);
         g_historyUiWindow.store(host.main);
@@ -102,10 +119,12 @@ struct HistoryUiClient final : UiHostClient {
         return true;
     }
 
-    // Every close starts here: the controller's close latch. No modal runs in this window.
+    // Every close starts here: the controller's close latch first, then the running dialog (and
+    // any that opens after it) is cancelled; while one runs the host retries the close once it
+    // has unwound.
     bool CancelModal() override {
         controller.RequestClose();
-        return false;
+        return HistoryDialogCancel();
     }
 
     bool Unloading() override { return ops.Unloading(); }

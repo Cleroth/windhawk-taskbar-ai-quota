@@ -13067,6 +13067,23 @@ static void UiHostInvalidate(const UiHost& host) {
     if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
+// Paints main-surface item `id` now, from a handler that keeps the thread busy (no message loop
+// meanwhile): found by id each time, its rectangle invalidated and the main window painted nested
+// (no rebuild there; a lost target is recreated by that paint). Nothing while closing or faulted,
+// without the window or the item. Returns whether it painted.
+static bool UiHostPaintNow(UiHost& host, uint32_t id) {
+    UiSurfaceId surface = UiSurfaceId::Content;
+    const UiItem* item = host.closing || host.faulted || !host.main || !IsWindow(host.main) ? nullptr :
+                         UiFindItem(host.frame, id, &surface);
+    if (!item || surface != UiSurfaceId::Main) return false;
+    float scale = UiHostScale(host);
+    RECT rect{LONG(std::floor(item->rect.left * scale)), LONG(std::floor(item->rect.top * scale)),
+              LONG(std::ceil(item->rect.right * scale)), LONG(std::ceil(item->rect.bottom * scale))};
+    InvalidateRect(host.main, &rect, FALSE);
+    UpdateWindow(host.main);
+    return true;
+}
+
 // Tooltip ---------------------------------------------------------------------------------------
 
 // Every hide trigger: a hovered chart's hover ends (the client clears its emphasis; the chart's
@@ -20317,6 +20334,79 @@ static int HistoryResolveSelection(const std::vector<HistoryUiAccount>& accounts
     return requested >= 0 ? requested : selected;
 }
 
+// src/history/csv.h
+// Usage-history CSV export (pure): the rows an export writes, from a scope frozen when it starts,
+// to a sink. Both history windows write through it; the file around it is native
+// (history/ops.h, history/export.h).
+
+// What an export writes, fixed at its command: its own snapshot (time-sorted samples), the
+// account (0: every account) and the times [from, to) (the range, and the week before it while
+// comparing).
+struct HistoryExportScope {
+    std::shared_ptr<const HistorySnapshot> snapshot;
+    uint64_t accountId = 0;
+    ULONGLONG from = 0, to = 0;
+    bool compare = false;
+};
+
+static std::string HistoryUtcDate(ULONGLONG time) {
+    if (!time || time > 1833029933770955ULL) return {};
+    ULONGLONG ticks = (time + 11644473600000ULL) * 10000;
+    FILETIME file{DWORD(ticks), DWORD(ticks >> 32)};
+    SYSTEMTIME utc{};
+    if (!FileTimeToSystemTime(&file, &utc)) return {};
+    char text[40];
+    snprintf(text, sizeof(text), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
+             utc.wYear, utc.wMonth, utc.wDay, utc.wHour, utc.wMinute, utc.wSecond,
+             utc.wMilliseconds);
+    return text;
+}
+
+enum class HistoryCsvEnd : uint8_t { Written, Cancelled, Failed };
+
+// Writes the scope's CSV: a header, then one row per sample of the scope and supported meter
+// lane, counted in `exported`, handed to `write` in pieces of at least 64 KiB (`last`: the final,
+// shorter one). Labels never enter it; times are UTC. Stops when `cancelled` (checked per
+// sample) or `write` (returning false) says so.
+static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& exported,
+                                     const std::function<bool(const std::string&, bool last)>& write,
+                                     const std::function<bool()>& cancelled) {
+    exported = 0;
+    std::string buffer = "timestamp_utc,timestamp_unix_ms,account_id,provider,provider_id,meter_id,unit,value,reset_utc,reset_unix_ms,duration_ms,poll_interval_ms,session_id,failed,missing\r\n";
+    for (const auto& sample : scope.snapshot->samples) {
+        if (cancelled()) return HistoryCsvEnd::Cancelled;
+        if (!sample.accountId || (scope.accountId && sample.accountId != scope.accountId) ||
+            sample.timeMs < scope.from || sample.timeMs >= scope.to) continue;
+        const char* provider = sample.provider == 1 ? "anthropic" : sample.provider == 2 ? "openai" :
+                               sample.provider == 3 ? "antigravity" : "unknown";
+        // Nonnumeric, non-formula text survives Excel's 15-digit number coercion.
+        std::string id = HistoryCsvId("account_", sample.accountId);
+        std::string session = HistoryCsvId("session_", sample.session);
+        for (size_t meter = 0; meter < kHistoryMeterCount; ++meter) {
+            // Omit structurally impossible lanes, but preserve missing observations
+            // for each provider's supported meters so exports retain gap information.
+            if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
+                (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
+                (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5)) continue;
+            const auto& value = sample.meters[meter];
+            bool present = HistoryHasValue(sample, int(meter));
+            buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
+                id + "," + provider + "," + std::to_string(sample.provider) + "," +
+                kHistoryMeterIds[meter] + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
+                (present ? WideToUtf8(HistoryNumber(value.value)) : "") + "," + HistoryUtcDate(value.resetMs) + "," +
+                std::to_string(value.resetMs) + "," + std::to_string(value.durationMs) + "," +
+                std::to_string(sample.intervalMs) + "," + session + "," +
+                std::to_string(sample.failed) + "," + (present ? "0" : "1") + "\r\n";
+            ++exported;
+        }
+        if (buffer.size() >= 65536) {
+            if (!write(buffer, false)) return HistoryCsvEnd::Failed;
+            buffer.clear();
+        }
+    }
+    return write(buffer, true) ? HistoryCsvEnd::Written : HistoryCsvEnd::Failed;
+}
+
 // src/history/window-state.h
 // History window thread state, control IDs, and the classic window's view-model types.
 
@@ -20333,9 +20423,10 @@ static constexpr PCWSTR kHistoryWindowClass = L"AiQuotaHistory_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
 static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
 static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
-// The custom-drawn window's posted refresh, and its deferral check timer (main window; the
-// toolkit's own timers use 0x7E01-0x7E02).
+// The custom-drawn window's posted refresh and export write, and its deferral check timer (main
+// window; the toolkit's own timers use 0x7E01-0x7E02).
 static constexpr UINT kHistoryRefreshMessage = WM_APP + 183;
+static constexpr UINT kHistoryWriteMessage = WM_APP + 184;
 static constexpr UINT_PTR kHistoryDeferralTimer = 0x4E01;
 static constexpr int kHistorySeriesHeight = 90;
 
@@ -20488,6 +20579,11 @@ struct HistoryUiView {
     bool storageCapped = false;
     HistoryUiNotice notice;
 
+    // Export: whether it can start (once loaded), and whether its write runs (s-states: its
+    // progress in the status slot, every control but the legend's chips disabled)
+    bool canExport = false;
+    bool exporting = false;
+
     // Content: the loading state before the first load, then cards (HistoryUiSetCards) and the
     // chart's lines
     bool loading = true;
@@ -20497,12 +20593,13 @@ struct HistoryUiView {
     bool operator==(const HistoryUiView&) const = default;
 };
 
-// Interactive items keep these ids across rebuilds, so focus follows them; an account's entry
-// takes kHistoryUiNavAccount + its slot, a legend chip kHistoryUiChip + 8 x its account's slot +
-// its meter. Other items take running ids from kHistoryUiFirstRunning.
+// Interactive items (and the export's progress, painted by id) keep these ids across rebuilds, so
+// focus follows them; an account's entry takes kHistoryUiNavAccount + its slot, a legend chip
+// kHistoryUiChip + 8 x its account's slot + its meter. Other items take running ids from
+// kHistoryUiFirstRunning.
 enum HistoryUiControl : uint32_t {
     kHistoryUiNavAll = 1, kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore, kHistoryUiViews,
-    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording, kHistoryUiChart,
+    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording, kHistoryUiChart, kHistoryUiProgress,
     kHistoryUiNavAccount = 0x1000,
     kHistoryUiFirstRunning = 0x100000,
     kHistoryUiChip = 0x800000,
@@ -20515,7 +20612,8 @@ enum HistoryUiControl : uint32_t {
 enum class HistoryUiCommand : uint32_t {
     None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording, Line
 };
-enum class HistoryUiMenuItem : int { Settings };
+// The More menu (approved Q9 a, s-menu).
+enum class HistoryUiMenuItem : int { Settings, Folder, About, Clear };
 
 static UiAction HistoryUiAction(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
     return {UiActionKind::Command, value, {}, uint32_t(command), key};
@@ -20572,6 +20670,19 @@ static std::wstring HistoryUiNumber(double value, int decimals) {
             return std::wstring(printed.begin(), printed.end()) + kSuffixes[level];
         }
     }
+}
+
+// A count with thousands separators: `12,345`.
+static std::wstring HistoryUiCount(size_t count) {
+    std::wstring text = std::to_wstring(count);
+    for (size_t at = text.size(); at > 3; at -= 3) text.insert(at - 3, 1, L',');
+    return text;
+}
+
+// An export's progress line: `Exporting 12,345 rows…`. Digits are tabular: a count's width
+// bounds every smaller one's.
+static std::wstring HistoryUiProgressText(size_t rows) {
+    return L"Exporting " + HistoryUiCount(rows) + L" rows\u2026";
 }
 
 // Hours to a tenth without a trailing zero: `166 h`, `0.4 h`.
@@ -21262,10 +21373,11 @@ static HistoryChartScene HistoryChartBuildScene(const HistoryChart& c, const std
 // src/history/controller.h
 // Usage history window controller: the selection by history ID, each mode's view, the range and
 // the week comparison, the lines the legend hides, explicit loads with the open request they
-// take, live refresh from notifications, Enable recording, the view the frame builders read
-// (history/view.h), and the chart laid out for its item with the lines the pointer picks on it
-// (history/chart.h). Pure, like the settings edit controller: it talks to HistoryOps
-// (production: history/ops.h; tests: in-memory ops) and reads no globals.
+// take, live refresh from notifications, Enable recording, the operations (Export, Clear) and the
+// More menu's dialogs, the view the frame builders read (history/view.h), and the chart laid out
+// for its item with the lines the pointer picks on it (history/chart.h). Pure, like the settings
+// edit controller: it talks to HistoryOps (production: history/ops.h; tests: in-memory ops) and
+// reads no globals.
 
 // What ReadSettings returns: the published settings (with this user's recording consent),
 // whether the taskbar has yet to save account history IDs, the journal's storage error flag, and
@@ -21281,8 +21393,25 @@ struct HistorySettingsSnapshot {
 // anything, failed (recording stays off), or applied.
 enum class HistoryConsentResult : uint8_t { Stopped, Failed, Applied };
 
+// The save dialog: a path chosen, cancelled, failed (`error`: its common dialog error), or never
+// shown because its dialogs couldn't be tracked.
+enum class HistoryDialogResult : uint8_t { Chosen, Cancelled, Failed, Untracked };
+struct HistoryDestination {
+    HistoryDialogResult result = HistoryDialogResult::Untracked;
+    std::wstring path;
+    DWORD error = 0;
+};
+
+// A CSV write: the rows written, and the Windows error that stopped it (0: the file replaced the
+// destination; ERROR_CANCELLED: unload); `created`: its temporary file was created.
+struct HistoryCsvResult {
+    size_t rows = 0;
+    DWORD error = 0;
+    bool created = true;
+};
+
 // What the controller reads and asks for. Production ops are stateless adapters: every request,
-// load, refresh, deferral and close state is the controller's.
+// load, refresh, deferral, operation and close state is the controller's.
 struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
@@ -21299,6 +21428,24 @@ struct HistoryOps {
     // the settings and history windows whatever the result, unless unload stopped it.
     virtual HistoryConsentResult ApplyConsent() = 0;
     virtual void OpenSettings() = 0;
+    // The journal's folder in Explorer; false when nothing was ever recorded (no folder yet).
+    virtual bool OpenFolder() = 0;
+    // A message box over the window, its dialogs tracked (history/modal.h): the close latch or
+    // unload ends it. Its answer; 0: it couldn't be shown safely.
+    virtual int Ask(const std::wstring& text, PCWSTR caption, UINT type) = 0;
+    // The save dialog for a CSV, titled `title`, tracked as Ask (its overwrite prompt too).
+    virtual HistoryDestination ChooseDestination(const std::wstring& title) = 0;
+    // Posts the window's write message (Write); false when it couldn't.
+    virtual bool PostWrite() = 0;
+    // Writes the scope's CSV to a new temporary file beside `destination` and replaces the
+    // destination with it once it is whole and flushed; any failure or unload deletes it and
+    // leaves the destination as it was. `progress` hears the rows written so far, at most every
+    // 250 ms.
+    virtual HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
+                                      const std::function<void(size_t)>& progress) = 0;
+    // Clears the journal (`error`: why it couldn't), then the flyout's burn-up curves are dropped.
+    virtual bool Clear(std::wstring& error) = 0;
+    virtual void InvalidateCurves() = 0;
     // Posts the window's refresh message (ProcessRefresh); false when it couldn't.
     virtual bool PostRefresh() = 0;
     // Starts or stops the window's 250 ms deferral check (DeferralTick). A check that can't
@@ -21325,6 +21472,14 @@ struct HistorySeriesKey {
     bool compare = false;
     bool operator==(const HistorySeriesKey&) const = default;
 };
+
+// The running operation: Export (its warning and save dialog), its write (posted once the
+// dialog chose a file), Clear (its confirmation, then the clear).
+enum class HistoryOperation : uint8_t { None, Export, Writing, Clear };
+
+// Operation notices shared by several of their ends.
+static constexpr PCWSTR kHistoryExportCancelled = L"CSV export cancelled; no file written.";
+static constexpr PCWSTR kHistoryUntracked = L"Cannot track native dialogs safely; operation cancelled.";
 
 // Samples in time order, journal order among equal times. The journal keeps that order, so
 // this usually only checks it.
@@ -21383,16 +21538,27 @@ struct HistoryController {
 
     // Live refresh. queued: a refresh message is posted and not handled yet. liveDirty: the live
     // part is outstanding (settings, polls, the journal's status); samplesDirty: the sample part
-    // (snapshot, times). A modal holds both (its end resumes them), so does the open popup (the
-    // deferral timer checks it); an inspection (the pointer on the chart, or a readout showing)
-    // holds the sample part (its end resumes it; the timer also checks it). Invariant: while work
-    // is outstanding and the window isn't closing, it is queued, a modal runs, or the timer runs.
+    // (snapshot, times). A modal or an operation holds both (its end resumes them), so does the
+    // open popup (the deferral timer checks it); an inspection (the pointer on the chart, or a
+    // readout showing) holds the sample part (its end resumes it; the timer also checks it).
+    // Invariant: while work is outstanding and the window isn't closing, it is queued, a modal or
+    // an operation runs, or the timer runs.
     bool queued = false, liveDirty = false, samplesDirty = false;
     int modal = 0;
     bool pointerOnChart = false, readoutShown = false;
     bool timer = false;
 
-    // Set once the window closes: nothing loads or acts any more
+    // Operations, one at a time; during one, and during a modal, only the legend's chips act and
+    // an explicit load the window asks for waits (loadPending: once after it, taking the latest
+    // request). An export's scope, frozen at its command, its destination and the rows written.
+    HistoryOperation operation = HistoryOperation::None;
+    bool loadPending = false;
+    std::optional<HistoryExportScope> exportScope;
+    std::wstring destination;
+    size_t exported = 0;
+
+    // Set once the window closes (the first step of every close, before a running dialog is
+    // cancelled): nothing loads or acts any more, and an operation ends at its next step
     bool closeRequested = false;
 
     // The window opened: until the first load, the pill and the configured accounts come from the
@@ -21403,12 +21569,13 @@ struct HistoryController {
     }
 
     // An explicit load (the first one, activation, refresh, a range or comparison change, after
-    // Enable recording): takes the open request, reads the settings and the journal from the
-    // range's start (and the week before it while comparing) and collects the accounts over them.
-    // A listed request selects its account; otherwise the selection stays while it is listed, else
-    // All accounts. It satisfies outstanding refresh work.
+    // Enable recording or a Clear): takes the open request, reads the settings and the journal
+    // from the range's start (and the week before it while comparing) and collects the accounts
+    // over them. A listed request selects its account; otherwise the selection stays while it is
+    // listed, else All accounts. It satisfies outstanding refresh work and a waiting load.
     void Load() {
         if (closeRequested || ops->Unloading()) return;
+        loadPending = false;
         uint64_t request = ops->TakeRequest();
         HistorySettingsSnapshot read = ops->ReadSettings();
         int retention = read.settings.historyRetentionDays;
@@ -21425,11 +21592,21 @@ struct HistoryController {
         Compose();
     }
 
-    // A control's command (history/view.h): the selection, the view and a legend chip's line
-    // recompose; the range, the comparison and Refresh load; the More menu's Settings opens the
-    // settings window; Enable recording turns recording on.
-    void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
+    // An explicit load the window asks for (its first, the activation request, F5, Ctrl+R): now,
+    // or once a running modal or operation ends.
+    void RequestLoad() {
         if (closeRequested || ops->Unloading()) return;
+        if (Busy()) loadPending = true;
+        else Load();
+    }
+
+    // A control's command (history/view.h): the selection, the view and a legend chip's line
+    // recompose; the range, the comparison and Refresh load; Export and the More menu's Clear
+    // all history start their operations; its Settings, Open history folder and About these
+    // charts open those; Enable recording turns recording on. During a modal or an operation only
+    // the legend's chips act (the rest are disabled or behind the modal).
+    void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
+        if (closeRequested || ops->Unloading() || (Busy() && command != HistoryUiCommand::Line)) return;
         switch (command) {
             case HistoryUiCommand::Select:
                 if (key != selectedId) notice = {};
@@ -21452,8 +21629,28 @@ struct HistoryController {
             case HistoryUiCommand::Refresh:
                 Load();
                 break;
+            case HistoryUiCommand::Export:
+                Export();
+                break;
             case HistoryUiCommand::Menu:
-                if (value == int(HistoryUiMenuItem::Settings)) ops->OpenSettings();
+                switch (HistoryUiMenuItem(value)) {
+                    case HistoryUiMenuItem::Settings:
+                        ops->OpenSettings();
+                        break;
+                    case HistoryUiMenuItem::Folder:
+                        if (!ops->OpenFolder()) {
+                            notice = {L"Nothing has been recorded yet. The folder is created with the first recorded "
+                                      L"sample."};
+                            Compose();
+                        }
+                        break;
+                    case HistoryUiMenuItem::About:
+                        About();
+                        break;
+                    case HistoryUiMenuItem::Clear:
+                        Clear();
+                        break;
+                }
                 break;
             case HistoryUiCommand::EnableRecording:
                 EnableRecording();
@@ -21466,7 +21663,6 @@ struct HistoryController {
                 break;
             }
             case HistoryUiCommand::None:
-            case HistoryUiCommand::Export:
                 break;
         }
     }
@@ -21490,12 +21686,208 @@ struct HistoryController {
         }
     }
 
-    // The window is closing (its close path's first step): requests stay with the opener, and
-    // outstanding refresh work and the deferral timer go.
+    // The window is closing (its close path's first step, before a running dialog is cancelled):
+    // requests stay with the opener; outstanding refresh work, a waiting load and the deferral
+    // timer go. A running operation ends when its dialog returns.
     void RequestClose() {
         closeRequested = true;
-        liveDirty = samplesDirty = false;
+        liveDirty = samplesDirty = loadPending = false;
         Timer(false);
+    }
+
+    // Operations and dialogs -----------------------------------------------------------------------
+
+    // Export (once loaded). Its scope freezes at the command: the selected account or every one,
+    // the shown times with the week before while comparing, and the snapshot itself, so what
+    // arrives during its dialogs (activation, refresh) changes nothing it writes. A large one asks
+    // first (Cancel the default); then the save dialog titled by its scope. Every return from a
+    // dialog checks the close latch and unload. With a file chosen the write is posted: the window
+    // shows its progress before the write starts (Write).
+    void Export() {
+        if (!snapshot) return;
+        notice = {};
+        HistoryExportScope scope{snapshot, view.selected >= 0 ? selectedId : 0, readFrom, to, compare};
+        size_t estimate = 0;
+        for (const HistorySample& sample : snapshot->samples) {
+            if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
+                sample.timeMs < scope.to) {
+                estimate += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 4;
+            }
+        }
+        operation = HistoryOperation::Export;
+        if (estimate > 500000) {
+            int answer = Ask(L"This export contains about " + std::to_wstring(estimate) +
+                                 L" rows. It may take a while and exceed spreadsheet row limits. The history window "
+                                 L"will be busy while writing; Explorer's taskbar remains available. Continue?",
+                             L"Large history export", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+            if (Stopped()) return;
+            if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+            if (answer != IDOK) return Finish({kHistoryExportCancelled});
+        }
+        ModalBegan();
+        HistoryDestination chosen = ops->ChooseDestination(
+            scope.accountId ? L"Export selected account \u2014 all meters, selected range (both weeks if comparing)" :
+                              L"Export all accounts \u2014 all meters, selected range (both weeks if comparing)");
+        ModalEnded();
+        if (Stopped()) return;
+        switch (chosen.result) {
+            case HistoryDialogResult::Chosen:
+                break;
+            case HistoryDialogResult::Cancelled:
+                return Finish({kHistoryExportCancelled});
+            case HistoryDialogResult::Failed:
+                return Finish({L"Save dialog failed (code " + std::to_wstring(chosen.error) + L").", UiSeverity::Error});
+            case HistoryDialogResult::Untracked:
+                return Finish({kHistoryUntracked, UiSeverity::Error});
+        }
+        exportScope = std::move(scope);
+        destination = std::move(chosen.path);
+        exported = 0;
+        operation = HistoryOperation::Writing;
+        if (!ops->PostWrite()) return Finish({L"CSV export could not start; no file written.", UiSeverity::Error});
+        Compose();
+    }
+
+    // The posted write, `shown`: the window painted its progress (else it is closing, or the frame
+    // with the progress never came: nothing is written). It runs to its end without returning to
+    // the window: each progress report sets the rows written and asks `repaint` to show them,
+    // nothing else. Its notice: the rows and where they went, or why the destination is unchanged.
+    void Write(bool shown, const std::function<void()>& repaint) {
+        if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return;
+        if (!shown) return Finish({kHistoryExportCancelled});
+        HistoryCsvResult result = ops->WriteCsv(*exportScope, destination, [&](size_t rows) {
+            exported = rows;
+            repaint();
+        });
+        if (Stopped()) return;
+        std::wstring error = std::to_wstring(result.error);
+        if (!result.created) {
+            return Finish({L"Cannot create the CSV temporary file (Windows error " + error +
+                               L"). Existing destination unchanged.", UiSeverity::Error});
+        }
+        if (result.error) {
+            return Finish({L"CSV export failed (Windows error " + error + L"). Existing destination unchanged.",
+                           UiSeverity::Error});
+        }
+        Finish({L"Exported " + HistoryUiCount(result.rows) + L" meter rows (" +
+                (exportScope->accountId ? L"selected account" : L"all accounts") + L") to " + destination +
+                L". Labels omitted; times UTC." + (exportScope->compare ? L" Includes both elapsed 7-day periods." : L"")});
+    }
+
+    // Clear all history (the More menu): asked first (Cancel the default). Whatever its result the
+    // flyout's burn-up curves are dropped (the journal's epoch moved); a success loads, a failure
+    // doesn't (the next refresh replaces the snapshot by the new epoch). Its notice after either.
+    void Clear() {
+        notice = {};
+        operation = HistoryOperation::Clear;
+        int answer = Ask(L"Permanently clear ALL local usage history for this Windows user, including deleted "
+                         L"accounts?\r\n\r\nThis cannot be undone. Settings and sign-ins are not changed. If recording "
+                         L"stays enabled, future polls will record new history.",
+                         L"Clear all usage history", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+        if (Stopped()) return;
+        if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+        if (answer != IDOK) return Finish({L"Clear history cancelled."});
+        std::wstring error;
+        bool cleared = ops->Clear(error);
+        ops->InvalidateCurves();
+        if (Stopped()) return;
+        operation = HistoryOperation::None;
+        if (!cleared) return Finish({L"Could not clear all history. " + error, UiSeverity::Error});
+        Load();
+        Finish({L"All local history cleared. Future polls can start recording again."});
+    }
+
+    // About these charts (the More menu): how to read the window, the retention and the oldest
+    // sample loaded.
+    void About() {
+        std::wstring text =
+            L"Reading the charts\r\n"
+            L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or "
+            L"All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, "
+            L"one account on All meters; each keeps its view until the window closes. Weekly follows each Anthropic "
+            L"account's taskbar weekly selections; removed accounts keep both weeklies, and All meters includes "
+            L"weeklies hidden on the taskbar. Antigravity Gemini and Claude/GPT quotas share the matching short-term "
+            L"and weekly views. Each quota keeps its own line and resets; overlapping limits are never added or "
+            L"merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
+            L"shows limiting pools, which can change.\r\n\r\n"
+            L"Legend and readout\r\n"
+            L"Each chip above the chart names a line with its color and width: click it to hide or show the line; "
+            L"point at it to emphasize the line. Point at the chart to read every nearby or overlapping line, "
+            L"current and previous week, at the recorded reading nearest the drawn line, never an interpolated "
+            L"value. Values are rounded for display; the CSV keeps them exact. Previous-week times are the original "
+            L"sample times. Gaps are not lines and have no readings.\r\n\r\n"
+            L"Axes and units\r\n"
+            L"Percentages use the left axis; the shaded band marks your red threshold. Extra usage shows Anthropic "
+            L"budget used (%) and OpenAI credits remaining, which fall as usage rises, on their own axis. Dollar "
+            L"spending shows on the cards; All meters also plots it on its own axis. Accounts without readings in "
+            L"the range are listed under No readings.\r\n\r\n"
+            L"Lines and markers\r\n"
+            L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
+            L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots "
+            L"mark only isolated readings (filled: current, hollow: previous). Resets, missing or failed readings, "
+            L"gaps, restarts and recording changes break lines without extra markers. Lines are reduced for drawing; "
+            L"cards and the CSV use the raw samples.\r\n\r\n"
+            L"Cards\r\n"
+            L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh "
+            L"poll. Peak is the highest recorded value. Coverage counts connected intervals. Time at or above the red "
+            L"threshold is estimated within those intervals, never across gaps or beyond the last sample. Dollar "
+            L"details report sampled last and peak spending, not total spending in the range. Times are local. Week "
+            L"comparison uses two elapsed seven-day periods; daylight saving can shift local clock times.\r\n\r\n"
+            L"Recording and export\r\n"
+            L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice "
+            L"applies to the current Windows user only, and per-account recording and hidden-account rules still "
+            L"apply. Recording starts with the next poll, once account history IDs are saved. No data can also mean "
+            L"an unsupported meter, failed polls or expired history. Nothing is backfilled. The window follows new "
+            L"polls (the chart waits while the pointer is on it); Refresh or F5 reads local history again. Export "
+            L"writes every supported meter of the selected account, or of every account under All accounts, over "
+            L"the selected range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are "
+            L"not dollars or a spending ledger.\r\n\r\n"
+            L"Retention: " + std::to_wstring(settings.settings.historyRetentionDays) +
+            L" days, also limited to 250,000 records / about 60 MB. Turning recording off keeps saved history. Removed "
+            L"accounts remain under their IDs until expiry or Clear, unless their history was deleted with them.";
+        if (snapshot && !snapshot->samples.empty()) {
+            text += L"\r\nOldest loaded sample: " +
+                    HistoryUiTime(snapshot->samples.front().timeMs, ops->Now(),
+                                  [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+        }
+        Ask(text, L"About these charts", MB_OK | MB_ICONINFORMATION);
+    }
+
+    // A message box: a modal meanwhile.
+    int Ask(const std::wstring& text, PCWSTR caption, UINT type) {
+        ModalBegan();
+        int answer = ops->Ask(text, caption, type);
+        ModalEnded();
+        return answer;
+    }
+
+    // After a dialog or a step that can take a while: the close latch or unload ends the running
+    // operation there, nothing more done or shown.
+    bool Stopped() {
+        if (!closeRequested && !ops->Unloading()) return false;
+        operation = HistoryOperation::None;
+        exportScope.reset();
+        return true;
+    }
+
+    // The operation ends: what waited for it runs, then its notice shows (nothing that ran replaces
+    // it).
+    void Finish(HistoryUiNotice result) {
+        operation = HistoryOperation::None;
+        exportScope.reset();
+        Resume();
+        notice = std::move(result);
+        Compose();
+    }
+
+    bool Busy() const { return modal > 0 || operation != HistoryOperation::None; }
+
+    // A modal or an operation ended: a load that waited runs (taking the latest request), else held
+    // refresh work is posted.
+    void Resume() {
+        if (Busy() || closeRequested || ops->Unloading()) return;
+        if (loadPending) Load();
+        else Schedule();
     }
 
     // Live refresh -------------------------------------------------------------------------------
@@ -21512,8 +21904,8 @@ struct HistoryController {
     // The posted refresh message, with whether the dropdown popup (the More menu) is open and
     // whether the pointer is on the chart now (a scroll or rebuild can move the chart under a
     // still pointer without a hover report): the live part, then the sample part unless an
-    // inspection holds it. A modal or the popup holds both (a rebuild would close the popup).
-    // Returns whether the view or the chart changed: the window rebuilds.
+    // inspection holds it. A modal, an operation or the popup holds both (a rebuild would close
+    // the popup). Returns whether the view or the chart changed: the window rebuilds.
     bool ProcessRefresh(bool popup, bool pointer) {
         queued = false;
         pointerOnChart = pointer;
@@ -21521,7 +21913,7 @@ struct HistoryController {
             liveDirty = samplesDirty = false;
             return false;
         }
-        if (modal) return false;
+        if (Busy()) return false;
         if (popup) {
             if (liveDirty || samplesDirty) Timer(true);
             return false;
@@ -21561,10 +21953,11 @@ struct HistoryController {
         if (!Inspecting()) Schedule();
     }
 
-    // A modal runs on the window's thread: no refresh until it ends, which resumes held work.
+    // A modal runs on the window's thread: no refresh or load until it ends, which resumes them
+    // (unless an operation still runs).
     void ModalBegan() { modal++; }
     void ModalEnded() {
-        if (modal && !--modal) Schedule();
+        if (modal && !--modal) Resume();
     }
 
     bool Inspecting() const { return pointerOnChart || readoutShown; }
@@ -21711,6 +22104,8 @@ struct HistoryController {
         v.colorblind = s.colorblindMode;
         v.remaining = s.barMode == BarMode::Remaining;
         v.notice = notice;
+        v.canExport = snapshot != nullptr;
+        v.exporting = operation == HistoryOperation::Writing;
         // Not saving: the journal's error (before the first load, the storage flag); waiting:
         // account IDs not saved yet, or no sample in range.
         bool storageError = snapshot ? !journalStatus.empty() : settings.storageError;
@@ -21842,15 +22237,33 @@ struct HistoryController {
 
 // src/history/chart-paint.h
 // Usage history chart painting (pure): the history window's client-drawn items, its chart (the
-// scene of history/chart.h) and the chart's legend chips, on a Direct2D target in the items'
-// coordinates. Stroke styles and path geometries are factory-bound (UiGraphics); brushes and
-// colored layouts live in the surface's cache.
+// scene of history/chart.h), the chart's legend chips and an export's progress, on a Direct2D
+// target in the items' coordinates. Stroke styles and path geometries are factory-bound
+// (UiGraphics); brushes and colored layouts live in the surface's cache.
 
 // Paints the chart item or one of its legend chips, the emphasis from the paint state and the
-// chart's picks (HistoryChartEmphasis).
+// chart's picks (HistoryChartEmphasis), or the progress of an export that wrote `exported` rows.
 static void HistoryUiPaintCustom(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache, const UiPalette& p,
-                                 const HistoryChart& chart, const std::vector<size_t>& picked, const UiItem& item,
-                                 const UiPaintState& state, float scale) {
+                                 const HistoryChart& chart, const std::vector<size_t>& picked, size_t exported,
+                                 const UiItem& item, const UiPaintState& state, float scale) {
+    // The progress (s-states .upd): its line in the item's font, muted, after a 16 DIP ring and 6
+    // DIP gap, at the item's leading or trailing end, centered on it vertically.
+    if (item.id == kHistoryUiProgress) {
+        const bool hc = p.kind == UiThemeKind::HighContrast;
+        UiTextStyle style = UiTextStyleFor(item.font);
+        IDWriteTextLayout* layout = UiLayout(g, HistoryUiProgressText(exported), style, 10000, false);
+        float width = std::ceil(UiLayoutSize(layout).width), middle = (item.rect.top + item.rect.bottom) / 2;
+        float x = item.align == DWRITE_TEXT_ALIGNMENT_TRAILING ? item.rect.right - width - 22 : item.rect.left;
+        UiDrawLayout(target, cache, layout, {x + 22, middle - style.lineHeight / 2}, p.textMuted);
+        UiItem ring;
+        ring.kind = UiItemKind::Shape;
+        ring.rect = {x, middle - 8, x + 16, middle + 8};
+        ring.viewBox = 16;
+        ring.parts = {{L"M8 1.5A6.5 6.5 0 1 1 8 14.5A6.5 6.5 0 1 1 8 1.5", {}, UiInk::Disabled, hc ? 1.0f : 0.45f, 2},
+                      {L"M8 1.5A6.5 6.5 0 0 1 14.5 8", {}, UiInk::Accent, 1, 2}};
+        UiPaintItems(target, g, cache, p, {ring}, {}, {0, 0}, scale, -1e9f, 1e9f);
+        return;
+    }
     std::vector<size_t> emphasis = HistoryChartEmphasis(chart.lines, picked, state);
 
     // The chart: its scene's prims in order, the lines inside the plot's clip.
@@ -22036,7 +22449,7 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
                          UiSeverity::Caution,
                          UiInfoButton{kHistoryUiEnableRecording, L"Enable recording",
                                       HistoryUiAction(HistoryUiCommand::EnableRecording),
-                                      view.canEnableRecording}) + 10;
+                                      view.canEnableRecording && !view.exporting}) + 10;
     }
     if (!view.storageError.empty()) {
         y = UiAddInfoBar(g, items, id, id++, x, y, width, {{view.storageError}}, UiSeverity::Error) + 10;
@@ -22211,15 +22624,18 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
 }
 
 // src/history/shell.h
-// Usage history window shell: the scrolling navigation pane, the pinned header (title, status,
-// pill, icon buttons, view and range segments, Compare) and the content, built from the view
-// snapshot (history/view.h; approved mockups s-light, s-min, s-menu, q13b-scroll). Pure.
+// Usage history window shell: the scrolling navigation pane, the pinned header (title, status or
+// an export's progress, pill, icon buttons, view and range segments, Compare) and the content,
+// built from the view snapshot (history/view.h; approved mockups s-light, s-min, s-menu, s-states,
+// q13b-scroll). Pure.
 
 static constexpr float kHistoryUiNavWidth = 260;
 
 static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_SIZE_F client, UiFrame& frame) {
     uint32_t id = kHistoryUiFirstRunning;
     const bool light = view.theme == UiThemeKind::Light;
+    // While an export writes, every control but the legend's chips is disabled (s-states).
+    const bool active = !view.exporting;
     const HistoryUiViewAccount* selected =
         view.selected >= 0 && size_t(view.selected) < view.accounts.size() ? &view.accounts[size_t(view.selected)] :
                                                                               nullptr;
@@ -22237,6 +22653,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     all.text = L"All accounts";
     all.icon = L"\uE716";
     all.selected = !selected;
+    all.enabled = active;
     all.action = HistoryUiAction(HistoryUiCommand::Select);
     frame.nav.push_back(std::move(all));
     y += 41;
@@ -22262,6 +22679,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         if (PCWSTR logo = HistoryUiLogo(account.provider)) entry.parts = {{logo, {}, UiInk::Primary}};
         entry.ink = account.removed ? UiInk::Muted : UiInk::Primary;
         entry.selected = selected == &account;
+        entry.enabled = active;
         entry.action = HistoryUiAction(HistoryUiCommand::Select, 0, account.historyId);
         if (!account.removed) {
             UiRun value{L"\u2014", UiRunStyle::Normal, UiInk::Muted};
@@ -22294,7 +22712,8 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     float left = kHistoryUiNavWidth + 12, right = std::max(client.width - 24, left + 1), width = right - left;
 
     // Icon buttons (mockup .ibtn: 32 x 30 DIP, 4 apart) at the title row's right: Refresh,
-    // Export and the More menu, named by their tooltips (s-tooltips; Export's with its scope).
+    // Export (once loaded) and the More menu, named by their tooltips (s-tooltips, q7a-icons;
+    // Export's by its scope, as the classic button, over the classic description).
     struct IconButton {
         uint32_t id;
         PCWSTR glyph;
@@ -22303,11 +22722,12 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         PCWSTR name, detail;
     };
     const IconButton buttons[] = {
-        {kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, true, L"Refresh (F5)", nullptr},
-        {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, false, L"Export CSV",
+        {kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, active, L"Refresh (F5)", nullptr},
+        {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, active && view.canExport,
+         selected ? L"Export CSV\u2026" : L"Export all CSV\u2026",
          L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
          L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels."},
-        {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, true, L"More options", nullptr}};
+        {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, active, L"More options", nullptr}};
     float x = right - 3 * 32 - 2 * 4;
     for (const IconButton& spec : buttons) {
         UiItem button;
@@ -22324,14 +22744,33 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                                        std::vector<UiRun>{{spec.name}};
         button.action = HistoryUiAction(spec.command, spec.command == HistoryUiCommand::Menu ? -1 : 0);
         if (spec.command == HistoryUiCommand::Menu) {
-            button.options = {{L"Settings", int(HistoryUiMenuItem::Settings), {}, {}, L"\uE713"}};
+            button.options = {{L"Settings", int(HistoryUiMenuItem::Settings), {}, {}, L"\uE713"},
+                              {L"Open history folder", int(HistoryUiMenuItem::Folder), {}, {}, L"\uE838"},
+                              {L"About these charts", int(HistoryUiMenuItem::About), {}, {}, L"\uE946"},
+                              {L"Clear all history\u2026", int(HistoryUiMenuItem::Clear), {}, {}, L"\uE74D", true}};
         }
         frame.main.push_back(std::move(button));
         x += 36;
     }
 
-    // Status and pill (mockup .hstat, .pill) 12 DIP before the buttons. The status stays on the
-    // title row while it holds the whole title too; otherwise it joins the line under the title.
+    // Status and pill (mockup .hstat, .pill) 12 DIP before the buttons. The status (or a running
+    // export's progress in its place, s-states .upd: a 16 DIP ring and 6 DIP gap before its row
+    // count, drawn by the client so the count changes without a rebuild; as wide as the journal's
+    // largest export, 250,000 samples of 8 rows) stays on the title row while it holds the whole
+    // title too; otherwise it joins the line under the title.
+    auto measure = [&](const std::wstring& text, UiFont font) {
+        return std::ceil(UiLayoutSize(UiLayout(g, text, UiTextStyleFor(font), 10000, false)).width);
+    };
+    auto progress = [&](D2D1_RECT_F rect, UiFont font, DWRITE_TEXT_ALIGNMENT align) {
+        UiItem item;
+        item.id = kHistoryUiProgress;
+        item.kind = UiItemKind::Custom;
+        item.rect = rect;
+        item.font = font;
+        item.align = align;
+        frame.main.push_back(std::move(item));
+    };
+    const std::wstring widest = HistoryUiProgressText(2000000);
     struct Pill {
         std::wstring text;
         UiInk ink;
@@ -22345,20 +22784,24 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     PCWSTR title = selected ? selected->label.c_str() : L"All accounts";
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, UiTextStyleFor(UiFont::Title), 100000, false)).width);
-    float statusWidth = view.status.empty() ? 0 :
-        std::ceil(UiLayoutSize(UiLayout(g, view.status, UiTextStyleFor(UiFont::Caption), 10000, false)).width);
+    float statusWidth = view.exporting     ? 22 + measure(widest, UiFont::Caption) :
+                        view.status.empty() ? 0 : measure(view.status, UiFont::Caption);
     bool narrow = statusWidth > 0 && titleWidth + 12 + statusWidth + 12 + pillSize.width + 12 + 104 > width;
     float pillRight = right - 104 - 12, titleRight = pillRight - pillSize.width - 12;
     UiAddPill(frame.main, id++, {titleRight + 12, 14, pillRight, 34}, pill.text, pill.ink, pill.on);
     if (statusWidth > 0 && !narrow) {
-        UiItem status;
-        status.id = id++;
-        status.kind = UiItemKind::Text;
-        status.font = UiFont::Caption;
-        status.ink = UiInk::Muted;
-        status.rect = {titleRight - statusWidth, 16, titleRight, 32};
-        status.runs = {{view.status}};
-        frame.main.push_back(std::move(status));
+        if (view.exporting) {
+            progress({titleRight - statusWidth, 14, titleRight, 34}, UiFont::Caption, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        } else {
+            UiItem status;
+            status.id = id++;
+            status.kind = UiItemKind::Text;
+            status.font = UiFont::Caption;
+            status.ink = UiInk::Muted;
+            status.rect = {titleRight - statusWidth, 16, titleRight, 32};
+            status.runs = {{view.status}};
+            frame.main.push_back(std::move(status));
+        }
         titleRight -= statusWidth + 12;
     }
     UiItem heading;
@@ -22371,7 +22814,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     frame.main.push_back(std::move(heading));
 
     // Under the title (mockup .psub): one account's provider and recording, then a status that
-    // didn't fit the title row.
+    // didn't fit the title row; an export's progress 12 DIP after that line, or starting it.
     std::wstring subtitle;
     if (selected) {
         subtitle = std::wstring(HistoryUiProviderName(selected->provider)) + L" \u00B7 " +
@@ -22379,18 +22822,28 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                     !view.recordingEnabled || selected->recordingOff ? L"Recording off" :
                     selected->paused                                     ? L"Paused" : L"Recording");
     }
-    if (narrow) subtitle += (subtitle.empty() ? L"" : L" \u00B7 ") + view.status;
+    if (narrow && !view.exporting) subtitle += (subtitle.empty() ? L"" : L" \u00B7 ") + view.status;
     float top = 56;
-    if (!subtitle.empty()) {
-        UiItem line;
-        line.id = id++;
-        line.kind = UiItemKind::Text;
-        line.font = UiFont::Note;
-        line.ink = UiInk::Muted;
-        line.rect = {left, 42, right, 61};
-        line.runs = {{subtitle}};
-        line.trim = true;
-        frame.main.push_back(std::move(line));
+    if (!subtitle.empty() || narrow) {
+        float lineRight = right;
+        if (narrow && view.exporting) {
+            float progressWidth = 22 + measure(widest, UiFont::Note);
+            float x = subtitle.empty() ? left :
+                      std::max(std::min(left + measure(subtitle, UiFont::Note) + 12, right - progressWidth), left);
+            progress({x, 42, x + progressWidth, 61}, UiFont::Note, DWRITE_TEXT_ALIGNMENT_LEADING);
+            lineRight = x - 12;
+        }
+        if (!subtitle.empty()) {
+            UiItem line;
+            line.id = id++;
+            line.kind = UiItemKind::Text;
+            line.font = UiFont::Note;
+            line.ink = UiInk::Muted;
+            line.rect = {left, 42, std::max(lineRight, left + 1), 61};
+            line.runs = {{subtitle}};
+            line.trim = true;
+            frame.main.push_back(std::move(line));
+        }
         top = 70;
     }
 
@@ -22411,16 +22864,16 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         return rect;
     };
     D2D1_SIZE_F viewsSize = UiSegmentedSize(g, views), rangesSize = UiSegmentedSize(g, ranges);
-    UiAddSegmented(frame.main, kHistoryUiViews, place(viewsSize), std::move(views), true,
+    UiAddSegmented(frame.main, kHistoryUiViews, place(viewsSize), std::move(views), active,
                    HistoryUiAction(HistoryUiCommand::View, int(view.view)));
-    UiAddSegmented(frame.main, kHistoryUiRanges, place(rangesSize), std::move(ranges), !view.compare,
+    UiAddSegmented(frame.main, kHistoryUiRanges, place(rangesSize), std::move(ranges), active && !view.compare,
                    HistoryUiAction(HistoryUiCommand::Range,
                                    int(view.compare ? HistoryUiRange::Week : view.range)));
     PCWSTR compare = L"Compare previous week";
     D2D1_SIZE_F compareSize = UiToggleSize(g, compare);
     D2D1_RECT_F compareSlot = place({4 + compareSize.width, 32});
     UiAddToggle(frame.main, kHistoryUiCompare, {compareSlot.left + 4, compareSlot.top, compareSlot.right, compareSlot.bottom},
-                view.compare, true, HistoryUiAction(HistoryUiCommand::Compare, !view.compare), compare);
+                view.compare, active, HistoryUiAction(HistoryUiCommand::Compare, !view.compare), compare);
     float header = top + 32 + 10;
 
     // Content (mockup .hcont), in viewport coordinates: the header's column, 20 DIP below the end.
@@ -22431,13 +22884,107 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     frame.contentHeight = bottom + 20;
 }
 
+// src/history/modal.h
+// Native dialogs of the custom-drawn usage history window (its message boxes, the save dialog
+// and that dialog's overwrite prompt): a scope tracks every dialog (#32770) its thread activates
+// while it runs, nested ones included, and ends them once its context says so (the window's
+// close latch or unload): those running then, and any activated after. Its context names where
+// the latest dialog is published for other threads (unload posts it a cancel) and the predicate;
+// nothing else is global. One scope at a time per thread. Native, extractable on its own.
+
+struct HistoryDialogContext {
+    std::atomic<HWND>* published = nullptr;
+    std::function<bool()> cancelled;
+};
+
+struct HistoryDialogScope;
+static thread_local HistoryDialogScope* g_historyDialogScope = nullptr;
+
+static LRESULT CALLBACK HistoryDialogScopeHook(int code, WPARAM wParam, LPARAM lParam);
+
+struct HistoryDialogScope {
+    // No hook (nothing may show) while another scope runs on the thread, without a predicate,
+    // once it says cancelled, or when the hook can't be set.
+    explicit HistoryDialogScope(const HistoryDialogContext& context) : context(context) {
+        if (g_historyDialogScope || !context.published || !context.cancelled || context.cancelled()) return;
+        g_historyDialogScope = this;
+        hook = SetWindowsHookExW(WH_CBT, HistoryDialogScopeHook, nullptr, GetCurrentThreadId());
+        if (!hook) g_historyDialogScope = nullptr;
+    }
+    ~HistoryDialogScope() {
+        if (!hook) return;
+        UnhookWindowsHookEx(hook);
+        g_historyDialogScope = nullptr;
+        context.published->store(nullptr);
+    }
+    HistoryDialogScope(const HistoryDialogScope&) = delete;
+    HistoryDialogScope& operator=(const HistoryDialogScope&) = delete;
+
+    const HistoryDialogContext& context;
+    HHOOK hook = nullptr;
+    std::array<HWND, 16> dialogs{};  // Activation order: the last is the topmost
+    size_t count = 0;
+};
+
+// Ends a dialog as its safest button would: Cancel where it has one (a message box with only OK
+// takes Cancel as OK), else No (a Yes/No prompt ignores Cancel); then closes it.
+static void HistoryDialogEnd(HWND dialog) {
+    int button = GetDlgItem(dialog, IDCANCEL) || !GetDlgItem(dialog, IDNO) ? IDCANCEL : IDNO;
+    PostMessageW(dialog, WM_COMMAND, button, 0);
+    PostMessageW(dialog, WM_CLOSE, 0, 0);
+}
+
+static LRESULT CALLBACK HistoryDialogScopeHook(int code, WPARAM wParam, LPARAM lParam) {
+    // Only fixed-size storage, Win32 calls and the predicate: nothing may throw across the hook.
+    HistoryDialogScope* scope = g_historyDialogScope;
+    HWND window = reinterpret_cast<HWND>(wParam);
+    if (scope && code == HCBT_ACTIVATE) {
+        wchar_t name[16]{};
+        if (GetClassNameW(window, name, ARRAYSIZE(name)) && wcscmp(name, L"#32770") == 0) {
+            auto end = scope->dialogs.begin() + scope->count;
+            if (std::find(scope->dialogs.begin(), end, window) == end && scope->count < scope->dialogs.size()) {
+                scope->dialogs[scope->count++] = window;
+            }
+            scope->context.published->store(window);
+            if (scope->context.cancelled()) HistoryDialogEnd(window);
+        }
+    } else if (scope && code == HCBT_DESTROYWND) {
+        // A tracked dialog went: the one under it is the latest again, and ends too once cancelled.
+        auto end = scope->dialogs.begin() + scope->count;
+        auto found = std::find(scope->dialogs.begin(), end, window);
+        if (found != end) {
+            std::move(found + 1, end, found);
+            scope->count--;
+            HWND remaining = scope->count ? scope->dialogs[scope->count - 1] : nullptr;
+            scope->context.published->store(remaining);
+            if (remaining && scope->context.cancelled()) HistoryDialogEnd(remaining);
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+// The window's close (after its latch): the topmost running dialog ends, and the one under it as
+// that one goes. True while a scope runs, its modal call not returned yet (the close retries).
+static bool HistoryDialogCancel() {
+    HistoryDialogScope* scope = g_historyDialogScope;
+    if (!scope) return false;
+    if (scope->count) HistoryDialogEnd(scope->dialogs[scope->count - 1]);
+    return true;
+}
+
 // src/history/ops.h
 // Production ops of the usage history window's controller (history/controller.h): stateless
 // adapters over the open request, the journal, the published settings and polls, recording
-// consent, the settings window and the window's own refresh message and deferral timer. History
-// thread only.
+// consent, the settings window, the journal's folder, the window's dialogs (history/modal.h), the
+// CSV file and the window's own refresh and write messages and deferral timer. History thread
+// only.
 
 struct HistoryProductionOps final : HistoryOps {
+    // Wiring, set once the window exists: its host (the dialogs' owner; its popup and tooltip
+    // close before each) and the context its dialogs run in.
+    UiHost* host = nullptr;
+    HistoryDialogContext dialogs;
+
     uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
 
     // As the classic window's load: an explicit viewer read also prunes retained history while
@@ -22491,6 +23038,124 @@ struct HistoryProductionOps final : HistoryOps {
 
     void OpenSettings() override { OpenSettingsWindow(); }
 
+    // As Settings > History's link: the folder from a link launch thread (ShellExecute's own
+    // message loop would run this window's close, activation and refresh inside the command).
+    bool OpenFolder() override {
+        PWSTR localAppData = nullptr;
+        std::wstring folder;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr, &localAppData))) {
+            folder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
+        }
+        CoTaskMemFree(localAppData);
+        DWORD attributes = folder.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(folder.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
+        OpenUrl(folder.c_str());
+        return true;
+    }
+
+    int Ask(const std::wstring& text, PCWSTR caption, UINT type) override {
+        UiHostClosePopup(*host);
+        HistoryDialogScope scope(dialogs);
+        return scope.hook ? MessageBoxW(host->main, text.c_str(), caption, type) : 0;
+    }
+
+    // The classic export's save dialog (history/export.h).
+    HistoryDestination ChooseDestination(const std::wstring& title) override {
+        UiHostClosePopup(*host);
+        HistoryDialogScope scope(dialogs);
+        if (!scope.hook) return {};
+        std::wstring path = L"ai-quota-history.csv";
+        path.resize(32768);
+        OPENFILENAMEW picker{};
+        picker.lStructSize = sizeof(picker);
+        picker.hwndOwner = host->main;
+        picker.lpstrFilter = L"CSV files (*.csv)\0*.csv\0All files (*.*)\0*.*\0\0";
+        picker.lpstrFile = path.data();
+        picker.nMaxFile = DWORD(path.size());
+        picker.lpstrDefExt = L"csv";
+        picker.lpstrTitle = title.c_str();
+        picker.Flags = OFN_EXPLORER | OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_ENABLESIZING;
+        if (GetSaveFileNameW(&picker)) return {HistoryDialogResult::Chosen, path.c_str()};
+        DWORD error = CommDlgExtendedError();
+        return {error ? HistoryDialogResult::Failed : HistoryDialogResult::Cancelled, {}, error};
+    }
+
+    bool PostWrite() override {
+        HWND window = g_historyUiWindow.load();
+        return window && PostMessageW(window, kHistoryWriteMessage, 0, 0);
+    }
+
+    // The classic export's file safety (history/export.h): a new temporary file beside the
+    // destination (never an existing one), the rows, flushed and closed, then moved over the
+    // destination with write-through. On any failure, unload or exception the temporary file is
+    // deleted and the destination keeps its content. Progress goes out before each full piece.
+    HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
+                              const std::function<void(size_t)>& progress) override {
+        struct Temporary {
+            HANDLE file = INVALID_HANDLE_VALUE;
+            std::wstring path;
+            ~Temporary() {
+                if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+                if (!path.empty()) DeleteFileW(path.c_str());
+            }
+        } temporary;
+        HistoryCsvResult result;
+        std::wstring candidate = destination + L".quota-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                                 std::to_wstring(GetTickCount64()) + L".tmp";
+        temporary.file = CreateFileW(candidate.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
+                                     nullptr);
+        if (temporary.file == INVALID_HANDLE_VALUE) {
+            result.error = GetLastError();
+            result.created = false;
+            return result;
+        }
+        temporary.path = std::move(candidate);
+        auto cancelled = [] { return g_unloading || g_historyWindowCancelRequested; };
+        ULONGLONG nextProgressMs = 0;
+        HistoryCsvEnd end = HistoryCsvWrite(scope, result.rows, [&](const std::string& piece, bool last) {
+            if (!last && GetTickCount64() >= nextProgressMs) {
+                progress(result.rows);
+                nextProgressMs = GetTickCount64() + 250;
+            }
+            for (size_t written = 0; written < piece.size();) {
+                if (cancelled()) {
+                    SetLastError(ERROR_CANCELLED);
+                    return false;
+                }
+                DWORD count = DWORD(std::min(piece.size() - written, size_t(65536))), actual = 0;
+                if (!WriteFile(temporary.file, piece.data() + written, count, &actual, nullptr)) return false;
+                if (!actual) {
+                    SetLastError(ERROR_WRITE_FAULT);
+                    return false;
+                }
+                written += actual;
+            }
+            return true;
+        }, cancelled);
+        bool success = end == HistoryCsvEnd::Written && FlushFileBuffers(temporary.file);
+        DWORD error = success ? ERROR_SUCCESS : end == HistoryCsvEnd::Cancelled ? DWORD(ERROR_CANCELLED) : GetLastError();
+        if (!CloseHandle(std::exchange(temporary.file, INVALID_HANDLE_VALUE)) && success) {
+            success = false;
+            error = GetLastError();
+        }
+        if (success && cancelled()) {
+            success = false;
+            error = ERROR_CANCELLED;
+        }
+        if (success && !MoveFileExW(temporary.path.c_str(), destination.c_str(),
+                                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            success = false;
+            error = GetLastError();
+        }
+        if (success) temporary.path.clear();
+        result.error = success ? 0 : error ? error : DWORD(ERROR_GEN_FAILURE);
+        return result;
+    }
+
+    bool Clear(std::wstring& error) override { return ClearHistory(&error); }
+
+    void InvalidateCurves() override { InvalidateBurnUpCurves(); }
+
     bool PostRefresh() override {
         HWND window = g_historyUiWindow.load();
         return window && PostMessageW(window, kHistoryRefreshMessage, 0, 0);
@@ -22517,8 +23182,9 @@ struct HistoryProductionOps final : HistoryOps {
 // The custom-drawn usage history window: the history client of the window host (ui/host.h), run
 // on the history thread (history/window.h); never touches XAML. It only translates: host
 // callbacks and notifications into controller events (history/controller.h, on its production
-// ops), the controller's view into frames (history/shell.h) and its chart into paints (history/
-// chart-paint.h) and readouts, rebuilds and focus requests. It holds no D2D objects.
+// ops), the controller's view into frames (history/shell.h) and its chart and an export's
+// progress into paints (history/chart-paint.h) and readouts, rebuilds and focus requests. It
+// holds no D2D objects.
 
 static constexpr PCWSTR kHistoryUiClass = L"AiQuotaHistoryUi_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryUiViewportClass = L"AiQuotaHistoryUiView_" WH_MOD_ID;
@@ -22541,8 +23207,8 @@ struct HistoryUiClient final : UiHostClient {
 
     void PaintCustom(UiHost& host, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
                      const UiPaintState& state) override {
-        HistoryUiPaintCustom(target, *host.graphics, cache, host.palette, controller.chart, controller.picked, item,
-                             state, UiHostScale(host));
+        HistoryUiPaintCustom(target, *host.graphics, cache, host.palette, controller.chart, controller.picked,
+                             controller.exported, item, state, UiHostScale(host));
     }
 
     // Only a change of the picked lines repaints the chart's surface; the readout's rows change
@@ -22555,21 +23221,30 @@ struct HistoryUiClient final : UiHostClient {
     }
 
     // A new selection or view scrolls the content back to its top; a successful Enable recording
-    // focuses the selected entry.
+    // focuses the selected entry, and so does a load that waited for a command's dialogs (Export,
+    // the More menu's) and changed the selection, as an activation's load does. Those commands
+    // return once their dialogs are done; an export's write then waits for its posted message.
     void Invoke(UiHost& host, UiAction action) override {
         if (Unloading() || action.kind != UiActionKind::Command) return;
         uint64_t selected = controller.selectedId;
         HistoryView shown = controller.view.view;
-        controller.Command(HistoryUiCommand(action.target), action.value, action.key);
-        if (std::exchange(controller.focusSelected, false)) UiHostRequestFocus(host, SelectedEntry(), false);
+        HistoryUiCommand command = HistoryUiCommand(action.target);
+        controller.Command(command, action.value, action.key);
+        bool waited = command == HistoryUiCommand::Export || command == HistoryUiCommand::Menu;
+        if (std::exchange(controller.focusSelected, false) || (waited && controller.selectedId != selected)) {
+            UiHostRequestFocus(host, SelectedEntry(), false);
+        }
         UiHostRequestRebuild(host, controller.selectedId != selected || controller.view.view != shown);
     }
 
     // Explicit loads: the first one, the activation request (once the host brought the window
-    // back), F5 and Ctrl+R from either surface. Notifications become one posted refresh, which
-    // holds what it must while the popup is open (the deferral timer checks it) or the pointer
-    // inspects the chart. A load or refresh that changed the selection (its request, or the
-    // account no longer listed) moves focus to the selected entry. Esc closes.
+    // back), F5 and Ctrl+R from either surface; during a dialog or an operation they wait for its
+    // end. Notifications become one posted refresh, which holds what it must while the popup is
+    // open (the deferral timer checks it), the pointer inspects the chart, or a dialog or an
+    // operation runs. A load or refresh that changed the selection (its request, or the account no
+    // longer listed) moves focus to the selected entry. Esc closes. An export's write runs once
+    // the frame with its progress was published by the command's rebuild: painted first (else it
+    // writes nothing), then repainted as rows are written, the item found again each time.
     bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
         result = 0;
         uint64_t selected = controller.selectedId;
@@ -22577,7 +23252,7 @@ struct HistoryUiClient final : UiHostClient {
         switch (message) {
             case kHistoryLoadMessage:
             case kHistoryActivateMessage:
-                controller.Load();
+                controller.RequestLoad();
                 break;
             case WM_KEYDOWN:
                 if (wParam == VK_ESCAPE) {
@@ -22585,7 +23260,7 @@ struct HistoryUiClient final : UiHostClient {
                     return true;
                 }
                 if (wParam != VK_F5 && !(wParam == 'R' && GetKeyState(VK_CONTROL) < 0)) return false;
-                controller.Load();
+                controller.RequestLoad();
                 break;
             case kSettingsRefreshMessage:
             case kHistoryConsentChangedMessage:
@@ -22593,6 +23268,10 @@ struct HistoryUiClient final : UiHostClient {
                 return true;
             case kHistoryRefreshMessage:
                 rebuild = controller.ProcessRefresh(host.popup.open, PointerOnChart(host));
+                break;
+            case kHistoryWriteMessage:
+                controller.Write(UiHostPaintNow(host, kHistoryUiProgress),
+                                 [&host] { UiHostPaintNow(host, kHistoryUiProgress); });
                 break;
             case WM_TIMER:
                 if (wParam != kHistoryDeferralTimer) return false;
@@ -22609,8 +23288,11 @@ struct HistoryUiClient final : UiHostClient {
 
     // The window is published before its first load is posted: an open request stored before
     // either is taken by that load, a later one by its activation. Notifications reach it from
-    // then on.
+    // then on. Its dialogs publish themselves where unload cancels them (g_historyDialog) and end
+    // once the close latch or unload says so.
     bool Attach(UiHost& host) override {
+        ops.host = &host;
+        ops.dialogs = {&g_historyDialog, [this] { return controller.closeRequested || ops.Unloading(); }};
         controller.Open();
         g_historyWindow.store(host.main);
         g_historyUiWindow.store(host.main);
@@ -22618,10 +23300,12 @@ struct HistoryUiClient final : UiHostClient {
         return true;
     }
 
-    // Every close starts here: the controller's close latch. No modal runs in this window.
+    // Every close starts here: the controller's close latch first, then the running dialog (and
+    // any that opens after it) is cancelled; while one runs the host retries the close once it
+    // has unwound.
     bool CancelModal() override {
         controller.RequestClose();
-        return false;
+        return HistoryDialogCancel();
     }
 
     bool Unloading() override { return ops.Unloading(); }
@@ -22660,19 +23344,6 @@ static std::wstring HistoryLocalDate(ULONGLONG time) {
     wchar_t text[48];
     swprintf(text, ARRAYSIZE(text), L"%04u-%02u-%02u %02u:%02u:%02u",
              local.wYear, local.wMonth, local.wDay, local.wHour, local.wMinute, local.wSecond);
-    return text;
-}
-
-static std::string HistoryUtcDate(ULONGLONG time) {
-    if (!time || time > 1833029933770955ULL) return {};
-    ULONGLONG ticks = (time + 11644473600000ULL) * 10000;
-    FILETIME file{DWORD(ticks), DWORD(ticks >> 32)};
-    SYSTEMTIME utc{};
-    if (!FileTimeToSystemTime(&file, &utc)) return {};
-    char text[40];
-    snprintf(text, sizeof(text), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
-             utc.wYear, utc.wMonth, utc.wDay, utc.wHour, utc.wMinute, utc.wSecond,
-             utc.wMilliseconds);
     return text;
 }
 
@@ -23158,51 +23829,28 @@ struct HistoryCsvFile {
         }
         return true;
     }
-    // Serialization boundary for both UI export and isolated file-content tests.
-    // Use the unreduced, stably timestamp-sorted snapshot, never the render cache.
+    // Serialization boundary for both UI export and isolated file-content tests: the shared CSV
+    // writer (history/csv.h) over the unreduced, stably timestamp-sorted snapshot (never the
+    // render cache), with the status line's progress every 250 ms.
     bool WriteSnapshot(const HistoryWindowState& state, size_t* exported) {
-        *exported = 0;
-        uint64_t accountId = state.selected >= 0 ? state.accounts.at(state.selected).id : 0;
-        std::string buffer = "timestamp_utc,timestamp_unix_ms,account_id,provider,provider_id,meter_id,unit,value,reset_utc,reset_unix_ms,duration_ms,poll_interval_ms,session_id,failed,missing\r\n";
+        HistoryExportScope scope;
+        // Borrowed (an empty owner): the window's state outlives the write.
+        scope.snapshot = std::shared_ptr<const HistorySnapshot>(std::shared_ptr<const HistorySnapshot>{}, &state.snapshot);
+        scope.accountId = state.selected >= 0 ? state.accounts.at(state.selected).id : 0;
+        scope.from = state.readFrom;
+        scope.to = state.to;
         ULONGLONG nextProgressMs = 0;
-        for (const auto& sample : state.snapshot.samples) {
-            if (g_unloading || g_historyWindowCancelRequested) { SetLastError(ERROR_CANCELLED); return false; }
-            if (!sample.accountId || (accountId && sample.accountId != accountId) ||
-                sample.timeMs < state.readFrom || sample.timeMs >= state.to) continue;
-            const char* provider = sample.provider == 1 ? "anthropic" : sample.provider == 2 ? "openai" :
-                                   sample.provider == 3 ? "antigravity" : "unknown";
-            // Nonnumeric, non-formula text survives Excel's 15-digit number coercion.
-            std::string id = HistoryCsvId("account_", sample.accountId);
-            std::string session = HistoryCsvId("session_", sample.session);
-            for (size_t meter = 0; meter < kHistoryMeterCount; ++meter) {
-                // Omit structurally impossible lanes, but preserve missing observations
-                // for each provider's supported meters so exports retain gap information.
-                if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
-                    (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
-                    (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5)) continue;
-                const auto& value = sample.meters[meter];
-                bool present = HistoryHasValue(sample, int(meter));
-                buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
-                    id + "," + provider + "," + std::to_string(sample.provider) + "," +
-                    kHistoryMeterIds[meter] + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
-                    (present ? WideToUtf8(HistoryNumber(value.value)) : "") + "," + HistoryUtcDate(value.resetMs) + "," +
-                    std::to_string(value.resetMs) + "," + std::to_string(value.durationMs) + "," +
-                    std::to_string(sample.intervalMs) + "," + session + "," +
-                    std::to_string(sample.failed) + "," + (present ? "0" : "1") + "\r\n";
-                ++*exported;
+        HistoryCsvEnd end = HistoryCsvWrite(scope, *exported, [&](const std::string& buffer, bool last) {
+            if (!last && state.status && GetTickCount64() >= nextProgressMs) {
+                std::wstring progress = L"Exporting " + std::to_wstring(*exported) + L" rows...";
+                SetWindowTextW(state.status, progress.c_str());
+                UpdateWindow(state.status);
+                nextProgressMs = GetTickCount64() + 250;
             }
-            if (buffer.size() >= 65536) {
-                if (state.status && GetTickCount64() >= nextProgressMs) {
-                    std::wstring progress = L"Exporting " + std::to_wstring(*exported) + L" rows...";
-                    SetWindowTextW(state.status, progress.c_str());
-                    UpdateWindow(state.status);
-                    nextProgressMs = GetTickCount64() + 250;
-                }
-                if (!Write(buffer)) return false;
-                buffer.clear();
-            }
-        }
-        return Write(buffer);
+            return Write(buffer);
+        }, [] { return g_unloading || g_historyWindowCancelRequested; });
+        if (end == HistoryCsvEnd::Cancelled) SetLastError(ERROR_CANCELLED);
+        return end == HistoryCsvEnd::Written;
     }
 };
 

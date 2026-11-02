@@ -3,11 +3,12 @@
 // hand-derived expectations.
 
 // The mockups' accounts (OAI, CC 1, CC 2, Go; slots 10-13 apart from their order), fresh weekly
-// values, recording, updated Sat 31 Oct 14:32; loaded, no cards.
+// values, recording, updated Sat 31 Oct 14:32; loaded (Export can start), no cards.
 static HistoryUiView TestHistoryView(UiThemeKind theme = UiThemeKind::Dark) {
     HistoryUiView view;
     view.theme = theme;
     view.loading = false;
+    view.canExport = true;
     view.status = L"Updated Sat 31 Oct 14:32";
     struct Entry {
         uint64_t id;
@@ -233,7 +234,9 @@ static void RunHistoryFrameTests() {
         CHECK(status && status->font == UiFont::Caption && status->ink == UiInk::Muted);
         CHECK_NEAR(status->rect.right, pill->rect.left - 12);
         CHECK_NEAR(title->rect.right, status->rect.left - 12);
-        // Buttons: 32 x 30 DIP, 4 apart, icon only; Export disabled; More holds Settings.
+        // Buttons: 32 x 30 DIP, 4 apart, icon only; Export once loaded; More holds the menu
+        // (s-menu: Settings, Open history folder, About these charts, then Clear all history after
+        // a separator).
         uint32_t ids[] = {kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore};
         HistoryUiCommand commands[] = {HistoryUiCommand::Refresh, HistoryUiCommand::Export, HistoryUiCommand::Menu};
         for (int i = 0; i < 3; i++) {
@@ -241,17 +244,36 @@ static void RunHistoryFrameTests() {
             CHECK(button && button->kind == UiItemKind::Button && button->button == UiButtonStyle::Subtle &&
                   button->text.empty() && !button->icon.empty());
             CHECK(TestSameRect(button->rect, {972 + 36.0f * float(i), 8, 1004 + 36.0f * float(i), 38}));
-            CHECK(button->action.target == uint32_t(commands[i]) && button->enabled == (i != 1));
+            CHECK(button->action.target == uint32_t(commands[i]) && button->enabled);
         }
+        HistoryUiView unloaded = view;
+        unloaded.canExport = false;
+        CHECK(!UiFindItem(TestHistoryFrame(unloaded), kHistoryUiExport)->enabled);
         const UiItem* more = UiFindItem(frame, kHistoryUiMore);
-        CHECK(more->options.size() == 1 && more->options[0].text == L"Settings" && more->options[0].icon == L"\uE713" &&
-              more->options[0].value == int(HistoryUiMenuItem::Settings) && more->action.value == -1);
-        // Their tooltips (s-tooltips): names; Export's in strong text over its scope.
+        CHECK(more->options.size() == 4 && more->action.value == -1);
+        const std::pair<PCWSTR, PCWSTR> menu[] = {{L"Settings", L"\uE713"}, {L"Open history folder", L"\uE838"},
+                                                  {L"About these charts", L"\uE946"},
+                                                  {L"Clear all history\u2026", L"\uE74D"}};
+        const HistoryUiMenuItem values[] = {HistoryUiMenuItem::Settings, HistoryUiMenuItem::Folder,
+                                            HistoryUiMenuItem::About, HistoryUiMenuItem::Clear};
+        for (size_t i = 0; i < 4; i++) {
+            const UiOption& option = more->options[i];
+            CHECK(option.text == menu[i].first && option.icon == menu[i].second && option.value == int(values[i]) &&
+                  option.separator == (i == 3));
+        }
+        // Their tooltips (s-tooltips, q7a-icons): names; Export's in strong text by its scope, over
+        // the classic description.
         CHECK(UiRunsText(UiFindItem(frame, kHistoryUiRefresh)->tooltip) == L"Refresh (F5)");
         CHECK(UiRunsText(more->tooltip) == L"More options" && more->tooltip[0].style == UiRunStyle::Normal);
         const std::vector<UiRun>& exportTip = UiFindItem(frame, kHistoryUiExport)->tooltip;
-        CHECK(exportTip.size() == 2 && exportTip[0].text == L"Export CSV" && exportTip[0].style == UiRunStyle::Strong &&
-              exportTip[1].ink == UiInk::Secondary && exportTip[1].text.starts_with(L"\nExport all raw meters"));
+        CHECK(exportTip.size() == 2 && exportTip[0].text == L"Export all CSV\u2026" &&
+              exportTip[0].style == UiRunStyle::Strong && exportTip[1].ink == UiInk::Secondary &&
+              exportTip[1].text == L"\nExport all raw meters for the selected account, or every account under All "
+                                   L"accounts. Uses the selected date range, plus the preceding 7 days in week "
+                                   L"comparison. UTC timestamps; text IDs; no labels.");
+        HistoryUiView one = view;
+        one.selected = 1;
+        CHECK(UiFindItem(TestHistoryFrame(one), kHistoryUiExport)->tooltip[0].text == L"Export CSV\u2026");
         CHECK_NEAR(frame.viewport.top, 98);
         CHECK(TestSameRect(frame.viewport, {260, 98, 1100, 790}));
 
@@ -351,14 +373,14 @@ static void RunHistoryFrameTests() {
               compare->text == L"Compare previous week" && !compare->selected && compare->action.value == 1 &&
               compare->action.target == uint32_t(HistoryUiCommand::Compare));
         CHECK_NEAR(compare->rect.left, ranges->rect.right + 14);
-        // Focus order: the pane, then Refresh, More, the segments and Compare (Export is disabled).
+        // Focus order: the pane, then Refresh, Export, More, the segments and Compare.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         std::vector<uint32_t> main;
         for (const UiFocusStop& stop : stops) {
             if (stop.surface == UiSurfaceId::Main) main.push_back(stop.ref.id);
         }
-        CHECK((main == std::vector<uint32_t>{kHistoryUiRefresh, kHistoryUiMore, kHistoryUiViews, kHistoryUiRanges,
-                                             kHistoryUiCompare}));
+        CHECK((main == std::vector<uint32_t>{kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore, kHistoryUiViews,
+                                             kHistoryUiRanges, kHistoryUiCompare}));
         CHECK(stops.size() == 5 + main.size());
         view.compare = true;
         frame = TestHistoryFrame(view);
@@ -665,12 +687,63 @@ static void RunHistoryFrameTests() {
         CHECK_NEAR(size.height, 4 + 36 * 4);
         CHECK(rows[3].rect.top == 112 && !rows[3].separator && !rows[0].separator && rows[2].selected);
         CHECK_NEAR(size.width, widest + 5 + 12 + 12 + 5);
-        // The history window's More menu: Settings alone.
+        // The history window's More menu: these four rows, as above.
         UiFrame frame = TestHistoryFrame(TestHistoryView());
         const UiItem* more = UiFindItem(frame, kHistoryUiMore);
         size = UiLayoutOptions(g, more->options, more->action, 32, rows);
-        CHECK(rows.size() == 1 && rows[0].icon == L"\uE713" && size.height == 40);
-        CHECK_NEAR(size.width, TestTextWidth(L"Settings", UiFont::Body) + 78);
+        CHECK(rows.size() == 4 && rows[3].separator && size.height == 4 + 36 * 4 + 5);
+        CHECK_NEAR(size.width, widest + 78);
+        for (size_t i = 0; i < 4; i++) {
+            CHECK(rows[i].text == options[i].text && rows[i].icon == more->options[i].icon && !rows[i].icon.empty());
+        }
+    });
+
+    Run("history frame: an export's write: its progress in the status slot (the title row, else under the title "
+        "after the account's line), every control but the legend's chips disabled", [] {
+        float widest = TestTextWidth(L"Exporting 2,000,000 rows\u2026", UiFont::Caption);
+        HistoryUiView view = TestWeeklyView();
+        view.exporting = true;
+        UiFrame frame = TestHistoryFrame(view);
+        const UiItem* progress = UiFindItem(frame, kHistoryUiProgress);
+        const UiItem* pill = &*std::find_if(frame.main.begin(), frame.main.end(),
+                                            [](const UiItem& item) { return item.kind == UiItemKind::Pill; });
+        CHECK(progress && progress->kind == UiItemKind::Custom && progress->action.kind == UiActionKind::None);
+        CHECK(progress->font == UiFont::Caption && progress->align == DWRITE_TEXT_ALIGNMENT_TRAILING);
+        CHECK(TestSameRect(progress->rect, {pill->rect.left - 12 - 22 - widest, 14, pill->rect.left - 12, 34}));
+        CHECK(!TestFind(frame.main, L"Updated Sat 31 Oct 14:32"));
+        CHECK_NEAR(TestFind(frame.main, L"All accounts")->rect.right, progress->rect.left - 12);
+        for (uint32_t id : {uint32_t(kHistoryUiNavAll), kHistoryUiNavAccount + 10, uint32_t(kHistoryUiRefresh),
+                            uint32_t(kHistoryUiExport), uint32_t(kHistoryUiMore), uint32_t(kHistoryUiViews),
+                            uint32_t(kHistoryUiRanges), uint32_t(kHistoryUiCompare)}) {
+            CHECK(!UiFindItem(frame, id)->enabled);
+        }
+        for (const HistoryUiLine& line : view.lines) CHECK(UiFindItem(frame, line.chip)->enabled);
+        CHECK(UiFindItem(frame, kHistoryUiChart)->enabled);
+        // The focus stops left: the chips and the chart.
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        CHECK(stops.size() == view.lines.size() + 1 && stops.back().ref.id == kHistoryUiChart);
+        // Recording off: the banner's button too.
+        view.recordingEnabled = false;
+        view.canEnableRecording = true;
+        CHECK(!UiFindItem(TestHistoryFrame(view), kHistoryUiEnableRecording)->enabled);
+
+        // The minimum window: under the title, starting the line (All accounts), or 12 DIP after the
+        // account's line, in note type.
+        view = TestHistoryView();
+        view.exporting = true;
+        frame = TestHistoryFrame(view, {800, 550});
+        progress = UiFindItem(frame, kHistoryUiProgress);
+        float note = TestTextWidth(L"Exporting 2,000,000 rows\u2026", UiFont::Note);
+        CHECK(progress && progress->font == UiFont::Note && progress->align == DWRITE_TEXT_ALIGNMENT_LEADING);
+        CHECK(TestSameRect(progress->rect, {272, 42, 272 + 22 + note, 61}));
+        CHECK(UiFindItem(frame, kHistoryUiViews)->rect.top == 70);
+        view.selected = 2;
+        view.accounts[2].label = L"Claude Max personal";
+        frame = TestHistoryFrame(view, {800, 550});
+        progress = UiFindItem(frame, kHistoryUiProgress);
+        const UiItem* line = TestFind(frame.main, L"Anthropic \u00B7 Recording");
+        float lineWidth = TestTextWidth(L"Anthropic \u00B7 Recording", UiFont::Note);
+        CHECK(line && progress && progress->rect.left == 272 + lineWidth + 12 && line->rect.right == progress->rect.left - 12);
     });
 
     Run("buttons: an icon-only button centers its glyph", [] {

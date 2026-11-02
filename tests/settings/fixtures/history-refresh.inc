@@ -15,10 +15,11 @@ static bool TestDeliver(HistoryController& c, TestHistoryOps& ops, bool popup = 
     return c.ProcessRefresh(popup, pointer.value_or(c.pointerOnChart));
 }
 
-// After an event: outstanding work is posted, held by a modal or watched by the deferral timer
-// (unless the window closes), and the ops saw the controller's posts and timer.
+// After an event: outstanding work is posted, held by a modal or an operation or watched by the
+// deferral timer (unless the window closes), and the ops saw the controller's posts and timer.
 static void TestSettled(const HistoryController& c, const TestHistoryOps& ops) {
-    CHECK(!(c.liveDirty || c.samplesDirty) || c.closeRequested || c.queued || c.modal > 0 || c.timer);
+    CHECK(!(c.liveDirty || c.samplesDirty) || c.closeRequested || c.queued || c.modal > 0 ||
+          c.operation != HistoryOperation::None || c.timer);
     CHECK(ops.timer == c.timer && (ops.posted > 0) == c.queued);
 }
 

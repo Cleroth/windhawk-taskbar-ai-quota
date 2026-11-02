@@ -112,13 +112,15 @@ native evidence suffices.
   pass a test. Review extraction when production structure changes. Extraction reads the
   generated file, but every section is bounded by its own `// src/<path>` fragment: pure
   fragments (`core/model.h`, `history/types.h`, `continuity.h`, `burn-up.h`, `series.h`,
-  `paint.h`) and the journal's coordination state (`history/state.h`) whole, other fragments by
+  `csv.h`, `paint.h`) and the journal's coordination state (`history/state.h`) whole, other fragments by
   named definitions or anchors searched inside that fragment only, so include order can't change
   what is extracted. `history/journal.h` keeps its in-memory state before its storage state
   (`g_historyPath` ends the extracted block). Fix production code in `src/` and regenerate.
 - `fixtures/model.inc` tests the shared model (`history/series.h`) through its explicit inputs;
   its trailing classic section and the interaction/tooltip/paint fixtures test the classic
-  window through its adapters.
+  window through its adapters. `fixtures/csv.inc` tests the CSV writer (`history/csv.h`, whole)
+  through the classic adapter and with frozen scopes: hand-derived bytes, 64 KiB pieces,
+  cancellation, a failing sink.
 - Fixtures are split by domain under `fixtures/`. Add independent expected behavior, not
   Python/C++ copies of production decision rules or source-text call-count audits.
 - Preserve synthetic continuity coverage for clock rollback, gaps, real resets, idle rolling

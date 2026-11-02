@@ -29,12 +29,13 @@ MODEL = [
 ]
 
 # The usage history window's view, formats, chart, controller, chart painter and frame builders
-# on the shared history model: tests and offscreen renders. No journal, settings storage,
-# production ops or window code.
+# on the shared history model and CSV writer: tests and offscreen renders. No journal, settings
+# storage, production ops or window code.
 HISTORY = [
     ("fragment", "core/model.h"),
     ("definition", "ApplyCreditsMax"),
     ("definition", "Utf8ToWide"),
+    ("definition", "WideToUtf8"),
     ("definition", "ProviderDisplayName"),
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
@@ -42,6 +43,7 @@ HISTORY = [
     ("fragment", "history/types.h"),
     ("fragment", "history/continuity.h"),
     ("fragment", "history/series.h"),
+    ("fragment", "history/csv.h"),
     ("fragment", "history/view.h"),
     ("fragment", "history/chart.h"),
     ("fragment", "history/controller.h"),
@@ -51,7 +53,8 @@ HISTORY = [
 ]
 
 # Toolkit with its native host (window icons, popup, tooltip, text boxes and color dialog
-# included): the probe DLL. No settings, storage or account code.
+# included) and the history window's dialog scope: the probe DLL. No settings, storage or account
+# code.
 HOST = [
     ("definition", "WindowDpi"),
     *UI_PURE,
@@ -63,6 +66,7 @@ HOST = [
     ("fragment", "ui/text-box.h"),
     ("fragment", "ui/host.h"),
     ("fragment", "ui/color-dialog.h"),
+    ("fragment", "history/modal.h"),
 ]
 
 TARGETS = {

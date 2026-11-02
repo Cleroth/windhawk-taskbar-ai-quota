@@ -1,9 +1,10 @@
 // Usage history window controller: the selection by history ID, each mode's view, the range and
 // the week comparison, the lines the legend hides, explicit loads with the open request they
-// take, live refresh from notifications, Enable recording, the view the frame builders read
-// (history/view.h), and the chart laid out for its item with the lines the pointer picks on it
-// (history/chart.h). Pure, like the settings edit controller: it talks to HistoryOps
-// (production: history/ops.h; tests: in-memory ops) and reads no globals.
+// take, live refresh from notifications, Enable recording, the operations (Export, Clear) and the
+// More menu's dialogs, the view the frame builders read (history/view.h), and the chart laid out
+// for its item with the lines the pointer picks on it (history/chart.h). Pure, like the settings
+// edit controller: it talks to HistoryOps (production: history/ops.h; tests: in-memory ops) and
+// reads no globals.
 
 // What ReadSettings returns: the published settings (with this user's recording consent),
 // whether the taskbar has yet to save account history IDs, the journal's storage error flag, and
@@ -19,8 +20,25 @@ struct HistorySettingsSnapshot {
 // anything, failed (recording stays off), or applied.
 enum class HistoryConsentResult : uint8_t { Stopped, Failed, Applied };
 
+// The save dialog: a path chosen, cancelled, failed (`error`: its common dialog error), or never
+// shown because its dialogs couldn't be tracked.
+enum class HistoryDialogResult : uint8_t { Chosen, Cancelled, Failed, Untracked };
+struct HistoryDestination {
+    HistoryDialogResult result = HistoryDialogResult::Untracked;
+    std::wstring path;
+    DWORD error = 0;
+};
+
+// A CSV write: the rows written, and the Windows error that stopped it (0: the file replaced the
+// destination; ERROR_CANCELLED: unload); `created`: its temporary file was created.
+struct HistoryCsvResult {
+    size_t rows = 0;
+    DWORD error = 0;
+    bool created = true;
+};
+
 // What the controller reads and asks for. Production ops are stateless adapters: every request,
-// load, refresh, deferral and close state is the controller's.
+// load, refresh, deferral, operation and close state is the controller's.
 struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
@@ -37,6 +55,24 @@ struct HistoryOps {
     // the settings and history windows whatever the result, unless unload stopped it.
     virtual HistoryConsentResult ApplyConsent() = 0;
     virtual void OpenSettings() = 0;
+    // The journal's folder in Explorer; false when nothing was ever recorded (no folder yet).
+    virtual bool OpenFolder() = 0;
+    // A message box over the window, its dialogs tracked (history/modal.h): the close latch or
+    // unload ends it. Its answer; 0: it couldn't be shown safely.
+    virtual int Ask(const std::wstring& text, PCWSTR caption, UINT type) = 0;
+    // The save dialog for a CSV, titled `title`, tracked as Ask (its overwrite prompt too).
+    virtual HistoryDestination ChooseDestination(const std::wstring& title) = 0;
+    // Posts the window's write message (Write); false when it couldn't.
+    virtual bool PostWrite() = 0;
+    // Writes the scope's CSV to a new temporary file beside `destination` and replaces the
+    // destination with it once it is whole and flushed; any failure or unload deletes it and
+    // leaves the destination as it was. `progress` hears the rows written so far, at most every
+    // 250 ms.
+    virtual HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
+                                      const std::function<void(size_t)>& progress) = 0;
+    // Clears the journal (`error`: why it couldn't), then the flyout's burn-up curves are dropped.
+    virtual bool Clear(std::wstring& error) = 0;
+    virtual void InvalidateCurves() = 0;
     // Posts the window's refresh message (ProcessRefresh); false when it couldn't.
     virtual bool PostRefresh() = 0;
     // Starts or stops the window's 250 ms deferral check (DeferralTick). A check that can't
@@ -63,6 +99,14 @@ struct HistorySeriesKey {
     bool compare = false;
     bool operator==(const HistorySeriesKey&) const = default;
 };
+
+// The running operation: Export (its warning and save dialog), its write (posted once the
+// dialog chose a file), Clear (its confirmation, then the clear).
+enum class HistoryOperation : uint8_t { None, Export, Writing, Clear };
+
+// Operation notices shared by several of their ends.
+static constexpr PCWSTR kHistoryExportCancelled = L"CSV export cancelled; no file written.";
+static constexpr PCWSTR kHistoryUntracked = L"Cannot track native dialogs safely; operation cancelled.";
 
 // Samples in time order, journal order among equal times. The journal keeps that order, so
 // this usually only checks it.
@@ -121,16 +165,27 @@ struct HistoryController {
 
     // Live refresh. queued: a refresh message is posted and not handled yet. liveDirty: the live
     // part is outstanding (settings, polls, the journal's status); samplesDirty: the sample part
-    // (snapshot, times). A modal holds both (its end resumes them), so does the open popup (the
-    // deferral timer checks it); an inspection (the pointer on the chart, or a readout showing)
-    // holds the sample part (its end resumes it; the timer also checks it). Invariant: while work
-    // is outstanding and the window isn't closing, it is queued, a modal runs, or the timer runs.
+    // (snapshot, times). A modal or an operation holds both (its end resumes them), so does the
+    // open popup (the deferral timer checks it); an inspection (the pointer on the chart, or a
+    // readout showing) holds the sample part (its end resumes it; the timer also checks it).
+    // Invariant: while work is outstanding and the window isn't closing, it is queued, a modal or
+    // an operation runs, or the timer runs.
     bool queued = false, liveDirty = false, samplesDirty = false;
     int modal = 0;
     bool pointerOnChart = false, readoutShown = false;
     bool timer = false;
 
-    // Set once the window closes: nothing loads or acts any more
+    // Operations, one at a time; during one, and during a modal, only the legend's chips act and
+    // an explicit load the window asks for waits (loadPending: once after it, taking the latest
+    // request). An export's scope, frozen at its command, its destination and the rows written.
+    HistoryOperation operation = HistoryOperation::None;
+    bool loadPending = false;
+    std::optional<HistoryExportScope> exportScope;
+    std::wstring destination;
+    size_t exported = 0;
+
+    // Set once the window closes (the first step of every close, before a running dialog is
+    // cancelled): nothing loads or acts any more, and an operation ends at its next step
     bool closeRequested = false;
 
     // The window opened: until the first load, the pill and the configured accounts come from the
@@ -141,12 +196,13 @@ struct HistoryController {
     }
 
     // An explicit load (the first one, activation, refresh, a range or comparison change, after
-    // Enable recording): takes the open request, reads the settings and the journal from the
-    // range's start (and the week before it while comparing) and collects the accounts over them.
-    // A listed request selects its account; otherwise the selection stays while it is listed, else
-    // All accounts. It satisfies outstanding refresh work.
+    // Enable recording or a Clear): takes the open request, reads the settings and the journal
+    // from the range's start (and the week before it while comparing) and collects the accounts
+    // over them. A listed request selects its account; otherwise the selection stays while it is
+    // listed, else All accounts. It satisfies outstanding refresh work and a waiting load.
     void Load() {
         if (closeRequested || ops->Unloading()) return;
+        loadPending = false;
         uint64_t request = ops->TakeRequest();
         HistorySettingsSnapshot read = ops->ReadSettings();
         int retention = read.settings.historyRetentionDays;
@@ -163,11 +219,21 @@ struct HistoryController {
         Compose();
     }
 
-    // A control's command (history/view.h): the selection, the view and a legend chip's line
-    // recompose; the range, the comparison and Refresh load; the More menu's Settings opens the
-    // settings window; Enable recording turns recording on.
-    void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
+    // An explicit load the window asks for (its first, the activation request, F5, Ctrl+R): now,
+    // or once a running modal or operation ends.
+    void RequestLoad() {
         if (closeRequested || ops->Unloading()) return;
+        if (Busy()) loadPending = true;
+        else Load();
+    }
+
+    // A control's command (history/view.h): the selection, the view and a legend chip's line
+    // recompose; the range, the comparison and Refresh load; Export and the More menu's Clear
+    // all history start their operations; its Settings, Open history folder and About these
+    // charts open those; Enable recording turns recording on. During a modal or an operation only
+    // the legend's chips act (the rest are disabled or behind the modal).
+    void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
+        if (closeRequested || ops->Unloading() || (Busy() && command != HistoryUiCommand::Line)) return;
         switch (command) {
             case HistoryUiCommand::Select:
                 if (key != selectedId) notice = {};
@@ -190,8 +256,28 @@ struct HistoryController {
             case HistoryUiCommand::Refresh:
                 Load();
                 break;
+            case HistoryUiCommand::Export:
+                Export();
+                break;
             case HistoryUiCommand::Menu:
-                if (value == int(HistoryUiMenuItem::Settings)) ops->OpenSettings();
+                switch (HistoryUiMenuItem(value)) {
+                    case HistoryUiMenuItem::Settings:
+                        ops->OpenSettings();
+                        break;
+                    case HistoryUiMenuItem::Folder:
+                        if (!ops->OpenFolder()) {
+                            notice = {L"Nothing has been recorded yet. The folder is created with the first recorded "
+                                      L"sample."};
+                            Compose();
+                        }
+                        break;
+                    case HistoryUiMenuItem::About:
+                        About();
+                        break;
+                    case HistoryUiMenuItem::Clear:
+                        Clear();
+                        break;
+                }
                 break;
             case HistoryUiCommand::EnableRecording:
                 EnableRecording();
@@ -204,7 +290,6 @@ struct HistoryController {
                 break;
             }
             case HistoryUiCommand::None:
-            case HistoryUiCommand::Export:
                 break;
         }
     }
@@ -228,12 +313,208 @@ struct HistoryController {
         }
     }
 
-    // The window is closing (its close path's first step): requests stay with the opener, and
-    // outstanding refresh work and the deferral timer go.
+    // The window is closing (its close path's first step, before a running dialog is cancelled):
+    // requests stay with the opener; outstanding refresh work, a waiting load and the deferral
+    // timer go. A running operation ends when its dialog returns.
     void RequestClose() {
         closeRequested = true;
-        liveDirty = samplesDirty = false;
+        liveDirty = samplesDirty = loadPending = false;
         Timer(false);
+    }
+
+    // Operations and dialogs -----------------------------------------------------------------------
+
+    // Export (once loaded). Its scope freezes at the command: the selected account or every one,
+    // the shown times with the week before while comparing, and the snapshot itself, so what
+    // arrives during its dialogs (activation, refresh) changes nothing it writes. A large one asks
+    // first (Cancel the default); then the save dialog titled by its scope. Every return from a
+    // dialog checks the close latch and unload. With a file chosen the write is posted: the window
+    // shows its progress before the write starts (Write).
+    void Export() {
+        if (!snapshot) return;
+        notice = {};
+        HistoryExportScope scope{snapshot, view.selected >= 0 ? selectedId : 0, readFrom, to, compare};
+        size_t estimate = 0;
+        for (const HistorySample& sample : snapshot->samples) {
+            if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
+                sample.timeMs < scope.to) {
+                estimate += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 4;
+            }
+        }
+        operation = HistoryOperation::Export;
+        if (estimate > 500000) {
+            int answer = Ask(L"This export contains about " + std::to_wstring(estimate) +
+                                 L" rows. It may take a while and exceed spreadsheet row limits. The history window "
+                                 L"will be busy while writing; Explorer's taskbar remains available. Continue?",
+                             L"Large history export", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+            if (Stopped()) return;
+            if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+            if (answer != IDOK) return Finish({kHistoryExportCancelled});
+        }
+        ModalBegan();
+        HistoryDestination chosen = ops->ChooseDestination(
+            scope.accountId ? L"Export selected account \u2014 all meters, selected range (both weeks if comparing)" :
+                              L"Export all accounts \u2014 all meters, selected range (both weeks if comparing)");
+        ModalEnded();
+        if (Stopped()) return;
+        switch (chosen.result) {
+            case HistoryDialogResult::Chosen:
+                break;
+            case HistoryDialogResult::Cancelled:
+                return Finish({kHistoryExportCancelled});
+            case HistoryDialogResult::Failed:
+                return Finish({L"Save dialog failed (code " + std::to_wstring(chosen.error) + L").", UiSeverity::Error});
+            case HistoryDialogResult::Untracked:
+                return Finish({kHistoryUntracked, UiSeverity::Error});
+        }
+        exportScope = std::move(scope);
+        destination = std::move(chosen.path);
+        exported = 0;
+        operation = HistoryOperation::Writing;
+        if (!ops->PostWrite()) return Finish({L"CSV export could not start; no file written.", UiSeverity::Error});
+        Compose();
+    }
+
+    // The posted write, `shown`: the window painted its progress (else it is closing, or the frame
+    // with the progress never came: nothing is written). It runs to its end without returning to
+    // the window: each progress report sets the rows written and asks `repaint` to show them,
+    // nothing else. Its notice: the rows and where they went, or why the destination is unchanged.
+    void Write(bool shown, const std::function<void()>& repaint) {
+        if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return;
+        if (!shown) return Finish({kHistoryExportCancelled});
+        HistoryCsvResult result = ops->WriteCsv(*exportScope, destination, [&](size_t rows) {
+            exported = rows;
+            repaint();
+        });
+        if (Stopped()) return;
+        std::wstring error = std::to_wstring(result.error);
+        if (!result.created) {
+            return Finish({L"Cannot create the CSV temporary file (Windows error " + error +
+                               L"). Existing destination unchanged.", UiSeverity::Error});
+        }
+        if (result.error) {
+            return Finish({L"CSV export failed (Windows error " + error + L"). Existing destination unchanged.",
+                           UiSeverity::Error});
+        }
+        Finish({L"Exported " + HistoryUiCount(result.rows) + L" meter rows (" +
+                (exportScope->accountId ? L"selected account" : L"all accounts") + L") to " + destination +
+                L". Labels omitted; times UTC." + (exportScope->compare ? L" Includes both elapsed 7-day periods." : L"")});
+    }
+
+    // Clear all history (the More menu): asked first (Cancel the default). Whatever its result the
+    // flyout's burn-up curves are dropped (the journal's epoch moved); a success loads, a failure
+    // doesn't (the next refresh replaces the snapshot by the new epoch). Its notice after either.
+    void Clear() {
+        notice = {};
+        operation = HistoryOperation::Clear;
+        int answer = Ask(L"Permanently clear ALL local usage history for this Windows user, including deleted "
+                         L"accounts?\r\n\r\nThis cannot be undone. Settings and sign-ins are not changed. If recording "
+                         L"stays enabled, future polls will record new history.",
+                         L"Clear all usage history", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+        if (Stopped()) return;
+        if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+        if (answer != IDOK) return Finish({L"Clear history cancelled."});
+        std::wstring error;
+        bool cleared = ops->Clear(error);
+        ops->InvalidateCurves();
+        if (Stopped()) return;
+        operation = HistoryOperation::None;
+        if (!cleared) return Finish({L"Could not clear all history. " + error, UiSeverity::Error});
+        Load();
+        Finish({L"All local history cleared. Future polls can start recording again."});
+    }
+
+    // About these charts (the More menu): how to read the window, the retention and the oldest
+    // sample loaded.
+    void About() {
+        std::wstring text =
+            L"Reading the charts\r\n"
+            L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or "
+            L"All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, "
+            L"one account on All meters; each keeps its view until the window closes. Weekly follows each Anthropic "
+            L"account's taskbar weekly selections; removed accounts keep both weeklies, and All meters includes "
+            L"weeklies hidden on the taskbar. Antigravity Gemini and Claude/GPT quotas share the matching short-term "
+            L"and weekly views. Each quota keeps its own line and resets; overlapping limits are never added or "
+            L"merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
+            L"shows limiting pools, which can change.\r\n\r\n"
+            L"Legend and readout\r\n"
+            L"Each chip above the chart names a line with its color and width: click it to hide or show the line; "
+            L"point at it to emphasize the line. Point at the chart to read every nearby or overlapping line, "
+            L"current and previous week, at the recorded reading nearest the drawn line, never an interpolated "
+            L"value. Values are rounded for display; the CSV keeps them exact. Previous-week times are the original "
+            L"sample times. Gaps are not lines and have no readings.\r\n\r\n"
+            L"Axes and units\r\n"
+            L"Percentages use the left axis; the shaded band marks your red threshold. Extra usage shows Anthropic "
+            L"budget used (%) and OpenAI credits remaining, which fall as usage rises, on their own axis. Dollar "
+            L"spending shows on the cards; All meters also plots it on its own axis. Accounts without readings in "
+            L"the range are listed under No readings.\r\n\r\n"
+            L"Lines and markers\r\n"
+            L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
+            L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots "
+            L"mark only isolated readings (filled: current, hollow: previous). Resets, missing or failed readings, "
+            L"gaps, restarts and recording changes break lines without extra markers. Lines are reduced for drawing; "
+            L"cards and the CSV use the raw samples.\r\n\r\n"
+            L"Cards\r\n"
+            L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh "
+            L"poll. Peak is the highest recorded value. Coverage counts connected intervals. Time at or above the red "
+            L"threshold is estimated within those intervals, never across gaps or beyond the last sample. Dollar "
+            L"details report sampled last and peak spending, not total spending in the range. Times are local. Week "
+            L"comparison uses two elapsed seven-day periods; daylight saving can shift local clock times.\r\n\r\n"
+            L"Recording and export\r\n"
+            L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice "
+            L"applies to the current Windows user only, and per-account recording and hidden-account rules still "
+            L"apply. Recording starts with the next poll, once account history IDs are saved. No data can also mean "
+            L"an unsupported meter, failed polls or expired history. Nothing is backfilled. The window follows new "
+            L"polls (the chart waits while the pointer is on it); Refresh or F5 reads local history again. Export "
+            L"writes every supported meter of the selected account, or of every account under All accounts, over "
+            L"the selected range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are "
+            L"not dollars or a spending ledger.\r\n\r\n"
+            L"Retention: " + std::to_wstring(settings.settings.historyRetentionDays) +
+            L" days, also limited to 250,000 records / about 60 MB. Turning recording off keeps saved history. Removed "
+            L"accounts remain under their IDs until expiry or Clear, unless their history was deleted with them.";
+        if (snapshot && !snapshot->samples.empty()) {
+            text += L"\r\nOldest loaded sample: " +
+                    HistoryUiTime(snapshot->samples.front().timeMs, ops->Now(),
+                                  [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+        }
+        Ask(text, L"About these charts", MB_OK | MB_ICONINFORMATION);
+    }
+
+    // A message box: a modal meanwhile.
+    int Ask(const std::wstring& text, PCWSTR caption, UINT type) {
+        ModalBegan();
+        int answer = ops->Ask(text, caption, type);
+        ModalEnded();
+        return answer;
+    }
+
+    // After a dialog or a step that can take a while: the close latch or unload ends the running
+    // operation there, nothing more done or shown.
+    bool Stopped() {
+        if (!closeRequested && !ops->Unloading()) return false;
+        operation = HistoryOperation::None;
+        exportScope.reset();
+        return true;
+    }
+
+    // The operation ends: what waited for it runs, then its notice shows (nothing that ran replaces
+    // it).
+    void Finish(HistoryUiNotice result) {
+        operation = HistoryOperation::None;
+        exportScope.reset();
+        Resume();
+        notice = std::move(result);
+        Compose();
+    }
+
+    bool Busy() const { return modal > 0 || operation != HistoryOperation::None; }
+
+    // A modal or an operation ended: a load that waited runs (taking the latest request), else held
+    // refresh work is posted.
+    void Resume() {
+        if (Busy() || closeRequested || ops->Unloading()) return;
+        if (loadPending) Load();
+        else Schedule();
     }
 
     // Live refresh -------------------------------------------------------------------------------
@@ -250,8 +531,8 @@ struct HistoryController {
     // The posted refresh message, with whether the dropdown popup (the More menu) is open and
     // whether the pointer is on the chart now (a scroll or rebuild can move the chart under a
     // still pointer without a hover report): the live part, then the sample part unless an
-    // inspection holds it. A modal or the popup holds both (a rebuild would close the popup).
-    // Returns whether the view or the chart changed: the window rebuilds.
+    // inspection holds it. A modal, an operation or the popup holds both (a rebuild would close
+    // the popup). Returns whether the view or the chart changed: the window rebuilds.
     bool ProcessRefresh(bool popup, bool pointer) {
         queued = false;
         pointerOnChart = pointer;
@@ -259,7 +540,7 @@ struct HistoryController {
             liveDirty = samplesDirty = false;
             return false;
         }
-        if (modal) return false;
+        if (Busy()) return false;
         if (popup) {
             if (liveDirty || samplesDirty) Timer(true);
             return false;
@@ -299,10 +580,11 @@ struct HistoryController {
         if (!Inspecting()) Schedule();
     }
 
-    // A modal runs on the window's thread: no refresh until it ends, which resumes held work.
+    // A modal runs on the window's thread: no refresh or load until it ends, which resumes them
+    // (unless an operation still runs).
     void ModalBegan() { modal++; }
     void ModalEnded() {
-        if (modal && !--modal) Schedule();
+        if (modal && !--modal) Resume();
     }
 
     bool Inspecting() const { return pointerOnChart || readoutShown; }
@@ -449,6 +731,8 @@ struct HistoryController {
         v.colorblind = s.colorblindMode;
         v.remaining = s.barMode == BarMode::Remaining;
         v.notice = notice;
+        v.canExport = snapshot != nullptr;
+        v.exporting = operation == HistoryOperation::Writing;
         // Not saving: the journal's error (before the first load, the storage flag); waiting:
         // account IDs not saved yet, or no sample in range.
         bool storageError = snapshot ? !journalStatus.empty() : settings.storageError;

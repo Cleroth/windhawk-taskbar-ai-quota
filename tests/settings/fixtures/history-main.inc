@@ -1,11 +1,12 @@
-// The usage history window's target: its view, formats, chart, controller (live refresh and
-// Enable recording included) and frame builders, the tooltip's promises in its formats, and
-// offscreen renders.
+// The usage history window's target: its view, formats, chart, controller (live refresh, Enable
+// recording and the operations included) and frame builders, the tooltip's promises in its
+// formats, and offscreen renders.
 #include "support.inc"
 #include "history-view.inc"
 #include "history-controller.inc"
 #include "history-frame.inc"
 #include "history-refresh.inc"
+#include "history-operations.inc"
 #include "tooltip-support.inc"
 #include "render-support.inc"
 #include "history-tooltip.inc"
@@ -30,6 +31,7 @@ int main(int argc, char** argv) {
         RunHistoryControllerTests();
         RunHistoryFrameTests();
         RunHistoryRefreshTests();
+        RunHistoryOperationsTests();
         RunHistoryTooltipTests();
         RunHistoryChartTests();
     }

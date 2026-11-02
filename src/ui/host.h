@@ -157,6 +157,23 @@ static void UiHostInvalidate(const UiHost& host) {
     if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
+// Paints main-surface item `id` now, from a handler that keeps the thread busy (no message loop
+// meanwhile): found by id each time, its rectangle invalidated and the main window painted nested
+// (no rebuild there; a lost target is recreated by that paint). Nothing while closing or faulted,
+// without the window or the item. Returns whether it painted.
+static bool UiHostPaintNow(UiHost& host, uint32_t id) {
+    UiSurfaceId surface = UiSurfaceId::Content;
+    const UiItem* item = host.closing || host.faulted || !host.main || !IsWindow(host.main) ? nullptr :
+                         UiFindItem(host.frame, id, &surface);
+    if (!item || surface != UiSurfaceId::Main) return false;
+    float scale = UiHostScale(host);
+    RECT rect{LONG(std::floor(item->rect.left * scale)), LONG(std::floor(item->rect.top * scale)),
+              LONG(std::ceil(item->rect.right * scale)), LONG(std::ceil(item->rect.bottom * scale))};
+    InvalidateRect(host.main, &rect, FALSE);
+    UpdateWindow(host.main);
+    return true;
+}
+
 // Tooltip ---------------------------------------------------------------------------------------
 
 // Every hide trigger: a hovered chart's hover ends (the client clears its emphasis; the chart's

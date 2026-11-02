@@ -94,51 +94,28 @@ struct HistoryCsvFile {
         }
         return true;
     }
-    // Serialization boundary for both UI export and isolated file-content tests.
-    // Use the unreduced, stably timestamp-sorted snapshot, never the render cache.
+    // Serialization boundary for both UI export and isolated file-content tests: the shared CSV
+    // writer (history/csv.h) over the unreduced, stably timestamp-sorted snapshot (never the
+    // render cache), with the status line's progress every 250 ms.
     bool WriteSnapshot(const HistoryWindowState& state, size_t* exported) {
-        *exported = 0;
-        uint64_t accountId = state.selected >= 0 ? state.accounts.at(state.selected).id : 0;
-        std::string buffer = "timestamp_utc,timestamp_unix_ms,account_id,provider,provider_id,meter_id,unit,value,reset_utc,reset_unix_ms,duration_ms,poll_interval_ms,session_id,failed,missing\r\n";
+        HistoryExportScope scope;
+        // Borrowed (an empty owner): the window's state outlives the write.
+        scope.snapshot = std::shared_ptr<const HistorySnapshot>(std::shared_ptr<const HistorySnapshot>{}, &state.snapshot);
+        scope.accountId = state.selected >= 0 ? state.accounts.at(state.selected).id : 0;
+        scope.from = state.readFrom;
+        scope.to = state.to;
         ULONGLONG nextProgressMs = 0;
-        for (const auto& sample : state.snapshot.samples) {
-            if (g_unloading || g_historyWindowCancelRequested) { SetLastError(ERROR_CANCELLED); return false; }
-            if (!sample.accountId || (accountId && sample.accountId != accountId) ||
-                sample.timeMs < state.readFrom || sample.timeMs >= state.to) continue;
-            const char* provider = sample.provider == 1 ? "anthropic" : sample.provider == 2 ? "openai" :
-                                   sample.provider == 3 ? "antigravity" : "unknown";
-            // Nonnumeric, non-formula text survives Excel's 15-digit number coercion.
-            std::string id = HistoryCsvId("account_", sample.accountId);
-            std::string session = HistoryCsvId("session_", sample.session);
-            for (size_t meter = 0; meter < kHistoryMeterCount; ++meter) {
-                // Omit structurally impossible lanes, but preserve missing observations
-                // for each provider's supported meters so exports retain gap information.
-                if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
-                    (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
-                    (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5)) continue;
-                const auto& value = sample.meters[meter];
-                bool present = HistoryHasValue(sample, int(meter));
-                buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
-                    id + "," + provider + "," + std::to_string(sample.provider) + "," +
-                    kHistoryMeterIds[meter] + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
-                    (present ? WideToUtf8(HistoryNumber(value.value)) : "") + "," + HistoryUtcDate(value.resetMs) + "," +
-                    std::to_string(value.resetMs) + "," + std::to_string(value.durationMs) + "," +
-                    std::to_string(sample.intervalMs) + "," + session + "," +
-                    std::to_string(sample.failed) + "," + (present ? "0" : "1") + "\r\n";
-                ++*exported;
+        HistoryCsvEnd end = HistoryCsvWrite(scope, *exported, [&](const std::string& buffer, bool last) {
+            if (!last && state.status && GetTickCount64() >= nextProgressMs) {
+                std::wstring progress = L"Exporting " + std::to_wstring(*exported) + L" rows...";
+                SetWindowTextW(state.status, progress.c_str());
+                UpdateWindow(state.status);
+                nextProgressMs = GetTickCount64() + 250;
             }
-            if (buffer.size() >= 65536) {
-                if (state.status && GetTickCount64() >= nextProgressMs) {
-                    std::wstring progress = L"Exporting " + std::to_wstring(*exported) + L" rows...";
-                    SetWindowTextW(state.status, progress.c_str());
-                    UpdateWindow(state.status);
-                    nextProgressMs = GetTickCount64() + 250;
-                }
-                if (!Write(buffer)) return false;
-                buffer.clear();
-            }
-        }
-        return Write(buffer);
+            return Write(buffer);
+        }, [] { return g_unloading || g_historyWindowCancelRequested; });
+        if (end == HistoryCsvEnd::Cancelled) SetLastError(ERROR_CANCELLED);
+        return end == HistoryCsvEnd::Written;
     }
 };
 

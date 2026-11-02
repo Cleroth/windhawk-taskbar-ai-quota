@@ -11,19 +11,6 @@ static std::wstring HistoryLocalDate(ULONGLONG time) {
     return text;
 }
 
-static std::string HistoryUtcDate(ULONGLONG time) {
-    if (!time || time > 1833029933770955ULL) return {};
-    ULONGLONG ticks = (time + 11644473600000ULL) * 10000;
-    FILETIME file{DWORD(ticks), DWORD(ticks >> 32)};
-    SYSTEMTIME utc{};
-    if (!FileTimeToSystemTime(&file, &utc)) return {};
-    char text[40];
-    snprintf(text, sizeof(text), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
-             utc.wYear, utc.wMonth, utc.wDay, utc.wHour, utc.wMinute, utc.wSecond,
-             utc.wMilliseconds);
-    return text;
-}
-
 // The render cache's reduction, stopped by unload or window close.
 static HistoryRenderSeries HistoryReducePeriod(const HistorySnapshot& snapshot,
                                                const std::vector<size_t>& rows,

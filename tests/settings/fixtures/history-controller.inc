@@ -7,7 +7,8 @@
 
 // In-memory ops: the open request (overwritten by each open, as the shared global is), a journal
 // with its stamp, status and cap, settings with their polls, the clock, unload, the window's
-// posted refresh messages and deferral timer, the consent transaction, and an operation log.
+// posted refresh messages and deferral timer, the consent transaction, the dialogs, the CSV write,
+// Clear and the folder, and an operation log.
 struct TestHistoryOps final : HistoryOps {
     uint64_t request = 0;
     std::vector<HistorySample> journal;
@@ -26,9 +27,32 @@ struct TestHistoryOps final : HistoryOps {
     // while it waits for the lock and once it notified
     HistoryConsentResult consent = HistoryConsentResult::Applied;
     std::function<void()> waitingForLock, notified;
+    // Dialogs: each message box's answer in turn (IDOK once none are left; 0: it couldn't be
+    // tracked), the save dialog's result, and what arrives while either shows (as messages the
+    // modal loop dispatches); the boxes shown (text, type)
+    std::deque<int> answers;
+    HistoryDestination destination{HistoryDialogResult::Chosen, L"C:\\Exports\\usage.csv"};
+    std::function<void()> asking, choosing;
+    std::vector<std::pair<std::wstring, UINT>> asked;
+    // The write: posted write messages (failPostWrite: posting fails), the scopes written, the
+    // progress it reports (rows), what happens during it, and its result (rows unless set: one
+    // per sample of the scope)
+    int writePosts = 0;
+    bool failPostWrite = false;
+    std::vector<HistoryExportScope> written;
+    std::vector<size_t> progressRows;
+    std::function<void()> writing;
+    HistoryCsvResult writeResult{SIZE_MAX, 0, true};
+    // Clear's result (and its error; the epoch moves either way, as the journal's does), what
+    // happens during it; whether the journal's folder exists
+    bool clearResult = true;
+    std::wstring clearError = L"History storage is in use by another Explorer session, or is inaccessible.";
+    std::function<void()> clearing;
+    bool folder = true;
     // "take", "settings", "snapshot <days before now>d keep <retention>", "peek" (status only),
     // "peek <days before now>d" (samples too), "consent", "notify", "post" ("post failed"),
-    // "timer on", "timer off", "open settings"
+    // "timer on", "timer off", "open settings", "open folder" ("no folder"), "ask <caption>",
+    // "choose <title>", "post write" ("post write failed"), "write <path>", "clear", "invalidate"
     std::vector<std::wstring> log;
 
     // A poll's reading recorded: appended, counted in the stamp.
@@ -82,6 +106,56 @@ struct TestHistoryOps final : HistoryOps {
         return consent;
     }
     void OpenSettings() override { log.push_back(L"open settings"); }
+    bool OpenFolder() override {
+        log.push_back(folder ? L"open folder" : L"no folder");
+        return folder;
+    }
+    int Ask(const std::wstring& text, PCWSTR caption, UINT type) override {
+        log.push_back(std::wstring(L"ask ") + caption);
+        asked.push_back({text, type});
+        if (asking) asking();
+        if (answers.empty()) return IDOK;
+        int answer = answers.front();
+        answers.pop_front();
+        return answer;
+    }
+    HistoryDestination ChooseDestination(const std::wstring& title) override {
+        log.push_back(L"choose " + title);
+        if (choosing) choosing();
+        return destination;
+    }
+    bool PostWrite() override {
+        log.push_back(failPostWrite ? L"post write failed" : L"post write");
+        writePosts += !failPostWrite;
+        return !failPostWrite;
+    }
+    HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& path,
+                              const std::function<void(size_t)>& progress) override {
+        log.push_back(L"write " + path);
+        written.push_back(scope);
+        for (size_t rows : progressRows) progress(rows);
+        if (writing) writing();
+        HistoryCsvResult result = writeResult;
+        if (result.rows == SIZE_MAX) {
+            result.rows = 0;
+            for (const HistorySample& sample : scope.snapshot->samples) {
+                if (sample.accountId && (!scope.accountId || sample.accountId == scope.accountId) &&
+                    sample.timeMs >= scope.from && sample.timeMs < scope.to) {
+                    result.rows++;
+                }
+            }
+        }
+        return result;
+    }
+    bool Clear(std::wstring& error) override {
+        log.push_back(L"clear");
+        if (clearing) clearing();
+        stamp.epoch++;
+        if (clearResult) journal.clear();
+        else error = clearError;
+        return clearResult;
+    }
+    void InvalidateCurves() override { log.push_back(L"invalidate"); }
     bool PostRefresh() override {
         log.push_back(failPost ? L"post failed" : L"post");
         posted += !failPost;
@@ -399,16 +473,25 @@ static void RunHistoryControllerTests() {
         CHECK(a[2].slot == 2 && a[3].historyId == 0xBEEF && a[3].slot == 3);
     });
 
-    Run("history controller: the More menu's Settings opens the settings window; Export does nothing", [] {
+    Run("history controller: the More menu's Settings opens the settings window, Open history folder the "
+        "journal's folder (a notice when nothing was recorded yet); an unknown item does nothing; Export only "
+        "once loaded", [] {
         TestHistoryOps ops = TestControllerOps();
         HistoryController c(ops);
         c.Open();
+        c.Command(HistoryUiCommand::Export);
+        CHECK(ops.log == TestLog{L"settings"} && !c.view.canExport);
         c.Load();
+        CHECK(c.view.canExport && !c.view.exporting);
         ops.log.clear();
         c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Settings));
-        CHECK(ops.log == TestLog{L"open settings"});
+        c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Folder));
+        CHECK((ops.log == TestLog{L"open settings", L"open folder"}) && c.view.notice.text.empty());
+        ops.folder = false;
+        c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Folder));
+        CHECK(c.view.notice.text == L"Nothing has been recorded yet. The folder is created with the first recorded "
+                                    L"sample." && c.view.notice.severity == UiSeverity::Info);
         c.Command(HistoryUiCommand::Menu, 7);
-        c.Command(HistoryUiCommand::Export);
-        CHECK(ops.log.size() == 1);
+        CHECK(ops.log.size() == 3);
     });
 }

@@ -48,7 +48,7 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
                          UiSeverity::Caution,
                          UiInfoButton{kHistoryUiEnableRecording, L"Enable recording",
                                       HistoryUiAction(HistoryUiCommand::EnableRecording),
-                                      view.canEnableRecording}) + 10;
+                                      view.canEnableRecording && !view.exporting}) + 10;
     }
     if (!view.storageError.empty()) {
         y = UiAddInfoBar(g, items, id, id++, x, y, width, {{view.storageError}}, UiSeverity::Error) + 10;

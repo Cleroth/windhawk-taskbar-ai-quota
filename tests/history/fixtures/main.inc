@@ -16,6 +16,7 @@ int main(int argc, char** argv) {
     }
 
 #include "model.inc"
+#include "csv.inc"
 #include "continuity.inc"
 #include "burn-up.inc"
 #include "journal.inc"

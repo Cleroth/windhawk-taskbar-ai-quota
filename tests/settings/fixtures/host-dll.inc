@@ -12,11 +12,18 @@ static constexpr UINT kProbeLoseTarget = WM_APP + 71;  // Device loss through th
 static constexpr UINT kProbeModal = WM_APP + 72;       // A tracked message box.
 static constexpr UINT kProbeCommand = WM_APP + 73;     // wParam: ProbeCommand, lParam: argument.
 static constexpr UINT kProbeColor = WM_APP + 74;       // The tracked color dialog.
+static constexpr UINT kProbeHistoryDialog = WM_APP + 75;  // wParam: ProbeDialogKind, in the history scope.
+static constexpr UINT kProbeNested = WM_APP + 76;      // A Yes/No box over the history scope's dialog.
 static constexpr LRESULT kProbeMagic = 0x51A7E;
 static constexpr uint32_t kProbeDropdown = 500, kProbeNumberBox = 600, kProbeSlider = 700,
                           kProbePreview = 800, kProbeCard = 900, kProbeHandle = 901, kProbeTextBox = 910,
                           kProbeMenu = 920, kProbeSegments = 1000, kProbeSegmentsOff = 1001, kProbeNav = 2000,
-                          kProbeChart = 1100, kProbeTipButton = 1101;
+                          kProbeChart = 1100, kProbeTipButton = 1101, kProbeProgress = 1200;
+// The history window's dialogs (history/modal.h) as its ops run them: an OK/Cancel message box,
+// the same with a Yes/No box opened over it from inside (as the save dialog's overwrite prompt),
+// an OK box (About), the save dialog, and two scopes at once (kTwoScopes: the outer one hooked,
+// the inner one refused, the outer one still current after the inner one's end).
+enum ProbeDialogKind { kAskBox, kNestedBox, kInfoBox, kSaveDialog, kTwoScopes };
 // The activation request (UiHostConfig::activateMessage), registered by name in both processes.
 static UINT ProbeActivateMessage() {
     static const UINT message = RegisterWindowMessageW(L"AiQuotaProbeUiActivate");
@@ -31,10 +38,14 @@ static UINT ProbeActivateMessage() {
 // existed at the main window's NCDESTROY. Every mode: theme notifications that reached the main
 // window (WM_SETTINGCHANGE, WM_THEMECHANGED, WM_SYSCOLORCHANGE, WM_DWMCOLORIZATIONCOLORCHANGED),
 // icons set on it (WM_SETICON), and the process's GDI and USER object counts at its NCDESTROY.
+// History dialogs: the outer dialog's result (a message box's answer; the save dialog: 1 chosen,
+// else 100 + its error; -1: no hook, nothing shown), the nested box's answer, 1 if a scope or a
+// published dialog was left at NCDESTROY. Progress mode: the progress item's paints.
 enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult,
                     kCloses, kClosesDragging, kAutoScrolls, kChartHovers, kChartLeaves, kChartRepaints,
                     kTipShows, kTipHides, kTipMouse, kTipActivate, kWindowPresses, kTipAlive, kThemeMessages,
-                    kSetIcons, kGdiAtDestroyed, kUserAtDestroyed, kCounterCount };
+                    kSetIcons, kGdiAtDestroyed, kUserAtDestroyed, kOuterAnswer, kNestedAnswer, kScopeLeft,
+                    kProgressPaints, kCounterCount };
 
 // Commands run on the window thread inside the client's message handler, like client code.
 enum ProbeCommand {
@@ -121,6 +132,16 @@ enum ProbeCommand {
     kHandles,      // The process's object counts, read on the window thread: USER << 16 | GDI;
                    // argument 1: after the thread's pending messages (sent and posted) and paints
                    // are handled, so nothing the window does is half done
+    kDialogMode,   // `argument` 1: closes cancel the history scope's dialogs (as the history client)
+    kLatch,        // The client's close latch, without a close
+    kProgressMode, // `argument` 1: an export-like progress item (client-drawn decoration) on the main
+                   // surface; returns the builds so far
+    kProgressLoop, // From inside this handler, ten repaints of the progress item through UiHostPaintNow
+                   // (the row count changing), as a long write does; before the sixth, `argument` 1
+                   // loses the main target through the production path, 2 faults the host, 3 moves
+                   // the item in the built frame. Returns repaints done | progress paints << 8 | builds
+                   // << 16 | main targets created << 24 | 1 << 28 if the last paint had the item's
+                   // current rectangle | 1 << 29 if it showed the last count asked for
 };
 // The tooltip window's state, read in one command.
 enum ProbeTip { kTipWindow = 1, kTipVisible = 2, kTipOwned = 4, kTipNoActivate = 8, kTipNotActive = 16,
@@ -135,6 +156,7 @@ enum ProbeEdit { kEditExists = 1, kEditFocused = 2, kEditEnabled = 4 };
 static std::atomic<int> g_counters[kCounterCount];
 static std::atomic<HWND> g_probeWindow{nullptr};
 static std::atomic<HWND> g_probeModal{nullptr};
+static std::atomic<HWND> g_probeDialog{nullptr};  // The history scope's published dialog (g_historyDialog)
 static std::atomic<bool> g_probeUnloading{false};
 static bool g_probeFailAttach = false;
 static HDESK g_probeDesktop = nullptr;
@@ -228,7 +250,9 @@ static LRESULT CALLBACK ProbeModalHook(int code, WPARAM wParam, LPARAM lParam) {
 // activation, and the header holds a segmented control and a disabled one. Keys and activation
 // requests the host passes on are recorded. In tooltip mode (kTipMode) a chart sits above the
 // cards, its readout naming the 50 DIP column under the pointer, and an icon button with a
-// tooltip on the main surface.
+// tooltip on the main surface. In dialog mode (kDialogMode) a close latches and cancels the history
+// scope's dialogs as the history client does; in progress mode (kProgressMode) a client-drawn
+// progress item sits on the main surface, repainted from inside a handler as an export's write does.
 struct ProbeClient final : UiHostClient {
     int choice = 0, sliderValue = 50, segment = 0;
     std::wstring boxText = L"10", freeText;
@@ -248,6 +272,24 @@ struct ProbeClient final : UiHostClient {
     bool popupAtActivation = false;
     bool tipMode = g_probeInteractive;
     int pick = 0;  // The chart's hovered column + 1; 0: none
+    // History dialogs: the close latch and the scope's context, as the history client's
+    bool dialogMode = false, latched = false;
+    HistoryDialogContext dialogs{&g_probeDialog, [this] { return latched || g_probeUnloading.load(); }};
+    // Progress mode: the count shown, and what the item's last paint saw
+    bool progressMode = false;
+    int progressValue = 0, progressSeen = -1;
+    D2D1_RECT_F progressRect{};
+
+    void PaintCustom(UiHost&, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
+                     const UiPaintState&) override {
+        if (item.id != kProbeProgress) return;
+        g_counters[kProgressPaints]++;
+        progressSeen = progressValue;
+        progressRect = item.rect;
+        D2D1_RECT_F bar = item.rect;
+        bar.right = bar.left + (bar.right - bar.left) * float(progressValue + 1) / 10;
+        target->FillRectangle(&bar, UiBrush(target, cache, UiRgb(0x43A047)));
+    }
 
     // The chart's readout: three rows naming the hovered 50 DIP column; a new column repaints.
     bool ChartHover(UiHost& host, uint32_t chart, std::optional<D2D1_POINT_2F> point,
@@ -307,6 +349,13 @@ struct ProbeClient final : UiHostClient {
             nav.selected = true;
             nav.action = {UiActionKind::Navigate, 0};
             frame.main.push_back(nav);
+        }
+        if (progressMode) {
+            UiItem progress;
+            progress.id = kProbeProgress;
+            progress.kind = UiItemKind::Custom;
+            progress.rect = {250, 8, 400, 32};
+            frame.main.push_back(std::move(progress));
         }
         if (tipMode) {
             UiItem button;
@@ -825,6 +874,36 @@ struct ProbeClient final : UiHostClient {
                 HANDLE process = GetCurrentProcess();
                 return int(GetGuiResources(process, GR_USEROBJECTS) << 16 | GetGuiResources(process, GR_GDIOBJECTS));
             }
+            case kDialogMode:
+                dialogMode = argument != 0;
+                return 0;
+            case kLatch:
+                latched = true;
+                return 0;
+            case kProgressMode:
+                progressMode = argument != 0;
+                UiHostRequestRebuild(host, false);
+                return g_counters[kBuilds];
+            case kProgressLoop: {
+                int builds = g_counters[kBuilds], paints = g_counters[kProgressPaints], created = host.mainSurface.created;
+                int painted = 0;
+                for (int i = 0; i < 10; i++) {
+                    if (i == 5 && argument == 1) UiSurfaceDrawResult(host.mainSurface, D2DERR_RECREATE_TARGET);
+                    if (i == 5 && argument == 2) UiHostFault(host);
+                    for (UiItem& item : host.frame.main) {
+                        if (i == 5 && argument == 3 && item.id == kProbeProgress) {
+                            item.rect.left += 40;
+                            item.rect.right += 40;
+                        }
+                    }
+                    progressValue = i;
+                    painted += UiHostPaintNow(host, kProbeProgress);
+                }
+                const UiItem* item = UiFindItem(host.frame, kProbeProgress);
+                bool current = item && item->rect.left == progressRect.left && item->rect.right == progressRect.right;
+                return painted | (g_counters[kProgressPaints] - paints) << 8 | (g_counters[kBuilds] - builds) << 16 |
+                       (host.mainSurface.created - created) << 24 | int(current) << 28 | int(progressSeen == 9) << 29;
+            }
         }
         return -1;
     }
@@ -871,6 +950,48 @@ struct ProbeClient final : UiHostClient {
                     UiChooseColor(host.main, RGB(1, 2, 3), customColors, colorDialog) ? 2 : 1;
                 result = 1;
                 return true;
+            // As the history window's ops show a dialog: the popup and tooltip closed, then the dialog
+            // in the history scope (history/modal.h).
+            case kProbeHistoryDialog: {
+                UiHostClosePopup(host);
+                HistoryDialogScope scope(dialogs);
+                if (wParam == kTwoScopes) {
+                    bool refused = false;
+                    {
+                        HistoryDialogScope inner(dialogs);
+                        refused = !inner.hook;
+                    }
+                    g_counters[kOuterAnswer] = int(scope.hook != nullptr) | int(refused) << 1 |
+                                               int(g_historyDialogScope == &scope) << 2;
+                    return true;
+                }
+                if (!scope.hook) {
+                    g_counters[kOuterAnswer] = -1;
+                    return true;
+                }
+                if (wParam == kNestedBox) PostMessageW(host.main, kProbeNested, 0, 0);
+                if (wParam == kSaveDialog) {
+                    std::wstring path = L"probe.csv";
+                    path.resize(32768);
+                    OPENFILENAMEW picker{};
+                    picker.lStructSize = sizeof(picker);
+                    picker.hwndOwner = host.main;
+                    picker.lpstrFilter = L"CSV files (*.csv)\0*.csv\0\0";
+                    picker.lpstrFile = path.data();
+                    picker.nMaxFile = DWORD(path.size());
+                    picker.lpstrDefExt = L"csv";
+                    picker.Flags = OFN_EXPLORER | OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+                    g_counters[kOuterAnswer] = GetSaveFileNameW(&picker) ? 1 : 100 + int(CommDlgExtendedError());
+                } else {
+                    g_counters[kOuterAnswer] = MessageBoxW(host.main, L"History dialog probe.", L"Probe",
+                                                           wParam == kInfoBox ? MB_OK : MB_OKCANCEL);
+                }
+                result = 1;
+                return true;
+            }
+            case kProbeNested:
+                g_counters[kNestedAnswer] = MessageBoxW(g_probeDialog.load(), L"Replace it?", L"Probe", MB_YESNO);
+                return true;
         }
         return false;
     }
@@ -886,6 +1007,13 @@ struct ProbeClient final : UiHostClient {
         return true;
     }
     bool CancelModal() override {
+        // As the history client: the latch first, then the scope's running dialog.
+        if (dialogMode) {
+            latched = true;
+            bool running = HistoryDialogCancel();
+            if (running) g_counters[kCancels]++;
+            return running;
+        }
         HWND modal = colorDialog && IsWindow(colorDialog) ? colorDialog : g_probeModal.load();
         if (!modal || !IsWindow(modal)) return false;
         g_counters[kCancels]++;
@@ -906,6 +1034,7 @@ struct ProbeClient final : UiHostClient {
     void Destroyed() override {
         g_counters[kDestroyed]++;
         g_counters[kTipAlive] = g_probeLastTip && IsWindow(g_probeLastTip);
+        g_counters[kScopeLeft] = g_historyDialogScope != nullptr || g_probeDialog.load() != nullptr;
         g_counters[kGdiAtDestroyed] = int(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS));
         g_counters[kUserAtDestroyed] = int(GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS));
         for (HHOOK& hook : g_probeHooks) {
@@ -998,6 +1127,18 @@ extern "C" __declspec(dllexport) PCWSTR ProbeClassName() { return kProbeClass; }
 // Unload's close: set the cancellation flag first, then close, like Wh_ModUninit.
 extern "C" __declspec(dllexport) void ProbeUnload() {
     g_probeUnloading = true;
+    if (HWND window = g_probeWindow.load()) PostMessageW(window, WM_CLOSE, 0, 0);
+}
+
+// The history scope's published dialog, and unload's close of the history window as
+// CloseHistoryWindow does it: the flag, a cancel and close to the published dialog, then the window.
+extern "C" __declspec(dllexport) HWND ProbeHistoryDialog() { return g_probeDialog; }
+extern "C" __declspec(dllexport) void ProbeCloseHistory() {
+    g_probeUnloading = true;
+    if (HWND dialog = g_probeDialog.load()) {
+        PostMessageW(dialog, WM_COMMAND, IDCANCEL, 0);
+        PostMessageW(dialog, WM_CLOSE, 0, 0);
+    }
     if (HWND window = g_probeWindow.load()) PostMessageW(window, WM_CLOSE, 0, 0);
 }
 
