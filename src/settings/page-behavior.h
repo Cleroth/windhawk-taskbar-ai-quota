@@ -37,8 +37,7 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.title = L"Show details on hover";
-        spec.description = {{L"Opens an account\u2019s details after the pointer rests on it. "
-                             L"Clicking always opens them."}};
+        spec.description = {{L"Opens an account\u2019s details after the pointer rests on it."}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec,
                                   SettingsField::ShowDetailsOnHover);
     }

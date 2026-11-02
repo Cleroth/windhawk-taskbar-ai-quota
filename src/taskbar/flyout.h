@@ -1,4 +1,4 @@
-// Account details flyout host: open/close, hover quick look and click-to-pin.
+// Account details flyout host: hover open/close, and the column click (refresh or sign-in).
 
 static constexpr int kFlyoutHoverDwellMs = 350;
 static constexpr int kFlyoutHoverGraceMs = 300;
@@ -7,7 +7,7 @@ static constexpr int kFlyoutPollMs = 100;
 static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
 
-static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned);
+static void ShowAccountFlyout(QuotaUiInstance& state, int index);
 static void OnTilePointerExited(QuotaUiInstance& state, int index);
 
 // Taskbars whose UI this thread owns; their flyout state may be used directly. Pointers stay
@@ -37,6 +37,9 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
     fo.pointerOutsideTick = 0;
     if (popup.flyout && popup.closedToken) {
         try { popup.flyout.Closed(popup.closedToken); } catch (...) {}
+    }
+    if (popup.flyout && popup.closingToken) {
+        try { popup.flyout.Closing(popup.closingToken); } catch (...) {}
     }
     for (auto& handler : popup.buttonHandlers) {
         if (!handler.button) continue;
@@ -68,24 +71,17 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                     if (fo.dwellTimer) fo.dwellTimer.Stop();
                     int index = fo.dwellIndex;
                     fo.dwellIndex = -1;
-                    if (index < 0 || fo.hoverIndex != index || fo.hoverSuppressedIndex == index) {
+                    if (index < 0 || fo.hoverIndex != index || fo.hoverSuppressedIndex == index ||
+                        (fo.popup.flyout && fo.popup.accountIndex == index)) {
                         return;
                     }
-                    // While pinned, hover does nothing, including from another taskbar.
-                    if (fo.popup.flyout && (fo.popup.pinned || fo.popup.accountIndex == index)) {
-                        return;
-                    }
-                    for (auto* instance : CurrentThreadUiInstances()) {
-                        if (instance->flyout.popup.pinned) return;
-                    }
-                    ShowAccountFlyout(*uiState, index, false);
+                    ShowAccountFlyout(*uiState, index);
                 } catch (...) {}
             });
         fo.dwellTimer = timer;
     }
     // XAML pointer events miss the pointer leaving the taskbar or the popup for another window,
-    // and clicks in other apps never reach the taskbar's light dismiss, so open popups poll the
-    // real pointer and foreground window.
+    // so open popups poll the real pointer.
     if (!fo.pollTimer) {
         DispatcherTimer timer;
         timer.Interval(std::chrono::milliseconds(kFlyoutPollMs));
@@ -119,20 +115,8 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                         return;
                     }
 
-                    // Pinned: close when another thread's window becomes the foreground.
-                    if (popup.pinned) {
-                        HWND foreground = GetForegroundWindow();
-                        if (foreground == popup.lastForeground) return;
-                        popup.lastForeground = foreground;
-                        if (foreground && GetWindowThreadProcessId(foreground, nullptr) !=
-                                              uiState->ownerThreadId) {
-                            CloseAccountFlyout(*uiState);
-                        }
-                        return;
-                    }
-
-                    // Hover: inside while over its tile (taskbar pointer events track that) or
-                    // over a window this thread showed after the popup opened.
+                    // Inside while over its tile (taskbar pointer events track that) or over a
+                    // window this thread showed after the popup opened.
                     POINT pt{};
                     if (!GetCursorPos(&pt)) return;
                     bool overTaskbar = false;
@@ -205,9 +189,9 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
     }
 }
 
-// Opens the account's flyout above its column, replacing any open one: transient (no focus)
-// for hover, standard (focusable, light dismiss) when pinned by a click.
-static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
+// Opens the account's flyout above its column, replacing any open one. It is transient: it never
+// takes focus.
+static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
     if (g_unloading || !state.quotaGrid || index < 0 ||
         index >= (int)state.accountRefs.size()) {
         return;
@@ -231,7 +215,6 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
         popup.generation = ++fo.openGeneration;
         popup.accountIndex = index;
         popup.accountIdentity = identity;
-        popup.pinned = pinned;
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
         popup.card = card;
@@ -272,13 +255,34 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
                     if (!uiState) return;
                     FlyoutUi& fo = uiState->flyout;
                     if (!fo.popup.flyout || fo.popup.generation != generation) return;
-                    fo.dismissedIndex = fo.popup.accountIndex;
-                    fo.dismissedPinned = fo.popup.pinned;
-                    fo.dismissedTick = GetTickCount64();
                     if (fo.hoverIndex == fo.popup.accountIndex) {
                         fo.hoverSuppressedIndex = fo.hoverIndex;
                     }
                     CloseAccountFlyout(*uiState);
+                } catch (...) {}
+            });
+        // A primary-button press on its own column is a click that refreshes the account: the
+        // flyout stays open to show it. Other system closes pass, including the context menu's
+        // after a right-click; CloseAccountFlyout revokes this before closing.
+        popup.closingToken = flyout.Closing(
+            [hWnd, generation](wuxcp::FlyoutBase const&,
+                               wuxcp::FlyoutBaseClosingEventArgs const& e) {
+                if (g_unloading) return;
+                try {
+                    auto* uiState = FindUiState(hWnd);
+                    if (!uiState) return;
+                    FlyoutUi& fo = uiState->flyout;
+                    if (!fo.popup.flyout || fo.popup.generation != generation ||
+                        fo.hoverIndex != fo.popup.accountIndex) {
+                        return;
+                    }
+                    POINT pt{};
+                    RECT rect{};
+                    int primaryButton = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+                    if (GetAsyncKeyState(primaryButton) < 0 && GetCursorPos(&pt) &&
+                        GetWindowRect(uiState->hWnd, &rect) && PtInRect(&rect, pt)) {
+                        e.Cancel(true);
+                    }
                 } catch (...) {}
             });
         UpdateTileHighlight(state, index);
@@ -289,8 +293,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
         auto origin = column.TransformToVisual(rootContent).TransformPoint({0.f, 0.f});
         wuxcp::FlyoutShowOptions options;
         options.Placement(wuxcp::FlyoutPlacementMode::Top);
-        options.ShowMode(pinned ? wuxcp::FlyoutShowMode::Standard :
-                                  wuxcp::FlyoutShowMode::Transient);
+        options.ShowMode(wuxcp::FlyoutShowMode::Transient);
         options.Position(winrt::Windows::Foundation::Point{
             (float)column.ActualWidth() / 2.f, -origin.Y - kFlyoutTaskbarGap});
         EnumThreadWindows(GetCurrentThreadId(),
@@ -300,7 +303,6 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
                 }
                 return TRUE;
             }, reinterpret_cast<LPARAM>(&popup.windowsBeforeOpen));
-        popup.lastForeground = GetForegroundWindow();
         fo.pointerOutsideTick = 0;
         flyout.ShowAt(column, options);
         if (fo.countdownTimer) fo.countdownTimer.Start();
@@ -311,13 +313,10 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
     }
 }
 
-// Click: open pinned; pinned on this account closes; otherwise switch to this account. Accounts
-// that need a sign-in start it instead.
-static void OnTileTapped(QuotaUiInstance& state, int index, uint64_t identity,
-                         bool visualTestMode) {
+// Click: refresh the account; its open or pending hover flyout stays and shows the refresh.
+// Accounts that need a sign-in start it instead, and visual test accounts open the settings.
+static void OnTileTapped(QuotaUiInstance& state, uint64_t identity, bool visualTestMode) {
     FlyoutUi& fo = state.flyout;
-    if (fo.dwellTimer) fo.dwellTimer.Stop();
-    fo.dwellIndex = -1;
     if (!visualTestMode) {
         bool accountFound = false;
         bool needsLogin = false;
@@ -332,29 +331,20 @@ static void OnTileTapped(QuotaUiInstance& state, int index, uint64_t identity,
             }
         }
         if (!accountFound) return;
-        if (needsLogin) {
-            for (auto* instance : CurrentThreadUiInstances()) CloseAccountFlyout(*instance);
-            StartLoginByIdentity(identity);
+        if (!needsLogin) {
+            RefreshQuotaByIdentity(identity);
             return;
         }
     }
 
-    // Pressing this tile can light-dismiss its pinned flyout before the tap arrives.
-    bool dismissedByThisPress = fo.dismissedIndex == index && fo.pressIndex == index &&
-                                fo.dismissedTick + 50 >= fo.pressTick;
-    bool dismissedPinned = fo.dismissedPinned;
-    fo.dismissedIndex = -1;
-    if (fo.popup.flyout) {
-        bool closeOnly = fo.popup.pinned && fo.popup.accountIndex == index;
-        CloseAccountFlyout(state);
-        if (closeOnly) {
-            if (fo.hoverIndex == index) fo.hoverSuppressedIndex = index;
-            return;
-        }
-    } else if (dismissedByThisPress && dismissedPinned) {
+    if (fo.dwellTimer) fo.dwellTimer.Stop();
+    fo.dwellIndex = -1;
+    if (visualTestMode) {
+        OpenSettingsWindow();
         return;
     }
-    ShowAccountFlyout(state, index, true);
+    for (auto* instance : CurrentThreadUiInstances()) CloseAccountFlyout(*instance);
+    StartLoginByIdentity(identity);
 }
 
 static void OnTilePointerEntered(QuotaUiInstance& state, int index, bool showDetailsOnHover) {
@@ -367,7 +357,7 @@ static void OnTilePointerEntered(QuotaUiInstance& state, int index, bool showDet
         if (!fo.pollTimer.IsEnabled()) fo.pollTimer.Start();
     }
     if (!showDetailsOnHover || fo.hoverSuppressedIndex == index ||
-        (popup.flyout && (popup.pinned || popup.accountIndex == index))) {
+        (popup.flyout && popup.accountIndex == index)) {
         if (fo.dwellTimer) fo.dwellTimer.Stop();
         fo.dwellIndex = -1;
         return;

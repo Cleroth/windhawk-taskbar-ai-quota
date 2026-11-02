@@ -268,12 +268,22 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
         }
 
-        // Keep every instance's menu checkboxes in sync with the shared hidden state
-        // (programmatic IsChecked does not raise Click).
+        // Keep every instance's menu checkboxes and Hide items in sync with the shared hidden
+        // state, live while a menu is open (programmatic IsChecked does not raise Click). The
+        // last visible account can't be hidden, so its checkbox and Hide item are disabled.
+        int visibleCount = (int)std::count_if(accounts.begin(), accounts.end(),
+            [](const AccountConfig& account) { return !account.hidden; });
         for (auto& [idx, item] : state.accountToggleItems) {
             if (!item || idx < 0 || idx >= (int)accounts.size()) continue;
             bool checked = !accounts[idx].hidden;
             if (item.IsChecked() != checked) item.IsChecked(checked);
+            bool enabled = !checked || visibleCount > 1;
+            if (item.IsEnabled() != enabled) item.IsEnabled(enabled);
+        }
+        for (size_t i = 0; i < state.accountRefs.size(); i++) {
+            MenuFlyoutItem const& hideItem = state.accountRefs[i].hideItem;
+            bool enabled = accounts[i].hidden || visibleCount > 1;
+            if (hideItem && hideItem.IsEnabled() != enabled) hideItem.IsEnabled(enabled);
         }
     } catch (...) {
         Wh_Log(L"UpdateQuotaUi: exception");

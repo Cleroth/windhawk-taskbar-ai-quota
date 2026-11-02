@@ -273,24 +273,38 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
     releaseTimer(flyout.dwellTimer, flyout.dwellTimerToken);
     releaseTimer(flyout.pollTimer, flyout.pollTimerToken);
     releaseTimer(flyout.countdownTimer, flyout.countdownTimerToken);
+    releaseTimer(state.keepMenuOpenTimer, state.keepMenuOpenTimerToken);
+    releaseTimer(state.submenuCloseTimer, state.submenuCloseTimerToken);
     flyout.hoverIndex = -1;
     flyout.dwellIndex = -1;
     flyout.hoverSuppressedIndex = -1;
-    flyout.pressIndex = -1;
-    flyout.dismissedIndex = -1;
+    state.keepMenuOpenToggle = nullptr;
+    state.submenuCloseMenu = nullptr;
+    state.submenuCloseItem = nullptr;
 
     for (auto& refs : state.accountRefs) {
-        if (!refs.menu || !refs.menuOpeningToken) continue;
-        try { refs.menu.Opening(refs.menuOpeningToken); } catch (...) {}
-        refs.menuOpeningToken = {};
+        if (!refs.menu) continue;
+        if (refs.menuOpeningToken) {
+            try { refs.menu.Opening(refs.menuOpeningToken); } catch (...) {}
+            refs.menuOpeningToken = {};
+        }
+        if (refs.menuClosingToken) {
+            try { refs.menu.Closing(refs.menuClosingToken); } catch (...) {}
+            refs.menuClosingToken = {};
+        }
     }
+
+    for (auto& handler : state.routedHandlers) {
+        if (!handler.element) continue;
+        try { handler.element.RemoveHandler(handler.event, handler.handler); } catch (...) {}
+    }
+    state.routedHandlers.clear();
 
     for (auto& handler : state.pointerHandlers) {
         if (!handler.element) continue;
 
         try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
         try { handler.element.PointerEntered(handler.pointerEnteredToken); } catch (...) {}
-        try { handler.element.PointerPressed(handler.pointerPressedToken); } catch (...) {}
         try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
         try { handler.element.PointerCanceled(handler.pointerCanceledToken); } catch (...) {}
         try { handler.element.ContextFlyout(nullptr); } catch (...) {}

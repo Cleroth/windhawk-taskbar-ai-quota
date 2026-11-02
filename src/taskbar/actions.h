@@ -21,14 +21,11 @@ static void OpenDashboardForIdentity(uint64_t identityHash) {
     }
 }
 
-// Right-click menu: flip an account's show/hide state, keep at least one visible, persist the
-// hidden-set to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
-// taskbar UI thread (menu click); `sender` is the clicked ToggleMenuFlyoutItem (already flipped).
-static void ToggleAccountVisibility(uint64_t identityHash,
-                                    winrt::Windows::Foundation::IInspectable const& sender) {
+// Right-click menu: show or hide an account (the desired state), keep at least one visible,
+// persist the hidden-set to mod storage, then wake the fetch thread and refresh all taskbars,
+// which also re-syncs every menu's show/hide toggles. Runs on a taskbar UI thread (menu click).
+static void SetAccountVisibility(uint64_t identityHash, bool wantVisible) {
     if (g_unloading) return;
-    auto toggle = sender.try_as<ToggleMenuFlyoutItem>();
-    bool clickedVisible = toggle && toggle.IsChecked();
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
 
     std::wstring hashes;
@@ -47,7 +44,6 @@ static void ToggleAccountVisibility(uint64_t identityHash,
         }
         if (accountIndex < 0) return;
         oldHidden = g_settings.accounts[accountIndex].hidden;
-        bool wantVisible = toggle ? clickedVisible : oldHidden;
 
         // Refuse to hide the last visible account: there'd be no bar left to right-click.
         if (!wantVisible && !g_settings.accounts[accountIndex].hidden) {
@@ -96,15 +92,15 @@ static void ToggleAccountVisibility(uint64_t identityHash,
     }
     if (rejectedLastVisible) {
         configLock.unlock();
-        if (toggle) toggle.IsChecked(true);
+        PostUiUpdate();
         return;
     }
 
     if (!SaveOwnedSettings(settingsSnapshot)) {
         configLock.unlock();
-        if (toggle) toggle.IsChecked(!oldHidden);
         Wh_Log(L"Could not persist account visibility");
         NotifySettingsWindowChanged();
+        PostUiUpdate();
         return;
     }
     PublishSettings(settingsSnapshot);

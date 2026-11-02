@@ -14,7 +14,7 @@ Each visible account gets one compact taskbar column. Choose among the provider'
 - stacked layout: horizontal bars stack vertically and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
 
-Hover a column for a quick look at its details flyout, or click to pin it: percentages, reset times, pace, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Right-click a column for Settings, Usage history, Refresh all, provider actions, and show/hide toggles. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
+Hover a column to open its details flyout: percentages, reset times, pace, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Click a column to refresh it. Right-click a column for Settings, Usage history, Refresh all, provider actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several accounts. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
 
 Bars can show compact quota labels and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark labels and tooltips with `!`.
 
@@ -28,7 +28,7 @@ Adding an account creates it at once, with a default label (`A`, `O` or `G`, the
 
 ## Signing In
 
-The mod runs its own OAuth sign-in and refreshes the access token itself, so the bars keep working without re-running any CLI. A column that needs authentication shows "click to sign in"; left-click it to start the flow. You can also click **Sign in** on the account's card in **Settings > Accounts**, or right-click a column, open **Sign in**, and pick the account.
+The mod runs its own OAuth sign-in and refreshes the access token itself, so the bars keep working without re-running any CLI. A column that needs authentication shows "click to sign in"; left-click it to start the flow. You can also click **Sign in** on the account's card in **Settings > Accounts**, or right-click the column and choose **Sign in**.
 
 Signing in shows a window instead of launching a browser: **Copy link** lets you paste the sign-in link into any browser or profile (handy when each account lives in a different profile), and **Open in browser** uses the default browser.
 
@@ -36,7 +36,7 @@ Signing in shows a window instead of launching a browser: **Copy link** lets you
 - **OpenAI**: open the link in a browser on this PC. The mod catches the redirect on `localhost:1455` (falling back to `1457`) and the window closes by itself, so there's nothing to paste. The window waits until you approve or click **Cancel**; while it is open the port stays busy, so a Codex CLI sign-in at the same time can fail - finish or cancel one first.
 - **Google Antigravity**: no separate mod sign-in is needed. Keep the signed-in Antigravity app or CLI running so the mod can query its local language server. Older IDE builds also need an open workspace.
 
-Use **Sign out** in the same menu, or on the account's expanded card in Settings, to delete an Anthropic/OpenAI stored token; the card also offers **Sign in again**. Renaming a label preserves its stored sign-in when possible. **Remove account** on an Anthropic/OpenAI card asks whether to retain or delete its stored sign-in; removing an Antigravity account only confirms the removal. Removing an account keeps its recorded usage history.
+Use **Sign out** on the account's expanded card in Settings to delete an Anthropic/OpenAI stored token; the card also offers **Sign in again**. Renaming a label preserves its stored sign-in when possible. **Remove account** on an Anthropic/OpenAI card asks whether to retain or delete its stored sign-in; removing an Antigravity account only confirms the removal. Removing an account keeps its recorded usage history.
 
 ## Settings
 
@@ -66,7 +66,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - additional OpenAI rate limits in account details (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - **Behavior**:
   - show on: the primary display, all displays, or a detected display with its resolution
-  - show details on hover: resting the pointer on a column opens its details flyout (on by default); clicking always opens it
+  - show details on hover: resting the pointer on a column opens its details flyout (on by default)
   - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
   - do not poll hidden accounts (on by default; overrides per-account history recording)
   - threshold notifications (toast when an account crosses the red threshold)

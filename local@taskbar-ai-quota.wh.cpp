@@ -119,6 +119,8 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
+#include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
@@ -258,7 +260,7 @@ static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
-    // Hovering a column opens its details flyout; clicking always does.
+    // Hovering a column opens its details flyout.
     bool showDetailsOnHover = true;
     BarLayout barLayout = BarLayout::Stacked;
     BarMode barMode = BarMode::Used;
@@ -332,7 +334,7 @@ struct AccountData {
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
-    bool needsLogin = false;  // Sign-in required; left-click signs in instead of opening details.
+    bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide
@@ -453,7 +455,6 @@ struct PointerHandlers {
     UIElement element{nullptr};
     winrt::event_token tappedToken{};
     winrt::event_token pointerEnteredToken{};
-    winrt::event_token pointerPressedToken{};
     winrt::event_token pointerExitedToken{};
     winrt::event_token pointerCanceledToken{};
 };
@@ -461,6 +462,13 @@ struct PointerHandlers {
 struct MenuItemClickHandler {
     MenuFlyoutItem item{nullptr};
     winrt::event_token token{};
+};
+
+// A routed event handler added with AddHandler; RemoveHandler needs the same handler object.
+struct RoutedHandler {
+    UIElement element{nullptr};
+    RoutedEvent event{nullptr};
+    winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
 // A tile layout's elements (rings, logo + mini bars, logo + headline). Mini bar and headline
@@ -499,6 +507,9 @@ struct AccountUiRefs {
     uint64_t historyId = 0;
     MenuFlyout menu{nullptr};
     winrt::event_token menuOpeningToken{};
+    winrt::event_token menuClosingToken{};
+    // Hides this account; disabled while it is the last visible one.
+    MenuFlyoutItem hideItem{nullptr};
     std::array<Border, kQuotaBarCount> tracks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<Grid, kQuotaBarCount> barItems{
@@ -610,10 +621,10 @@ struct FlyoutPopup {
     FrameworkElement card{nullptr};
     winrt::event_token closedToken{};
     std::vector<FlyoutButtonHandler> buttonHandlers;
+    winrt::event_token closingToken{};
     // Visible top-level windows of this thread before the popup opened; a visible one that is
     // not listed is the popup's own window.
     std::vector<HWND> windowsBeforeOpen;
-    HWND lastForeground = nullptr;
     FlyoutTheme theme;
 
     TextBlock title{nullptr};
@@ -637,7 +648,6 @@ struct FlyoutPopup {
     int accountIndex = -1;
     uint64_t accountIdentity = 0;
     uint64_t generation = 0;
-    bool pinned = false;  // Opened by click (focusable); otherwise a hover quick look.
 };
 
 struct FlyoutUi {
@@ -654,18 +664,11 @@ struct FlyoutUi {
     DispatcherTimer countdownTimer{nullptr};
     winrt::event_token countdownTimerToken{};
 
-    // Hover and click tracking by account index; -1 when unset.
+    // Hover tracking by account index; -1 when unset.
     int hoverIndex = -1;
     int dwellIndex = -1;
     int hoverSuppressedIndex = -1;  // Explicitly closed while hovered: wait for pointer exit.
-    ULONGLONG pointerOutsideTick = 0;  // When the pointer left a hover popup and its tile; 0 inside.
-    int pressIndex = -1;
-    ULONGLONG pressTick = 0;
-    // Last popup closed by the system (light dismiss, Escape): a click that dismissed a pinned
-    // popup must not reopen it.
-    int dismissedIndex = -1;
-    bool dismissedPinned = false;
-    ULONGLONG dismissedTick = 0;
+    ULONGLONG pointerOutsideTick = 0;  // When the pointer left the popup and its tile; 0 inside.
 };
 
 struct QuotaUiInstance {
@@ -683,14 +686,26 @@ struct QuotaUiInstance {
     ColumnDefinition quotaColumnDefinition{nullptr};
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
+    std::vector<RoutedHandler> routedHandlers;
     std::vector<AccountUiRefs> accountRefs;
     std::vector<AppliedState> applied;
     DispatcherTimer paceTimer{nullptr};
     winrt::event_token paceTimerToken{};
     FlyoutUi flyout;
     // Per-account show/hide toggle items, paired with their account index, for cross-instance
-    // IsChecked sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
+    // IsChecked/IsEnabled sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
     std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
+    // The show/hide toggle whose click asked to keep its menu open: the menu's next close request
+    // is cancelled and the submenu reopens with the toggle focused. The timer drops a request
+    // that no close request followed.
+    ToggleMenuFlyoutItem keepMenuOpenToggle{nullptr};
+    DispatcherTimer keepMenuOpenTimer{nullptr};
+    winrt::event_token keepMenuOpenTimerToken{};
+    // Closes the open menu's "Show on taskbar" submenu once the pointer rests on another item.
+    DispatcherTimer submenuCloseTimer{nullptr};
+    winrt::event_token submenuCloseTimerToken{};
+    MenuFlyout submenuCloseMenu{nullptr};
+    MenuFlyoutSubItem submenuCloseItem{nullptr};
 };
 
 [[clang::no_destroy]] static std::optional<
@@ -5142,24 +5157,38 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
     releaseTimer(flyout.dwellTimer, flyout.dwellTimerToken);
     releaseTimer(flyout.pollTimer, flyout.pollTimerToken);
     releaseTimer(flyout.countdownTimer, flyout.countdownTimerToken);
+    releaseTimer(state.keepMenuOpenTimer, state.keepMenuOpenTimerToken);
+    releaseTimer(state.submenuCloseTimer, state.submenuCloseTimerToken);
     flyout.hoverIndex = -1;
     flyout.dwellIndex = -1;
     flyout.hoverSuppressedIndex = -1;
-    flyout.pressIndex = -1;
-    flyout.dismissedIndex = -1;
+    state.keepMenuOpenToggle = nullptr;
+    state.submenuCloseMenu = nullptr;
+    state.submenuCloseItem = nullptr;
 
     for (auto& refs : state.accountRefs) {
-        if (!refs.menu || !refs.menuOpeningToken) continue;
-        try { refs.menu.Opening(refs.menuOpeningToken); } catch (...) {}
-        refs.menuOpeningToken = {};
+        if (!refs.menu) continue;
+        if (refs.menuOpeningToken) {
+            try { refs.menu.Opening(refs.menuOpeningToken); } catch (...) {}
+            refs.menuOpeningToken = {};
+        }
+        if (refs.menuClosingToken) {
+            try { refs.menu.Closing(refs.menuClosingToken); } catch (...) {}
+            refs.menuClosingToken = {};
+        }
     }
+
+    for (auto& handler : state.routedHandlers) {
+        if (!handler.element) continue;
+        try { handler.element.RemoveHandler(handler.event, handler.handler); } catch (...) {}
+    }
+    state.routedHandlers.clear();
 
     for (auto& handler : state.pointerHandlers) {
         if (!handler.element) continue;
 
         try { handler.element.Tapped(handler.tappedToken); } catch (...) {}
         try { handler.element.PointerEntered(handler.pointerEnteredToken); } catch (...) {}
-        try { handler.element.PointerPressed(handler.pointerPressedToken); } catch (...) {}
         try { handler.element.PointerExited(handler.pointerExitedToken); } catch (...) {}
         try { handler.element.PointerCanceled(handler.pointerCanceledToken); } catch (...) {}
         try { handler.element.ContextFlyout(nullptr); } catch (...) {}
@@ -6691,14 +6720,11 @@ static void OpenDashboardForIdentity(uint64_t identityHash) {
     }
 }
 
-// Right-click menu: flip an account's show/hide state, keep at least one visible, persist the
-// hidden-set to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
-// taskbar UI thread (menu click); `sender` is the clicked ToggleMenuFlyoutItem (already flipped).
-static void ToggleAccountVisibility(uint64_t identityHash,
-                                    winrt::Windows::Foundation::IInspectable const& sender) {
+// Right-click menu: show or hide an account (the desired state), keep at least one visible,
+// persist the hidden-set to mod storage, then wake the fetch thread and refresh all taskbars,
+// which also re-syncs every menu's show/hide toggles. Runs on a taskbar UI thread (menu click).
+static void SetAccountVisibility(uint64_t identityHash, bool wantVisible) {
     if (g_unloading) return;
-    auto toggle = sender.try_as<ToggleMenuFlyoutItem>();
-    bool clickedVisible = toggle && toggle.IsChecked();
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
 
     std::wstring hashes;
@@ -6717,7 +6743,6 @@ static void ToggleAccountVisibility(uint64_t identityHash,
         }
         if (accountIndex < 0) return;
         oldHidden = g_settings.accounts[accountIndex].hidden;
-        bool wantVisible = toggle ? clickedVisible : oldHidden;
 
         // Refuse to hide the last visible account: there'd be no bar left to right-click.
         if (!wantVisible && !g_settings.accounts[accountIndex].hidden) {
@@ -6766,15 +6791,15 @@ static void ToggleAccountVisibility(uint64_t identityHash,
     }
     if (rejectedLastVisible) {
         configLock.unlock();
-        if (toggle) toggle.IsChecked(true);
+        PostUiUpdate();
         return;
     }
 
     if (!SaveOwnedSettings(settingsSnapshot)) {
         configLock.unlock();
-        if (toggle) toggle.IsChecked(!oldHidden);
         Wh_Log(L"Could not persist account visibility");
         NotifySettingsWindowChanged();
+        PostUiUpdate();
         return;
     }
     PublishSettings(settingsSnapshot);
@@ -7639,7 +7664,7 @@ static void UpdateAccountFlyout(
 }
 
 // src/taskbar/flyout.h
-// Account details flyout host: open/close, hover quick look and click-to-pin.
+// Account details flyout host: hover open/close, and the column click (refresh or sign-in).
 
 static constexpr int kFlyoutHoverDwellMs = 350;
 static constexpr int kFlyoutHoverGraceMs = 300;
@@ -7648,7 +7673,7 @@ static constexpr int kFlyoutPollMs = 100;
 static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
 
-static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned);
+static void ShowAccountFlyout(QuotaUiInstance& state, int index);
 static void OnTilePointerExited(QuotaUiInstance& state, int index);
 
 // Taskbars whose UI this thread owns; their flyout state may be used directly. Pointers stay
@@ -7678,6 +7703,9 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
     fo.pointerOutsideTick = 0;
     if (popup.flyout && popup.closedToken) {
         try { popup.flyout.Closed(popup.closedToken); } catch (...) {}
+    }
+    if (popup.flyout && popup.closingToken) {
+        try { popup.flyout.Closing(popup.closingToken); } catch (...) {}
     }
     for (auto& handler : popup.buttonHandlers) {
         if (!handler.button) continue;
@@ -7709,24 +7737,17 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                     if (fo.dwellTimer) fo.dwellTimer.Stop();
                     int index = fo.dwellIndex;
                     fo.dwellIndex = -1;
-                    if (index < 0 || fo.hoverIndex != index || fo.hoverSuppressedIndex == index) {
+                    if (index < 0 || fo.hoverIndex != index || fo.hoverSuppressedIndex == index ||
+                        (fo.popup.flyout && fo.popup.accountIndex == index)) {
                         return;
                     }
-                    // While pinned, hover does nothing, including from another taskbar.
-                    if (fo.popup.flyout && (fo.popup.pinned || fo.popup.accountIndex == index)) {
-                        return;
-                    }
-                    for (auto* instance : CurrentThreadUiInstances()) {
-                        if (instance->flyout.popup.pinned) return;
-                    }
-                    ShowAccountFlyout(*uiState, index, false);
+                    ShowAccountFlyout(*uiState, index);
                 } catch (...) {}
             });
         fo.dwellTimer = timer;
     }
     // XAML pointer events miss the pointer leaving the taskbar or the popup for another window,
-    // and clicks in other apps never reach the taskbar's light dismiss, so open popups poll the
-    // real pointer and foreground window.
+    // so open popups poll the real pointer.
     if (!fo.pollTimer) {
         DispatcherTimer timer;
         timer.Interval(std::chrono::milliseconds(kFlyoutPollMs));
@@ -7760,20 +7781,8 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                         return;
                     }
 
-                    // Pinned: close when another thread's window becomes the foreground.
-                    if (popup.pinned) {
-                        HWND foreground = GetForegroundWindow();
-                        if (foreground == popup.lastForeground) return;
-                        popup.lastForeground = foreground;
-                        if (foreground && GetWindowThreadProcessId(foreground, nullptr) !=
-                                              uiState->ownerThreadId) {
-                            CloseAccountFlyout(*uiState);
-                        }
-                        return;
-                    }
-
-                    // Hover: inside while over its tile (taskbar pointer events track that) or
-                    // over a window this thread showed after the popup opened.
+                    // Inside while over its tile (taskbar pointer events track that) or over a
+                    // window this thread showed after the popup opened.
                     POINT pt{};
                     if (!GetCursorPos(&pt)) return;
                     bool overTaskbar = false;
@@ -7846,9 +7855,9 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
     }
 }
 
-// Opens the account's flyout above its column, replacing any open one: transient (no focus)
-// for hover, standard (focusable, light dismiss) when pinned by a click.
-static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
+// Opens the account's flyout above its column, replacing any open one. It is transient: it never
+// takes focus.
+static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
     if (g_unloading || !state.quotaGrid || index < 0 ||
         index >= (int)state.accountRefs.size()) {
         return;
@@ -7872,7 +7881,6 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
         popup.generation = ++fo.openGeneration;
         popup.accountIndex = index;
         popup.accountIdentity = identity;
-        popup.pinned = pinned;
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
         popup.card = card;
@@ -7913,13 +7921,34 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
                     if (!uiState) return;
                     FlyoutUi& fo = uiState->flyout;
                     if (!fo.popup.flyout || fo.popup.generation != generation) return;
-                    fo.dismissedIndex = fo.popup.accountIndex;
-                    fo.dismissedPinned = fo.popup.pinned;
-                    fo.dismissedTick = GetTickCount64();
                     if (fo.hoverIndex == fo.popup.accountIndex) {
                         fo.hoverSuppressedIndex = fo.hoverIndex;
                     }
                     CloseAccountFlyout(*uiState);
+                } catch (...) {}
+            });
+        // A primary-button press on its own column is a click that refreshes the account: the
+        // flyout stays open to show it. Other system closes pass, including the context menu's
+        // after a right-click; CloseAccountFlyout revokes this before closing.
+        popup.closingToken = flyout.Closing(
+            [hWnd, generation](wuxcp::FlyoutBase const&,
+                               wuxcp::FlyoutBaseClosingEventArgs const& e) {
+                if (g_unloading) return;
+                try {
+                    auto* uiState = FindUiState(hWnd);
+                    if (!uiState) return;
+                    FlyoutUi& fo = uiState->flyout;
+                    if (!fo.popup.flyout || fo.popup.generation != generation ||
+                        fo.hoverIndex != fo.popup.accountIndex) {
+                        return;
+                    }
+                    POINT pt{};
+                    RECT rect{};
+                    int primaryButton = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+                    if (GetAsyncKeyState(primaryButton) < 0 && GetCursorPos(&pt) &&
+                        GetWindowRect(uiState->hWnd, &rect) && PtInRect(&rect, pt)) {
+                        e.Cancel(true);
+                    }
                 } catch (...) {}
             });
         UpdateTileHighlight(state, index);
@@ -7930,8 +7959,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
         auto origin = column.TransformToVisual(rootContent).TransformPoint({0.f, 0.f});
         wuxcp::FlyoutShowOptions options;
         options.Placement(wuxcp::FlyoutPlacementMode::Top);
-        options.ShowMode(pinned ? wuxcp::FlyoutShowMode::Standard :
-                                  wuxcp::FlyoutShowMode::Transient);
+        options.ShowMode(wuxcp::FlyoutShowMode::Transient);
         options.Position(winrt::Windows::Foundation::Point{
             (float)column.ActualWidth() / 2.f, -origin.Y - kFlyoutTaskbarGap});
         EnumThreadWindows(GetCurrentThreadId(),
@@ -7941,7 +7969,6 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
                 }
                 return TRUE;
             }, reinterpret_cast<LPARAM>(&popup.windowsBeforeOpen));
-        popup.lastForeground = GetForegroundWindow();
         fo.pointerOutsideTick = 0;
         flyout.ShowAt(column, options);
         if (fo.countdownTimer) fo.countdownTimer.Start();
@@ -7952,13 +7979,10 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index, bool pinned) {
     }
 }
 
-// Click: open pinned; pinned on this account closes; otherwise switch to this account. Accounts
-// that need a sign-in start it instead.
-static void OnTileTapped(QuotaUiInstance& state, int index, uint64_t identity,
-                         bool visualTestMode) {
+// Click: refresh the account; its open or pending hover flyout stays and shows the refresh.
+// Accounts that need a sign-in start it instead, and visual test accounts open the settings.
+static void OnTileTapped(QuotaUiInstance& state, uint64_t identity, bool visualTestMode) {
     FlyoutUi& fo = state.flyout;
-    if (fo.dwellTimer) fo.dwellTimer.Stop();
-    fo.dwellIndex = -1;
     if (!visualTestMode) {
         bool accountFound = false;
         bool needsLogin = false;
@@ -7973,29 +7997,20 @@ static void OnTileTapped(QuotaUiInstance& state, int index, uint64_t identity,
             }
         }
         if (!accountFound) return;
-        if (needsLogin) {
-            for (auto* instance : CurrentThreadUiInstances()) CloseAccountFlyout(*instance);
-            StartLoginByIdentity(identity);
+        if (!needsLogin) {
+            RefreshQuotaByIdentity(identity);
             return;
         }
     }
 
-    // Pressing this tile can light-dismiss its pinned flyout before the tap arrives.
-    bool dismissedByThisPress = fo.dismissedIndex == index && fo.pressIndex == index &&
-                                fo.dismissedTick + 50 >= fo.pressTick;
-    bool dismissedPinned = fo.dismissedPinned;
-    fo.dismissedIndex = -1;
-    if (fo.popup.flyout) {
-        bool closeOnly = fo.popup.pinned && fo.popup.accountIndex == index;
-        CloseAccountFlyout(state);
-        if (closeOnly) {
-            if (fo.hoverIndex == index) fo.hoverSuppressedIndex = index;
-            return;
-        }
-    } else if (dismissedByThisPress && dismissedPinned) {
+    if (fo.dwellTimer) fo.dwellTimer.Stop();
+    fo.dwellIndex = -1;
+    if (visualTestMode) {
+        OpenSettingsWindow();
         return;
     }
-    ShowAccountFlyout(state, index, true);
+    for (auto* instance : CurrentThreadUiInstances()) CloseAccountFlyout(*instance);
+    StartLoginByIdentity(identity);
 }
 
 static void OnTilePointerEntered(QuotaUiInstance& state, int index, bool showDetailsOnHover) {
@@ -8008,7 +8023,7 @@ static void OnTilePointerEntered(QuotaUiInstance& state, int index, bool showDet
         if (!fo.pollTimer.IsEnabled()) fo.pollTimer.Start();
     }
     if (!showDetailsOnHover || fo.hoverSuppressedIndex == index ||
-        (popup.flyout && (popup.pinned || popup.accountIndex == index))) {
+        (popup.flyout && popup.accountIndex == index)) {
         if (fo.dwellTimer) fo.dwellTimer.Stop();
         fo.dwellIndex = -1;
         return;
@@ -8031,6 +8046,29 @@ static void OnTilePointerExited(QuotaUiInstance& state, int index) {
 
 // src/taskbar/quota-grid.h
 // Builds the per-taskbar quota grid.
+
+// How long the pointer rests on another menu item before an open submenu closes. System XAML
+// waits MenuShowDelay (400 ms by default), which feels sluggish next to the instant open; a short
+// delay still lets a diagonal move cross an item on its way into the submenu.
+static constexpr int kSubmenuCloseDelayMs = 150;
+
+// Opens or closes a menu's submenu at once through its automation peer's expand pattern. System
+// XAML opens one only after the MenuShowDelay hover timeout, and not on a mouse click. Expanding
+// while the menu is closed would leave an orphan submenu that nothing closes.
+static void SetMenuSubItemExpanded(wuxcp::FlyoutBase const& menu, MenuFlyoutSubItem const& item,
+                                   bool expanded) {
+    using namespace winrt::Windows::UI::Xaml::Automation;
+    try {
+        if (!menu || !item || !menu.IsOpen()) return;
+        auto peer = Peers::FrameworkElementAutomationPeer::CreatePeerForElement(item);
+        auto expander = peer ? peer.GetPattern(Peers::PatternInterface::ExpandCollapse)
+                                   .try_as<Provider::IExpandCollapseProvider>() : nullptr;
+        if (!expander) return;
+        ExpandCollapseState current = expander.ExpandCollapseState();
+        if (expanded && current == ExpandCollapseState::Collapsed) expander.Expand();
+        if (!expanded && current == ExpandCollapseState::Expanded) expander.Collapse();
+    } catch (...) {}
+}
 
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
@@ -8146,6 +8184,42 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
+
+        // Drops a show/hide toggle's keep-open request on the next dispatcher pass if no close
+        // request followed its click.
+        if (!visualTestMode) {
+            DispatcherTimer keepOpenTimer;
+            keepOpenTimer.Interval(std::chrono::milliseconds(0));
+            state.keepMenuOpenTimerToken = keepOpenTimer.Tick(
+                [hWnd = state.hWnd](winrt::Windows::Foundation::IInspectable const&,
+                                     winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (!uiState) return;
+                        if (uiState->keepMenuOpenTimer) uiState->keepMenuOpenTimer.Stop();
+                        uiState->keepMenuOpenToggle = nullptr;
+                    } catch (...) {}
+                });
+            state.keepMenuOpenTimer = keepOpenTimer;
+
+            DispatcherTimer submenuCloseTimer;
+            submenuCloseTimer.Interval(std::chrono::milliseconds(kSubmenuCloseDelayMs));
+            state.submenuCloseTimerToken = submenuCloseTimer.Tick(
+                [hWnd = state.hWnd](winrt::Windows::Foundation::IInspectable const&,
+                                     winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (!uiState) return;
+                        if (uiState->submenuCloseTimer) uiState->submenuCloseTimer.Stop();
+                        MenuFlyout menu = std::exchange(uiState->submenuCloseMenu, nullptr);
+                        MenuFlyoutSubItem item = std::exchange(uiState->submenuCloseItem, nullptr);
+                        SetMenuSubItemExpanded(menu, item, false);
+                    } catch (...) {}
+                });
+            state.submenuCloseTimer = submenuCloseTimer;
+        }
 
         // Context menu account header: icon, bold label, then provider and plan. Unlike the
         // standard item template, it neither highlights nor dims while disabled; its margin,
@@ -8403,13 +8477,13 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             int accountIndex = (int)i;
             uint64_t accountIdentity = refs.identity;
             auto tappedToken = tappedElement.Tapped(
-                [statePtr, accountIndex, accountIdentity, visualTestMode](
+                [statePtr, accountIdentity, visualTestMode](
                     winrt::Windows::Foundation::IInspectable const&,
                     wuxi::TappedRoutedEventArgs const& e) {
                     e.Handled(true);
                     if (g_unloading || !statePtr->quotaGrid) return;
                     try {
-                        OnTileTapped(*statePtr, accountIndex, accountIdentity, visualTestMode);
+                        OnTileTapped(*statePtr, accountIdentity, visualTestMode);
                     } catch (...) {}
                 });
 
@@ -8438,14 +8512,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     } catch (...) {}
                 });
 
-            // Lets a click recognize that its own press light-dismissed this tile's flyout.
-            auto pointerPressedToken = tappedElement.PointerPressed(
-                [statePtr, accountIndex](winrt::Windows::Foundation::IInspectable const&,
-                                         wuxi::PointerRoutedEventArgs const&) {
-                    statePtr->flyout.pressIndex = accountIndex;
-                    statePtr->flyout.pressTick = GetTickCount64();
-                });
-
             auto pointerExited =
                 [statePtr, accountIndex, percentTextVisibility](
                     winrt::Windows::Foundation::IInspectable const&,
@@ -8465,15 +8531,15 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             auto pointerExitedToken = tappedElement.PointerExited(pointerExited);
             auto pointerCanceledToken = tappedElement.PointerCanceled(pointerExited);
             state.pointerHandlers.push_back({tappedElement, tappedToken, pointerEnteredToken,
-                                             pointerPressedToken, pointerExitedToken,
-                                             pointerCanceledToken});
+                                             pointerExitedToken, pointerCanceledToken});
 
             // Context menu: this account's header and actions, then every account's, then
             // Settings. Visual tests offer only their exit and Settings.
             bool antigravity = accounts[i].provider == L"antigravity";
             MenuFlyout menu;
             MenuFlyoutItem menuHeader{nullptr};
-            MenuFlyoutItem signItem{nullptr};
+            MenuFlyoutItem signInItem{nullptr};
+            MenuFlyoutSubItem showSub{nullptr};
             if (visualTestMode) {
                 menu.Items().Append(menuItem(L"Exit visual test", L"\uE711",
                     [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
@@ -8527,26 +8593,24 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                                 RoutedEventArgs const&) {
                         OpenHistoryWindow(historyId, HistoryWindowKind::Custom);
                     }));
-                // Sign in or out with the mod's own OAuth. The Opening handler picks the label,
-                // which decides the action.
+                // Sign in with the mod's own OAuth; the Opening handler shows it only while the
+                // account needs a sign-in.
                 if (!antigravity) {
-                    signItem = menuItem(L"Sign out", L"\uF3B1",
-                        [accountIdentity](winrt::Windows::Foundation::IInspectable const& sender,
+                    signInItem = menuItem(L"Sign in", L"\uE77B",
+                        [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                           RoutedEventArgs const&) {
-                            if (g_unloading) return;
-                            bool signIn = false;
-                            try {
-                                auto item = sender.try_as<MenuFlyoutItem>();
-                                if (!item) return;
-                                signIn = item.Text() == L"Sign in";
-                            } catch (...) {
-                                return;
-                            }
-                            if (signIn) StartLoginByIdentity(accountIdentity);
-                            else if (!SignOutAccountByIdentity(accountIdentity)) OpenSettingsWindow();
+                            StartLoginByIdentity(accountIdentity);
                         });
-                    menu.Items().Append(signItem);
+                    signInItem.Visibility(Visibility::Collapsed);
+                    menu.Items().Append(signInItem);
                 }
+                // UpdateQuotaUi disables it while this is the last visible account.
+                refs.hideItem = menuItem(L"Hide", L"\uED1A",
+                    [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
+                                      RoutedEventArgs const&) {
+                        SetAccountVisibility(accountIdentity, false);
+                    });
+                menu.Items().Append(refs.hideItem);
 
                 menu.Items().Append(MenuFlyoutSeparator{});
                 menu.Items().Append(menuItem(L"Refresh all", L"\uE895",
@@ -8555,8 +8619,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     }));
 
                 // Per-account show/hide checkboxes (checked = visible). Every column carries the
-                // same list; toggling flips global state, persists, and re-syncs all instances.
-                MenuFlyoutSubItem showSub;
+                // same list; toggling sets global state, persists, and re-syncs all instances.
+                // The menu stays open for more toggles, even when one hides this column.
+                showSub = MenuFlyoutSubItem{};
                 showSub.Text(L"Show on taskbar");
                 showSub.Icon(menuIcon(L"\uE890"));
                 for (size_t k = 0; k < accounts.size(); k++) {
@@ -8567,13 +8632,40 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     int toggleIndex = (int)k;
                     uint64_t toggleIdentity = AccountIdentityHash(accounts[k]);
                     auto toggleToken = toggle.Click(
-                        [toggleIdentity](winrt::Windows::Foundation::IInspectable const& sender,
-                                         RoutedEventArgs const&) {
-                            ToggleAccountVisibility(toggleIdentity, sender);
+                        [statePtr, toggleIdentity](
+                            winrt::Windows::Foundation::IInspectable const& sender,
+                            RoutedEventArgs const&) {
+                            if (g_unloading) return;
+                            bool visible = true;
+                            try {
+                                auto item = sender.try_as<ToggleMenuFlyoutItem>();
+                                if (!item) return;
+                                visible = item.IsChecked();
+                                statePtr->keepMenuOpenToggle = item;
+                                if (statePtr->keepMenuOpenTimer) statePtr->keepMenuOpenTimer.Start();
+                            } catch (...) {
+                                return;
+                            }
+                            SetAccountVisibility(toggleIdentity, visible);
                         });
                     state.menuItemClickHandlers.push_back({toggle, toggleToken});
                     state.accountToggleItems.push_back({toggleIndex, toggle});
                     showSub.Items().Append(toggle);
+                }
+                // Opens the submenu as soon as the pointer enters it or clicks it, even when the
+                // item handles the event itself.
+                auto expandHandler = winrt::box_value(wuxi::PointerEventHandler(
+                    [weakMenu = winrt::make_weak(menu)](
+                        winrt::Windows::Foundation::IInspectable const& sender,
+                        wuxi::PointerRoutedEventArgs const&) {
+                        if (g_unloading) return;
+                        auto item = sender.try_as<MenuFlyoutSubItem>();
+                        if (item) SetMenuSubItemExpanded(weakMenu.get(), item, true);
+                    }));
+                for (RoutedEvent routedEvent :
+                     {UIElement::PointerEnteredEvent(), UIElement::PointerReleasedEvent()}) {
+                    showSub.AddHandler(routedEvent, expandHandler, true);
+                    state.routedHandlers.push_back({showSub, routedEvent, expandHandler});
                 }
                 menu.Items().Append(showSub);
             }
@@ -8590,12 +8682,13 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             refs.menu = menu;
             state.accountRefs.push_back(std::move(refs));
             // Right-click closes any details flyout before the menu shows. The header's plan and
-            // the sign-in choice then follow the account's current state.
+            // whether Sign in shows then follow the account's current state.
             state.accountRefs.back().menuOpeningToken = menu.Opening(
-                [statePtr, accountIdentity, provider = accounts[i].provider, menuHeader, signItem](
+                [statePtr, accountIdentity, provider = accounts[i].provider, menuHeader, signInItem](
                     winrt::Windows::Foundation::IInspectable const&,
                     winrt::Windows::Foundation::IInspectable const&) {
                     if (g_unloading) return;
+                    statePtr->keepMenuOpenToggle = nullptr;
                     try {
                         FlyoutUi& fo = statePtr->flyout;
                         if (fo.dwellTimer) fo.dwellTimer.Stop();
@@ -8635,14 +8728,66 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         std::wstring details = ProviderDisplayName(provider);
                         if (!plan.empty()) details += L" · " + plan;
                         menuHeader.KeyboardAcceleratorTextOverride(details);
-                        if (signItem) {
-                            signItem.Text(needsLogin ? L"Sign in" : L"Sign out");
-                            if (auto icon = signItem.Icon().try_as<FontIcon>()) {
-                                icon.Glyph(needsLogin ? L"\uE77B" : L"\uF3B1");
-                            }
+                        if (signInItem) {
+                            signInItem.Visibility(needsLogin ? Visibility::Visible :
+                                                               Visibility::Collapsed);
                         }
                     } catch (...) {}
                 });
+            if (showSub) {
+                // The pointer resting on another item for kSubmenuCloseDelayMs closes the
+                // submenu; coming back to the submenu or its item first keeps it.
+                auto closeSubmenu = winrt::box_value(wuxi::PointerEventHandler(
+                    [statePtr, weakMenu = winrt::make_weak(menu), weakSub = winrt::make_weak(showSub)](
+                        winrt::Windows::Foundation::IInspectable const&,
+                        wuxi::PointerRoutedEventArgs const&) {
+                        if (g_unloading || !statePtr->submenuCloseTimer) return;
+                        try {
+                            statePtr->submenuCloseMenu = weakMenu.get();
+                            statePtr->submenuCloseItem = weakSub.get();
+                            statePtr->submenuCloseTimer.Stop();
+                            statePtr->submenuCloseTimer.Start();
+                        } catch (...) {}
+                    }));
+                auto keepSubmenu = winrt::box_value(wuxi::PointerEventHandler(
+                    [statePtr](winrt::Windows::Foundation::IInspectable const&,
+                               wuxi::PointerRoutedEventArgs const&) {
+                        try {
+                            if (statePtr->submenuCloseTimer) statePtr->submenuCloseTimer.Stop();
+                        } catch (...) {}
+                    }));
+                auto addPointerEntered = [&](UIElement const& element,
+                                             winrt::Windows::Foundation::IInspectable const& handler) {
+                    element.AddHandler(UIElement::PointerEnteredEvent(), handler, true);
+                    state.routedHandlers.push_back({element, UIElement::PointerEnteredEvent(), handler});
+                };
+                // Root items other than the submenu's own; separators don't count.
+                for (auto const& item : menu.Items()) {
+                    if (item.try_as<MenuFlyoutItem>()) addPointerEntered(item, closeSubmenu);
+                }
+                addPointerEntered(showSub, keepSubmenu);
+                for (auto const& toggle : showSub.Items()) addPointerEntered(toggle, keepSubmenu);
+
+                // A show/hide toggle's click closes the submenu, then asks the menu to close; the
+                // menu stays, and the submenu reopens in the same call (no blank frame) with the
+                // toggle focused. Other closes (light dismiss, Escape, other items) pass.
+                state.accountRefs.back().menuClosingToken = menu.Closing(
+                    [statePtr, showSub](wuxcp::FlyoutBase const& sender,
+                                        wuxcp::FlyoutBaseClosingEventArgs const& e) {
+                        if (g_unloading || !statePtr->keepMenuOpenToggle) return;
+                        ToggleMenuFlyoutItem toggle = std::move(statePtr->keepMenuOpenToggle);
+                        statePtr->keepMenuOpenToggle = nullptr;
+                        try {
+                            e.Cancel(true);
+                        } catch (...) {
+                            return;
+                        }
+                        SetMenuSubItemExpanded(sender, showSub, true);
+                        try {
+                            toggle.Focus(FocusState::Programmatic);
+                        } catch (...) {}
+                    });
+            }
         }
 
         root.Children().Append(panel);
@@ -8942,12 +9087,22 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
         }
 
-        // Keep every instance's menu checkboxes in sync with the shared hidden state
-        // (programmatic IsChecked does not raise Click).
+        // Keep every instance's menu checkboxes and Hide items in sync with the shared hidden
+        // state, live while a menu is open (programmatic IsChecked does not raise Click). The
+        // last visible account can't be hidden, so its checkbox and Hide item are disabled.
+        int visibleCount = (int)std::count_if(accounts.begin(), accounts.end(),
+            [](const AccountConfig& account) { return !account.hidden; });
         for (auto& [idx, item] : state.accountToggleItems) {
             if (!item || idx < 0 || idx >= (int)accounts.size()) continue;
             bool checked = !accounts[idx].hidden;
             if (item.IsChecked() != checked) item.IsChecked(checked);
+            bool enabled = !checked || visibleCount > 1;
+            if (item.IsEnabled() != enabled) item.IsEnabled(enabled);
+        }
+        for (size_t i = 0; i < state.accountRefs.size(); i++) {
+            MenuFlyoutItem const& hideItem = state.accountRefs[i].hideItem;
+            bool enabled = accounts[i].hidden || visibleCount > 1;
+            if (hideItem && hideItem.IsEnabled() != enabled) hideItem.IsEnabled(enabled);
         }
     } catch (...) {
         Wh_Log(L"UpdateQuotaUi: exception");
@@ -17900,8 +18055,7 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.title = L"Show details on hover";
-        spec.description = {{L"Opens an account\u2019s details after the pointer rests on it. "
-                             L"Clicking always opens them."}};
+        spec.description = {{L"Opens an account\u2019s details after the pointer rests on it."}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec,
                                   SettingsField::ShowDetailsOnHover);
     }

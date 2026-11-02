@@ -41,7 +41,6 @@ struct PointerHandlers {
     UIElement element{nullptr};
     winrt::event_token tappedToken{};
     winrt::event_token pointerEnteredToken{};
-    winrt::event_token pointerPressedToken{};
     winrt::event_token pointerExitedToken{};
     winrt::event_token pointerCanceledToken{};
 };
@@ -49,6 +48,13 @@ struct PointerHandlers {
 struct MenuItemClickHandler {
     MenuFlyoutItem item{nullptr};
     winrt::event_token token{};
+};
+
+// A routed event handler added with AddHandler; RemoveHandler needs the same handler object.
+struct RoutedHandler {
+    UIElement element{nullptr};
+    RoutedEvent event{nullptr};
+    winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
 // A tile layout's elements (rings, logo + mini bars, logo + headline). Mini bar and headline
@@ -87,6 +93,9 @@ struct AccountUiRefs {
     uint64_t historyId = 0;
     MenuFlyout menu{nullptr};
     winrt::event_token menuOpeningToken{};
+    winrt::event_token menuClosingToken{};
+    // Hides this account; disabled while it is the last visible one.
+    MenuFlyoutItem hideItem{nullptr};
     std::array<Border, kQuotaBarCount> tracks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<Grid, kQuotaBarCount> barItems{
@@ -198,10 +207,10 @@ struct FlyoutPopup {
     FrameworkElement card{nullptr};
     winrt::event_token closedToken{};
     std::vector<FlyoutButtonHandler> buttonHandlers;
+    winrt::event_token closingToken{};
     // Visible top-level windows of this thread before the popup opened; a visible one that is
     // not listed is the popup's own window.
     std::vector<HWND> windowsBeforeOpen;
-    HWND lastForeground = nullptr;
     FlyoutTheme theme;
 
     TextBlock title{nullptr};
@@ -225,7 +234,6 @@ struct FlyoutPopup {
     int accountIndex = -1;
     uint64_t accountIdentity = 0;
     uint64_t generation = 0;
-    bool pinned = false;  // Opened by click (focusable); otherwise a hover quick look.
 };
 
 struct FlyoutUi {
@@ -242,18 +250,11 @@ struct FlyoutUi {
     DispatcherTimer countdownTimer{nullptr};
     winrt::event_token countdownTimerToken{};
 
-    // Hover and click tracking by account index; -1 when unset.
+    // Hover tracking by account index; -1 when unset.
     int hoverIndex = -1;
     int dwellIndex = -1;
     int hoverSuppressedIndex = -1;  // Explicitly closed while hovered: wait for pointer exit.
-    ULONGLONG pointerOutsideTick = 0;  // When the pointer left a hover popup and its tile; 0 inside.
-    int pressIndex = -1;
-    ULONGLONG pressTick = 0;
-    // Last popup closed by the system (light dismiss, Escape): a click that dismissed a pinned
-    // popup must not reopen it.
-    int dismissedIndex = -1;
-    bool dismissedPinned = false;
-    ULONGLONG dismissedTick = 0;
+    ULONGLONG pointerOutsideTick = 0;  // When the pointer left the popup and its tile; 0 inside.
 };
 
 struct QuotaUiInstance {
@@ -271,14 +272,26 @@ struct QuotaUiInstance {
     ColumnDefinition quotaColumnDefinition{nullptr};
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
+    std::vector<RoutedHandler> routedHandlers;
     std::vector<AccountUiRefs> accountRefs;
     std::vector<AppliedState> applied;
     DispatcherTimer paceTimer{nullptr};
     winrt::event_token paceTimerToken{};
     FlyoutUi flyout;
     // Per-account show/hide toggle items, paired with their account index, for cross-instance
-    // IsChecked sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
+    // IsChecked/IsEnabled sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
     std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
+    // The show/hide toggle whose click asked to keep its menu open: the menu's next close request
+    // is cancelled and the submenu reopens with the toggle focused. The timer drops a request
+    // that no close request followed.
+    ToggleMenuFlyoutItem keepMenuOpenToggle{nullptr};
+    DispatcherTimer keepMenuOpenTimer{nullptr};
+    winrt::event_token keepMenuOpenTimerToken{};
+    // Closes the open menu's "Show on taskbar" submenu once the pointer rests on another item.
+    DispatcherTimer submenuCloseTimer{nullptr};
+    winrt::event_token submenuCloseTimerToken{};
+    MenuFlyout submenuCloseMenu{nullptr};
+    MenuFlyoutSubItem submenuCloseItem{nullptr};
 };
 
 [[clang::no_destroy]] static std::optional<

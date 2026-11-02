@@ -90,7 +90,7 @@ static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
-    // Hovering a column opens its details flyout; clicking always does.
+    // Hovering a column opens its details flyout.
     bool showDetailsOnHover = true;
     BarLayout barLayout = BarLayout::Stacked;
     BarMode barMode = BarMode::Used;
@@ -164,7 +164,7 @@ struct AccountData {
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
-    bool needsLogin = false;  // Sign-in required; left-click signs in instead of opening details.
+    bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide
