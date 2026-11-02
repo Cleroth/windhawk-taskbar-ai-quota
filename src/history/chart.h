@@ -112,21 +112,24 @@ struct HistoryChartTick {
     std::wstring label;
 };
 
-// What a chart's reduction was made for: the snapshot's generation, the period, the selection
-// (history ID) and view, the lines it reduced (the visible ones' chips) and the plot's width in
-// device pixels.
+// What a chart's reduction was made for: the snapshot's generation, the settings' revision, the
+// period, the selection (history ID), view and comparison, the lines it reduced (the visible
+// ones' chips) and the plot's width in device pixels. Together they fix the chart's lines, so
+// each line keeps its reduced periods.
 struct HistoryChartKey {
-    uint64_t generation = 0;
+    uint64_t generation = 0, settings = 0;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     uint64_t selected = 0;
     HistoryView view = HistoryView::Weekly;
+    bool compare = false;
     std::vector<uint32_t> lines;
     int width = -1;
     bool operator==(const HistoryChartKey&) const = default;
 };
 
 // A laid out, reduced chart: everything painting and picking read, self-contained (its lines and
-// the snapshot its reduced rows index), so a later load can't skew it before the next build.
+// the snapshot its reduced rows index), so a later load or refresh can't skew it before the next
+// build.
 struct HistoryChart {
     // Data: the view's lines, the period ([readFrom, from) is the previous week while comparing),
     // the red threshold, the snapshot with its generation, and a message instead of lines

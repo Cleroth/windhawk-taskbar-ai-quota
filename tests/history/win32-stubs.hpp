@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include <charconv>
+#include <chrono>
 #include <climits>
 #include <cmath>
 #include <cstdint>
@@ -20,14 +21,20 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <numeric>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <vector>
 
 static std::atomic<bool> g_unloading{false}, g_historyWindowCancelRequested{false};
+// The journal's status notifier posts to the settings and history windows; here it only counts.
+static int settingsNotifications = 0;
+static void NotifySettingsWindowChanged(bool = false) { ++settingsNotifications; }
 struct StubControl {
     std::vector<std::wstring> items;
     std::wstring text;

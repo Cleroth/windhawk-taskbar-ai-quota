@@ -240,11 +240,15 @@ static void RunHistoryRenders(const std::wstring& directory) {
                  {L"Current: Peak 63% \u00B7 Sun 25 Oct 22:32", L"Coverage 166 h (98.8%)", L"Est. \u226590%: 0 h",
                   L"Previous: Peak 61% \u00B7 Sat 24 Oct 14:32", L"Coverage 154 h (91.7%)", L"Est. \u226590%: 0 h"})};
 
-    // s-states: recording off; storage failing; waiting, with keyboard focus on the range
-    // segments and the pointer on Refresh.
+    // s-states: recording off; Enable recording failed; storage failing; waiting, with keyboard
+    // focus on the range segments and the pointer on Refresh.
     HistoryRenderPart off{L"Recording off: pill Off, caution bar with Enable recording", weekly(), {1100, 790}, 330};
     off.view.recordingEnabled = false;
+    off.view.canEnableRecording = true;
     off.view.pill = HistoryUiPill::Off;
+    HistoryRenderPart consent{L"Enable recording failed: its error notice above the recording-off bar", off.view,
+                              {1100, 790}, 390};
+    consent.view.notice = {L"Could not save recording consent. Recording is still off.", UiSeverity::Error};
     HistoryRenderPart storage{L"Storage failing: pill Not saving, error and cap bars", weekly(), {1100, 790}, 400};
     storage.view.pill = HistoryUiPill::NotSaving;
     storage.view.storageError = L"History storage is in use by another Explorer session, or is inaccessible.";
@@ -255,7 +259,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     waiting.state.focus = {kHistoryUiRanges};
     waiting.state.focusVisible = true;
     waiting.state.hot = {kHistoryUiRefresh};
-    off.chart = storage.chart = waiting.chart = week;
+    off.chart = consent.chart = storage.chart = waiting.chart = week;
 
     // s-empty: loading (no status yet), no accounts, a view no account supports (one account,
     // All accounts); then no readings in range with the No readings card, dollars only, and the
@@ -274,6 +278,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     HistoryRenderPart noReadings{L"No readings in range (24h while recording was off) and the No readings card",
                                  TestHistoryView()};
     noReadings.view.recordingEnabled = false;
+    noReadings.view.canEnableRecording = true;
     noReadings.view.pill = HistoryUiPill::Off;
     noReadings.view.range = HistoryUiRange::Day;
     noReadings.view.noReadings = {{2, L"OAI", L"OpenAI"}, {1, L"CC 1", L"Anthropic"}, {1, L"CC 2", L"Anthropic"},
@@ -422,7 +427,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
         {"default", {defaults}},
         {"account", {oai, cc1}},
         {"compare", {compare}},
-        {"states", {off, storage, waiting}},
+        {"states", {off, consent, storage, waiting}},
         {"empty", {loading, none, unsupported, unsupportedAll}},
         {"empty-readings", {noReadings, dollars, partial}},
         {"menu", {menu}},

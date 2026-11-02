@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
 #include "model.inc"
 #include "continuity.inc"
 #include "burn-up.inc"
+#include "journal.inc"
 #include "paint.inc"
     RunInteractionTests();
     RunTooltipTests();

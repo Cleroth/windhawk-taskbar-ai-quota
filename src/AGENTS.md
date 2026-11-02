@@ -43,8 +43,10 @@ The mod is injected into `explorer.exe`. Execution domains:
   native history window, graph caches and export/confirmation dialogs; `HistoryUiThreadProc` runs
   the custom-drawn window (`history/ui-window.h`, a client of the `ui/` toolkit host), whose
   controller (`history/controller.h`) owns all window state and reaches the journal, settings and
-  live readings only through the stateless ops in `history/ops.h`. No XAML. Cancel tracked modal
-  dialogs and join it before unloading.
+  live readings only through the stateless ops in `history/ops.h`. `NotifySettingsWindowChanged`
+  also reaches the custom-drawn window (never the classic one): its refresh reads the journal
+  only through the memory-only `PeekHistorySnapshot`; only its explicit loads may initialize or
+  retry storage. No XAML. Cancel tracked modal dialogs and join it before unloading.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
   `g_urlLaunchMutex`): `ShellExecuteExW` in an STA with error dialogs suppressed. `Wh_ModUninit`
   joins them after the login thread, which can start them; a stuck launch delays unload.
@@ -73,8 +75,9 @@ first, then reads/updates XAML.
   `g_historyEpoch`; settings publication updates the history admission generation.
 - Burn-up curves (`history/burn-up-store.h`): only the fetch thread publishes; settings
   publication and Clear history reset it via `ResetBurnUpCurvesLocked` (under `g_dataMutex`).
-  The fetch thread caches per-account journal tails, so any change to `g_historySamples` other
-  than `AppendHistory` must bump `g_historyEpoch` or `g_historyRevision`.
+  The fetch thread caches per-account journal tails and the history window keeps a snapshot by
+  the journal's stamp, so any change to `g_historySamples` other than `AppendHistory` must bump
+  `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning).
 - `g_settingsGeneration` gates published data; `g_refreshGeneration` drives manual
   single-account refresh. Code that publishes to `g_data` must re-check the generation under
   lock (see the existing publish block).

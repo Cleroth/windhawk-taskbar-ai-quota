@@ -357,6 +357,24 @@
             UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from}}, false);
             CHECK(tailContents(cache, 7) == expected(journal, 7, from));
         });
+        Run("burn-up/retention pruning refills requested tails at once and others when requested", [&] {
+            auto journal = journalOf(10);
+            BurnUpSampleCache cache;
+            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from}, {9, 3, from}}, false);
+            // Maintenance prunes the four oldest rounds of both accounts and bumps the revision.
+            journal.erase(journal.begin(), journal.begin() + 8);
+            const ULONGLONG kept = start + hour + 4 * poll;
+            UpdateBurnUpTails(cache, journal, 1, 2, 20, {{7, 1, from}}, false);
+            CHECK(tailContents(cache, 7) == expected(journal, 7, from));
+            CHECK(tailContents(cache, 7).size() == 6 && tailContents(cache, 7).front().first == kept);
+            CHECK(!tailOf(cache, 9));
+            append(journal, 7, start + hour + 10 * poll, 10);
+            append(journal, 9, start + hour + 10 * poll + 1, 110);
+            UpdateBurnUpTails(cache, journal, 1, 2, 22, {{7, 1, from}, {9, 3, from}}, false);
+            CHECK(tailContents(cache, 9) == expected(journal, 9, from));
+            CHECK(tailContents(cache, 9).size() == 7 && tailContents(cache, 9).front().first == kept + 1);
+            CHECK(tailContents(cache, 7) == expected(journal, 7, from) && tailContents(cache, 7).size() == 7);
+        });
         Run("burn-up/unrequested tails still receive their appends", [&] {
             auto journal = journalOf(5);
             BurnUpSampleCache cache;

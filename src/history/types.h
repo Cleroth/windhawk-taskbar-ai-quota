@@ -22,8 +22,25 @@ struct HistorySample {
     uint64_t checksum = 0;
 };
 static_assert(sizeof(HistorySample) == 240);
+// The journal's state when it was read: loaded (a damaged or unreadable journal stays loaded with
+// an error status), then its epoch (Clear), revision (load, cap eviction, retention pruning) and
+// append count. Equal stamps hold the same samples.
+struct HistoryJournalStamp {
+    bool loaded = false;
+    uint64_t epoch = 0, revision = 0, appended = 0;
+    bool operator==(const HistoryJournalStamp&) const = default;
+};
 struct HistorySnapshot {
     std::vector<HistorySample> samples;
     std::wstring status;  // The journal's error status; empty while healthy
     bool capped = false;  // The storage cap pruned the oldest samples
+    HistoryJournalStamp stamp;
+};
+// A memory-only look at the journal: its stamp, status and cap, and a replacement for a held
+// snapshot (every sample from the asked start on, possibly none) or nullopt: no replacement.
+struct HistoryPeek {
+    HistoryJournalStamp stamp;
+    std::wstring status;
+    bool capped = false;
+    std::optional<std::vector<HistorySample>> samples;
 };

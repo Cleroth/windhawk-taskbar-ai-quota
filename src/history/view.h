@@ -24,6 +24,7 @@ struct HistoryUiViewAccount {
     double weeklyPct = -1;      // The latest poll's weekly used %; < 0 unknown
     bool stale = false;         // That poll is stale: the value shows muted, cards never say "now"
     ULONGLONG lastPollMs = 0;   // The latest successful poll; 0 none
+    bool operator==(const HistoryUiViewAccount&) const = default;
 };
 
 // A summary card (approved Q10 a): a series' chip name and line, a headline with the current
@@ -36,12 +37,14 @@ struct HistoryUiCard {
     bool detailsOnly = false;
     std::wstring value, when;   // Empty without a current reading
     std::vector<std::wstring> lines;
+    bool operator==(const HistoryUiCard&) const = default;
 };
 
 // An account without readings in range: its logo, label and provider (with its status).
 struct HistoryUiNoReadings {
     uint32_t provider = 0;
     std::wstring label, detail;
+    bool operator==(const HistoryUiNoReadings&) const = default;
 };
 
 // A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
@@ -58,6 +61,15 @@ struct HistoryUiLine {
     int stroke = 3;
     double low = 0, high = 0;
     bool hidden = false;
+    bool operator==(const HistoryUiLine&) const = default;
+};
+
+// An operation's result shown inline (approved Q3 a, s-states): failures as errors, successes and
+// cancellations as information, until the next operation or a selection change.
+struct HistoryUiNotice {
+    std::wstring text;
+    UiSeverity severity = UiSeverity::Info;
+    bool operator==(const HistoryUiNotice&) const = default;
 };
 
 struct HistoryUiView {
@@ -79,11 +91,13 @@ struct HistoryUiView {
     bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
 
     // Status: the pill, the header's status text ("Updated Sat 31 Oct 14:32"; empty before the
-    // first load) and the journal's state (its status without the cap note, the cap)
+    // first load), the journal's state (its status without the cap note, the cap) and an
+    // operation's notice (none: empty text)
     HistoryUiPill pill = HistoryUiPill::Recording;
     std::wstring status;
     std::wstring storageError;
     bool storageCapped = false;
+    HistoryUiNotice notice;
 
     // Content: the loading state before the first load, then cards (HistoryUiSetCards) and the
     // chart's lines
@@ -91,6 +105,7 @@ struct HistoryUiView {
     std::vector<HistoryUiCard> cards;
     std::vector<HistoryUiNoReadings> noReadings;
     std::vector<HistoryUiLine> lines;
+    bool operator==(const HistoryUiView&) const = default;
 };
 
 // Interactive items keep these ids across rebuilds, so focus follows them; an account's entry

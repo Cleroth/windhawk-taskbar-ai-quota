@@ -105,9 +105,17 @@ def generate(source, output, expected_hash):
 
     # Every section is bounded by its own fragment. Pure fragments are taken whole: the account
     # model, sample types, continuity rules, the flyout's burn-up curves and the shared history
-    # model. Journal, store, state and window fragments only contribute named definitions.
+    # model; so is the journal's coordination state (a lock, counters and flags). Journal, store
+    # and window fragments only contribute named definitions.
     emit("core/model.h", fragment(text, "core/model.h"))
     emit("history/types.h", fragment(text, "history/types.h"))
+    # The journal's memory-only parts: its in-memory state (never the storage state after it),
+    # the status notifier and the history window's peek. Nothing that loads or writes storage.
+    journal = "history/journal.h"
+    emit("history/state.h", fragment(text, "history/state.h"))
+    emit("journal memory state", within(text, journal, between, "static std::deque<HistorySample> g_historySamples;", "static std::wstring g_historyPath;"))
+    for name in ["SetHistoryStatus", "PeekHistorySnapshot"]:
+        emit(name, within(text, journal, definition, name))
     emit("filetime epoch", within(text, "core/helpers.h", constant, "kFileTimeUnixEpochOffsetMs"))
     for name in ["Utf8ToWide", "WideToUtf8", "UnixMsToLocalSystemTime", "ProviderDisplayName"]:
         emit(name, within(text, "core/helpers.h", definition, name))

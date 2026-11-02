@@ -99,11 +99,20 @@ regenerates.
   formats in synthetic time zones, number rounding and abbreviation with carry, hours; summary
   cards and No readings entries built through `HistoryCollectAccounts` and `HistoryBuildSeries`
   from synthetic readings, as the window's controller does), `fixtures/history-controller.inc`
-  (the controller against `TestHistoryOps`: in-memory request, journal, settings with polls,
-  clock and unload, with an operation log; open requests before and after the window is
+  (the controller against `TestHistoryOps`: in-memory request, journal with its stamp and peek
+  contract, settings with polls, clock, unload, posted refresh messages, the deferral timer and
+  the consent transaction, with an operation log; open requests before and after the window is
   published, repeated and unlisted requests, removed accounts, per-mode views, the range under
   week comparison, close and unload with a request pending, and the view it fills; orchestration
-  only, never the production ops or the opener-to-window bridge) and
+  only, never the production ops or the opener-to-window bridge),
+  `fixtures/history-refresh.inc` (live refresh: one post per batch of notifications, the live and
+  sample parts by the journal's stamp, empty versus no replacement, status-only changes, failed
+  storage initialization, pruning, widened ranges, modal, popup and inspection deferral (pointer
+  or readout, an unreported leave ended by the timer, a chart scrolled under a still pointer) with
+  their resume paths and the no-stranding invariant after every event, explicit loads clearing the
+  work, raw rows rebuilt with a replacement while the laid-out chart keeps its own snapshot,
+  unload during collection changing nothing;
+  Enable recording's success, failure notice, and unload or close during it) and
   `fixtures/history-frame.inc` (the frame per
   state: navigation entries and their ids per history ID, values and inks, the Removed group;
   header title, status, pill, icon buttons, the narrow rule; segments, Compare disabling range;
@@ -123,8 +132,8 @@ regenerates.
   pane at its scroll, viewport, scrollbar, the More menu and a chart's readout where the host
   shows them; the chart and its chips by the production painter, laid out by a controller over
   a synthetic journal), modeled on the approved phase-3 mockups: `default` (s-light), `account`
-  (s-account), `compare`, `states` (recording off, storage failing, waiting with focus and
-  hover), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings,
+  (s-account), `compare`, `states` (recording off, Enable recording's failure notice, storage
+  failing, waiting with focus and hover), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings,
   dollars only, the No readings card beside cards), `menu`, `min` (the minimum window scrolled),
   `nav` (the scrolled sidebar), `band` (above 100%), `chart-views` (every view, both extra axes),
   `chart-ticks` (each range's ticks) and `chart-states` (comparing, above 100%, every line hidden,
@@ -209,8 +218,10 @@ window/thread/teardown contract in a test process (the controller against a test
 popup and EDITs against a stub client); Explorer, the settings thread's real client and store,
 DWM caption colors, how the title bar and Alt+Tab show the window icon, live theme switches and
 multi-monitor DPI need the runtime check in the root guide. The history controller fills
-its view from in-memory ops: the production ops (journal, settings and poll reads), the opener,
-the window client and its activation path are outside this suite. The popup probe's automated part covers thread-local activation and programmatic events
+its view from in-memory ops: the production ops (journal reads and the peek, settings and poll
+reads, the consent transaction, the refresh message and deferral timer), the opener, the window
+client (its notification, inspection and popup inputs) and its activation path are outside this
+suite; `tests/history` covers the production peek's contract. The popup probe's automated part covers thread-local activation and programmatic events
 only; real clicks on other apps or the taskbar, Alt+Tab, Start and wheel routing need the
 interactive mode, and neither runs inside Explorer (where the taskbar shares the process). The
 same holds for the tooltip: on the hidden desktop the cursor image isn't readable (the fallback

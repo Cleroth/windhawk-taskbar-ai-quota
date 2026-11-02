@@ -9,26 +9,30 @@ static constexpr size_t kHistoryMaxSamples = 250000;  // ~60 MB, independent of 
 static constexpr ULONGLONG kHistoryTimestampLimitMs = 100000000000000ULL;
 static constexpr ULONGLONG kHistoryMaxWindowMs = 3650 * kHistoryDayMs;
 static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
+// In-memory journal state, then its storage state.
 static std::deque<HistorySample> g_historySamples;
-// Let incremental readers (burn-up curves) mirror g_historySamples: they copy only samples
-// appended since their last copy while the revision is unchanged. The revision changes when
-// samples are loaded or evicted by the size cap; Clear changes g_historyEpoch.
+// Let incremental readers (burn-up curves, the history window's refresh) mirror
+// g_historySamples: they copy only samples appended since their last copy while the revision is
+// unchanged. The revision changes when samples are loaded, evicted by the size cap or pruned by
+// retention; Clear changes g_historyEpoch.
 static uint64_t g_historyAppendCount = 0;
 static uint64_t g_historyRevision = 0;
-static std::wstring g_historyPath;
 static std::wstring g_historyStatus;
 static bool g_historyLoaded = false;
+static bool g_historyCapped = false;
+static std::wstring g_historyPath;
 static bool g_historyWritable = true;
 static bool g_historyDirty = false;
-static bool g_historyCapped = false;
 static ULONGLONG g_historyMaintenanceMs = 0;
 static ULONGLONG g_historyWriteRetryMs = 0;
 static winrt::file_handle g_historyOwnership;
 
+// Each change of the status text notifies the settings and history windows (a posted message).
 static void SetHistoryStatus(std::wstring message) {
+    bool changed = message != g_historyStatus;
     g_historyStatus = std::move(message);
-    bool error = !g_historyStatus.empty();
-    if (g_historyStorageError.exchange(error) != error) NotifySettingsWindowChanged();
+    g_historyStorageError = !g_historyStatus.empty();
+    if (changed) NotifySettingsWindowChanged();
 }
 
 static bool IsHistoryOwnerProcess() {
@@ -236,7 +240,10 @@ static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
         std::erase_if(g_historySamples, [cutoff](const auto& sample) {
             return sample.timeMs < cutoff;
         });
-        if (g_historySamples.size() != previousSize) g_historyDirty = true;
+        if (g_historySamples.size() != previousSize) {
+            g_historyDirty = true;
+            ++g_historyRevision;
+        }
         if (g_historyDirty && g_historyWritable && !g_unloading && now >= g_historyWriteRetryMs) {
             RewriteHistoryLocked(g_historySamples);
         }
@@ -325,16 +332,39 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
     }
 }
 
+// Loads the journal if it isn't (read-only), then its samples from `fromMs` on with the status,
+// cap and stamp of that state.
 static HistorySnapshot ReadHistorySnapshot(ULONGLONG fromMs) {
     std::lock_guard lock(g_historyMutex);
     LoadHistoryLocked();
     HistorySnapshot snapshot;
     snapshot.status = g_historyStatus;
     snapshot.capped = g_historyCapped;
+    snapshot.stamp = {g_historyLoaded, g_historyEpoch.load(), g_historyRevision, g_historyAppendCount};
     for (const auto& sample : g_historySamples) {
         if (sample.timeMs >= fromMs) snapshot.samples.push_back(sample);
     }
     return snapshot;
+}
+
+// The history window's refresh: memory only, never loading, creating or retrying storage. In one
+// hold: the stamp, status and cap, and, when `samples` asks for them, the journal is loaded and it
+// differs from a snapshot held with `held` from `heldFrom` (another stamp, or `fromMs` further
+// back), a replacement: every sample from `fromMs` on, possibly none.
+static HistoryPeek PeekHistorySnapshot(ULONGLONG fromMs, bool samples, const HistoryJournalStamp& held,
+                                       ULONGLONG heldFrom) {
+    std::lock_guard lock(g_historyMutex);
+    HistoryPeek peek;
+    peek.stamp = {g_historyLoaded, g_historyEpoch.load(), g_historyRevision, g_historyAppendCount};
+    peek.status = g_historyStatus;
+    peek.capped = g_historyCapped;
+    if (samples && g_historyLoaded && (peek.stamp != held || fromMs < heldFrom)) {
+        std::vector<HistorySample>& replacement = peek.samples.emplace();
+        for (const auto& sample : g_historySamples) {
+            if (sample.timeMs >= fromMs) replacement.push_back(sample);
+        }
+    }
+    return peek;
 }
 
 static bool ClearHistory(std::wstring* error) {

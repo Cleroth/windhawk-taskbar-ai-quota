@@ -36,9 +36,12 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
         items.push_back(std::move(card));
     };
 
-    // Info bars (mockup .ibar), 10 DIP apart: this user's recording off (caution, with Enable
-    // recording), a storage error, the storage cap (caution), then the selected account's own
-    // recording off or pause (info).
+    // Info bars (mockup .ibar), 10 DIP apart: an operation's notice, this user's recording off
+    // (caution, with Enable recording), a storage error, the storage cap (caution), then the
+    // selected account's own recording off or pause (info).
+    if (!view.notice.text.empty()) {
+        y = UiAddInfoBar(g, items, id, id++, x, y, width, {{view.notice.text}}, view.notice.severity) + 10;
+    }
     if (!view.recordingEnabled) {
         y = UiAddInfoBar(g, items, id, id++, x, y, width,
                          {{L"History recording is off. Saved history stays; nothing new is recorded."}},

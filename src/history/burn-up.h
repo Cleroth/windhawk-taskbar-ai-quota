@@ -59,9 +59,9 @@ struct BurnUpSampleCache {
 // Copy step, run under g_historyMutex with the journal's epoch, revision and append count. A
 // requested tail gets only the samples appended since the last copy; it is refilled from its
 // scan start when it is new or must reach further back, on `rescan`, or when the journal changed
-// other than by appends (Clear, load, cap eviction), which also drops unrequested tails. Each
-// requested tail is then trimmed to its scan start, which also drops readings that retention
-// maintenance prunes from the journal.
+// other than by appends (Clear, load, cap eviction, retention pruning), which also drops
+// unrequested tails: they refill once requested again. Each requested tail is then trimmed to its
+// scan start.
 static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<HistorySample>& journal,
                               uint64_t epoch, uint64_t revision, uint64_t appended,
                               const std::vector<BurnUpRequest>& requests, bool rescan) {

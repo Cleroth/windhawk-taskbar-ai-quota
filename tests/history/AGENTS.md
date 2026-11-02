@@ -61,6 +61,15 @@ from an older source hash.
   source. Fake HWND/tooltip seams
   assert observable calls, text lifetime and failure handling. GDI rendering/resource counts are
   real. Stubs don't prove native control semantics.
+- **Journal memory parts** (`fixtures/journal.inc`): the in-memory journal state, the status
+  notifier (`SetHistoryStatus`, its window notification a counting stub) and the history window's
+  peek (`PeekHistorySnapshot`) are actual source; nothing that loads or writes storage is
+  extracted, so the peek compiles only while it never loads. Its lock is the real
+  `g_historyMutex`. A refresh-cost observation at the 250,000-sample cap prints one `OBSERVE
+  refresh-cost` line (copy, sort, account collection, series analysis, reduction; `-O0` like the
+  rest of the build): an observation, not a readiness condition. The tail cache's reaction to
+  retention pruning is `burn-up.inc`'s; the prune's revision bump in `MaintainHistory` is not
+  extracted.
 - **Native contracts:** a separate hand-written positive probe (not extracted production code)
   exercises V2 `TOOLINFO`, swap-backed active text changes without hide/show, offscreen first
   activation then `GetWindowRect`, and no preactivation `TTM_GETBUBBLESIZE`. It records the actual
@@ -101,9 +110,10 @@ native evidence suffices.
   pass a test. Review extraction when production structure changes. Extraction reads the
   generated file, but every section is bounded by its own `// src/<path>` fragment: pure
   fragments (`core/model.h`, `history/types.h`, `continuity.h`, `burn-up.h`, `series.h`,
-  `paint.h`) whole, other fragments by named definitions or anchors searched inside that fragment
-  only, so include order can't change what is extracted. Fix production code in `src/` and
-  regenerate.
+  `paint.h`) and the journal's coordination state (`history/state.h`) whole, other fragments by
+  named definitions or anchors searched inside that fragment only, so include order can't change
+  what is extracted. `history/journal.h` keeps its in-memory state before its storage state
+  (`g_historyPath` ends the extracted block). Fix production code in `src/` and regenerate.
 - `fixtures/model.inc` tests the shared model (`history/series.h`) through its explicit inputs;
   its trailing classic section and the interaction/tooltip/paint fixtures test the classic
   window through its adapters.

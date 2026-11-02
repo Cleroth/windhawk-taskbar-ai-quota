@@ -1,7 +1,7 @@
 // The custom-drawn usage history window: the history client of the window host (ui/host.h), run
 // on the history thread (history/window.h); never touches XAML. It only translates: host
-// callbacks into controller events (history/controller.h, on its production ops), the
-// controller's view into frames (history/shell.h) and its chart into paints (history/
+// callbacks and notifications into controller events (history/controller.h, on its production
+// ops), the controller's view into frames (history/shell.h) and its chart into paints (history/
 // chart-paint.h) and readouts, rebuilds and focus requests. It holds no D2D objects.
 
 static constexpr PCWSTR kHistoryUiClass = L"AiQuotaHistoryUi_" WH_MOD_ID;
@@ -30,52 +30,74 @@ struct HistoryUiClient final : UiHostClient {
     }
 
     // Only a change of the picked lines repaints the chart's surface; the readout's rows change
-    // with the picked samples.
+    // with the picked samples. An ended hover (a hide trigger) leaves the inspection on while the
+    // pointer is still over the chart.
     bool ChartHover(UiHost& host, uint32_t, std::optional<D2D1_POINT_2F> point, UiTooltipContent& readout) override {
-        return controller.Hover(point, readout, host.palette);
+        bool changed = controller.Hover(point, readout, host.palette);
+        controller.Inspect(point.has_value() || PointerOnChart(host));
+        return changed;
     }
 
-    // A new selection or view scrolls the content back to its top.
+    // A new selection or view scrolls the content back to its top; a successful Enable recording
+    // focuses the selected entry.
     void Invoke(UiHost& host, UiAction action) override {
         if (Unloading() || action.kind != UiActionKind::Command) return;
         uint64_t selected = controller.selectedId;
         HistoryView shown = controller.view.view;
         controller.Command(HistoryUiCommand(action.target), action.value, action.key);
+        if (std::exchange(controller.focusSelected, false)) UiHostRequestFocus(host, SelectedEntry(), false);
         UiHostRequestRebuild(host, controller.selectedId != selected || controller.view.view != shown);
     }
 
     // Explicit loads: the first one, the activation request (once the host brought the window
-    // back), F5 and Ctrl+R from either surface. A load that changed the selection (its request, or
-    // the account no longer listed) moves focus to the selected entry. Esc closes.
+    // back), F5 and Ctrl+R from either surface. Notifications become one posted refresh, which
+    // holds what it must while the popup is open (the deferral timer checks it) or the pointer
+    // inspects the chart. A load or refresh that changed the selection (its request, or the
+    // account no longer listed) moves focus to the selected entry. Esc closes.
     bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
         result = 0;
-        bool load = message == kHistoryLoadMessage || message == kHistoryActivateMessage;
-        if (message == WM_KEYDOWN) {
-            if (wParam == VK_ESCAPE) {
-                PostMessageW(host.main, WM_CLOSE, 0, 0);
-                return true;
-            }
-            load = wParam == VK_F5 || (wParam == 'R' && GetKeyState(VK_CONTROL) < 0);
-        }
-        if (!load) return false;
         uint64_t selected = controller.selectedId;
-        controller.Load();
-        bool moved = controller.selectedId != selected;
-        if (moved) {
-            const HistoryUiView& view = controller.view;
-            uint32_t entry = view.selected >= 0 ? kHistoryUiNavAccount + view.accounts[size_t(view.selected)].slot :
-                                                  kHistoryUiNavAll;
-            UiHostRequestFocus(host, {entry, -1}, false);
+        bool rebuild = true;
+        switch (message) {
+            case kHistoryLoadMessage:
+            case kHistoryActivateMessage:
+                controller.Load();
+                break;
+            case WM_KEYDOWN:
+                if (wParam == VK_ESCAPE) {
+                    PostMessageW(host.main, WM_CLOSE, 0, 0);
+                    return true;
+                }
+                if (wParam != VK_F5 && !(wParam == 'R' && GetKeyState(VK_CONTROL) < 0)) return false;
+                controller.Load();
+                break;
+            case kSettingsRefreshMessage:
+            case kHistoryConsentChangedMessage:
+                controller.Notify();
+                return true;
+            case kHistoryRefreshMessage:
+                rebuild = controller.ProcessRefresh(host.popup.open, PointerOnChart(host));
+                break;
+            case WM_TIMER:
+                if (wParam != kHistoryDeferralTimer) return false;
+                controller.DeferralTick(host.popup.open, PointerOnChart(host));
+                return true;
+            default:
+                return false;
         }
-        UiHostRequestRebuild(host, moved);
+        bool moved = controller.selectedId != selected;
+        if (moved) UiHostRequestFocus(host, SelectedEntry(), false);
+        if (rebuild || moved) UiHostRequestRebuild(host, moved);
         return true;
     }
 
     // The window is published before its first load is posted: an open request stored before
-    // either is taken by that load, a later one by its activation.
+    // either is taken by that load, a later one by its activation. Notifications reach it from
+    // then on.
     bool Attach(UiHost& host) override {
         controller.Open();
         g_historyWindow.store(host.main);
+        g_historyUiWindow.store(host.main);
         PostMessageW(host.main, kHistoryLoadMessage, 0, 0);
         return true;
     }
@@ -90,7 +112,23 @@ struct HistoryUiClient final : UiHostClient {
 
     bool PrepareClose(UiHost&) override { return true; }
 
-    void Destroying() override { g_historyWindow.store(nullptr); }
+    void Destroying() override {
+        g_historyUiWindow.store(nullptr);
+        g_historyWindow.store(nullptr);
+    }
 
     void Destroyed() override {}
+
+    // The navigation entry of the selected account (or All accounts).
+    UiFocusRef SelectedEntry() const {
+        const HistoryUiView& view = controller.view;
+        return {view.selected >= 0 ? kHistoryUiNavAccount + view.accounts[size_t(view.selected)].slot : kHistoryUiNavAll,
+                -1};
+    }
+
+    // Whether the host's last pointer position is over the chart's item (content surface).
+    bool PointerOnChart(const UiHost& host) const {
+        const UiItem* chart = UiFindItem(host.frame, kHistoryUiChart);
+        return chart && host.pointerSurface == UiSurfaceId::Content && UiContains(chart->rect, host.pointerAt);
+    }
 };

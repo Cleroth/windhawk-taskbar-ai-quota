@@ -1,42 +1,96 @@
 // The history window's controller (history/controller.h) against in-memory ops: open requests
 // before and after the window is published, repeated and unlisted requests, removed accounts,
-// each mode's view, the range under week comparison, close and unload, and the view it fills from
-// settings, polls and the journal. Orchestration only: the production ops and the opener-to-window
-// bridge are outside this suite. Hand-derived expectations.
+// each mode's view, the range under week comparison, close and unload, the view it fills from
+// settings, polls and the journal, and Enable recording. Orchestration only: the production ops
+// and the opener-to-window bridge are outside this suite. Hand-derived expectations. Live refresh:
+// history-refresh.inc.
 
 // In-memory ops: the open request (overwritten by each open, as the shared global is), a journal
-// with its status and cap, settings with their polls, the clock, unload, and an operation log.
+// with its stamp, status and cap, settings with their polls, the clock, unload, the window's
+// posted refresh messages and deferral timer, the consent transaction, and an operation log.
 struct TestHistoryOps final : HistoryOps {
     uint64_t request = 0;
     std::vector<HistorySample> journal;
+    HistoryJournalStamp stamp{true, 1, 1, 0};
     std::wstring status;
     bool capped = false;
     HistorySettingsSnapshot settings;
     ULONGLONG now = kWeekTo;
     bool unloading = false;
-    std::vector<std::wstring> log;  // "take", "settings", "snapshot <days before now>d keep <retention>",
-                                    // "open settings"
+    // Refresh messages posted and not handled yet (failPost: posting fails), the timer, and what
+    // happens once a peek returned
+    int posted = 0;
+    bool failPost = false, timer = false;
+    std::function<void()> peeked;
+    // Enable recording: the transaction's result once it holds the edit lock, and what happens
+    // while it waits for the lock and once it notified
+    HistoryConsentResult consent = HistoryConsentResult::Applied;
+    std::function<void()> waitingForLock, notified;
+    // "take", "settings", "snapshot <days before now>d keep <retention>", "peek" (status only),
+    // "peek <days before now>d" (samples too), "consent", "notify", "post" ("post failed"),
+    // "timer on", "timer off", "open settings"
+    std::vector<std::wstring> log;
+
+    // A poll's reading recorded: appended, counted in the stamp.
+    void Append(const HistorySample& sample) {
+        journal.push_back(sample);
+        stamp.appended++;
+    }
+    std::wstring Days(ULONGLONG from) const { return std::to_wstring((now - from) / kHistoryDayMs) + L"d"; }
 
     uint64_t TakeRequest() override {
         log.push_back(L"take");
         return std::exchange(request, 0);
     }
     HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) override {
-        log.push_back(L"snapshot " + std::to_wstring((now - from) / kHistoryDayMs) + L"d keep " +
-                      std::to_wstring(retentionDays));
+        log.push_back(L"snapshot " + Days(from) + L" keep " + std::to_wstring(retentionDays));
         HistorySnapshot snapshot;
         for (const HistorySample& sample : journal) {
             if (sample.timeMs >= from) snapshot.samples.push_back(sample);
         }
         snapshot.status = status;
         snapshot.capped = capped;
+        snapshot.stamp = stamp;
         return snapshot;
+    }
+    // The journal's peek contract (tests/history checks the production one): a replacement only
+    // with samples asked for, the journal loaded, and another stamp or a start further back.
+    HistoryPeek PeekSnapshot(ULONGLONG from, bool samples, const HistoryJournalStamp& held,
+                             ULONGLONG heldFrom) override {
+        log.push_back(samples ? L"peek " + Days(from) : L"peek");
+        HistoryPeek peek{stamp, status, capped, std::nullopt};
+        if (samples && stamp.loaded && (stamp != held || from < heldFrom)) {
+            peek.samples.emplace();
+            for (const HistorySample& sample : journal) {
+                if (sample.timeMs >= from) peek.samples->push_back(sample);
+            }
+        }
+        if (peeked) peeked();
+        return peek;
     }
     HistorySettingsSnapshot ReadSettings() override {
         log.push_back(L"settings");
         return settings;
     }
+    HistoryConsentResult ApplyConsent() override {
+        log.push_back(L"consent");
+        if (waitingForLock) waitingForLock();
+        if (unloading) return HistoryConsentResult::Stopped;
+        if (consent == HistoryConsentResult::Applied) settings.settings.historyEnabled = true;
+        log.push_back(L"notify");
+        if (notified) notified();
+        return consent;
+    }
     void OpenSettings() override { log.push_back(L"open settings"); }
+    bool PostRefresh() override {
+        log.push_back(failPost ? L"post failed" : L"post");
+        posted += !failPost;
+        return !failPost;
+    }
+    void DeferralTimer(bool on) override {
+        log.push_back(on ? L"timer on" : L"timer off");
+        timer = on;
+    }
     bool Unloading() override { return unloading; }
     ULONGLONG Now() override { return now; }
     SYSTEMTIME LocalTime(ULONGLONG ms) override { return TestZone()(ms); }
@@ -64,6 +118,7 @@ static TestHistoryOps TestControllerOps() {
                    TestReading(0x0A, 2, kWeekFrom + kHourMs, {{1, 60}}),
                    TestReading(0xC1, 1, kWeekFrom + 2 * kHourMs, {{1, 45}}),
                    TestReading(0xDEAD, 1, kWeekFrom + 3 * kHourMs, {{1, 70}})};
+    ops.stamp.appended = ops.journal.size();
     return ops;
 }
 
@@ -344,8 +399,7 @@ static void RunHistoryControllerTests() {
         CHECK(a[2].slot == 2 && a[3].historyId == 0xBEEF && a[3].slot == 3);
     });
 
-    Run("history controller: the More menu's Settings opens the settings window; Export and Enable "
-        "recording do nothing", [] {
+    Run("history controller: the More menu's Settings opens the settings window; Export does nothing", [] {
         TestHistoryOps ops = TestControllerOps();
         HistoryController c(ops);
         c.Open();
@@ -355,7 +409,6 @@ static void RunHistoryControllerTests() {
         CHECK(ops.log == TestLog{L"open settings"});
         c.Command(HistoryUiCommand::Menu, 7);
         c.Command(HistoryUiCommand::Export);
-        c.Command(HistoryUiCommand::EnableRecording);
-        CHECK(ops.log.size() == 1 && !c.view.canEnableRecording);
+        CHECK(ops.log.size() == 1);
     });
 }

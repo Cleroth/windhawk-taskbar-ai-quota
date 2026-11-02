@@ -13,6 +13,10 @@ static constexpr PCWSTR kHistoryWindowClass = L"AiQuotaHistory_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
 static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
 static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
+// The custom-drawn window's posted refresh, and its deferral check timer (main window; the
+// toolkit's own timers use 0x7E01-0x7E02).
+static constexpr UINT kHistoryRefreshMessage = WM_APP + 183;
+static constexpr UINT_PTR kHistoryDeferralTimer = 0x4E01;
 static constexpr int kHistorySeriesHeight = 90;
 
 enum HistoryControlId {

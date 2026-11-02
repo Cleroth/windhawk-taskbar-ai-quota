@@ -1,5 +1,5 @@
-// Shared runtime state, lifecycle signals, and cross-thread requests to the fetch thread
-// and settings window.
+// Shared runtime state, lifecycle signals, and cross-thread requests to the fetch thread, the
+// settings window and the custom-drawn history window.
 
 static Settings g_settings;
 static std::mutex g_settingsMutex;
@@ -21,14 +21,20 @@ static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
 
 static std::atomic<HWND> g_settingsWindow{nullptr};
+// The custom-drawn usage history window while it takes notifications (history/ui-window.h); the
+// classic window never gets them.
+static std::atomic<HWND> g_historyUiWindow{nullptr};
 
 static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
 static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
 static constexpr UINT kHistoryConsentChangedMessage = WM_APP + 22;
 
+// Settings, sign-in, visibility, history ID, storage status, consent and poll changes: posted to
+// the settings window and the custom-drawn history window, never waited on.
 static void NotifySettingsWindowChanged(bool historyConsentChanged = false) {
-    if (HWND hWnd = g_settingsWindow.load()) {
-        PostMessageW(hWnd, historyConsentChanged ? kHistoryConsentChangedMessage : kSettingsRefreshMessage, 0, 0);
+    UINT message = historyConsentChanged ? kHistoryConsentChangedMessage : kSettingsRefreshMessage;
+    for (HWND window : {g_settingsWindow.load(), g_historyUiWindow.load()}) {
+        if (window) PostMessageW(window, message, 0, 0);
     }
 }
 

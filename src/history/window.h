@@ -565,6 +565,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
         }
     }
     g_historyDialog.store(nullptr);
+    g_historyUiWindow.store(nullptr);
     g_historyWindow.store(nullptr);
     if (apartmentInitialized) winrt::uninit_apartment();
     return 0;
