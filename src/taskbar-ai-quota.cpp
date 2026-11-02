@@ -21,7 +21,7 @@ Supported providers and quotas:
 
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
 - **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
-- **Google Antigravity:** short-window and weekly Gemini pools; Claude/GPT pool limits in the tooltip
+- **Google Antigravity:** short-window and weekly Gemini pools; Claude/GPT pool limits in the details flyout
 
 Optional notifications warn when usage crosses the configured red threshold.
 
