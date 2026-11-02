@@ -4588,27 +4588,7 @@ static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, 
             bool labelBold = false;
             bool quotaLine = false;
             bool errorLine = false;
-            if (line.rfind(L"5h:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 3;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"week:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 5;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"Fable week:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 11;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"Argon week:", 0) == 0) {
-                labelBrush = quotaLabel;
-                labelEnd = 11;
-                labelBold = true;
-                quotaLine = true;
-            } else if (line.rfind(L"error:", 0) == 0) {
+            if (line.rfind(L"error:", 0) == 0) {
                 labelBrush = accent;
                 labelEnd = 6;
                 labelBold = true;
@@ -4637,6 +4617,16 @@ static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, 
                 highlightStart = line.find(L"no data yet", labelEnd);
                 if (highlightStart != std::wstring::npos) highlightEnd = highlightStart + 11;
                 labelBold = true;
+            } else if (line.rfind(L"rate limits:", 0) == 0) {
+                labelBrush = muted;
+                labelEnd = 12;
+                labelBold = true;
+            } else if (size_t colon = line.find(L':');
+                       colon != std::wstring::npos && colon > 0 && colon + 1 < line.size() && line[colon + 1] == L' ') {
+                labelBrush = quotaLabel;
+                labelEnd = colon + 1;
+                labelBold = true;
+                quotaLine = true;
             }
 
             size_t textStart = 0;
@@ -4656,14 +4646,16 @@ static void UpdateQuotaToolTip(ToolTip const& toolTip, std::wstring const& tip, 
 
             size_t cursor = textStart;
             if (quotaLine) {
-                size_t percentEnd = line.find(L"%", cursor);
-                if (percentEnd != std::wstring::npos) {
+                while (cursor < line.size()) {
+                    size_t percentEnd = line.find(L"%", cursor);
+                    if (percentEnd == std::wstring::npos) break;
                     size_t percentStart = percentEnd;
                     while (percentStart > cursor) {
                         wchar_t ch = line[percentStart - 1];
                         if ((ch < L'0' || ch > L'9') && ch != L'.') break;
                         percentStart--;
                     }
+                    if (percentStart == percentEnd) break;
                     appendRun(lineBlock, line.substr(cursor, percentStart - cursor), muted);
                     appendRun(lineBlock, line.substr(percentStart, percentEnd + 1 - percentStart), duration, true);
                     cursor = percentEnd + 1;
