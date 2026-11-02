@@ -1,5 +1,5 @@
 """Small fail-closed checks for the extraction/runner boundary."""
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 from pathlib import Path
@@ -88,6 +88,26 @@ class ToolingTests(unittest.TestCase):
         self.assertEqual(results["interactive"]["exit_code"], 0)
         _, _, names = self.invoke_runner(["--popup-interactive"], freshness_exit=1)
         self.assertEqual(names, ["tooling", "freshness"])
+
+    def test_tooltip_interactive_builds_only_the_host_probe_then_runs_it_attached(self):
+        launched = []
+
+        def child(command, **_):
+            launched.append(command)
+            return run.subprocess.CompletedProcess(command, 0)
+
+        reads = []
+        code, results, names = self.invoke_runner(["--tooltip-interactive"], child=child, reads=reads)
+        self.assertEqual(code, 0)
+        self.assertEqual(names, ["tooling", "freshness", "extract-host", "host-compile", "probe-compile"])
+        self.assertEqual(reads, ["ui-host.manifest.json"])
+        self.assertEqual(len(launched), 1)
+        self.assertTrue(launched[0][1].endswith("ui-host.dll"))
+        self.assertEqual(launched[0][2:4], ["--tooltip-interactive", "--log"])
+        self.assertTrue(launched[0][4].endswith("tooltip-interactive.log"))
+        self.assertEqual(results["interactive"]["exit_code"], 0)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.invoke_runner(["--tooltip-interactive", "--popup-interactive"])
 
     def test_explicit_other_source_skips_freshness(self):
         _, _, names = self.invoke_runner(["--source", "other.wh.cpp"], model_output=self.PASSING)

@@ -9644,8 +9644,8 @@ static UiTextStyle UiIconStyle(float size) {
 
 // Device-independent resources shared by every target of one UI thread: font collections and
 // resolved families, text formats with their ellipsis signs, effect-free layouts (measuring and
-// plain drawing) and path geometries. Owned by that thread's graphics scope, released before the
-// apartment is.
+// plain drawing), path geometries and stroke styles. Owned by that thread's graphics scope,
+// released before the apartment is.
 struct UiGraphics {
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
@@ -9656,6 +9656,7 @@ struct UiGraphics {
     std::map<std::wstring, winrt::com_ptr<IDWriteInlineObject>> ellipses;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
     std::map<PCWSTR, winrt::com_ptr<ID2D1PathGeometry>> paths;
+    std::map<std::tuple<bool, float, float>, winrt::com_ptr<ID2D1StrokeStyle>> strokes;
 };
 
 // Resources bound to one render target: a recolored brush for primitives, drawing-effect
@@ -9800,6 +9801,21 @@ static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const 
     layout->SetTextAlignment(align);
     if (trim) UiTrimLayout(g, layout.get(), style);
     return layout.get();
+}
+
+// A stroke style with round caps and joins (flat caps and mitered joins when not `round`), dashed
+// when `dash` is set: dashes and gaps in stroke widths, round dashes capped beyond their length.
+static ID2D1StrokeStyle* UiStrokeStyle(UiGraphics& g, bool round, float dash = 0, float gap = 0) {
+    auto& style = g.strokes[{round, dash, gap}];
+    if (style) return style.get();
+    D2D1_CAP_STYLE cap = round ? D2D1_CAP_STYLE_ROUND : D2D1_CAP_STYLE_FLAT;
+    D2D1_STROKE_STYLE_PROPERTIES properties = D2D1::StrokeStyleProperties(
+        cap, cap, cap, round ? D2D1_LINE_JOIN_ROUND : D2D1_LINE_JOIN_MITER, 10,
+        dash > 0 ? D2D1_DASH_STYLE_CUSTOM : D2D1_DASH_STYLE_SOLID);
+    const float dashes[] = {dash, gap};
+    winrt::check_hresult(g.d2d->CreateStrokeStyle(&properties, dash > 0 ? dashes : nullptr, dash > 0 ? 2 : 0,
+                                                  style.put()));
+    return style.get();
 }
 
 // Layout box size: the widest line and the line-box height.
@@ -10245,10 +10261,14 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // rectangle's top edge. Segmented: one tab stop choosing among `options` (action.value = the
 // selected one's value); the pointer targets each segment (UiFocusRef::link = its index).
 // Pill: a status chip tinted with its `ink`, a dot (hollow unless selected) before `text`; never
-// interactive.
+// interactive. Chart: client-drawn, a tab stop while enabled (no action needed, never activated):
+// the pointer over it reports to the client, which may answer with a readout (ui/host.h), and
+// its arrows scroll the content. Custom: client-drawn whole; a decoration, or with an action a
+// control like a button (hot, pressed, a tab stop, activated, its tooltip) whose focus ring is
+// rounded at its ends.
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
-    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill
+    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill, Chart, Custom
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -10288,6 +10308,7 @@ struct UiItem {
                                      // placeholder; Option detail; Nav value
     std::vector<UiShapePart> parts;  // Shape; Option and Nav icon
     std::vector<UiOption> options;   // Dropdown; menu Button; Segmented
+    std::vector<UiRun> tooltip;      // Complete text shown after the hover delay (icon buttons, chips)
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;  // Button; Card (Subtle)
@@ -10333,6 +10354,7 @@ struct UiFocusStop {
     UiFocusRef ref;
     UiSurfaceId surface = UiSurfaceId::Main;
     bool nav = false;
+    bool chart = false;  // Its arrows scroll the content
 };
 
 static bool UiInteractiveKind(UiItemKind kind) {
@@ -10340,9 +10362,10 @@ static bool UiInteractiveKind(UiItemKind kind) {
            kind != UiItemKind::Rule && kind != UiItemKind::Pill;
 }
 
-// Reacts to the pointer and can be activated.
+// Reacts to the pointer and can be activated (a chart only reacts).
 static bool UiActive(const UiItem& item) {
-    return UiInteractiveKind(item.kind) && item.enabled && item.action.kind != UiActionKind::None;
+    return UiInteractiveKind(item.kind) && item.enabled &&
+           (item.action.kind != UiActionKind::None || item.kind == UiItemKind::Chart);
 }
 
 // A tab stop. Spin buttons belong to their number box; options to the dropdown field; a
@@ -10380,7 +10403,7 @@ static std::vector<UiFocusStop> UiFocusStops(const UiFrame& frame) {
                     link++;
                 }
             } else if (UiFocusable(item)) {
-                stops.push_back({{item.id, -1}, surface, item.kind == UiItemKind::Nav});
+                stops.push_back({{item.id, -1}, surface, item.kind == UiItemKind::Nav, item.kind == UiItemKind::Chart});
             }
         }
     }
@@ -10418,9 +10441,9 @@ static int UiSelectedSegment(const UiItem& item) {
 }
 
 // The interactive element under a point: an inline link or a segment, else the topmost
-// interactive item. A disabled interactive item blocks the items below it; an enabled one
-// without an action (a plain card, a chip that only shows) doesn't. A slider takes in its thumb,
-// which overhangs the track's ends by its 10 DIP radius.
+// interactive item. A disabled interactive item blocks the items below it; an enabled inactive
+// one (a plain card, a chip that only shows) doesn't. A slider takes in its thumb, which
+// overhangs the track's ends by its 10 DIP radius.
 static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D1_POINT_2F point) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const UiItem& item = *it;
@@ -10436,9 +10459,7 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
             if (run && run->action.kind != UiActionKind::None) return {item.id, link};
             continue;
         }
-        if (!UiInteractiveKind(item.kind) || (item.enabled && item.action.kind == UiActionKind::None)) {
-            continue;
-        }
+        if (!UiInteractiveKind(item.kind) || (item.enabled && !UiActive(item))) continue;
         if (!UiActive(item)) return {};
         if (item.kind == UiItemKind::Segmented) {
             std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, item);
@@ -11024,8 +11045,8 @@ struct UiPaintState {
     D2D1_POINT_2F pointer{-1e9f, -1e9f};
 };
 
-// Draws a client-drawn item (a Preview, a Gallery card's thumbnail) with the target's transform
-// in item coordinates.
+// Draws a client-drawn item (a Preview, a Gallery card's thumbnail, a Chart, a Custom item) with
+// the target's transform in item coordinates.
 using UiCustomPaint = std::function<void(const UiItem&)>;
 
 static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
@@ -11559,11 +11580,14 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              {thumb.left + 2, thumb.bottom + 8}, item.enabled ? p.text : p.textDisabled);
                 break;
             }
+            // Client-drawn; without a painter only a preview shows (a placeholder).
             case UiItemKind::Preview:
+            case UiItemKind::Chart:
+            case UiItemKind::Custom:
                 if (custom && *custom) {
                     (*custom)(item);
                     target->SetTransform(&shifted);
-                } else {
+                } else if (item.kind == UiItemKind::Preview) {
                     UiFillRect(target, cache, r, 4, p.control, scale);
                 }
                 break;
@@ -11581,7 +11605,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
             focused->kind != UiItemKind::TextBox) {
             float radius = state.focus.link >= 0                  ? 2 :
                            focused->kind == UiItemKind::Swatch    ? (focused->rect.right - focused->rect.left) / 2 :
-                           focused->kind == UiItemKind::Chip      ? (focused->rect.bottom - focused->rect.top) / 2 :
+                           focused->kind == UiItemKind::Chip ||
+                               focused->kind == UiItemKind::Custom ? (focused->rect.bottom - focused->rect.top) / 2 :
                            focused->kind == UiItemKind::Segmented ? 3 :
                            focused->kind == UiItemKind::Card ||
                                focused->kind == UiItemKind::Gallery ? 6 : 4;
@@ -11656,8 +11681,8 @@ struct UiIntent {
 };
 
 // Keys on the focused surface. Tab cycles all stops; Up/Down/Home/End move within the
-// navigation pane, Up/Down between content stops (scrolling past the ends); Page Up/Down and
-// Home/End scroll content; Enter and Space activate.
+// navigation pane, Up/Down between content stops (scrolling past the ends) and scroll on a chart;
+// Page Up/Down and Home/End scroll content; Enter and Space activate.
 static UiIntent UiKeyIntent(const std::vector<UiFocusStop>& stops, UiFocusRef focus,
                             UiSurfaceId surface, UINT key, bool shift, float lineStep,
                             float pageStep) {
@@ -11685,6 +11710,7 @@ static UiIntent UiKeyIntent(const std::vector<UiFocusStop>& stops, UiFocusRef fo
         case VK_DOWN: {
             int direction = key == VK_DOWN ? 1 : -1;
             if (inNav) return move(direction, true);
+            if (known && at->chart) return {UiIntentKind::ScrollBy, {}, direction * lineStep};
             if (surface == UiSurfaceId::Content) {
                 UiIntent next = known ? move(direction, false) : UiIntent{};
                 if (next.kind != UiIntentKind::None) return next;
@@ -11812,6 +11838,301 @@ static float UiScrollForThumb(const UiScrollbar& bar, float thumbTop, float view
     if (travel <= 0) return 0;
     float fraction = std::clamp((thumbTop - bar.track.top) / travel, 0.0f, 1.0f);
     return fraction * std::max(contentHeight - viewportHeight, 0.0f);
+}
+// src/ui/tooltip-layout.h
+// Tooltip content, layout and placement (pure): a hover readout's rows or a complete-text block,
+// laid out inside a region of the work area beside the pointer, never under it, and the items
+// the tooltip window paints (ui/tooltip.h). Sizes follow the approved mockups (q6a-tooltip,
+// q6-rows, s-tooltips): caption text on 16 DIP lines and 8 DIP padding; a row's 16 DIP swatch
+// and 6 DIP gap, 12 DIP before its mandatory part, titles cut no shorter than 64 DIP, 4 DIP
+// between rows and 16 between columns; text blocks at most 420 DIP wide with 10 DIP side
+// padding, 8 above and 9 below; the pointer kept 8 DIP clear.
+static constexpr float kUiTipPad = 8, kUiTipLine = 16, kUiTipSwatch = 16 + 6, kUiTipGap = 12, kUiTipMinTitle = 64,
+                       kUiTipRowGap = 4, kUiTipColumnGap = 16, kUiTipTextWidth = 420, kUiTipTextSide = 10,
+                       kUiTipTextTop = 8, kUiTipTextBottom = 9, kUiTipMargin = 8;
+static constexpr PCWSTR kUiTipSwatchPath = L"M2,8H14";  // 16 DIP view box
+
+// One readout row: a swatch in its line's color and width, the line's title (the only part ever
+// cut) and the mandatory part (period, value with its unit, time), never cut.
+struct UiReadoutRow {
+    std::wstring title;
+    std::vector<UiRun> detail;
+    D2D1_COLOR_F color{};
+    float stroke = 2;  // DIPs
+};
+
+// What a tooltip shows: readout rows or a complete-text block. key 0: nothing; an unchanged key:
+// the same content. `more` follows "+N more" when not every row fits (" — select one account").
+struct UiTooltipContent {
+    uint64_t key = 0;
+    std::vector<UiReadoutRow> rows;
+    std::wstring more;
+    std::vector<UiRun> text;
+};
+
+// A readout's widths, measured once per content: the widest title and the widest mandatory part
+// (whole DIPs).
+struct UiTooltipMeasure {
+    float title = 0, detail = 0;
+};
+
+static UiTooltipMeasure UiMeasureReadout(UiGraphics& g, const UiTooltipContent& content) {
+    UiTooltipMeasure measure;
+    for (const UiReadoutRow& row : content.rows) {
+        measure.title = std::max(measure.title,
+                                 UiLayoutSize(UiRichLayout(g, {{row.title}}, UiFont::Caption, 100000)).width);
+        measure.detail = std::max(measure.detail,
+                                  std::ceil(UiLayoutSize(UiRichLayout(g, row.detail, UiFont::Caption, 100000)).width));
+    }
+    return measure;
+}
+
+// A laid-out tooltip in DIPs. A readout: `columns` columns of `rows` row slots, each `column`
+// wide with titles `title` wide, of one-line rows or two-line ones (`narrow`: the mandatory part
+// under the title); its first `shown` rows, then, when `more` rows don't fit, the "+N more" hint
+// (`hint` tall) in the slots after them. A text block: wrapped `column` wide.
+struct UiTooltipLayout {
+    bool narrow = false;
+    int columns = 0, rows = 0, shown = 0, more = 0;
+    float column = 0, title = 0, hint = 0, width = 0, height = 0;
+    bool operator==(const UiTooltipLayout&) const = default;
+};
+
+static std::wstring UiMoreText(int more, const std::wstring& suffix) {
+    return L"+" + std::to_wstring(more) + L" more" + suffix;
+}
+
+// Most rows, then one-line rows, then the widest titles.
+static bool UiBetterReadout(const UiTooltipLayout& a, const UiTooltipLayout& b) {
+    if (a.shown != b.shown) return a.shown > b.shown;
+    if (a.narrow != b.narrow) return !a.narrow;
+    return a.title > b.title + 0.01f;
+}
+
+// The readout's best layout inside a region (DIPs): per form and column count, equal columns
+// that each hold the mandatory part and a title of at least 64 DIP; its capacity is columns x
+// the rows its height holds. All rows when they fit; otherwise the "+N more" hint, measured on
+// its own at the column's full width (it can wrap; the columns widen to it), takes the last
+// column's last slots before the rows are counted. Of these the best (UiBetterReadout; among
+// equals the fewest columns); none when no column fits.
+static std::optional<UiTooltipLayout> UiLayoutReadout(UiGraphics& g, const UiTooltipContent& content,
+                                                      const UiTooltipMeasure& measure, D2D1_SIZE_F region) {
+    int count = int(content.rows.size());
+    float innerWidth = region.width - 2 * kUiTipPad, innerHeight = region.height - 2 * kUiTipPad;
+    std::optional<UiTooltipLayout> best;
+    for (bool narrow : {false, true}) {
+        float line = narrow ? 2 * kUiTipLine : kUiTipLine;
+        int rows = int(std::floor((innerHeight + kUiTipRowGap) / (line + kUiTipRowGap)));
+        if (count < 1 || rows < 1) continue;
+        for (int columns = 1;; columns++) {
+            float column = (innerWidth - float(columns - 1) * kUiTipColumnGap) / float(columns);
+            float room = narrow ? column - kUiTipSwatch : column - kUiTipSwatch - kUiTipGap - measure.detail;
+            if (room < kUiTipMinTitle || room < (narrow ? measure.detail : 0)) break;
+            UiTooltipLayout layout;
+            layout.narrow = narrow;
+            layout.title = std::min(measure.title, room);
+            layout.column = kUiTipSwatch + (narrow ? std::max(layout.title, measure.detail) :
+                                                     layout.title + kUiTipGap + measure.detail);
+            int capacity = columns * rows;
+            layout.columns = columns;
+            layout.rows = rows;
+            layout.shown = count;
+            if (count > capacity) {
+                int slots = 1;
+                DWRITE_TEXT_METRICS hint{};
+                while (slots <= rows) {
+                    layout.more = count - (capacity - slots);
+                    winrt::check_hresult(UiLayout(g, UiMoreText(layout.more, content.more), UiTextStyleFor(UiFont::Caption),
+                                                  column - kUiTipSwatch)->GetMetrics(&hint));
+                    int need = int(std::ceil((hint.height + kUiTipRowGap) / (line + kUiTipRowGap) - 0.001f));
+                    if (need <= slots) break;
+                    slots = need;
+                }
+                if (slots > rows) continue;
+                layout.hint = hint.height;
+                layout.column = std::max(layout.column, std::min(column, kUiTipSwatch + std::ceil(hint.width)));
+                layout.shown = capacity - slots;
+            } else {
+                // Balanced: as few columns as hold every row, as few rows as fill them.
+                layout.columns = (count + rows - 1) / rows;
+                layout.rows = (count + layout.columns - 1) / layout.columns;
+            }
+            layout.width = 2 * kUiTipPad + float(layout.columns) * layout.column +
+                           float(layout.columns - 1) * kUiTipColumnGap;
+            layout.height = 2 * kUiTipPad + float(layout.rows) * line + float(layout.rows - 1) * kUiTipRowGap;
+            if (!best || UiBetterReadout(layout, *best)) best = layout;
+            if (count <= capacity) break;  // More columns would only narrow the titles.
+        }
+    }
+    return best;
+}
+
+// The pointer a tooltip is placed for, in screen pixels: the cursor's hotspot, the cursor image's
+// rectangle (wherever the hotspot lies in it), the work area of its monitor (any origin) and that
+// monitor's DPI.
+struct UiTooltipKey {
+    POINT cursor{};
+    RECT cursorRect{}, work{};
+    UINT dpi = 96;
+};
+
+enum class UiTooltipSide : uint8_t { Below, Right, Above, Left };
+
+struct UiTooltipSpot {
+    RECT rect{};  // Screen pixels
+    UiTooltipSide side = UiTooltipSide::Below;
+    UiTooltipLayout layout;
+};
+
+// Where a tooltip goes. The exclusion rectangle is the cursor image (and its hotspot) 8 DIP
+// out; the candidate regions are the work area below, right of, above and left of it. A readout
+// takes the region whose layout is best (UiBetterReadout; ties in that side order), a text block
+// (wrapped at the region's width, at most 420 DIP, at its full height) the first region that
+// holds it whole. The rectangle lies against the exclusion rectangle, aligned with the pointer
+// along it, and is never moved or clamped afterwards: it never covers the cursor. None when
+// nothing fits: no rectangle at all.
+static std::optional<UiTooltipSpot> UiTooltipPlacement(UiGraphics& g, const UiTooltipContent& content,
+                                                       const UiTooltipMeasure& measure, const UiTooltipKey& at) {
+    float scale = float(std::max(at.dpi, 1u)) / 96;
+    LONG margin = LONG(std::ceil(kUiTipMargin * scale));
+    const RECT& c = at.cursorRect;
+    const RECT exclusion{std::min(c.left, at.cursor.x) - margin, std::min(c.top, at.cursor.y) - margin,
+                         std::max(c.right, at.cursor.x + 1) + margin, std::max(c.bottom, at.cursor.y + 1) + margin};
+    const RECT& w = at.work;
+    const std::pair<UiTooltipSide, RECT> regions[] = {
+        {UiTooltipSide::Below, {w.left, std::max(exclusion.bottom, w.top), w.right, w.bottom}},
+        {UiTooltipSide::Right, {std::max(exclusion.right, w.left), w.top, w.right, w.bottom}},
+        {UiTooltipSide::Above, {w.left, w.top, w.right, std::min(exclusion.top, w.bottom)}},
+        {UiTooltipSide::Left, {w.left, w.top, std::min(exclusion.left, w.right), w.bottom}},
+    };
+    std::optional<UiTooltipSpot> best;
+    for (const auto& [side, region] : regions) {
+        LONG width = region.right - region.left, height = region.bottom - region.top;
+        if (width <= 0 || height <= 0) continue;
+        D2D1_SIZE_F room{float(width) / scale, float(height) / scale};
+        std::optional<UiTooltipLayout> layout;
+        if (!content.rows.empty()) {
+            layout = UiLayoutReadout(g, content, measure, room);
+            if (!layout || (best && !UiBetterReadout(*layout, best->layout))) continue;
+        } else {
+            float wrap = std::min(kUiTipTextWidth, room.width - 2 * kUiTipTextSide);
+            if (content.text.empty() || wrap < 1) continue;
+            DWRITE_TEXT_METRICS metrics{};
+            winrt::check_hresult(UiRichLayout(g, content.text, UiFont::Caption, wrap)->GetMetrics(&metrics));
+            layout = UiTooltipLayout{};
+            layout->column = wrap;
+            layout->width = std::ceil(metrics.width) + 2 * kUiTipTextSide;
+            layout->height = metrics.height + kUiTipTextTop + kUiTipTextBottom;
+            if (layout->width > room.width || layout->height > room.height) continue;
+        }
+        LONG cx = LONG(std::ceil(layout->width * scale - 0.01f)), cy = LONG(std::ceil(layout->height * scale - 0.01f));
+        if (cx > width || cy > height) continue;
+        LONG x = side == UiTooltipSide::Right ? region.left :
+                 side == UiTooltipSide::Left  ? region.right - cx :
+                                                std::clamp(at.cursor.x, region.left, region.right - cx);
+        LONG y = side == UiTooltipSide::Below ? region.top :
+                 side == UiTooltipSide::Above ? region.bottom - cy :
+                                                std::clamp(at.cursor.y, region.top, region.bottom - cy);
+        best = UiTooltipSpot{{x, y, x + cx, y + cy}, side, *layout};
+        if (content.rows.empty()) break;
+    }
+    return best;
+}
+
+// The tooltip's items in its DIPs (ids from 1): per shown readout row a swatch, its title cut at
+// the layout's title width and its mandatory part beside it (or under the title); the hint in
+// muted text after them; or the text block.
+static std::vector<UiItem> UiTooltipItems(const UiTooltipContent& content, const UiTooltipMeasure& measure,
+                                          const UiTooltipLayout& layout) {
+    std::vector<UiItem> items;
+    auto text = [&](D2D1_RECT_F rect, std::vector<UiRun> runs, UiInk ink, bool trim) {
+        UiItem item;
+        item.id = uint32_t(items.size() + 1);
+        item.kind = UiItemKind::Text;
+        item.font = UiFont::Caption;
+        item.ink = ink;
+        item.rect = rect;
+        item.runs = std::move(runs);
+        item.trim = trim;
+        items.push_back(std::move(item));
+    };
+    if (content.rows.empty()) {
+        text({kUiTipTextSide, kUiTipTextTop, kUiTipTextSide + layout.column, layout.height - kUiTipTextBottom},
+             content.text, UiInk::Primary, false);
+        return items;
+    }
+    float line = layout.narrow ? 2 * kUiTipLine : kUiTipLine;
+    auto slot = [&](int index) {
+        int rows = std::max(layout.rows, 1);
+        return D2D1_POINT_2F{kUiTipPad + float(index / rows) * (layout.column + kUiTipColumnGap),
+                             kUiTipPad + float(index % rows) * (line + kUiTipRowGap)};
+    };
+    for (int i = 0; i < layout.shown && i < int(content.rows.size()); i++) {
+        const UiReadoutRow& row = content.rows[size_t(i)];
+        D2D1_POINT_2F at = slot(i);
+        UiItem swatch;
+        swatch.id = uint32_t(items.size() + 1);
+        swatch.kind = UiItemKind::Shape;
+        swatch.viewBox = 16;
+        swatch.rect = {at.x, at.y, at.x + 16, at.y + 16};
+        swatch.parts = {{kUiTipSwatchPath, row.color, UiInk::Inherit, 1, row.stroke}};
+        items.push_back(std::move(swatch));
+        float left = at.x + kUiTipSwatch;
+        text({left, at.y, left + layout.title, at.y + kUiTipLine}, {{row.title}}, UiInk::Primary, true);
+        D2D1_POINT_2F detail = layout.narrow ? D2D1_POINT_2F{left, at.y + kUiTipLine} :
+                                               D2D1_POINT_2F{left + layout.title + kUiTipGap, at.y};
+        text({detail.x, detail.y, detail.x + measure.detail, detail.y + kUiTipLine}, row.detail, UiInk::Primary,
+             false);
+    }
+    if (layout.more) {
+        D2D1_POINT_2F at = slot(layout.shown);
+        text({at.x + kUiTipSwatch, at.y, at.x + layout.column, at.y + layout.hint},
+             {{UiMoreText(layout.more, content.more)}}, UiInk::Muted, false);
+    }
+    return items;
+}
+
+// What a tooltip shows: its content (measured when its key changes), the pointer it was placed
+// for and where. Content and placement are deduped apart.
+struct UiTooltipModel {
+    UiTooltipContent content;
+    UiTooltipMeasure measure;
+    UiTooltipKey at;
+    std::optional<UiTooltipSpot> spot;
+};
+
+// What an update changed: nothing; the rectangle only (the same layout); the layout (new items);
+// or the shown tooltip no longer fits anywhere.
+enum class UiTooltipChange : uint8_t { None, Move, Layout, Hide };
+
+// Takes `content` when its key differs from the shown one's (measured again), else keeps the
+// shown content, and places it for the pointer `at`. The same content at the same pointer,
+// cursor image, work area and DPI does nothing.
+static UiTooltipChange UiTooltipUpdate(UiGraphics& g, UiTooltipModel& model, UiTooltipContent content,
+                                       const UiTooltipKey& at) {
+    auto same = [](const RECT& a, const RECT& b) {
+        return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
+    };
+    bool shown = model.spot.has_value();
+    bool fresh = content.key != model.content.key;
+    if (fresh) {
+        model.content = std::move(content);
+        model.measure = UiMeasureReadout(g, model.content);
+    } else if (shown && at.cursor.x == model.at.cursor.x && at.cursor.y == model.at.cursor.y &&
+               same(at.cursorRect, model.at.cursorRect) && same(at.work, model.at.work) && at.dpi == model.at.dpi) {
+        return UiTooltipChange::None;
+    }
+    model.at = at;
+    std::optional<UiTooltipSpot> spot =
+        model.content.key ? UiTooltipPlacement(g, model.content, model.measure, at) : std::nullopt;
+    if (!spot) {
+        model.spot.reset();
+        return shown ? UiTooltipChange::Hide : UiTooltipChange::None;
+    }
+    bool relaid = !shown || fresh || !(model.spot->layout == spot->layout);
+    bool moved = !shown || !same(model.spot->rect, spot->rect);
+    model.spot = spot;
+    return relaid ? UiTooltipChange::Layout : moved ? UiTooltipChange::Move : UiTooltipChange::None;
 }
 
 // src/ui/system-theme.h
@@ -12108,6 +12429,95 @@ static bool UiPaintPopup(UiPopup& popup, UiGraphics& g, const UiPalette& palette
     }
     return UiSurfaceDrawResult(popup.surface, target->EndDraw());
 }
+// src/ui/tooltip.h
+// Tooltip window (native): an owned popup showing a chart's hover readout or an item's complete
+// text beside the pointer, never under it (ui/tooltip-layout.h). It never activates or takes
+// focus or capture (WS_EX_NOACTIVATE, shown without activation, HTTRANSPARENT, MA_NOACTIVATE)
+// and draws on its own target at its monitor's DPI. The host creates it on first use, routes
+// its messages and every hide trigger, and destroys it with the main window (ui/host.h).
+
+struct UiTooltip {
+    HWND window = nullptr;
+    UiSurface surface;
+    UINT dpi = 96;
+    UiTooltipModel model;
+    std::vector<UiItem> items;      // Tooltip DIPs
+    uint32_t pending = 0;           // The item whose hover delay runs (the main window's timer)
+    uint32_t pendingGeneration = 0; // The frame it was hot in
+};
+
+static constexpr UINT_PTR kUiTooltipTimer = 0x7E02;
+static constexpr DWORD kUiTooltipExStyle = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+
+// The cursor image's screen rectangle with its hotspot on `point`: the color bitmap's size, or
+// the monochrome mask's with half its height (AND and XOR masks stacked); both bitmaps freed.
+// Without a visible cursor image: SM_CXCURSOR at `dpi` on each side of the point.
+static RECT UiCursorRect(POINT point, UINT dpi) {
+    CURSORINFO cursor{sizeof(cursor)};
+    ICONINFO icon{};
+    if (GetCursorInfo(&cursor) && (cursor.flags & CURSOR_SHOWING) && cursor.hCursor &&
+        GetIconInfo(cursor.hCursor, &icon)) {
+        BITMAP bitmap{};
+        bool color = icon.hbmColor && GetObjectW(icon.hbmColor, sizeof(bitmap), &bitmap);
+        if (!color) {
+            if (icon.hbmMask && GetObjectW(icon.hbmMask, sizeof(bitmap), &bitmap)) bitmap.bmHeight /= 2;
+            else bitmap = {};
+        }
+        if (icon.hbmColor) DeleteObject(icon.hbmColor);
+        if (icon.hbmMask) DeleteObject(icon.hbmMask);
+        if (bitmap.bmWidth > 0 && bitmap.bmHeight > 0) {
+            LONG left = point.x - LONG(icon.xHotspot), top = point.y - LONG(icon.yHotspot);
+            return {left, top, left + bitmap.bmWidth, top + bitmap.bmHeight};
+        }
+    }
+    // Not declared by the toolchain's default headers (Windows 10 1607 and later).
+    using GetSystemMetricsForDpi_t = int(WINAPI*)(int, UINT);
+    static const auto metricsForDpi = reinterpret_cast<GetSystemMetricsForDpi_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
+    LONG size = std::max(metricsForDpi ? metricsForDpi(SM_CXCURSOR, dpi) : MulDiv(32, int(dpi), 96), 1);
+    return {point.x - size, point.y - size, point.x + size, point.y + size};
+}
+
+// A monitor's effective DPI (shcore's GetDpiForMonitor, when the process has shcore loaded, as
+// Explorer does), else `fallback`.
+static UINT UiMonitorDpi(HMONITOR monitor, UINT fallback) {
+    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    HMODULE shcore = GetModuleHandleW(L"shcore.dll");
+    auto getDpi = shcore ? reinterpret_cast<GetDpiForMonitor_t>(GetProcAddress(shcore, "GetDpiForMonitor")) : nullptr;
+    UINT x = 0, y = 0;
+    return getDpi && SUCCEEDED(getDpi(monitor, 0 /* MDT_EFFECTIVE_DPI */, &x, &y)) && x ? x : fallback;
+}
+
+// The one hide routine: cancels the hover delay, hides the window (no activation, focus or
+// foreground change) and forgets what it showed, so the next show starts afresh. Repeated calls
+// do nothing.
+static void UiTooltipHide(UiTooltip& tip, HWND owner) {
+    if (std::exchange(tip.pending, 0) && owner) KillTimer(owner, kUiTooltipTimer);
+    tip.model = {};
+    tip.items.clear();
+    if (tip.window && IsWindowVisible(tip.window)) {
+        SetWindowPos(tip.window, nullptr, 0, 0, 0, 0,
+                     SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
+    }
+}
+
+// Paints the items on the tooltip's surface; false when it can't draw.
+static bool UiPaintTooltip(UiTooltip& tip, UiGraphics& g, const UiPalette& palette) {
+    ID2D1HwndRenderTarget* target = UiSurfaceTarget(tip.surface, g.d2d.get(), tip.dpi);
+    if (!target) return false;
+    float scale = float(tip.dpi) / 96;
+    target->BeginDraw();
+    D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
+    target->SetTransform(&identity);
+    target->Clear(palette.popup);
+    UiPaintItems(target, g, tip.surface.cache, palette, tip.items, {}, {0, 0}, scale, -1e9f, 1e9f);
+    // Windows draws the rounded border; high contrast gets its own in the text color.
+    if (palette.kind == UiThemeKind::HighContrast) {
+        D2D1_SIZE_F size = target->GetSize();
+        UiStrokeRect(target, tip.surface.cache, {0, 0, size.width, size.height}, 0, palette.cardBorder, 1, scale);
+    }
+    return UiSurfaceDrawResult(tip.surface, target->EndDraw());
+}
 
 // src/ui/text-box.h
 // Native text boxes of the custom-drawn windows: one single-line EDIT per number box or text box
@@ -12237,9 +12647,10 @@ static void UiReleaseTextBoxes(UiTextBoxes& boxes) {
 // src/ui/host.h
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
 // and its scrolling viewport child, each with its own render target, the main window optionally
-// with a scrolling navigation pane; the dropdown popup and the number boxes' native text boxes;
-// theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths and
-// teardown. A client supplies the content and the window-specific behavior. Rules: ui/AGENTS.md.
+// with a scrolling navigation pane; the dropdown popup, the tooltip and the number boxes' native
+// text boxes; theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths
+// and teardown. A client supplies the content and the window-specific behavior. Rules:
+// ui/AGENTS.md.
 
 struct UiHost;
 
@@ -12270,6 +12681,13 @@ struct UiHostClient {
     // never pumps messages, rebuilds or shows a modal.
     virtual void PaintCustom(UiHost&, ID2D1RenderTarget*, UiTargetCache&, const UiItem&,
                              const UiPaintState&) {}
+    // The pointer over Chart item `chart` at `point` (the coordinates of its rect), at most once
+    // per move that moved; nullopt: its hover ended (the pointer left it, a press, a hide
+    // trigger). `readout` arrives holding the shown readout's key and no rows: leave it to keep
+    // that readout, or set a new key with its rows (none: no readout). Returns whether the
+    // chart's emphasis changed: only then its surface repaints. Never pumps messages, rebuilds
+    // or shows a modal.
+    virtual bool ChartHover(UiHost&, uint32_t, std::optional<D2D1_POINT_2F>, UiTooltipContent&) { return false; }
 
 protected:
     ~UiHostClient() = default;
@@ -12278,6 +12696,7 @@ protected:
 struct UiHostConfig {
     PCWSTR mainClass = nullptr, viewportClass = nullptr, title = nullptr;
     PCWSTR popupClass = nullptr;       // Dropdown popup; nullptr: dropdowns don't open.
+    PCWSTR tooltipClass = nullptr;     // Tooltip; nullptr: no tooltips or readouts.
     UINT activateMessage = 0;          // Registered "show yourself" message; 0 = none.
     D2D1_SIZE_F size{1000, 860};       // Initial outer size, DIPs.
     D2D1_SIZE_F minSize{500, 400};     // Minimum outer size, DIPs.
@@ -12330,9 +12749,17 @@ struct UiHost {
     UiFocusRef pendingFocus;  // Focused once the next rebuild has built it
     bool pendingFocusVisible = false;
 
+    // Tooltip: the chart whose hover the client was told about, and the pointer's last screen
+    // position (where a delayed tooltip shows)
+    UiTooltip tooltip;
+    uint32_t hoverChart = 0;
+    POINT pointerScreen{LONG_MIN, LONG_MIN};
+
     // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md); live ones until
-    // the next paint. rebuildMain: the next rebuild repaints the main window.
+    // the next paint; each counts a generation. rebuildMain: the next rebuild repaints the main
+    // window.
     int dispatchDepth = 0;
+    uint32_t generation = 0;
     bool rebuildPending = false, resetScroll = false, liveRebuild = false, rebuildMain = false;
     bool closing = false, faulted = false;
 };
@@ -12377,17 +12804,87 @@ static void UiHostInvalidate(const UiHost& host) {
     if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
+// Tooltip ---------------------------------------------------------------------------------------
+
+// Every hide trigger: a hovered chart's hover ends (the client clears its emphasis; the chart's
+// surface repaints when it says so), then the tooltip hides (UiTooltipHide).
+static void UiHostHideTooltip(UiHost& host) {
+    if (uint32_t chart = std::exchange(host.hoverChart, 0); chart && !host.closing) {
+        UiTooltipContent none;
+        if (host.client->ChartHover(host, chart, std::nullopt, none)) {
+            UiSurfaceId surface = UiSurfaceId::Main;
+            UiFindItem(host.frame, chart, &surface);
+            if (HWND window = surface == UiSurfaceId::Content ? host.viewport : host.main) {
+                InvalidateRect(window, nullptr, FALSE);
+            }
+        }
+    }
+    UiTooltipHide(host.tooltip, host.main);
+}
+
+// Shows `content` (or keeps the shown content when its key is unchanged) beside the pointer at
+// `cursor` (screen pixels), on the work area of the pointer's monitor at its DPI, or moves or
+// hides the tooltip as the placement says. Never while a press, the popup or a modal (the owner
+// disabled) holds the window. The window is created on first use; a failure leaves the tooltip
+// hidden until the next show.
+static void UiHostShowTooltip(UiHost& host, UiTooltipContent content, POINT cursor) {
+    UiTooltip& tip = host.tooltip;
+    MONITORINFO monitor{sizeof(monitor)};
+    HMONITOR handle = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    if (!host.config->tooltipClass || host.closing || !host.main || host.popup.open || host.pointer.pressed.id ||
+        !IsWindowEnabled(host.main) || !GetMonitorInfoW(handle, &monitor)) {
+        UiTooltipHide(tip, host.main);
+        return;
+    }
+    UiTrimCaches(*host.graphics);
+    UiTooltipKey at;
+    at.cursor = cursor;
+    at.work = monitor.rcWork;
+    at.dpi = UiMonitorDpi(handle, host.dpi);
+    at.cursorRect = UiCursorRect(cursor, at.dpi);
+    UiTooltipChange change = UiTooltipUpdate(*host.graphics, tip.model, std::move(content), at);
+    if (change == UiTooltipChange::Hide) UiTooltipHide(tip, host.main);
+    if (change == UiTooltipChange::None || change == UiTooltipChange::Hide) return;
+    if (!tip.window) {
+        HWND window = CreateWindowExW(kUiTooltipExStyle, host.config->tooltipClass, nullptr, WS_POPUP, 0, 0, 0, 0,
+                                      host.main, nullptr, GetModuleHandleW(nullptr), &host);
+        if (!window) {
+            Wh_Log(L"Could not create the tooltip: %lu", GetLastError());
+            UiTooltipHide(tip, host.main);
+            return;
+        }
+        tip.window = tip.surface.window = window;
+        DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUNDSMALL;
+        DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    }
+    if (tip.dpi != at.dpi || change == UiTooltipChange::Layout) {
+        if (tip.dpi != at.dpi) UiDiscardSurface(tip.surface);
+        tip.dpi = at.dpi;
+        tip.items = UiTooltipItems(tip.model.content, tip.model.measure, tip.model.spot->layout);
+        tip.surface.cache.layouts.clear();  // Inked layouts of earlier content
+        InvalidateRect(tip.window, nullptr, FALSE);
+    }
+    const RECT& rect = tip.model.spot->rect;
+    bool visible = IsWindowVisible(tip.window);
+    SetWindowPos(tip.window, visible ? nullptr : HWND_TOP, rect.left, rect.top, rect.right - rect.left,
+                 rect.bottom - rect.top, SWP_NOACTIVATE | (visible ? SWP_NOZORDER : SWP_SHOWWINDOW));
+}
+
 // Fault close: nothing is saved. WM_CLOSE cancels tracked modals and destroys the window once
 // they have unwound; until then nothing draws or acts.
 static void UiHostFault(UiHost& host) {
     host.faulted = true;
     host.closing = true;
+    host.hoverChart = 0;
+    UiTooltipHide(host.tooltip, host.main);
     UiDiscardSurface(host.mainSurface);
     UiDiscardSurface(host.viewSurface);
+    UiDiscardSurface(host.tooltip.surface);
     if (host.main) PostMessageW(host.main, WM_CLOSE, 0, 0);
 }
 
 static void UiHostApplyTheme(UiHost& host) {
+    UiHostHideTooltip(host);
     host.theme = UiReadTheme(*host.themes);
     host.palette = UiPaletteFor(host.theme);
     UiApplyChrome(host.main, host.palette);
@@ -12397,6 +12894,7 @@ static void UiHostApplyTheme(UiHost& host) {
     host.mainSurface.cache.Clear();
     host.viewSurface.cache.Clear();
     host.popup.surface.cache.Clear();
+    host.tooltip.surface.cache.Clear();
     UiHostInvalidate(host);
     for (const UiTextBox& box : host.boxes.boxes) {
         if (box.window) InvalidateRect(box.window, nullptr, TRUE);
@@ -12428,7 +12926,10 @@ static UiFocusRef UiHostHit(UiHost& host, UiSurfaceId surface, POINT point) {
 
 // Dropdown popup -------------------------------------------------------------------------------
 
+// Every popup close trigger (size, move, DPI, activation, cancel mode, system commands, focus,
+// scroll, rebuild, client modals, close) also hides the tooltip.
 static void UiHostClosePopup(UiHost& host) {
+    UiHostHideTooltip(host);
     if (!host.popup.open && !host.popup.window) return;
     UiPopupClose(host.popup);
     UiHostInvalidate(host);
@@ -12689,8 +13190,9 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
 // A dropdown or menu button opens its popup; a number or text box only takes focus (its native
-// text box reports edits); a slider, a preview and a drag handle report their drags instead; a
-// segmented control selects the activated segment (its keys select the others).
+// text box reports edits); a slider, a preview and a drag handle report their drags instead, a
+// chart its hover; a segmented control selects the activated segment (its keys select the
+// others).
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
     const UiItem* item = UiFindItem(host.frame, ref.id);
@@ -12706,7 +13208,7 @@ static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (item && ref.link < 0 &&
         (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox ||
          item->kind == UiItemKind::Slider || item->kind == UiItemKind::Preview ||
-         item->kind == UiItemKind::Handle)) {
+         item->kind == UiItemKind::Handle || item->kind == UiItemKind::Chart)) {
         return;
     }
     const UiAction* action = UiActionOf(host.frame, ref);
@@ -12763,10 +13265,11 @@ static void UiHostEndHandleDrag(UiHost& host, UiActionKind end) {
 
 // Deferred structural rebuild, once the outermost dispatch is done with the old items. A live
 // one waits for the paint its request caused (which runs it), unless a nested paint (a modal's)
-// consumed that. A rebuild closes the popup; keyboard focus follows the focused element (a
-// requested one, or one whose text box was removed). The main window repaints when requested,
-// when its layout changed or when the pointer's element went. A newly selected entry of the
-// navigation pane scrolls into view.
+// consumed that. A rebuild closes the popup and the tooltip (before the client builds: a chart's
+// hover ends first); keyboard focus follows the focused element (a requested one, or one whose
+// text box was removed). The main window repaints when requested, when its layout changed or
+// when the pointer's element went. A newly selected entry of the navigation pane scrolls into
+// view.
 static void UiHostRebuildIfPending(UiHost& host) {
     auto selectedNav = [](const std::vector<UiItem>& items) {
         auto at = std::find_if(items.begin(), items.end(), [](const UiItem& item) {
@@ -12793,6 +13296,7 @@ static void UiHostRebuildIfPending(UiHost& host) {
         UiTrimCaches(*host.graphics);
         UiFrame frame;
         host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
+        host.generation++;
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         UiFocusRef fallback{selectedNav(frame.nav) ? selectedNav(frame.nav) : selectedNav(frame.main), -1};
         // Keyboard focus starts on the selected navigation item, without a ring.
@@ -12909,13 +13413,18 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
                         ReleaseCapture();
                     }
+                    // The tooltip's timer dies here, its window before the main window's
+                    // NCDESTROY.
+                    host.hoverChart = 0;
+                    UiTooltipHide(host.tooltip, window);
+                    if (host.tooltip.window) DestroyWindow(host.tooltip.window);
                     host.client->Destroying();
                 }
                 break;
             case WM_NCDESTROY:
-                // Children (viewport, text boxes) and the owned popup are gone before the main
-                // window's NCDESTROY; each surface releases its target with its window. Host
-                // state outlives them all.
+                // Children (viewport, text boxes) and the owned popup and tooltip are gone before
+                // the main window's NCDESTROY; each surface releases its target with its window.
+                // Host state outlives them all.
                 UiDiscardSurface(own);
                 own.window = nullptr;
                 SetWindowLongPtrW(window, GWLP_USERDATA, 0);
@@ -12990,9 +13499,14 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
 
             // Activation and modes: the popup closes before default handling (a system command
-            // such as minimize is swallowed while the popup holds capture).
+            // such as minimize is swallowed while the popup holds capture). A disabled owner (a
+            // modal) and Alt hide the tooltip.
             case WM_ACTIVATE:
                 if (LOWORD(wParam) == WA_INACTIVE) UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_ENABLE:
+                if (isMain && !wParam) UiHostHideTooltip(host);
                 handled = false;
                 break;
             case WM_CANCELMODE:
@@ -13006,6 +13520,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 handled = false;
                 break;
             case WM_SYSKEYDOWN: {
+                UiHostHideTooltip(host);
                 const UiItem* focused = UiFindItem(host.frame, host.focus.id);
                 if (host.popup.open) {
                     UiHostClosePopup(host);
@@ -13170,12 +13685,46 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 const UiItem* hot = UiFindItem(host.frame, host.pointer.hot.id);
                 if (changed) UiHostInvalidate(host);
                 else if (hot && hot->kind == UiItemKind::Preview) InvalidateRect(window, nullptr, FALSE);
+
+                // Tooltips, at the pointer's rate: no rebuild, nothing for a move that didn't
+                // move. A new element hides the old one's tooltip (ending a chart's hover). Over
+                // a chart the client hears where the pointer is and its readout shows at once;
+                // its surface repaints only when the client says so. Another element's tooltip
+                // waits for the hover delay; once shown it follows the pointer.
+                POINT screen = point;
+                ClientToScreen(window, &screen);
+                bool moved = screen.x != host.pointerScreen.x || screen.y != host.pointerScreen.y;
+                host.pointerScreen = screen;
+                bool chart = hot && hot->kind == UiItemKind::Chart && !host.pointer.pressed.id;
+                if (changed || (host.hoverChart && !chart)) UiHostHideTooltip(host);
+                if (chart && (moved || changed)) {
+                    host.hoverChart = hot->id;
+                    UiTooltipContent readout;
+                    readout.key = host.tooltip.model.content.key;
+                    if (host.client->ChartHover(host, host.hoverChart, host.pointerAt, readout)) {
+                        InvalidateRect(window, nullptr, FALSE);
+                    }
+                    UiHostShowTooltip(host, std::move(readout), screen);
+                } else if (!chart && changed && hot && !hot->tooltip.empty() && host.config->tooltipClass &&
+                           !host.pointer.pressed.id) {
+                    host.tooltip.pending = hot->id;
+                    host.tooltip.pendingGeneration = host.generation;
+                    SetTimer(host.main, kUiTooltipTimer, GetDoubleClickTime(), nullptr);
+                } else if (!chart && moved && host.tooltip.model.spot) {
+                    UiTooltipContent shown;
+                    shown.key = host.tooltip.model.content.key;
+                    UiHostShowTooltip(host, std::move(shown), screen);
+                }
                 break;
             }
             case WM_MOUSELEAVE:
                 // While a press or drag holds capture, only this surface's pointer position
                 // changes; outside the window every move reports a leave, so nothing else repaints.
-                if (host.pointerSurface == surface) host.pointerAt = {-1e9f, -1e9f};
+                // A leave from the surface the pointer is on hides the tooltip.
+                if (host.pointerSurface == surface) {
+                    host.pointerAt = {-1e9f, -1e9f};
+                    UiHostHideTooltip(host);
+                }
                 if (host.pointer.pressed.id || host.scrollDragging || host.navBarDragging) {
                     InvalidateRect(window, nullptr, FALSE);
                     break;
@@ -13184,8 +13733,15 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.scrollbarHot = host.navBarHot = false;
                 UiHostInvalidate(host);
                 break;
+            case WM_RBUTTONDOWN:
+            case WM_MBUTTONDOWN:
+            case WM_XBUTTONDOWN:
+                UiHostHideTooltip(host);
+                handled = false;
+                break;
             case WM_LBUTTONDOWN: {
                 if (host.closing) break;
+                UiHostHideTooltip(host);
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
                 float scale = UiHostScale(host);
                 UiScrollbar bar = UiHostScrollbar(host);
@@ -13306,6 +13862,21 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     UiHostDragHandle(host, float(cursor.y) / UiHostScale(host) + host.scroll);
                     break;
                 }
+                // The hover delay is over: the item's tooltip shows if the pointer is still on it
+                // in the same frame (UiHostShowTooltip checks press, popup and modal).
+                if (isMain && wParam == kUiTooltipTimer) {
+                    KillTimer(window, kUiTooltipTimer);
+                    uint32_t id = std::exchange(host.tooltip.pending, 0);
+                    const UiItem* item = UiFindItem(host.frame, id);
+                    if (item && !item->tooltip.empty() && host.pointer.hot.id == id &&
+                        host.tooltip.pendingGeneration == host.generation) {
+                        UiTooltipContent text;
+                        text.key = uint64_t(host.generation) << 32 | id;
+                        text.text = item->tooltip;
+                        UiHostShowTooltip(host, std::move(text), host.pointerScreen);
+                    }
+                    break;
+                }
                 handled = isMain && host.client->Message(host, message, wParam, lParam, result);
                 break;
             case WM_MOUSEWHEEL:
@@ -13315,6 +13886,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 // and the vertical wheel scrolls the navigation pane over it, or the content
                 // over the page column (header or content).
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
+                UiHostHideTooltip(host);
                 if (host.popup.open) {
                     RECT popup{};
                     GetWindowRect(host.popup.window, &popup);
@@ -13369,6 +13941,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             // Keyboard and focus. While the popup is open, the field's keys drive it.
             case WM_KEYDOWN: {
                 if (host.closing) break;
+                UiHostHideTooltip(host);
                 // Esc cancels a handle drag; other keys wait until it ends.
                 if (host.handleDrag) {
                     if (wParam == VK_ESCAPE) {
@@ -13639,6 +14212,76 @@ static LRESULT CALLBACK UiHostPopupProc(HWND window, UINT message, WPARAM wParam
     return handled ? result : DefWindowProcW(window, message, wParam, lParam);
 }
 
+// The tooltip: the pointer passes through it to the window under it (HTTRANSPARENT reaches the
+// same thread's windows), and any mouse message that still reaches it hides it. Never activates;
+// its DPI is its monitor's, set where it is placed.
+static LRESULT CALLBACK UiHostTooltipProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_NCCREATE) {
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(
+            reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams));
+    }
+    auto* found = reinterpret_cast<UiHost*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (!found) return DefWindowProcW(window, message, wParam, lParam);
+    UiHost& host = *found;
+    UiTooltip& tip = host.tooltip;
+    host.dispatchDepth++;
+    LRESULT result = 0;
+    bool handled = true;
+    try {
+        switch (message) {
+            case WM_NCHITTEST:
+                result = HTTRANSPARENT;
+                break;
+            case WM_MOUSEACTIVATE:
+                result = MA_NOACTIVATE;
+                break;
+            case WM_ERASEBKGND:
+                result = 1;
+                break;
+            case WM_DPICHANGED:
+                break;
+            case WM_SIZE:
+                UiResizeSurface(tip.surface);
+                break;
+            case WM_PAINT: {
+                PAINTSTRUCT paint{};
+                BeginPaint(window, &paint);
+                bool painted = host.faulted || tip.window != window || UiPaintTooltip(tip, *host.graphics, host.palette);
+                EndPaint(window, &paint);
+                if (!painted) UiTooltipHide(tip, host.main);
+                break;
+            }
+            case WM_SETCURSOR:
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                result = TRUE;
+                break;
+            case WM_NCDESTROY:
+                UiDiscardSurface(tip.surface);
+                tip.surface.window = nullptr;
+                if (tip.window == window) tip.window = nullptr;
+                SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+                handled = false;
+                break;
+            default:
+                if ((message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) ||
+                    (message >= WM_NCMOUSEMOVE && message <= WM_NCXBUTTONDBLCLK)) {
+                    UiHostHideTooltip(host);
+                    break;
+                }
+                handled = false;
+                break;
+        }
+        UiHostRebuildIfPending(host);
+    } catch (...) {
+        Wh_Log(L"Tooltip callback failed (message 0x%04X); closing the window", message);
+        handled = true;
+        result = 0;
+        UiHostFault(host);
+    }
+    host.dispatchDepth--;
+    return handled ? result : DefWindowProcW(window, message, wParam, lParam);
+}
+
 // A number or text box's native text box: Tab moves focus along the item order, Enter commits,
 // Esc reverts, Up/Down step a number box; focus moving elsewhere in the window reports focus
 // loss. During IME composition every message goes to native handling and the composed text is
@@ -13669,6 +14312,7 @@ static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wPar
                 break;
             }
             case WM_KEYDOWN: {
+                if (!host.closing) UiHostHideTooltip(host);
                 if (!commands) break;
                 uint32_t id = box->id;
                 handled = true;
@@ -13778,8 +14422,12 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
     // Without its class the popup can't open; the window works otherwise.
     bool popupRegistered = viewportRegistered && config.popupClass &&
                            registerClass(config.popupClass, UiHostPopupProc, CS_DROPSHADOW);
+    // Without its class nothing shows tooltips or readouts; the window works otherwise.
+    bool tooltipRegistered = viewportRegistered && config.tooltipClass &&
+                             registerClass(config.tooltipClass, UiHostTooltipProc, CS_DROPSHADOW);
     UiHostConfig effective = config;
     if (!popupRegistered) effective.popupClass = nullptr;
+    if (!tooltipRegistered) effective.tooltipClass = nullptr;
     bool created = false;
     if (viewportRegistered) {
         UiGraphics graphics;
@@ -13835,11 +14483,13 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
         }
         if (host.main && IsWindow(host.main)) DestroyWindow(host.main);
         UiPopupClose(host.popup);
+        if (host.tooltip.window) DestroyWindow(host.tooltip.window);
         UiReleaseTextBoxes(host.boxes);
         for (HICON icon : host.icons) {
             if (icon) DestroyIcon(icon);
         }
     }
+    if (tooltipRegistered) UnregisterClassW(config.tooltipClass, instance);
     if (popupRegistered) UnregisterClassW(config.popupClass, instance);
     if (viewportRegistered) UnregisterClassW(config.viewportClass, instance);
     if (mainRegistered) UnregisterClassW(config.mainClass, instance);
@@ -19028,6 +19678,7 @@ struct HistorySeries {
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
     bool plotted = true;
     HistoryStatistics current, previous;
+    double low = 0, high = 0;  // Its readings' range in [readFrom, to), with 0
 };
 
 struct HistoryAxis {
@@ -19245,6 +19896,8 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                 if (sample.timeMs < query.readFrom || sample.timeMs >= query.to ||
                     !HistoryHasValue(sample, meter)) continue;
                 double value = sample.meters[meter].value;
+                series.low = std::min(series.low, value);
+                series.high = std::max(series.high, value);
                 if (series.plotted) {
                     axis.low = std::min(axis.low, value);
                     axis.high = std::max(axis.high, value);
@@ -19451,6 +20104,22 @@ struct HistoryUiNoReadings {
     std::wstring label, detail;
 };
 
+// A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
+// the chip's item id (per history ID and meter, stable for the session), the chip's name (the
+// readout's too) and the full title, the classic color and width, the range of its readings in
+// both periods (with 0), and whether the legend hides it.
+struct HistoryUiLine {
+    uint32_t chip = 0;
+    uint64_t historyId = 0;
+    int meter = 0;
+    size_t series = 0, account = 0;  // Its series (and card) in the set; its collected account
+    std::wstring name, title;
+    COLORREF color = 0;
+    int stroke = 3;
+    double low = 0, high = 0;
+    bool hidden = false;
+};
+
 struct HistoryUiView {
     UiThemeKind theme = UiThemeKind::Dark;   // Built content follows it: value inks, card lines
 
@@ -19476,26 +20145,31 @@ struct HistoryUiView {
     std::wstring storageError;
     bool storageCapped = false;
 
-    // Content: the loading state before the first load, then cards (HistoryUiSetCards)
+    // Content: the loading state before the first load, then cards (HistoryUiSetCards) and the
+    // chart's lines
     bool loading = true;
     std::vector<HistoryUiCard> cards;
     std::vector<HistoryUiNoReadings> noReadings;
+    std::vector<HistoryUiLine> lines;
 };
 
 // Interactive items keep these ids across rebuilds, so focus follows them; an account's entry
-// takes kHistoryUiNavAccount + its slot. Other items take running ids from kHistoryUiFirstRunning.
+// takes kHistoryUiNavAccount + its slot, a legend chip kHistoryUiChip + 8 x its account's slot +
+// its meter. Other items take running ids from kHistoryUiFirstRunning.
 enum HistoryUiControl : uint32_t {
     kHistoryUiNavAll = 1, kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore, kHistoryUiViews,
-    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording,
+    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording, kHistoryUiChart,
     kHistoryUiNavAccount = 0x1000,
     kHistoryUiFirstRunning = 0x100000,
+    kHistoryUiChip = 0x800000,
 };
 
 // What an item's action asks for (UiAction::target): Select (key = history ID, 0: All accounts),
 // View (value = HistoryView), Range (value = HistoryUiRange), Compare (value = the desired state),
-// Refresh, Export, Menu (value = HistoryUiMenuItem), EnableRecording.
+// Refresh, Export, Menu (value = HistoryUiMenuItem), EnableRecording, Line (a legend chip: key =
+// history ID, value = meter; shows or hides that line).
 enum class HistoryUiCommand : uint32_t {
-    None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording
+    None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording, Line
 };
 enum class HistoryUiMenuItem : int { Settings };
 
@@ -19515,26 +20189,26 @@ static PCWSTR HistoryUiLogo(uint32_t provider) {
 }
 
 // Compact display formats (approved with the phase-3 mockups), English and independent of the
-// locale like the CSV. Local times read `Sat 31 Oct 14:31`, with the year only outside the
-// current one; `localTime` converts a Unix ms time with the user's clock and zone.
+// locale like the CSV. Local times read `Sat 31 Oct 14:31`; outside the current year the year
+// takes the weekday's place, `25 May 2026 23:59` (the readout's mandatory part keeps its width
+// bound); `localTime` converts a Unix ms time with the user's clock and zone.
 using HistoryUiLocalTime = std::function<SYSTEMTIME(ULONGLONG)>;
+static constexpr PCWSTR kHistoryUiDays[] = {L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
+static constexpr PCWSTR kHistoryUiMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
+                                              L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
 
 static std::wstring HistoryUiTime(ULONGLONG ms, ULONGLONG now, const HistoryUiLocalTime& localTime) {
-    static constexpr PCWSTR kDays[] = {L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
-    static constexpr PCWSTR kMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
-                                         L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
     static constexpr int kMonthOffsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
     SYSTEMTIME t = localTime(ms);
     if (t.wMonth < 1 || t.wMonth > 12 || t.wDay < 1 || t.wDay > 31) return L"\u2014";
+    wchar_t clock[8];
+    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
+    std::wstring date = std::to_wstring(t.wDay) + L' ' + kHistoryUiMonths[t.wMonth - 1];
+    if (t.wYear != localTime(now).wYear) return date + L' ' + std::to_wstring(t.wYear) + L' ' + clock;
     // The weekday from the date (Sakamoto's method), whatever the conversion filled in.
     int year = t.wYear - (t.wMonth < 3);
     int weekday = (year + year / 4 - year / 100 + year / 400 + kMonthOffsets[t.wMonth - 1] + t.wDay) % 7;
-    wchar_t clock[8];
-    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
-    std::wstring text = std::wstring(kDays[weekday]) + L' ' + std::to_wstring(t.wDay) + L' ' +
-                        kMonths[t.wMonth - 1];
-    if (t.wYear != localTime(now).wYear) text += L' ' + std::to_wstring(t.wYear);
-    return text + L' ' + clock;
+    return std::wstring(kHistoryUiDays[weekday]) + L' ' + date + L' ' + clock;
 }
 
 // `decimals` places below 10,000 after rounding; past that one decimal with a suffix (12.3K,
@@ -19648,11 +20322,603 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set,
     }
 }
 
+// src/history/chart.h
+// Usage history chart (approved mockups s-light, s-hc, s-account, s-short, s-ticks, s-compare,
+// s-legend, s-band, q6a-tooltip, q8a-filter, q6-rows): line colors per theme, the axes, the
+// layout with its local time ticks, the projection painting and picking share, picking, readout
+// rows, emphasis and the scene, a draw list the painter executes (history/chart-paint.h). Pure:
+// explicit inputs; geometry in DIPs in the chart item's coordinates. The classic graph's rules
+// (history/view-model.h, paint.h) carry over: per-pixel reduction, every nearby line in both
+// periods picked at a recorded endpoint, muted lines first, the previous week dashed.
+
+// Colors -----------------------------------------------------------------------------------------
+
+// A series' classic color in the mockups' palette, dark or light; a scoped quota's tint keeps a
+// quarter of the theme's text color over its account's hue.
+static D2D1_COLOR_F HistoryUiHue(COLORREF color, bool light) {
+    static constexpr uint32_t kHues[][2] = {
+        {0x4F95FF, 0x2A6FD6}, {0xF0923F, 0xC8621A}, {0x4CC38A, 0x1F8F5A}, {0xE36BD0, 0xB8389F},
+        {0xA184FF, 0x6F4FE6}, {0x33C3A6, 0x0E8F78}, {0xD9B44A, 0x9A7A12}, {0xFF7A70, 0xD0463C},
+    };
+    static_assert(std::size(kHues) == std::size(kHistoryColors));
+    for (size_t k = 0; k < std::size(kHistoryColors); k++) {
+        COLORREF base = kHistoryColors[k];
+        COLORREF tint = RGB((GetRValue(base) * 3 + 255) / 4, (GetGValue(base) * 3 + 255) / 4,
+                            (GetBValue(base) * 3 + 255) / 4);
+        if (color != base && color != tint) continue;
+        D2D1_COLOR_F hue = UiRgb(kHues[k][light]);
+        return color == base ? hue : UiOver(UiRgb(light ? 0x000000 : 0xFFFFFF, 0.25f), hue);
+    }
+    return {float(GetRValue(color)) / 255, float(GetGValue(color)) / 255, float(GetBValue(color)) / 255, 1};
+}
+
+// A line's color: its hue; high contrast alternates the text and link colors by series (as the
+// cards do).
+static D2D1_COLOR_F HistoryChartColor(const HistoryUiLine& line, const UiPalette& p) {
+    if (p.kind == UiThemeKind::HighContrast) return line.series % 2 ? p.link : p.text;
+    return HistoryUiHue(line.color, p.kind == UiThemeKind::Light);
+}
+
+// The graph card's surface: muted lines mix into it, hollow dots and messages are filled with it.
+static D2D1_COLOR_F HistoryChartBackground(const UiPalette& p) {
+    return UiOver(p.card, p.background);
+}
+
+// Axes -------------------------------------------------------------------------------------------
+
+// One unit's axis: its bounds and the values it labels (the percent axis also rules them).
+struct HistoryChartAxis {
+    bool visible = false;
+    double low = 0, high = 1;
+    std::vector<double> values;
+};
+
+// Axis labels: rounded, trailing decimal zeros dropped, abbreviated from 10,000.
+static std::wstring HistoryChartAxisLabel(size_t axis, double value) {
+    std::wstring number = HistoryUiNumber(value, 2);
+    size_t end = std::min(number.find_first_not_of(L"-0123456789."), number.size()), dot = number.find(L'.');
+    if (dot < end) {
+        size_t last = number.find_last_not_of(L'0', end - 1);
+        number.erase(last == dot ? dot : last + 1, end - (last == dot ? dot : last + 1));
+    }
+    return number + (axis == 0 ? L"%" : axis == 1 ? L" USD" : L" cr");
+}
+
+// Axes over the visible lines (percent, USD, credits; never shared by unlike units). Percent is
+// always shown, from 0 (or below) to 100, or the next multiple of 25 above its readings; labels
+// 0, its bounds, 100 and 50 (the layout keeps those with room). An extra axis shows while one of
+// its lines does, from 0 (or below) to 1, 2, 3, 4, 5, 6 or 8 times a power of ten at or above its
+// readings, labeled at its bounds and middle.
+static std::array<HistoryChartAxis, 3> HistoryChartAxes(const std::vector<HistoryUiLine>& lines) {
+    std::array<HistoryChartAxis, 3> axes;
+    axes[0].visible = true;
+    axes[0].high = 100;
+    for (const HistoryUiLine& line : lines) {
+        if (line.hidden) continue;
+        HistoryChartAxis& axis = axes[line.meter < 6 ? 0 : size_t(line.meter - 5)];
+        axis.visible = true;
+        axis.low = std::min(axis.low, line.low);
+        axis.high = std::max(axis.high, line.high);
+    }
+    auto nice = [](double value) {
+        if (!(value > 0) || !std::isfinite(value)) return value;
+        double power = std::pow(10.0, std::floor(std::log10(value)));
+        for (double m : {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0}) {
+            if (m * power >= value * (1 - 1e-9)) return std::isfinite(m * power) ? m * power : value;
+        }
+        return value;
+    };
+    auto quarter = [](double value) {
+        double up = std::ceil(value / 25) * 25;
+        return std::isfinite(up) ? up : value;
+    };
+    HistoryChartAxis& percent = axes[0];
+    if (percent.high > 100) percent.high = quarter(percent.high);
+    if (percent.low < 0) percent.low = -quarter(-percent.low);
+    for (double value : {0.0, percent.low, percent.high, 100.0, 50.0}) {
+        if (value >= percent.low && value <= percent.high &&
+            std::find(percent.values.begin(), percent.values.end(), value) == percent.values.end()) {
+            percent.values.push_back(value);
+        }
+    }
+    for (size_t i = 1; i < 3; i++) {
+        HistoryChartAxis& axis = axes[i];
+        axis.high = nice(axis.high);
+        if (axis.low < 0) axis.low = -nice(-axis.low);
+        axis.values = {axis.low, axis.low / 2 + axis.high / 2, axis.high};
+    }
+    return axes;
+}
+
+// Layout -----------------------------------------------------------------------------------------
+
+struct HistoryChartTick {
+    ULONGLONG time = 0;
+    std::wstring label;
+};
+
+// What a chart's reduction was made for: the snapshot's generation, the period, the selection
+// (history ID) and view, the lines it reduced (the visible ones' chips) and the plot's width in
+// device pixels.
+struct HistoryChartKey {
+    uint64_t generation = 0;
+    ULONGLONG from = 0, to = 0, readFrom = 0;
+    uint64_t selected = 0;
+    HistoryView view = HistoryView::Weekly;
+    std::vector<uint32_t> lines;
+    int width = -1;
+    bool operator==(const HistoryChartKey&) const = default;
+};
+
+// A laid out, reduced chart: everything painting and picking read, self-contained (its lines and
+// the snapshot its reduced rows index), so a later load can't skew it before the next build.
+struct HistoryChart {
+    // Data: the view's lines, the period ([readFrom, from) is the previous week while comparing),
+    // the red threshold, the snapshot with its generation, and a message instead of lines
+    std::vector<HistoryUiLine> lines;
+    ULONGLONG from = 0, to = 0, readFrom = 0;
+    bool compare = false;
+    int redThreshold = 90;
+    std::shared_ptr<const HistorySnapshot> snapshot;
+    uint64_t generation = 0;
+    std::wstring message;
+
+    // Layout at `scale`: the item's rectangle and the plot in it, the plot's device-pixel width,
+    // the axes with their label columns (percent left, USD and credits right) and the time ticks
+    D2D1_RECT_F rect{}, plot{};
+    float scale = 1;
+    int width = 0;
+    std::array<HistoryChartAxis, 3> axes;
+    std::array<float, 3> columns{};
+    std::vector<HistoryChartTick> ticks;
+
+    // Each line's periods (current, previous) reduced to the plot's pixels (hidden lines none),
+    // and what for
+    std::vector<std::array<HistoryRenderSeries, 2>> render;
+    HistoryChartKey key;
+};
+
+static const UiTextStyle kHistoryChartAxisStyle{UiFamily::Small, 11, 14, DWRITE_FONT_WEIGHT_NORMAL};
+
+// A value's height on its axis in the plot, clamped to it; large finite bounds don't overflow.
+static float HistoryChartY(const HistoryChartAxis& axis, const D2D1_RECT_F& plot, double value) {
+    double magnitude = std::max({1.0, std::abs(axis.low), std::abs(axis.high)});
+    double low = axis.low / magnitude, span = axis.high / magnitude - low;
+    double fraction = span > 0 ? (value / magnitude - low) / span : 0;
+    return plot.bottom - float(std::clamp(fraction, 0.0, 1.0)) * (plot.bottom - plot.top);
+}
+
+// A reduced point: its pixel column of the plot and its value's height on its line's axis.
+static D2D1_POINT_2F HistoryChartPoint(const HistoryChart& c, const HistoryUiLine& line, const HistoryRenderPoint& point) {
+    return {c.plot.left + float(point.x) / c.scale,
+            HistoryChartY(c.axes[line.meter < 6 ? 0 : size_t(line.meter - 5)], c.plot, point.value)};
+}
+
+// The plot inside the chart's item (mockup .plot): 10 DIP above it, 26 below for the time
+// labels, the percent labels' column on the left (44 DIP, wider for wider labels: 8 DIP each
+// side), on the right 26 DIP or the extra axes' columns (8 DIP, the widest label, 8 DIP between,
+// 12 after), snapped to device pixels. Percent gridlines keep 14 DIP apart, the first of the
+// axis's values first. Its device-pixel width is the reduction's.
+static void HistoryChartLayout(UiGraphics& g, HistoryChart& c, D2D1_RECT_F rect, float scale) {
+    auto widest = [&](size_t axis) {
+        float width = 0;
+        for (double value : c.axes[axis].values) {
+            width = std::max(width, std::ceil(UiLayoutSize(UiLayout(g, HistoryChartAxisLabel(axis, value),
+                                                                    kHistoryChartAxisStyle, 10000, false)).width));
+        }
+        return width;
+    };
+    c.columns = {widest(0), 0, 0};
+    float left = std::max(44.0f, c.columns[0] + 16), right = 0;
+    for (size_t axis = 1; axis < 3; axis++) {
+        if (!c.axes[axis].visible) continue;
+        c.columns[axis] = widest(axis);
+        right += 8 + c.columns[axis];
+    }
+    right = right > 0 ? right + 12 : 26;
+    c.rect = rect;
+    c.scale = scale;
+    float l = UiSnap(rect.left + left, scale), t = UiSnap(rect.top + 10, scale);
+    c.plot = {l, t, std::max(UiSnap(rect.right - right, scale), l), std::max(UiSnap(rect.bottom - 26, scale), t)};
+    c.width = int(std::lround((c.plot.right - c.plot.left) * scale));
+    std::vector<double> kept;
+    for (double value : c.axes[0].values) {
+        float y = HistoryChartY(c.axes[0], c.plot, value);
+        if (std::all_of(kept.begin(), kept.end(),
+                        [&](double k) { return std::abs(HistoryChartY(c.axes[0], c.plot, k) - y) >= 14; })) {
+            kept.push_back(value);
+        }
+    }
+    std::sort(kept.begin(), kept.end());
+    c.axes[0].values = kept;
+}
+
+// Time ticks over [from, to) at local boundaries (approved s-ticks), labeled at most 2 days:
+// every 1, 2, 3, 6 or 12 hours (`14:00`, midnight as `Sat 31`); at most 14 days: every 1 or 2
+// days (`Sat 24`); at most 120 days: every 1 or 2 days, or Mondays every 1, 2 or 4 weeks
+// (`Oct 5`); beyond: every 1, 2, 3, 6, 12, 24 or 60 months from January (`Oct 2026`). The step
+// is the smallest keeping labels 52, 56 and 64 DIP apart over `width`. A boundary is where the
+// local clock (`localTime`) first reaches a new hour, day or month: daylight saving moves it, a
+// repeated hour counts once, a skipped one never. A scan in steps shorter than the unit finds
+// each, a bisection its millisecond.
+static std::vector<HistoryChartTick> HistoryChartTicks(ULONGLONG from, ULONGLONG to, float width,
+                                                       const HistoryUiLocalTime& localTime) {
+    std::vector<HistoryChartTick> ticks;
+    if (to <= from + 1 || width <= 0) return ticks;
+    enum class Unit { Hour, Day, Month };
+    double span = double(to - from), days = span / double(kHistoryDayMs);
+    Unit unit = days <= 2 ? Unit::Hour : days <= 120 ? Unit::Day : Unit::Month;
+    auto mod = [](int64_t a, int64_t b) { return (a % b + b) % b; };
+    // Days since 1 January 1970 of a local date (proleptic Gregorian); hours and months count
+    // from then and from year 0.
+    auto day = [](const SYSTEMTIME& t) {
+        int64_t year = int64_t(t.wYear) - (t.wMonth <= 2);
+        int64_t era = (year >= 0 ? year : year - 399) / 400, yoe = year - era * 400;
+        int64_t doy = (153 * (int64_t(t.wMonth) + (t.wMonth > 2 ? -3 : 9)) + 2) / 5 + t.wDay - 1;
+        return era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468;
+    };
+    auto bucket = [&](const SYSTEMTIME& t) {
+        return unit == Unit::Hour ? day(t) * 24 + t.wHour :
+               unit == Unit::Day  ? day(t) : int64_t(t.wYear) * 12 + t.wMonth - 1;
+    };
+    auto valid = [](const SYSTEMTIME& t) { return t.wMonth >= 1 && t.wMonth <= 12 && t.wDay >= 1 && t.wDay <= 31; };
+
+    std::vector<int> steps = unit == Unit::Hour  ? std::vector<int>{1, 2, 3, 6, 12} :
+                             unit == Unit::Month ? std::vector<int>{1, 2, 3, 6, 12, 24, 60} :
+                             days <= 14          ? std::vector<int>{1, 2} : std::vector<int>{1, 2, 7, 14, 28};
+    double unitMs = unit == Unit::Hour ? 3600000.0 : unit == Unit::Day ? double(kHistoryDayMs) : 30.44 * kHistoryDayMs;
+    float spacing = unit == Unit::Hour ? 52.0f : unit == Unit::Day ? 56.0f : 64.0f;
+    int step = steps.back();
+    for (int s : steps) {
+        if (width * float(double(s) * unitMs / span) >= spacing) {
+            step = s;
+            break;
+        }
+    }
+    // Mondays are days 4 + 7k; every second or fourth one by k.
+    auto chosen = [&](int64_t b) {
+        if (unit != Unit::Day || step < 7) return mod(b, step) == 0;
+        return mod(b, 7) == 4 && mod((b - 4) / 7, step / 7) == 0;
+    };
+    auto label = [&](const SYSTEMTIME& t) -> std::wstring {
+        std::wstring month = kHistoryUiMonths[t.wMonth - 1];
+        if (unit == Unit::Month) return month + L' ' + std::to_wstring(t.wYear);
+        if (unit == Unit::Day && days > 14) return month + L' ' + std::to_wstring(t.wDay);
+        if (unit == Unit::Hour && t.wHour) {
+            wchar_t clock[8];
+            swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
+            return clock;
+        }
+        return std::wstring(kHistoryUiDays[mod(day(t) + 4, 7)]) + L' ' + std::to_wstring(t.wDay);
+    };
+
+    SYSTEMTIME start = localTime(from);
+    if (!valid(start)) return ticks;
+    int64_t seen = bucket(start);
+    ULONGLONG scan = unit == Unit::Hour ? 15 * 60000ULL : unit == Unit::Day ? 3600000ULL : kHistoryDayMs;
+    for (ULONGLONG lo = from; lo < to - 1;) {
+        ULONGLONG hi = std::min(lo + scan, to - 1);
+        SYSTEMTIME t = localTime(hi);
+        if (!valid(t)) return {};
+        if (bucket(t) <= seen) {
+            lo = hi;
+            continue;
+        }
+        while (hi - lo > 1) {
+            ULONGLONG mid = lo + (hi - lo) / 2;
+            SYSTEMTIME m = localTime(mid);
+            if (valid(m) && bucket(m) > seen) hi = mid;
+            else lo = mid;
+        }
+        SYSTEMTIME at = localTime(hi);
+        seen = bucket(at);
+        if (chosen(seen)) ticks.push_back({hi, label(at)});
+        lo = hi;
+    }
+    return ticks;
+}
+
+// Picking ----------------------------------------------------------------------------------------
+
+struct HistoryChartHit {
+    size_t line = 0;
+    int period = 0;
+    size_t point = 0;
+};
+
+// Every visible line in both periods within 5 DIP and half its width of `at` (item
+// coordinates), in line then period order: per line and period the recorded endpoint nearest
+// `at` of the closest drawn segment (or a lone reading), never an interpolated value; a break
+// is never a segment. Nothing outside the plot.
+static std::vector<HistoryChartHit> HistoryChartPick(const HistoryChart& c, D2D1_POINT_2F at) {
+    std::vector<HistoryChartHit> hits;
+    const D2D1_RECT_F& plot = c.plot;
+    if (c.width <= 0 || c.render.size() != c.lines.size() || at.x < plot.left || at.x > plot.right ||
+        at.y < plot.top || at.y > plot.bottom) {
+        return hits;
+    }
+    for (size_t index = 0; index < c.lines.size(); index++) {
+        const HistoryUiLine& line = c.lines[index];
+        if (line.hidden) continue;
+        float tolerance = 5 + float(line.stroke) / 2;
+        float minX = (at.x - tolerance - plot.left) * c.scale, maxX = (at.x + tolerance - plot.left) * c.scale;
+        for (int period = 0; period < (c.compare ? 2 : 1); period++) {
+            const std::vector<HistoryRenderPoint>& points = c.render[index][size_t(period)].points;
+            auto first = std::lower_bound(points.begin(), points.end(), minX,
+                                          [](const HistoryRenderPoint& point, float x) { return float(point.x) < x; });
+            float best = tolerance * tolerance;
+            size_t nearest = SIZE_MAX;
+            for (size_t i = size_t(first - points.begin()); i < points.size(); i++) {
+                D2D1_POINT_2F b = HistoryChartPoint(c, line, points[i]);
+                float bx = at.x - b.x, by = at.y - b.y, distance = bx * bx + by * by;
+                size_t endpoint = i;
+                if (i && points[i].connect) {
+                    D2D1_POINT_2F a = HistoryChartPoint(c, line, points[i - 1]);
+                    float dx = b.x - a.x, dy = b.y - a.y, ax = at.x - a.x, ay = at.y - a.y;
+                    float length = dx * dx + dy * dy;
+                    float t = length > 0 ? std::clamp((ax * dx + ay * dy) / length, 0.0f, 1.0f) : 0;
+                    float ex = ax - t * dx, ey = ay - t * dy;
+                    distance = ex * ex + ey * ey;
+                    if (ax * ax + ay * ay < bx * bx + by * by) endpoint = i - 1;
+                }
+                if (distance <= best) {
+                    best = distance;
+                    nearest = endpoint;
+                }
+                // One endpoint past the band: its incoming segment can cross it.
+                if (float(points[i].x) > maxX) break;
+            }
+            if (nearest != SIZE_MAX) hits.push_back({index, period, nearest});
+        }
+    }
+    return hits;
+}
+
+// Readout ----------------------------------------------------------------------------------------
+
+// A readout row (approved q6-rows, with the chip names): the line's name and swatch, then never
+// cut its period, its value rounded with its unit and the recorded local time, compact.
+static UiReadoutRow HistoryChartRow(std::wstring name, D2D1_COLOR_F color, int stroke, int meter, int period,
+                                    double value, ULONGLONG time, ULONGLONG now, const HistoryUiLocalTime& localTime) {
+    return {std::move(name),
+            {{period ? L"[Previous week]" : L"[Current]", UiRunStyle::Normal, UiInk::Secondary},
+             {L" " + HistoryUiValue(meter, value, 1)},
+             {L" \u00B7 " + HistoryUiTime(time, now, localTime), UiRunStyle::Normal, UiInk::Secondary}},
+            color,
+            float(stroke)};
+}
+
+// The readout of picked points: one row each, in their order, keyed by the recorded samples
+// they name (none: key 0). Its overflow hint names what shows the rest.
+static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::vector<HistoryChartHit>& hits,
+                                            const UiPalette& p, bool oneAccount, ULONGLONG now,
+                                            const HistoryUiLocalTime& localTime) {
+    UiTooltipContent content;
+    if (!c.snapshot) return content;
+    uint64_t key = 14695981039346656037ULL;
+    auto mix = [&](uint64_t value) {
+        for (int i = 0; i < 8; i++) key = (key ^ ((value >> (8 * i)) & 0xFF)) * 1099511628211ULL;
+    };
+    mix(c.generation);
+    for (const HistoryChartHit& hit : hits) {
+        const HistoryUiLine& line = c.lines[hit.line];
+        const HistoryRenderPoint& point = c.render[hit.line][size_t(hit.period)].points[hit.point];
+        if (point.sourceRow >= c.snapshot->samples.size()) continue;
+        mix(line.chip);
+        mix(uint64_t(hit.period));
+        mix(point.sourceRow);
+        content.rows.push_back(HistoryChartRow(line.name, HistoryChartColor(line, p), line.stroke, line.meter,
+                                               hit.period, point.value, c.snapshot->samples[point.sourceRow].timeMs,
+                                               now, localTime));
+    }
+    if (content.rows.empty()) return {};
+    content.key = key ? key : 1;
+    content.more = oneAccount ? L" \u2014 hide lines in the legend" :
+                                L" \u2014 hide lines in the legend or select one account";
+    return content;
+}
+
+// Emphasis ---------------------------------------------------------------------------------------
+
+// The lines drawn emphasized, the others muted (none: no emphasis): the hovered chip's, else the
+// lines picked on the chart, else the chip with keyboard focus; never a hidden line.
+static std::vector<size_t> HistoryChartEmphasis(const std::vector<HistoryUiLine>& lines,
+                                                const std::vector<size_t>& picked, const UiPaintState& state) {
+    auto chip = [&](uint32_t id) {
+        for (size_t i = 0; i < lines.size(); i++) {
+            if (id && lines[i].chip == id && !lines[i].hidden) return std::vector<size_t>{i};
+        }
+        return std::vector<size_t>{};
+    };
+    if (std::vector<size_t> hovered = chip(state.hot.id); !hovered.empty()) return hovered;
+    if (!picked.empty()) return picked;
+    return state.focusVisible ? chip(state.focus.id) : std::vector<size_t>{};
+}
+
+// Scene ------------------------------------------------------------------------------------------
+
+// Fill and Hatch: a rectangle (the band; high contrast hatches it). Rule: a horizontal line
+// (gridlines, the threshold). Label: text in its box (a message over a backdrop of `fill`). Run:
+// a polyline of one continuous stretch, round-capped and joined. Dot: a lone reading, `fill`
+// inside (the background: hollow). Square: a flat run compressed into one point, stroke-wide.
+enum class HistoryChartMark : uint8_t { Fill, Hatch, Rule, Label, Run, Dot, Square };
+
+struct HistoryChartPrim {
+    HistoryChartMark mark = HistoryChartMark::Rule;
+    D2D1_COLOR_F color{};
+    D2D1_COLOR_F fill{};
+    D2D1_RECT_F rect{};
+    std::vector<D2D1_POINT_2F> points;
+    float width = 1;          // DIPs
+    float dash = 0, gap = 0;  // In stroke widths; 0: solid
+    std::wstring text;
+    UiTextStyle style;
+    DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
+    bool clipped = false;     // Inside the plot's clip
+    int line = -1, period = -1;
+};
+
+// The draw list in order, and the clip of the lines (the plot 3 DIP out).
+struct HistoryChartScene {
+    D2D1_RECT_F clip{};
+    std::vector<HistoryChartPrim> prims;
+};
+
+// The chart as drawn (mockup .plot): while a percent line shows, the red band from the threshold
+// to the percent axis's top (high contrast: hatched) and its dashed line and label; percent
+// gridlines; each axis's labels (percent left, extra axes in their columns right) and the time
+// labels below; then, clipped, the lines: muted ones first, each line's previous week (dashed,
+// lone readings hollow) before its current period, 3 or 2 DIP wide; and the message over the
+// plot. Emphasis mutes the other lines to a quarter of their color (high contrast: emphasized in
+// the selection color, the others grey).
+static HistoryChartScene HistoryChartBuildScene(const HistoryChart& c, const std::vector<size_t>& emphasis,
+                                                const UiPalette& p) {
+    HistoryChartScene scene;
+    const bool hc = p.kind == UiThemeKind::HighContrast, light = p.kind == UiThemeKind::Light;
+    const float s = c.scale;
+    const D2D1_RECT_F& plot = c.plot;
+    scene.clip = UiInflate(plot, 3, 3);
+    D2D1_COLOR_F background = HistoryChartBackground(p), ink = p.textMuted;
+    auto add = [&](HistoryChartMark mark, D2D1_COLOR_F color) -> HistoryChartPrim& {
+        HistoryChartPrim& prim = scene.prims.emplace_back();
+        prim.mark = mark;
+        prim.color = color;
+        return prim;
+    };
+    auto label = [&](std::wstring text, D2D1_RECT_F box, DWRITE_TEXT_ALIGNMENT align, D2D1_COLOR_F color) {
+        HistoryChartPrim& prim = add(HistoryChartMark::Label, color);
+        prim.text = std::move(text);
+        prim.rect = box;
+        prim.style = kHistoryChartAxisStyle;
+        prim.align = align;
+    };
+    // Rules a whole number of device pixels wide (a DIP, rounded down), on pixel boundaries.
+    float rule = std::max(1.0f, std::floor(s)) / s;
+    auto line = [&](float y, D2D1_COLOR_F color, float dash) {
+        float top = std::round(y * s - rule * s / 2) / s + rule / 2;
+        HistoryChartPrim& prim = add(HistoryChartMark::Rule, color);
+        prim.points = {{plot.left, top}, {plot.right, top}};
+        prim.width = rule;
+        prim.dash = prim.gap = dash / rule;
+    };
+
+    const HistoryChartAxis& percent = c.axes[0];
+    bool percentLine = std::any_of(c.lines.begin(), c.lines.end(),
+                                   [](const HistoryUiLine& l) { return !l.hidden && l.meter < 6; });
+    bool threshold = percentLine && c.redThreshold >= percent.low && c.redThreshold <= percent.high;
+    float red = HistoryChartY(percent, plot, c.redThreshold);
+    if (threshold && red > plot.top) {
+        add(hc ? HistoryChartMark::Hatch : HistoryChartMark::Fill,
+            hc ? UiFade(p.textDisabled, 0.55f) : light ? UiRgb(0xC42B1C, 0.07f) : UiRgb(0xE53935, 0.08f))
+            .rect = {plot.left, plot.top, plot.right, red};
+    }
+    for (double value : percent.values) {
+        line(HistoryChartY(percent, plot, value), hc ? p.textDisabled : light ? UiRgb(0, 0.09f) : UiRgb(0xFFFFFF, 0.08f), 0);
+    }
+    if (threshold) {
+        line(red, hc ? p.text : light ? UiRgb(0xC42B1C, 0.5f) : UiRgb(0xE53935, 0.55f), 4);
+    }
+    float x = plot.right;
+    for (size_t i = 0; i < c.axes.size(); i++) {
+        const HistoryChartAxis& axis = c.axes[i];
+        if (!axis.visible) continue;
+        if (i) x += 8;
+        for (double value : axis.values) {
+            float y = HistoryChartY(axis, plot, value);
+            label(HistoryChartAxisLabel(i, value),
+                  i ? D2D1_RECT_F{x, y - 7, x + c.columns[i], y + 7} : D2D1_RECT_F{c.rect.left, y - 7, plot.left - 8, y + 7},
+                  i ? DWRITE_TEXT_ALIGNMENT_LEADING : DWRITE_TEXT_ALIGNMENT_TRAILING, ink);
+        }
+        if (i) x += c.columns[i];
+    }
+    if (threshold) {
+        label(std::to_wstring(c.redThreshold) + L"%", {plot.left, red - 16, plot.right - 2, red - 2},
+              DWRITE_TEXT_ALIGNMENT_TRAILING, hc ? p.text : light ? UiRgb(0xC42B1C) : UiRgb(0xE57373));
+    }
+    for (const HistoryChartTick& tick : c.ticks) {
+        float at = plot.left + float(double(tick.time - c.from) / double(c.to - c.from)) * (plot.right - plot.left);
+        label(tick.label, {at - 60, c.rect.bottom - 18, at + 60, c.rect.bottom - 4}, DWRITE_TEXT_ALIGNMENT_CENTER, ink);
+    }
+
+    // Lines, muted first; per line its previous week, then its current period.
+    auto emphasized = [&](size_t i) { return std::find(emphasis.begin(), emphasis.end(), i) != emphasis.end(); };
+    std::vector<size_t> order;
+    for (size_t i = 0; i < c.lines.size() && i < c.render.size(); i++) {
+        if (!c.lines[i].hidden) order.push_back(i);
+    }
+    std::stable_partition(order.begin(), order.end(), [&](size_t i) { return !emphasized(i); });
+    for (size_t i : order) {
+        const HistoryUiLine& l = c.lines[i];
+        D2D1_COLOR_F base = HistoryChartColor(l, p), color = base;
+        if (!emphasis.empty()) {
+            color = emphasized(i) ? (hc ? p.highlight : base) :
+                    hc            ? p.textDisabled : UiOver(UiFade(base, 0.25f), background);
+        }
+        float width = float(l.stroke);
+        for (int period : {1, 0}) {
+            if (period && !c.compare) continue;
+            std::vector<D2D1_POINT_2F> run;
+            size_t samples = 0;
+            LONG lastY = 0;
+            int lastX = -1;
+            auto flush = [&] {
+                if (run.empty()) return;
+                HistoryChartPrim& prim = add(run.size() > 1 ? HistoryChartMark::Run :
+                                             samples > 1    ? HistoryChartMark::Square : HistoryChartMark::Dot,
+                                             color);
+                prim.clipped = true;
+                prim.line = int(i);
+                prim.period = period;
+                if (prim.mark == HistoryChartMark::Square) {
+                    prim.rect = {run[0].x - width / 2, run[0].y - width / 2, run[0].x + width / 2, run[0].y + width / 2};
+                } else if (prim.mark == HistoryChartMark::Dot) {
+                    prim.points = {run[0]};
+                    prim.width = 1.6f;
+                    prim.fill = period ? background : color;
+                } else {
+                    prim.points = run;
+                    prim.width = width;
+                    if (period) {
+                        prim.dash = 3 / width;
+                        prim.gap = 6 / width;
+                    }
+                }
+                run.clear();
+                samples = 0;
+            };
+            for (const HistoryRenderPoint& point : c.render[i][size_t(period)].points) {
+                if (!point.connect) flush();
+                D2D1_POINT_2F at = HistoryChartPoint(c, l, point);
+                // Points on the same device pixel are one vertex.
+                LONG y = std::lround(at.y * s);
+                if (run.empty() || point.x != lastX || y != lastY) run.push_back(at);
+                lastX = point.x;
+                lastY = y;
+                samples++;
+            }
+            flush();
+        }
+    }
+
+    if (!c.message.empty()) {
+        float middle = (plot.top + plot.bottom) / 2;
+        HistoryChartPrim& prim = add(HistoryChartMark::Label, p.textSecondary);
+        prim.text = c.message;
+        prim.rect = {plot.left, middle - 9.5f, plot.right, middle + 9.5f};
+        prim.style = UiTextStyleFor(UiFont::Note);
+        prim.align = DWRITE_TEXT_ALIGNMENT_CENTER;
+        prim.fill = background;
+    }
+    return scene;
+}
+
 // src/history/controller.h
 // Usage history window controller: the selection by history ID, each mode's view, the range and
-// the week comparison, explicit loads with the open request they take, and the view the frame
-// builders read (history/view.h). Pure, like the settings edit controller: it talks to HistoryOps
-// (production: history/ops.h; tests: in-memory ops) and reads no globals.
+// the week comparison, the lines the legend hides, explicit loads with the open request they
+// take, the view the frame builders read (history/view.h), and the chart laid out for its item
+// with the lines the pointer picks on it (history/chart.h). Pure, like the settings edit
+// controller: it talks to HistoryOps (production: history/ops.h; tests: in-memory ops) and reads
+// no globals.
 
 // What ReadSettings returns: the published settings (with this user's recording consent),
 // whether the taskbar has yet to save account history IDs, the journal's storage error flag, and
@@ -19698,16 +20964,23 @@ struct HistoryController {
     HistoryUiRange range = HistoryUiRange::Week;
     bool compare = false;
 
-    // The last settings read and explicit load: its sorted snapshot (none before the first load),
-    // the times it covers ([readFrom, from) is the previous week while comparing) and the accounts
-    // collected over them, whose rows index the snapshot
+    // The last settings read and explicit load: its sorted snapshot (none before the first load)
+    // and its generation (one per load), the times it covers ([readFrom, from) is the previous
+    // week while comparing) and the accounts collected over them, whose rows index the snapshot
     HistorySettingsSnapshot settings;
     std::shared_ptr<const HistorySnapshot> snapshot;
+    uint64_t generation = 0;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     std::vector<HistoryUiAccount> accounts;
 
-    // Navigation slots by history ID, for the session (never reused)
+    // Navigation slots by history ID, for the session (never reused); the lines the legend hides
+    // for the session (history ID, meter), whatever the selection, view or range
     std::map<uint64_t, uint32_t> slots;
+    std::vector<std::pair<uint64_t, int>> hidden;
+
+    // The chart as the last build laid it out, and the lines the pointer picks on it
+    HistoryChart chart;
+    std::vector<size_t> picked;
 
     // Set once the window closes: nothing loads or acts any more
     bool closeRequested = false;
@@ -19747,6 +21020,7 @@ struct HistoryController {
         selectedId = selected >= 0 ? collected[size_t(selected)].id : 0;
         settings = std::move(read);
         snapshot = std::move(loaded);
+        generation++;
         from = start;
         to = now;
         readFrom = readStart;
@@ -19754,8 +21028,9 @@ struct HistoryController {
         Compose();
     }
 
-    // A control's command (history/view.h): the selection and the view recompose; the range, the
-    // comparison and Refresh load; the More menu's Settings opens the settings window.
+    // A control's command (history/view.h): the selection, the view and a legend chip's line
+    // recompose; the range, the comparison and Refresh load; the More menu's Settings opens the
+    // settings window.
     void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
         if (closeRequested || ops->Unloading()) return;
         switch (command) {
@@ -19782,6 +21057,13 @@ struct HistoryController {
             case HistoryUiCommand::Menu:
                 if (value == int(HistoryUiMenuItem::Settings)) ops->OpenSettings();
                 break;
+            case HistoryUiCommand::Line: {
+                auto line = std::find(hidden.begin(), hidden.end(), std::pair{key, value});
+                if (line != hidden.end()) hidden.erase(line);
+                else hidden.push_back({key, value});
+                Compose();
+                break;
+            }
             case HistoryUiCommand::None:
             case HistoryUiCommand::Export:
             case HistoryUiCommand::EnableRecording:
@@ -19850,14 +21132,252 @@ struct HistoryController {
             HistorySeriesSet set =
                 HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
             HistoryUiSetCards(v, set, accounts, from, to, now, localTime);
+            // The chart's lines: the plotted series in order, named as their cards (a removed
+            // account without the collected "removed " prefix), hidden as the legend left them.
+            for (size_t i = 0; i < set.series.size(); i++) {
+                const HistorySeries& series = set.series[i];
+                if (!series.plotted || series.account >= v.accounts.size()) continue;
+                const HistoryUiViewAccount& account = v.accounts[series.account];
+                std::wstring prefix = accounts[series.account].label + L" \u00B7 ";
+                auto named = [&](const std::wstring& title) {
+                    return title.starts_with(prefix) ? account.label + title.substr(prefix.size() - 3) : title;
+                };
+                HistoryUiLine& line = v.lines.emplace_back();
+                line.chip = kHistoryUiChip + account.slot * 8 + uint32_t(series.meter);
+                line.historyId = account.historyId;
+                line.meter = series.meter;
+                line.series = i;
+                line.account = series.account;
+                line.name = named(series.legendTitle);
+                line.title = named(series.hoverTitle);
+                line.color = series.color;
+                line.stroke = series.stroke;
+                line.low = series.low;
+                line.high = series.high;
+                line.hidden = std::find(hidden.begin(), hidden.end(), std::pair{line.historyId, line.meter}) != hidden.end();
+            }
         }
         view = std::move(v);
     }
+
+    // Lays the chart out in its item's rectangle at `scale` (each build that shows it; never a
+    // paint): the view's lines, axes and plot, then the visible lines' periods reduced to the
+    // plot's device pixels, again only when that reduction's key changed (HistoryChartKey), and the
+    // time ticks. A build ended any hover: nothing is picked.
+    void LayChart(UiGraphics& g, D2D1_RECT_F rect, float scale) {
+        HistoryChart& c = chart;
+        bool hiddenAll = std::all_of(view.lines.begin(), view.lines.end(), [](const HistoryUiLine& l) { return l.hidden; });
+        c.lines = view.lines;
+        c.from = from;
+        c.to = to;
+        c.readFrom = readFrom;
+        c.compare = compare;
+        c.redThreshold = view.redThreshold;
+        c.message = view.lines.empty() ? (view.cards.empty() ? L"No readings in this range." :
+                                              L"No percentage readings to plot. Dollar spending is shown below.") :
+                    hiddenAll ? L"All lines are hidden" : L"";
+        c.axes = HistoryChartAxes(c.lines);
+        float plotWidth = c.plot.right - c.plot.left;
+        HistoryChartLayout(g, c, rect, scale);
+        HistoryChartKey key{generation, from, to, readFrom, view.selected >= 0 ? selectedId : 0, view.view, {}, c.width};
+        for (const HistoryUiLine& line : c.lines) {
+            if (!line.hidden) key.lines.push_back(line.chip);
+        }
+        bool reduce = !(key == c.key) && snapshot;
+        if (reduce) {
+            c.key = key;
+            c.snapshot = snapshot;
+            c.generation = generation;
+            c.render.assign(c.lines.size(), {});
+            auto cancelled = [this] { return ops->Unloading(); };
+            for (size_t i = 0; i < c.lines.size(); i++) {
+                const HistoryUiLine& line = c.lines[i];
+                if (line.hidden || line.account >= accounts.size()) continue;
+                const std::vector<size_t>& rows = accounts[line.account].rows;
+                c.render[i][0] = HistoryReduceRows(snapshot->samples, rows, line.meter, from, to, c.width, cancelled);
+                if (compare) {
+                    c.render[i][1] = HistoryReduceRows(snapshot->samples, rows, line.meter, readFrom, from, c.width,
+                                                       cancelled);
+                }
+            }
+            // A reduction cut short is never taken for a complete one.
+            if (cancelled()) c.key = {};
+        }
+        if (reduce || plotWidth != c.plot.right - c.plot.left) {
+            c.ticks = HistoryChartTicks(from, to, c.plot.right - c.plot.left,
+                                        [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+        }
+        picked.clear();
+    }
+
+    // The pointer over the chart at `at` (item coordinates; nullopt: its hover ended): the lines
+    // it picks, emphasized (true when they changed), and their readout in `readout` unless that
+    // already holds it (the same key).
+    bool Hover(std::optional<D2D1_POINT_2F> at, UiTooltipContent& readout, const UiPalette& palette) {
+        std::vector<HistoryChartHit> hits;
+        if (at && !closeRequested && !ops->Unloading()) hits = HistoryChartPick(chart, *at);
+        std::vector<size_t> lines;
+        for (const HistoryChartHit& hit : hits) {
+            if (lines.empty() || lines.back() != hit.line) lines.push_back(hit.line);
+        }
+        UiTooltipContent content = HistoryChartReadout(chart, hits, palette, view.selected >= 0, ops->Now(),
+                                                       [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+        if (content.key != readout.key) readout = std::move(content);
+        bool changed = lines != picked;
+        picked = std::move(lines);
+        return changed;
+    }
 };
+
+// src/history/chart-paint.h
+// Usage history chart painting (pure): the history window's client-drawn items, its chart (the
+// scene of history/chart.h) and the chart's legend chips, on a Direct2D target in the items'
+// coordinates. Stroke styles and path geometries are factory-bound (UiGraphics); brushes and
+// colored layouts live in the surface's cache.
+
+// Paints the chart item or one of its legend chips, the emphasis from the paint state and the
+// chart's picks (HistoryChartEmphasis).
+static void HistoryUiPaintCustom(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache, const UiPalette& p,
+                                 const HistoryChart& chart, const std::vector<size_t>& picked, const UiItem& item,
+                                 const UiPaintState& state, float scale) {
+    std::vector<size_t> emphasis = HistoryChartEmphasis(chart.lines, picked, state);
+
+    // The chart: its scene's prims in order, the lines inside the plot's clip.
+    if (item.id == kHistoryUiChart) {
+        HistoryChartScene scene = HistoryChartBuildScene(chart, emphasis, p);
+        bool clipped = false;
+        for (const HistoryChartPrim& prim : scene.prims) {
+            if (prim.clipped != clipped) {
+                if (prim.clipped) target->PushAxisAlignedClip(&scene.clip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                else target->PopAxisAlignedClip();
+                clipped = prim.clipped;
+            }
+            switch (prim.mark) {
+                case HistoryChartMark::Fill:
+                case HistoryChartMark::Square:
+                    target->FillRectangle(&prim.rect, UiBrush(target, cache, prim.color));
+                    break;
+                // Diagonal hairlines 6 DIP apart (mockup: a 45 degree pattern).
+                case HistoryChartMark::Hatch: {
+                    const D2D1_RECT_F& r = prim.rect;
+                    float height = r.bottom - r.top;
+                    target->PushAxisAlignedClip(&r, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                    for (float x = r.left - height; x < r.right; x += 6) {
+                        target->DrawLine({x, r.bottom}, {x + height, r.top}, UiBrush(target, cache, prim.color), 1);
+                    }
+                    target->PopAxisAlignedClip();
+                    break;
+                }
+                case HistoryChartMark::Rule:
+                    target->DrawLine(prim.points[0], prim.points[1], UiBrush(target, cache, prim.color), prim.width,
+                                     prim.dash > 0 ? UiStrokeStyle(g, false, prim.dash, prim.gap) : nullptr);
+                    break;
+                case HistoryChartMark::Run: {
+                    winrt::com_ptr<ID2D1PathGeometry> path;
+                    winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
+                    winrt::com_ptr<ID2D1GeometrySink> sink;
+                    winrt::check_hresult(path->Open(sink.put()));
+                    sink->BeginFigure(prim.points[0], D2D1_FIGURE_BEGIN_HOLLOW);
+                    sink->AddLines(prim.points.data() + 1, UINT32(prim.points.size() - 1));
+                    sink->EndFigure(D2D1_FIGURE_END_OPEN);
+                    winrt::check_hresult(sink->Close());
+                    target->DrawGeometry(path.get(), UiBrush(target, cache, prim.color), prim.width,
+                                         UiStrokeStyle(g, true, prim.dash, prim.gap));
+                    break;
+                }
+                // A lone reading (mockup: a 3 DIP circle, 1.6 DIP outline).
+                case HistoryChartMark::Dot: {
+                    D2D1_ELLIPSE dot{prim.points[0], 3, 3};
+                    target->FillEllipse(&dot, UiBrush(target, cache, prim.fill));
+                    target->DrawEllipse(&dot, UiBrush(target, cache, prim.color), prim.width);
+                    break;
+                }
+                // Text on one line in its box; a backdrop 6 DIP around a message's ink.
+                case HistoryChartMark::Label: {
+                    IDWriteTextLayout* layout =
+                        UiLayout(g, prim.text, prim.style, std::max(prim.rect.right - prim.rect.left, 0.0f), false, prim.align);
+                    if (prim.fill.a > 0) {
+                        DWRITE_TEXT_METRICS metrics{};
+                        winrt::check_hresult(layout->GetMetrics(&metrics));
+                        target->FillRectangle(D2D1::RectF(prim.rect.left + metrics.left - 6, prim.rect.top,
+                                                          prim.rect.left + metrics.left + metrics.width + 6, prim.rect.bottom),
+                                              UiBrush(target, cache, prim.fill));
+                    }
+                    UiDrawLayout(target, cache, layout, {prim.rect.left, prim.rect.top}, prim.color);
+                    break;
+                }
+            }
+        }
+        if (clipped) target->PopAxisAlignedClip();
+        return;
+    }
+
+    // A legend chip (approved q8a-filter, s-hc; mockup .lchip): a 24 DIP pill, its line's swatch
+    // (18 x 12 DIP: the line at its width, or solid over dashed while comparing; a hollow outline
+    // while hidden) 11 DIP in, its name 7 DIP after it. Shown: a faint fill, stronger under the
+    // pointer (high contrast: an outline, the selection colors under the pointer); hidden: an
+    // outline (high contrast: dashed) with faint text; muted (emphasis elsewhere): muted text and
+    // the line's muted color.
+    auto found = std::find_if(chart.lines.begin(), chart.lines.end(),
+                              [&](const HistoryUiLine& line) { return line.chip == item.id; });
+    if (found == chart.lines.end()) return;
+    const HistoryUiLine& line = *found;
+    const bool hc = p.kind == UiThemeKind::HighContrast, light = p.kind == UiThemeKind::Light;
+    const bool hot = state.hot.id == item.id, off = !item.selected;
+    const bool emphasized =
+        std::find(emphasis.begin(), emphasis.end(), size_t(found - chart.lines.begin())) != emphasis.end();
+    const bool muted = !off && !emphasis.empty() && !emphasized;
+    const D2D1_RECT_F& r = item.rect;
+    float radius = (r.bottom - r.top) / 2, middle = (r.top + r.bottom) / 2;
+    D2D1_COLOR_F base = HistoryChartColor(line, p), fill{}, border{}, ink = p.text, swatch = base;
+    if (hc) {
+        border = off || muted ? p.textDisabled : hot ? p.highlight : p.text;
+        fill = hot && !off ? p.highlight : D2D1_COLOR_F{};
+        ink = off || muted ? p.textDisabled : hot ? p.highlightText : p.text;
+        swatch = off || muted ? p.textDisabled : hot ? p.highlightText : emphasized ? p.highlight : base;
+    } else {
+        D2D1_COLOR_F tone = light ? UiRgb(0x000000) : UiRgb(0xFFFFFF);
+        fill = off ? D2D1_COLOR_F{} : UiFade(tone, hot ? (light ? 0.08f : 0.09f) : (light ? 0.045f : 0.05f));
+        border = off ? UiFade(tone, light ? 0.2f : 0.22f) : D2D1_COLOR_F{};
+        ink = off ? UiFade(tone, 0.4f) : muted ? p.textMuted : p.text;
+        if (muted) swatch = UiOver(UiFade(base, 0.25f), HistoryChartBackground(p));
+    }
+    if (!item.enabled) ink = p.textDisabled;
+    UiFillRect(target, cache, r, radius, fill, scale);
+    if (hc && off) {
+        D2D1_RECT_F edge = UiInflate(UiSnapRect(r, scale), -0.5f / scale, -0.5f / scale);
+        D2D1_ROUNDED_RECT rounded{edge, radius, radius};
+        target->DrawRoundedRectangle(&rounded, UiBrush(target, cache, border), 1 / scale, UiStrokeStyle(g, false, 3, 2));
+    } else {
+        UiStrokeRect(target, cache, r, radius, border, 1, scale);
+    }
+    float left = r.left + 11, top = middle - 6;
+    auto stroke = [&](float y, float dash) {
+        float width = float(line.stroke);
+        target->DrawLine({left + 2, top + y}, {left + 16, top + y}, UiBrush(target, cache, swatch), width,
+                         UiStrokeStyle(g, true, dash / width, dash ? 2 * dash / width : 0));
+    };
+    if (off) {
+        D2D1_ROUNDED_RECT hollow{{left + 1, top + 3.5f, left + 17, top + 8.5f}, 2.5f, 2.5f};
+        target->DrawRoundedRectangle(&hollow, UiBrush(target, cache, hc ? swatch : UiFade(swatch, 0.55f)), 1.2f);
+    } else if (chart.compare) {
+        stroke(3, 0);
+        stroke(9.5f, 2);
+    } else {
+        stroke(6, 0);
+    }
+    UiTextStyle label{UiFamily::Text, 12.5f, 16, DWRITE_FONT_WEIGHT_NORMAL};
+    float textLeft = left + 18 + 7;
+    UiDrawLayout(target, cache,
+                 UiLayout(g, line.name, label, std::max(r.right - 11 - textLeft, 0.0f), false,
+                          DWRITE_TEXT_ALIGNMENT_LEADING, true),
+                 {textLeft, middle - label.lineHeight / 2}, ink);
+}
 
 // src/history/content.h
 // Usage history window content (approved mockups s-light, s-account, s-compare, s-states,
-// s-empty): info bars, the chart's card or an empty state, the summary cards and the No readings
+// s-empty, s-legend, q8a-filter): info bars, the chart's card (legend chips, key line, the chart
+// item, drawn by history/chart-paint.h) or an empty state, the summary cards and the No readings
 // card, from the view snapshot (history/view.h). Pure builder.
 
 // Lays out the content from y in a column of `width`; the viewport's height sizes the chart's
@@ -19923,27 +21443,62 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
         }
     }
 
-    // The chart's card (mockup .gcardh), as tall as the graph card with its legend and key line,
-    // its plot between 200 and 300 DIP by the viewport's height. Without a plotted line it holds a
-    // message instead: the first load, no accounts, a view no account supports (a shorter empty
-    // card), no readings in range or dollars only (a plot without legend).
-    bool plotted = std::any_of(view.cards.begin(), view.cards.end(),
-                               [](const HistoryUiCard& card) { return !card.detailsOnly; });
-    float plot = std::clamp(viewHeight - 212, 200.0f, 300.0f), height = plot + 68;
+    // The chart's card (mockups .gcardh, .legendrow, .lchip, .keyline): inside 10 DIP (top), 14
+    // (sides) and 8 (bottom) padding, the legend chips (24 DIP pills 6 DIP apart, wrapping), the
+    // key line 4 DIP under them, the chart 4 DIP under that, its area between 200 and 300 DIP tall
+    // by the viewport's height. Without a plotted line the chart holds a message and the card has
+    // no legend. Without a chart, a message instead (a shorter card): the first load, no accounts,
+    // a view no account supports.
+    float plot = std::clamp(viewHeight - 212, 200.0f, 300.0f), height = plot + 40;
     PCWSTR message = view.loading                                     ? L"Loading local history\u2026" :
                      view.accounts.empty()                            ? L"No accounts to display." :
                      view.cards.empty() && view.noReadings.empty() ?
                          (view.selected >= 0 ? L"This account has no meters in this view." :
                                                L"No accounts support this view.") : nullptr;
-    if (message) {
-        height = plot + 40;
-    } else if (!plotted) {
-        message = view.cards.empty() ? L"No readings in this range." :
-                                       L"No percentage readings to plot. Dollar spending is shown below.";
-        height = plot + 20;
-    }
+    size_t graphCard = items.size();
     panel({x, y, x + width, y + height});
-    if (message) {
+    if (!message) {
+        // A chip: 1 DIP border, 10 DIP padding, its 18 DIP swatch and 7 DIP gap, the 12.5 DIP name.
+        float left = x + 15, right = x + width - 15, top = y + 11;
+        UiTextStyle name{UiFamily::Text, 12.5f, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        float cx = left;
+        for (const HistoryUiLine& line : view.lines) {
+            float chipWidth = std::min(std::ceil(UiLayoutSize(UiLayout(g, line.name, name, 100000, false)).width) + 47,
+                                       right - left);
+            if (cx > left && cx + chipWidth > right) {
+                cx = left;
+                top += 24 + 6;
+            }
+            UiItem chip;
+            chip.id = line.chip;
+            chip.kind = UiItemKind::Custom;
+            chip.rect = {cx, top, cx + chipWidth, top + 24};
+            chip.text = line.name;
+            chip.selected = !line.hidden;
+            chip.action = HistoryUiAction(HistoryUiCommand::Line, line.meter, line.historyId);
+            chip.tooltip = {{line.title, UiRunStyle::Strong},
+                            {view.compare ? L"\nSolid / filled: current week. Dashed / hollow: previous week. Click to "
+                                            L"hide or show this line." :
+                                            L"\nSolid / filled: current range. Click to hide or show this line.",
+                             UiRunStyle::Normal, UiInk::Secondary}};
+            items.push_back(std::move(chip));
+            cx += chipWidth + 6;
+        }
+        if (!view.lines.empty()) {
+            top += 24 + 4;
+            text({left + 2, top, right, top + 16},
+                 {{view.compare ? L"Solid: current \u00B7 Dashed: previous" : L"Solid: current"}}, UiFont::Caption,
+                 UiInk::Muted, true);
+            top += 16 + 4;
+        }
+        UiItem chart;
+        chart.id = kHistoryUiChart;
+        chart.kind = UiItemKind::Chart;
+        chart.rect = {left, top, right, top + plot};
+        items.push_back(std::move(chart));
+        height = top + plot + 9 - y;
+        items[graphCard].rect.bottom = y + height;
+    } else {
         // Centered (mockup .pmsg), the first load's progress ring 8 DIP before it.
         float textWidth = std::ceil(UiLayoutSize(UiLayout(g, message, UiTextStyleFor(UiFont::Note), 10000, false)).width);
         float ring = view.loading ? 16 + 8 : 0;
@@ -19971,14 +21526,8 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
     if (heights.empty()) return y - 10;
     size_t columns = size_t(std::clamp(int((width + 8) / 248), 1, view.compare ? 2 : 3));
     float cardWidth = (width - 8 * float(columns - 1)) / float(columns);
-    // A card's line (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in the
-    // theme: the series palette's hues as the mockups draw them, dark and light (a scoped quota's
-    // tint toward the text color kept); high contrast alternates text and link.
-    static constexpr uint32_t kHues[][2] = {
-        {0x4F95FF, 0x2A6FD6}, {0xF0923F, 0xC8621A}, {0x4CC38A, 0x1F8F5A}, {0xE36BD0, 0xB8389F},
-        {0xA184FF, 0x6F4FE6}, {0x33C3A6, 0x0E8F78}, {0xD9B44A, 0x9A7A12}, {0xFF7A70, 0xD0463C},
-    };
-    static_assert(std::size(kHues) == std::size(kHistoryColors));
+    // A card's line (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in its
+    // chart line's color (history/chart.h; high contrast: text and link alternating as inks).
     for (size_t first = 0; first < heights.size(); first += columns) {
         size_t last = std::min(first + columns, heights.size());
         float rowHeight = *std::max_element(heights.begin() + ptrdiff_t(first), heights.begin() + ptrdiff_t(last));
@@ -20010,21 +21559,8 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
             float titleLeft = left;
             if (!card.detailsOnly) {
                 UiShapePart line{L"M1 4H15", {}, UiInk::Inherit, 1, 3};
-                if (hc) {
-                    line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
-                } else {
-                    COLORREF c = card.color;
-                    line.color = {float(GetRValue(c)) / 255, float(GetGValue(c)) / 255, float(GetBValue(c)) / 255, 1};
-                    for (size_t k = 0; k < std::size(kHistoryColors); k++) {
-                        COLORREF base = kHistoryColors[k];
-                        COLORREF tint = RGB((GetRValue(base) * 3 + 255) / 4, (GetGValue(base) * 3 + 255) / 4,
-                                            (GetBValue(base) * 3 + 255) / 4);
-                        if (c != base && c != tint) continue;
-                        line.color = UiRgb(kHues[k][light]);
-                        if (c != base) line.color = UiOver(UiRgb(light ? 0x000000 : 0xFFFFFF, 0.25f), line.color);
-                        break;
-                    }
-                }
+                if (hc) line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
+                else line.color = HistoryUiHue(card.color, light);
                 shape({left, y + 15, left + 16, y + 23}, 16, {line});
                 titleLeft = left + 24;
             }
@@ -20144,16 +21680,20 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     float left = kHistoryUiNavWidth + 12, right = std::max(client.width - 24, left + 1), width = right - left;
 
     // Icon buttons (mockup .ibtn: 32 x 30 DIP, 4 apart) at the title row's right: Refresh,
-    // Export and the More menu.
+    // Export and the More menu, named by their tooltips (s-tooltips; Export's with its scope).
     struct IconButton {
         uint32_t id;
         PCWSTR glyph;
         HistoryUiCommand command;
         bool enabled;
+        PCWSTR name, detail;
     };
-    const IconButton buttons[] = {{kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, true},
-                                  {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, false},
-                                  {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, true}};
+    const IconButton buttons[] = {
+        {kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, true, L"Refresh (F5)", nullptr},
+        {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, false, L"Export CSV",
+         L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
+         L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels."},
+        {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, true, L"More options", nullptr}};
     float x = right - 3 * 32 - 2 * 4;
     for (const IconButton& spec : buttons) {
         UiItem button;
@@ -20164,6 +21704,10 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         button.icon = spec.glyph;
         button.iconSize = 15;
         button.enabled = spec.enabled;
+        button.tooltip = spec.detail ? std::vector<UiRun>{{spec.name, UiRunStyle::Strong},
+                                                          {std::wstring(L"\n") + spec.detail, UiRunStyle::Normal,
+                                                           UiInk::Secondary}} :
+                                       std::vector<UiRun>{{spec.name}};
         button.action = HistoryUiAction(spec.command, spec.command == HistoryUiCommand::Menu ? -1 : 0);
         if (spec.command == HistoryUiCommand::Menu) {
             button.options = {{L"Settings", int(HistoryUiMenuItem::Settings), {}, {}, L"\uE713"}};
@@ -20319,20 +21863,38 @@ struct HistoryProductionOps final : HistoryOps {
 // The custom-drawn usage history window: the history client of the window host (ui/host.h), run
 // on the history thread (history/window.h); never touches XAML. It only translates: host
 // callbacks into controller events (history/controller.h, on its production ops), the
-// controller's view into frames (history/shell.h), rebuilds and focus requests.
+// controller's view into frames (history/shell.h) and its chart into paints (history/
+// chart-paint.h) and readouts, rebuilds and focus requests. It holds no D2D objects.
 
 static constexpr PCWSTR kHistoryUiClass = L"AiQuotaHistoryUi_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryUiViewportClass = L"AiQuotaHistoryUiView_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryUiPopupClass = L"AiQuotaHistoryUiPopup_" WH_MOD_ID;
+static constexpr PCWSTR kHistoryUiTooltipClass = L"AiQuotaHistoryUiTip_" WH_MOD_ID;
 
 struct HistoryUiClient final : UiHostClient {
     HistoryProductionOps ops;
     HistoryController controller{ops};
 
+    // The chart is laid out (and reduced, when its key changed) for the item the frame placed.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         HistoryUiView view = controller.view;
         view.theme = host.theme.kind;
         HistoryUiBuildFrame(*host.graphics, view, client, frame);
+        if (const UiItem* chart = UiFindItem(frame, kHistoryUiChart)) {
+            controller.LayChart(*host.graphics, chart->rect, UiHostScale(host));
+        }
+    }
+
+    void PaintCustom(UiHost& host, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
+                     const UiPaintState& state) override {
+        HistoryUiPaintCustom(target, *host.graphics, cache, host.palette, controller.chart, controller.picked, item,
+                             state, UiHostScale(host));
+    }
+
+    // Only a change of the picked lines repaints the chart's surface; the readout's rows change
+    // with the picked samples.
+    bool ChartHover(UiHost& host, uint32_t, std::optional<D2D1_POINT_2F> point, UiTooltipContent& readout) override {
+        return controller.Hover(point, readout, host.palette);
     }
 
     // A new selection or view scrolls the content back to its top.
@@ -21877,6 +23439,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
             config.mainClass = kHistoryUiClass;
             config.viewportClass = kHistoryUiViewportClass;
             config.popupClass = kHistoryUiPopupClass;
+            config.tooltipClass = kHistoryUiTooltipClass;
             config.title = L"Taskbar AI Quota Bars \u2014 Usage history";
             config.activateMessage = kHistoryActivateMessage;
             config.size = {1100, 830};

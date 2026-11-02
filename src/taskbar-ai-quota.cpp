@@ -245,6 +245,7 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "ui/paint.h"
 
 #include "ui/input.h"
+#include "ui/tooltip-layout.h"
 
 #include "ui/system-theme.h"
 
@@ -253,6 +254,7 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "ui/window-icon.h"
 
 #include "ui/popup.h"
+#include "ui/tooltip.h"
 
 #include "ui/text-box.h"
 
@@ -300,7 +302,11 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "history/view.h"
 
+#include "history/chart.h"
+
 #include "history/controller.h"
+
+#include "history/chart-paint.h"
 
 #include "history/content.h"
 

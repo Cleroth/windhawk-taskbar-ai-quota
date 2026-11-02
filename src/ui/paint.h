@@ -12,8 +12,8 @@ struct UiPaintState {
     D2D1_POINT_2F pointer{-1e9f, -1e9f};
 };
 
-// Draws a client-drawn item (a Preview, a Gallery card's thumbnail) with the target's transform
-// in item coordinates.
+// Draws a client-drawn item (a Preview, a Gallery card's thumbnail, a Chart, a Custom item) with
+// the target's transform in item coordinates.
 using UiCustomPaint = std::function<void(const UiItem&)>;
 
 static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
@@ -547,11 +547,14 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              {thumb.left + 2, thumb.bottom + 8}, item.enabled ? p.text : p.textDisabled);
                 break;
             }
+            // Client-drawn; without a painter only a preview shows (a placeholder).
             case UiItemKind::Preview:
+            case UiItemKind::Chart:
+            case UiItemKind::Custom:
                 if (custom && *custom) {
                     (*custom)(item);
                     target->SetTransform(&shifted);
-                } else {
+                } else if (item.kind == UiItemKind::Preview) {
                     UiFillRect(target, cache, r, 4, p.control, scale);
                 }
                 break;
@@ -569,7 +572,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
             focused->kind != UiItemKind::TextBox) {
             float radius = state.focus.link >= 0                  ? 2 :
                            focused->kind == UiItemKind::Swatch    ? (focused->rect.right - focused->rect.left) / 2 :
-                           focused->kind == UiItemKind::Chip      ? (focused->rect.bottom - focused->rect.top) / 2 :
+                           focused->kind == UiItemKind::Chip ||
+                               focused->kind == UiItemKind::Custom ? (focused->rect.bottom - focused->rect.top) / 2 :
                            focused->kind == UiItemKind::Segmented ? 3 :
                            focused->kind == UiItemKind::Card ||
                                focused->kind == UiItemKind::Gallery ? 6 : 4;

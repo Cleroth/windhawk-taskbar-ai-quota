@@ -1,18 +1,24 @@
 // Native-host probe driver (hand-written, not production code). Loads the probe DLL built from
 // the extracted toolkit host, opens its window on the DLL's worker thread, closes it from this
 // thread, joins and unloads, repeatedly; then failed creation, a conflicting class, render-target
-// loss, window icons across DPI changes and an unload close during a message box. Windows are
+// loss, window icons across DPI changes and theme notifications (handle counts read on the
+// window thread once it settles) and an unload close during a message box. Windows are
 // off-screen and never activated; the message box shows briefly. The dropdown popup, text box,
-// segmented control, key forwarding, activation request and navigation pane cases run on a
-// hidden desktop this probe creates and never switches to, so their focus, capture, foreground
-// and message box stay off the user's screen.
+// segmented control, key forwarding, activation request, navigation pane, chart and tooltip
+// cases run on a hidden desktop this probe creates and never switches to, so their focus,
+// capture, foreground, tooltips and message box stay off the user's screen.
 // Usage: host-probe.exe <ui-host.dll>
+//        host-probe.exe <ui-host.dll> --tooltip-interactive --log <file>  (by hand, on the user's
+//        desktop: tooltip pointer routing; F9 ends a step, F8 skips it)
 #include <windows.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 using OpenFn = BOOL (*)(BOOL, HDESK);
 using WindowFn = HWND (*)();
@@ -23,7 +29,9 @@ using JoinFn = int (*)(DWORD);
 
 // Mirrors the DLL's counters and messages.
 enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult,
-                    kCloses, kClosesDragging, kAutoScrolls };
+                    kCloses, kClosesDragging, kAutoScrolls, kChartHovers, kChartLeaves, kChartRepaints,
+                    kTipShows, kTipHides, kTipMouse, kTipActivate, kWindowPresses, kTipAlive, kThemeMessages,
+                    kSetIcons, kGdiAtDestroyed, kUserAtDestroyed };
 static constexpr UINT kProbePing = WM_APP + 70;
 static constexpr UINT kProbeLoseTarget = WM_APP + 71;
 static constexpr UINT kProbeModal = WM_APP + 72;
@@ -36,7 +44,20 @@ enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, 
                     kHandleMouse, kSysKey, kTextBoxLimit, kTextBoxChar, kTextBoxKey, kItemTop, kTextBoxTop,
                     kPaintNow, kSliderSweep, kSliderValue, kLiveMain, kPaintMain, kDeclineClose, kViewHeight,
                     kScrollTop, kStopAutoScroll, kHistoryMode, kNavScroll, kNavRange, kNavVisible, kWheel,
-                    kNavMouse, kNavBar, kSelectNav, kHot, kSegmentMouse, kClientKeys };
+                    kNavMouse, kNavBar, kSelectNav, kHot, kSegmentMouse, kClientKeys, kTipMode, kChartMouse,
+                    kTipButton, kTipState, kTipRect, kTipKey, kTipNcHit, kTipFromPoint, kTipUnregister,
+                    kTipRegister, kEnableMain, kTipLoseTarget, kMoveMain, kSendView, kCursorWidth, kHandles };
+enum ProbeTip { kTipWindow = 1, kTipVisible = 2, kTipOwned = 4, kTipNoActivate = 8, kTipNotActive = 16,
+                kTipNoCapture = 32, kTipClear = 64, kTipReadout = 128, kTipText = 256, kTipPending = 512 };
+static constexpr int kTipShown = kTipWindow | kTipVisible | kTipOwned | kTipNoActivate | kTipNotActive |
+                                 kTipNoCapture | kTipClear;
+static constexpr int kChart = 1100, kTipButtonId = 1101;
+static constexpr PCWSTR kTipClass = L"AiQuotaProbeUiTip";
+
+// kChartMouse's argument: kind (0 move, 1 left down, 2 up) at (x, y) DIPs in the chart.
+static int ChartAt(int kind, int x, int y) {
+    return kind << 24 | x << 12 | y;
+}
 enum ProbeUpdate { kMainUpdate = 1, kViewportUpdate = 2 };
 enum ProbeState { kWindow = 1, kVisible = 2, kCaptured = 4, kNoActivate = 8, kOwned = 16,
                   kNotActive = 32, kOpen = 64, kAnyCapture = 128 };
@@ -152,9 +173,135 @@ static HWND ThreadDialog(HWND window) {
     return found;
 }
 
+// Interactive tooltip routing (--tooltip-interactive): the probe window on the user's desktop,
+// activated, in tooltip mode (a chart, an icon button with a tooltip). The user does each step
+// with real input and ends it with F9 (F8 skips). Each step logs how often the readout and the
+// tooltip showed and hid, the chart's hover reports, mouse and activation messages that reached
+// the tooltip window (it hides on any mouse message; activations should never come), presses
+// that reached the probe window, and the foreground window at its end.
+static int RunTooltipInteractive(const std::wstring& logPath) {
+    struct Step {
+        const char* id;
+        const char* action;
+    };
+    static constexpr Step kSteps[] = {
+        {"hover", "Move the pointer slowly over the chart (the empty panel under the dropdown and the slider). The "
+                  "readout follows it and never covers the pointer."},
+        {"onto-readout", "Move the pointer quickly from the chart onto the readout, then around inside it."},
+        {"click-beside", "With the readout showing, click the chart right beside it, then where it was."},
+        {"icon-tooltip", "Rest the pointer on the icon button at the top until its tooltip shows (about half a "
+                         "second), then click the button."},
+        {"click-other-app", "With the readout showing, click another app's window (for example this console)."},
+        {"alt-tab", "With the readout showing, press Alt+Tab to another window, then Alt+Tab back."},
+        {"wheel", "With the readout showing, turn the mouse wheel over the chart."},
+        {"screen-corner", "Drag the probe window to a screen corner and hover the chart next to it: the readout "
+                          "takes another side, still clear of the pointer."},
+        {"taskbar", "Move the probe window so the chart is just above the taskbar and hover the chart's bottom "
+                    "edge: the readout stays off the taskbar."},
+        {"second-monitor", "With a second monitor at another scale (F8 skips), move the window there and hover the "
+                           "chart: the readout is crisp and sized like the window's text."},
+        {"win-key", "With the readout showing, press the Windows key, then Esc."},
+    };
+    FILE* log = _wfopen(logPath.c_str(), L"w");
+    auto out = [&](const std::string& text) {
+        std::printf("%s", text.c_str());
+        std::fflush(stdout);
+        if (log) {
+            std::fputs(text.c_str(), log);
+            std::fflush(log);
+        }
+    };
+    struct Hotkey {
+        int id;
+        UINT vk;
+        const char* name;
+    };
+    std::string keys[3];
+    for (Hotkey key : {Hotkey{1, VK_F9, "F9"}, Hotkey{2, VK_F8, "F8"}}) {
+        keys[key.id] = key.name;
+        if (!RegisterHotKey(nullptr, key.id, MOD_NOREPEAT, key.vk)) {
+            keys[key.id] = std::string("Ctrl+Alt+") + key.name;
+            if (!RegisterHotKey(nullptr, key.id, MOD_NOREPEAT | MOD_CONTROL | MOD_ALT, key.vk)) {
+                std::fprintf(stderr, "Cannot register hotkey %s\n", keys[key.id].c_str());
+                return 2;
+            }
+        }
+    }
+    int result = 0;
+    try {
+        Probe probe;
+        reinterpret_cast<void (*)(BOOL)>(GetProcAddress(probe.module, "ProbeSetInteractive"))(TRUE);
+        HWND hwnd = probe.Open();
+        OSVERSIONINFOW version{sizeof(version)};
+        using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+        if (auto get = reinterpret_cast<RtlGetVersion_t>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"))) {
+            get(&version);
+        }
+        std::time_t now = std::time(nullptr);
+        char stamp[32] = {};
+        std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M", std::localtime(&now));
+        char header[512];
+        std::snprintf(header, sizeof(header),
+                      "Tooltip routing probe, interactive. %s. Windows build %lu, window DPI %u.\nStandalone process "
+                      "(not Explorer). Keys: %s ends a step, %s skips it.\n",
+                      stamp, version.dwBuildNumber, GetDpiForWindow(hwnd), keys[1].c_str(), keys[2].c_str());
+        out(header);
+        static constexpr ProbeCounter kLogged[] = {kChartHovers, kChartLeaves, kTipShows, kTipHides, kTipMouse,
+                                                   kTipActivate, kWindowPresses};
+        static constexpr const char* kNames[] = {"chart hover reports", "chart hovers ended", "tooltip shows",
+                                                 "tooltip hides", "mouse messages that reached the tooltip",
+                                                 "activation or focus messages to the tooltip",
+                                                 "presses that reached the probe window"};
+        for (size_t i = 0; i < std::size(kSteps) && IsWindow(hwnd); i++) {
+            char line[640];
+            std::snprintf(line, sizeof(line), "\nStep %zu of %zu: %s\n  Then press %s (%s skips).\n", i + 1,
+                          std::size(kSteps), kSteps[i].action, keys[1].c_str(), keys[2].c_str());
+            std::printf("%s", line);
+            std::fflush(stdout);
+            int before[std::size(kLogged)];
+            for (size_t c = 0; c < std::size(kLogged); c++) before[c] = probe.count(kLogged[c]);
+            int key = 0;
+            for (MSG msg{}; !key && IsWindow(hwnd);) {
+                while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                    if (msg.message == WM_HOTKEY) key = int(msg.wParam);
+                }
+                if (!key) MsgWaitForMultipleObjects(0, nullptr, FALSE, 200, QS_ALLINPUT);
+            }
+            std::string block = "\n[step " + std::to_string(i + 1) + "] " + kSteps[i].id + ": " +
+                                (key == 1 ? "done" : key == 2 ? "SKIPPED" : "window closed") + "\naction: " +
+                                kSteps[i].action + "\n";
+            for (size_t c = 0; c < std::size(kLogged); c++) {
+                block += "  " + std::string(kNames[c]) + ": " + std::to_string(probe.count(kLogged[c]) - before[c]) + "\n";
+            }
+            if (IsWindow(hwnd)) {
+                int state = probe.Call(kTipState);
+                HWND foreground = GetForegroundWindow();
+                block += std::string("end: tooltip ") + (state & kTipVisible ? "showing" : "hidden") +
+                         (state & kTipWindow && !(state & kTipNotActive) ? ", ACTIVE" : "") +
+                         "; foreground " + (foreground == hwnd ? "the probe window" : "another window") + "\n";
+            }
+            out(block);
+        }
+        if (IsWindow(hwnd)) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        probe.Closed();
+        out(std::string("\nAll steps done; tooltip window ") +
+            (probe.count(kTipAlive) ? "outlived the main window" : "gone before the main window") +
+            ". Send the log to the agent.\n");
+    } catch (const std::exception& e) {
+        out(std::string("\nProbe failed: ") + e.what() + "\n");
+        result = 1;
+    }
+    UnregisterHotKey(nullptr, 1);
+    UnregisterHotKey(nullptr, 2);
+    if (log) std::fclose(log);
+    return result;
+}
+
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2) {
-        std::fprintf(stderr, "Usage: host-probe.exe <ui-host.dll>\n");
+    bool interactive = argc == 5 && std::wstring(argv[2]) == L"--tooltip-interactive" &&
+                       std::wstring(argv[3]) == L"--log";
+    if (argc != 2 && !interactive) {
+        std::fprintf(stderr, "Usage: host-probe.exe <ui-host.dll> [--tooltip-interactive --log <file>]\n");
         return 2;
     }
     g_dll = argv[1];
@@ -163,6 +310,11 @@ int wmain(int argc, wchar_t** argv) {
     // way so a worker apartment's teardown can't strand one.
     CO_MTA_USAGE_COOKIE mta{};
     CoIncrementMTAUsage(&mta);
+    if (interactive) {
+        int code = RunTooltipInteractive(argv[4]);
+        CoDecrementMTAUsage(mta);
+        return code;
+    }
     std::wstring className = L"AiQuotaProbeUi";
     HANDLE process = GetCurrentProcess();
     DWORD gdiWarm = 0, userWarm = 0, gdiEnd = 0, userEnd = 0;
@@ -240,7 +392,8 @@ int wmain(int argc, wchar_t** argv) {
         probe.Closed();
     });
 
-    Run("window icons: both sizes at the window's DPI, redrawn on DPI changes, destroyed after close", [&] {
+    Run("window icons: both sizes at the window's DPI, redrawn on DPI changes and theme notifications without "
+        "handle growth (read on the window thread once it settles), destroyed after close", [&] {
         Probe probe;
         HWND hwnd = probe.Open();
         auto iconOf = [&](WPARAM type) {
@@ -262,35 +415,120 @@ int wmain(int argc, wchar_t** argv) {
         HICON last[2] = {iconOf(ICON_SMALL), iconOf(ICON_BIG)};
         CHECK(width(last[0]) == GetSystemMetricsForDpi(SM_CXSMICON, dpi));
         CHECK(width(last[1]) == GetSystemMetricsForDpi(SM_CXICON, dpi));
+        // Object counts: USER and GDI read by this thread, and on the window thread once its
+        // pending messages and paints are handled (`settled`) or as it is (`now`).
+        struct Counts {
+            int user, gdi;
+            bool operator==(const Counts&) const = default;
+        };
+        auto here = [&] {
+            return Counts{int(GetGuiResources(process, GR_USEROBJECTS)), int(GetGuiResources(process, GR_GDIOBJECTS))};
+        };
+        auto there = [&](bool settled) {
+            int packed = probe.Call(kHandles, settled);
+            return Counts{packed >> 16, packed & 0xFFFF};
+        };
+        auto inventory = [&] {
+            auto list = reinterpret_cast<int (*)(wchar_t*, int)>(GetProcAddress(probe.module, "ProbeWindowInventory"));
+            wchar_t buffer[2048] = {};
+            int windows = list ? list(buffer, 2048) : -1;
+            std::printf("WINDOW inventory (%d): %ls\n", windows, buffer);
+        };
+        Counts warm{};
+        int steps = 0;
+        auto step = [&](const char* phase, int change, Counts settled, Counts driver, Counts unsettled) {
+            std::printf("STEP icons %d %s settled=%d/%d driver=%d/%d unsettled=%d/%d theme=%d seticon=%d\n", change,
+                        phase, settled.user, settled.gdi, driver.user, driver.gdi, unsettled.user, unsettled.gdi,
+                        probe.count(kThemeMessages), probe.count(kSetIcons));
+            if (steps++ && warm.user && !(settled == warm)) {
+                std::printf("ANOMALY icons %d %s settled %+d USER %+d GDI\n", change, phase, settled.user - warm.user,
+                            settled.gdi - warm.gdi);
+                inventory();
+            }
+        };
         // DPI changes as the system reports them (made-up DPIs, the window's rectangle kept): new
         // icons at the new sizes replace the old, which are destroyed; repeated, no handles stay.
-        DWORD gdiWarm = 0, userWarm = 0;
         for (int change = 0; change < 6; change++) {
             UINT next = change % 2 ? 192 : 144;
+            step("before", change, there(true), here(), there(false));
             RECT rect{};
             GetWindowRect(hwnd, &rect);
             DWORD_PTR answer = 0;
             CHECK(SendMessageTimeoutW(hwnd, WM_DPICHANGED, MAKEWPARAM(next, next), LPARAM(&rect), SMTO_BLOCK,
                                       kTimeout, &answer));
+            Counts driver = here(), unsettled = there(false);
+            step("dpi", change, there(true), driver, unsettled);
             probe.Call(kPaintMain);
             HICON now[2] = {iconOf(ICON_SMALL), iconOf(ICON_BIG)};
+            driver = here();
+            unsettled = there(false);
+            Counts settled = there(true);
+            step("icons", change, settled, driver, unsettled);
             CHECK(width(now[0]) == GetSystemMetricsForDpi(SM_CXSMICON, next));
             CHECK(width(now[1]) == GetSystemMetricsForDpi(SM_CXICON, next));
             CHECK(!width(last[0]) && !width(last[1]));
             last[0] = now[0];
             last[1] = now[1];
-            if (change == 1) {
-                gdiWarm = GetGuiResources(process, GR_GDIOBJECTS);
-                userWarm = GetGuiResources(process, GR_USEROBJECTS);
+            if (change == 1) warm = settled;
+        }
+        Counts end = there(true);
+        // Theme notifications to this window only (posted, or the color-set change sent from a
+        // helper thread: it carries a string), read meanwhile on this thread: what a read off
+        // the window thread can catch mid-redraw, and what stays once it is handled.
+        Counts widest = end;
+        for (int i = 0; i < 24; i++) {
+            HANDLE sender = nullptr;
+            if (i % 3 == 2) {
+                sender = CreateThread(nullptr, 0, [](LPVOID window) -> DWORD {
+                    DWORD_PTR answer = 0;
+                    SendMessageTimeoutW(HWND(window), WM_SETTINGCHANGE, 0, LPARAM(L"ImmersiveColorSet"), SMTO_BLOCK,
+                                        kTimeout, &answer);
+                    return 0;
+                }, hwnd, 0, nullptr);
+                CHECK(sender);
+            } else {
+                PostMessageW(hwnd, i % 3 ? WM_THEMECHANGED : WM_SYSCOLORCHANGE, 0, 0);
+            }
+            for (DWORD start = GetTickCount(); GetTickCount() - start < 30;) {
+                Counts c = here();
+                widest = {std::max(widest.user, c.user), std::max(widest.gdi, c.gdi)};
+            }
+            if (sender) {
+                CHECK(WaitForSingleObject(sender, kTimeout) == WAIT_OBJECT_0);
+                CloseHandle(sender);
             }
         }
-        DWORD gdiEnd = GetGuiResources(process, GR_GDIOBJECTS), userEnd = GetGuiResources(process, GR_USEROBJECTS);
-        std::printf("HANDLES icons gdi_after_warmup=%lu gdi_end=%lu user_after_warmup=%lu user_end=%lu\n",
-                    gdiWarm, gdiEnd, userWarm, userEnd);
-        CHECK(gdiWarm == gdiEnd && userWarm == userEnd);
+        Counts themed = there(true);
+        std::printf("NOTE theme notifications handled by the window: %d of 24 sent (more: the system's)\n",
+                    probe.count(kThemeMessages));
+        std::printf("HANDLES icons settled user %d -> %d -> %d after themes; gdi %d -> %d -> %d after themes; "
+                    "during themes this thread read up to %+d USER %+d GDI\n",
+                    warm.user, end.user, themed.user, warm.gdi, end.gdi, themed.gdi, widest.user - end.user,
+                    widest.gdi - end.gdi);
+        CHECK(warm == end && end == themed);
         PostMessageW(hwnd, WM_CLOSE, 0, 0);
         probe.Closed();
+        std::printf("HANDLES icons at the main window's NCDESTROY user %d gdi %d; after join user %d gdi %d\n",
+                    probe.count(kUserAtDestroyed), probe.count(kGdiAtDestroyed), here().user, here().gdi);
         CHECK(!width(last[0]) && !width(last[1]));
+    });
+
+    Run("cursor rectangle: the real cursor's image around its hotspot (read on this thread's desktop); its "
+        "bitmaps freed: repeated without GDI handle growth", [&] {
+        Probe probe;
+        auto cursorRect = reinterpret_cast<RECT (*)(POINT*)>(GetProcAddress(probe.module, "ProbeCursorRect"));
+        CHECK(cursorRect);
+        POINT at{};
+        RECT rect = cursorRect(&at);
+        CURSORINFO info{sizeof(info)};
+        bool showing = GetCursorInfo(&info) && (info.flags & CURSOR_SHOWING);
+        std::printf("OBSERVE cursor rectangle %ld x %ld px, hotspot +%ld,+%ld (%s)\n", rect.right - rect.left,
+                    rect.bottom - rect.top, at.x - rect.left, at.y - rect.top,
+                    showing ? "cursor image" : "cursor hidden: the SM_CXCURSOR fallback");
+        CHECK(rect.left <= at.x && at.x < rect.right && rect.top <= at.y && at.y < rect.bottom);
+        DWORD gdi = GetGuiResources(process, GR_GDIOBJECTS);
+        for (int i = 0; i < 200; i++) cursorRect(&at);
+        CHECK(GetGuiResources(process, GR_GDIOBJECTS) == gdi);
     });
 
     Run("unload close from another thread during a message box", [&] {
@@ -847,6 +1085,263 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(probe.Call(kNavBar, 3000) == 1 && probe.Call(kNavScroll) == dragged);
         PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
         probe.Closed();
+    });
+
+    // Chart and tooltip cases: the window moved on screen (of the hidden desktop), so the readout
+    // sits on the pointer's monitor beside it.
+    auto tipWindow = [&](Probe& probe) {
+        probe.Open(desktop);
+        probe.Call(kMoveMain, 100);
+        probe.Call(kTipMode, 1);
+    };
+    auto visible = [](Probe& probe) { return (probe.Call(kTipState) & kTipVisible) != 0; };
+
+    Run("chart and readout: hover reaches the client without taking focus; the readout shows at once, owned, "
+        "never active, without capture, clear of the pointer, passing the pointer through; the same pick moves "
+        "it without a repaint, a new one repaints only the chart's surface; a press ends the hover and focuses "
+        "the chart, the release activates nothing; its arrows scroll; target loss recreates", [&] {
+        CHECK(desktop);
+        Probe probe;
+        tipWindow(probe);
+        CHECK(probe.Call(kFocus, kDropdown) == 1);
+        probe.Call(kChartMouse, ChartAt(0, 10, 50));
+        CHECK(probe.Call(kTipState) == (kTipShown | kTipReadout));
+        CHECK(probe.Call(kFocusedItem) == kDropdown && probe.count(kChartHovers) == 1 && probe.Call(kTipKey) == 1);
+        int left = probe.Call(kTipRect, 0), shows = probe.count(kTipShows);
+        CHECK(shows == 1);
+        probe.Call(kPaintNow);
+        CHECK(probe.Call(kChartMouse, ChartAt(0, 30, 70)) == 0);  // The same column: no repaint
+        CHECK(probe.Call(kTipState) == (kTipShown | kTipReadout) && probe.Call(kTipKey) == 1);
+        CHECK(probe.Call(kTipRect, 0) != left && probe.count(kTipShows) == shows);
+        CHECK(probe.Call(kChartMouse, ChartAt(0, 130, 70)) == kViewportUpdate);  // A new column
+        CHECK(probe.Call(kTipKey) == 3 && probe.count(kChartRepaints) == 2);
+        int hovers = probe.count(kChartHovers);
+        probe.Call(kChartMouse, ChartAt(0, 130, 70));  // A move that didn't move
+        CHECK(probe.count(kChartHovers) == hovers);
+        CHECK(probe.Call(kTipNcHit) == HTTRANSPARENT);
+        static constexpr const char* kUnder[] = {"another window", "the tooltip", "the viewport", "the main window"};
+        std::printf("OBSERVE WindowFromPoint at the readout's center (window thread): %s\n",
+                    kUnder[std::clamp(probe.Call(kTipFromPoint), 0, 3)]);
+        std::printf("OBSERVE cursor rectangle width on the hidden desktop: %d px (fallback: 2 x SM_CXCURSOR)\n",
+                    probe.Call(kCursorWidth));
+        CHECK(probe.Call(kTipLoseTarget) == 1);
+        CHECK(probe.count(kTipMouse) == 0 && probe.count(kTipActivate) == 0);
+        int actions = probe.Call(kAction, 0), leaves = probe.count(kChartLeaves);
+        probe.Call(kChartMouse, ChartAt(1, 130, 70));
+        CHECK(!visible(probe) && probe.count(kChartLeaves) == leaves + 1 && probe.Call(kFocusedItem) == kChart);
+        probe.Call(kChartMouse, ChartAt(2, 130, 70));
+        CHECK(probe.Call(kAction, 0) == actions);
+        probe.Call(kFieldKey, VK_DOWN);
+        CHECK(probe.Call(kScrollTop) == 40 && probe.Call(kFocusedItem) == kChart);
+        probe.Call(kFieldKey, VK_NEXT);
+        CHECK(probe.Call(kScrollTop) > 40);
+        probe.Call(kFieldKey, VK_HOME);
+        CHECK(probe.Call(kScrollTop) == 0);
+        probe.Call(kFieldKey, VK_UP);
+        CHECK(probe.Call(kScrollTop) == 0 && probe.Call(kFocusedItem) == kChart);
+        probe.Call(kFieldKey, VK_RETURN);
+        CHECK(probe.Call(kAction, 0) == actions);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+        CHECK(probe.count(kTipAlive) == 0);
+        CHECK(!ClassRegistered(kTipClass));
+    });
+
+    Run("readout: every hide trigger hides it (leave, press, key, wheel, scroll, rebuild, popup, cancel mode, "
+        "deactivation, a disabled owner, focus loss, move, size, minimize, hide, system command, Alt, the "
+        "activation request, DPI, theme, a declined close, a modal); none shows with the owner disabled", [&] {
+        CHECK(desktop);
+        Probe probe;
+        tipWindow(probe);
+        int x = 10;
+        auto show = [&] {
+            x = x == 10 ? 14 : 10;
+            probe.Call(kChartMouse, ChartAt(0, x, 60));
+            CHECK(probe.Call(kTipState) == (kTipShown | kTipReadout));
+        };
+        UINT activate = RegisterWindowMessageW(L"AiQuotaProbeUiActivate");
+        struct Trigger {
+            const char* name;
+            std::function<void()> fire, undo;
+        };
+        std::vector<Trigger> triggers = {
+            {"leave", [&] { probe.Call(kSendView, MAKELONG(WM_MOUSELEAVE, 0)); }, nullptr},
+            {"press", [&] { probe.Call(kChartMouse, ChartAt(1, x, 60)); },
+             [&] { probe.Call(kChartMouse, ChartAt(2, x, 60)); }},
+            {"key", [&] { probe.Call(kFieldKey, 'A'); }, nullptr},
+            {"wheel", [&] { probe.Call(kSendMain, MAKELONG(WM_MOUSEWHEEL, 0)); }, nullptr},
+            {"scroll", [&] { probe.Call(kScroll, 30); }, [&] { probe.Call(kScroll, 0); }},
+            {"rebuild", [&] { probe.Call(kRebuild); }, nullptr},
+            {"popup", [&] { CHECK(probe.Call(kOpenPopup) == 1); },
+             [&] { probe.Call(kSendMain, WM_CANCELMODE); }},
+            {"cancel mode", [&] { probe.Call(kSendMain, WM_CANCELMODE); }, nullptr},
+            {"deactivation", [&] { probe.Call(kSendMain, MAKELONG(WM_ACTIVATE, WA_INACTIVE)); }, nullptr},
+            {"disabled owner", [&] { probe.Call(kEnableMain, 0); }, [&] {
+                 probe.Call(kChartMouse, ChartAt(0, 40, 60));  // Not while disabled
+                 CHECK(!visible(probe) && probe.count(kChartHovers) > 0);
+                 probe.Call(kEnableMain, 1);
+             }},
+            {"focus loss", [&] { probe.Call(kSendMain, WM_KILLFOCUS); }, nullptr},
+            {"move", [&] { probe.Call(kSendMain, WM_MOVE); }, nullptr},
+            {"size", [&] { probe.Call(kSendMain, MAKELONG(WM_SIZE, SIZE_RESTORED)); }, nullptr},
+            {"minimize", [&] { probe.Call(kSendMain, MAKELONG(WM_SIZE, SIZE_MINIMIZED)); }, nullptr},
+            {"hide", [&] { probe.Call(kSendMain, MAKELONG(WM_SHOWWINDOW, 0)); }, nullptr},
+            {"system command", [&] { probe.Call(kSendMain, MAKELONG(WM_SYSCOMMAND, SC_RESTORE)); }, nullptr},
+            {"alt", [&] { probe.Call(kSysKey, VK_MENU); }, nullptr},
+            {"activation request", [&] {
+                 int requests = probe.Call(kClientKeys, 2);
+                 PostMessageW(probe.hwnd_, activate, 0, 0);
+                 for (DWORD waited = 0; probe.Call(kClientKeys, 2) == requests && waited < kTimeout; waited += 10) {
+                     Sleep(10);
+                 }
+             }, nullptr},
+            {"dpi", [&] {
+                 RECT rect{};
+                 GetWindowRect(probe.hwnd_, &rect);
+                 UINT dpi = GetDpiForWindow(probe.hwnd_);
+                 DWORD_PTR answer = 0;
+                 CHECK(SendMessageTimeoutW(probe.hwnd_, WM_DPICHANGED, MAKEWPARAM(dpi, dpi), LPARAM(&rect), SMTO_BLOCK,
+                                           kTimeout, &answer));
+             }, nullptr},
+            {"theme", [&] { probe.Call(kSendMain, WM_THEMECHANGED); }, nullptr},
+            {"declined close", [&] {
+                 probe.Call(kDeclineClose);
+                 int closes = probe.count(kCloses);
+                 PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+                 for (DWORD waited = 0; probe.count(kCloses) == closes && waited < kTimeout; waited += 10) Sleep(10);
+             }, nullptr},
+            {"modal", [&] {
+                 PostMessageW(probe.hwnd_, kProbeModal, 0, 0);
+                 for (DWORD waited = 0; !probe.modal() && waited < kTimeout; waited += 10) Sleep(10);
+                 CHECK(probe.modal());
+             }, [&] {
+                 probe.Call(kChartMouse, ChartAt(0, 40, 60));  // Not during the modal
+                 CHECK(!visible(probe));
+                 PostMessageW(probe.modal(), WM_COMMAND, IDCANCEL, 0);
+                 for (DWORD waited = 0; probe.modal() && waited < kTimeout; waited += 10) Sleep(10);
+             }},
+        };
+        for (const Trigger& trigger : triggers) {
+            show();
+            trigger.fire();
+            bool hidden = !visible(probe);
+            if (!hidden) std::printf("NOTE still showing after: %s\n", trigger.name);
+            CHECK(hidden);
+            if (trigger.undo) trigger.undo();
+        }
+        CHECK(probe.count(kTipMouse) == 0 && probe.count(kTipActivate) == 0);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+        CHECK(probe.count(kTipAlive) == 0);
+    });
+
+    Run("item tooltip: after the hover delay while the pointer stays on its item in the same frame; a new "
+        "element hides it; nothing shows after a rebuild, a press, a move away, or with the popup open", [&] {
+        CHECK(desktop);
+        Probe probe;
+        tipWindow(probe);
+        DWORD delay = GetDoubleClickTime() + 300;
+        auto arm = [&] {
+            probe.Call(kTipButton, 3);
+            CHECK(probe.Call(kTipButton, 0) == kTipButtonId * 16);
+            CHECK((probe.Call(kTipState) & (kTipPending | kTipVisible)) == kTipPending);
+        };
+        arm();
+        Sleep(delay);
+        CHECK(probe.Call(kTipState) == (kTipShown | kTipText));
+        probe.Call(kTipButton, 3);
+        CHECK(probe.Call(kTipState) == (kTipWindow | kTipOwned | kTipNoActivate | kTipNotActive | kTipNoCapture));
+        arm();
+        probe.Call(kRebuild);
+        Sleep(delay);
+        CHECK(!visible(probe));
+        arm();
+        probe.Call(kTipButton, 1);
+        Sleep(delay);
+        CHECK(!visible(probe));
+        probe.Call(kTipButton, 2);
+        arm();
+        probe.Call(kTipButton, 3);
+        Sleep(delay);
+        CHECK(!visible(probe));
+        // The delay running out with the popup open (armed after it opened), and the readout then.
+        CHECK(probe.Call(kOpenPopup) == 1);
+        probe.Call(kTipButton, 3);
+        CHECK(probe.Call(kTipButton, 0) == kTipButtonId * 16 && (probe.Call(kTipState) & kTipPending));
+        Sleep(delay);
+        CHECK(!visible(probe) && (probe.Call(kPopupState) & kOpen));
+        probe.Call(kChartMouse, ChartAt(0, 20, 60));
+        CHECK(!visible(probe));
+        probe.Call(kSendMain, WM_CANCELMODE);
+        CHECK(probe.count(kTipMouse) == 0 && probe.count(kTipActivate) == 0);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("tooltip: repeated show and hide without USER or GDI handle growth", [&] {
+        CHECK(desktop);
+        Probe probe;
+        tipWindow(probe);
+        // Read on the window thread once its messages and paints are handled (the tooltip paints
+        // after it shows): USER << 16 | GDI.
+        int warm = 0;
+        for (int i = 0; i < 60; i++) {
+            probe.Call(kChartMouse, ChartAt(0, 10 + (i % 7) * 50, 60 + i % 2));
+            CHECK(visible(probe));
+            probe.Call(kSendView, MAKELONG(WM_MOUSELEAVE, 0));
+            CHECK(!visible(probe));
+            if (i == 9) warm = probe.Call(kHandles, 1);
+        }
+        int end = probe.Call(kHandles, 1);
+        std::printf("HANDLES tooltip gdi_after_warmup=%d gdi_end=%d user_after_warmup=%d user_end=%d shows=%d\n",
+                    warm & 0xFFFF, end & 0xFFFF, warm >> 16, end >> 16, probe.count(kTipShows));
+        CHECK(warm == end && probe.count(kTipShows) == 60);
+        PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+        probe.Closed();
+    });
+
+    Run("tooltip: unload with the readout showing; the tooltip is gone before the main window's NCDESTROY", [&] {
+        CHECK(desktop);
+        Probe probe;
+        tipWindow(probe);
+        probe.Call(kChartMouse, ChartAt(0, 10, 60));
+        CHECK(visible(probe));
+        probe.unload();
+        probe.Closed();
+        CHECK(probe.count(kTipAlive) == 0 && probe.count(kTipHides) >= 1);
+        CHECK(!ClassRegistered(kTipClass));
+    });
+
+    Run("tooltip: a creation failure leaves the window working without tooltips, hover still reported; the "
+        "next show retries; a conflicting class registration is replaced", [&] {
+        CHECK(desktop);
+        {
+            Probe probe;
+            tipWindow(probe);
+            CHECK(probe.Call(kTipUnregister) == 1);
+            probe.Call(kChartMouse, ChartAt(0, 10, 60));
+            CHECK(!(probe.Call(kTipState) & kTipWindow) && probe.count(kChartHovers) == 1);
+            CHECK(probe.Call(kFocus, kDropdown) == 1);
+            CHECK(probe.Call(kTipRegister) == 1);
+            probe.Call(kChartMouse, ChartAt(0, 60, 60));
+            CHECK(probe.Call(kTipState) == (kTipShown | kTipReadout));
+            PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+            probe.Closed();
+        }
+        WNDCLASSEXW conflicting{sizeof(conflicting)};
+        conflicting.lpfnWndProc = DefWindowProcW;
+        conflicting.hInstance = GetModuleHandleW(nullptr);
+        conflicting.lpszClassName = kTipClass;
+        CHECK(RegisterClassExW(&conflicting));
+        {
+            Probe probe;
+            tipWindow(probe);
+            probe.Call(kChartMouse, ChartAt(0, 10, 60));
+            CHECK(probe.Call(kTipState) == (kTipShown | kTipReadout) && probe.Call(kTipNcHit) == HTTRANSPARENT);
+            PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
+            probe.Closed();
+        }
+        CHECK(!ClassRegistered(kTipClass));
     });
 
     Run("unload during a message box opened over the popup", [&] {

@@ -26,10 +26,14 @@
 // rectangle's top edge. Segmented: one tab stop choosing among `options` (action.value = the
 // selected one's value); the pointer targets each segment (UiFocusRef::link = its index).
 // Pill: a status chip tinted with its `ink`, a dot (hollow unless selected) before `text`; never
-// interactive.
+// interactive. Chart: client-drawn, a tab stop while enabled (no action needed, never activated):
+// the pointer over it reports to the client, which may answer with a readout (ui/host.h), and
+// its arrows scroll the content. Custom: client-drawn whole; a decoration, or with an action a
+// control like a button (hot, pressed, a tab stop, activated, its tooltip) whose focus ring is
+// rounded at its ends.
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
-    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill
+    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill, Chart, Custom
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -69,6 +73,7 @@ struct UiItem {
                                      // placeholder; Option detail; Nav value
     std::vector<UiShapePart> parts;  // Shape; Option and Nav icon
     std::vector<UiOption> options;   // Dropdown; menu Button; Segmented
+    std::vector<UiRun> tooltip;      // Complete text shown after the hover delay (icon buttons, chips)
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;  // Button; Card (Subtle)
@@ -114,6 +119,7 @@ struct UiFocusStop {
     UiFocusRef ref;
     UiSurfaceId surface = UiSurfaceId::Main;
     bool nav = false;
+    bool chart = false;  // Its arrows scroll the content
 };
 
 static bool UiInteractiveKind(UiItemKind kind) {
@@ -121,9 +127,10 @@ static bool UiInteractiveKind(UiItemKind kind) {
            kind != UiItemKind::Rule && kind != UiItemKind::Pill;
 }
 
-// Reacts to the pointer and can be activated.
+// Reacts to the pointer and can be activated (a chart only reacts).
 static bool UiActive(const UiItem& item) {
-    return UiInteractiveKind(item.kind) && item.enabled && item.action.kind != UiActionKind::None;
+    return UiInteractiveKind(item.kind) && item.enabled &&
+           (item.action.kind != UiActionKind::None || item.kind == UiItemKind::Chart);
 }
 
 // A tab stop. Spin buttons belong to their number box; options to the dropdown field; a
@@ -161,7 +168,7 @@ static std::vector<UiFocusStop> UiFocusStops(const UiFrame& frame) {
                     link++;
                 }
             } else if (UiFocusable(item)) {
-                stops.push_back({{item.id, -1}, surface, item.kind == UiItemKind::Nav});
+                stops.push_back({{item.id, -1}, surface, item.kind == UiItemKind::Nav, item.kind == UiItemKind::Chart});
             }
         }
     }
@@ -199,9 +206,9 @@ static int UiSelectedSegment(const UiItem& item) {
 }
 
 // The interactive element under a point: an inline link or a segment, else the topmost
-// interactive item. A disabled interactive item blocks the items below it; an enabled one
-// without an action (a plain card, a chip that only shows) doesn't. A slider takes in its thumb,
-// which overhangs the track's ends by its 10 DIP radius.
+// interactive item. A disabled interactive item blocks the items below it; an enabled inactive
+// one (a plain card, a chip that only shows) doesn't. A slider takes in its thumb, which
+// overhangs the track's ends by its 10 DIP radius.
 static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D1_POINT_2F point) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const UiItem& item = *it;
@@ -217,9 +224,7 @@ static UiFocusRef UiHitTest(UiGraphics& g, const std::vector<UiItem>& items, D2D
             if (run && run->action.kind != UiActionKind::None) return {item.id, link};
             continue;
         }
-        if (!UiInteractiveKind(item.kind) || (item.enabled && item.action.kind == UiActionKind::None)) {
-            continue;
-        }
+        if (!UiInteractiveKind(item.kind) || (item.enabled && !UiActive(item))) continue;
         if (!UiActive(item)) return {};
         if (item.kind == UiItemKind::Segmented) {
             std::vector<D2D1_RECT_F> segments = UiSegmentRects(g, item);

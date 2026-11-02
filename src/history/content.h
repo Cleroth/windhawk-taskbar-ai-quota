@@ -1,5 +1,6 @@
 // Usage history window content (approved mockups s-light, s-account, s-compare, s-states,
-// s-empty): info bars, the chart's card or an empty state, the summary cards and the No readings
+// s-empty, s-legend, q8a-filter): info bars, the chart's card (legend chips, key line, the chart
+// item, drawn by history/chart-paint.h) or an empty state, the summary cards and the No readings
 // card, from the view snapshot (history/view.h). Pure builder.
 
 // Lays out the content from y in a column of `width`; the viewport's height sizes the chart's
@@ -65,27 +66,62 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
         }
     }
 
-    // The chart's card (mockup .gcardh), as tall as the graph card with its legend and key line,
-    // its plot between 200 and 300 DIP by the viewport's height. Without a plotted line it holds a
-    // message instead: the first load, no accounts, a view no account supports (a shorter empty
-    // card), no readings in range or dollars only (a plot without legend).
-    bool plotted = std::any_of(view.cards.begin(), view.cards.end(),
-                               [](const HistoryUiCard& card) { return !card.detailsOnly; });
-    float plot = std::clamp(viewHeight - 212, 200.0f, 300.0f), height = plot + 68;
+    // The chart's card (mockups .gcardh, .legendrow, .lchip, .keyline): inside 10 DIP (top), 14
+    // (sides) and 8 (bottom) padding, the legend chips (24 DIP pills 6 DIP apart, wrapping), the
+    // key line 4 DIP under them, the chart 4 DIP under that, its area between 200 and 300 DIP tall
+    // by the viewport's height. Without a plotted line the chart holds a message and the card has
+    // no legend. Without a chart, a message instead (a shorter card): the first load, no accounts,
+    // a view no account supports.
+    float plot = std::clamp(viewHeight - 212, 200.0f, 300.0f), height = plot + 40;
     PCWSTR message = view.loading                                     ? L"Loading local history\u2026" :
                      view.accounts.empty()                            ? L"No accounts to display." :
                      view.cards.empty() && view.noReadings.empty() ?
                          (view.selected >= 0 ? L"This account has no meters in this view." :
                                                L"No accounts support this view.") : nullptr;
-    if (message) {
-        height = plot + 40;
-    } else if (!plotted) {
-        message = view.cards.empty() ? L"No readings in this range." :
-                                       L"No percentage readings to plot. Dollar spending is shown below.";
-        height = plot + 20;
-    }
+    size_t graphCard = items.size();
     panel({x, y, x + width, y + height});
-    if (message) {
+    if (!message) {
+        // A chip: 1 DIP border, 10 DIP padding, its 18 DIP swatch and 7 DIP gap, the 12.5 DIP name.
+        float left = x + 15, right = x + width - 15, top = y + 11;
+        UiTextStyle name{UiFamily::Text, 12.5f, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        float cx = left;
+        for (const HistoryUiLine& line : view.lines) {
+            float chipWidth = std::min(std::ceil(UiLayoutSize(UiLayout(g, line.name, name, 100000, false)).width) + 47,
+                                       right - left);
+            if (cx > left && cx + chipWidth > right) {
+                cx = left;
+                top += 24 + 6;
+            }
+            UiItem chip;
+            chip.id = line.chip;
+            chip.kind = UiItemKind::Custom;
+            chip.rect = {cx, top, cx + chipWidth, top + 24};
+            chip.text = line.name;
+            chip.selected = !line.hidden;
+            chip.action = HistoryUiAction(HistoryUiCommand::Line, line.meter, line.historyId);
+            chip.tooltip = {{line.title, UiRunStyle::Strong},
+                            {view.compare ? L"\nSolid / filled: current week. Dashed / hollow: previous week. Click to "
+                                            L"hide or show this line." :
+                                            L"\nSolid / filled: current range. Click to hide or show this line.",
+                             UiRunStyle::Normal, UiInk::Secondary}};
+            items.push_back(std::move(chip));
+            cx += chipWidth + 6;
+        }
+        if (!view.lines.empty()) {
+            top += 24 + 4;
+            text({left + 2, top, right, top + 16},
+                 {{view.compare ? L"Solid: current \u00B7 Dashed: previous" : L"Solid: current"}}, UiFont::Caption,
+                 UiInk::Muted, true);
+            top += 16 + 4;
+        }
+        UiItem chart;
+        chart.id = kHistoryUiChart;
+        chart.kind = UiItemKind::Chart;
+        chart.rect = {left, top, right, top + plot};
+        items.push_back(std::move(chart));
+        height = top + plot + 9 - y;
+        items[graphCard].rect.bottom = y + height;
+    } else {
         // Centered (mockup .pmsg), the first load's progress ring 8 DIP before it.
         float textWidth = std::ceil(UiLayoutSize(UiLayout(g, message, UiTextStyleFor(UiFont::Note), 10000, false)).width);
         float ring = view.loading ? 16 + 8 : 0;
@@ -113,14 +149,8 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
     if (heights.empty()) return y - 10;
     size_t columns = size_t(std::clamp(int((width + 8) / 248), 1, view.compare ? 2 : 3));
     float cardWidth = (width - 8 * float(columns - 1)) / float(columns);
-    // A card's line (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in the
-    // theme: the series palette's hues as the mockups draw them, dark and light (a scoped quota's
-    // tint toward the text color kept); high contrast alternates text and link.
-    static constexpr uint32_t kHues[][2] = {
-        {0x4F95FF, 0x2A6FD6}, {0xF0923F, 0xC8621A}, {0x4CC38A, 0x1F8F5A}, {0xE36BD0, 0xB8389F},
-        {0xA184FF, 0x6F4FE6}, {0x33C3A6, 0x0E8F78}, {0xD9B44A, 0x9A7A12}, {0xFF7A70, 0xD0463C},
-    };
-    static_assert(std::size(kHues) == std::size(kHistoryColors));
+    // A card's line (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in its
+    // chart line's color (history/chart.h; high contrast: text and link alternating as inks).
     for (size_t first = 0; first < heights.size(); first += columns) {
         size_t last = std::min(first + columns, heights.size());
         float rowHeight = *std::max_element(heights.begin() + ptrdiff_t(first), heights.begin() + ptrdiff_t(last));
@@ -152,21 +182,8 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
             float titleLeft = left;
             if (!card.detailsOnly) {
                 UiShapePart line{L"M1 4H15", {}, UiInk::Inherit, 1, 3};
-                if (hc) {
-                    line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
-                } else {
-                    COLORREF c = card.color;
-                    line.color = {float(GetRValue(c)) / 255, float(GetGValue(c)) / 255, float(GetBValue(c)) / 255, 1};
-                    for (size_t k = 0; k < std::size(kHistoryColors); k++) {
-                        COLORREF base = kHistoryColors[k];
-                        COLORREF tint = RGB((GetRValue(base) * 3 + 255) / 4, (GetGValue(base) * 3 + 255) / 4,
-                                            (GetBValue(base) * 3 + 255) / 4);
-                        if (c != base && c != tint) continue;
-                        line.color = UiRgb(kHues[k][light]);
-                        if (c != base) line.color = UiOver(UiRgb(light ? 0x000000 : 0xFFFFFF, 0.25f), line.color);
-                        break;
-                    }
-                }
+                if (hc) line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
+                else line.color = HistoryUiHue(card.color, light);
                 shape({left, y + 15, left + 16, y + 23}, 16, {line});
                 titleLeft = left + 24;
             }

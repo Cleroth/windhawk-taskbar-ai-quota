@@ -70,6 +70,7 @@ struct HistorySeries {
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
     bool plotted = true;
     HistoryStatistics current, previous;
+    double low = 0, high = 0;  // Its readings' range in [readFrom, to), with 0
 };
 
 struct HistoryAxis {
@@ -287,6 +288,8 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                 if (sample.timeMs < query.readFrom || sample.timeMs >= query.to ||
                     !HistoryHasValue(sample, meter)) continue;
                 double value = sample.meters[meter].value;
+                series.low = std::min(series.low, value);
+                series.high = std::max(series.high, value);
                 if (series.plotted) {
                     axis.low = std::min(axis.low, value);
                     axis.high = std::max(axis.high, value);

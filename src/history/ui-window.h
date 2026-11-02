@@ -1,20 +1,38 @@
 // The custom-drawn usage history window: the history client of the window host (ui/host.h), run
 // on the history thread (history/window.h); never touches XAML. It only translates: host
 // callbacks into controller events (history/controller.h, on its production ops), the
-// controller's view into frames (history/shell.h), rebuilds and focus requests.
+// controller's view into frames (history/shell.h) and its chart into paints (history/
+// chart-paint.h) and readouts, rebuilds and focus requests. It holds no D2D objects.
 
 static constexpr PCWSTR kHistoryUiClass = L"AiQuotaHistoryUi_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryUiViewportClass = L"AiQuotaHistoryUiView_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryUiPopupClass = L"AiQuotaHistoryUiPopup_" WH_MOD_ID;
+static constexpr PCWSTR kHistoryUiTooltipClass = L"AiQuotaHistoryUiTip_" WH_MOD_ID;
 
 struct HistoryUiClient final : UiHostClient {
     HistoryProductionOps ops;
     HistoryController controller{ops};
 
+    // The chart is laid out (and reduced, when its key changed) for the item the frame placed.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         HistoryUiView view = controller.view;
         view.theme = host.theme.kind;
         HistoryUiBuildFrame(*host.graphics, view, client, frame);
+        if (const UiItem* chart = UiFindItem(frame, kHistoryUiChart)) {
+            controller.LayChart(*host.graphics, chart->rect, UiHostScale(host));
+        }
+    }
+
+    void PaintCustom(UiHost& host, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
+                     const UiPaintState& state) override {
+        HistoryUiPaintCustom(target, *host.graphics, cache, host.palette, controller.chart, controller.picked, item,
+                             state, UiHostScale(host));
+    }
+
+    // Only a change of the picked lines repaints the chart's surface; the readout's rows change
+    // with the picked samples.
+    bool ChartHover(UiHost& host, uint32_t, std::optional<D2D1_POINT_2F> point, UiTooltipContent& readout) override {
+        return controller.Hover(point, readout, host.palette);
     }
 
     // A new selection or view scrolls the content back to its top.

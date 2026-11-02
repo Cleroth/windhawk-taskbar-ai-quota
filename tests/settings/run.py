@@ -80,8 +80,11 @@ def main():
                         help="Mod file to extract; the default generated file is first checked against src/")
     parser.add_argument("--compiler", type=Path, default=DEFAULT_COMPILER, help="Windhawk-compatible clang++ executable")
     parser.add_argument("--output", type=Path, default=HERE / ".out", help="Parent for a new unique run directory (never cleaned)")
-    parser.add_argument("--popup-interactive", action="store_true",
-                        help="Only build the popup probe, then run its interactive mode by hand (logs to the run directory)")
+    interactive = parser.add_mutually_exclusive_group()
+    interactive.add_argument("--popup-interactive", action="store_true",
+                             help="Only build the popup probe, then run its interactive mode by hand (logs to the run directory)")
+    interactive.add_argument("--tooltip-interactive", action="store_true",
+                             help="Only build the host probe, then run its tooltip routing mode by hand (logs to the run directory)")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("Windows is required")
@@ -121,20 +124,24 @@ def main():
                                         *host_libs]),
         ]
         render_libs = ["-ld2d1", "-ldwrite", "-lwindowscodecs", "-lole32", "-loleaut32", "-lruntimeobject"]
-        commands = [*setup, *popup_build] if args.popup_interactive else [
+        host_build = [
+            ("extract-host", extract + ["--output", str(host_cpp), "--target", "host"]),
+            ("host-compile", native + ["-shared", "-I", str(HERE), str(host_cpp), "-o", str(host_dll), *host_libs]),
+            ("probe-compile", native + ["-municode", str(HERE / "host-probe.cpp"), "-o", str(probe),
+                                        "-lole32", "-luser32", "-lgdi32"]),
+        ]
+        commands = [*setup, *popup_build] if args.popup_interactive else [*setup, *host_build] if args.tooltip_interactive else [
             *setup,
             ("extract", extract + ["--output", str(cpp)]),
             ("extract-history", extract + ["--output", str(history_cpp), "--target", "history"]),
-            ("extract-host", extract + ["--output", str(host_cpp), "--target", "host"]),
+            host_build[0],
             ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), *render_libs]),
             ("model", [str(exe)]),
             ("render", [str(exe), "--render-dir", str(root)]),
             ("history-compile", flags + ["-I", str(HERE), str(history_cpp), "-o", str(history_exe), *render_libs]),
             ("history", [str(history_exe)]),
             ("history-render", [str(history_exe), "--render-dir", str(root)]),
-            ("host-compile", native + ["-shared", "-I", str(HERE), str(host_cpp), "-o", str(host_dll), *host_libs]),
-            ("probe-compile", native + ["-municode", str(HERE / "host-probe.cpp"), "-o", str(probe),
-                                        "-lole32", "-luser32", "-lgdi32"]),
+            *host_build[1:],
             ("host-probe", [str(probe), str(host_dll)]),
             *popup_build,
             ("popup-probe", [str(popup_exe)]),
@@ -161,11 +168,14 @@ def main():
             if not step["ok"]:
                 break
         results["ok"] = len(results["phases"]) == len(commands) and all(step["ok"] for step in results["phases"])
-        if args.popup_interactive and results["ok"]:
+        if (args.popup_interactive or args.tooltip_interactive) and results["ok"]:
             # By hand, attached to this console, no timeout; the log is the evidence.
-            log = root / "popup-interactive.log"
-            print(f"\n=== popup-interactive ===\nFollow the steps below; the log is {log}", flush=True)
-            process = subprocess.run([str(popup_exe), "--interactive", "--log", str(log)], cwd=root)
+            name = "popup-interactive" if args.popup_interactive else "tooltip-interactive"
+            log = root / f"{name}.log"
+            print(f"\n=== {name} ===\nFollow the steps below; the log is {log}", flush=True)
+            command = ([str(popup_exe), "--interactive", "--log", str(log)] if args.popup_interactive else
+                       [str(probe), str(host_dll), "--tooltip-interactive", "--log", str(log)])
+            process = subprocess.run(command, cwd=root)
             results["interactive"] = {"log": str(log), "exit_code": process.returncode}
             print(f"Interactive log: {log}", flush=True)
     except (OSError, ValueError) as error:

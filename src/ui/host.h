@@ -1,8 +1,9 @@
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
 // and its scrolling viewport child, each with its own render target, the main window optionally
-// with a scrolling navigation pane; the dropdown popup and the number boxes' native text boxes;
-// theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths and
-// teardown. A client supplies the content and the window-specific behavior. Rules: ui/AGENTS.md.
+// with a scrolling navigation pane; the dropdown popup, the tooltip and the number boxes' native
+// text boxes; theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths
+// and teardown. A client supplies the content and the window-specific behavior. Rules:
+// ui/AGENTS.md.
 
 struct UiHost;
 
@@ -33,6 +34,13 @@ struct UiHostClient {
     // never pumps messages, rebuilds or shows a modal.
     virtual void PaintCustom(UiHost&, ID2D1RenderTarget*, UiTargetCache&, const UiItem&,
                              const UiPaintState&) {}
+    // The pointer over Chart item `chart` at `point` (the coordinates of its rect), at most once
+    // per move that moved; nullopt: its hover ended (the pointer left it, a press, a hide
+    // trigger). `readout` arrives holding the shown readout's key and no rows: leave it to keep
+    // that readout, or set a new key with its rows (none: no readout). Returns whether the
+    // chart's emphasis changed: only then its surface repaints. Never pumps messages, rebuilds
+    // or shows a modal.
+    virtual bool ChartHover(UiHost&, uint32_t, std::optional<D2D1_POINT_2F>, UiTooltipContent&) { return false; }
 
 protected:
     ~UiHostClient() = default;
@@ -41,6 +49,7 @@ protected:
 struct UiHostConfig {
     PCWSTR mainClass = nullptr, viewportClass = nullptr, title = nullptr;
     PCWSTR popupClass = nullptr;       // Dropdown popup; nullptr: dropdowns don't open.
+    PCWSTR tooltipClass = nullptr;     // Tooltip; nullptr: no tooltips or readouts.
     UINT activateMessage = 0;          // Registered "show yourself" message; 0 = none.
     D2D1_SIZE_F size{1000, 860};       // Initial outer size, DIPs.
     D2D1_SIZE_F minSize{500, 400};     // Minimum outer size, DIPs.
@@ -93,9 +102,17 @@ struct UiHost {
     UiFocusRef pendingFocus;  // Focused once the next rebuild has built it
     bool pendingFocusVisible = false;
 
+    // Tooltip: the chart whose hover the client was told about, and the pointer's last screen
+    // position (where a delayed tooltip shows)
+    UiTooltip tooltip;
+    uint32_t hoverChart = 0;
+    POINT pointerScreen{LONG_MIN, LONG_MIN};
+
     // Lifecycle: structural rebuilds wait until dispatch unwinds (ui/AGENTS.md); live ones until
-    // the next paint. rebuildMain: the next rebuild repaints the main window.
+    // the next paint; each counts a generation. rebuildMain: the next rebuild repaints the main
+    // window.
     int dispatchDepth = 0;
+    uint32_t generation = 0;
     bool rebuildPending = false, resetScroll = false, liveRebuild = false, rebuildMain = false;
     bool closing = false, faulted = false;
 };
@@ -140,17 +157,87 @@ static void UiHostInvalidate(const UiHost& host) {
     if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
+// Tooltip ---------------------------------------------------------------------------------------
+
+// Every hide trigger: a hovered chart's hover ends (the client clears its emphasis; the chart's
+// surface repaints when it says so), then the tooltip hides (UiTooltipHide).
+static void UiHostHideTooltip(UiHost& host) {
+    if (uint32_t chart = std::exchange(host.hoverChart, 0); chart && !host.closing) {
+        UiTooltipContent none;
+        if (host.client->ChartHover(host, chart, std::nullopt, none)) {
+            UiSurfaceId surface = UiSurfaceId::Main;
+            UiFindItem(host.frame, chart, &surface);
+            if (HWND window = surface == UiSurfaceId::Content ? host.viewport : host.main) {
+                InvalidateRect(window, nullptr, FALSE);
+            }
+        }
+    }
+    UiTooltipHide(host.tooltip, host.main);
+}
+
+// Shows `content` (or keeps the shown content when its key is unchanged) beside the pointer at
+// `cursor` (screen pixels), on the work area of the pointer's monitor at its DPI, or moves or
+// hides the tooltip as the placement says. Never while a press, the popup or a modal (the owner
+// disabled) holds the window. The window is created on first use; a failure leaves the tooltip
+// hidden until the next show.
+static void UiHostShowTooltip(UiHost& host, UiTooltipContent content, POINT cursor) {
+    UiTooltip& tip = host.tooltip;
+    MONITORINFO monitor{sizeof(monitor)};
+    HMONITOR handle = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    if (!host.config->tooltipClass || host.closing || !host.main || host.popup.open || host.pointer.pressed.id ||
+        !IsWindowEnabled(host.main) || !GetMonitorInfoW(handle, &monitor)) {
+        UiTooltipHide(tip, host.main);
+        return;
+    }
+    UiTrimCaches(*host.graphics);
+    UiTooltipKey at;
+    at.cursor = cursor;
+    at.work = monitor.rcWork;
+    at.dpi = UiMonitorDpi(handle, host.dpi);
+    at.cursorRect = UiCursorRect(cursor, at.dpi);
+    UiTooltipChange change = UiTooltipUpdate(*host.graphics, tip.model, std::move(content), at);
+    if (change == UiTooltipChange::Hide) UiTooltipHide(tip, host.main);
+    if (change == UiTooltipChange::None || change == UiTooltipChange::Hide) return;
+    if (!tip.window) {
+        HWND window = CreateWindowExW(kUiTooltipExStyle, host.config->tooltipClass, nullptr, WS_POPUP, 0, 0, 0, 0,
+                                      host.main, nullptr, GetModuleHandleW(nullptr), &host);
+        if (!window) {
+            Wh_Log(L"Could not create the tooltip: %lu", GetLastError());
+            UiTooltipHide(tip, host.main);
+            return;
+        }
+        tip.window = tip.surface.window = window;
+        DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUNDSMALL;
+        DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    }
+    if (tip.dpi != at.dpi || change == UiTooltipChange::Layout) {
+        if (tip.dpi != at.dpi) UiDiscardSurface(tip.surface);
+        tip.dpi = at.dpi;
+        tip.items = UiTooltipItems(tip.model.content, tip.model.measure, tip.model.spot->layout);
+        tip.surface.cache.layouts.clear();  // Inked layouts of earlier content
+        InvalidateRect(tip.window, nullptr, FALSE);
+    }
+    const RECT& rect = tip.model.spot->rect;
+    bool visible = IsWindowVisible(tip.window);
+    SetWindowPos(tip.window, visible ? nullptr : HWND_TOP, rect.left, rect.top, rect.right - rect.left,
+                 rect.bottom - rect.top, SWP_NOACTIVATE | (visible ? SWP_NOZORDER : SWP_SHOWWINDOW));
+}
+
 // Fault close: nothing is saved. WM_CLOSE cancels tracked modals and destroys the window once
 // they have unwound; until then nothing draws or acts.
 static void UiHostFault(UiHost& host) {
     host.faulted = true;
     host.closing = true;
+    host.hoverChart = 0;
+    UiTooltipHide(host.tooltip, host.main);
     UiDiscardSurface(host.mainSurface);
     UiDiscardSurface(host.viewSurface);
+    UiDiscardSurface(host.tooltip.surface);
     if (host.main) PostMessageW(host.main, WM_CLOSE, 0, 0);
 }
 
 static void UiHostApplyTheme(UiHost& host) {
+    UiHostHideTooltip(host);
     host.theme = UiReadTheme(*host.themes);
     host.palette = UiPaletteFor(host.theme);
     UiApplyChrome(host.main, host.palette);
@@ -160,6 +247,7 @@ static void UiHostApplyTheme(UiHost& host) {
     host.mainSurface.cache.Clear();
     host.viewSurface.cache.Clear();
     host.popup.surface.cache.Clear();
+    host.tooltip.surface.cache.Clear();
     UiHostInvalidate(host);
     for (const UiTextBox& box : host.boxes.boxes) {
         if (box.window) InvalidateRect(box.window, nullptr, TRUE);
@@ -191,7 +279,10 @@ static UiFocusRef UiHostHit(UiHost& host, UiSurfaceId surface, POINT point) {
 
 // Dropdown popup -------------------------------------------------------------------------------
 
+// Every popup close trigger (size, move, DPI, activation, cancel mode, system commands, focus,
+// scroll, rebuild, client modals, close) also hides the tooltip.
 static void UiHostClosePopup(UiHost& host) {
+    UiHostHideTooltip(host);
     if (!host.popup.open && !host.popup.window) return;
     UiPopupClose(host.popup);
     UiHostInvalidate(host);
@@ -452,8 +543,9 @@ static void UiHostSetFocus(UiHost& host, UiFocusRef ref, bool visible) {
 
 // Activation. The action is copied first: the client may rebuild, pump messages or show a modal.
 // A dropdown or menu button opens its popup; a number or text box only takes focus (its native
-// text box reports edits); a slider, a preview and a drag handle report their drags instead; a
-// segmented control selects the activated segment (its keys select the others).
+// text box reports edits); a slider, a preview and a drag handle report their drags instead, a
+// chart its hover; a segmented control selects the activated segment (its keys select the
+// others).
 static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (host.closing) return;
     const UiItem* item = UiFindItem(host.frame, ref.id);
@@ -469,7 +561,7 @@ static void UiHostInvoke(UiHost& host, UiFocusRef ref) {
     if (item && ref.link < 0 &&
         (item->kind == UiItemKind::NumberBox || item->kind == UiItemKind::TextBox ||
          item->kind == UiItemKind::Slider || item->kind == UiItemKind::Preview ||
-         item->kind == UiItemKind::Handle)) {
+         item->kind == UiItemKind::Handle || item->kind == UiItemKind::Chart)) {
         return;
     }
     const UiAction* action = UiActionOf(host.frame, ref);
@@ -526,10 +618,11 @@ static void UiHostEndHandleDrag(UiHost& host, UiActionKind end) {
 
 // Deferred structural rebuild, once the outermost dispatch is done with the old items. A live
 // one waits for the paint its request caused (which runs it), unless a nested paint (a modal's)
-// consumed that. A rebuild closes the popup; keyboard focus follows the focused element (a
-// requested one, or one whose text box was removed). The main window repaints when requested,
-// when its layout changed or when the pointer's element went. A newly selected entry of the
-// navigation pane scrolls into view.
+// consumed that. A rebuild closes the popup and the tooltip (before the client builds: a chart's
+// hover ends first); keyboard focus follows the focused element (a requested one, or one whose
+// text box was removed). The main window repaints when requested, when its layout changed or
+// when the pointer's element went. A newly selected entry of the navigation pane scrolls into
+// view.
 static void UiHostRebuildIfPending(UiHost& host) {
     auto selectedNav = [](const std::vector<UiItem>& items) {
         auto at = std::find_if(items.begin(), items.end(), [](const UiItem& item) {
@@ -556,6 +649,7 @@ static void UiHostRebuildIfPending(UiHost& host) {
         UiTrimCaches(*host.graphics);
         UiFrame frame;
         host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
+        host.generation++;
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         UiFocusRef fallback{selectedNav(frame.nav) ? selectedNav(frame.nav) : selectedNav(frame.main), -1};
         // Keyboard focus starts on the selected navigation item, without a ring.
@@ -672,13 +766,18 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
                         ReleaseCapture();
                     }
+                    // The tooltip's timer dies here, its window before the main window's
+                    // NCDESTROY.
+                    host.hoverChart = 0;
+                    UiTooltipHide(host.tooltip, window);
+                    if (host.tooltip.window) DestroyWindow(host.tooltip.window);
                     host.client->Destroying();
                 }
                 break;
             case WM_NCDESTROY:
-                // Children (viewport, text boxes) and the owned popup are gone before the main
-                // window's NCDESTROY; each surface releases its target with its window. Host
-                // state outlives them all.
+                // Children (viewport, text boxes) and the owned popup and tooltip are gone before
+                // the main window's NCDESTROY; each surface releases its target with its window.
+                // Host state outlives them all.
                 UiDiscardSurface(own);
                 own.window = nullptr;
                 SetWindowLongPtrW(window, GWLP_USERDATA, 0);
@@ -753,9 +852,14 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
 
             // Activation and modes: the popup closes before default handling (a system command
-            // such as minimize is swallowed while the popup holds capture).
+            // such as minimize is swallowed while the popup holds capture). A disabled owner (a
+            // modal) and Alt hide the tooltip.
             case WM_ACTIVATE:
                 if (LOWORD(wParam) == WA_INACTIVE) UiHostClosePopup(host);
+                handled = false;
+                break;
+            case WM_ENABLE:
+                if (isMain && !wParam) UiHostHideTooltip(host);
                 handled = false;
                 break;
             case WM_CANCELMODE:
@@ -769,6 +873,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 handled = false;
                 break;
             case WM_SYSKEYDOWN: {
+                UiHostHideTooltip(host);
                 const UiItem* focused = UiFindItem(host.frame, host.focus.id);
                 if (host.popup.open) {
                     UiHostClosePopup(host);
@@ -933,12 +1038,46 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 const UiItem* hot = UiFindItem(host.frame, host.pointer.hot.id);
                 if (changed) UiHostInvalidate(host);
                 else if (hot && hot->kind == UiItemKind::Preview) InvalidateRect(window, nullptr, FALSE);
+
+                // Tooltips, at the pointer's rate: no rebuild, nothing for a move that didn't
+                // move. A new element hides the old one's tooltip (ending a chart's hover). Over
+                // a chart the client hears where the pointer is and its readout shows at once;
+                // its surface repaints only when the client says so. Another element's tooltip
+                // waits for the hover delay; once shown it follows the pointer.
+                POINT screen = point;
+                ClientToScreen(window, &screen);
+                bool moved = screen.x != host.pointerScreen.x || screen.y != host.pointerScreen.y;
+                host.pointerScreen = screen;
+                bool chart = hot && hot->kind == UiItemKind::Chart && !host.pointer.pressed.id;
+                if (changed || (host.hoverChart && !chart)) UiHostHideTooltip(host);
+                if (chart && (moved || changed)) {
+                    host.hoverChart = hot->id;
+                    UiTooltipContent readout;
+                    readout.key = host.tooltip.model.content.key;
+                    if (host.client->ChartHover(host, host.hoverChart, host.pointerAt, readout)) {
+                        InvalidateRect(window, nullptr, FALSE);
+                    }
+                    UiHostShowTooltip(host, std::move(readout), screen);
+                } else if (!chart && changed && hot && !hot->tooltip.empty() && host.config->tooltipClass &&
+                           !host.pointer.pressed.id) {
+                    host.tooltip.pending = hot->id;
+                    host.tooltip.pendingGeneration = host.generation;
+                    SetTimer(host.main, kUiTooltipTimer, GetDoubleClickTime(), nullptr);
+                } else if (!chart && moved && host.tooltip.model.spot) {
+                    UiTooltipContent shown;
+                    shown.key = host.tooltip.model.content.key;
+                    UiHostShowTooltip(host, std::move(shown), screen);
+                }
                 break;
             }
             case WM_MOUSELEAVE:
                 // While a press or drag holds capture, only this surface's pointer position
                 // changes; outside the window every move reports a leave, so nothing else repaints.
-                if (host.pointerSurface == surface) host.pointerAt = {-1e9f, -1e9f};
+                // A leave from the surface the pointer is on hides the tooltip.
+                if (host.pointerSurface == surface) {
+                    host.pointerAt = {-1e9f, -1e9f};
+                    UiHostHideTooltip(host);
+                }
                 if (host.pointer.pressed.id || host.scrollDragging || host.navBarDragging) {
                     InvalidateRect(window, nullptr, FALSE);
                     break;
@@ -947,8 +1086,15 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 host.scrollbarHot = host.navBarHot = false;
                 UiHostInvalidate(host);
                 break;
+            case WM_RBUTTONDOWN:
+            case WM_MBUTTONDOWN:
+            case WM_XBUTTONDOWN:
+                UiHostHideTooltip(host);
+                handled = false;
+                break;
             case WM_LBUTTONDOWN: {
                 if (host.closing) break;
+                UiHostHideTooltip(host);
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
                 float scale = UiHostScale(host);
                 UiScrollbar bar = UiHostScrollbar(host);
@@ -1069,6 +1215,21 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     UiHostDragHandle(host, float(cursor.y) / UiHostScale(host) + host.scroll);
                     break;
                 }
+                // The hover delay is over: the item's tooltip shows if the pointer is still on it
+                // in the same frame (UiHostShowTooltip checks press, popup and modal).
+                if (isMain && wParam == kUiTooltipTimer) {
+                    KillTimer(window, kUiTooltipTimer);
+                    uint32_t id = std::exchange(host.tooltip.pending, 0);
+                    const UiItem* item = UiFindItem(host.frame, id);
+                    if (item && !item->tooltip.empty() && host.pointer.hot.id == id &&
+                        host.tooltip.pendingGeneration == host.generation) {
+                        UiTooltipContent text;
+                        text.key = uint64_t(host.generation) << 32 | id;
+                        text.text = item->tooltip;
+                        UiHostShowTooltip(host, std::move(text), host.pointerScreen);
+                    }
+                    break;
+                }
                 handled = isMain && host.client->Message(host, message, wParam, lParam, result);
                 break;
             case WM_MOUSEWHEEL:
@@ -1078,6 +1239,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 // and the vertical wheel scrolls the navigation pane over it, or the content
                 // over the page column (header or content).
                 POINT point{short(LOWORD(lParam)), short(HIWORD(lParam))};
+                UiHostHideTooltip(host);
                 if (host.popup.open) {
                     RECT popup{};
                     GetWindowRect(host.popup.window, &popup);
@@ -1132,6 +1294,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             // Keyboard and focus. While the popup is open, the field's keys drive it.
             case WM_KEYDOWN: {
                 if (host.closing) break;
+                UiHostHideTooltip(host);
                 // Esc cancels a handle drag; other keys wait until it ends.
                 if (host.handleDrag) {
                     if (wParam == VK_ESCAPE) {
@@ -1402,6 +1565,76 @@ static LRESULT CALLBACK UiHostPopupProc(HWND window, UINT message, WPARAM wParam
     return handled ? result : DefWindowProcW(window, message, wParam, lParam);
 }
 
+// The tooltip: the pointer passes through it to the window under it (HTTRANSPARENT reaches the
+// same thread's windows), and any mouse message that still reaches it hides it. Never activates;
+// its DPI is its monitor's, set where it is placed.
+static LRESULT CALLBACK UiHostTooltipProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_NCCREATE) {
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(
+            reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams));
+    }
+    auto* found = reinterpret_cast<UiHost*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (!found) return DefWindowProcW(window, message, wParam, lParam);
+    UiHost& host = *found;
+    UiTooltip& tip = host.tooltip;
+    host.dispatchDepth++;
+    LRESULT result = 0;
+    bool handled = true;
+    try {
+        switch (message) {
+            case WM_NCHITTEST:
+                result = HTTRANSPARENT;
+                break;
+            case WM_MOUSEACTIVATE:
+                result = MA_NOACTIVATE;
+                break;
+            case WM_ERASEBKGND:
+                result = 1;
+                break;
+            case WM_DPICHANGED:
+                break;
+            case WM_SIZE:
+                UiResizeSurface(tip.surface);
+                break;
+            case WM_PAINT: {
+                PAINTSTRUCT paint{};
+                BeginPaint(window, &paint);
+                bool painted = host.faulted || tip.window != window || UiPaintTooltip(tip, *host.graphics, host.palette);
+                EndPaint(window, &paint);
+                if (!painted) UiTooltipHide(tip, host.main);
+                break;
+            }
+            case WM_SETCURSOR:
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                result = TRUE;
+                break;
+            case WM_NCDESTROY:
+                UiDiscardSurface(tip.surface);
+                tip.surface.window = nullptr;
+                if (tip.window == window) tip.window = nullptr;
+                SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+                handled = false;
+                break;
+            default:
+                if ((message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) ||
+                    (message >= WM_NCMOUSEMOVE && message <= WM_NCXBUTTONDBLCLK)) {
+                    UiHostHideTooltip(host);
+                    break;
+                }
+                handled = false;
+                break;
+        }
+        UiHostRebuildIfPending(host);
+    } catch (...) {
+        Wh_Log(L"Tooltip callback failed (message 0x%04X); closing the window", message);
+        handled = true;
+        result = 0;
+        UiHostFault(host);
+    }
+    host.dispatchDepth--;
+    return handled ? result : DefWindowProcW(window, message, wParam, lParam);
+}
+
 // A number or text box's native text box: Tab moves focus along the item order, Enter commits,
 // Esc reverts, Up/Down step a number box; focus moving elsewhere in the window reports focus
 // loss. During IME composition every message goes to native handling and the composed text is
@@ -1432,6 +1665,7 @@ static LRESULT CALLBACK UiHostTextBoxProc(HWND window, UINT message, WPARAM wPar
                 break;
             }
             case WM_KEYDOWN: {
+                if (!host.closing) UiHostHideTooltip(host);
                 if (!commands) break;
                 uint32_t id = box->id;
                 handled = true;
@@ -1541,8 +1775,12 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
     // Without its class the popup can't open; the window works otherwise.
     bool popupRegistered = viewportRegistered && config.popupClass &&
                            registerClass(config.popupClass, UiHostPopupProc, CS_DROPSHADOW);
+    // Without its class nothing shows tooltips or readouts; the window works otherwise.
+    bool tooltipRegistered = viewportRegistered && config.tooltipClass &&
+                             registerClass(config.tooltipClass, UiHostTooltipProc, CS_DROPSHADOW);
     UiHostConfig effective = config;
     if (!popupRegistered) effective.popupClass = nullptr;
+    if (!tooltipRegistered) effective.tooltipClass = nullptr;
     bool created = false;
     if (viewportRegistered) {
         UiGraphics graphics;
@@ -1598,11 +1836,13 @@ static bool UiHostRun(const UiHostConfig& config, UiHostClient& client) {
         }
         if (host.main && IsWindow(host.main)) DestroyWindow(host.main);
         UiPopupClose(host.popup);
+        if (host.tooltip.window) DestroyWindow(host.tooltip.window);
         UiReleaseTextBoxes(host.boxes);
         for (HICON icon : host.icons) {
             if (icon) DestroyIcon(icon);
         }
     }
+    if (tooltipRegistered) UnregisterClassW(config.tooltipClass, instance);
     if (popupRegistered) UnregisterClassW(config.popupClass, instance);
     if (viewportRegistered) UnregisterClassW(config.viewportClass, instance);
     if (mainRegistered) UnregisterClassW(config.mainClass, instance);

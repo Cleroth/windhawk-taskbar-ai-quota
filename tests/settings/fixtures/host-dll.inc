@@ -6,6 +6,7 @@
 static constexpr PCWSTR kProbeClass = L"AiQuotaProbeUi";
 static constexpr PCWSTR kProbeViewportClass = L"AiQuotaProbeUiView";
 static constexpr PCWSTR kProbePopupClass = L"AiQuotaProbeUiPopup";
+static constexpr PCWSTR kProbeTipClass = L"AiQuotaProbeUiTip";
 static constexpr UINT kProbePing = WM_APP + 70;        // Answered with kProbeMagic.
 static constexpr UINT kProbeLoseTarget = WM_APP + 71;  // Device loss through the production path.
 static constexpr UINT kProbeModal = WM_APP + 72;       // A tracked message box.
@@ -14,7 +15,8 @@ static constexpr UINT kProbeColor = WM_APP + 74;       // The tracked color dial
 static constexpr LRESULT kProbeMagic = 0x51A7E;
 static constexpr uint32_t kProbeDropdown = 500, kProbeNumberBox = 600, kProbeSlider = 700,
                           kProbePreview = 800, kProbeCard = 900, kProbeHandle = 901, kProbeTextBox = 910,
-                          kProbeMenu = 920, kProbeSegments = 1000, kProbeSegmentsOff = 1001, kProbeNav = 2000;
+                          kProbeMenu = 920, kProbeSegments = 1000, kProbeSegmentsOff = 1001, kProbeNav = 2000,
+                          kProbeChart = 1100, kProbeTipButton = 1101;
 // The activation request (UiHostConfig::activateMessage), registered by name in both processes.
 static UINT ProbeActivateMessage() {
     static const UINT message = RegisterWindowMessageW(L"AiQuotaProbeUiActivate");
@@ -23,9 +25,16 @@ static UINT ProbeActivateMessage() {
 
 // kColorResult: 1 cancelled (or ended by a close), 2 chosen. kCloses: PrepareClose calls,
 // kClosesDragging: those that found a handle drag or capture; kAutoScrolls: the viewport's
-// auto-scroll timer ticks.
+// auto-scroll timer ticks. Tooltip mode: the chart's hover reports (with a point, ended) and
+// repaints asked for; the tooltip shown and hidden; mouse and activation messages that reached
+// it; presses that reached the main window or the viewport; 1 if the tooltip window still
+// existed at the main window's NCDESTROY. Every mode: theme notifications that reached the main
+// window (WM_SETTINGCHANGE, WM_THEMECHANGED, WM_SYSCOLORCHANGE, WM_DWMCOLORIZATIONCOLORCHANGED),
+// icons set on it (WM_SETICON), and the process's GDI and USER object counts at its NCDESTROY.
 enum ProbeCounter { kBuilds, kAttaches, kDestroying, kDestroyed, kCancels, kLossResult, kColorResult,
-                    kCloses, kClosesDragging, kAutoScrolls, kCounterCount };
+                    kCloses, kClosesDragging, kAutoScrolls, kChartHovers, kChartLeaves, kChartRepaints,
+                    kTipShows, kTipHides, kTipMouse, kTipActivate, kWindowPresses, kTipAlive, kThemeMessages,
+                    kSetIcons, kGdiAtDestroyed, kUserAtDestroyed, kCounterCount };
 
 // Commands run on the window thread inside the client's message handler, like client code.
 enum ProbeCommand {
@@ -91,7 +100,31 @@ enum ProbeCommand {
                    // returns the pointer's element right after it (kHot)
     kClientKeys,   // 0: WM_KEYDOWN the client saw, 1: the last one's key, 2: activation requests
                    // seen, 3: 1 if the popup was still open when the last request arrived
+    kTipMode,      // `argument` 1: tooltip mode (a chart in the content, an icon button with a tooltip
+                   // on the main surface); returns the builds so far
+    kChartMouse,   // argument >> 24: 0 move, 1 left down, 2 up, at (argument >> 12 & 0xFFF, argument &
+                   // 0xFFF) DIPs in the chart, to the viewport; ProbeUpdate bits right after it
+    kTipButton,    // 0: move over the icon button's center, 1 left down there, 2 up, 3 move to an empty
+                   // spot of the main surface; returns the pointer's element (kHot)
+    kTipState,     // ProbeTip bits
+    kTipRect,      // The tooltip window's rectangle: 0 left, 1 top, 2 right, 3 bottom (screen pixels)
+    kTipKey,       // The shown content's key
+    kTipNcHit,     // WM_NCHITTEST at the tooltip's center, as the window under it would be asked
+    kTipFromPoint, // WindowFromPoint at the tooltip's center: 1 tooltip, 2 viewport, 3 main, 0 other
+    kTipUnregister,// Unregisters the tooltip class (no tooltip window yet): 1 if it did
+    kTipRegister,  // Registers it again as the host does: 1 if it did
+    kEnableMain,   // EnableWindow(main, argument)
+    kTipLoseTarget,// Device loss on the tooltip's surface through the production path: 1 if recreated
+    kMoveMain,     // Moves the main window to (argument, argument) on the screen
+    kSendView,     // SendMessage(viewport, LOWORD(argument), HIWORD(argument), 0)
+    kCursorWidth,  // The width of the cursor rectangle the tooltip keeps clear of, pixels
+    kHandles,      // The process's object counts, read on the window thread: USER << 16 | GDI;
+                   // argument 1: after the thread's pending messages (sent and posted) and paints
+                   // are handled, so nothing the window does is half done
 };
+// The tooltip window's state, read in one command.
+enum ProbeTip { kTipWindow = 1, kTipVisible = 2, kTipOwned = 4, kTipNoActivate = 8, kTipNotActive = 16,
+                kTipNoCapture = 32, kTipClear = 64, kTipReadout = 128, kTipText = 256, kTipPending = 512 };
 // The surfaces with something to repaint, read in the same command as the event (a paint may
 // follow as soon as the command returns).
 enum ProbeUpdate { kMainUpdate = 1, kViewportUpdate = 2 };
@@ -106,6 +139,66 @@ static std::atomic<bool> g_probeUnloading{false};
 static bool g_probeFailAttach = false;
 static HDESK g_probeDesktop = nullptr;
 static HANDLE g_probeThread = nullptr;
+static bool g_probeInteractive = false;  // On the user's desktop, activated, in tooltip mode
+static UiHost* g_probeHost = nullptr;     // The window thread's host, for its message hooks
+static HWND g_probeLastTip = nullptr;     // The tooltip window last seen by the hooks
+static HHOOK g_probeHooks[2] = {};
+
+// The window thread's message hooks (every mode): what reaches the tooltip window (mouse,
+// activation and focus messages; its shows and hides), presses that reach the window, and theme
+// notifications and icons that reach the main window.
+static void ProbeRecord(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    UiHost* host = g_probeHost;
+    if (!host || !window) return;
+    bool mouse = (message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) ||
+                 (message >= WM_NCMOUSEMOVE && message <= WM_NCXBUTTONDBLCLK);
+    if (window == host->main) {
+        if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED || message == WM_SYSCOLORCHANGE ||
+            message == WM_DWMCOLORIZATIONCOLORCHANGED) {
+            g_counters[kThemeMessages]++;
+        }
+        if (message == WM_SETICON) g_counters[kSetIcons]++;
+    }
+    if (window == host->tooltip.window) {
+        g_probeLastTip = window;
+        if (mouse) g_counters[kTipMouse]++;
+        if (message == WM_MOUSEACTIVATE || message == WM_SETFOCUS ||
+            (message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) || (message == WM_NCACTIVATE && wParam)) {
+            g_counters[kTipActivate]++;
+        }
+        if (message == WM_WINDOWPOSCHANGED) {
+            UINT flags = reinterpret_cast<const WINDOWPOS*>(lParam)->flags;
+            if (flags & SWP_SHOWWINDOW) g_counters[kTipShows]++;
+            if (flags & SWP_HIDEWINDOW) g_counters[kTipHides]++;
+        }
+    } else if ((window == host->main || window == host->viewport) &&
+               (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN)) {
+        g_counters[kWindowPresses]++;
+    }
+}
+
+// Tooltip mode's pointer stays where the probe moved it: the leave that the real cursor's
+// position (elsewhere) posts right after the move is dropped.
+static void ProbeKeepPointer() {
+    MSG leave{};
+    while (PeekMessageW(&leave, nullptr, WM_MOUSELEAVE, WM_MOUSELEAVE, PM_REMOVE)) {}
+}
+
+static LRESULT CALLBACK ProbeGetMessageHook(int code, WPARAM wParam, LPARAM lParam) {
+    if (code >= 0 && wParam == PM_REMOVE) {
+        const MSG* m = reinterpret_cast<const MSG*>(lParam);
+        ProbeRecord(m->hwnd, m->message, m->wParam, m->lParam);
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+static LRESULT CALLBACK ProbeCallWndHook(int code, WPARAM wParam, LPARAM lParam) {
+    if (code >= 0) {
+        const CWPSTRUCT* m = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        ProbeRecord(m->hwnd, m->message, m->wParam, m->lParam);
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
 
 // Counts the viewport's auto-scroll timer ticks.
 static LRESULT CALLBACK ProbeViewportProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR id,
@@ -133,7 +226,9 @@ static LRESULT CALLBACK ProbeModalHook(int code, WPARAM wParam, LPARAM lParam) {
 // settings window's card drag. The color dialog is tracked like the settings client's. In
 // history mode (kHistoryMode) the navigation is a scrolling pane of entries, selected by their
 // activation, and the header holds a segmented control and a disabled one. Keys and activation
-// requests the host passes on are recorded.
+// requests the host passes on are recorded. In tooltip mode (kTipMode) a chart sits above the
+// cards, its readout naming the 50 DIP column under the pointer, and an icon button with a
+// tooltip on the main surface.
 struct ProbeClient final : UiHostClient {
     int choice = 0, sliderValue = 50, segment = 0;
     std::wstring boxText = L"10", freeText;
@@ -151,6 +246,33 @@ struct ProbeClient final : UiHostClient {
     int keys = 0, activations = 0;
     WPARAM lastKey = 0;
     bool popupAtActivation = false;
+    bool tipMode = g_probeInteractive;
+    int pick = 0;  // The chart's hovered column + 1; 0: none
+
+    // The chart's readout: three rows naming the hovered 50 DIP column; a new column repaints.
+    bool ChartHover(UiHost& host, uint32_t chart, std::optional<D2D1_POINT_2F> point,
+                    UiTooltipContent& readout) override {
+        if (!point) {
+            g_counters[kChartLeaves]++;
+            return std::exchange(pick, 0) != 0;
+        }
+        g_counters[kChartHovers]++;
+        const UiItem* item = UiFindItem(host.frame, chart);
+        int next = item ? 1 + int((point->x - item->rect.left) / 50) : 0;
+        bool changed = std::exchange(pick, next) != next;
+        if (uint64_t(pick) != readout.key) {
+            readout.key = uint64_t(pick);
+            for (int i = 0; i < 3; i++) {
+                readout.rows.push_back({L"Probe line " + std::to_wstring(i + 1),
+                                        {{L"[Current]", UiRunStyle::Normal, UiInk::Secondary},
+                                         {L" " + std::to_wstring(pick * 10 + i) + L".0%"},
+                                         {L" \u00B7 Sat 31 Oct 14:31", UiRunStyle::Normal, UiInk::Secondary}},
+                                        UiRgb(0x5B9BFF), 2});
+            }
+        }
+        if (changed) g_counters[kChartRepaints]++;
+        return changed;
+    }
 
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         g_counters[kBuilds]++;
@@ -186,6 +308,18 @@ struct ProbeClient final : UiHostClient {
             nav.action = {UiActionKind::Navigate, 0};
             frame.main.push_back(nav);
         }
+        if (tipMode) {
+            UiItem button;
+            button.id = kProbeTipButton;
+            button.kind = UiItemKind::Button;
+            button.button = UiButtonStyle::Subtle;
+            button.rect = {210, 4, 242, 34};
+            button.icon = L"\uE72C";
+            button.iconSize = 15;
+            button.tooltip = {{L"Refresh (F5)"}};
+            button.action = {UiActionKind::Command, 0, {}, 17};
+            frame.main.push_back(std::move(button));
+        }
         frame.viewport = {200, 40, std::max(client.width, 200.0f), std::max(client.height, 40.0f)};
         UiAddDropdown(frame.content, kProbeDropdown, {20, 0, 280, 32},
                       {{L"First", 0}, {L"Second", 1}, {L"Third", 2}}, true,
@@ -203,6 +337,14 @@ struct ProbeClient final : UiHostClient {
         frame.content.push_back(preview);
         uint32_t id = 10;
         float y = 88;
+        if (tipMode) {
+            UiItem chart;
+            chart.id = kProbeChart;
+            chart.kind = UiItemKind::Chart;
+            chart.rect = {20, y, 400, y + 200};
+            frame.content.push_back(std::move(chart));
+            y += 212;
+        }
         for (int i = 0; i < 12; i++) {
             UiCardSpec spec;
             spec.glyph = L"\uE774";
@@ -553,6 +695,136 @@ struct ProbeClient final : UiHostClient {
             case kClientKeys:
                 return argument == 0 ? keys : argument == 1 ? int(lastKey) :
                        argument == 2 ? activations : int(popupAtActivation);
+            case kTipMode:
+                tipMode = argument != 0;
+                UiHostRequestRebuild(host, true);
+                return g_counters[kBuilds];
+            case kChartMouse: {
+                const UiItem* chart = UiFindItem(host.frame, kProbeChart);
+                if (!chart) return -1;
+                float scale = UiHostScale(host);
+                int kind = argument >> 24;
+                float x = chart->rect.left + float(argument >> 12 & 0xFFF), y = chart->rect.top + float(argument & 0xFFF);
+                POINT at{LONG(std::lround(x * scale)), LONG(std::lround((y - host.scroll) * scale))};
+                UINT message = kind == 0 ? WM_MOUSEMOVE : kind == 1 ? WM_LBUTTONDOWN : WM_LBUTTONUP;
+                SendMessageW(host.viewport, message, kind == 1 ? MK_LBUTTON : 0, MAKELPARAM(at.x, at.y));
+                ProbeKeepPointer();
+                return updates();
+            }
+            case kTipButton: {
+                const UiItem* button = UiFindItem(host.frame, kProbeTipButton);
+                if (!button) return -1;
+                float scale = UiHostScale(host);
+                POINT at = argument == 3 ? POINT{LONG(std::lround(400 * scale)), LONG(std::lround(20 * scale))} :
+                    POINT{LONG(std::lround((button->rect.left + button->rect.right) / 2 * scale)),
+                          LONG(std::lround((button->rect.top + button->rect.bottom) / 2 * scale))};
+                UINT message = argument == 1 ? WM_LBUTTONDOWN : argument == 2 ? WM_LBUTTONUP : WM_MOUSEMOVE;
+                SendMessageW(host.main, message, argument == 1 ? MK_LBUTTON : 0, MAKELPARAM(at.x, at.y));
+                ProbeKeepPointer();
+                return hot();
+            }
+            case kTipState: {
+                const UiTooltip& tip = host.tooltip;
+                int state = (tip.pending ? kTipPending : 0) | (tip.model.content.rows.empty() ? 0 : kTipReadout) |
+                            (tip.model.content.text.empty() ? 0 : kTipText);
+                if (!tip.window) return state;
+                state |= kTipWindow;
+                if (IsWindowVisible(tip.window)) state |= kTipVisible;
+                if (GetWindow(tip.window, GW_OWNER) == host.main) state |= kTipOwned;
+                LONG_PTR style = GetWindowLongPtrW(tip.window, GWL_EXSTYLE);
+                if ((style & WS_EX_NOACTIVATE) && (style & WS_EX_TOOLWINDOW)) state |= kTipNoActivate;
+                if (GetActiveWindow() != tip.window && GetFocus() != tip.window && GetForegroundWindow() != tip.window) {
+                    state |= kTipNotActive;
+                }
+                if (GetCapture() != tip.window) state |= kTipNoCapture;
+                // Where the window really is: inside the work area, clear of the pointer's image
+                // and hotspot 8 DIP out.
+                RECT r{};
+                GetWindowRect(tip.window, &r);
+                if (tip.model.spot) {
+                    const UiTooltipKey& key = tip.model.at;
+                    LONG margin = LONG(std::ceil(8 * float(key.dpi) / 96));
+                    RECT ex{std::min(key.cursorRect.left, key.cursor.x) - margin,
+                            std::min(key.cursorRect.top, key.cursor.y) - margin,
+                            std::max(key.cursorRect.right, key.cursor.x + 1) + margin,
+                            std::max(key.cursorRect.bottom, key.cursor.y + 1) + margin};
+                    const RECT& w = key.work;
+                    bool inside = r.left >= w.left && r.top >= w.top && r.right <= w.right && r.bottom <= w.bottom;
+                    bool apart = r.right <= ex.left || r.left >= ex.right || r.bottom <= ex.top || r.top >= ex.bottom;
+                    if (inside && apart) state |= kTipClear;
+                }
+                return state;
+            }
+            case kTipRect: {
+                RECT r{};
+                if (!host.tooltip.window || !GetWindowRect(host.tooltip.window, &r)) return INT_MIN;
+                return argument == 0 ? r.left : argument == 1 ? r.top : argument == 2 ? r.right : r.bottom;
+            }
+            case kTipKey:
+                return int(host.tooltip.model.content.key);
+            case kTipNcHit:
+            case kTipFromPoint: {
+                RECT r{};
+                if (!host.tooltip.window || !GetWindowRect(host.tooltip.window, &r)) return -1;
+                POINT center{(r.left + r.right) / 2, (r.top + r.bottom) / 2};
+                if (command == kTipNcHit) {
+                    return int(SendMessageW(host.tooltip.window, WM_NCHITTEST, 0, MAKELPARAM(center.x, center.y)));
+                }
+                HWND under = WindowFromPoint(center);
+                return under == host.tooltip.window ? 1 : under == host.viewport ? 2 : under == host.main ? 3 : 0;
+            }
+            case kTipUnregister:
+                return UnregisterClassW(kProbeTipClass, GetModuleHandleW(nullptr)) != FALSE;
+            case kTipRegister: {
+                WNDCLASSEXW tipClass{sizeof(tipClass)};
+                tipClass.style = CS_DROPSHADOW;
+                tipClass.lpfnWndProc = UiHostTooltipProc;
+                tipClass.hInstance = GetModuleHandleW(nullptr);
+                tipClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+                tipClass.lpszClassName = kProbeTipClass;
+                return RegisterClassExW(&tipClass) != 0;
+            }
+            case kEnableMain:
+                EnableWindow(host.main, argument != 0);
+                return 0;
+            case kTipLoseTarget: {
+                UiTooltip& tip = host.tooltip;
+                if (!tip.window) return 0;
+                UpdateWindow(tip.window);
+                int before = tip.surface.created;
+                bool had = tip.surface.target != nullptr;
+                UiSurfaceDrawResult(tip.surface, D2DERR_RECREATE_TARGET);
+                bool discarded = !tip.surface.target && tip.surface.cache.layouts.empty();
+                UpdateWindow(tip.window);
+                return had && discarded && tip.surface.target && tip.surface.created == before + 1 &&
+                       IsWindowVisible(tip.window);
+            }
+            case kMoveMain:
+                SetWindowPos(host.main, nullptr, argument, argument, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                return 0;
+            case kSendView:
+                SendMessageW(host.viewport, LOWORD(argument), HIWORD(argument), 0);
+                return 0;
+            case kCursorWidth: {
+                RECT cursor = UiCursorRect({0, 0}, host.dpi);
+                return int(cursor.right - cursor.left);
+            }
+            case kHandles: {
+                if (argument == 1) {
+                    for (MSG msg{}; PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);) {
+                        if (msg.message == WM_QUIT) {
+                            PostQuitMessage(int(msg.wParam));
+                            break;
+                        }
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                    UpdateWindow(host.main);
+                    GdiFlush();
+                }
+                HANDLE process = GetCurrentProcess();
+                return int(GetGuiResources(process, GR_USEROBJECTS) << 16 | GetGuiResources(process, GR_GDIOBJECTS));
+            }
         }
         return -1;
     }
@@ -607,6 +879,10 @@ struct ProbeClient final : UiHostClient {
         if (g_probeFailAttach) return false;
         g_probeWindow = host.main;
         SetWindowSubclass(host.viewport, ProbeViewportProc, 0, 0);
+        g_probeHost = &host;
+        g_probeLastTip = nullptr;
+        g_probeHooks[0] = SetWindowsHookExW(WH_GETMESSAGE, ProbeGetMessageHook, nullptr, GetCurrentThreadId());
+        g_probeHooks[1] = SetWindowsHookExW(WH_CALLWNDPROC, ProbeCallWndHook, nullptr, GetCurrentThreadId());
         return true;
     }
     bool CancelModal() override {
@@ -629,6 +905,13 @@ struct ProbeClient final : UiHostClient {
     void Destroying() override { g_counters[kDestroying]++; }
     void Destroyed() override {
         g_counters[kDestroyed]++;
+        g_counters[kTipAlive] = g_probeLastTip && IsWindow(g_probeLastTip);
+        g_counters[kGdiAtDestroyed] = int(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS));
+        g_counters[kUserAtDestroyed] = int(GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS));
+        for (HHOOK& hook : g_probeHooks) {
+            if (hook) UnhookWindowsHookEx(std::exchange(hook, nullptr));
+        }
+        g_probeHost = nullptr;
         g_probeWindow = nullptr;
     }
 };
@@ -645,11 +928,12 @@ static DWORD WINAPI ProbeThread(LPVOID) {
         config.mainClass = kProbeClass;
         config.viewportClass = kProbeViewportClass;
         config.popupClass = kProbePopupClass;
+        config.tooltipClass = kProbeTipClass;
         config.title = L"Native-host probe";
         config.size = {640, 480};
-        config.activate = false;
+        config.activate = g_probeInteractive;
         config.activateMessage = ProbeActivateMessage();
-        config.position = POINT{-12000, -12000};
+        if (!g_probeInteractive) config.position = POINT{-12000, -12000};
         // Window icons: a palette-inked track, a colored arc and a dot.
         UiItem icon;
         icon.kind = UiItemKind::Shape;
@@ -674,6 +958,38 @@ extern "C" __declspec(dllexport) BOOL ProbeOpen(BOOL failAttach, HDESK desktop) 
     return g_probeThread != nullptr;
 }
 
+// This process's windows on the calling thread's desktop, top-level and message-only, with their
+// threads and classes (diagnostics when handle counts move): "class@thread" separated by spaces.
+extern "C" __declspec(dllexport) int ProbeWindowInventory(wchar_t* buffer, int size) {
+    std::wstring list;
+    int count = 0;
+    auto add = [&](HWND window) {
+        DWORD process = 0, thread = GetWindowThreadProcessId(window, &process);
+        if (process != GetCurrentProcessId()) return;
+        wchar_t name[64] = {};
+        GetClassNameW(window, name, 64);
+        list += std::wstring(name) + L"@" + std::to_wstring(thread) + L" ";
+        count++;
+    };
+    using Add = decltype(add);
+    EnumWindows([](HWND window, LPARAM param) -> BOOL {
+        (*reinterpret_cast<Add*>(param))(window);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&add));
+    for (HWND window = nullptr; (window = FindWindowExW(HWND_MESSAGE, window, nullptr, nullptr));) add(window);
+    if (buffer && size > 0) lstrcpynW(buffer, list.c_str(), size);
+    return count;
+}
+
+// The cursor rectangle around the real cursor on the calling thread's desktop (reads only).
+extern "C" __declspec(dllexport) RECT ProbeCursorRect(POINT* cursor) {
+    GetCursorPos(cursor);
+    return UiCursorRect(*cursor, 96);
+}
+
+// The next window opens on the user's desktop, activated, centered on the cursor's monitor, in
+// tooltip mode (the interactive routing mode).
+extern "C" __declspec(dllexport) void ProbeSetInteractive(BOOL interactive) { g_probeInteractive = interactive; }
 extern "C" __declspec(dllexport) HWND ProbeWindow() { return g_probeWindow; }
 extern "C" __declspec(dllexport) HWND ProbeModalWindow() { return g_probeModal; }
 extern "C" __declspec(dllexport) int ProbeCount(int counter) { return g_counters[counter]; }

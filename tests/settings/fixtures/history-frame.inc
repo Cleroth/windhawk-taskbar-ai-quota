@@ -73,6 +73,45 @@ static std::vector<HistoryUiCard> TestWeeklyCards() {
                      TestLines(L"61% \u00B7 Thu 29 Oct 20:31", L"166 h (98.8%)", L"0 h"))};
 }
 
+// Their chart lines: the same series, chips by the accounts' slots (OAI 12, CC 1 10, CC 2 13,
+// Go 11) and meters.
+static std::vector<HistoryUiLine> TestWeeklyLines() {
+    struct Entry {
+        uint64_t id;
+        uint32_t slot;
+        int meter;
+        PCWSTR name, title;
+    };
+    const Entry entries[] = {
+        {0x0A, 12, 1, L"OAI \u00B7 Weekly", L"OAI \u00B7 Weekly used (%)"},
+        {0xC1, 10, 1, L"CC 1 \u00B7 Weekly", L"CC 1 \u00B7 Weekly used (%)"},
+        {0xC2, 13, 1, L"CC 2 \u00B7 Weekly", L"CC 2 \u00B7 Weekly used (%)"},
+        {0xC2, 13, 2, L"CC 2 \u00B7 Fable weekly", L"CC 2 \u00B7 Fable weekly used (%)"},
+        {0x60, 11, 1, L"Go \u00B7 Gemini weekly", L"Go \u00B7 Gemini weekly used (%)"}};
+    std::vector<HistoryUiCard> cards = TestWeeklyCards();
+    std::vector<HistoryUiLine> lines;
+    for (size_t i = 0; i < std::size(entries); i++) {
+        HistoryUiLine line;
+        line.chip = kHistoryUiChip + entries[i].slot * 8 + uint32_t(entries[i].meter);
+        line.historyId = entries[i].id;
+        line.meter = entries[i].meter;
+        line.series = i;
+        line.name = entries[i].name;
+        line.title = entries[i].title;
+        line.color = cards[i].color;
+        line.stroke = entries[i].meter == 2 ? 2 : 3;
+        lines.push_back(std::move(line));
+    }
+    return lines;
+}
+
+static HistoryUiView TestWeeklyView(UiThemeKind theme = UiThemeKind::Dark) {
+    HistoryUiView view = TestHistoryView(theme);
+    view.cards = TestWeeklyCards();
+    view.lines = TestWeeklyLines();
+    return view;
+}
+
 static std::wstring TestItemText(const UiItem& item) {
     return item.kind == UiItemKind::Text ? UiRunsText(item.runs) : item.text;
 }
@@ -207,6 +246,12 @@ static void RunHistoryFrameTests() {
         const UiItem* more = UiFindItem(frame, kHistoryUiMore);
         CHECK(more->options.size() == 1 && more->options[0].text == L"Settings" && more->options[0].icon == L"\uE713" &&
               more->options[0].value == int(HistoryUiMenuItem::Settings) && more->action.value == -1);
+        // Their tooltips (s-tooltips): names; Export's in strong text over its scope.
+        CHECK(UiRunsText(UiFindItem(frame, kHistoryUiRefresh)->tooltip) == L"Refresh (F5)");
+        CHECK(UiRunsText(more->tooltip) == L"More options" && more->tooltip[0].style == UiRunStyle::Normal);
+        const std::vector<UiRun>& exportTip = UiFindItem(frame, kHistoryUiExport)->tooltip;
+        CHECK(exportTip.size() == 2 && exportTip[0].text == L"Export CSV" && exportTip[0].style == UiRunStyle::Strong &&
+              exportTip[1].ink == UiInk::Secondary && exportTip[1].text.starts_with(L"\nExport all raw meters"));
         CHECK_NEAR(frame.viewport.top, 98);
         CHECK(TestSameRect(frame.viewport, {260, 98, 1100, 790}));
 
@@ -324,8 +369,7 @@ static void RunHistoryFrameTests() {
     });
 
     Run("history frame: info bars by state, in order, 10 DIP apart", [] {
-        HistoryUiView view = TestHistoryView();
-        view.cards = TestWeeklyCards();
+        HistoryUiView view = TestWeeklyView();
         CHECK(TestPanels(TestHistoryFrame(view))[0]->rect.top == 0);  // The chart's card first
         view.recordingEnabled = false;
         view.storageError = L"History storage is in use by another Explorer session, or is inaccessible.";
@@ -341,12 +385,21 @@ static void RunHistoryFrameTests() {
         CHECK(enable && enable->kind == UiItemKind::Button && enable->text == L"Enable recording" && !enable->enabled &&
               enable->action.target == uint32_t(HistoryUiCommand::EnableRecording));
         CHECK(TestFind(frame.content, view.storageError) && TestFind(frame.content, L"Storage cap reached; oldest samples were pruned."));
-        CHECK(UiFocusStops(frame).back().ref.id != kHistoryUiEnableRecording);
-        // Enabled only while it can run.
+        auto stop = [](const UiFrame& f, uint32_t id) {
+            std::vector<UiFocusStop> stops = UiFocusStops(f);
+            return std::find_if(stops.begin(), stops.end(), [&](const UiFocusStop& s) { return s.ref.id == id; }) !=
+                   stops.end();
+        };
+        CHECK(!stop(frame, kHistoryUiEnableRecording));
+        // Enabled only while it can run; the first content stop, before the legend and chart.
         view.canEnableRecording = true;
         frame = TestHistoryFrame(view);
         CHECK(UiFindItem(frame, kHistoryUiEnableRecording)->enabled);
-        CHECK(UiFocusStops(frame).back().ref.id == kHistoryUiEnableRecording);
+        CHECK(stop(frame, kHistoryUiEnableRecording));
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        auto content = std::find_if(stops.begin(), stops.end(),
+                                    [](const UiFocusStop& s) { return s.surface == UiSurfaceId::Content; });
+        CHECK(content != stops.end() && content->ref.id == kHistoryUiEnableRecording);
 
         // One account's recording off or pause: an info bar while this user records.
         PCWSTR off = L"Recording is off for this account. Its saved history stays; turn on Record history in "
@@ -372,30 +425,86 @@ static void RunHistoryFrameTests() {
         CHECK(!TestFind(TestHistoryFrame(view).content, paused));
     });
 
-    Run("history frame: the chart's card and the empty states", [] {
-        HistoryUiView view = TestHistoryView();
-        view.cards = TestWeeklyCards();
-        // As tall as the mockup's graph card (368 DIP with a 300 DIP plot), shorter in short windows.
-        CHECK_NEAR(TestPanels(TestHistoryFrame(view))[0]->rect.bottom, 368);
+    Run("history frame: the chart's card: legend chips, the key line and the chart, by the mockups' "
+        "geometry", [] {
+        HistoryUiView view = TestWeeklyView();
+        UiFrame frame = TestHistoryFrame(view);
+        // As tall as the mockup's graph card (368 DIP with a 300 DIP chart), shorter in short windows.
+        const UiItem* card = TestPanels(frame)[0];
+        CHECK(TestSameRect(card->rect, {12, 0, 816, 368}));
         CHECK_NEAR(TestPanels(TestHistoryFrame(view, {1100, 550}))[0]->rect.bottom, 452 - 212 + 68);
-        CHECK_NEAR(TestPanels(TestHistoryFrame(view, {800, 450}))[0]->rect.bottom, 200 + 68);
-        CHECK(!TestFind(TestHistoryFrame(view).content, L"No readings in this range."));
+        CHECK_NEAR(TestPanels(TestHistoryFrame(view, {800, 450}))[0]->rect.bottom, 200 + 68 + 30);  // Two chip rows
+        // The chips: Custom items by line, 24 DIP tall, 6 DIP apart from 15 DIP inside the card;
+        // each 47 DIP wider than its 12.5 DIP name; showing their lines, toggling them.
+        UiTextStyle name{UiFamily::Text, 12.5f, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        float x = 27;
+        for (const HistoryUiLine& line : view.lines) {
+            const UiItem* chip = UiFindItem(frame, line.chip);
+            float width = std::ceil(UiLayoutSize(UiLayout(TestGraphics(), line.name, name, 100000, false)).width) + 47;
+            CHECK(chip && chip->kind == UiItemKind::Custom && chip->text == line.name && chip->selected);
+            CHECK(TestSameRect(chip->rect, {x, 11, x + width, 35}));
+            CHECK(chip->action.kind == UiActionKind::Command && chip->action.target == uint32_t(HistoryUiCommand::Line) &&
+                  chip->action.key == line.historyId && chip->action.value == line.meter);
+            CHECK(chip->tooltip.size() == 2 && chip->tooltip[0].text == line.title &&
+                  chip->tooltip[0].style == UiRunStyle::Strong && chip->tooltip[1].ink == UiInk::Secondary &&
+                  chip->tooltip[1].text == L"\nSolid / filled: current range. Click to hide or show this line.");
+            x += width + 6;
+        }
+        CHECK(UiFindItem(frame, kHistoryUiChip + 13 * 8 + 2)->text == L"CC 2 \u00B7 Fable weekly");
+        const UiItem* key = TestFind(frame.content, L"Solid: current");
+        CHECK(key && key->font == UiFont::Caption && key->ink == UiInk::Muted && TestSameRect(key->rect, {29, 39, 801, 55}));
+        const UiItem* chart = UiFindItem(frame, kHistoryUiChart);
+        CHECK(chart && chart->kind == UiItemKind::Chart && TestSameRect(chart->rect, {27, 59, 801, 359}));
+        // Focus: the chips, then the chart; a press on a chip hits it, on the chart the chart.
+        std::vector<uint32_t> content;
+        for (const UiFocusStop& stop : UiFocusStops(frame)) {
+            if (stop.surface == UiSurfaceId::Content) content.push_back(stop.ref.id);
+        }
+        CHECK(content.size() == 6 && content[0] == view.lines[0].chip && content[5] == kHistoryUiChart);
+        CHECK(UiHitTest(TestGraphics(), frame.content, {40, 20}).id == view.lines[0].chip);
+        CHECK(UiHitTest(TestGraphics(), frame.content, {400, 200}).id == kHistoryUiChart);
+        CHECK(UiHitTest(TestGraphics(), frame.content, {20, 20}).id == 0);  // The card itself is no target
 
+        // Comparing: the key names both periods and so do the chips' tooltips; a hidden line's chip
+        // shows it off and stays a stop.
+        view.compare = true;
+        view.lines[1].hidden = true;
+        frame = TestHistoryFrame(view);
+        CHECK(TestFind(frame.content, L"Solid: current \u00B7 Dashed: previous"));
+        CHECK(UiFindItem(frame, view.lines[0].chip)->tooltip[1].text ==
+              L"\nSolid / filled: current week. Dashed / hollow: previous week. Click to hide or show this line.");
+        CHECK(!UiFindItem(frame, view.lines[1].chip)->selected && UiFocusable(*UiFindItem(frame, view.lines[1].chip)));
+
+        // At the minimum width the chips wrap into rows 6 DIP apart and the card grows with them;
+        // a name wider than the row is cut to it.
+        frame = TestHistoryFrame(view, {800, 550});
+        std::vector<float> rows;
+        for (const HistoryUiLine& line : view.lines) {
+            const UiItem* chip = UiFindItem(frame, line.chip);
+            CHECK(chip->rect.left >= 27 && chip->rect.right <= 12 + 504 - 15 + 0.01f);
+            if (std::find(rows.begin(), rows.end(), chip->rect.top) == rows.end()) rows.push_back(chip->rect.top);
+        }
+        CHECK(rows.size() == 2 && rows[1] == rows[0] + 30);
+        CHECK_NEAR(TestPanels(frame)[0]->rect.bottom, 200 + 68 + 30);  // The viewport 396 DIP tall: a 200 DIP chart
+        view.lines[0].name =
+            L"Research \u2014 shared Max seat for the whole engineering team and its contractors \u00B7 Fable weekly";
+        frame = TestHistoryFrame(view, {800, 550});
+        CHECK_NEAR(UiFindItem(frame, view.lines[0].chip)->rect.right - UiFindItem(frame, view.lines[0].chip)->rect.left,
+                   504 - 30);
+    });
+
+    Run("history frame: the chart's card without lines, and the empty states", [] {
         struct Empty {
             std::function<void(HistoryUiView&)> edit;
             PCWSTR message;
             float height;
         };
+        // Without a chart: the message centered in a shorter card.
         const Empty empties[] = {
             {[](HistoryUiView& v) { v.loading = true; v.status.clear(); }, L"Loading local history\u2026", 340},
             {[](HistoryUiView& v) { v.accounts.clear(); }, L"No accounts to display.", 340},
             {[](HistoryUiView&) {}, L"No accounts support this view.", 340},
             {[](HistoryUiView& v) { v.selected = 3; }, L"This account has no meters in this view.", 340},
-            {[](HistoryUiView& v) { v.noReadings = {{2, L"OAI", L"OpenAI"}}; }, L"No readings in this range.", 320},
-            {[](HistoryUiView& v) {
-                 v.cards = {TestCard(L"Extra spending (USD) \u2014 details only", 6, L"USD 10.00", L"now", {})};
-                 v.cards[0].detailsOnly = true;
-             }, L"No percentage readings to plot. Dollar spending is shown below.", 320},
         };
         for (const Empty& empty : empties) {
             HistoryUiView edited = TestHistoryView();
@@ -406,11 +515,30 @@ static void RunHistoryFrameTests() {
             CHECK(message && message->font == UiFont::Note && message->ink == UiInk::Secondary);
             CHECK_NEAR(card->rect.bottom - card->rect.top, empty.height);
             CHECK_NEAR((message->rect.top + message->rect.bottom) / 2, (card->rect.top + card->rect.bottom) / 2);
+            CHECK(!UiFindItem(frame, kHistoryUiChart));
             bool ring = std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
                 return item.kind == UiItemKind::Shape && item.rect.bottom <= card->rect.bottom &&
                        item.rect.right <= message->rect.left;
             });
             CHECK(ring == edited.loading);
+        }
+        // No readings in range, or dollars only: the chart without legend or key (its message is
+        // the chart's, history-chart.inc), in a card of the chart and its padding.
+        for (bool dollars : {false, true}) {
+            HistoryUiView edited = TestHistoryView();
+            if (dollars) {
+                edited.cards = {TestCard(L"Extra spending (USD) \u2014 details only", 6, L"USD 10.00", L"now", {})};
+                edited.cards[0].detailsOnly = true;
+            } else {
+                edited.noReadings = {{2, L"OAI", L"OpenAI"}};
+            }
+            UiFrame frame = TestHistoryFrame(edited);
+            const UiItem* chart = UiFindItem(frame, kHistoryUiChart);
+            CHECK(chart && TestSameRect(chart->rect, {27, 11, 801, 311}));
+            CHECK_NEAR(TestPanels(frame)[0]->rect.bottom, 320);
+            CHECK(!TestFind(frame.content, L"Solid: current") && !TestFind(frame.content, L"No readings in this range."));
+            CHECK(std::none_of(frame.content.begin(), frame.content.end(),
+                               [](const UiItem& item) { return item.kind == UiItemKind::Custom; }));
         }
         UiFrame none = TestHistoryFrame([] { HistoryUiView v = TestHistoryView(); v.accounts.clear(); return v; }());
         CHECK(none.nav.size() == 1);
@@ -418,8 +546,7 @@ static void RunHistoryFrameTests() {
 
     Run("history frame: summary cards in up to three columns (two comparing), rows as tall as their "
         "tallest card; the No readings card last", [] {
-        HistoryUiView view = TestHistoryView();
-        view.cards = TestWeeklyCards();
+        HistoryUiView view = TestWeeklyView();
         UiFrame frame = TestHistoryFrame(view);
         std::vector<const UiItem*> panels = TestPanels(frame);
         CHECK(panels.size() == 6);
@@ -429,8 +556,10 @@ static void RunHistoryFrameTests() {
             CHECK(TestSameRect(panels[i]->rect, {x, y, x + width, y + 122}));
         }
         CHECK_NEAR(frame.contentHeight, panels[5]->rect.bottom + 20);
-        // A card: its line, title, headline, then caption lines.
-        const UiItem* title = TestFind(frame.content, L"OAI \u00B7 Weekly");
+        // A card: its line, title, headline, then caption lines (the chip of its name is no text).
+        const UiItem* title = &*std::find_if(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+            return item.kind == UiItemKind::Text && UiRunsText(item.runs) == L"OAI \u00B7 Weekly";
+        });
         CHECK(title && title->font == UiFont::Caption && title->trim && title->rect.left == 12 + 13 + 24 &&
               title->rect.top == panels[1]->rect.top + 11);
         const UiItem* line = &*std::find_if(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
@@ -467,15 +596,16 @@ static void RunHistoryFrameTests() {
               lineOf(frame, 2).ink == UiInk::Primary);
 
         // Two columns at the minimum width and while comparing; a row takes its tallest card.
-        view = TestHistoryView();
-        view.cards = TestWeeklyCards();
-        panels = TestPanels(TestHistoryFrame(view, {800, 550}));
+        view = TestWeeklyView();
+        frame = TestHistoryFrame(view, {800, 550});
+        panels = TestPanels(frame);
         CHECK_NEAR(panels[1]->rect.right - panels[1]->rect.left, (504 - 8) / 2.0);
         CHECK_NEAR(panels[3]->rect.left, 12);
         view.compare = true;
         view.cards.resize(2);
         view.cards[0].lines.insert(view.cards[0].lines.end(), {L"Previous: Peak \u2014"});
-        panels = TestPanels(TestHistoryFrame(view));
+        frame = TestHistoryFrame(view);
+        panels = TestPanels(frame);
         CHECK_NEAR(panels[1]->rect.right - panels[1]->rect.left, (804 - 8) / 2.0);
         CHECK_NEAR(panels[1]->rect.bottom - panels[1]->rect.top, 122 + 16);
         CHECK_NEAR(panels[2]->rect.bottom - panels[2]->rect.top, 122 + 16);

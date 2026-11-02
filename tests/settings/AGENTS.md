@@ -2,9 +2,9 @@
 
 Source-extracted tests of the pure fragments behind both custom-drawn windows (meter model,
 `src/ui/` toolkit, the settings edit controller, shell and page builders; the usage history
-window's view, controller and frame builders on the shared history model), offscreen renders of
-both windows, a native-host probe of the toolkit's window host (with its dropdown popup and
-number box text boxes), and a capture/foreground probe for the dropdown popup. Not a Windhawk,
+window's view, chart, controller and frame builders on the shared history model), offscreen renders of
+both windows, a native-host probe of the toolkit's window host (with its dropdown popup, tooltip
+and number box text boxes), and a capture/foreground probe for the dropdown popup. Not a Windhawk,
 Explorer or XAML test. The history domain (journal, series, continuity, burn-up, the classic window) stays in
 `tests/history`.
 
@@ -15,12 +15,22 @@ From the repo root:
 ```text
 python tests/settings/run.py
 python tests/settings/run.py --popup-interactive
+python tests/settings/run.py --tooltip-interactive
 ```
 
 `--popup-interactive` builds only the popup probe, then runs its interactive mode by hand,
 attached to the console: a probe window opens on your desktop; follow the printed steps (open the
 dropdown, do the action, F9 ends the step, F8 skips it, F10 is the activate request). The log is
 `popup-interactive.log` in the run directory.
+
+`--tooltip-interactive` builds only the host probe, then runs its tooltip routing mode the same
+way: the probe window (a chart under the dropdown and slider, an icon button with a tooltip at the
+top) opens activated on your desktop; follow the printed steps (hover the chart, move onto the
+readout, click beside it, the icon's tooltip, other apps, Alt+Tab, the wheel, screen corners and
+the taskbar, a second monitor, the Windows key), F9 ends a step, F8 skips it. Each step logs the
+readout's shows and hides, hover reports, mouse and activation messages that reached the tooltip,
+presses that reached the window and the foreground window. The log is `tooltip-interactive.log`
+in the run directory; it is the evidence for tooltip pointer routing.
 
 Prerequisites: Windows x64, Python 3.10+, PowerShell 7 (`pwsh`), Windhawk's bundled clang++ with
 its MinGW headers/libraries, and an interactive desktop session (the probe creates windows). No
@@ -38,7 +48,12 @@ regenerates.
   controls, popup rows/placement/keys, settings shell and pages). `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,
-  status pills, info bar severities with a button). The edit controller
+  status pills, info bar severities with a button). `fixtures/tooltip.inc`: the readout layout
+  search (forms, columns, widest titles, the "+N more" hint measured on its own, nothing below
+  one row), the pointer-excluding placement in adversarial geometries (centre, corners, edges, a
+  readout larger than every region, a negative origin, a cursor partly outside, a large image off
+  its hotspot, 144 DPI, side order), complete-text blocks, the tooltip's items, content and
+  placement dedupe, and the chart item's hits, stop and scroll keys. The edit controller
   (`settings/edits.h`) runs against `TestStore` (`fixtures/edits.inc`): an in-memory store with
   an operation log, deterministic save failures and unload after N transactions; number parsing
   and the render projection get their own fixtures. `fixtures/accounts.inc`: the controller's
@@ -78,8 +93,9 @@ regenerates.
   `fixtures/render-support.inc`.
 - `extract-history`, `history-compile`, `history`, `history-render`: the history window's own
   executable (`history.cpp`, `fixtures/history-main.inc`) on `core/model.h`, the meter model,
-  logos, the pure toolkit, `history/types.h`, `continuity.h`, `series.h`, `view.h`,
-  `controller.h`, `content.h` and `shell.h`. `history` runs `fixtures/history-view.inc` (compact
+  logos, the pure toolkit, `history/types.h`, `continuity.h`, `series.h`, `view.h`, `chart.h`,
+  `controller.h`, `chart-paint.h`, `content.h` and `shell.h`. `history` runs
+  `fixtures/history-view.inc` (compact
   formats in synthetic time zones, number rounding and abbreviation with carry, hours; summary
   cards and No readings entries built through `HistoryCollectAccounts` and `HistoryBuildSeries`
   from synthetic readings, as the window's controller does), `fixtures/history-controller.inc`
@@ -91,16 +107,32 @@ regenerates.
   `fixtures/history-frame.inc` (the frame per
   state: navigation entries and their ids per history ID, values and inks, the Removed group;
   header title, status, pill, icon buttons, the narrow rule; segments, Compare disabling range;
-  info bars; the chart's placeholder and empty states; card grid and contents; one-line menu
-  rows with separators; an icon-only button's centered glyph, measured in pixels).
-  `history-render` paints `render-history-*` (every theme at 96/144/192 DPI,
-  `fixtures/history-render.inc`) as the host composes the window (main surface, navigation pane
-  at its scroll, viewport, scrollbar, the More menu where the host opens it), modeled on the
-  approved phase-3 mockups: `default` (s-light), `account` (s-account), `compare`, `states`
-  (recording off, storage failing, waiting with focus and hover), `empty` (loading, no accounts,
-  unsupported view), `empty-readings` (no readings, dollars only, the No readings card beside
-  cards), `menu`, `min` (the minimum window scrolled), `nav` (the scrolled sidebar) and `band`
-  (above 100%). The chart's card is an empty placeholder of its size.
+  info bars; the chart's card (legend chips with their ids, actions and tooltips, wrapping; the
+  key line; the chart item) and the empty states; card grid and contents; one-line menu rows
+  with separators; an icon-only button's centered glyph, measured in pixels; the icon buttons'
+  tooltips), `fixtures/history-tooltip.inc` (the single-account readout guarantee: the widest
+  mandatory parts the production readout rows print, then ten such rows placed at every pointer
+  position of an 800 x 590 DIP work area with 32 and 256 DIP pointers at 96 and 144 DPI;
+  complete-text tooltips placed whole there; `OBSERVE` lines report widths and capacities) and
+  `fixtures/history-chart.inc` (the chart through the controller on synthetic journals in the
+  mockups' shapes: axes, the plot's layout on device pixels, local time ticks per range, across
+  daylight saving and over ten years; picking and readout rows ported from the classic
+  `tests/history` expectations; emphasis; the legend's filter; the scene's draw list; the
+  reduction cache's key). `history-render` paints `render-history-*` (every theme at 96/144/192
+  DPI, `fixtures/history-render.inc`) as the host composes the window (main surface, navigation
+  pane at its scroll, viewport, scrollbar, the More menu and a chart's readout where the host
+  shows them; the chart and its chips by the production painter, laid out by a controller over
+  a synthetic journal), modeled on the approved phase-3 mockups: `default` (s-light), `account`
+  (s-account), `compare`, `states` (recording off, storage failing, waiting with focus and
+  hover), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings,
+  dollars only, the No readings card beside cards), `menu`, `min` (the minimum window scrolled),
+  `nav` (the scrolled sidebar), `band` (above 100%), `chart-views` (every view, both extra axes),
+  `chart-ticks` (each range's ticks) and `chart-states` (comparing, above 100%, every line hidden,
+  chips off, hot and focused, chart focus, a readout on the chart). `render-history-tooltips-*`
+  (same themes and DPIs): the readout placed on each side of the pointer by the production
+  placement, row forms, a shortened name, the production time forms (a previous year's, this
+  year's), two columns, the "+N more" hint, and the complete-text tooltips (a chip's, the icon
+  buttons').
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
   (`ui/system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
   `color-dialog.h`) and a stub client with window icons form `ui-host.dll`; `host-probe.cpp`
@@ -108,8 +140,13 @@ regenerates.
   thread, joins and unloads, repeatedly, and checks classes, windows and GDI/USER handle counts;
   then client creation failure, a conflicting class registration, render-target loss through the
   production discard path, the window icons (both sizes at the window's DPI, redrawn at the new
-  sizes on synthetic DPI changes with the replaced ones destroyed and no handle growth, destroyed
-  after close), and an unload close during a message box. On a hidden desktop: the production
+  sizes on synthetic DPI changes and on theme notifications sent to the window only, the replaced
+  ones destroyed and no handle growth, destroyed after close), and an unload close during a
+  message box. Handle counts are process-wide: a window case reads them on the window thread once
+  its pending messages and paints are handled (`kHandles`), never from the driver while the
+  window may still be painting or redrawing; the icons case logs each step's counts (`STEP`
+  lines; `ANOMALY` with the process's windows if a settled count moves) and what a driver-thread
+  read catches mid-redraw. On a hidden desktop: the production
   popup (owned, never active, capture, close triggers, outside press swallowed until release,
   keys and clicks choosing), the number
   box EDIT (kept across rebuilds, text/Enter/Esc/arrow/Tab events, focus loss then rebuild), a
@@ -130,7 +167,16 @@ regenerates.
   keys), the activation request reaching the client after the popup closed, theme messages
   rebuilding, and the pane's wheel routing, hits at its scroll, keyboard and selection
   scroll-into-view and scrollbar drag. Pointer state is read in the command that moved the
-  pointer: the real cursor is elsewhere, so a leave follows.
+  pointer: the real cursor is elsewhere, so a leave follows. In the probe client's tooltip mode
+  (a chart in the content, an icon button with a tooltip; its moves drop that leave, so the
+  pointer stays): chart hover reports without focus, repaint scope, focus on press, scroll keys;
+  the readout owned, never active, without capture, clear of the pointer, `HTTRANSPARENT`, moved
+  without new rows, hidden by every trigger (one by one), never with the popup open or the owner
+  disabled; the delayed item tooltip and what cancels it; target loss; repeated shows without
+  USER/GDI handle growth; unload with the readout showing (gone before the main window's
+  `WM_NCDESTROY`); creation failure and retry; a conflicting class registration; thread message
+  hooks count mouse and activation messages that reach the tooltip. Off the hidden desktop: the
+  cursor rectangle of the real cursor (read only) without GDI handle growth.
 - `extract-popup`, `popup-compile`, `popup-probe`: the same host as the owner of a probe popup
   (owned, `WS_EX_NOACTIVATE`, shown without activation; `fixtures/popup-*.inc`, hand-written).
   Thread-local message hooks record what each window receives while capture is on the popup, on
@@ -146,11 +192,12 @@ Each run creates a retained `.out/run-.../` with the extracted `settings.cpp`, `
 `ui-host.cpp` and `popup.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
 `render-*.png`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe
 shows off-screen, never-activated windows and briefly a message box, and reads the user's theme
-(registry, `UISettings`); its popup, text box, slider, preview and color dialog cases, like the
-popup probe, run on a hidden desktop it creates and never switches to, so their windows, focus,
-capture and dialogs never reach the user's screen, focus or pointer. The popup probe's interactive mode is the exception:
-an activated window on the user's desktop, and F8/F9/F10 registered as global hotkeys until it
-exits. No storage, network, credential or Explorer access.
+(registry, `UISettings`); its popup, text box, slider, preview, chart, tooltip and color dialog
+cases, like the popup probe, run on a hidden desktop it creates and never switches to, so their
+windows, focus, capture, tooltips and dialogs never reach the user's screen, focus or pointer. The
+interactive modes are the exception: an activated window on the user's desktop, and F8/F9 (the
+popup probe also F10) registered as global hotkeys until it exits. No storage, network,
+credential or Explorer access.
 
 ## Success and evidence limits
 
@@ -165,7 +212,11 @@ multi-monitor DPI need the runtime check in the root guide. The history controll
 its view from in-memory ops: the production ops (journal, settings and poll reads), the opener,
 the window client and its activation path are outside this suite. The popup probe's automated part covers thread-local activation and programmatic events
 only; real clicks on other apps or the taskbar, Alt+Tab, Start and wheel routing need the
-interactive mode, and neither runs inside Explorer (where the taskbar shares the process).
+interactive mode, and neither runs inside Explorer (where the taskbar shares the process). The
+same holds for the tooltip: on the hidden desktop the cursor image isn't readable (the fallback
+square stands in) and `WindowFromPoint` is only an observation; pointer routing through the
+readout, real cursor sizes, multi-monitor DPI and z-order next to the taskbar need
+`--tooltip-interactive` and Explorer.
 
 ## Maintenance rules
 

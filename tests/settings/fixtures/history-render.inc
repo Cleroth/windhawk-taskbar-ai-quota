@@ -1,8 +1,9 @@
 // Offscreen renders of the history window's client area (the approved mockups' 1100 x 830 window
 // without its 40 DIP caption) as the host composes it: main items, the navigation pane at its
-// scroll, the content clipped to the viewport at its scroll with its scrollbar, and the More menu
-// where the host opens it. Sheets stack captioned frames (or their top parts). PNG evidence for
-// review, no pixel goldens.
+// scroll, the content clipped to the viewport at its scroll with its scrollbar (the chart and its
+// legend chips through the production painter, as the client draws them), the More menu and a
+// chart's readout where the host shows them. Sheets stack captioned frames (or their top parts).
+// PNG evidence for review, no pixel goldens.
 
 struct HistoryRenderPart {
     std::wstring caption;
@@ -13,6 +14,13 @@ struct HistoryRenderPart {
     float scroll = 0;      // The content's; negative: that far above its end
     bool navEnd = false;   // The navigation pane scrolled to its end
     bool menu = false;     // The More menu open, the pointer on its first row
+    // The chart: a controller over a synthetic journal (history-chart.inc) lays it out for the
+    // frame's chart item and draws it; its lines replace the view's (`chartView`: its whole view
+    // does). `hover`: the pointer on the laid out chart (content coordinates), its readout shown
+    // where the tooltip's placement puts it within the frame.
+    std::shared_ptr<TestChartWindow> chart{};
+    bool chartView = false;
+    std::function<D2D1_POINT_2F(const HistoryChart&)> hover{};
 };
 
 static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -34,9 +42,30 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
     target->Clear(sheet ? UiOver(UiFade(palette.text, 0.08f), palette.background) : palette.background);
     float y = sheet ? kMargin : 0;
     for (HistoryRenderPart& part : parts) {
+        HistoryController* controller = part.chart ? &part.chart->controller : nullptr;
+        if (controller && part.chartView) {
+            part.view = controller->view;
+        } else if (controller) {
+            // The hand-made cards take the colors of the lines they name.
+            part.view.lines = controller->view.lines;
+            for (HistoryUiCard& card : part.view.cards) {
+                for (const HistoryUiLine& line : part.view.lines) {
+                    if (card.title == line.name) card.color = line.color;
+                }
+            }
+        }
         part.view.theme = theme.kind;
         UiFrame frame;
         HistoryUiBuildFrame(g, part.view, part.client, frame);
+        UiTooltipContent readout;
+        D2D1_POINT_2F pointer{};
+        if (controller) {
+            if (const UiItem* chart = UiFindItem(frame, kHistoryUiChart)) controller->LayChart(g, chart->rect, scale);
+            if (part.hover) {
+                pointer = part.hover(controller->chart);
+                controller->Hover(pointer, readout, palette);
+            }
+        }
         float x = sheet ? kMargin : 0;
         if (sheet) {
             UiDrawLayout(target.get(), cache, UiLayout(g, part.caption, UiTextStyleFor(UiFont::BodyStrong), width, false),
@@ -60,8 +89,14 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
         float scroll = part.scroll >= 0 ? part.scroll : frame.contentHeight - viewHeight + part.scroll;
         scroll = std::round(UiClampScroll(scroll, viewHeight, frame.contentHeight) * scale) / scale;
         target->PushAxisAlignedClip(&v, D2D1_ANTIALIAS_MODE_ALIASED);
+        UiCustomPaint custom = [&](const UiItem& item) {
+            if (controller) {
+                HistoryUiPaintCustom(target.get(), g, cache, palette, controller->chart, controller->picked, item, state,
+                                     scale);
+            }
+        };
         UiPaintItems(target.get(), g, cache, palette, frame.content, state, {v.left, v.top - scroll}, scale, scroll,
-                     scroll + viewHeight);
+                     scroll + viewHeight, &custom);
         D2D1::Matrix3x2F shift = D2D1::Matrix3x2F::Translation(v.left, v.top) * at;
         target->SetTransform(&shift);
         UiPaintScrollbar(target.get(), cache, palette,
@@ -82,6 +117,31 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
             UiPaintState hover;
             hover.hot = {1};
             UiPaintItems(target.get(), g, cache, palette, rows, hover, {box.left, box.top}, scale, -1e9f, 1e9f);
+        }
+        if (readout.key) {
+            // The frame as the screen (its top-left at 0, its client the work area), the mockups'
+            // 32 DIP arrow pointer.
+            auto px = [&](float dip) { return LONG(std::lround(dip * scale)); };
+            POINT cursor{px(v.left + pointer.x), px(v.top + pointer.y - scroll)};
+            UiTooltipKey key = TestKey(cursor, {0, 0, px(bounds.right), px(bounds.bottom)}, px(32), {0, 0}, dpi);
+            UiTooltipMeasure measure = UiMeasureReadout(g, readout);
+            if (std::optional<UiTooltipSpot> spot = UiTooltipPlacement(g, readout, measure, key)) {
+                D2D1_RECT_F box{float(spot->rect.left) / scale, float(spot->rect.top) / scale,
+                                float(spot->rect.right) / scale, float(spot->rect.bottom) / scale};
+                UiFillRect(target.get(), cache, box, 4, palette.popup, scale);
+                UiStrokeRect(target.get(), cache, box, 4,
+                             palette.kind == UiThemeKind::HighContrast ? palette.cardBorder : palette.controlBorder, 1,
+                             scale);
+                UiPaintItems(target.get(), g, cache, palette, UiTooltipItems(readout, measure, spot->layout), {},
+                             {box.left, box.top}, scale, -1e9f, 1e9f);
+            }
+            UiItem arrow;
+            arrow.kind = UiItemKind::Shape;
+            arrow.viewBox = 32;
+            float ax = float(cursor.x) / scale, ay = float(cursor.y) / scale;
+            arrow.rect = {ax, ay, ax + 32, ay + 32};
+            arrow.parts = {{kTestArrowPath, UiRgb(0xFFFFFF)}, {kTestArrowPath, UiRgb(0x000000), UiInk::Inherit, 1, 1}};
+            UiPaintItems(target.get(), g, cache, palette, {arrow}, {}, {0, 0}, scale, -1e9f, 1e9f);
         }
         target->PopAxisAlignedClip();
         if (sheet) UiStrokeRect(target.get(), cache, UiInflate(bounds, 1, 1), 0, UiFade(palette.text, 0.3f), 1, scale);
@@ -131,14 +191,20 @@ static void RunHistoryRenders(const std::wstring& directory) {
     winrt::com_ptr<IWICImagingFactory> wic;
     winrt::check_hresult(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                           __uuidof(IWICImagingFactory), wic.put_void()));
-    auto weekly = [] {
-        HistoryUiView view = TestHistoryView();
-        view.cards = TestWeeklyCards();
-        return view;
+    auto weekly = [] { return TestWeeklyView(); };
+    // The charts: controllers over the mockups' synthetic journals (history-chart.inc).
+    auto select = [](uint64_t id, HistoryView view, bool compare = false) {
+        return [=](HistoryController& c) {
+            c.Command(HistoryUiCommand::Select, 0, id);
+            c.Command(HistoryUiCommand::View, int(view));
+            if (compare) c.Command(HistoryUiCommand::Compare, 1);
+        };
     };
+    std::shared_ptr<TestChartWindow> week = TestChartOf(TestMockupWeek());
 
     // s-light: All accounts, Weekly.
     HistoryRenderPart defaults{L"", weekly()};
+    defaults.chart = week;
 
     // s-account: OAI with its recording off (credits); CC 1 paused, its value stale (extra
     // budget, dollars details only).
@@ -148,6 +214,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     oai.view.accounts[0].recordingOff = true;
     oai.view.cards = {TestCard(L"Credits remaining", 7, L"1240.00 credits", L"Thu 29 Oct 17:31",
                                {L"Peak 2500.00 credits \u00B7 Sat 24 Oct 14:32", L"Coverage 123 h (73.2%)"})};
+    oai.chart = TestChartOf(TestMockupWeek(), select(0x0A, HistoryView::ExtraUsage));
     HistoryRenderPart cc1{L"One account: Anthropic, Extra usage, paused (hidden, its value stale)", TestHistoryView()};
     cc1.view.selected = 1;
     cc1.view.view = HistoryView::ExtraUsage;
@@ -158,11 +225,13 @@ static void RunHistoryRenders(const std::wstring& directory) {
                       TestCard(L"Extra spending (USD) \u2014 details only", 6, L"USD 11.00", L"Fri 30 Oct 20:32",
                                {L"Peak USD 11.00 \u00B7 Fri 30 Oct 20:32"})};
     cc1.view.cards[1].detailsOnly = true;
+    cc1.chart = TestChartOf(TestMockupWeek(), select(0xC1, HistoryView::ExtraUsage));
 
     // s-compare: CC 2, Weekly, comparing (two columns of both periods).
     HistoryRenderPart compare{L"", TestHistoryView()};
     compare.view.selected = 2;
     compare.view.compare = true;
+    compare.chart = TestChartOf(TestMockupCompare(), select(0xC2, HistoryView::Weekly, true));
     compare.view.cards = {
         TestCard(L"Weekly", 1, L"93%", L"now",
                  {L"Current: Peak 93% \u00B7 Sat 31 Oct 14:31", L"Coverage 158 h (94.0%)", L"Est. \u226590%: 4 h",
@@ -186,6 +255,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     waiting.state.focus = {kHistoryUiRanges};
     waiting.state.focusVisible = true;
     waiting.state.hot = {kHistoryUiRefresh};
+    off.chart = storage.chart = waiting.chart = week;
 
     // s-empty: loading (no status yet), no accounts, a view no account supports (one account,
     // All accounts); then no readings in range with the No readings card, dollars only, and the
@@ -208,6 +278,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     noReadings.view.range = HistoryUiRange::Day;
     noReadings.view.noReadings = {{2, L"OAI", L"OpenAI"}, {1, L"CC 1", L"Anthropic"}, {1, L"CC 2", L"Anthropic"},
                                   {3, L"Go", L"Google Antigravity"}};
+    noReadings.chart = TestChartOf({}, [](HistoryController& c) { c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Day)); });
     HistoryRenderPart dollars{L"Dollars only: no percentage line, the spending card below", TestHistoryView(),
                               {1100, 790}, 640};
     dollars.view.selected = 2;
@@ -215,19 +286,25 @@ static void RunHistoryRenders(const std::wstring& directory) {
     dollars.view.cards = {TestCard(L"Extra spending (USD) \u2014 details only", 6, L"USD 10.00", L"now",
                                    {L"Peak USD 10.00 \u00B7 Sat 31 Oct 10:31"})};
     dollars.view.cards[0].detailsOnly = true;
+    dollars.chart = TestChartOf(TestMockupWeek(), select(0xC2, HistoryView::ExtraUsage));
     HistoryRenderPart partial{L"No readings card beside plotted accounts (CC 1 recording off, Go paused)", weekly()};
     partial.view.cards = {partial.view.cards[0], partial.view.cards[2], partial.view.cards[3]};
     partial.view.noReadings = {{1, L"CC 1", L"Anthropic \u00B7 recording off"},
                                {3, L"Go", L"Google Antigravity \u00B7 paused"}};
     partial.view.accounts[3].stale = true;
+    std::vector<HistorySample> some = TestMockupWeek();
+    std::erase_if(some, [](const HistorySample& s) { return s.accountId == 0xC1 || s.accountId == 0x60; });
+    partial.chart = TestChartOf(some);
 
     // s-menu: the More menu open (Settings), the pointer on it.
     HistoryRenderPart menu{L"", weekly(), {1100, 790}, 330};
     menu.menu = true;
+    menu.chart = week;
 
     // s-min: the minimum window (800 x 590), scrolled near the end.
     HistoryRenderPart minimum{L"", weekly(), {800, 550}};
     minimum.scroll = -90;
+    minimum.chart = week;
 
     // q13b-scroll, s-menu: a short window's sidebar scrolled to its end, keyboard focus on the
     // last removed account, the pointer on Codex CI; CC 6 selected in All meters.
@@ -246,14 +323,102 @@ static void RunHistoryRenders(const std::wstring& directory) {
                  TestLines(L"20% \u00B7 Sat 31 Oct 04:31", L"158 h (94.0%)", L"0 h")),
         TestCard(L"Extra spending (USD)", 6, L"USD 10.00", L"Sat 31 Oct 04:31",
                  {L"Peak USD 10.00 \u00B7 Sat 31 Oct 04:31", L"Coverage 158 h (94.0%)"})};
+    nav.chart = TestChartOf(TestMockupWeek(), select(0xC2, HistoryView::AllMeters));
 
     // s-band: CC 2 above 100%.
     HistoryRenderPart band{L"", weekly()};
     band.view.accounts[2].weeklyPct = 112;
     band.view.cards[2] = TestCard(L"CC 2 \u00B7 Weekly", 4, L"112%", L"now",
                                   TestLines(L"112% \u00B7 Sat 31 Oct 14:31", L"166 h (98.8%)", L"15.1 h"));
+    band.chart = TestChartOf(TestMockupBand());
+
+    // The chart sheets: whole views from the controllers, cropped to the header and the chart's card.
+    auto real = [](std::wstring caption, std::shared_ptr<TestChartWindow> window, float crop = 520) {
+        HistoryRenderPart part{std::move(caption), {}, {1100, 790}, crop};
+        part.chart = std::move(window);
+        part.chartView = true;
+        return part;
+    };
+    // Every view (s-light, s-short, s-account; All meters with both extra axes).
+    std::vector<HistoryRenderPart> views = {
+        real(L"Short-term, All accounts, 24h: five-hour windows, Go's Claude/GPT windows varying",
+             TestChartOf(TestMockupShort(), [](HistoryController& c) {
+                 c.Command(HistoryUiCommand::View, int(HistoryView::ShortTerm));
+                 c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Day));
+             })),
+        real(L"Weekly, All accounts, 7d (a scoped quota 2 DIP wide)", week),
+        real(L"Extra usage, All accounts: credits on the right axis; dollars details only",
+             TestChartOf(TestMockupWeek(), [](HistoryController& c) { c.Command(HistoryUiCommand::View, int(HistoryView::ExtraUsage)); })),
+        real(L"All meters, All accounts: percent, USD and credits axes",
+             TestChartOf(TestMockupWeek(), [](HistoryController& c) { c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters)); })),
+        real(L"All meters, one account (CC 2): five-hour windows, weekly lines, dollars on their axis",
+             TestChartOf(TestMockupWeek(), select(0xC2, HistoryView::AllMeters))),
+    };
+    // Each range's ticks (s-ticks) over two weekly lines kept 900 days.
+    std::vector<HistoryRenderPart> ticks;
+    for (auto [range, caption] : {std::pair{HistoryUiRange::Day, L"24h: hours, every 2 h at this width; midnight shows the day"},
+                                  std::pair{HistoryUiRange::Week, L"7d: days, `Sat 24`"},
+                                  std::pair{HistoryUiRange::Month, L"30d: dates, `Oct 5`, weekly on Mondays"},
+                                  std::pair{HistoryUiRange::Quarter, L"90d: dates, every other Monday"},
+                                  std::pair{HistoryUiRange::All, L"All retained (900 days): months, `Oct 2026`, quarterly"}}) {
+        int value = int(range);
+        ticks.push_back(real(caption, TestChartOf(TestMockupLong(900), [value](HistoryController& c) {
+            c.Command(HistoryUiCommand::Range, value);
+        })));
+        ticks.back().chart->ops.settings.settings.historyRetentionDays = 900;
+        ticks.back().chart->controller.Load();
+    }
+    // States: comparing (s-compare), above 100% (s-band), every line hidden (s-legend), chips off,
+    // under the pointer and focused (q8a-filter), the chart focused with a chip under the pointer
+    // (s-hc), and a readout on the chart (q6a-tooltip: six coincident lines, comparing).
+    std::vector<HistoryRenderPart> states = {
+        real(L"Comparing CC 2's weekly lines: previous week dashed, lone readings filled and hollow",
+             TestChartOf(TestMockupCompare(), select(0xC2, HistoryView::Weekly, true))),
+        real(L"Above 100%: the axis to 125%, the band to its top", TestChartOf(TestMockupBand())),
+        real(L"Every line hidden: the percent axis alone, no band", TestChartOf(TestMockupWeek(), [](HistoryController& c) {
+                 for (const HistoryUiLine& line : std::vector<HistoryUiLine>(c.view.lines)) {
+                     c.Command(HistoryUiCommand::Line, line.meter, line.historyId);
+                 }
+             })),
+    };
+    auto filtered = TestChartOf(TestMockupWeek(), [](HistoryController& c) {
+        for (size_t i : {size_t(1), size_t(4)}) {
+            HistoryUiLine line = c.view.lines[i];
+            c.Command(HistoryUiCommand::Line, line.meter, line.historyId);
+        }
+    });
+    states.push_back(real(L"CC 1 and Go hidden; the pointer on CC 2's chip; keyboard focus on Go's (hidden) chip", filtered));
+    states.back().state.hot = {filtered->controller.view.lines[2].chip};
+    states.back().state.focus = {filtered->controller.view.lines[4].chip};
+    states.back().state.focusVisible = true;
+    states.push_back(real(L"Keyboard focus on the chart; the pointer on CC 2's chip (emphasis); CC 1 hidden",
+                          TestChartOf(TestMockupWeek(), [](HistoryController& c) {
+                              c.Command(HistoryUiCommand::Line, c.view.lines[1].meter, c.view.lines[1].historyId);
+                          })));
+    states.back().state.hot = {states.back().chart->controller.view.lines[2].chip};
+    states.back().state.focus = {kHistoryUiChart};
+    states.back().state.focusVisible = true;
+    states.push_back(real(L"The readout on the chart: six coincident lines at hour 70, comparing",
+                          TestChartOf(TestMockupWeek(), [](HistoryController& c) { c.Command(HistoryUiCommand::Compare, 1); }),
+                          640));
+    states.back().hover = [](const HistoryChart& c) {
+        const std::vector<HistoryRenderPoint>& points = c.render[0][0].points;
+        ULONGLONG target = kWeekFrom + 70 * kHourMs;
+        size_t best = 0;
+        for (size_t i = 0; i < points.size(); i++) {
+            auto distance = [&](size_t k) {
+                ULONGLONG time = c.snapshot->samples[points[k].sourceRow].timeMs;
+                return time > target ? time - target : target - time;
+            };
+            if (distance(i) < distance(best)) best = i;
+        }
+        return HistoryChartPoint(c, c.lines[0], points[best]);
+    };
 
     const std::pair<const char*, std::vector<HistoryRenderPart>> sheets[] = {
+        {"chart-views", views},
+        {"chart-ticks", ticks},
+        {"chart-states", states},
         {"default", {defaults}},
         {"account", {oai, cc1}},
         {"compare", {compare}},

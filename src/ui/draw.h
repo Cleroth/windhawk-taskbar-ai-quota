@@ -4,8 +4,8 @@
 
 // Device-independent resources shared by every target of one UI thread: font collections and
 // resolved families, text formats with their ellipsis signs, effect-free layouts (measuring and
-// plain drawing) and path geometries. Owned by that thread's graphics scope, released before the
-// apartment is.
+// plain drawing), path geometries and stroke styles. Owned by that thread's graphics scope,
+// released before the apartment is.
 struct UiGraphics {
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
@@ -16,6 +16,7 @@ struct UiGraphics {
     std::map<std::wstring, winrt::com_ptr<IDWriteInlineObject>> ellipses;
     std::map<std::wstring, winrt::com_ptr<IDWriteTextLayout>> layouts;
     std::map<PCWSTR, winrt::com_ptr<ID2D1PathGeometry>> paths;
+    std::map<std::tuple<bool, float, float>, winrt::com_ptr<ID2D1StrokeStyle>> strokes;
 };
 
 // Resources bound to one render target: a recolored brush for primitives, drawing-effect
@@ -160,6 +161,21 @@ static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const 
     layout->SetTextAlignment(align);
     if (trim) UiTrimLayout(g, layout.get(), style);
     return layout.get();
+}
+
+// A stroke style with round caps and joins (flat caps and mitered joins when not `round`), dashed
+// when `dash` is set: dashes and gaps in stroke widths, round dashes capped beyond their length.
+static ID2D1StrokeStyle* UiStrokeStyle(UiGraphics& g, bool round, float dash = 0, float gap = 0) {
+    auto& style = g.strokes[{round, dash, gap}];
+    if (style) return style.get();
+    D2D1_CAP_STYLE cap = round ? D2D1_CAP_STYLE_ROUND : D2D1_CAP_STYLE_FLAT;
+    D2D1_STROKE_STYLE_PROPERTIES properties = D2D1::StrokeStyleProperties(
+        cap, cap, cap, round ? D2D1_LINE_JOIN_ROUND : D2D1_LINE_JOIN_MITER, 10,
+        dash > 0 ? D2D1_DASH_STYLE_CUSTOM : D2D1_DASH_STYLE_SOLID);
+    const float dashes[] = {dash, gap};
+    winrt::check_hresult(g.d2d->CreateStrokeStyle(&properties, dash > 0 ? dashes : nullptr, dash > 0 ? 2 : 0,
+                                                  style.put()));
+    return style.get();
 }
 
 // Layout box size: the widest line and the line-box height.

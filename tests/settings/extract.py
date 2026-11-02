@@ -7,7 +7,7 @@ import re
 
 # Declaration order: each section may use the ones before it.
 UI_PURE = [("fragment", f"ui/{name}.h") for name in
-           ("tokens", "draw", "svg-path", "rich-text", "items", "paint", "input")]
+           ("tokens", "draw", "svg-path", "rich-text", "items", "paint", "input", "tooltip-layout")]
 
 # Pure model, toolkit and page builders: tests and offscreen renders.
 MODEL = [
@@ -28,8 +28,9 @@ MODEL = [
     ("fragment", "settings/shell.h"),
 ]
 
-# The usage history window's view, formats, controller and frame builders on the shared history
-# model: tests and offscreen renders. No journal, settings storage, production ops or window code.
+# The usage history window's view, formats, chart, controller, chart painter and frame builders
+# on the shared history model: tests and offscreen renders. No journal, settings storage,
+# production ops or window code.
 HISTORY = [
     ("fragment", "core/model.h"),
     ("definition", "ApplyCreditsMax"),
@@ -42,13 +43,15 @@ HISTORY = [
     ("fragment", "history/continuity.h"),
     ("fragment", "history/series.h"),
     ("fragment", "history/view.h"),
+    ("fragment", "history/chart.h"),
     ("fragment", "history/controller.h"),
+    ("fragment", "history/chart-paint.h"),
     ("fragment", "history/content.h"),
     ("fragment", "history/shell.h"),
 ]
 
-# Toolkit with its native host (window icons, popup, text boxes and color dialog included): the
-# probe DLL. No settings, storage or account code.
+# Toolkit with its native host (window icons, popup, tooltip, text boxes and color dialog
+# included): the probe DLL. No settings, storage or account code.
 HOST = [
     ("definition", "WindowDpi"),
     *UI_PURE,
@@ -56,6 +59,7 @@ HOST = [
     ("fragment", "ui/surface.h"),
     ("fragment", "ui/window-icon.h"),
     ("fragment", "ui/popup.h"),
+    ("fragment", "ui/tooltip.h"),
     ("fragment", "ui/text-box.h"),
     ("fragment", "ui/host.h"),
     ("fragment", "ui/color-dialog.h"),

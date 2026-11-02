@@ -44,6 +44,22 @@ struct HistoryUiNoReadings {
     std::wstring label, detail;
 };
 
+// A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
+// the chip's item id (per history ID and meter, stable for the session), the chip's name (the
+// readout's too) and the full title, the classic color and width, the range of its readings in
+// both periods (with 0), and whether the legend hides it.
+struct HistoryUiLine {
+    uint32_t chip = 0;
+    uint64_t historyId = 0;
+    int meter = 0;
+    size_t series = 0, account = 0;  // Its series (and card) in the set; its collected account
+    std::wstring name, title;
+    COLORREF color = 0;
+    int stroke = 3;
+    double low = 0, high = 0;
+    bool hidden = false;
+};
+
 struct HistoryUiView {
     UiThemeKind theme = UiThemeKind::Dark;   // Built content follows it: value inks, card lines
 
@@ -69,26 +85,31 @@ struct HistoryUiView {
     std::wstring storageError;
     bool storageCapped = false;
 
-    // Content: the loading state before the first load, then cards (HistoryUiSetCards)
+    // Content: the loading state before the first load, then cards (HistoryUiSetCards) and the
+    // chart's lines
     bool loading = true;
     std::vector<HistoryUiCard> cards;
     std::vector<HistoryUiNoReadings> noReadings;
+    std::vector<HistoryUiLine> lines;
 };
 
 // Interactive items keep these ids across rebuilds, so focus follows them; an account's entry
-// takes kHistoryUiNavAccount + its slot. Other items take running ids from kHistoryUiFirstRunning.
+// takes kHistoryUiNavAccount + its slot, a legend chip kHistoryUiChip + 8 x its account's slot +
+// its meter. Other items take running ids from kHistoryUiFirstRunning.
 enum HistoryUiControl : uint32_t {
     kHistoryUiNavAll = 1, kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore, kHistoryUiViews,
-    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording,
+    kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording, kHistoryUiChart,
     kHistoryUiNavAccount = 0x1000,
     kHistoryUiFirstRunning = 0x100000,
+    kHistoryUiChip = 0x800000,
 };
 
 // What an item's action asks for (UiAction::target): Select (key = history ID, 0: All accounts),
 // View (value = HistoryView), Range (value = HistoryUiRange), Compare (value = the desired state),
-// Refresh, Export, Menu (value = HistoryUiMenuItem), EnableRecording.
+// Refresh, Export, Menu (value = HistoryUiMenuItem), EnableRecording, Line (a legend chip: key =
+// history ID, value = meter; shows or hides that line).
 enum class HistoryUiCommand : uint32_t {
-    None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording
+    None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording, Line
 };
 enum class HistoryUiMenuItem : int { Settings };
 
@@ -108,26 +129,26 @@ static PCWSTR HistoryUiLogo(uint32_t provider) {
 }
 
 // Compact display formats (approved with the phase-3 mockups), English and independent of the
-// locale like the CSV. Local times read `Sat 31 Oct 14:31`, with the year only outside the
-// current one; `localTime` converts a Unix ms time with the user's clock and zone.
+// locale like the CSV. Local times read `Sat 31 Oct 14:31`; outside the current year the year
+// takes the weekday's place, `25 May 2026 23:59` (the readout's mandatory part keeps its width
+// bound); `localTime` converts a Unix ms time with the user's clock and zone.
 using HistoryUiLocalTime = std::function<SYSTEMTIME(ULONGLONG)>;
+static constexpr PCWSTR kHistoryUiDays[] = {L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
+static constexpr PCWSTR kHistoryUiMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
+                                              L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
 
 static std::wstring HistoryUiTime(ULONGLONG ms, ULONGLONG now, const HistoryUiLocalTime& localTime) {
-    static constexpr PCWSTR kDays[] = {L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
-    static constexpr PCWSTR kMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
-                                         L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
     static constexpr int kMonthOffsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
     SYSTEMTIME t = localTime(ms);
     if (t.wMonth < 1 || t.wMonth > 12 || t.wDay < 1 || t.wDay > 31) return L"\u2014";
+    wchar_t clock[8];
+    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
+    std::wstring date = std::to_wstring(t.wDay) + L' ' + kHistoryUiMonths[t.wMonth - 1];
+    if (t.wYear != localTime(now).wYear) return date + L' ' + std::to_wstring(t.wYear) + L' ' + clock;
     // The weekday from the date (Sakamoto's method), whatever the conversion filled in.
     int year = t.wYear - (t.wMonth < 3);
     int weekday = (year + year / 4 - year / 100 + year / 400 + kMonthOffsets[t.wMonth - 1] + t.wDay) % 7;
-    wchar_t clock[8];
-    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
-    std::wstring text = std::wstring(kDays[weekday]) + L' ' + std::to_wstring(t.wDay) + L' ' +
-                        kMonths[t.wMonth - 1];
-    if (t.wYear != localTime(now).wYear) text += L' ' + std::to_wstring(t.wYear);
-    return text + L' ' + clock;
+    return std::wstring(kHistoryUiDays[weekday]) + L' ' + date + L' ' + clock;
 }
 
 // `decimals` places below 10,000 after rounding; past that one decimal with a suffix (12.3K,

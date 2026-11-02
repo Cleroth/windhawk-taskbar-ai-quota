@@ -81,16 +81,20 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     float left = kHistoryUiNavWidth + 12, right = std::max(client.width - 24, left + 1), width = right - left;
 
     // Icon buttons (mockup .ibtn: 32 x 30 DIP, 4 apart) at the title row's right: Refresh,
-    // Export and the More menu.
+    // Export and the More menu, named by their tooltips (s-tooltips; Export's with its scope).
     struct IconButton {
         uint32_t id;
         PCWSTR glyph;
         HistoryUiCommand command;
         bool enabled;
+        PCWSTR name, detail;
     };
-    const IconButton buttons[] = {{kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, true},
-                                  {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, false},
-                                  {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, true}};
+    const IconButton buttons[] = {
+        {kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, true, L"Refresh (F5)", nullptr},
+        {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, false, L"Export CSV",
+         L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
+         L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels."},
+        {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, true, L"More options", nullptr}};
     float x = right - 3 * 32 - 2 * 4;
     for (const IconButton& spec : buttons) {
         UiItem button;
@@ -101,6 +105,10 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         button.icon = spec.glyph;
         button.iconSize = 15;
         button.enabled = spec.enabled;
+        button.tooltip = spec.detail ? std::vector<UiRun>{{spec.name, UiRunStyle::Strong},
+                                                          {std::wstring(L"\n") + spec.detail, UiRunStyle::Normal,
+                                                           UiInk::Secondary}} :
+                                       std::vector<UiRun>{{spec.name}};
         button.action = HistoryUiAction(spec.command, spec.command == HistoryUiCommand::Menu ? -1 : 0);
         if (spec.command == HistoryUiCommand::Menu) {
             button.options = {{L"Settings", int(HistoryUiMenuItem::Settings), {}, {}, L"\uE713"}};

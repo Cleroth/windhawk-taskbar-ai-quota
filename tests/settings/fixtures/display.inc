@@ -285,7 +285,8 @@ static void RunDisplayPageTests() {
         CHECK(toggle.selected && toggle.action.value == 0);
         // Equal thresholds keep a dot each.
         view.settings.yellowThreshold = view.settings.orangeThreshold = view.settings.redThreshold = 60;
-        dots = Dots(DisplayFrame(view));
+        frame = DisplayFrame(view);
+        dots = Dots(frame);
         CHECK(dots.size() == 3 && COLORREF(dots[0]->action.value) == colorblind[0]);
     });
 

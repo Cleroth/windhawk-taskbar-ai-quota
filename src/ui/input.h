@@ -30,8 +30,8 @@ struct UiIntent {
 };
 
 // Keys on the focused surface. Tab cycles all stops; Up/Down/Home/End move within the
-// navigation pane, Up/Down between content stops (scrolling past the ends); Page Up/Down and
-// Home/End scroll content; Enter and Space activate.
+// navigation pane, Up/Down between content stops (scrolling past the ends) and scroll on a chart;
+// Page Up/Down and Home/End scroll content; Enter and Space activate.
 static UiIntent UiKeyIntent(const std::vector<UiFocusStop>& stops, UiFocusRef focus,
                             UiSurfaceId surface, UINT key, bool shift, float lineStep,
                             float pageStep) {
@@ -59,6 +59,7 @@ static UiIntent UiKeyIntent(const std::vector<UiFocusStop>& stops, UiFocusRef fo
         case VK_DOWN: {
             int direction = key == VK_DOWN ? 1 : -1;
             if (inNav) return move(direction, true);
+            if (known && at->chart) return {UiIntentKind::ScrollBy, {}, direction * lineStep};
             if (surface == UiSurfaceId::Content) {
                 UiIntent next = known ? move(direction, false) : UiIntent{};
                 if (next.kind != UiIntentKind::None) return next;

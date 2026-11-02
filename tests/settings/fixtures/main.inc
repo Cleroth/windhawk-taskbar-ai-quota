@@ -3,6 +3,8 @@
 #include "logos.inc"
 #include "ui.inc"
 #include "controls.inc"
+#include "tooltip-support.inc"
+#include "tooltip.inc"
 #include "edits.inc"
 #include "accounts.inc"
 #include "layout.inc"
@@ -28,6 +30,7 @@ int main(int argc, char** argv) {
         RunLogoTests();
         RunUiTests();
         RunControlTests();
+        RunTooltipTests();
         RunEditTests();
         RunPageTests();
         RunAccountEditTests();

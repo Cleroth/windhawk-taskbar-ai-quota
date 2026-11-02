@@ -1,7 +1,9 @@
 // Usage history window controller: the selection by history ID, each mode's view, the range and
-// the week comparison, explicit loads with the open request they take, and the view the frame
-// builders read (history/view.h). Pure, like the settings edit controller: it talks to HistoryOps
-// (production: history/ops.h; tests: in-memory ops) and reads no globals.
+// the week comparison, the lines the legend hides, explicit loads with the open request they
+// take, the view the frame builders read (history/view.h), and the chart laid out for its item
+// with the lines the pointer picks on it (history/chart.h). Pure, like the settings edit
+// controller: it talks to HistoryOps (production: history/ops.h; tests: in-memory ops) and reads
+// no globals.
 
 // What ReadSettings returns: the published settings (with this user's recording consent),
 // whether the taskbar has yet to save account history IDs, the journal's storage error flag, and
@@ -47,16 +49,23 @@ struct HistoryController {
     HistoryUiRange range = HistoryUiRange::Week;
     bool compare = false;
 
-    // The last settings read and explicit load: its sorted snapshot (none before the first load),
-    // the times it covers ([readFrom, from) is the previous week while comparing) and the accounts
-    // collected over them, whose rows index the snapshot
+    // The last settings read and explicit load: its sorted snapshot (none before the first load)
+    // and its generation (one per load), the times it covers ([readFrom, from) is the previous
+    // week while comparing) and the accounts collected over them, whose rows index the snapshot
     HistorySettingsSnapshot settings;
     std::shared_ptr<const HistorySnapshot> snapshot;
+    uint64_t generation = 0;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     std::vector<HistoryUiAccount> accounts;
 
-    // Navigation slots by history ID, for the session (never reused)
+    // Navigation slots by history ID, for the session (never reused); the lines the legend hides
+    // for the session (history ID, meter), whatever the selection, view or range
     std::map<uint64_t, uint32_t> slots;
+    std::vector<std::pair<uint64_t, int>> hidden;
+
+    // The chart as the last build laid it out, and the lines the pointer picks on it
+    HistoryChart chart;
+    std::vector<size_t> picked;
 
     // Set once the window closes: nothing loads or acts any more
     bool closeRequested = false;
@@ -96,6 +105,7 @@ struct HistoryController {
         selectedId = selected >= 0 ? collected[size_t(selected)].id : 0;
         settings = std::move(read);
         snapshot = std::move(loaded);
+        generation++;
         from = start;
         to = now;
         readFrom = readStart;
@@ -103,8 +113,9 @@ struct HistoryController {
         Compose();
     }
 
-    // A control's command (history/view.h): the selection and the view recompose; the range, the
-    // comparison and Refresh load; the More menu's Settings opens the settings window.
+    // A control's command (history/view.h): the selection, the view and a legend chip's line
+    // recompose; the range, the comparison and Refresh load; the More menu's Settings opens the
+    // settings window.
     void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
         if (closeRequested || ops->Unloading()) return;
         switch (command) {
@@ -131,6 +142,13 @@ struct HistoryController {
             case HistoryUiCommand::Menu:
                 if (value == int(HistoryUiMenuItem::Settings)) ops->OpenSettings();
                 break;
+            case HistoryUiCommand::Line: {
+                auto line = std::find(hidden.begin(), hidden.end(), std::pair{key, value});
+                if (line != hidden.end()) hidden.erase(line);
+                else hidden.push_back({key, value});
+                Compose();
+                break;
+            }
             case HistoryUiCommand::None:
             case HistoryUiCommand::Export:
             case HistoryUiCommand::EnableRecording:
@@ -199,7 +217,99 @@ struct HistoryController {
             HistorySeriesSet set =
                 HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
             HistoryUiSetCards(v, set, accounts, from, to, now, localTime);
+            // The chart's lines: the plotted series in order, named as their cards (a removed
+            // account without the collected "removed " prefix), hidden as the legend left them.
+            for (size_t i = 0; i < set.series.size(); i++) {
+                const HistorySeries& series = set.series[i];
+                if (!series.plotted || series.account >= v.accounts.size()) continue;
+                const HistoryUiViewAccount& account = v.accounts[series.account];
+                std::wstring prefix = accounts[series.account].label + L" \u00B7 ";
+                auto named = [&](const std::wstring& title) {
+                    return title.starts_with(prefix) ? account.label + title.substr(prefix.size() - 3) : title;
+                };
+                HistoryUiLine& line = v.lines.emplace_back();
+                line.chip = kHistoryUiChip + account.slot * 8 + uint32_t(series.meter);
+                line.historyId = account.historyId;
+                line.meter = series.meter;
+                line.series = i;
+                line.account = series.account;
+                line.name = named(series.legendTitle);
+                line.title = named(series.hoverTitle);
+                line.color = series.color;
+                line.stroke = series.stroke;
+                line.low = series.low;
+                line.high = series.high;
+                line.hidden = std::find(hidden.begin(), hidden.end(), std::pair{line.historyId, line.meter}) != hidden.end();
+            }
         }
         view = std::move(v);
+    }
+
+    // Lays the chart out in its item's rectangle at `scale` (each build that shows it; never a
+    // paint): the view's lines, axes and plot, then the visible lines' periods reduced to the
+    // plot's device pixels, again only when that reduction's key changed (HistoryChartKey), and the
+    // time ticks. A build ended any hover: nothing is picked.
+    void LayChart(UiGraphics& g, D2D1_RECT_F rect, float scale) {
+        HistoryChart& c = chart;
+        bool hiddenAll = std::all_of(view.lines.begin(), view.lines.end(), [](const HistoryUiLine& l) { return l.hidden; });
+        c.lines = view.lines;
+        c.from = from;
+        c.to = to;
+        c.readFrom = readFrom;
+        c.compare = compare;
+        c.redThreshold = view.redThreshold;
+        c.message = view.lines.empty() ? (view.cards.empty() ? L"No readings in this range." :
+                                              L"No percentage readings to plot. Dollar spending is shown below.") :
+                    hiddenAll ? L"All lines are hidden" : L"";
+        c.axes = HistoryChartAxes(c.lines);
+        float plotWidth = c.plot.right - c.plot.left;
+        HistoryChartLayout(g, c, rect, scale);
+        HistoryChartKey key{generation, from, to, readFrom, view.selected >= 0 ? selectedId : 0, view.view, {}, c.width};
+        for (const HistoryUiLine& line : c.lines) {
+            if (!line.hidden) key.lines.push_back(line.chip);
+        }
+        bool reduce = !(key == c.key) && snapshot;
+        if (reduce) {
+            c.key = key;
+            c.snapshot = snapshot;
+            c.generation = generation;
+            c.render.assign(c.lines.size(), {});
+            auto cancelled = [this] { return ops->Unloading(); };
+            for (size_t i = 0; i < c.lines.size(); i++) {
+                const HistoryUiLine& line = c.lines[i];
+                if (line.hidden || line.account >= accounts.size()) continue;
+                const std::vector<size_t>& rows = accounts[line.account].rows;
+                c.render[i][0] = HistoryReduceRows(snapshot->samples, rows, line.meter, from, to, c.width, cancelled);
+                if (compare) {
+                    c.render[i][1] = HistoryReduceRows(snapshot->samples, rows, line.meter, readFrom, from, c.width,
+                                                       cancelled);
+                }
+            }
+            // A reduction cut short is never taken for a complete one.
+            if (cancelled()) c.key = {};
+        }
+        if (reduce || plotWidth != c.plot.right - c.plot.left) {
+            c.ticks = HistoryChartTicks(from, to, c.plot.right - c.plot.left,
+                                        [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+        }
+        picked.clear();
+    }
+
+    // The pointer over the chart at `at` (item coordinates; nullopt: its hover ended): the lines
+    // it picks, emphasized (true when they changed), and their readout in `readout` unless that
+    // already holds it (the same key).
+    bool Hover(std::optional<D2D1_POINT_2F> at, UiTooltipContent& readout, const UiPalette& palette) {
+        std::vector<HistoryChartHit> hits;
+        if (at && !closeRequested && !ops->Unloading()) hits = HistoryChartPick(chart, *at);
+        std::vector<size_t> lines;
+        for (const HistoryChartHit& hit : hits) {
+            if (lines.empty() || lines.back() != hit.line) lines.push_back(hit.line);
+        }
+        UiTooltipContent content = HistoryChartReadout(chart, hits, palette, view.selected >= 0, ops->Now(),
+                                                       [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+        if (content.key != readout.key) readout = std::move(content);
+        bool changed = lines != picked;
+        picked = std::move(lines);
+        return changed;
     }
 };
