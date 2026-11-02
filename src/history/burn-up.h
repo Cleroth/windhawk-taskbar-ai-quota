@@ -3,7 +3,9 @@
 // fetch/UI protocol are in burn-up-store.h.
 
 static constexpr int kBurnUpMeterCount = 6;  // History meters 0-5: percentages with windows.
-static constexpr size_t kBurnUpMaxPoints = 64;
+// Drawing resolution: one reduction bin per flyout chart column (DIP) across the window.
+static constexpr int kBurnUpColumns = 190;
+static constexpr size_t kBurnUpMaxPoints = 4 * kBurnUpColumns;
 // Longest charted window; it bounds the fetch thread's journal scan. Anthropic's monthly extra
 // usage is the longest provider window.
 static constexpr ULONGLONG kBurnUpMaxWindowMs = 32 * kHistoryDayMs;
@@ -155,22 +157,27 @@ static BurnUpCurve BuildBurnUpCurve(const std::deque<HistorySample>& samples, in
     }
     std::reverse(points.begin(), points.end());
 
-    // Reduce for drawing: per time bucket and segment keep the first, lowest, highest and last
-    // readings, with fewer buckets until it fits, so every segment keeps its endpoints. Only
-    // when even that exceeds the cap do buckets span segments, dropping short ones; kept
-    // readings of different segments are never joined.
+    // Reduce for drawing: per chart column of the window and segment keep the first, lowest,
+    // highest and last readings, so every segment keeps its endpoints and joins between columns
+    // survive. Only past the cap do columns span segments: kept readings of different segments
+    // are never joined, dropped readings stay within their column, and short runs inside one
+    // column can become dots or vanish.
     if (points.size() > kBurnUpMaxPoints) {
         std::vector<size_t> segment(points.size(), 0);
         for (size_t i = 1; i < points.size(); ++i) segment[i] = segment[i - 1] + !points[i].connect;
-        ULONGLONG from = points.front().timeMs, span = points.back().timeMs - from + 1;
-        auto reduce = [&](ULONGLONG buckets, bool acrossSegments) {
-            auto bucketOf = [&](size_t i) { return (points[i].timeMs - from) * buckets / span; };
+        auto columnOf = [&](size_t i) {
+            // Readings within the reset tolerance before the start go to the first column.
+            ULONGLONG time = std::clamp(points[i].timeMs, start, curve.resetMs);
+            return std::min<ULONGLONG>((time - start) * kBurnUpColumns / curve.durationMs,
+                                       kBurnUpColumns - 1);
+        };
+        auto reduce = [&](bool acrossSegments) {
             std::vector<BurnUpPoint> reduced;
             size_t previous = SIZE_MAX;
             for (size_t begin = 0, end = 0; begin < points.size(); begin = end) {
                 size_t low = begin, high = begin;
-                for (ULONGLONG bucket = bucketOf(begin);
-                     end < points.size() && bucketOf(end) == bucket &&
+                for (ULONGLONG column = columnOf(begin);
+                     end < points.size() && columnOf(end) == column &&
                      (acrossSegments || segment[end] == segment[begin]); ++end) {
                     if (points[end].used < points[low].used) low = end;
                     if (points[end].used > points[high].used) high = end;
@@ -185,12 +192,8 @@ static BurnUpCurve BuildBurnUpCurve(const std::deque<HistorySample>& samples, in
             }
             return reduced;
         };
-        std::vector<BurnUpPoint> reduced;
-        for (ULONGLONG buckets = kBurnUpMaxPoints / 4; ; buckets /= 2) {
-            reduced = reduce(buckets, false);
-            if (reduced.size() <= kBurnUpMaxPoints || buckets == 1) break;
-        }
-        if (reduced.size() > kBurnUpMaxPoints) reduced = reduce(kBurnUpMaxPoints / 4, true);
+        std::vector<BurnUpPoint> reduced = reduce(false);
+        if (reduced.size() > kBurnUpMaxPoints) reduced = reduce(true);
         points = std::move(reduced);
     }
     return curve;

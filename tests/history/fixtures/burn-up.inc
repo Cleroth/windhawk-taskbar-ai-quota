@@ -169,7 +169,7 @@
             const std::pair<int, int> breaks[] = {{199, 201}, {599, 600}, {698, 700}, {700, 702}, {799, 900}};
             auto curve = BuildBurnUpCurve(samples, 1);
             const auto& points = curve.points;
-            CHECK(!points.empty()); CHECK(points.size() <= 64);
+            CHECK(!points.empty()); CHECK(points.size() <= 760);
             for (size_t k = 0; k < points.size(); ++k) {
                 CHECK(recorded.contains(points[k].timeMs));
                 CHECK(recorded[points[k].timeMs] == points[k].used);
@@ -193,29 +193,96 @@
                 CHECK(next != points.end() && next != points.begin() && !next->connect);
             }
         });
-        Run("burn-up/too many segments stay capped and unjoined", [&] {
-            // 60 three-reading segments separated by failed polls: endpoints alone exceed 64.
+        Run("burn-up/frequent restarts keep every segment whole", [&] {
+            // A week of polls with a restart every 37 polls, one-poll sessions, a failed poll, a
+            // long recording gap, flat steps, a drop and a spike. The first reading is just before
+            // the nominal start, within the reset tolerance.
             std::deque<HistorySample> samples;
-            std::map<ULONGLONG, int> run;
-            for (int i = 0; i < 240; ++i) {
-                ULONGLONG time = start + hour + ULONGLONG(i) * poll;
-                samples.push_back(reading(time, i == 101 ? 90.0 : 10 + i * 0.1));
-                if (i % 4 == 3) samples.back().failed = 1;
-                else run[time] = i / 4;
+            std::map<ULONGLONG, std::pair<int, double>> recorded;  // Time: segment and value.
+            int segment = 0;
+            uint64_t session = 0;
+            bool joined = false;  // The previous poll was recorded.
+            for (int i = 0; i <= 1000; ++i) {
+                if (i >= 500 && i < 540) {
+                    joined = false;
+                    continue;
+                }
+                ULONGLONG time = start - 60000 + ULONGLONG(i) * poll;
+                double used = i == 250 ? 95.0 : 10 + (i / 50) * 2 - (i >= 700 ? 15 : 0);
+                samples.push_back(reading(time, used));
+                samples.back().session = i % 150 == 75 ? 1000 + i : 1 + i / 37;
+                if (i == 300) {
+                    samples.back().failed = 1;
+                    joined = false;
+                    continue;
+                }
+                if (!joined || samples.back().session != session) ++segment;
+                session = samples.back().session;
+                joined = true;
+                recorded[time] = {segment, used};
             }
             auto curve = BuildBurnUpCurve(samples, 1);
             const auto& points = curve.points;
-            CHECK(!points.empty()); CHECK(points.size() <= 64);
+            CHECK(!points.empty()); CHECK(points.size() <= 760);
+            std::set<ULONGLONG> kept;
             for (size_t k = 0; k < points.size(); ++k) {
-                CHECK(run.contains(points[k].timeMs));
+                auto entry = recorded.find(points[k].timeMs);
+                CHECK(entry != recorded.end()); CHECK(entry->second.second == points[k].used);
                 if (k) CHECK(points[k].timeMs > points[k - 1].timeMs);
-                if (k && points[k].connect) CHECK(run[points[k].timeMs] == run[points[k - 1].timeMs]);
+                // Joined exactly to the previous kept reading of its segment: no hole inside one.
+                CHECK(points[k].connect == (k && recorded.at(points[k - 1].timeMs).first == entry->second.first));
+                kept.insert(points[k].timeMs);
             }
-            CHECK(points.front().timeMs == start + hour);
-            CHECK(points.back().timeMs == start + hour + 238 * poll);
-            CHECK(std::any_of(points.begin(), points.end(), [&](const BurnUpPoint& p) {
-                return p.timeMs == start + hour + 101 * poll && p.used == 90;
-            }));
+            std::map<int, std::pair<ULONGLONG, ULONGLONG>> spans;  // Segment: first and last reading.
+            for (const auto& [time, entry] : recorded) {
+                spans.try_emplace(entry.first, time, time).first->second.second = time;
+            }
+            for (const auto& [id, span] : spans) {
+                CHECK(kept.contains(span.first)); CHECK(kept.contains(span.second));
+            }
+            CHECK(kept.contains(start - 60000));
+            CHECK(kept.contains(start - 60000 + 250 * poll));
+        });
+        Run("burn-up/dense fragmentation degrades within columns", [&] {
+            // Pairs of readings between failed polls at half the poll interval: far more segment
+            // endpoints than the cap holds. A column is 1/190 of the window.
+            std::deque<HistorySample> samples;
+            std::map<ULONGLONG, std::pair<int, double>> recorded;  // Time: segment and value.
+            for (int i = 0; i < 2000; ++i) {
+                ULONGLONG time = start + hour + ULONGLONG(i) * (poll / 2);
+                double used = i == 1000 ? 90.0 : 10 + i * 0.02;
+                samples.push_back(reading(time, used));
+                if (i % 3 == 2) samples.back().failed = 1;
+                else recorded[time] = {i / 3, used};
+            }
+            auto curve = BuildBurnUpCurve(samples, 1);
+            const auto& points = curve.points;
+            CHECK(!points.empty()); CHECK(points.size() <= 760);
+            std::map<ULONGLONG, bool> kept;  // Time: joined to the previous kept reading.
+            for (size_t k = 0; k < points.size(); ++k) {
+                auto entry = recorded.find(points[k].timeMs);
+                CHECK(entry != recorded.end()); CHECK(entry->second.second == points[k].used);
+                if (k) CHECK(points[k].timeMs > points[k - 1].timeMs);
+                if (points[k].connect) CHECK(k && recorded.at(points[k - 1].timeMs).first == entry->second.first);
+                kept[points[k].timeMs] = points[k].connect;
+            }
+            CHECK(kept.contains(recorded.begin()->first)); CHECK(kept.contains(recorded.rbegin()->first));
+            CHECK(kept.contains(start + hour + 1000 * (poll / 2)));
+            auto columnOf = [&](ULONGLONG time) { return (time - start) * 190 / kHistoryWeekMs; };
+            for (auto it = recorded.begin(); it != recorded.end(); ++it) {
+                // A dropped reading has a kept one in its column.
+                auto after = kept.lower_bound(it->first);
+                bool inColumn = after != kept.end() && columnOf(after->first) == columnOf(it->first);
+                inColumn = inColumn || (after != kept.begin() &&
+                                        columnOf(std::prev(after)->first) == columnOf(it->first));
+                CHECK(inColumn);
+                // Joins between columns survive.
+                auto next = std::next(it);
+                if (next != recorded.end() && next->second.first == it->second.first &&
+                    columnOf(next->first) != columnOf(it->first)) {
+                    CHECK(kept.contains(it->first)); CHECK(kept.contains(next->first) && kept.at(next->first));
+                }
+            }
         });
 
         auto stored = [&](uint64_t historyId, uint32_t provider) {

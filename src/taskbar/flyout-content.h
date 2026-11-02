@@ -26,8 +26,9 @@ struct FlyoutDisplay {
 static constexpr double kFlyoutDetailsLeft = 12;
 static constexpr double kFlyoutDetailsRight = 16;
 // Burn-up chart plot (DIP). Its fixed width lets updates compute geometry without a layout
-// pass; 0% and 100% sit inside the vertical inset so their strokes stay in the plot.
-static constexpr double kFlyoutChartWidth = 190;
+// pass, and curves are reduced to one bin per column; 0% and 100% sit inside the vertical inset
+// so their strokes stay in the plot.
+static constexpr double kFlyoutChartWidth = kBurnUpColumns;
 static constexpr double kFlyoutChartHeight = 40;
 static constexpr double kFlyoutChartInset = 2;
 
