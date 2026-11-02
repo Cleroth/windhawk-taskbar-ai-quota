@@ -41,7 +41,8 @@ local app or CLI session, which must remain running.
 ## Settings
 
 - **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
-  quotas, tile identity, history recording, and sign-in. Removing an account keeps its history.
+  quotas, tile identity, history recording, and sign-in. Removing an account deletes its
+  sign-in and, if you choose, its history.
 - **Layout:** Tile style with a live taskbar preview, sizes, labels, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.

@@ -19,6 +19,8 @@ struct HistoryModalScope {
         state.modal = false;
         if (state.closing || g_unloading || g_historyWindowCancelRequested)
             PostMessageW(state.window, WM_CLOSE, 0, 0);
+        else if (std::exchange(state.reloadAfterModal, false))
+            PostMessageW(state.window, kHistoryLoadMessage, 1, 0);
     }
 };
 

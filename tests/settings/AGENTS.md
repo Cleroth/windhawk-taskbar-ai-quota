@@ -58,7 +58,8 @@ regenerates.
   an operation log, deterministic save failures and unload after N transactions; number parsing
   and the render projection get their own fixtures. `fixtures/accounts.inc`: the controller's
   account edits and actions against the same store (keys and slots, label validation, drafts
-  committed before an account action and an invalid label blocking it, removal invalidation, the
+  committed before an account action and an invalid label blocking it, removal invalidation,
+  removal's sign-in and history deletion with a kept history's notice, the
   Add account label choice skipping stored sign-ins, desired visibility and moves, vanished
   accounts) and the Accounts page (cards, header controls, expanded rows per provider, empty
   state, a lifted dragged card, the reorder target, a drag's in-place card moves matching a rebuild

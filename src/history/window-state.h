@@ -52,6 +52,7 @@ struct HistoryWindowState {
     std::wstring graphTipText;
     bool graphTipActive = false, trackingMouse = false;
     bool overlay = false, closing = false, modal = false, loading = false;
+    bool reloadAfterModal = false;  // The journal changed while a dialog was open
     bool enabled = false, skipHidden = true, idsPendingSave = false;
     int retention = 90, redThreshold = 90;
     ULONGLONG from = 0, to = 0, readFrom = 0;

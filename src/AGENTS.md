@@ -77,7 +77,9 @@ first, then reads/updates XAML.
   publication and Clear history reset it via `ResetBurnUpCurvesLocked` (under `g_dataMutex`).
   The fetch thread caches per-account journal tails and the history window keeps a snapshot by
   the journal's stamp, so any change to `g_historySamples` other than `AppendHistory` must bump
-  `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning).
+  `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning, an
+  account's deletion). The classic history window gets no notifications: a change outside its
+  own loads posts it a reload (`NotifyHistoryJournalChanged`).
 - `g_settingsGeneration` gates published data; `g_refreshGeneration` drives manual
   single-account refresh. Code that publishes to `g_data` must re-check the generation under
   lock (see the existing publish block).

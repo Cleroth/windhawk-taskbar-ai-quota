@@ -3,13 +3,16 @@
 
 // In-memory store: settings, statuses, stored sign-ins, an operation log, failures and unload on
 // demand. Account operations resolve the account afresh (by history ID, else identity), as the
-// production store does, and a rename moves the account's stored sign-in.
+// production store does; a rename moves the account's stored sign-in, a removal deletes it and,
+// when asked, the account's history.
 struct TestStore final : SettingsStore {
     Settings settings;
     SettingsStatus status;
     std::vector<std::wstring> log;  // "load", "apply <field>=<value>",
                                     // "account <field> <label>=<value or text>", "add <provider> <label>"
     std::vector<uint64_t> signIns;  // Identities with a stored sign-in
+    std::vector<uint64_t> historyDeleted;  // History IDs whose removal deleted their history
+    bool historyKept = false;              // A removal asked to delete history keeps it, saying so
     int failNext = 0;               // The next N applies, account operations and adds fail
     int unloadAfter = -1;           // Unloading once this many of them ran
     int applies = 0;
@@ -67,7 +70,13 @@ struct TestStore final : SettingsStore {
                 std::erase(signIns, identity);
                 return result;
             case SettingsField::AccountRemove:
-                if (value) std::erase(signIns, identity);
+                std::erase(signIns, identity);
+                if (value && historyKept) {
+                    result.notice = L"The account was removed, but its usage history could not be deleted and was kept.";
+                    result.kind = SettingsNoticeKind::Warning;
+                } else if (value) {
+                    historyDeleted.push_back(at->historyId);
+                }
                 accounts.erase(at);
                 result.save = SettingsSaveResult::Changed;
                 return result;

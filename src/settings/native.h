@@ -1,5 +1,5 @@
-// Native window helpers: the settings window's tracked message box, and the DPI helpers the
-// sign-in, history and custom-drawn windows share.
+// Native window helpers: the settings window's tracked message box and task dialog, and the DPI
+// helpers the sign-in, history and custom-drawn windows share.
 
 struct SettingsMessageBoxContext {
     SettingsMessageBoxContext* previous = nullptr;
@@ -65,6 +65,40 @@ static int SettingsMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT ty
     }
     g_settingsMessageBoxContext = context.previous;
     return context.forced ? context.forcedResult : result;
+}
+
+// A task dialog tracked like the message boxes: owner-close ends it as cancelled (IDCANCEL), as
+// do Esc and its close button. TaskDialogIndirect exists only in comctl32 v6, so it's looked up
+// in the comctl32 the thread's activation context maps (Explorer's is v6): a direct import would
+// keep the whole mod from loading against v5. Returns the button chosen, or 0 when no task dialog
+// can be shown.
+static int SettingsTaskDialog(TASKDIALOGCONFIG config, BOOL* verification) {
+    using TaskDialogIndirect_t = HRESULT(WINAPI*)(const TASKDIALOGCONFIG*, int*, int*, BOOL*);
+    HMODULE comctl32 = GetModuleHandleW(L"comctl32.dll");
+    auto taskDialog = reinterpret_cast<TaskDialogIndirect_t>(
+        comctl32 ? GetProcAddress(comctl32, "TaskDialogIndirect") : nullptr);
+    if (!taskDialog) return 0;
+    if (g_unloading || g_settingsWindowCancelRequested ||
+        (config.hwndParent && !IsWindow(config.hwndParent))) {
+        return IDCANCEL;
+    }
+    SettingsMessageBoxContext context;
+    context.previous = g_settingsMessageBoxContext;
+    config.dwFlags |= TDF_ALLOW_DIALOG_CANCELLATION;
+    config.pfCallback = [](HWND hWnd, UINT notification, WPARAM, LPARAM, LONG_PTR data) -> HRESULT {
+        if (notification == TDN_CREATED) reinterpret_cast<SettingsMessageBoxContext*>(data)->hWnd = hWnd;
+        return S_OK;
+    };
+    config.lpCallbackData = reinterpret_cast<LONG_PTR>(&context);
+    g_settingsMessageBoxContext = &context;
+    int button = IDCANCEL;
+    HRESULT result = taskDialog(&config, &button, nullptr, verification);
+    g_settingsMessageBoxContext = context.previous;
+    if (FAILED(result)) {
+        Wh_Log(L"Could not show the settings task dialog: 0x%08X", (unsigned)result);
+        return 0;
+    }
+    return context.forced ? context.forcedResult : button;
 }
 
 static int ScaleForDpi(int value, UINT dpi) {

@@ -61,7 +61,7 @@ enum class SettingsField : uint8_t {
     // Account actions: each commits the account's drafts first
     AccountHidden,     // Desired: 1 hidden
     AccountMove,       // To this index
-    AccountRemove,     // 1: also delete the stored sign-in
+    AccountRemove,     // 1: also delete its recorded usage history (the stored sign-in always goes)
     AccountSignIn,
     AccountSignOut,
     AccountDashboard,

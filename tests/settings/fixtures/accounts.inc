@@ -222,6 +222,26 @@ static void RunAccountEditTests() {
         CHECK(store.signIns == std::vector<uint64_t>{Identity(L"anthropic", L"CC 2")});
     });
 
+    Run("accounts: removal deletes the stored sign-in either way and the history only when asked; a kept history's "
+        "notice shows once the account is gone, as no failure", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        store.signIns = {Identity(L"openai", L"OAI"), Identity(L"anthropic", L"CC 1"), Identity(L"anthropic", L"CC 2")};
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.AccountAction(12, SettingsField::AccountRemove, 0) == SettingsActionResult::Done);
+        CHECK(store.historyDeleted.empty() && edits.notices.empty());
+        CHECK(edits.AccountAction(11, SettingsField::AccountRemove, 1) == SettingsActionResult::Done);
+        CHECK(store.historyDeleted == std::vector<uint64_t>{11});
+        CHECK(store.signIns == std::vector<uint64_t>{Identity(L"anthropic", L"CC 2")});
+        store.historyKept = true;
+        CHECK(edits.AccountAction(13, SettingsField::AccountRemove, 1) == SettingsActionResult::Done);
+        CHECK(store.signIns.empty() && store.historyDeleted.size() == 1);
+        CHECK(!edits.IndexOf(13) && edits.keys == std::vector<uint64_t>{14});
+        CHECK(edits.notices.size() == 1 && !edits.notices[0].failure &&
+              edits.notices[0].kind == SettingsNoticeKind::Warning);
+    });
+
     Run("accounts: Add takes the first default label without a stored sign-in or a configured account", [] {
         TestStore store;
         AddTestAccounts(store.settings);

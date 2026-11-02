@@ -147,8 +147,8 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
             result.message =
                 tokenCopyResult == TokenCopyResult::DestinationOccupied ?
                     L"The renamed account identity already has a retained sign-in. To replace it, "
-                    L"add an account with that provider and label, then remove it and delete its "
-                    L"stored sign-in. The account was not changed." :
+                    L"add an account with that provider and label, then remove it. The account was "
+                    L"not changed." :
                     L"The stored sign-in could not be copied. The account was not changed.";
             return result;
         }
@@ -172,7 +172,7 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
                 L"Could not save the account." :
                 L"Could not save the account. The copied sign-in remains under the attempted "
                 L"new identity. To delete it, add an account with the attempted provider and "
-                L"label, then remove it and choose to delete its stored sign-in.";
+                L"label, then remove it.";
         return result;
     }
     if (sameProviderRename) {
@@ -198,15 +198,17 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         result.message =
             L"The account was renamed, but a duplicate stored sign-in remains under the old "
             L"identity. To delete it, re-add an account with the old provider and label, then "
-            L"remove it and choose to delete its stored sign-in.";
+            L"remove it.";
         result.icon = MB_ICONWARNING;
     }
     NotifySettingsWindowChanged();
     return result;
 }
 
-// Removes the account, deleting its stored sign-in first when asked. Not during a sign-in.
-static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteSignIn) {
+// Removes the account with its stored sign-in (Anthropic, OpenAI; deleted first), then, when
+// asked, its recorded usage history, outside every settings lock; if that fails the account
+// stays removed and the message says its history was kept. Not during a sign-in.
+static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteHistory) {
     AccountCommandResult result;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     if (g_loginInProgress.load()) {
@@ -225,7 +227,9 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
         return result;
     }
     uint64_t identity = AccountIdentityHash(settings.accounts[index]);
-    if (deleteSignIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
+    uint64_t historyId = settings.accounts[index].historyId;
+    bool signIn = settings.accounts[index].provider != L"antigravity";
+    if (signIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
         result.message = L"The stored sign-in could not be deleted, so the account was not removed.";
         return result;
     }
@@ -233,17 +237,23 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
     result.apply = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
     if (result.apply == SettingsApplyResult::Failed) {
-        if (deleteSignIn) {
+        if (signIn) {
             RefreshQuotaByIdentity(identity);
             NotifySettingsWindowChanged();
         }
-        result.message = deleteSignIn ?
+        result.message = signIn ?
             L"The stored sign-in was deleted, but settings could not be saved. The account "
             L"remains configured but signed out." :
             L"Could not remove the account.";
         return result;
     }
     if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
+    std::wstring error;
+    if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &error)) {
+        result.message = L"The account was removed, but its usage history could not be deleted and was kept.\n\n" +
+                         error;
+        result.icon = MB_ICONWARNING;
+    }
     return result;
 }
 

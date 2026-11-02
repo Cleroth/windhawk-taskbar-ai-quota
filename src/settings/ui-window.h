@@ -327,8 +327,10 @@ struct SettingsUiClient final : UiHostClient {
                         AccountAction(host, action.key, field, action.value);
                         break;
                     case SettingsField::AccountRemove: {
-                        // Its drafts first (an invalid label stops it), then the confirmation:
-                        // Antigravity yes/no; the others whether to delete the stored sign-in.
+                        // Its drafts first (an invalid label stops it), then one confirmation
+                        // naming the account. Removal deletes its stored sign-in; the checkbox,
+                        // offered unless it surely has no recorded history, deletes that too.
+                        // Without a task dialog, a message box confirms and history stays.
                         uint64_t key = action.key;
                         KillStepTimers(host);
                         if (edits.FlushAccount(key) != SettingsActionResult::Done) {
@@ -343,22 +345,38 @@ struct SettingsUiClient final : UiHostClient {
                                 L"Account", MB_OK | MB_ICONINFORMATION);
                             break;
                         }
-                        bool antigravity = edits.baseline.settings.accounts[*index].provider == L"antigravity";
-                        int answer = antigravity ?
-                            Ask(host, L"Remove this account?\n\nIts recorded usage history is kept.",
-                                L"Remove account", MB_YESNO | MB_ICONQUESTION) :
-                            Ask(host, L"Remove this account?\n\n"
-                                      L"Yes: remove it and delete its stored sign-in\n"
-                                      L"No: remove it but retain the sign-in for later\n"
-                                      L"Cancel: do nothing\n\n"
-                                      L"Its recorded usage history is kept.",
-                                L"Remove account", MB_YESNOCANCEL | MB_ICONQUESTION);
-                        if ((answer != IDYES && (antigravity || answer != IDNO)) || Unloading() ||
-                            closePreparation || host.closing) {
-                            break;
+                        const AccountConfig& account = edits.baseline.settings.accounts[*index];
+                        std::wstring title = L"Remove \"" + account.label + L"\" (" +
+                                             ProviderDisplayName(account.provider) + L")?";
+                        PCWSTR signIn = *index < edits.baseline.status.accounts.size() &&
+                                                edits.baseline.status.accounts[*index].signedIn ?
+                                            L"Its stored sign-in will be deleted." : nullptr;
+                        bool history = account.historyId && HistoryMayHaveSamples(account.historyId);
+                        TASKDIALOG_BUTTON remove{IDOK, L"Remove"};
+                        TASKDIALOGCONFIG config{};
+                        config.cbSize = sizeof(config);
+                        config.hwndParent = host.main;
+                        config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
+                        config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+                        config.pszWindowTitle = L"Remove account";
+                        config.pszMainIcon = TD_WARNING_ICON;
+                        config.pszMainInstruction = title.c_str();
+                        config.pszContent = signIn;
+                        config.cButtons = 1;
+                        config.pButtons = &remove;
+                        config.nDefaultButton = IDOK;
+                        config.pszVerificationText = history ? L"Also delete its usage history" : nullptr;
+                        BOOL deleteHistory = FALSE;
+                        int answer = Modal(host, [&] { return SettingsTaskDialog(config, &deleteHistory); });
+                        if (!answer) {
+                            deleteHistory = FALSE;
+                            std::wstring text = title + (signIn ? L"\n\n" + std::wstring(signIn) : L"") +
+                                                (history ? L"\n\nIts usage history is kept." : L"");
+                            answer = Ask(host, text.c_str(), L"Remove account", MB_OKCANCEL | MB_ICONWARNING);
                         }
+                        if (answer != IDOK || Unloading() || closePreparation || host.closing) break;
                         std::erase(expanded, key);
-                        AccountAction(host, key, SettingsField::AccountRemove, !antigravity && answer == IDYES);
+                        AccountAction(host, key, SettingsField::AccountRemove, history && deleteHistory);
                         break;
                     }
                     default:

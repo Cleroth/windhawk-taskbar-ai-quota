@@ -241,7 +241,11 @@ static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wPar
                 SetForegroundWindow(g_historyDialog.load() ? g_historyDialog.load() : window);
                 HistoryLoad(*state);
                 return 0;
-            case kHistoryLoadMessage: HistoryLoad(*state); return 0;
+            case kHistoryLoadMessage:
+                // A journal change (wParam 1) under the window's own dialog reloads once it ends.
+                if (wParam && state->modal) state->reloadAfterModal = true;
+                else HistoryLoad(*state);
+                return 0;
             case WM_ACTIVATE:
                 if (LOWORD(wParam) == WA_INACTIVE) HistoryClearHover(*state);
                 break;
@@ -372,7 +376,8 @@ static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wPar
                                 L"Refresh / F5 reads local history only. CSV includes all supported meters for the selected accounts and range "
                                 L"(both weeks when comparing), with UTC times and IDs instead of labels. Credits are not dollars or a spending ledger.\r\n\r\n"
                                 L"Retention: " + std::to_wstring(state->retention) + L" days, also limited to 250,000 records / about 60 MB. "
-                                L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear.";
+                                L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
+                                L"unless their history was deleted with them.";
                             if (!state->snapshot.samples.empty()) {
                                 info += L"\r\nOldest loaded sample: " + HistoryLocalDate(state->snapshot.samples.front().timeMs);
                             }
@@ -595,6 +600,16 @@ static void OpenHistoryWindow(uint64_t historyId, HistoryWindowKind kind) {
         nullptr, 0, kind == HistoryWindowKind::Custom ? HistoryUiThreadProc : HistoryWindowThreadProc, nullptr, 0,
         nullptr);
     if (!g_historyWindowThread) Wh_Log(L"Could not create history window thread: %lu", GetLastError());
+}
+
+// The journal changed outside the history windows' own loads (an account's history deleted): the
+// custom-drawn window refreshes from its notification; the classic one, which gets none, reloads,
+// after its own dialog if one is open (an export already past its dialog writes what it showed).
+// Never waits.
+static void NotifyHistoryJournalChanged() {
+    NotifySettingsWindowChanged();
+    HWND window = g_historyWindow.load();
+    if (window && window != g_historyUiWindow.load()) PostMessageW(window, kHistoryLoadMessage, 1, 0);
 }
 
 // Lifecycle API for either kind: call from the unload thread, after g_unloading=true. Never from

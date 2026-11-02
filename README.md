@@ -36,7 +36,7 @@ Signing in shows a window instead of launching a browser: **Copy link** lets you
 - **OpenAI**: open the link in a browser on this PC. The mod catches the redirect on `localhost:1455` (falling back to `1457`) and the window closes by itself, so there's nothing to paste. The window waits until you approve or click **Cancel**; while it is open the port stays busy, so a Codex CLI sign-in at the same time can fail - finish or cancel one first.
 - **Google Antigravity**: no separate mod sign-in is needed. Keep the signed-in Antigravity app or CLI running so the mod can query its local language server. Older IDE builds also need an open workspace.
 
-Use **Sign out** on the account's expanded card in Settings to delete an Anthropic/OpenAI stored token; the card also offers **Sign in again**. Renaming a label preserves its stored sign-in when possible. **Remove account** on an Anthropic/OpenAI card asks whether to retain or delete its stored sign-in; removing an Antigravity account only confirms the removal. Removing an account keeps its recorded usage history.
+Use **Sign out** on the account's expanded card in Settings to delete an Anthropic/OpenAI stored token; the card also offers **Sign in again**. Renaming a label preserves its stored sign-in when possible. **Remove account** names the account and asks for confirmation; removing an Anthropic/OpenAI account always deletes its stored sign-in. Its recorded usage history is kept unless you check **Also delete its usage history** (offered when it may have some). Sign-ins that earlier versions retained for removed accounts stay stored; renaming a new, signed-out account of that provider to the old label takes one over, and removing that account then deletes it.
 
 ## Settings
 
@@ -136,6 +136,9 @@ state and storage errors stay visible in the main window.
   without exporting labels. An existing destination is replaced only after a successful write.
 - **Clear all history...** permanently removes every account's local samples after confirmation.
   It leaves settings and sign-ins untouched; future polls record again if recording remains on.
+  To delete one account's samples, remove the account with **Also delete its usage history**
+  checked. If they can't be deleted (damaged or inaccessible storage, or another Explorer
+  session holding it), the account is still removed and you are told its history was kept.
 
 ### Recording and storage
 
@@ -146,10 +149,10 @@ it off to poll hidden accounts only when both global and per-account recording a
 
 History follows the **configured account entry**, not a verified provider login. Renaming keeps
 its history. Use a new entry for a different provider or login, including an Antigravity login
-changed in its app. Removing an entry retains anonymous history until expiry or Clear; re-adding
-it starts fresh. Duplicate entries for the same login remain separate lines. Antigravity graphs
-track the displayed limiting pools, which can change; they are not cumulative consumption
-meters.
+changed in its app. Removing an entry retains anonymous history until expiry or Clear, unless
+you check **Also delete its usage history** when removing it; re-adding it starts fresh.
+Duplicate entries for the same login remain separate lines. Antigravity graphs track the
+displayed limiting pools, which can change; they are not cumulative consumption meters.
 
 Samples are stored under `%LOCALAPPDATA%\TaskbarAIQuota\<Windhawk mod ID>\usage-history-v1.bin`,
 with the user's inherited folder permissions. The journal contains quota/amount readings,
@@ -177,7 +180,10 @@ account or wait for its normal poll. Open Usage history and refresh the snapshot
 point should appear. Two successful polls in the same uninterrupted window should produce a
 line and nonzero observed coverage. Check that hidden accounts pause with the default global
 restriction, and resume only when that restriction is off and recording is enabled. Test CSV
-export, restart persistence, and Clear without changing sign-ins.
+export, restart persistence, and Clear without changing sign-ins. Remove a disposable recorded
+account with **Also delete its usage history** checked, once with each kind of history window
+open: its samples leave the open window, CSV export and a restart; other accounts keep theirs.
+Removing one without the checkbox keeps it under **Removed**.
 
 With multiple accounts and retained readings, check:
 

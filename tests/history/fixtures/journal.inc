@@ -1,5 +1,6 @@
 // The journal's memory-only parts (history/journal.h), on synthetic in-memory state: the history
-// window's peek (PeekHistorySnapshot) and the status notifier (SetHistoryStatus). Nothing that
+// window's peek (PeekHistorySnapshot), the status notifier (SetHistoryStatus) and an account
+// deletion's memory step (EraseHistorySamplesLocked) with what its readers then see. Nothing that
 // loads or writes storage is extracted, so the peek compiles here only while it never loads.
 // Then an observation of a refresh's cost at the 250,000-sample cap: the peek's copy, the sort,
 // account collection and series analysis, and reduction, each timed (OBSERVE lines, no limits).
@@ -108,6 +109,47 @@
             CHECK(settingsNotifications == 3 && !g_historyStorageError && g_historyStatus.empty());
             SetHistoryStatus({});
             CHECK(settingsNotifications == 3);
+        });
+        Run("journal/account deletion: only that account's samples go, the rest in order; the revision changes, so "
+            "the window's peek replaces its snapshot and the fetch thread's tails refill; an absent account changes "
+            "nothing", [&] {
+            // Account 7 at hours 0-4, account 9 half an hour after each.
+            const HistoryJournalStamp held = journal();
+            std::deque<HistorySample> mixed;
+            for (const auto& sample : g_historySamples) {
+                mixed.push_back(sample);
+                HistorySample other = sample;
+                other.accountId = 9;
+                other.timeMs += hour / 2;
+                mixed.push_back(other);
+            }
+            g_historySamples = mixed;
+            BurnUpSampleCache cache;
+            UpdateBurnUpTails(cache, g_historySamples, 3, 5, 7, {{7, 1, at(0)}, {9, 1, at(0)}}, false);
+            CHECK(cache.accounts.size() == 2 && cache.accounts[1].samples.size() == 5);
+            settingsNotifications = 0;
+            {
+                std::lock_guard lock(g_historyMutex);
+                EraseHistorySamplesLocked(9);
+            }
+            const std::vector<ULONGLONG> sevens{at(0), at(1), at(2), at(3), at(4)};
+            std::vector<HistorySample> kept(g_historySamples.begin(), g_historySamples.end());
+            CHECK(times(kept) == sevens && std::all_of(kept.begin(), kept.end(), [](const HistorySample& sample) {
+                return sample.accountId == 7;
+            }));
+            CHECK(g_historyRevision == 6 && g_historyEpoch == 3 && g_historyAppendCount == 7 && g_historyLoaded);
+            auto peek = PeekHistorySnapshot(at(0), true, held, at(0));
+            CHECK(peek.samples && times(*peek.samples) == sevens && peek.stamp.revision == 6);
+            // Account 9 is no longer configured: only 7's tail is requested, and refilled whole.
+            UpdateBurnUpTails(cache, g_historySamples, 3, g_historyRevision, g_historyAppendCount, {{7, 1, at(0)}}, false);
+            CHECK(cache.accounts.size() == 1 && cache.accounts[0].historyId == 7 && cache.accounts[0].samples.size() == 5);
+            {
+                std::lock_guard lock(g_historyMutex);
+                EraseHistorySamplesLocked(42);
+            }
+            CHECK(g_historyRevision == 6 && g_historySamples.size() == 5);
+            CHECK(!PeekHistorySnapshot(at(0), true, peek.stamp, at(0)).samples);
+            CHECK(settingsNotifications == 0);  // The deletion notifies the windows after the lock
         });
 
         Run("journal/refresh cost at the sample cap (observation)", [&] {

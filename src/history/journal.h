@@ -13,8 +13,8 @@ static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
 static std::deque<HistorySample> g_historySamples;
 // Let incremental readers (burn-up curves, the history window's refresh) mirror
 // g_historySamples: they copy only samples appended since their last copy while the revision is
-// unchanged. The revision changes when samples are loaded, evicted by the size cap or pruned by
-// retention; Clear changes g_historyEpoch.
+// unchanged. The revision changes when samples are loaded, evicted by the size cap, pruned by
+// retention or deleted with their account; Clear changes g_historyEpoch.
 static uint64_t g_historyAppendCount = 0;
 static uint64_t g_historyRevision = 0;
 static std::wstring g_historyStatus;
@@ -182,7 +182,8 @@ static void LoadHistoryLocked(bool create = false) {
     }
 }
 
-static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples) {
+// Atomically replaces the journal with `samples`, except those of `skippedAccount` (0: none).
+static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint64_t skippedAccount = 0) {
     if (g_historyPath.empty() || !g_historyOwnership) return false;
     std::wstring temporary = g_historyPath + L".tmp";
     winrt::file_handle file{CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr,
@@ -200,7 +201,9 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples) {
     auto it = samples.begin();
     while (ok && it != samples.end()) {
         size_t n = 0;
-        while (n < batch.size() && it != samples.end()) batch[n++] = *it++;
+        for (; n < batch.size() && it != samples.end(); ++it) {
+            if (!skippedAccount || it->accountId != skippedAccount) batch[n++] = *it;
+        }
         DWORD bytes = (DWORD)(n * sizeof(HistorySample));
         ok = WriteFile(file.get(), batch.data(), bytes, &written, nullptr) && written == bytes;
     }
@@ -382,6 +385,52 @@ static bool ClearHistory(std::wstring* error) {
     g_historySamples.clear();
     g_historyWritable = true;
     g_historyCapped = false;
+    return true;
+}
+
+// Whether the journal may hold samples of a history ID, from memory only (never loading,
+// creating or retrying storage): unless it is loaded, readable whole and saved, it may.
+static bool HistoryMayHaveSamples(uint64_t historyId) {
+    std::lock_guard lock(g_historyMutex);
+    return !g_historyLoaded || !g_historyWritable || g_historyDirty ||
+           std::any_of(g_historySamples.begin(), g_historySamples.end(),
+                       [&](const HistorySample& sample) { return sample.accountId == historyId; });
+}
+
+// The memory half of deleting an account's history, once the journal was rewritten without its
+// samples: they go, and the revision tells incremental readers. Caller holds g_historyMutex.
+static void EraseHistorySamplesLocked(uint64_t historyId) {
+    if (std::erase_if(g_historySamples, [&](const HistorySample& sample) { return sample.accountId == historyId; })) {
+        ++g_historyRevision;
+    }
+}
+
+// Deletes a removed account's samples: the journal rewritten without them, then memory, then the
+// history windows told. Remove the account first: its settings publication fences out batches
+// still carrying its samples and drops its burn-up curves. Nothing ever recorded is a success; a
+// journal that couldn't be read (damaged, unreadable, in use by another session) stays as it is,
+// with `error` saying why. An unsaved one (a torn tail, or past the size cap, whose eviction this
+// then saves) is rewritten even without the account's samples. Holds only the history lock.
+static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
+    {
+        std::lock_guard lock(g_historyMutex);
+        LoadHistoryLocked();
+        if (!g_historyLoaded && g_historyWritable && !g_historyOwnership && !g_historyPath.empty()) {
+            return true;
+        }
+        bool present = std::any_of(g_historySamples.begin(), g_historySamples.end(),
+                                   [&](const HistorySample& sample) { return sample.accountId == historyId; });
+        // An unload can stop a load part-way: never rewrite what it left.
+        bool kept = !g_historyLoaded || !g_historyWritable || g_unloading;
+        if (!kept && !present && !g_historyDirty) return true;
+        if (kept || !RewriteHistoryLocked(g_historySamples, historyId)) {
+            if (error) *error = g_historyStatus.empty() ? L"History storage is unavailable." : g_historyStatus;
+            return false;
+        }
+        EraseHistorySamplesLocked(historyId);
+        if (!present) return true;
+    }
+    NotifyHistoryJournalChanged();
     return true;
 }
 

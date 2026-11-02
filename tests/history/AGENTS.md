@@ -62,9 +62,11 @@ from an older source hash.
   assert observable calls, text lifetime and failure handling. GDI rendering/resource counts are
   real. Stubs don't prove native control semantics.
 - **Journal memory parts** (`fixtures/journal.inc`): the in-memory journal state, the status
-  notifier (`SetHistoryStatus`, its window notification a counting stub) and the history window's
-  peek (`PeekHistorySnapshot`) are actual source; nothing that loads or writes storage is
-  extracted, so the peek compiles only while it never loads. Its lock is the real
+  notifier (`SetHistoryStatus`, its window notification a counting stub), the history window's
+  peek (`PeekHistorySnapshot`) and an account deletion's memory step
+  (`EraseHistorySamplesLocked`, with the peek and burn-up tails it must refresh) are actual
+  source; nothing that loads or writes storage is extracted (nor the deletion's rewrite and
+  window notification), so the peek compiles only while it never loads. Its lock is the real
   `g_historyMutex`. A refresh-cost observation at the 250,000-sample cap prints one `OBSERVE
   refresh-cost` line (copy, sort, account collection, series analysis, reduction; `-O0` like the
   rest of the build): an observation, not a readiness condition. The tail cache's reaction to

@@ -44,7 +44,8 @@ local app or CLI session, which must remain running.
 ## Settings
 
 - **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
-  quotas, tile identity, history recording, and sign-in. Removing an account keeps its history.
+  quotas, tile identity, history recording, and sign-in. Removing an account deletes its
+  sign-in and, if you choose, its history.
 - **Layout:** Tile style with a live taskbar preview, sizes, labels, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
@@ -734,6 +735,7 @@ static void OpenSettingsWindow();
 // The usage history window a new history thread runs: native controls or custom-drawn.
 enum class HistoryWindowKind : uint8_t { Classic, Custom };
 static void OpenHistoryWindow(uint64_t historyId = 0, HistoryWindowKind kind = HistoryWindowKind::Classic);
+static void NotifyHistoryJournalChanged();
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
                             uint64_t newIdentity = 0);
@@ -3373,8 +3375,8 @@ static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
 static std::deque<HistorySample> g_historySamples;
 // Let incremental readers (burn-up curves, the history window's refresh) mirror
 // g_historySamples: they copy only samples appended since their last copy while the revision is
-// unchanged. The revision changes when samples are loaded, evicted by the size cap or pruned by
-// retention; Clear changes g_historyEpoch.
+// unchanged. The revision changes when samples are loaded, evicted by the size cap, pruned by
+// retention or deleted with their account; Clear changes g_historyEpoch.
 static uint64_t g_historyAppendCount = 0;
 static uint64_t g_historyRevision = 0;
 static std::wstring g_historyStatus;
@@ -3542,7 +3544,8 @@ static void LoadHistoryLocked(bool create = false) {
     }
 }
 
-static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples) {
+// Atomically replaces the journal with `samples`, except those of `skippedAccount` (0: none).
+static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint64_t skippedAccount = 0) {
     if (g_historyPath.empty() || !g_historyOwnership) return false;
     std::wstring temporary = g_historyPath + L".tmp";
     winrt::file_handle file{CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr,
@@ -3560,7 +3563,9 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples) {
     auto it = samples.begin();
     while (ok && it != samples.end()) {
         size_t n = 0;
-        while (n < batch.size() && it != samples.end()) batch[n++] = *it++;
+        for (; n < batch.size() && it != samples.end(); ++it) {
+            if (!skippedAccount || it->accountId != skippedAccount) batch[n++] = *it;
+        }
         DWORD bytes = (DWORD)(n * sizeof(HistorySample));
         ok = WriteFile(file.get(), batch.data(), bytes, &written, nullptr) && written == bytes;
     }
@@ -3742,6 +3747,52 @@ static bool ClearHistory(std::wstring* error) {
     g_historySamples.clear();
     g_historyWritable = true;
     g_historyCapped = false;
+    return true;
+}
+
+// Whether the journal may hold samples of a history ID, from memory only (never loading,
+// creating or retrying storage): unless it is loaded, readable whole and saved, it may.
+static bool HistoryMayHaveSamples(uint64_t historyId) {
+    std::lock_guard lock(g_historyMutex);
+    return !g_historyLoaded || !g_historyWritable || g_historyDirty ||
+           std::any_of(g_historySamples.begin(), g_historySamples.end(),
+                       [&](const HistorySample& sample) { return sample.accountId == historyId; });
+}
+
+// The memory half of deleting an account's history, once the journal was rewritten without its
+// samples: they go, and the revision tells incremental readers. Caller holds g_historyMutex.
+static void EraseHistorySamplesLocked(uint64_t historyId) {
+    if (std::erase_if(g_historySamples, [&](const HistorySample& sample) { return sample.accountId == historyId; })) {
+        ++g_historyRevision;
+    }
+}
+
+// Deletes a removed account's samples: the journal rewritten without them, then memory, then the
+// history windows told. Remove the account first: its settings publication fences out batches
+// still carrying its samples and drops its burn-up curves. Nothing ever recorded is a success; a
+// journal that couldn't be read (damaged, unreadable, in use by another session) stays as it is,
+// with `error` saying why. An unsaved one (a torn tail, or past the size cap, whose eviction this
+// then saves) is rewritten even without the account's samples. Holds only the history lock.
+static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
+    {
+        std::lock_guard lock(g_historyMutex);
+        LoadHistoryLocked();
+        if (!g_historyLoaded && g_historyWritable && !g_historyOwnership && !g_historyPath.empty()) {
+            return true;
+        }
+        bool present = std::any_of(g_historySamples.begin(), g_historySamples.end(),
+                                   [&](const HistorySample& sample) { return sample.accountId == historyId; });
+        // An unload can stop a load part-way: never rewrite what it left.
+        bool kept = !g_historyLoaded || !g_historyWritable || g_unloading;
+        if (!kept && !present && !g_historyDirty) return true;
+        if (kept || !RewriteHistoryLocked(g_historySamples, historyId)) {
+            if (error) *error = g_historyStatus.empty() ? L"History storage is unavailable." : g_historyStatus;
+            return false;
+        }
+        EraseHistorySamplesLocked(historyId);
+        if (!present) return true;
+    }
+    NotifyHistoryJournalChanged();
     return true;
 }
 
@@ -15459,8 +15510,8 @@ static std::mutex g_settingsWindowMutex;
 static std::atomic<bool> g_settingsWindowCancelRequested{false};
 
 // src/settings/native.h
-// Native window helpers: the settings window's tracked message box, and the DPI helpers the
-// sign-in, history and custom-drawn windows share.
+// Native window helpers: the settings window's tracked message box and task dialog, and the DPI
+// helpers the sign-in, history and custom-drawn windows share.
 
 struct SettingsMessageBoxContext {
     SettingsMessageBoxContext* previous = nullptr;
@@ -15526,6 +15577,40 @@ static int SettingsMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT ty
     }
     g_settingsMessageBoxContext = context.previous;
     return context.forced ? context.forcedResult : result;
+}
+
+// A task dialog tracked like the message boxes: owner-close ends it as cancelled (IDCANCEL), as
+// do Esc and its close button. TaskDialogIndirect exists only in comctl32 v6, so it's looked up
+// in the comctl32 the thread's activation context maps (Explorer's is v6): a direct import would
+// keep the whole mod from loading against v5. Returns the button chosen, or 0 when no task dialog
+// can be shown.
+static int SettingsTaskDialog(TASKDIALOGCONFIG config, BOOL* verification) {
+    using TaskDialogIndirect_t = HRESULT(WINAPI*)(const TASKDIALOGCONFIG*, int*, int*, BOOL*);
+    HMODULE comctl32 = GetModuleHandleW(L"comctl32.dll");
+    auto taskDialog = reinterpret_cast<TaskDialogIndirect_t>(
+        comctl32 ? GetProcAddress(comctl32, "TaskDialogIndirect") : nullptr);
+    if (!taskDialog) return 0;
+    if (g_unloading || g_settingsWindowCancelRequested ||
+        (config.hwndParent && !IsWindow(config.hwndParent))) {
+        return IDCANCEL;
+    }
+    SettingsMessageBoxContext context;
+    context.previous = g_settingsMessageBoxContext;
+    config.dwFlags |= TDF_ALLOW_DIALOG_CANCELLATION;
+    config.pfCallback = [](HWND hWnd, UINT notification, WPARAM, LPARAM, LONG_PTR data) -> HRESULT {
+        if (notification == TDN_CREATED) reinterpret_cast<SettingsMessageBoxContext*>(data)->hWnd = hWnd;
+        return S_OK;
+    };
+    config.lpCallbackData = reinterpret_cast<LONG_PTR>(&context);
+    g_settingsMessageBoxContext = &context;
+    int button = IDCANCEL;
+    HRESULT result = taskDialog(&config, &button, nullptr, verification);
+    g_settingsMessageBoxContext = context.previous;
+    if (FAILED(result)) {
+        Wh_Log(L"Could not show the settings task dialog: 0x%08X", (unsigned)result);
+        return 0;
+    }
+    return context.forced ? context.forcedResult : button;
 }
 
 static int ScaleForDpi(int value, UINT dpi) {
@@ -15695,8 +15780,8 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
             result.message =
                 tokenCopyResult == TokenCopyResult::DestinationOccupied ?
                     L"The renamed account identity already has a retained sign-in. To replace it, "
-                    L"add an account with that provider and label, then remove it and delete its "
-                    L"stored sign-in. The account was not changed." :
+                    L"add an account with that provider and label, then remove it. The account was "
+                    L"not changed." :
                     L"The stored sign-in could not be copied. The account was not changed.";
             return result;
         }
@@ -15720,7 +15805,7 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
                 L"Could not save the account." :
                 L"Could not save the account. The copied sign-in remains under the attempted "
                 L"new identity. To delete it, add an account with the attempted provider and "
-                L"label, then remove it and choose to delete its stored sign-in.";
+                L"label, then remove it.";
         return result;
     }
     if (sameProviderRename) {
@@ -15746,15 +15831,17 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         result.message =
             L"The account was renamed, but a duplicate stored sign-in remains under the old "
             L"identity. To delete it, re-add an account with the old provider and label, then "
-            L"remove it and choose to delete its stored sign-in.";
+            L"remove it.";
         result.icon = MB_ICONWARNING;
     }
     NotifySettingsWindowChanged();
     return result;
 }
 
-// Removes the account, deleting its stored sign-in first when asked. Not during a sign-in.
-static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteSignIn) {
+// Removes the account with its stored sign-in (Anthropic, OpenAI; deleted first), then, when
+// asked, its recorded usage history, outside every settings lock; if that fails the account
+// stays removed and the message says its history was kept. Not during a sign-in.
+static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteHistory) {
     AccountCommandResult result;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     if (g_loginInProgress.load()) {
@@ -15773,7 +15860,9 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
         return result;
     }
     uint64_t identity = AccountIdentityHash(settings.accounts[index]);
-    if (deleteSignIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
+    uint64_t historyId = settings.accounts[index].historyId;
+    bool signIn = settings.accounts[index].provider != L"antigravity";
+    if (signIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
         result.message = L"The stored sign-in could not be deleted, so the account was not removed.";
         return result;
     }
@@ -15781,17 +15870,23 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
     result.apply = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
     if (result.apply == SettingsApplyResult::Failed) {
-        if (deleteSignIn) {
+        if (signIn) {
             RefreshQuotaByIdentity(identity);
             NotifySettingsWindowChanged();
         }
-        result.message = deleteSignIn ?
+        result.message = signIn ?
             L"The stored sign-in was deleted, but settings could not be saved. The account "
             L"remains configured but signed out." :
             L"Could not remove the account.";
         return result;
     }
     if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
+    std::wstring error;
+    if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &error)) {
+        result.message = L"The account was removed, but its usage history could not be deleted and was kept.\n\n" +
+                         error;
+        result.icon = MB_ICONWARNING;
+    }
     return result;
 }
 
@@ -15933,7 +16028,7 @@ enum class SettingsField : uint8_t {
     // Account actions: each commits the account's drafts first
     AccountHidden,     // Desired: 1 hidden
     AccountMove,       // To this index
-    AccountRemove,     // 1: also delete the stored sign-in
+    AccountRemove,     // 1: also delete its recorded usage history (the stored sign-in always goes)
     AccountSignIn,
     AccountSignOut,
     AccountDashboard,
@@ -19473,8 +19568,10 @@ struct SettingsUiClient final : UiHostClient {
                         AccountAction(host, action.key, field, action.value);
                         break;
                     case SettingsField::AccountRemove: {
-                        // Its drafts first (an invalid label stops it), then the confirmation:
-                        // Antigravity yes/no; the others whether to delete the stored sign-in.
+                        // Its drafts first (an invalid label stops it), then one confirmation
+                        // naming the account. Removal deletes its stored sign-in; the checkbox,
+                        // offered unless it surely has no recorded history, deletes that too.
+                        // Without a task dialog, a message box confirms and history stays.
                         uint64_t key = action.key;
                         KillStepTimers(host);
                         if (edits.FlushAccount(key) != SettingsActionResult::Done) {
@@ -19489,22 +19586,38 @@ struct SettingsUiClient final : UiHostClient {
                                 L"Account", MB_OK | MB_ICONINFORMATION);
                             break;
                         }
-                        bool antigravity = edits.baseline.settings.accounts[*index].provider == L"antigravity";
-                        int answer = antigravity ?
-                            Ask(host, L"Remove this account?\n\nIts recorded usage history is kept.",
-                                L"Remove account", MB_YESNO | MB_ICONQUESTION) :
-                            Ask(host, L"Remove this account?\n\n"
-                                      L"Yes: remove it and delete its stored sign-in\n"
-                                      L"No: remove it but retain the sign-in for later\n"
-                                      L"Cancel: do nothing\n\n"
-                                      L"Its recorded usage history is kept.",
-                                L"Remove account", MB_YESNOCANCEL | MB_ICONQUESTION);
-                        if ((answer != IDYES && (antigravity || answer != IDNO)) || Unloading() ||
-                            closePreparation || host.closing) {
-                            break;
+                        const AccountConfig& account = edits.baseline.settings.accounts[*index];
+                        std::wstring title = L"Remove \"" + account.label + L"\" (" +
+                                             ProviderDisplayName(account.provider) + L")?";
+                        PCWSTR signIn = *index < edits.baseline.status.accounts.size() &&
+                                                edits.baseline.status.accounts[*index].signedIn ?
+                                            L"Its stored sign-in will be deleted." : nullptr;
+                        bool history = account.historyId && HistoryMayHaveSamples(account.historyId);
+                        TASKDIALOG_BUTTON remove{IDOK, L"Remove"};
+                        TASKDIALOGCONFIG config{};
+                        config.cbSize = sizeof(config);
+                        config.hwndParent = host.main;
+                        config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
+                        config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+                        config.pszWindowTitle = L"Remove account";
+                        config.pszMainIcon = TD_WARNING_ICON;
+                        config.pszMainInstruction = title.c_str();
+                        config.pszContent = signIn;
+                        config.cButtons = 1;
+                        config.pButtons = &remove;
+                        config.nDefaultButton = IDOK;
+                        config.pszVerificationText = history ? L"Also delete its usage history" : nullptr;
+                        BOOL deleteHistory = FALSE;
+                        int answer = Modal(host, [&] { return SettingsTaskDialog(config, &deleteHistory); });
+                        if (!answer) {
+                            deleteHistory = FALSE;
+                            std::wstring text = title + (signIn ? L"\n\n" + std::wstring(signIn) : L"") +
+                                                (history ? L"\n\nIts usage history is kept." : L"");
+                            answer = Ask(host, text.c_str(), L"Remove account", MB_OKCANCEL | MB_ICONWARNING);
                         }
+                        if (answer != IDOK || Unloading() || closePreparation || host.closing) break;
                         std::erase(expanded, key);
-                        AccountAction(host, key, SettingsField::AccountRemove, !antigravity && answer == IDYES);
+                        AccountAction(host, key, SettingsField::AccountRemove, history && deleteHistory);
                         break;
                     }
                     default:
@@ -20259,6 +20372,7 @@ struct HistoryWindowState {
     std::wstring graphTipText;
     bool graphTipActive = false, trackingMouse = false;
     bool overlay = false, closing = false, modal = false, loading = false;
+    bool reloadAfterModal = false;  // The journal changed while a dialog was open
     bool enabled = false, skipHidden = true, idsPendingSave = false;
     int retention = 90, redThreshold = 90;
     ULONGLONG from = 0, to = 0, readFrom = 0;
@@ -22969,6 +23083,8 @@ struct HistoryModalScope {
         state.modal = false;
         if (state.closing || g_unloading || g_historyWindowCancelRequested)
             PostMessageW(state.window, WM_CLOSE, 0, 0);
+        else if (std::exchange(state.reloadAfterModal, false))
+            PostMessageW(state.window, kHistoryLoadMessage, 1, 0);
     }
 };
 
@@ -23705,7 +23821,11 @@ static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wPar
                 SetForegroundWindow(g_historyDialog.load() ? g_historyDialog.load() : window);
                 HistoryLoad(*state);
                 return 0;
-            case kHistoryLoadMessage: HistoryLoad(*state); return 0;
+            case kHistoryLoadMessage:
+                // A journal change (wParam 1) under the window's own dialog reloads once it ends.
+                if (wParam && state->modal) state->reloadAfterModal = true;
+                else HistoryLoad(*state);
+                return 0;
             case WM_ACTIVATE:
                 if (LOWORD(wParam) == WA_INACTIVE) HistoryClearHover(*state);
                 break;
@@ -23836,7 +23956,8 @@ static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wPar
                                 L"Refresh / F5 reads local history only. CSV includes all supported meters for the selected accounts and range "
                                 L"(both weeks when comparing), with UTC times and IDs instead of labels. Credits are not dollars or a spending ledger.\r\n\r\n"
                                 L"Retention: " + std::to_wstring(state->retention) + L" days, also limited to 250,000 records / about 60 MB. "
-                                L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear.";
+                                L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
+                                L"unless their history was deleted with them.";
                             if (!state->snapshot.samples.empty()) {
                                 info += L"\r\nOldest loaded sample: " + HistoryLocalDate(state->snapshot.samples.front().timeMs);
                             }
@@ -24059,6 +24180,16 @@ static void OpenHistoryWindow(uint64_t historyId, HistoryWindowKind kind) {
         nullptr, 0, kind == HistoryWindowKind::Custom ? HistoryUiThreadProc : HistoryWindowThreadProc, nullptr, 0,
         nullptr);
     if (!g_historyWindowThread) Wh_Log(L"Could not create history window thread: %lu", GetLastError());
+}
+
+// The journal changed outside the history windows' own loads (an account's history deleted): the
+// custom-drawn window refreshes from its notification; the classic one, which gets none, reloads,
+// after its own dialog if one is open (an export already past its dialog writes what it showed).
+// Never waits.
+static void NotifyHistoryJournalChanged() {
+    NotifySettingsWindowChanged();
+    HWND window = g_historyWindow.load();
+    if (window && window != g_historyUiWindow.load()) PostMessageW(window, kHistoryLoadMessage, 1, 0);
 }
 
 // Lifecycle API for either kind: call from the unload thread, after g_unloading=true. Never from
