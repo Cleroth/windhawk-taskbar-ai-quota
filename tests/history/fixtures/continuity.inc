@@ -26,6 +26,8 @@
             {"rolling partial window not guessed", HistoryBreak::Reset, [](auto& a, auto& b) { a.meters[1].resetMs -= kHistoryDayMs; b.meters[1].resetMs -= kHistoryDayMs; }},
             {"anchored zero cannot discard old window", HistoryBreak::Reset, [](auto& a, auto&) { a.meters[1].resetMs -= 600000; }},
             {"session break", HistoryBreak::Gap, [](auto&, auto& b) { b.session = 2; }},
+            {"provider change", HistoryBreak::Gap, [](auto&, auto& b) { b.provider = 3; }},
+            {"account change", HistoryBreak::Gap, [](auto&, auto& b) { ++b.accountId; }},
             {"large gap", HistoryBreak::Gap, [](auto&, auto& b) { b.timeMs += 900000; b.meters[1].resetMs += 900000; }},
             {"clock rollback", HistoryBreak::Gap, [](auto& a, auto& b) { b.timeMs = a.timeMs - 1; }},
             {"failed reading", HistoryBreak::Unavailable, [](auto&, auto& b) { b.failed = 1; }},

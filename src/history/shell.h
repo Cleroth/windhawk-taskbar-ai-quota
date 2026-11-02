@@ -87,7 +87,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
 
     // Icon buttons (mockup .ibtn: 32 x 30 DIP, 4 apart) at the title row's right: Refresh,
     // Export (once loaded) and the More menu, named by their tooltips (s-tooltips, q7a-icons;
-    // Export's by its scope, as the classic button, over the classic description).
+    // Export's by its scope, over its description).
     struct IconButton {
         uint32_t id;
         PCWSTR glyph;

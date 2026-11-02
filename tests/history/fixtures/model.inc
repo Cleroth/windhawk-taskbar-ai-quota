@@ -1,6 +1,6 @@
-// Shared model (history/series.h) through its explicit inputs: grouping, statuses, styles,
-// labels, reduction, statistics, account collection, selection and cancellation. The classic
-// window's adapters, combos, render cache and in-memory CSV follow at the end.
+// The history model (history/series.h) through its explicit inputs: grouping, accounts without
+// readings, styles, labels, reduction, statistics, account collection, selection and
+// cancellation.
     const std::array<std::array<std::set<int>, 4>, 3> expected{{
         {{{0}, {1, 2}, {3, 6}, {0, 1, 2, 3, 6}}},
         {{{0}, {1}, {7}, {0, 1, 7}}},
@@ -14,24 +14,23 @@
                 state.selected = selected; state.view = HistoryView(view);
                 auto built = Build(state);
                 CHECK(Meters(built) == expected[provider - 1][view]);
-                CHECK(built.noReadings.empty());
+                CHECK(built.noReadingAccounts.empty());
                 for (const auto& line : built.series) {
                     CHECK(line.current.hasValue); CHECK(line.current.validSamples == 2);
                     CHECK(line.plotted == (line.meter != 6 || view == 3));
                 }
-                if (provider == 1 && (view == 1 || view == 3)) CHECK(Series(built, 0, 2).title.find(L"Fable weekly") != std::wstring::npos);
+                if (provider == 1 && (view == 1 || view == 3)) CHECK(Series(built, 0, 2).hoverTitle.find(L"Fable weekly") != std::wstring::npos);
                 if (provider == 3 && (view == 1 || view == 3)) {
-                    CHECK(Series(built, 0, 1).title.find(L"Gemini weekly") != std::wstring::npos);
-                    CHECK(Series(built, 0, 5).title.find(L"Claude/GPT weekly") != std::wstring::npos);
+                    CHECK(Series(built, 0, 1).hoverTitle.find(L"Gemini weekly") != std::wstring::npos);
+                    CHECK(Series(built, 0, 5).hoverTitle.find(L"Claude/GPT weekly") != std::wstring::npos);
                 }
             });
-            Run("compact no-readings " + key, [&, provider, view, selected] {
+            Run("no readings " + key, [&, provider, view, selected] {
                 auto state = Model({provider});
                 state.selected = selected; state.view = HistoryView(view);
                 auto built = Build(state);
                 CHECK(built.series.empty());
-                CHECK(built.noReadings.size() == (expected[provider - 1][view].empty() ? 0 : 1));
-                if (!built.noReadings.empty()) CHECK(built.noReadings[0] == state.accounts[0].title);
+                CHECK(built.noReadingAccounts == (expected[provider - 1][view].empty() ? std::vector<size_t>{} : std::vector<size_t>{0}));
             });
             Run("previous-only data retained " + key, [&, provider, view, selected] {
                 auto state = Model({provider}); state.overlay = true; state.readFrom -= kHistoryWeekMs;
@@ -39,7 +38,7 @@
                 state.selected = selected; state.view = HistoryView(view);
                 auto built = Build(state);
                 CHECK(Meters(built) == expected[provider - 1][view]);
-                CHECK(built.noReadings.empty());
+                CHECK(built.noReadingAccounts.empty());
                 for (const auto& line : built.series) {
                     CHECK(!line.current.hasValue); CHECK(line.previous.hasValue);
                     CHECK(Reduce(state, line, 0).points.empty());
@@ -55,7 +54,7 @@
             auto state = Model({provider}); AllLanes(state);
             state.view = HistoryView(view); state.selected = selected;
             auto built = Build(state);
-            CHECK(built.series.empty()); CHECK(built.noReadings.empty());
+            CHECK(built.series.empty()); CHECK(built.noReadingAccounts.empty());
         });
     }
 
@@ -65,8 +64,7 @@
     for (int selected : {-1, 0}) for (size_t flags = 0; flags < weeklyFlags.size(); ++flags) {
         for (int readings : {0, 1, 2}) Run("Anthropic weekly flags=" + std::to_string(flags) +
                 "/readings=" + std::to_string(readings) + "/mode=" + std::to_string(selected), [&, selected, flags, readings] {
-            auto state = Model({1}); state.selected = selected; state.enabled = true;
-            state.accounts[0].recording = false;
+            auto state = Model({1}); state.selected = selected;
             state.accounts[0].showWeekly = weeklyFlags[flags].first;
             state.accounts[0].showFableWeekly = weeklyFlags[flags].second;
             state.overlay = readings == 2;
@@ -75,8 +73,7 @@
             state.view = HistoryView::Weekly;
             auto built = Build(state);
             CHECK(Meters(built) == (readings ? weeklyMeters[flags] : std::set<int>{}));
-            CHECK(built.noReadings.size() == (!readings && !weeklyMeters[flags].empty() ? 1 : 0));
-            CHECK(StatusCount(built, state, 0, L"[recording off]") == (weeklyMeters[flags].empty() ? 0 : 1));
+            CHECK(built.noReadingAccounts.size() == (!readings && !weeklyMeters[flags].empty() ? 1 : 0));
             for (const auto& line : built.series) {
                 CHECK(line.current.hasValue == (readings == 1)); CHECK(line.previous.hasValue == (readings == 2));
                 CHECK(Reduce(state, line, 0).points.size() == (readings == 1 ? 2 : 0));
@@ -87,8 +84,7 @@
                 state.view = HistoryView(view);
                 built = Build(state);
                 CHECK(Meters(built) == (readings ? expected[0][view] : std::set<int>{}));
-                CHECK(built.noReadings.size() == (readings ? 0 : 1));
-                CHECK(StatusCount(built, state, 0, L"[recording off]") == 1);
+                CHECK(built.noReadingAccounts.size() == (readings ? 0 : 1));
                 if (readings && view == 3) {
                     CHECK(Series(built, 0, 6).plotted);
                     CHECK(Reduce(state, Series(built, 0, 6), state.overlay ? 1 : 0).points.size() == 2);
@@ -99,7 +95,7 @@
                 state.view = HistoryView::Weekly;
                 built = Build(state);
                 CHECK(built.series.empty());
-                CHECK(built.noReadings.size() == (weeklyMeters[flags].empty() ? 0 : 1));
+                CHECK(built.noReadingAccounts.size() == (weeklyMeters[flags].empty() ? 0 : 1));
             }
         });
     }
@@ -113,10 +109,10 @@
             AddRow(state, 0, state.readFrom + 1000, {{2, 30}});
             state.view = HistoryView::Weekly;
             auto built = Build(state);
-            CHECK(built.series.empty()); CHECK(built.noReadings == std::vector<std::wstring>{state.accounts[0].title});
+            CHECK(built.series.empty()); CHECK(built.noReadingAccounts == std::vector<size_t>{0});
             state.accounts[0].showWeekly = false; state.accounts[0].showFableWeekly = true;
             built = Build(state);
-            CHECK(Meters(built) == std::set<int>{2}); CHECK(built.noReadings.empty());
+            CHECK(Meters(built) == std::set<int>{2}); CHECK(built.noReadingAccounts.empty());
             CHECK(Series(built, 0, 2).current.hasValue == !previous);
             CHECK(Series(built, 0, 2).previous.hasValue == previous);
         });
@@ -133,43 +129,40 @@
         const std::array<std::set<int>, 7> mixedMeters{{{}, {1}, {2}, {1, 2}, {1, 2}, {1}, {1, 5}}};
         state.view = HistoryView::Weekly;
         auto built = Build(state);
-        CHECK(built.series.size() == 9); CHECK(built.noReadings.empty());
+        CHECK(built.series.size() == 9); CHECK(built.noReadingAccounts.empty());
         for (size_t i = 0; i < state.accounts.size(); ++i) CHECK(Meters(built, i) == mixedMeters[i]);
         for (size_t i = 0; i < state.accounts.size(); ++i) {
             state.selected = int(i); built = Build(state);
-            CHECK(Meters(built, i) == mixedMeters[i]); CHECK(built.noReadings.empty());
+            CHECK(Meters(built, i) == mixedMeters[i]); CHECK(built.noReadingAccounts.empty());
             CHECK(built.series.size() == mixedMeters[i].size());
         }
-        // A disabled account must not leave a compact no-readings row behind either.
+        // A disabled account must not leave a no-readings entry behind either.
         for (auto& account : state.accounts) account.rows.clear();
         state.selected = -1; built = Build(state);
-        CHECK(built.series.empty()); CHECK(built.noReadings.size() == 6);
-        for (size_t i = 1; i < state.accounts.size(); ++i) CHECK(built.noReadings[i - 1] == state.accounts[i].title);
+        CHECK(built.series.empty()); CHECK((built.noReadingAccounts == std::vector<size_t>{1, 2, 3, 4, 5, 6}));
         for (size_t i = 0; i < state.accounts.size(); ++i) {
             state.selected = int(i); built = Build(state);
-            CHECK(built.series.empty()); CHECK(built.noReadings.size() == (i == 0 ? 0 : 1));
-            if (i) CHECK(built.noReadings[0] == state.accounts[i].title);
+            CHECK(built.series.empty());
+            CHECK(built.noReadingAccounts == (i == 0 ? std::vector<size_t>{} : std::vector<size_t>{i}));
         }
     });
 
-    Run("Extra USD is detail-only; AllMeters plots it on its own axis", [] {
+    Run("Extra USD is detail-only; All meters plots it", [] {
         auto state = Model(); state.overlay = true; state.readFrom -= kHistoryWeekMs;
         AllLanes(state, true); AllLanes(state);
         state.view = HistoryView::ExtraUsage;
         auto built = Build(state);
-        CHECK(built.series.size() == 3); CHECK(built.noReadings.empty());
-        CHECK(built.axes[0].visible); CHECK(!built.axes[1].visible); CHECK(built.axes[2].visible);
-        CHECK(built.axes[1].low == 0); CHECK(built.axes[1].high == 1);
+        CHECK(built.series.size() == 3); CHECK(built.noReadingAccounts.empty());
         const auto usd = Series(built, 0, 6);
         CHECK(!usd.plotted); CHECK(usd.current.latest == 15.5); CHECK(usd.current.peak == 15.5);
         CHECK(usd.previous.hasValue);
-        CHECK(usd.title.find(L"details only") != std::wstring::npos);
+        CHECK(Series(built, 0, 3).plotted && Series(built, 1, 7).plotted);
         state.selected = 0; state.view = HistoryView::AllMeters;
         built = Build(state);
-        CHECK(built.axes[1].visible); CHECK(Series(built, 0, 6).plotted);
+        CHECK(Series(built, 0, 6).plotted);
         state.view = HistoryView::ExtraUsage;
         built = Build(state);
-        CHECK(!built.axes[1].visible); CHECK(!Series(built, 0, 6).plotted);
+        CHECK(!Series(built, 0, 6).plotted);
     });
 
     for (bool previous : {false, true}) Run(std::string("USD-only account not empty/") + (previous ? "previous" : "current"), [=] {
@@ -179,35 +172,9 @@
         AddRow(state, 0, state.readFrom + 61000, {{6, 5}});
         state.view = HistoryView::ExtraUsage;
         auto built = Build(state);
-        CHECK(built.series.size() == 1); CHECK(built.noReadings.empty());
+        CHECK(built.series.size() == 1); CHECK(built.noReadingAccounts.empty());
         const auto& usd = built.series[0]; const auto& stats = previous ? usd.previous : usd.current;
         CHECK(!usd.plotted); CHECK(stats.latest == 5); CHECK(stats.peak == 30);
-        CHECK(built.axes[0].visible); CHECK(!built.axes[1].visible); CHECK(!built.axes[2].visible);
-    });
-
-    Run("status emitted once/account, including compact and USD-only", [] {
-        auto state = Model({1, 2, 1, 1, 3}); state.enabled = true;
-        AllLanes(state);
-        state.accounts[0].recording = false;
-        state.accounts[1].hidden = true;
-        state.accounts[2].recording = false; state.accounts[2].rows.clear();
-        state.accounts[3].recording = false;
-        for (auto row : state.accounts[3].rows) for (int meter = 0; meter < 6; ++meter)
-            state.snapshot.samples[row].meters[meter].value = -1;
-        state.accounts[4].recording = false;
-        for (auto view : {HistoryView::ShortTerm, HistoryView::Weekly, HistoryView::ExtraUsage, HistoryView::AllMeters}) {
-            state.view = view;
-            auto built = Build(state);
-            CHECK(StatusCount(built, state, 0, L"[recording off]") == 1);
-            CHECK(StatusCount(built, state, 1, L"[paused]") == 1);
-            CHECK(StatusCount(built, state, 2, L"[recording off]") == 1);
-            CHECK(StatusCount(built, state, 3, L"[recording off]") == 1);
-            CHECK(StatusCount(built, state, 4, L"[recording off]") == (view == HistoryView::ExtraUsage ? 0 : 1));
-        }
-        state.skipHidden = false;
-        CHECK(StatusCount(Build(state), state, 1, L"[paused]") == 0);
-        state.enabled = false;
-        CHECK(StatusCount(Build(state), state, 0, L"[recording off]") == 0);
     });
 
     Run("all-account colors/widths stable when views omit preceding accounts", [] {
@@ -259,9 +226,12 @@
         }
         state.view = HistoryView::ShortTerm;
         auto built = Build(state);
-        CHECK(Series(built, 0, 0).title == state.accounts[0].title + L" · " + durations[d].second + L" used (%)");
-        CHECK(Series(built, 1, 0).title == state.accounts[1].title + L" · Gemini " + antigravityDurations[d] + L" used (%)");
-        CHECK(Series(built, 1, 4).title == state.accounts[1].title + L" · Claude/GPT " + antigravityDurations[d] + L" used (%)");
+        CHECK(Series(built, 0, 0).hoverTitle == state.accounts[0].label + L" · " + durations[d].second + L" used (%)");
+        CHECK(Series(built, 1, 0).hoverTitle == state.accounts[1].label + L" · Gemini " + antigravityDurations[d] + L" used (%)");
+        CHECK(Series(built, 1, 4).hoverTitle == state.accounts[1].label + L" · Claude/GPT " + antigravityDurations[d] + L" used (%)");
+        CHECK(Series(built, 1, 4).legendTitle == state.accounts[1].label + L" · Claude/GPT " + antigravityDurations[d]);
+        state.selected = 1;
+        CHECK(Series(Build(state), 1, 4).legendTitle == L"Claude/GPT " + antigravityDurations[d]);
     });
     Run("duration labels include previous period, ignore missing/failed/outside", [] {
         auto state = Model({1}); state.overlay = true; state.readFrom -= kHistoryWeekMs;
@@ -273,9 +243,9 @@
         failedRow.failed = 1; failedRow.meters[0].durationMs = hour;
         AddRow(state, 0, state.to, {{0, 10}}).meters[0].durationMs = hour;
         state.view = HistoryView::ShortTerm;
-        CHECK(Series(Build(state), 0, 0).title.find(L"varying windows") != std::wstring::npos);
+        CHECK(Series(Build(state), 0, 0).hoverTitle.find(L"varying windows") != std::wstring::npos);
         state.overlay = false; state.readFrom = state.from;
-        CHECK(Series(Build(state), 0, 0).title.find(L"5h used") != std::wstring::npos);
+        CHECK(Series(Build(state), 0, 0).hoverTitle.find(L"5h used") != std::wstring::npos);
     });
 
     // Every break is tested in the same pixel and in separate pixels; use raw sourceRow
@@ -359,7 +329,8 @@
         for (size_t i = 0; i < 7; ++i) { CHECK(render.points[i].connect == connects[i]); CHECK(render.points[i].sourceRow == rows[i]); }
     });
 
-    Run("collected accounts: settings order, skipped IDs, removed accounts from samples in range", [] {
+    Run("collected accounts: settings order, skipped IDs, removed accounts from samples in range, labelled by "
+        "journal ID", [] {
         auto config = [](PCWSTR provider, PCWSTR label, uint64_t id) {
             AccountConfig account; account.provider = provider; account.label = label; account.historyId = id;
             return account;
@@ -380,26 +351,23 @@
             samples.push_back(sample);
         }
         struct Expected {
-            uint64_t id; uint32_t provider; std::wstring title, label;
+            uint64_t id; uint32_t provider; std::wstring label;
             bool configured, recording, hidden, weekly, fable; std::vector<size_t> rows;
         };
         const std::vector<Expected> wanted{
-            {0x30, 2, L"OpenAI — Work", L"Work", true, true, false, true, false, {5}},
-            {0x10, 1, L"Anthropic — Home", L"Home", true, false, true, false, true, {2}},
-            {0x20, 3, L"Google Antigravity — Lab", L"Lab", true, true, false, true, false, {9}},
-            {0x40, 2, L"OpenAI — Idle", L"Idle", true, true, false, true, false, {}},
-            {0xab, 2, L"OpenAI — removed account_00000000000000ab", L"removed account_00000000000000ab",
-             false, false, false, true, true, {3, 8}},
-            {0xef, 9, L"Unknown provider — removed account_00000000000000ef", L"removed account_00000000000000ef",
-             false, false, false, true, true, {6}},
-            {0x0123456789abcdefULL, 3, L"Google Antigravity — removed account_0123456789abcdef",
-             L"removed account_0123456789abcdef", false, false, false, true, true, {7}},
+            {0x30, 2, L"Work", true, true, false, true, false, {5}},
+            {0x10, 1, L"Home", true, false, true, false, true, {2}},
+            {0x20, 3, L"Lab", true, true, false, true, false, {9}},
+            {0x40, 2, L"Idle", true, true, false, true, false, {}},
+            {0xab, 2, L"account_00000000000000ab", false, false, false, true, true, {3, 8}},
+            {0xef, 9, L"account_00000000000000ef", false, false, false, true, true, {6}},
+            {0x0123456789abcdefULL, 3, L"account_0123456789abcdef", false, false, false, true, true, {7}},
         };
         auto accounts = HistoryCollectAccounts(configured, samples, from, to, Never);
         CHECK(accounts.size() == wanted.size());
         for (size_t i = 0; i < std::min(accounts.size(), wanted.size()); ++i) {
             const auto& a = accounts[i]; const auto& w = wanted[i];
-            CHECK(a.id == w.id); CHECK(a.provider == w.provider); CHECK(a.title == w.title); CHECK(a.label == w.label);
+            CHECK(a.id == w.id); CHECK(a.provider == w.provider); CHECK(a.label == w.label);
             CHECK(a.configured == w.configured); CHECK(a.recording == w.recording); CHECK(a.hidden == w.hidden);
             CHECK(a.showWeekly == w.weekly); CHECK(a.showFableWeekly == w.fable); CHECK(a.rows == w.rows);
         }
@@ -450,13 +418,12 @@
         auto state = Model({1, 2}); AllLanes(state); state.view = HistoryView::AllMeters;
         CHECK(Build(state).series.size() == 8);
         auto built = HistoryBuildSeries(state.snapshot.samples, state.accounts, state, always);
-        CHECK(built.series.empty()); CHECK(built.noReadings.empty());
-        CHECK(built.axes[0].visible); CHECK(!built.axes[1].visible); CHECK(!built.axes[2].visible);
+        CHECK(built.series.empty()); CHECK(built.noReadingAccounts.empty());
         // Cancelled while the first account is built: the second is never visited.
         int calls = 0;
         built = HistoryBuildSeries(state.snapshot.samples, state.accounts, state, [&calls] { return ++calls >= 2; });
         for (const auto& line : built.series) CHECK(line.account == 0);
-        for (const auto& title : built.noReadings) CHECK(title != state.accounts[1].title);
+        for (size_t account : built.noReadingAccounts) CHECK(account != 1);
         std::vector<AccountConfig> configured(2);
         configured[0].provider = L"anthropic"; configured[0].label = L"A"; configured[0].historyId = 0x10;
         configured[1].provider = L"openai"; configured[1].label = L"B"; configured[1].historyId = 0x20;
@@ -470,159 +437,4 @@
         auto accounts = HistoryCollectAccounts(configured, samples, baseTime, baseTime + hour, [&calls] { return ++calls > 2; });
         CHECK(accounts.size() == 2);
         for (const auto& account : accounts) CHECK(account.rows.empty());
-    });
-
-    // Classic window adapters: per-mode views, combos, render cache, scroll height and in-memory
-    // CSV over the classic state.
-    Run("classic defaults and combo contents", [] {
-        auto state = Fixture(); AllLanes(state);
-        CHECK(state.selected == -1); CHECK(state.allAccountsView == HistoryView::Weekly);
-        CHECK(state.accountView == HistoryView::AllMeters);
-        CHECK(state.accounts[0].showWeekly); CHECK(state.accounts[0].showFableWeekly);
-        HistoryRebuildView(state);
-        CHECK(state.visible.size() == 5);
-        CHECK((Meters(state, 0) == std::set<int>{1, 2}));
-        CHECK((Meters(state, 1) == std::set<int>{1}));
-        CHECK((Meters(state, 2) == std::set<int>{1, 5}));
-        CHECK((controls[state.meterCombo].items == std::vector<std::wstring>{L"Short-term", L"Weekly", L"Extra usage", L"All meters"}));
-        CHECK(controls[state.meterCombo].selection == 1);
-        CHECK(controls[state.exportButton].text == L"&Export all CSV...");
-        SelectAccount(state, 0);
-        CHECK(state.accountView == HistoryView::AllMeters);
-        CHECK((Meters(state) == std::set<int>{0, 1, 2, 3, 6}));
-        CHECK(controls[state.meterCombo].items.size() == 4);
-        CHECK(controls[state.meterCombo].items[3] == L"All meters");
-        CHECK(controls[state.meterCombo].selection == 3);
-        CHECK(controls[state.exportButton].text == L"&Export CSV...");
-        SelectAccount(state, -1); SelectView(state, HistoryView::AllMeters);
-        CHECK(state.visible.size() == 12); CHECK(state.noReadings.empty());
-        CHECK((Meters(state, 0) == std::set<int>{0, 1, 2, 3, 6}));
-        CHECK((Meters(state, 1) == std::set<int>{0, 1, 7}));
-        CHECK((Meters(state, 2) == std::set<int>{0, 1, 4, 5}));
-        CHECK(controls[state.meterCombo].selection == 3);
-        CHECK(controls[state.exportButton].text == L"&Export all CSV...");
-    });
-
-    for (int selected : {-1, 0}) for (uint32_t provider = 1; provider <= 3; ++provider) for (int view = 0; view < 4; ++view) {
-        Run("classic compact no-readings p" + std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected), [&, provider, view, selected] {
-            auto state = Fixture({provider});
-            state.selected = selected;
-            state.allAccountsView = state.accountView = HistoryView(view);
-            HistoryRebuildView(state);
-            CHECK(state.visible.empty());
-            CHECK(state.noReadings.size() == (expected[provider - 1][view].empty() ? 0 : 1));
-            if (!state.noReadings.empty()) {
-                CHECK(state.noReadings[0] == state.accounts[0].title);
-                CHECK(lastScroll.nMax == state.graphHeight + 2 * 24 - 1);
-            }
-        });
-    }
-
-    Run("classic Extra USD is detail-only, AllMeters restores USD plot/cache", [] {
-        auto state = Fixture(); state.overlay = true; state.readFrom -= kHistoryWeekMs;
-        AllLanes(state, true); AllLanes(state);
-        SelectView(state, HistoryView::ExtraUsage);
-        CHECK(state.visible.size() == 3); CHECK(state.noReadings.empty());
-        CHECK(state.axes[0].visible); CHECK(!state.axes[1].visible); CHECK(state.axes[2].visible);
-        CHECK(state.axes[1].low == 0); CHECK(state.axes[1].high == 1);
-        const auto& usd = Series(state, 0, 6);
-        CHECK(!usd.plotted); CHECK(usd.current.latest == 15.5); CHECK(usd.current.peak == 15.5);
-        CHECK(usd.previous.hasValue); CHECK(usd.render[0].points.empty()); CHECK(usd.render[1].points.empty());
-        CHECK(usd.title.find(L"details only") != std::wstring::npos);
-        SelectAccount(state, 0);
-        CHECK(state.axes[1].visible); CHECK(Series(state, 0, 6).plotted);
-        CHECK(Series(state, 0, 6).render[0].points.size() == 2);
-        CHECK(Series(state, 0, 6).render[1].points.size() == 2);
-        SelectView(state, HistoryView::ExtraUsage);
-        CHECK(!state.axes[1].visible); CHECK(!Series(state, 0, 6).plotted);
-        CHECK(Series(state, 0, 6).render[0].points.empty());
-    });
-
-    Run("classic view selections restore across account/all mode transitions", [] {
-        auto state = Fixture(); AllLanes(state); HistoryRebuildView(state);
-        SelectView(state, HistoryView::ExtraUsage);
-        SelectAccount(state, 1); CHECK(state.accountView == HistoryView::AllMeters);
-        SelectView(state, HistoryView::ShortTerm);
-        SelectAccount(state, 2); CHECK(state.accountView == HistoryView::ShortTerm);
-        CHECK(controls[state.meterCombo].selection == 0);
-        SelectAccount(state, -1); CHECK(state.allAccountsView == HistoryView::ExtraUsage);
-        CHECK(controls[state.meterCombo].selection == 2); CHECK(controls[state.meterCombo].items.size() == 4);
-        SelectView(state, HistoryView::Weekly);
-        SelectAccount(state, 0); CHECK(state.accountView == HistoryView::ShortTerm);
-        SelectAccount(state, -1); CHECK(controls[state.meterCombo].selection == 1);
-        SelectView(state, HistoryView::AllMeters);
-        SelectAccount(state, 1); CHECK(state.accountView == HistoryView::ShortTerm);
-        CHECK(controls[state.meterCombo].selection == 0);
-        SelectAccount(state, -1); CHECK(state.allAccountsView == HistoryView::AllMeters);
-        CHECK(controls[state.meterCombo].selection == 3); CHECK(state.visible.size() == 12);
-        // Both modes clamp to the same four choices without changing the other memory.
-        for (int selected : {-1, 0}) {
-            SelectAccount(state, selected);
-            auto otherView = selected < 0 ? state.accountView : state.allAccountsView;
-            controls[state.meterCombo].selection = -2; DispatchSelection(&state, kHistoryMeterCombo);
-            CHECK((selected < 0 ? state.allAccountsView : state.accountView) == HistoryView::ShortTerm);
-            CHECK(controls[state.meterCombo].selection == 0);
-            controls[state.meterCombo].selection = 99; DispatchSelection(&state, kHistoryMeterCombo);
-            CHECK((selected < 0 ? state.allAccountsView : state.accountView) == HistoryView::AllMeters);
-            CHECK(controls[state.meterCombo].selection == 3);
-            CHECK((selected < 0 ? state.accountView : state.allAccountsView) == otherView);
-        }
-    });
-
-    for (int selected : {-1, 0}) Run("classic CB_ERR preserves both view selections/mode=" + std::to_string(selected), [=] {
-        for (auto allView : {HistoryView::ShortTerm, HistoryView::Weekly, HistoryView::ExtraUsage, HistoryView::AllMeters}) {
-            for (auto accountView : {HistoryView::ShortTerm, HistoryView::Weekly, HistoryView::ExtraUsage, HistoryView::AllMeters}) {
-                auto state = Fixture(); AllLanes(state);
-                state.selected = selected; state.allAccountsView = allView; state.accountView = accountView;
-                HistoryRebuildView(state);
-                const auto items = controls[state.meterCombo].items;
-                int resets = controls[state.meterCombo].resets;
-                const auto* visible = state.visible.data();
-                int renderWidth = state.renderWidth;
-                state.scroll = 17;
-                controls[state.meterCombo].selection = CB_ERR;
-                DispatchSelection(&state, kHistoryMeterCombo);
-                CHECK(state.selected == selected);
-                CHECK(state.allAccountsView == allView); CHECK(state.accountView == accountView);
-                CHECK(controls[state.meterCombo].resets == resets);
-                CHECK(controls[state.meterCombo].items == items);
-                CHECK(controls[state.meterCombo].selection == CB_ERR);
-                CHECK(state.visible.data() == visible); CHECK(state.renderWidth == renderWidth);
-                CHECK(state.scroll == 17);
-                // Subsequent mode switches must still restore the remembered valid choice.
-                SelectAccount(state, selected < 0 ? 0 : -1);
-                CHECK(controls[state.meterCombo].selection == int(selected < 0 ? accountView : allView));
-                SelectAccount(state, selected);
-                CHECK(controls[state.meterCombo].selection == int(selected < 0 ? allView : accountView));
-            }
-        }
-    });
-
-    Run("classic raw snapshot and CSV independent of grouped view/weekly flags/reduction", [&] {
-        auto state = Fixture(); AllLanes(state);
-        AddRow(state, 0, baseTime + 121000, {}).failed = 1;
-        auto original = state.snapshot.samples;
-        CapturedCsv baseline; size_t count = 0;
-        CHECK(baseline.WriteSnapshot(state, &count)); CHECK(count == 29);
-        CHECK(baseline.bytes.find("anthropic_extra_used,USD,12.5") != std::string::npos);
-        CHECK(baseline.bytes.find("openai_credit_balance,credits,800") != std::string::npos);
-        CHECK(baseline.bytes.find("account-100") == std::string::npos);
-        CHECK(baseline.bytes.find(",1,1\r\n") != std::string::npos);
-        SelectAccount(state, 0);
-        CapturedCsv single; size_t singleCount = 0;
-        CHECK(single.WriteSnapshot(state, &singleCount)); CHECK(singleCount == 15);
-        for (int selected : {-1, 0}) for (auto [weekly, fable] : weeklyFlags) {
-            state.accounts[0].showWeekly = weekly; state.accounts[0].showFableWeekly = fable;
-            SelectAccount(state, selected);
-            for (auto view : {HistoryView::ShortTerm, HistoryView::Weekly, HistoryView::ExtraUsage, HistoryView::AllMeters}) {
-                SelectView(state, view);
-                clientRect.right = 137; state.renderWidth = -1; HistoryRebuildRenderCache(state);
-                CapturedCsv next; size_t nextCount = 0;
-                CHECK(next.WriteSnapshot(state, &nextCount));
-                CHECK(nextCount == (selected < 0 ? count : singleCount));
-                CHECK(next.bytes == (selected < 0 ? baseline.bytes : single.bytes));
-                CHECK(state.snapshot.samples.size() == original.size());
-                CHECK(std::memcmp(original.data(), state.snapshot.samples.data(), original.size()*sizeof(HistorySample)) == 0);
-            }
-        }
     });

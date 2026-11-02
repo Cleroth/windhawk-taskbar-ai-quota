@@ -732,10 +732,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state);
 static void CloseAccountFlyout(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
-// The usage history window a new history thread runs: native controls or custom-drawn.
-enum class HistoryWindowKind : uint8_t { Classic, Custom };
-static void OpenHistoryWindow(uint64_t historyId = 0, HistoryWindowKind kind = HistoryWindowKind::Classic);
-static void NotifyHistoryJournalChanged();
+static void OpenHistoryWindow(uint64_t historyId = 0);
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
                             uint64_t newIdentity = 0);
@@ -746,7 +743,7 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
 
 // src/core/state.h
 // Shared runtime state, lifecycle signals, and cross-thread requests to the fetch thread, the
-// settings window and the custom-drawn history window.
+// settings window and the usage history window.
 
 static Settings g_settings;
 static std::mutex g_settingsMutex;
@@ -768,19 +765,19 @@ static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;
 
 static std::atomic<HWND> g_settingsWindow{nullptr};
-// The custom-drawn usage history window while it takes notifications (history/ui-window.h); the
-// classic window never gets them.
-static std::atomic<HWND> g_historyUiWindow{nullptr};
+// The usage history window from its publication until its destruction (history/ui-window.h).
+static std::atomic<HWND> g_historyWindow{nullptr};
 
 static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
 static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
 static constexpr UINT kHistoryConsentChangedMessage = WM_APP + 22;
 
-// Settings, sign-in, visibility, history ID, storage status, consent and poll changes: posted to
-// the settings window and the custom-drawn history window, never waited on.
+// Settings, sign-in, visibility, history ID, storage status, consent, poll and journal changes
+// (an account's history deleted): posted to the settings window and the usage history window,
+// never waited on.
 static void NotifySettingsWindowChanged(bool historyConsentChanged = false) {
     UINT message = historyConsentChanged ? kHistoryConsentChangedMessage : kSettingsRefreshMessage;
-    for (HWND window : {g_settingsWindow.load(), g_historyUiWindow.load()}) {
+    for (HWND window : {g_settingsWindow.load(), g_historyWindow.load()}) {
         if (window) PostMessageW(window, message, 0, 0);
     }
 }
@@ -3768,8 +3765,8 @@ static void EraseHistorySamplesLocked(uint64_t historyId) {
 }
 
 // Deletes a removed account's samples: the journal rewritten without them, then memory, then the
-// history windows told. Remove the account first: its settings publication fences out batches
-// still carrying its samples and drops its burn-up curves. Nothing ever recorded is a success; a
+// windows told. Remove the account first: its settings publication fences out batches still
+// carrying its samples and drops its burn-up curves. Nothing ever recorded is a success; a
 // journal that couldn't be read (damaged, unreadable, in use by another session) stays as it is,
 // with `error` saying why. An unsaved one (a torn tail, or past the size cap, whose eviction this
 // then saves) is rewritten even without the account's samples. Holds only the history lock.
@@ -3792,7 +3789,7 @@ static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
         EraseHistorySamplesLocked(historyId);
         if (!present) return true;
     }
-    NotifyHistoryJournalChanged();
+    NotifySettingsWindowChanged();
     return true;
 }
 
@@ -8219,10 +8216,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenHistoryWindow();
                 }));
-            menu.Items().Append(menuItem(L"Usage history (new)", L"\uE81C",
-                [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
-                    OpenHistoryWindow(0, HistoryWindowKind::Custom);
-                }));
             menu.Items().Append(menuItem(L"Settings", L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
@@ -8638,11 +8631,6 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     [historyId](winrt::Windows::Foundation::IInspectable const&,
                                 RoutedEventArgs const&) {
                         OpenHistoryWindow(historyId);
-                    }));
-                menu.Items().Append(menuItem(L"Usage history (new)", L"\uE81C",
-                    [historyId](winrt::Windows::Foundation::IInspectable const&,
-                                RoutedEventArgs const&) {
-                        OpenHistoryWindow(historyId, HistoryWindowKind::Custom);
                     }));
                 // Sign in with the mod's own OAuth; the Opening handler shows it only while the
                 // account needs a sign-in.
@@ -19947,7 +19935,7 @@ static void OpenSettingsWindow() {
 }
 
 // src/history/series.h
-// Usage-history model shared by the history windows: meter and view tables, statistics,
+// Usage-history model of the usage history window: meter and view tables, statistics,
 // reduction, series building, account collection and selection resolution. Explicit inputs
 // only; loops stop as soon as `cancelled` returns true.
 
@@ -19991,7 +19979,7 @@ struct HistoryStatistics {
 struct HistoryRenderPoint {
     int x = 0;
     double value = 0;
-    size_t sourceRow = 0;  // Raw provenance for structural tests; paint never dereferences it.
+    size_t sourceRow = 0;  // Raw provenance: a pick reports this sample; paint never dereferences it.
     bool connect = false;
 };
 
@@ -20002,7 +19990,7 @@ struct HistoryRenderSeries {
 struct HistoryUiAccount {
     uint64_t id = 0;
     uint32_t provider = 0;
-    std::wstring title, label;
+    std::wstring label;  // Removed accounts: account_<16 hex digits>
     bool configured = false;
     bool recording = false;
     bool hidden = false;
@@ -20013,7 +20001,7 @@ struct HistoryUiAccount {
 struct HistorySeries {
     size_t account = 0;
     int meter = 0;
-    std::wstring title;
+    // Its short name (without the account in one account's view) and full title (with it)
     std::wstring legendTitle, hoverTitle;
     COLORREF color = 0;
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
@@ -20022,27 +20010,18 @@ struct HistorySeries {
     double low = 0, high = 0;  // Its readings' range in [readFrom, to), with 0
 };
 
-struct HistoryAxis {
-    double low = 0, high = 1;
-    bool visible = false;
-};
-
 // What a series build reads besides the samples and accounts.
 struct HistorySeriesQuery {
     int selected = -1;  // Account index; -1 is All accounts.
     HistoryView view = HistoryView::Weekly;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     bool overlay = false;  // Compare previous week: [readFrom, from) is the previous period.
-    bool enabled = false, skipHidden = true;  // Recording consent; hidden accounts not polled.
     int redThreshold = 90;
 };
 
 struct HistorySeriesSet {
     std::vector<HistorySeries> series;
-    // Accounts without readings: each one's title with its status, and its account index.
-    std::vector<std::wstring> noReadings;
-    std::vector<size_t> noReadingAccounts;
-    std::array<HistoryAxis, 3> axes;  // Percent, USD, credits; never share unlike units.
+    std::vector<size_t> noReadingAccounts;  // Accounts without readings, by account index
     int redThreshold = 90;  // The threshold the statistics' near-limit times used
 };
 
@@ -20171,17 +20150,14 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
 }
 
 // Series of the selected account (or every account) in the query's view: one per meter with
-// readings in either period, in account then meter order. An account with none gets one
-// no-readings entry carrying its recording status.
+// readings in either period, in account then meter order. An account with none is listed
+// without readings.
 static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& samples,
                                            const std::vector<HistoryUiAccount>& accounts,
                                            const HistorySeriesQuery& query,
                                            const std::function<bool()>& cancelled) {
     HistorySeriesSet result;
     result.redThreshold = query.redThreshold;
-    result.axes[0].high = 100;
-    // Keep percentages on the left even if only dollar/credit readings are available.
-    result.axes[0].visible = true;
     for (size_t i = 0; i < accounts.size(); ++i) {
         if (cancelled()) break;
         if (query.selected >= 0 && size_t(query.selected) != i) continue;
@@ -20195,11 +20171,6 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
         }
         if (!meters) continue;
         size_t firstSeries = result.series.size();
-        std::wstring status;
-        if (account.configured && query.enabled) {
-            if (!account.recording) status = L"  [recording off]";
-            else if (account.hidden && query.skipHidden) status = L"  [paused]";
-        }
         for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
             if (cancelled()) break;
             if (!(meters & (1U << meter))) continue;
@@ -20227,8 +20198,6 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             }
             std::wstring label = kHistoryMeterNames[meter];
             if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
-            auto& axis = result.axes[meter < 6 ? 0 : meter - 5];
-            if (series.plotted) axis.visible = true;
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;
             for (size_t row : account.rows) {
@@ -20239,10 +20208,6 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                 double value = sample.meters[meter].value;
                 series.low = std::min(series.low, value);
                 series.high = std::max(series.high, value);
-                if (series.plotted) {
-                    axis.low = std::min(axis.low, value);
-                    axis.high = std::max(axis.high, value);
-                }
                 if (meter == 0 || meter == 4) {
                     ULONGLONG duration = sample.meters[meter].durationMs;
                     if (hasDuration && shortDuration != duration) mixedDuration = true;
@@ -20264,21 +20229,16 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             std::wstring compact = label;
             if (compact.ends_with(L" used (%)")) compact.resize(compact.size() - 9);
             series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + compact;
-            if (!series.plotted) label += L" — details only";
-            series.title = (query.selected < 0 ? account.label + L" · " : L"") + label;
-            if (result.series.size() == firstSeries) series.title += status;
             result.series.push_back(std::move(series));
         }
-        if (result.series.size() == firstSeries) {
-            result.noReadings.push_back(account.title + status);
-            result.noReadingAccounts.push_back(i);
-        }
+        if (result.series.size() == firstSeries) result.noReadingAccounts.push_back(i);
     }
     return result;
 }
 
 // Configured accounts in settings order (zero and duplicate history IDs skipped), then removed
-// accounts with samples in [readFrom, to), in order of their first sample. Rows index `samples`.
+// accounts with samples in [readFrom, to), in order of their first sample, labelled by their
+// journal ID. Rows index `samples`.
 static std::vector<HistoryUiAccount> HistoryCollectAccounts(const std::vector<AccountConfig>& configured,
                                                             const std::vector<HistorySample>& samples,
                                                             ULONGLONG readFrom, ULONGLONG to,
@@ -20297,7 +20257,6 @@ static std::vector<HistoryUiAccount> HistoryCollectAccounts(const std::vector<Ac
         account.showWeekly = config.showBars[kWeeklyBar];
         account.showFableWeekly = config.showBars[kFableWeeklyBar];
         account.label = config.label;
-        account.title = std::wstring(ProviderDisplayName(config.provider)) + L" — " + config.label;
         index.emplace(account.id, accounts.size());
         accounts.push_back(std::move(account));
     }
@@ -20310,10 +20269,7 @@ static std::vector<HistoryUiAccount> HistoryCollectAccounts(const std::vector<Ac
             HistoryUiAccount account;
             account.id = sample.accountId;
             account.provider = sample.provider;
-            PCWSTR provider = sample.provider == 1 ? L"Anthropic" : sample.provider == 2 ? L"OpenAI" :
-                              sample.provider == 3 ? L"Google Antigravity" : L"Unknown provider";
-            account.label = L"removed " + Utf8ToWide(HistoryCsvId("account_", sample.accountId));
-            account.title = std::wstring(provider) + L" — " + account.label;
+            account.label = Utf8ToWide(HistoryCsvId("account_", sample.accountId));
             accounts.push_back(std::move(account));
         }
         accounts[it->second].rows.push_back(row);
@@ -20336,8 +20292,7 @@ static int HistoryResolveSelection(const std::vector<HistoryUiAccount>& accounts
 
 // src/history/csv.h
 // Usage-history CSV export (pure): the rows an export writes, from a scope frozen when it starts,
-// to a sink. Both history windows write through it; the file around it is native
-// (history/ops.h, history/export.h).
+// to a sink. The file around it is native (history/ops.h).
 
 // What an export writes, fixed at its command: its own snapshot (time-sorted samples), the
 // account (0: every account) and the times [from, to) (the range, and the week before it while
@@ -20408,74 +20363,23 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
 }
 
 // src/history/window-state.h
-// History window thread state, control IDs, and the classic window's view-model types.
+// Usage history window thread state and messages.
 
 static HANDLE g_historyWindowThread = nullptr;
 static std::mutex g_historyWindowMutex;
-static std::atomic<HWND> g_historyWindow{nullptr};
 static std::atomic<HWND> g_historyDialog{nullptr};
 static std::atomic<bool> g_historyWindowCancelRequested{false};
 // History ID that the window's next load selects, from the latest open request; 0 keeps the
 // current selection. OpenHistoryWindow stores it under g_historyWindowMutex.
 static std::atomic<uint64_t> g_historyRequestedAccount{0};
 
-static constexpr PCWSTR kHistoryWindowClass = L"AiQuotaHistory_" WH_MOD_ID;
-static constexpr PCWSTR kHistoryGraphClass = L"AiQuotaHistoryGraph_" WH_MOD_ID;
+// The window's activation request and explicit load, its posted refresh and export write, and its
+// deferral check timer (main window; the toolkit's own timers use 0x7E01-0x7E02).
 static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
 static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
-// The custom-drawn window's posted refresh and export write, and its deferral check timer (main
-// window; the toolkit's own timers use 0x7E01-0x7E02).
 static constexpr UINT kHistoryRefreshMessage = WM_APP + 183;
 static constexpr UINT kHistoryWriteMessage = WM_APP + 184;
 static constexpr UINT_PTR kHistoryDeferralTimer = 0x4E01;
-static constexpr int kHistorySeriesHeight = 90;
-
-enum HistoryControlId {
-    kHistoryAccountCombo = 2800, kHistoryMeterCombo, kHistoryRangeCombo,
-    kHistoryOverlayCheck, kHistoryRefreshButton, kHistoryExportButton,
-    kHistoryClearButton, kHistorySettingsButton, kHistoryGraphControl, kHistoryInfoButton,
-    kHistoryEnableButton,
-};
-
-// A built series with its legend placement and per-period render cache.
-struct HistoryUiSeries : HistorySeries {
-    RECT legendRect{};  // Unscrolled graph coordinates, shared by paint and hit testing.
-    std::array<HistoryRenderSeries, 2> render;
-};
-
-struct HistoryWindowState {
-    HWND window = nullptr, graph = nullptr;
-    HWND accountLabel = nullptr, meterLabel = nullptr, rangeLabel = nullptr;
-    HWND accountCombo = nullptr, meterCombo = nullptr, rangeCombo = nullptr;
-    HWND overlayCheck = nullptr, refreshButton = nullptr, exportButton = nullptr;
-    HWND clearButton = nullptr, settingsButton = nullptr, legend = nullptr, status = nullptr;
-    HWND infoButton = nullptr;
-    HWND recordingBanner = nullptr, enableButton = nullptr;
-    HWND exportTip = nullptr, graphTip = nullptr;
-    HFONT font = nullptr;
-    UINT dpi = 96;
-    HistoryView allAccountsView = HistoryView::Weekly, accountView = HistoryView::AllMeters;
-    int range = 0, selected = -1, scroll = 0, wheelRemainder = 0;
-    int renderWidth = -1, layoutWidth = -1, graphHeight = 0;
-    RECT plot{};  // Unscrolled; layout, reduction, hit tests and statistics share this geometry.
-    POINT hoverPoint{-1, -1};  // Ignore mouse moves synthesized by positioning the tooltip.
-    std::vector<size_t> hoverSeries;
-    std::wstring graphTipText;
-    bool graphTipActive = false, trackingMouse = false;
-    bool overlay = false, closing = false, modal = false, loading = false;
-    bool reloadAfterModal = false;  // The journal changed while a dialog was open
-    bool enabled = false, skipHidden = true, idsPendingSave = false;
-    int retention = 90, redThreshold = 90;
-    ULONGLONG from = 0, to = 0, readFrom = 0;
-    std::array<HistoryAxis, 3> axes;  // Percent, USD, credits; never share unlike units.
-    HistorySnapshot snapshot;
-    std::vector<HistoryUiAccount> accounts;
-    std::vector<HistoryUiSeries> visible;
-    std::vector<std::wstring> noReadings;
-    std::wstring snapshotStatus;
-};
-
-static void HistoryLayout(HistoryWindowState& state, bool newFont);
 
 // src/history/view.h
 // Usage history window view: the explicit snapshot its frame builders read (history/shell.h,
@@ -20497,7 +20401,7 @@ struct HistoryUiViewAccount {
     uint64_t historyId = 0;
     uint32_t slot = 0;          // Session-stable per history ID (below 0xFF000): its entry's item id
     uint32_t provider = 0;      // 1 Anthropic, 2 OpenAI, 3 Antigravity; else unknown
-    std::wstring label;         // Removed accounts: account_<16 hex digits>, without "removed "
+    std::wstring label;         // Removed accounts: account_<16 hex digits>
     bool removed = false;
     bool recordingOff = false;  // Its Record history is off
     bool paused = false;        // Hidden while hidden accounts aren't polled
@@ -20509,7 +20413,7 @@ struct HistoryUiViewAccount {
 
 // A summary card (approved Q10 a): a series' chip name and line, a headline with the current
 // period's latest value ("now" when it is the account's latest fresh poll, else its time), then
-// the classic lines. Details-only dollar spending has no line.
+// its statistics lines. Details-only dollar spending has no line.
 struct HistoryUiCard {
     std::wstring title;
     std::wstring status;        // After the title, muted: the account's recording status
@@ -20529,7 +20433,7 @@ struct HistoryUiNoReadings {
 
 // A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
 // the chip's item id (per history ID and meter, stable for the session), the chip's name (the
-// readout's too) and the full title, the classic color and width, the range of its readings in
+// readout's too) and the full title, the series' color and width, the range of its readings in
 // both periods (with 0), and whether the legend hides it.
 struct HistoryUiLine {
     uint32_t chip = 0;
@@ -20704,12 +20608,11 @@ static std::wstring HistoryUiValue(int meter, double value, int percentDecimals)
 }
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
-// accounts without readings, from the view's accounts (parallel to `collected`), selection,
-// comparison and consent. Classic parity: every peak and its time, coverage with its share, time
-// at or above the red threshold the set was analyzed with for percentages, dollar spending's last
-// and peak readings, and an account's recording status once (in All accounts, on its first card).
-static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set,
-                              const std::vector<HistoryUiAccount>& collected, ULONGLONG from, ULONGLONG to,
+// accounts without readings, from the view's accounts (parallel to the set's), selection,
+// comparison and consent: every peak and its time, coverage with its share, time at or above the
+// red threshold the set was analyzed with for percentages, dollar spending's last and peak
+// readings, and an account's recording status once (in All accounts, on its first card).
+static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, ULONGLONG from, ULONGLONG to,
                               ULONGLONG now, const HistoryUiLocalTime& localTime) {
     view.cards.clear();
     view.noReadings.clear();
@@ -20721,16 +20624,10 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set,
     double duration = double(to > from ? to - from : 0);
     size_t previousAccount = SIZE_MAX;
     for (const HistorySeries& series : set.series) {
-        if (series.account >= view.accounts.size() || series.account >= collected.size()) continue;
+        if (series.account >= view.accounts.size()) continue;
         const HistoryUiViewAccount& account = view.accounts[series.account];
         HistoryUiCard card;
-        // All accounts names the account by its label in the view (a removed one's without the
-        // collected "removed " prefix).
         card.title = series.legendTitle;
-        if (const std::wstring& collectedLabel = collected[series.account].label;
-            view.selected < 0 && card.title.starts_with(collectedLabel)) {
-            card.title = account.label + card.title.substr(collectedLabel.size());
-        }
         if (!series.plotted) card.title += L" \u2014 details only";
         if (view.selected < 0 && series.account != previousAccount) card.status = status(series.account);
         previousAccount = series.account;
@@ -20782,13 +20679,13 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set,
 // s-legend, s-band, q6a-tooltip, q8a-filter, q6-rows): line colors per theme, the axes, the
 // layout with its local time ticks, the projection painting and picking share, picking, readout
 // rows, emphasis and the scene, a draw list the painter executes (history/chart-paint.h). Pure:
-// explicit inputs; geometry in DIPs in the chart item's coordinates. The classic graph's rules
-// (history/view-model.h, paint.h) carry over: per-pixel reduction, every nearby line in both
-// periods picked at a recorded endpoint, muted lines first, the previous week dashed.
+// explicit inputs; geometry in DIPs in the chart item's coordinates. Per-pixel reduction, every
+// nearby line in both periods picked at a recorded endpoint, muted lines first, the previous week
+// dashed.
 
 // Colors -----------------------------------------------------------------------------------------
 
-// A series' classic color in the mockups' palette, dark or light; a scoped quota's tint keeps a
+// A series' color (history/series.h palette) in the mockups' palette, dark or light; a scoped quota's tint keeps a
 // quarter of the theme's text color over its account's hue.
 static D2D1_COLOR_F HistoryUiHue(COLORREF color, bool light) {
     static constexpr uint32_t kHues[][2] = {
@@ -22060,11 +21957,10 @@ struct HistoryController {
         return true;
     }
 
-    // The view from the state: the accounts with their slots, recording state and latest polls
-    // (a removed one named by its journal ID), the current mode's view, the settings, the pill,
-    // status and notice, then the summary cards once loaded (from the series, built again only
-    // when their key changed). A selection that isn't listed is All accounts. Returns whether the
-    // view changed.
+    // The view from the state: the accounts with their slots, recording state and latest polls,
+    // the current mode's view, the settings, the pill, status and notice, then the summary cards
+    // once loaded (from the series, built again only when their key changed). A selection that
+    // isn't listed is All accounts. Returns whether the view changed.
     bool Compose() {
         const Settings& s = settings.settings;
         ULONGLONG now = ops->Now();
@@ -22077,7 +21973,7 @@ struct HistoryController {
             account.historyId = a.id;
             account.slot = slots.try_emplace(a.id, uint32_t(slots.size())).first->second;
             account.provider = a.provider;
-            account.label = a.configured ? a.label : Utf8ToWide(HistoryCsvId("account_", a.id));
+            account.label = a.label;
             account.removed = !a.configured;
             account.recordingOff = a.configured && !a.recording;
             account.paused = a.hidden && s.skipHiddenPolling;
@@ -22124,31 +22020,26 @@ struct HistoryController {
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
                                  v.selected >= 0 ? selectedId : 0, compare};
             if (!(key == seriesKey)) {
-                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, s.historyEnabled,
-                                         s.skipHiddenPolling, v.redThreshold};
+                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold};
                 series = HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
                 // A build cut short is never taken for a complete one.
                 seriesKey = ops->Unloading() ? HistorySeriesKey{} : key;
             }
-            HistoryUiSetCards(v, series, accounts, from, to, now, localTime);
-            // The chart's lines: the plotted series in order, named as their cards (a removed
-            // account without the collected "removed " prefix), hidden as the legend left them.
+            HistoryUiSetCards(v, series, from, to, now, localTime);
+            // The chart's lines: the plotted series in order, named as their cards, hidden as the
+            // legend left them.
             for (size_t i = 0; i < series.series.size(); i++) {
                 const HistorySeries& line = series.series[i];
                 if (!line.plotted || line.account >= v.accounts.size()) continue;
                 const HistoryUiViewAccount& account = v.accounts[line.account];
-                std::wstring prefix = accounts[line.account].label + L" \u00B7 ";
-                auto named = [&](const std::wstring& title) {
-                    return title.starts_with(prefix) ? account.label + title.substr(prefix.size() - 3) : title;
-                };
                 HistoryUiLine& shown = v.lines.emplace_back();
                 shown.chip = kHistoryUiChip + account.slot * 8 + uint32_t(line.meter);
                 shown.historyId = account.historyId;
                 shown.meter = line.meter;
                 shown.series = i;
                 shown.account = line.account;
-                shown.name = named(line.legendTitle);
-                shown.title = named(line.hoverTitle);
+                shown.name = line.legendTitle;
+                shown.title = line.hoverTitle;
                 shown.color = line.color;
                 shown.stroke = line.stroke;
                 shown.low = line.low;
@@ -22713,7 +22604,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
 
     // Icon buttons (mockup .ibtn: 32 x 30 DIP, 4 apart) at the title row's right: Refresh,
     // Export (once loaded) and the More menu, named by their tooltips (s-tooltips, q7a-icons;
-    // Export's by its scope, as the classic button, over the classic description).
+    // Export's by its scope, over its description).
     struct IconButton {
         uint32_t id;
         PCWSTR glyph;
@@ -22987,8 +22878,8 @@ struct HistoryProductionOps final : HistoryOps {
 
     uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
 
-    // As the classic window's load: an explicit viewer read also prunes retained history while
-    // recording is off. Each call holds only the history leaf lock.
+    // An explicit viewer read also prunes retained history while recording is off. Each call
+    // holds only the history leaf lock.
     HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) override {
         MaintainHistory(retentionDays);
         return ReadHistorySnapshot(from);
@@ -23014,10 +22905,10 @@ struct HistoryProductionOps final : HistoryOps {
         return snapshot;
     }
 
-    // The classic window's Enable recording transaction (history/window.h): the edit lock, the
-    // unload check once it is held, consent through the shared edit path (it persists this
-    // user's consent without changing account selections), the lock released before marshaling
-    // to taskbar threads, then the windows notified whatever the result.
+    // Enable recording: the edit lock, the unload check once it is held, consent through the
+    // shared edit path (it persists this user's consent without changing account selections),
+    // the lock released before marshaling to taskbar threads, then the windows notified whatever
+    // the result.
     HistoryConsentResult ApplyConsent() override {
         SettingsApplyResult applied;
         {
@@ -23059,7 +22950,7 @@ struct HistoryProductionOps final : HistoryOps {
         return scope.hook ? MessageBoxW(host->main, text.c_str(), caption, type) : 0;
     }
 
-    // The classic export's save dialog (history/export.h).
+    // The export's save dialog; its overwrite prompt runs in the same scope.
     HistoryDestination ChooseDestination(const std::wstring& title) override {
         UiHostClosePopup(*host);
         HistoryDialogScope scope(dialogs);
@@ -23081,14 +22972,14 @@ struct HistoryProductionOps final : HistoryOps {
     }
 
     bool PostWrite() override {
-        HWND window = g_historyUiWindow.load();
+        HWND window = g_historyWindow.load();
         return window && PostMessageW(window, kHistoryWriteMessage, 0, 0);
     }
 
-    // The classic export's file safety (history/export.h): a new temporary file beside the
-    // destination (never an existing one), the rows, flushed and closed, then moved over the
-    // destination with write-through. On any failure, unload or exception the temporary file is
-    // deleted and the destination keeps its content. Progress goes out before each full piece.
+    // The export's file safety: a new temporary file beside the destination (never an existing
+    // one), the rows, flushed and closed, then moved over the destination with write-through. On
+    // any failure, unload or exception the temporary file is deleted and the destination keeps
+    // its content. Progress goes out before each full piece.
     HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
                               const std::function<void(size_t)>& progress) override {
         struct Temporary {
@@ -23157,12 +23048,12 @@ struct HistoryProductionOps final : HistoryOps {
     void InvalidateCurves() override { InvalidateBurnUpCurves(); }
 
     bool PostRefresh() override {
-        HWND window = g_historyUiWindow.load();
+        HWND window = g_historyWindow.load();
         return window && PostMessageW(window, kHistoryRefreshMessage, 0, 0);
     }
 
     void DeferralTimer(bool on) override {
-        HWND window = g_historyUiWindow.load();
+        HWND window = g_historyWindow.load();
         if (!window) return;
         if (!on) KillTimer(window, kHistoryDeferralTimer);
         else if (!SetTimer(window, kHistoryDeferralTimer, 250, nullptr)) winrt::throw_last_error();
@@ -23295,7 +23186,6 @@ struct HistoryUiClient final : UiHostClient {
         ops.dialogs = {&g_historyDialog, [this] { return controller.closeRequested || ops.Unloading(); }};
         controller.Open();
         g_historyWindow.store(host.main);
-        g_historyUiWindow.store(host.main);
         PostMessageW(host.main, kHistoryLoadMessage, 0, 0);
         return true;
     }
@@ -23312,10 +23202,7 @@ struct HistoryUiClient final : UiHostClient {
 
     bool PrepareClose(UiHost&) override { return true; }
 
-    void Destroying() override {
-        g_historyUiWindow.store(nullptr);
-        g_historyWindow.store(nullptr);
-    }
+    void Destroying() override { g_historyWindow.store(nullptr); }
 
     void Destroyed() override {}
 
@@ -23333,1441 +23220,11 @@ struct HistoryUiClient final : UiHostClient {
     }
 };
 
-// src/history/view-model.h
-// Classic history window over the shared model (history/series.h): dates, render cache, hover
-// hit-testing, and loading.
-
-// Dates on-screen are local; CSV dates are UTC.
-static std::wstring HistoryLocalDate(ULONGLONG time) {
-    SYSTEMTIME local{};
-    if (!UnixMsToLocalSystemTime(time, &local)) return L"unknown local time";
-    wchar_t text[48];
-    swprintf(text, ARRAYSIZE(text), L"%04u-%02u-%02u %02u:%02u:%02u",
-             local.wYear, local.wMonth, local.wDay, local.wHour, local.wMinute, local.wSecond);
-    return text;
-}
-
-// The render cache's reduction, stopped by unload or window close.
-static HistoryRenderSeries HistoryReducePeriod(const HistorySnapshot& snapshot,
-                                               const std::vector<size_t>& rows,
-                                               int meter, ULONGLONG from,
-                                               ULONGLONG to, int width) {
-    return HistoryReduceRows(snapshot.samples, rows, meter, from, to, width,
-                             [] { return g_unloading || g_historyWindowCancelRequested; });
-}
-
-// Cache reduction and painting reserve identical space for additional unit axes.
-static int HistoryPlotRightPadding(const HistoryWindowState& state) {
-    int axes = 0;
-    for (const auto& axis : state.axes) axes += axis.visible;
-    return ScaleForDpi(26 + std::max(0, axes - 1) * 110, state.dpi);
-}
-
-static void HistoryClearHover(HistoryWindowState& state) {
-    if (state.graphTip && state.graphTipActive) {
-        TOOLINFOW tool{};
-        tool.cbSize = TTTOOLINFOW_V2_SIZE;
-        tool.hwnd = state.graph;
-        tool.uId = 1;
-        SendMessageW(state.graphTip, TTM_TRACKACTIVATE, FALSE, reinterpret_cast<LPARAM>(&tool));
-    }
-    state.graphTipActive = false;
-    state.hoverPoint = {-1, -1};
-    // The native tool can retain lpszText even while hidden; do not discard its backing string.
-    if (!state.hoverSeries.empty()) {
-        state.hoverSeries.clear();
-        if (state.graph) InvalidateRect(state.graph, nullptr, FALSE);
-    }
-    if (state.trackingMouse && state.graph) {
-        TRACKMOUSEEVENT tracking{sizeof(tracking), TME_CANCEL | TME_LEAVE, state.graph, 0};
-        TrackMouseEvent(&tracking);
-    }
-    state.trackingMouse = false;
-}
-
-// One projection for drawing and picking, including large finite values and unlike units.
-static POINT HistoryPlotPoint(const HistoryWindowState& state, const HistoryUiSeries& series,
-                              const HistoryRenderPoint& point) {
-    const auto& axis = state.axes[series.meter < 6 ? 0 : series.meter - 5];
-    double magnitude = std::max({1.0, std::abs(axis.low), std::abs(axis.high)});
-    double low = axis.low / magnitude, span = axis.high / magnitude - low;
-    double fraction = span > 0 ? (point.value / magnitude - low) / span : 0;
-    return {state.plot.left + point.x,
-            state.plot.bottom - int(std::clamp(fraction, 0.0, 1.0) * (state.plot.bottom - state.plot.top))};
-}
-
-static COLORREF HistoryLineColor(const HistoryWindowState& state, size_t index, bool highContrast) {
-    COLORREF color = highContrast ? GetSysColor(COLOR_WINDOWTEXT) : state.visible[index].color;
-    if (state.hoverSeries.empty() ||
-        std::find(state.hoverSeries.begin(), state.hoverSeries.end(), index) != state.hoverSeries.end()) return color;
-    if (highContrast) return GetSysColor(COLOR_GRAYTEXT);
-    COLORREF background = GetSysColor(COLOR_WINDOW);
-    return RGB((GetRValue(color) + 3 * GetRValue(background)) / 4,
-               (GetGValue(color) + 3 * GetGValue(background)) / 4,
-               (GetBValue(color) + 3 * GetBValue(background)) / 4);
-}
-
-// Only selection/snapshot/size handlers build caches; WM_PAINT never scans raw rows.
-// Selection rebuilds invalidate renderWidth even if the physical plot width is unchanged.
-static void HistoryRebuildRenderCache(HistoryWindowState& state) {
-    RECT client{};
-    if (!state.graph || !GetClientRect(state.graph, &client)) return;
-    int width = std::max(0, int(client.right) - ScaleForDpi(110, state.dpi) - HistoryPlotRightPadding(state));
-    if (width == state.renderWidth && state.layoutWidth == client.right) return;
-    HistoryClearHover(state);
-    state.layoutWidth = -1;
-    HDC dc = GetDC(state.graph);
-    if (!dc) return;
-    HGDIOBJ oldFont = SelectObject(dc, state.font ? state.font : GetStockObject(DEFAULT_GUI_FONT));
-    int pad = ScaleForDpi(12, state.dpi), swatch = ScaleForDpi(34, state.dpi);
-    int right = std::max(pad, int(client.right) - pad);
-    int x = pad, y = ScaleForDpi(36, state.dpi), rowHeight = 0;
-    for (auto& series : state.visible) {
-        if (g_unloading || g_historyWindowCancelRequested) break;
-        series.legendRect = {};
-        if (!series.plotted || right <= pad) continue;
-        RECT text{0, 0, std::max(1, right - pad - swatch), 0};
-        DrawTextW(dc, series.legendTitle.c_str(), int(series.legendTitle.size()), &text,
-                  DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
-        int itemWidth = std::min(right - pad, int(text.right) + swatch);
-        int itemHeight = std::max(ScaleForDpi(22, state.dpi), int(text.bottom));
-        if (x > pad && x + itemWidth > right) {
-            x = pad;
-            y += rowHeight + ScaleForDpi(2, state.dpi);
-            rowHeight = 0;
-        }
-        series.legendRect = {x, y, x + itemWidth, y + itemHeight};
-        x += itemWidth + pad;
-        rowHeight = std::max(rowHeight, itemHeight);
-    }
-    SelectObject(dc, oldFont);
-    ReleaseDC(state.graph, dc);
-    if (g_unloading || g_historyWindowCancelRequested) return;
-    int plotTop = rowHeight ? y + rowHeight + ScaleForDpi(10, state.dpi) : ScaleForDpi(42, state.dpi);
-    int left = std::min(int(client.right), ScaleForDpi(110, state.dpi));
-    state.plot = {left, plotTop, left + width, plotTop + ScaleForDpi(166, state.dpi)};
-    state.graphHeight = state.plot.bottom + ScaleForDpi(44, state.dpi);
-    for (auto& series : state.visible) {
-        if (g_unloading || g_historyWindowCancelRequested) return;
-        if (!series.plotted) continue;
-        const auto& account = state.accounts[series.account];
-        series.render[0] = HistoryReducePeriod(state.snapshot, account.rows, series.meter, state.from, state.to, width);
-        series.render[1] = state.overlay
-            ? HistoryReducePeriod(state.snapshot, account.rows, series.meter, state.readFrom, state.from, width)
-            : HistoryRenderSeries{};
-    }
-    state.renderWidth = width;
-    state.layoutWidth = client.right;
-}
-
-struct HistoryHoverHit {
-    size_t series = 0;
-    int period = 0;
-    size_t point = 0;
-};
-
-// Picking boundary: return every nearby series/period, not just the last painted line.
-// Only real connected segments participate; the reported endpoint is always a recorded sample.
-static std::vector<HistoryHoverHit> HistoryHitTest(const HistoryWindowState& state, POINT cursor) {
-    std::vector<HistoryHoverHit> hits;
-    if (state.renderWidth <= 0 || state.renderWidth != state.plot.right - state.plot.left ||
-        cursor.x < state.plot.left || cursor.x > state.plot.right ||
-        cursor.y < state.plot.top || cursor.y > state.plot.bottom) return hits;
-    for (size_t index = 0; index < state.visible.size(); ++index) {
-        if (g_unloading || g_historyWindowCancelRequested) return {};
-        const auto& line = state.visible[index];
-        if (!line.plotted) continue;
-        int tolerance = ScaleForDpi(5, state.dpi) + std::max(1, ScaleForDpi(line.stroke, state.dpi)) / 2;
-        for (int period = 0; period < (state.overlay ? 2 : 1); ++period) {
-            const auto& points = line.render[period].points;
-            int minX = cursor.x - state.plot.left - tolerance;
-            int maxX = cursor.x - state.plot.left + tolerance;
-            auto first = std::lower_bound(points.begin(), points.end(), minX,
-                [](const HistoryRenderPoint& point, int x) { return point.x < x; });
-            double best = double(tolerance) * tolerance;
-            size_t nearest = SIZE_MAX;
-            for (size_t i = size_t(first - points.begin()); i < points.size(); ++i) {
-                if (g_unloading || g_historyWindowCancelRequested) return {};
-                POINT b = HistoryPlotPoint(state, line, points[i]);
-                double bx = double(cursor.x) - b.x, by = double(cursor.y) - b.y;
-                double distance = bx * bx + by * by;
-                size_t endpoint = i;
-                if (i && points[i].connect) {
-                    POINT a = HistoryPlotPoint(state, line, points[i - 1]);
-                    double dx = double(b.x) - a.x, dy = double(b.y) - a.y;
-                    double ax = double(cursor.x) - a.x, ay = double(cursor.y) - a.y;
-                    double length = dx * dx + dy * dy;
-                    double t = length > 0 ? std::clamp((ax * dx + ay * dy) / length, 0.0, 1.0) : 0;
-                    double ex = ax - t * dx, ey = ay - t * dy;
-                    distance = ex * ex + ey * ey;
-                    if (ax * ax + ay * ay < bx * bx + by * by) endpoint = i - 1;
-                }
-                if (distance <= best) {
-                    best = distance;
-                    nearest = endpoint;
-                }
-                // Include one endpoint beyond the search band: its incoming segment can cross it.
-                if (points[i].x > maxX) break;
-            }
-            if (nearest != SIZE_MAX) hits.push_back({index, period, nearest});
-        }
-    }
-    return hits;
-}
-
-// Native tracking tool and its text belong exclusively to the graph's history thread.
-static void HistoryUpdateHover(HistoryWindowState& state, POINT cursor) {
-    RECT client{};
-    GetClientRect(state.graph, &client);
-    if (state.closing || state.loading || state.modal || g_unloading || g_historyWindowCancelRequested ||
-        state.renderWidth < 0 || state.layoutWidth != client.right || !PtInRect(&client, cursor)) {
-        HistoryClearHover(state);
-        return;
-    }
-    if (state.hoverPoint.x == cursor.x && state.hoverPoint.y == cursor.y) return;
-    state.hoverPoint = cursor;
-    POINT content{cursor.x, cursor.y + state.scroll};
-    std::vector<size_t> highlighted;
-    std::wstring text;
-    for (size_t index = 0; index < state.visible.size(); ++index) {
-        if (g_unloading || g_historyWindowCancelRequested) { HistoryClearHover(state); return; }
-        const auto& series = state.visible[index];
-        if (!series.plotted || !PtInRect(&series.legendRect, content)) continue;
-        highlighted.push_back(index);
-        text = series.hoverTitle + (state.overlay
-            ? L"\r\nSolid / filled: current week. Dashed / hollow: previous week."
-            : L"\r\nSolid / filled: current range.");
-        break;
-    }
-    if (highlighted.empty()) {
-        auto hits = HistoryHitTest(state, content);
-        for (const auto& hit : hits) {
-            if (g_unloading || g_historyWindowCancelRequested) { HistoryClearHover(state); return; }
-            const auto& series = state.visible[hit.series];
-            const auto& point = series.render[hit.period].points[hit.point];
-            if (point.sourceRow >= state.snapshot.samples.size()) continue;
-            if (highlighted.empty() || highlighted.back() != hit.series) highlighted.push_back(hit.series);
-            if (!text.empty()) text += L"\r\n";
-            text += series.hoverTitle + (hit.period ? L" [Previous week]: " : L" [Current]: ") +
-                (series.meter == 6 ? L"USD " : L"") + HistoryNumber(point.value) +
-                (series.meter < 6 ? L"%" : series.meter == 7 ? L" credits" : L"") + L" · " +
-                HistoryLocalDate(state.snapshot.samples[point.sourceRow].timeMs);
-        }
-    }
-    if (highlighted.empty()) {
-        HistoryClearHover(state);
-        return;
-    }
-    if (!state.trackingMouse) {
-        TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, state.graph, 0};
-        state.trackingMouse = TrackMouseEvent(&tracking) != FALSE;
-    }
-    if (state.hoverSeries != highlighted) {
-        state.hoverSeries = std::move(highlighted);
-        InvalidateRect(state.graph, nullptr, FALSE);
-    }
-    if (!state.graphTip) return;
-    TOOLINFOW tool{};
-    tool.cbSize = TTTOOLINFOW_V2_SIZE;
-    tool.hwnd = state.graph;
-    tool.uId = 1;
-    if (state.graphTipText != text) {
-        // Keep the old native text pointer alive until its replacement has been processed.
-        state.graphTipText.swap(text);
-        tool.lpszText = state.graphTipText.data();
-        SendMessageW(state.graphTip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&tool));
-    }
-    POINT screen = cursor;
-    ClientToScreen(state.graph, &screen);
-    MONITORINFO monitor{sizeof(monitor)};
-    if (!GetMonitorInfoW(MonitorFromPoint(screen, MONITOR_DEFAULTTONEAREST), &monitor))
-        monitor.rcWork = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
-    int pad = ScaleForDpi(12, state.dpi);
-    SendMessageW(state.graphTip, TTM_SETMAXTIPWIDTH, 0,
-                  std::max(1L, std::min(LONG(ScaleForDpi(900, state.dpi)), monitor.rcWork.right - monitor.rcWork.left - 2 * pad)));
-    // Native tooltip sizing is unreliable (and can fault in v5) before first activation.
-    // Prime it offscreen once; active text updates resize synchronously without hide/show.
-    if (!state.graphTipActive) {
-        SendMessageW(state.graphTip, TTM_TRACKPOSITION, 0, MAKELPARAM(-32000, -32000));
-        SendMessageW(state.graphTip, TTM_TRACKACTIVATE, TRUE, reinterpret_cast<LPARAM>(&tool));
-        state.graphTipActive = true;
-    }
-    RECT tip{};
-    if (!GetWindowRect(state.graphTip, &tip) || tip.right <= tip.left || tip.bottom <= tip.top) {
-        HistoryClearHover(state);
-        return;
-    }
-    int tipWidth = tip.right - tip.left, tipHeight = tip.bottom - tip.top;
-    int x = screen.x + pad, y = screen.y + ScaleForDpi(20, state.dpi);
-    if (y + tipHeight > monitor.rcWork.bottom) y = screen.y - tipHeight - pad;
-    x = std::clamp(x, int(monitor.rcWork.left), std::max(int(monitor.rcWork.left), int(monitor.rcWork.right) - tipWidth));
-    y = std::clamp(y, int(monitor.rcWork.top), std::max(int(monitor.rcWork.top), int(monitor.rcWork.bottom) - tipHeight));
-    SendMessageW(state.graphTip, TTM_TRACKPOSITION, 0, MAKELPARAM(x, y));
-}
-
-static void HistorySetStatus(HistoryWindowState& state, const std::wstring& message) {
-    // Keep operational failures visible; explanatory text lives behind Info.
-    std::wstring text = message.empty() ? state.snapshotStatus : message;
-    std::wstring journal = state.snapshot.status;
-    if (state.snapshot.capped) journal += L" Storage cap reached; oldest samples were pruned.";
-    if (!journal.empty()) text += L"\r\n" + journal;
-    SetWindowTextW(state.status, text.c_str());
-}
-
-static void HistoryScroll(HistoryWindowState& state, int position) {
-    if (!state.graph) return;
-    HistoryClearHover(state);
-    HistoryRebuildRenderCache(state);
-    RECT client{};
-    GetClientRect(state.graph, &client);
-    int seriesHeight = std::max(1, ScaleForDpi(kHistorySeriesHeight + (state.overlay ? 44 : 0), state.dpi));
-    size_t height = state.visible.empty() && state.noReadings.empty() ? 0 :
-        size_t(state.graphHeight) + state.visible.size() * size_t(seriesHeight);
-    if (!state.noReadings.empty())
-        height += (state.noReadings.size() + 1) * size_t(ScaleForDpi(24, state.dpi));
-    int total = int(std::min(height, size_t(INT_MAX)));
-    SCROLLINFO scroll{};
-    scroll.cbSize = sizeof(scroll);
-    scroll.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-    scroll.nMax = std::max(0, total - 1);
-    scroll.nPage = UINT(std::max(0L, client.bottom));
-    scroll.nPos = std::clamp(position, 0, std::max(0, total - int(scroll.nPage)));
-    SetScrollInfo(state.graph, SB_VERT, &scroll, TRUE);
-    state.scroll = scroll.nPos;
-    InvalidateRect(state.graph, nullptr, FALSE);
-}
-
-// Runs only on the history thread. Selection changes reuse the loaded file snapshot.
-static void HistoryRebuildView(HistoryWindowState& state) {
-    HistoryClearHover(state);
-    state.visible.clear();
-    state.noReadings.clear();
-    state.renderWidth = -1;
-    HistoryView view = state.selected < 0 ? state.allAccountsView : state.accountView;
-    auto built = HistoryBuildSeries(state.snapshot.samples, state.accounts,
-        {.selected = state.selected, .view = view, .from = state.from, .to = state.to,
-         .readFrom = state.readFrom, .overlay = state.overlay, .enabled = state.enabled,
-         .skipHidden = state.skipHidden, .redThreshold = state.redThreshold},
-        [] { return g_unloading || g_historyWindowCancelRequested; });
-    state.visible.reserve(built.series.size());
-    for (auto& series : built.series) state.visible.push_back({std::move(series), {}, {}});
-    state.noReadings = std::move(built.noReadings);
-    state.axes = built.axes;
-    // Each account mode keeps its own view selection; single accounts start on All meters.
-    SendMessageW(state.meterCombo, CB_RESETCONTENT, 0, 0);
-    for (PCWSTR name : kHistoryViewNames)
-        SendMessageW(state.meterCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
-    SendMessageW(state.meterCombo, CB_SETCURSEL, WPARAM(view), 0);
-    EnableWindow(state.exportButton, !state.loading);
-    SetWindowTextW(state.exportButton, state.selected < 0 ? L"&Export all CSV..." : L"&Export CSV...");
-    HistoryScroll(state, 0);
-}
-
-static void HistoryLoad(HistoryWindowState& state) {
-    // An open request applies to this load only, even one that bails (e.g. under a modal
-    // dialog), so it never switches the selection later.
-    uint64_t requestedId = g_historyRequestedAccount.exchange(0);
-    if (state.loading || state.modal || state.closing || g_unloading || g_historyWindowCancelRequested) return;
-    HistoryClearHover(state);
-    state.loading = true;
-    EnableWindow(state.refreshButton, FALSE);
-    uint64_t selectedId = state.selected >= 0 && size_t(state.selected) < state.accounts.size()
-                              ? state.accounts[state.selected].id : 0;
-    std::vector<AccountConfig> configured;
-    {
-        std::lock_guard lock(g_settingsMutex);
-        configured = g_settings.accounts;
-        state.enabled = g_settings.historyEnabled;
-        state.idsPendingSave = g_historyIdsPendingSave.load();
-        state.retention = g_settings.historyRetentionDays;
-        state.skipHidden = g_settings.skipHiddenPolling;
-        state.redThreshold = g_settings.redThreshold;
-    }
-    static constexpr int days[] = {1, 7, 30, 90};
-    state.to = NowUnixMs();
-    ULONGLONG rangeDays = state.overlay ? 7 : state.range == 4
-        ? std::max(1, state.retention) : days[state.range];
-    ULONGLONG range = rangeDays * kHistoryDayMs;
-    state.from = state.to > range ? state.to - range : 0;
-    state.readFrom = state.overlay && state.from > kHistoryWeekMs
-                        ? state.from - kHistoryWeekMs : state.from;
-    // Explicit viewer refresh also prunes retained history while recording is off.
-    // No settings lock is held across disk I/O or the history leaf lock.
-    MaintainHistory(state.retention);
-    state.snapshot = ReadHistorySnapshot(state.readFrom);
-    // A close can arrive while the snapshot API is doing I/O. Drop old row indices
-    // before returning so even a queued paint cannot index the replacement snapshot.
-    state.visible.clear();
-    state.noReadings.clear();
-    state.renderWidth = -1;
-    if (g_unloading || g_historyWindowCancelRequested) {
-        state.loading = false;
-        PostMessageW(state.window, WM_CLOSE, 0, 0);
-        return;
-    }
-    std::stable_sort(state.snapshot.samples.begin(), state.snapshot.samples.end(),
-                     [](const HistorySample& a, const HistorySample& b) {
-                         return a.timeMs < b.timeMs;
-                     });
-    // Old rows index the replaced snapshot: drop them even if collection throws.
-    state.accounts.clear();
-    state.accounts = HistoryCollectAccounts(configured, state.snapshot.samples, state.readFrom, state.to,
-                                            [] { return g_unloading || g_historyWindowCancelRequested; });
-    SendMessageW(state.accountCombo, CB_RESETCONTENT, 0, 0);
-    SendMessageW(state.accountCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"All accounts"));
-    for (const auto& account : state.accounts)
-        SendMessageW(state.accountCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(account.title.c_str()));
-    state.selected = HistoryResolveSelection(state.accounts, selectedId, requestedId);
-    SendMessageW(state.accountCombo, CB_SETCURSEL, state.selected + 1, 0);
-    state.snapshotStatus = std::wstring(!state.enabled ? L"Recording off" : state.idsPendingSave
-        ? L"Recording pending" : L"Recording on") + L"  ·  Updated " + HistoryLocalDate(state.to);
-    if (state.enabled && !state.idsPendingSave && state.snapshot.samples.empty()) {
-        state.snapshotStatus = L"Recording on  ·  Waiting for the next poll";
-    }
-    SetWindowTextW(state.legend, state.overlay ? L"Solid: current    Dashed: previous" : L"Solid: current");
-    state.loading = false;
-    EnableWindow(state.refreshButton, TRUE);
-    HistorySetStatus(state, {});
-    HistoryRebuildView(state);
-    HistoryLayout(state, false);
-}
-
-// src/history/export.h
-// Native dialog tracking and CSV export.
-
-// A thread-local CBT hook tracks native save/confirmation dialogs, including nested
-// overwrite prompts. Owner-close defers destruction until the modal API has returned.
-struct HistoryModalScope;
-static thread_local HistoryModalScope* g_historyModalScope = nullptr;
-
-struct HistoryModalScope {
-    HistoryWindowState& state;
-    HHOOK hook = nullptr;
-    std::array<HWND, 16> dialogs{};
-    size_t count = 0;
-    explicit HistoryModalScope(HistoryWindowState& owner);
-    ~HistoryModalScope() {
-        if (!hook) return;  // A rejected nested scope must not clear its active outer scope.
-        UnhookWindowsHookEx(hook);
-        g_historyModalScope = nullptr;
-        g_historyDialog.store(nullptr);
-        state.modal = false;
-        if (state.closing || g_unloading || g_historyWindowCancelRequested)
-            PostMessageW(state.window, WM_CLOSE, 0, 0);
-        else if (std::exchange(state.reloadAfterModal, false))
-            PostMessageW(state.window, kHistoryLoadMessage, 1, 0);
-    }
-};
-
-static LRESULT CALLBACK HistoryDialogCbtProc(int code, WPARAM wParam, LPARAM lParam) {
-    // Only fixed-size storage and Win32 calls here: no exceptions across a hook boundary.
-    auto* scope = g_historyModalScope;
-    HWND window = reinterpret_cast<HWND>(wParam);
-    if (scope && code == HCBT_ACTIVATE) {
-        wchar_t name[24]{};
-        if (GetClassNameW(window, name, ARRAYSIZE(name)) && wcscmp(name, L"#32770") == 0) {
-            auto end = scope->dialogs.begin() + scope->count;
-            if (std::find(scope->dialogs.begin(), end, window) == end && scope->count < scope->dialogs.size())
-                scope->dialogs[scope->count++] = window;
-            g_historyDialog.store(window);
-            if (scope->state.closing || g_unloading || g_historyWindowCancelRequested) {
-                PostMessageW(window, WM_COMMAND, IDCANCEL, 0);
-                PostMessageW(window, WM_CLOSE, 0, 0);
-            }
-        }
-    } else if (scope && code == HCBT_DESTROYWND) {
-        for (size_t i = 0; i < scope->count; ++i) {
-            if (scope->dialogs[i] != window) continue;
-            for (size_t j = i + 1; j < scope->count; ++j) scope->dialogs[j - 1] = scope->dialogs[j];
-            --scope->count;
-            break;
-        }
-        HWND remaining = scope->count ? scope->dialogs[scope->count - 1] : nullptr;
-        g_historyDialog.store(remaining);
-        if (remaining && (scope->state.closing || g_unloading || g_historyWindowCancelRequested)) {
-            PostMessageW(remaining, WM_COMMAND, IDCANCEL, 0);
-            PostMessageW(remaining, WM_CLOSE, 0, 0);
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-HistoryModalScope::HistoryModalScope(HistoryWindowState& owner) : state(owner) {
-    if (state.modal || state.closing || g_unloading || g_historyWindowCancelRequested) return;
-    HistoryClearHover(state);
-    state.modal = true;
-    g_historyModalScope = this;
-    hook = SetWindowsHookExW(WH_CBT, HistoryDialogCbtProc, nullptr, GetCurrentThreadId());
-    if (!hook) {
-        g_historyModalScope = nullptr;
-        state.modal = false;
-        SetWindowTextW(state.status, L"ERROR: cannot track native dialogs safely; operation cancelled.");
-    }
-}
-
-// Keep an existing CSV intact if writing fails. This owns the temporary file until
-// a same-directory rename succeeds; labels never enter CSV or the suggested filename.
-struct HistoryCsvFile {
-    HANDLE handle = INVALID_HANDLE_VALUE;
-    std::wstring temporary;
-    ~HistoryCsvFile() {
-        if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
-        if (!temporary.empty()) DeleteFileW(temporary.c_str());
-    }
-    bool Write(const std::string& text) {
-        size_t written = 0;
-        while (written < text.size()) {
-            if (g_unloading || g_historyWindowCancelRequested) {
-                SetLastError(ERROR_CANCELLED);
-                return false;
-            }
-            DWORD count = DWORD(std::min(text.size() - written, size_t(65536)));
-            DWORD actual = 0;
-            if (!WriteFile(handle, text.data() + written, count, &actual, nullptr)) return false;
-            if (!actual) { SetLastError(ERROR_WRITE_FAULT); return false; }
-            written += actual;
-        }
-        return true;
-    }
-    // Serialization boundary for both UI export and isolated file-content tests: the shared CSV
-    // writer (history/csv.h) over the unreduced, stably timestamp-sorted snapshot (never the
-    // render cache), with the status line's progress every 250 ms.
-    bool WriteSnapshot(const HistoryWindowState& state, size_t* exported) {
-        HistoryExportScope scope;
-        // Borrowed (an empty owner): the window's state outlives the write.
-        scope.snapshot = std::shared_ptr<const HistorySnapshot>(std::shared_ptr<const HistorySnapshot>{}, &state.snapshot);
-        scope.accountId = state.selected >= 0 ? state.accounts.at(state.selected).id : 0;
-        scope.from = state.readFrom;
-        scope.to = state.to;
-        ULONGLONG nextProgressMs = 0;
-        HistoryCsvEnd end = HistoryCsvWrite(scope, *exported, [&](const std::string& buffer, bool last) {
-            if (!last && state.status && GetTickCount64() >= nextProgressMs) {
-                std::wstring progress = L"Exporting " + std::to_wstring(*exported) + L" rows...";
-                SetWindowTextW(state.status, progress.c_str());
-                UpdateWindow(state.status);
-                nextProgressMs = GetTickCount64() + 250;
-            }
-            return Write(buffer);
-        }, [] { return g_unloading || g_historyWindowCancelRequested; });
-        if (end == HistoryCsvEnd::Cancelled) SetLastError(ERROR_CANCELLED);
-        return end == HistoryCsvEnd::Written;
-    }
-};
-
-static void HistoryExport(HistoryWindowState& state) {
-    if ((state.selected >= 0 && size_t(state.selected) >= state.accounts.size()) || state.modal || state.loading) return;
-    size_t estimatedRows = 0;
-    uint64_t selectedId = state.selected < 0 ? 0 : state.accounts[state.selected].id;
-    for (const auto& sample : state.snapshot.samples) {
-        if ((!selectedId || sample.accountId == selectedId) &&
-            sample.timeMs >= state.readFrom && sample.timeMs < state.to) {
-            estimatedRows += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 4;
-        }
-    }
-    if (estimatedRows > 500000) {
-        std::wstring warning = L"This export contains about " + std::to_wstring(estimatedRows) +
-            L" rows. It may take a while and exceed spreadsheet row limits. "
-            L"The history window will be busy while writing; Explorer's taskbar remains available. Continue?";
-        HistoryModalScope modal(state);
-        if (!modal.hook || MessageBoxW(state.window, warning.c_str(), L"Large history export",
-                                      MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK) return;
-    }
-    if (state.closing || g_unloading || g_historyWindowCancelRequested) return;
-    wchar_t path[32768] = L"ai-quota-history.csv";
-    DWORD dialogError = 0;
-    bool accepted = false;
-    {
-        HistoryModalScope modal(state);
-        if (!modal.hook) return;
-        OPENFILENAMEW picker{};
-        picker.lStructSize = sizeof(picker);
-        picker.hwndOwner = state.window;
-        picker.lpstrFilter = L"CSV files (*.csv)\0*.csv\0All files (*.*)\0*.*\0\0";
-        picker.lpstrFile = path;
-        picker.nMaxFile = ARRAYSIZE(path);
-        picker.lpstrDefExt = L"csv";
-        picker.lpstrTitle = state.selected < 0
-            ? L"Export all accounts — all meters, selected range (both weeks if comparing)"
-            : L"Export selected account — all meters, selected range (both weeks if comparing)";
-        picker.Flags = OFN_EXPLORER | OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST |
-                       OFN_NOCHANGEDIR | OFN_ENABLESIZING;
-        accepted = GetSaveFileNameW(&picker) != FALSE;
-        if (!accepted) dialogError = CommDlgExtendedError();
-    }
-    if (state.closing || g_unloading || g_historyWindowCancelRequested) return;
-    if (!accepted) {
-        HistorySetStatus(state, dialogError ? L"ERROR: Save dialog failed (code " + std::to_wstring(dialogError) + L")."
-                                            : L"CSV export cancelled; no file written.");
-        return;
-    }
-    HistoryCsvFile output;
-    std::wstring candidate = std::wstring(path) + L".quota-" + std::to_wstring(GetCurrentProcessId()) +
-                             L"-" + std::to_wstring(GetTickCount64()) + L".tmp";
-    output.handle = CreateFileW(candidate.c_str(), GENERIC_WRITE, 0, nullptr,
-                                CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (output.handle == INVALID_HANDLE_VALUE) {
-        HistorySetStatus(state, L"ERROR: cannot create CSV temporary file (Windows error " +
-                         std::to_wstring(GetLastError()) + L"). Existing destination unchanged.");
-        return;
-    }
-    output.temporary = std::move(candidate);
-    size_t exported = 0;
-    HistorySetStatus(state, L"Exporting local history...");
-    UpdateWindow(state.status);
-    bool success = output.WriteSnapshot(state, &exported);
-    if (success) success = FlushFileBuffers(output.handle) != FALSE;
-    DWORD error = success ? ERROR_SUCCESS : GetLastError();
-    if (!CloseHandle(output.handle) && success) { success = false; error = GetLastError(); }
-    output.handle = INVALID_HANDLE_VALUE;
-    if (success && (g_unloading || g_historyWindowCancelRequested)) { success = false; error = ERROR_CANCELLED; }
-    if (success) {
-        success = MoveFileExW(output.temporary.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
-        if (success) output.temporary.clear();
-        else error = GetLastError();
-    }
-    HistorySetStatus(state, success
-        ? L"Exported " + std::to_wstring(exported) + (state.selected < 0 ? L" meter rows (all accounts) to " : L" meter rows (selected account) to ") +
-          path + L". Labels omitted; times UTC." +
-          (state.overlay ? L" Includes both elapsed 7-day periods." : L"")
-        : L"ERROR: CSV export failed (Windows error " + std::to_wstring(error) + L"). Existing destination unchanged.");
-}
-
-// src/history/paint.h
-// History graph painting.
-
-// Paint resources are scoped so allocation/formatting exceptions cannot leak a DC or pen.
-struct HistoryPaint {
-    HWND window;
-    PAINTSTRUCT paint{};
-    HDC dc = nullptr;
-    int saved = 0;
-    HPEN solid = nullptr, dashed = nullptr;
-    explicit HistoryPaint(HWND owner) : window(owner), dc(BeginPaint(owner, &paint)) {
-        if (dc) saved = SaveDC(dc);
-    }
-    ~HistoryPaint() {
-        if (saved) RestoreDC(dc, saved);
-        else if (dc) { SelectObject(dc, GetStockObject(BLACK_PEN)); SelectObject(dc, GetStockObject(SYSTEM_FONT)); }
-        if (solid) DeleteObject(solid);
-        if (dashed) DeleteObject(dashed);
-        if (dc) EndPaint(window, &paint);
-    }
-};
-
-static void HistorySetLinePens(HistoryPaint& paint, COLORREF color, int width, bool overlay) {
-    SelectObject(paint.dc, GetStockObject(DC_PEN));
-    SetDCPenColor(paint.dc, color);
-    if (paint.solid) DeleteObject(paint.solid);
-    if (paint.dashed) DeleteObject(paint.dashed);
-    LOGBRUSH brush{BS_SOLID, color, 0};
-    constexpr DWORD style = PS_GEOMETRIC | PS_ENDCAP_ROUND | PS_JOIN_ROUND;
-    paint.solid = ExtCreatePen(style | PS_SOLID, width, &brush, 0, nullptr);
-    // CreatePen silently turns wide dashed pens solid; geometric pens retain the period key.
-    paint.dashed = overlay ? ExtCreatePen(style | PS_DASH, width, &brush, 0, nullptr) : nullptr;
-}
-
-static void HistoryDrawText(HDC dc, const std::wstring& text, RECT rect, UINT flags = DT_LEFT) {
-    DrawTextW(dc, text.c_str(), int(text.size()), &rect, flags | DT_NOPREFIX);
-}
-
-static void HistoryPaintGraph(HistoryWindowState& state) {
-    HistoryPaint paint(state.graph);
-    if (!paint.dc) return;
-    HDC dc = paint.dc;
-    RECT client{};
-    GetClientRect(state.graph, &client);
-    FillRect(dc, &paint.paint.rcPaint, GetSysColorBrush(COLOR_WINDOW));
-    SelectObject(dc, state.font ? state.font : GetStockObject(DEFAULT_GUI_FONT));
-    SetBkMode(dc, TRANSPARENT);
-    COLORREF textColor = GetSysColor(COLOR_WINDOWTEXT);
-    SetTextColor(dc, textColor);
-    HIGHCONTRASTW contrast{};
-    contrast.cbSize = sizeof(contrast);
-    bool highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
-                        (contrast.dwFlags & HCF_HIGHCONTRASTON);
-    int pad = ScaleForDpi(12, state.dpi);
-    int graphHeight = state.graphHeight;
-    int seriesHeight = std::max(1, ScaleForDpi(kHistorySeriesHeight + (state.overlay ? 44 : 0), state.dpi));
-    if (state.visible.empty() && state.noReadings.empty()) {
-        RECT rect{pad, pad, client.right - pad, client.bottom - pad};
-        HistoryDrawText(dc, state.accounts.empty() ? L"No accounts to display." : L"No accounts support this view.",
-                        rect, DT_WORDBREAK);
-        return;
-    }
-    // Synchronous resize paints may precede the matching cache; never lay out in WM_PAINT.
-    if (state.layoutWidth != client.right || state.renderWidth < 0) return;
-    // All lines share a timeline; unlike units have separate, explicitly labeled axes.
-    int top = -state.scroll;
-    RECT plot = state.plot;
-    OffsetRect(&plot, 0, top);
-    if (top + graphHeight >= paint.paint.rcPaint.top && top <= paint.paint.rcPaint.bottom) {
-        RECT title{pad, top + ScaleForDpi(6, state.dpi), client.right - pad, top + ScaleForDpi(30, state.dpi)};
-        HistoryView view = state.selected < 0 ? state.allAccountsView : state.accountView;
-        std::wstring heading = state.selected < 0 ? L"All accounts" : state.accounts.at(state.selected).title;
-        HistoryDrawText(dc, heading + L" · " + kHistoryViewNames[size_t(view)],
-                        title, DT_SINGLELINE | DT_END_ELLIPSIS);
-        for (size_t index = 0; index < state.visible.size(); ++index) {
-            if (g_unloading || g_historyWindowCancelRequested) break;
-            const auto& series = state.visible[index];
-            RECT rect = series.legendRect;
-            OffsetRect(&rect, 0, top);
-            if (!series.plotted || rect.right <= rect.left || rect.bottom < paint.paint.rcPaint.top ||
-                rect.top > paint.paint.rcPaint.bottom) continue;
-            COLORREF color = HistoryLineColor(state, index, highContrast);
-            int strokeWidth = std::max(1, ScaleForDpi(series.stroke, state.dpi));
-            HistorySetLinePens(paint, color, strokeWidth, state.overlay);
-            if (rect.right - rect.left >= ScaleForDpi(34, state.dpi)) {
-                for (int period = 0; period < (state.overlay ? 2 : 1); ++period) {
-                    if (!(period ? series.previous : series.current).hasValue) continue;
-                    SelectObject(dc, period && paint.dashed ? paint.dashed :
-                                     paint.solid ? paint.solid : GetStockObject(DC_PEN));
-                    int y = rect.top + ScaleForDpi(state.overlay ? 6 + period * 10 : 10, state.dpi);
-                    MoveToEx(dc, rect.left + ScaleForDpi(2, state.dpi), y, nullptr);
-                    LineTo(dc, rect.left + ScaleForDpi(26, state.dpi), y);
-                }
-                rect.left += ScaleForDpi(34, state.dpi);
-            }
-            SetTextColor(dc, state.hoverSeries.empty() ||
-                std::find(state.hoverSeries.begin(), state.hoverSeries.end(), index) != state.hoverSeries.end()
-                ? textColor : GetSysColor(COLOR_GRAYTEXT));
-            HistoryDrawText(dc, series.legendTitle, rect, DT_WORDBREAK | DT_END_ELLIPSIS);
-        }
-        SetTextColor(dc, textColor);
-        if (plot.right <= plot.left) {
-            RECT narrow{pad, plot.top, client.right - pad, plot.bottom};
-            HistoryDrawText(dc, L"Widen the window to show the plot.", narrow, DT_WORDBREAK);
-        }
-    }
-    if (plot.bottom + ScaleForDpi(30, state.dpi) >= paint.paint.rcPaint.top && plot.top <= paint.paint.rcPaint.bottom &&
-        plot.right > plot.left && plot.bottom > plot.top) {
-        SelectObject(dc, GetStockObject(DC_PEN));
-        SetDCPenColor(dc, GetSysColor(COLOR_GRAYTEXT));
-        for (int tick = 0; tick < 3; ++tick) {
-            int y = plot.bottom - (plot.bottom - plot.top) * tick / 2;
-            MoveToEx(dc, plot.left, y, nullptr);
-            LineTo(dc, plot.right, y);
-            static constexpr PCWSTR units[] = {L"%", L" USD", L" cr"};
-            int axisPosition = 0;
-            for (size_t i = 0; i < state.axes.size(); ++i) {
-                const auto& axis = state.axes[i];
-                if (!axis.visible) continue;
-                double value = tick == 0 ? axis.low : tick == 2 ? axis.high : axis.low / 2 + axis.high / 2;
-                wchar_t label[64];
-                swprintf(label, ARRAYSIZE(label), L"%.6g%ls", value, units[i]);
-                RECT labelRect{pad, y - ScaleForDpi(10, state.dpi), plot.left - ScaleForDpi(6, state.dpi), y + ScaleForDpi(12, state.dpi)};
-                if (axisPosition) {
-                    labelRect.left = plot.right + ScaleForDpi(6 + (axisPosition - 1) * 110, state.dpi);
-                    labelRect.right = labelRect.left + ScaleForDpi(104, state.dpi);
-                }
-                HistoryDrawText(dc, label, labelRect, (axisPosition ? DT_LEFT : DT_RIGHT) | DT_SINGLELINE);
-                ++axisPosition;
-            }
-        }
-        bool hasValue = false, hasDetails = false;
-        int lineClip = SaveDC(dc);
-        if (lineClip) IntersectClipRect(dc, plot.left, plot.top, plot.right + 1, plot.bottom + 1);
-        // Muted lines go first so a selected coincident series is never hidden beneath them.
-        for (size_t draw = 0; lineClip && draw < state.visible.size() * (state.hoverSeries.empty() ? 1 : 2); ++draw) {
-            if (g_unloading || g_historyWindowCancelRequested) break;
-            size_t index = draw % state.visible.size();
-            const auto& line = state.visible[index];
-            if (!line.plotted) { hasDetails = true; continue; }
-            bool highlighted = std::find(state.hoverSeries.begin(), state.hoverSeries.end(), index) != state.hoverSeries.end();
-            if (!state.hoverSeries.empty() && highlighted != (draw >= state.visible.size())) continue;
-            hasValue |= line.current.hasValue || (state.overlay && line.previous.hasValue);
-            COLORREF color = HistoryLineColor(state, index, highContrast);
-            int strokeWidth = std::max(1, ScaleForDpi(line.stroke, state.dpi));
-            // Keep line colors in both periods; dashes/hollow points identify the prior week.
-            HistorySetLinePens(paint, color, strokeWidth, state.overlay);
-            // Width mismatches can occur during synchronous resize paints. Do not rebuild
-            // here: size/selection handlers publish the matching cache before invalidating.
-            for (int period = state.overlay ? 1 : 0; period >= 0 && state.renderWidth == plot.right - plot.left; --period) {
-                const auto& series = line.render[period];
-                int radius = std::max(1, ScaleForDpi(2, state.dpi));
-                std::vector<POINT> segment;
-                segment.reserve(series.points.size());
-                size_t segmentSamples = 0;
-                // One stroke per continuous run preserves dash phase and rounded joins.
-                // Coincident vertices must not fill the gaps in a dashed stroke.
-                auto drawSegment = [&] {
-                    if (segment.empty() || g_unloading || g_historyWindowCancelRequested) return;
-                    SelectObject(dc, period && paint.dashed ? paint.dashed :
-                                     paint.solid ? paint.solid : GetStockObject(DC_PEN));
-                    SetDCPenColor(dc, color);
-                    if (segment.size() > 1) {
-                        Polyline(dc, segment.data(), int(segment.size()));
-                    } else {
-                        int x = segment.front().x, y = segment.front().y;
-                        if (segmentSamples > 1) {
-                            // Compressed flat runs still use the stroke's width, not a stray pixel.
-                            RECT mark{x - strokeWidth / 2, y - strokeWidth / 2,
-                                      x - strokeWidth / 2 + strokeWidth, y - strokeWidth / 2 + strokeWidth};
-                            SetDCBrushColor(dc, color);
-                            FillRect(dc, &mark, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-                        } else {
-                            // Keep lone readings visible across gaps without dotting connected curves.
-                            SelectObject(dc, GetStockObject(DC_PEN));
-                            SetDCPenColor(dc, color);
-                            SelectObject(dc, period ? GetStockObject(HOLLOW_BRUSH) : GetStockObject(DC_BRUSH));
-                            SetDCBrushColor(dc, color);
-                            Ellipse(dc, x - radius, y - radius, x + radius + 1, y + radius + 1);
-                        }
-                    }
-                    segment.clear();
-                    segmentSamples = 0;
-                };
-                for (const auto& point : series.points) {
-                    if (g_unloading || g_historyWindowCancelRequested) break;
-                    if (!point.connect) drawSegment();
-                    POINT position = HistoryPlotPoint(state, line, point);
-                    position.y -= state.scroll;
-                    if (segment.empty() || position.x != segment.back().x || position.y != segment.back().y)
-                        segment.push_back(position);
-                    ++segmentSamples;
-                }
-                drawSegment();
-            }
-        }
-        if (lineClip) RestoreDC(dc, lineClip);
-        if (!hasValue) {
-            RECT empty{plot.left + pad, plot.top + pad, plot.right - pad, plot.bottom - pad};
-            HistoryDrawText(dc, hasDetails ? L"No percentage readings to plot. Dollar spending is shown below."
-                                          : L"No readings in this range.",
-                            empty, DT_WORDBREAK);
-        }
-        for (int tick = 0; tick < 3; ++tick) {
-            ULONGLONG time = state.from + (state.to - state.from) / 2 * tick;
-            int width = std::min(ScaleForDpi(190, state.dpi), int(plot.right - plot.left) / 3);
-            int x = tick == 0 ? plot.left : tick == 2 ? plot.right - width : (plot.left + plot.right - width) / 2;
-            RECT rect{x, plot.bottom + ScaleForDpi(7, state.dpi), x + width, plot.bottom + ScaleForDpi(29, state.dpi)};
-            HistoryDrawText(dc, HistoryLocalDate(time), rect, DT_SINGLELINE | DT_END_ELLIPSIS | (tick == 2 ? DT_RIGHT : tick == 1 ? DT_CENTER : DT_LEFT));
-        }
-    }
-
-    // Cached titles/styles match the plotted lines; USD details never claim a swatch or axis.
-    size_t firstView = size_t(std::max(0LL, static_cast<long long>(state.scroll) + paint.paint.rcPaint.top - graphHeight)) / seriesHeight;
-    size_t endView = std::min(state.visible.size(),
-        size_t(std::max(0LL, static_cast<long long>(state.scroll) + paint.paint.rcPaint.bottom - graphHeight)) / seriesHeight + 1);
-    for (size_t view = firstView; view < endView; ++view) {
-        if (g_unloading || g_historyWindowCancelRequested) break;
-        long long top64 = graphHeight + static_cast<long long>(view) * seriesHeight - state.scroll;
-        if (top64 + seriesHeight < paint.paint.rcPaint.top || top64 > paint.paint.rcPaint.bottom) continue;
-        int seriesTop = int(top64);
-        const auto& series = state.visible[view];
-        int meter = series.meter;
-        COLORREF color = highContrast ? textColor : series.color;
-        int strokeWidth = std::max(1, ScaleForDpi(series.stroke, state.dpi));
-        SelectObject(dc, GetStockObject(DC_PEN));
-        SetDCPenColor(dc, color);
-        int swatchY = seriesTop + ScaleForDpi(16, state.dpi);
-        RECT swatch{pad, swatchY - strokeWidth / 2, pad + ScaleForDpi(26, state.dpi),
-                    swatchY - strokeWidth / 2 + strokeWidth};
-        SetDCBrushColor(dc, color);
-        if (series.plotted) FillRect(dc, &swatch, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-        RECT title{pad + (series.plotted ? ScaleForDpi(34, state.dpi) : 0), seriesTop + ScaleForDpi(6, state.dpi),
-                    client.right - pad, seriesTop + ScaleForDpi(30, state.dpi)};
-        HistoryDrawText(dc, series.title, title, DT_SINGLELINE | DT_END_ELLIPSIS);
-        for (int period = 0; period < (state.overlay ? 2 : 1); ++period) {
-            const auto& stats = period ? series.previous : series.current;
-            std::wstring prefix = !state.overlay ? L"" : period ? L"Previous: " : L"Current: ";
-            std::wstring level = (meter == 6 ? L"USD " : L"") + HistoryNumber(stats.peak) +
-                (meter < 6 ? L"%" : meter == 7 ? L" credits" : L"");
-            std::wstring peak = prefix + (stats.hasValue
-                ? L"Peak " + level + L"  ·  " + HistoryLocalDate(stats.peakTime)
-                : L"Peak —");
-            int y = seriesTop + ScaleForDpi(34 + period * 44, state.dpi);
-            RECT line{pad, y, client.right - pad, y + ScaleForDpi(21, state.dpi)};
-            if (!series.plotted) {
-                std::wstring latest = prefix + (stats.hasValue
-                    ? L"Last recorded spend: USD " + HistoryNumber(stats.latest) + L"  ·  " + HistoryLocalDate(stats.latestTime)
-                    : L"No dollar readings in this period.");
-                HistoryDrawText(dc, latest, line, DT_SINGLELINE | DT_END_ELLIPSIS);
-                line.top += ScaleForDpi(21, state.dpi);
-                line.bottom += ScaleForDpi(21, state.dpi);
-                if (stats.hasValue) HistoryDrawText(dc, peak, line, DT_SINGLELINE | DT_END_ELLIPSIS);
-                continue;
-            }
-            HistoryDrawText(dc, peak, line, DT_SINGLELINE | DT_END_ELLIPSIS);
-            double duration = double(state.to - state.from);
-            wchar_t coverage[32];
-            swprintf(coverage, ARRAYSIZE(coverage), L" (%.1f%%)", duration ? 100 * stats.coverageMs / duration : 0);
-            std::wstring summary = L"Coverage " + HistoryHours(stats.coverageMs) + coverage;
-            if (meter < 6) {
-                summary += L"  ·  Est. ≥" + std::to_wstring(state.redThreshold) + L"%: " +
-                    (stats.coverageMs ? HistoryHours(stats.nearLimitMs) : L"—");
-            }
-            line.top += ScaleForDpi(21, state.dpi);
-            line.bottom += ScaleForDpi(21, state.dpi);
-            HistoryDrawText(dc, summary, line, DT_SINGLELINE | DT_END_ELLIPSIS);
-        }
-        SelectObject(dc, GetStockObject(DC_PEN));
-        SetDCPenColor(dc, GetSysColor(COLOR_GRAYTEXT));
-        MoveToEx(dc, pad, seriesTop + seriesHeight - 1, nullptr);
-        LineTo(dc, client.right - pad, seriesTop + seriesHeight - 1);
-    }
-    // Accounts without readings get one compact entry, not an empty block per quota.
-    if (!state.noReadings.empty()) {
-        int rowHeight = ScaleForDpi(24, state.dpi);
-        long long listTop = graphHeight + static_cast<long long>(state.visible.size()) * seriesHeight - state.scroll;
-        for (size_t row = 0; row <= state.noReadings.size(); ++row) {
-            if (g_unloading || g_historyWindowCancelRequested) break;
-            long long y = listTop + static_cast<long long>(row) * rowHeight;
-            if (y + rowHeight < paint.paint.rcPaint.top) continue;
-            if (y > paint.paint.rcPaint.bottom) break;
-            RECT rect{pad, int(y), client.right - pad, int(y + rowHeight)};
-            HistoryDrawText(dc, row ? state.noReadings[row - 1] : L"No readings in range:",
-                            rect, DT_SINGLELINE | DT_END_ELLIPSIS);
-        }
-    }
-    if (GetFocus() == state.graph) {
-        InflateRect(&client, -1, -1);
-        DrawFocusRect(dc, &client);
-    }
-}
-
 // src/history/window.h
-// History windows: the classic window's layout, procedures and thread, the custom-drawn window's
-// thread, and open/close for both (one history thread at a time, its kind fixed at its start).
+// The usage history window's thread and its open and close (one history thread at a time).
 
-static void HistoryLayout(HistoryWindowState& state, bool newFont) {
-    HistoryClearHover(state);
-    RECT client{};
-    GetClientRect(state.window, &client);
-    if (newFont) {
-        state.renderWidth = state.layoutWidth = -1;
-        HFONT font = CreateFontW(-MulDiv(9, state.dpi, 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        if (font) {
-            EnumChildWindows(state.window, [](HWND child, LPARAM value) -> BOOL {
-                SendMessageW(child, WM_SETFONT, WPARAM(value), TRUE);
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(font));
-            if (state.graphTip) SendMessageW(state.graphTip, WM_SETFONT, WPARAM(font), FALSE);
-            if (state.font) DeleteObject(state.font);
-            state.font = font;
-        }
-    }
-    // Layout table uses logical pixels; combo heights include their drop-down lists.
-    int width = MulDiv(client.right, 96, state.dpi);
-    int height = MulDiv(client.bottom, 96, state.dpi);
-    bool showBanner = state.to && !state.enabled;
-    int bannerHeight = showBanner ? 54 : 0;
-    struct Placement { HWND control; int x, y, w, h; };
-    const Placement positions[] = {
-        {state.recordingBanner, 12, 10, width - 24, 42},
-        {state.enableButton, width - 184, 17, 160, 28},
-        {state.accountLabel, 12, 15, 80, 22}, {state.accountCombo, 96, 10, width - 108, 320},
-        {state.meterLabel, 12, 51, 80, 22}, {state.meterCombo, 96, 46, width - 328, 310},
-        {state.rangeLabel, width - 220, 51, 64, 22}, {state.rangeCombo, width - 154, 46, 142, 180},
-        {state.overlayCheck, 12, 80, 280, 26}, {state.legend, 312, 84, width - 324, 22},
-        {state.refreshButton, 12, 113, 105, 28}, {state.exportButton, 127, 113, 145, 28},
-        {state.clearButton, 282, 113, 135, 28}, {state.settingsButton, 427, 113, 105, 28},
-        {state.infoButton, 542, 113, 80, 28},
-        {state.graph, 12, 153 + bannerHeight, width - 24, std::max(0, height - 225 - bannerHeight)},
-        {state.status, 12, std::max(153 + bannerHeight, height - 64), width - 24, 60},
-    };
-    for (const auto& p : positions) {
-        int y = p.y;
-        if (p.control != state.recordingBanner && p.control != state.enableButton &&
-            p.control != state.graph && p.control != state.status) y += bannerHeight;
-        MoveWindow(p.control, ScaleForDpi(p.x, state.dpi), ScaleForDpi(y, state.dpi),
-                    ScaleForDpi(std::max(0, p.w), state.dpi), ScaleForDpi(std::max(0, p.h), state.dpi), TRUE);
-    }
-    ShowWindow(state.recordingBanner, showBanner ? SW_SHOW : SW_HIDE);
-    ShowWindow(state.enableButton, showBanner ? SW_SHOW : SW_HIDE);
-    EnableWindow(state.enableButton, showBanner && !state.loading);
-    SetWindowPos(state.enableButton, HWND_TOP, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    HistoryScroll(state, state.scroll);
-}
-
-static LRESULT CALLBACK HistoryGraphWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-    auto* state = reinterpret_cast<HistoryWindowState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
-    try {
-        if (message == WM_NCCREATE) {
-            state = static_cast<HistoryWindowState*>(reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams);
-            state->graph = window;
-            SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
-        }
-        if (!state) return DefWindowProcW(window, message, wParam, lParam);
-        switch (message) {
-            case WM_CREATE: {
-                state->graphTip = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TRANSPARENT, TOOLTIPS_CLASSW, nullptr,
-                    WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, CW_USEDEFAULT, CW_USEDEFAULT,
-                    CW_USEDEFAULT, CW_USEDEFAULT, window, nullptr, GetModuleHandleW(nullptr), nullptr);
-                if (state->graphTip) {
-                    TOOLINFOW tool{};
-                    // Only V2 fields are used; the v6-only size is rejected by comctl32 v5.
-                    tool.cbSize = TTTOOLINFOW_V2_SIZE;
-                    tool.uFlags = TTF_TRACK | TTF_ABSOLUTE | TTF_TRANSPARENT;
-                    tool.hwnd = window;
-                    tool.uId = 1;
-                    tool.lpszText = const_cast<PWSTR>(L"");
-                    if (!SendMessageW(state->graphTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool))) {
-                        DestroyWindow(state->graphTip);
-                        state->graphTip = nullptr;
-                    }
-                }
-                return 0;
-            }
-            case WM_PAINT: HistoryPaintGraph(*state); return 0;
-            case WM_ERASEBKGND: return 1;
-            case WM_SIZE:
-                HistoryScroll(*state, state->scroll);
-                return 0;
-            case WM_MOUSEMOVE:
-                HistoryUpdateHover(*state, {static_cast<short>(LOWORD(lParam)), static_cast<short>(HIWORD(lParam))});
-                return 0;
-            case WM_MOUSELEAVE:
-                HistoryClearHover(*state);
-                return 0;
-            case WM_CANCELMODE:
-                HistoryClearHover(*state);
-                break;  // DefWindowProc must release capture and cancel scrollbar thumb tracking.
-            case WM_LBUTTONDOWN: SetFocus(window); return 0;
-            case WM_KILLFOCUS: HistoryClearHover(*state); InvalidateRect(window, nullptr, FALSE); return 0;
-            case WM_SETFOCUS: InvalidateRect(window, nullptr, FALSE); return 0;
-            case WM_GETDLGCODE: {
-                const auto* key = reinterpret_cast<const MSG*>(lParam);
-                if (key && key->message == WM_KEYDOWN && (key->wParam == VK_PRIOR || key->wParam == VK_NEXT ||
-                    key->wParam == VK_HOME || key->wParam == VK_END)) return DLGC_WANTMESSAGE;
-                return DLGC_WANTARROWS;
-            }
-            case WM_MOUSEWHEEL: {
-                UINT lines = 3;
-                SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
-                state->wheelRemainder += GET_WHEEL_DELTA_WPARAM(wParam);
-                int notches = state->wheelRemainder / WHEEL_DELTA;
-                state->wheelRemainder %= WHEEL_DELTA;
-                RECT client{};
-                GetClientRect(window, &client);
-                int step = lines == WHEEL_PAGESCROLL ? client.bottom : ScaleForDpi(20, state->dpi) * int(std::min(lines, 100U));
-                long long position = static_cast<long long>(state->scroll) - static_cast<long long>(notches) * step;
-                HistoryScroll(*state, int(std::clamp(position, 0LL, static_cast<long long>(INT_MAX))));
-                return 0;
-            }
-            case WM_KEYDOWN: case WM_VSCROLL: {
-                SCROLLINFO info{};
-                info.cbSize = sizeof(info);
-                info.fMask = SIF_ALL;
-                GetScrollInfo(window, SB_VERT, &info);
-                int code = LOWORD(wParam);
-                if (message == WM_KEYDOWN) {
-                    switch (wParam) {
-                        case VK_UP: code = SB_LINEUP; break;
-                        case VK_DOWN: code = SB_LINEDOWN; break;
-                        case VK_PRIOR: code = SB_PAGEUP; break;
-                        case VK_NEXT: code = SB_PAGEDOWN; break;
-                        case VK_HOME: code = SB_TOP; break;
-                        case VK_END: code = SB_BOTTOM; break;
-                        default: return DefWindowProcW(window, message, wParam, lParam);
-                    }
-                }
-                long long position = state->scroll;
-                switch (code) {
-                    case SB_LINEUP: position -= ScaleForDpi(32, state->dpi); break;
-                    case SB_LINEDOWN: position += ScaleForDpi(32, state->dpi); break;
-                    case SB_PAGEUP: position -= info.nPage; break;
-                    case SB_PAGEDOWN: position += info.nPage; break;
-                    case SB_TOP: position = 0; break;
-                    case SB_BOTTOM: position = info.nMax; break;
-                    case SB_THUMBTRACK: case SB_THUMBPOSITION: position = info.nTrackPos; break;
-                    default: return 0;
-                }
-                HistoryScroll(*state, int(std::clamp(position, 0LL, static_cast<long long>(INT_MAX))));
-                return 0;
-            }
-            case WM_DESTROY:
-                HistoryClearHover(*state);
-                if (state->graphTip) DestroyWindow(state->graphTip);
-                state->graphTip = nullptr;
-                return 0;
-            case WM_NCDESTROY:
-                state->graph = nullptr;
-                SetWindowLongPtrW(window, GWLP_USERDATA, 0);
-                break;
-        }
-        return DefWindowProcW(window, message, wParam, lParam);
-    } catch (...) {
-        Wh_Log(L"History graph callback failed");
-        if (state && state->window) {
-            SetWindowTextW(state->status, L"ERROR: history rendering failed; closing the window.");
-            PostMessageW(state->window, WM_CLOSE, 0, 0);
-        }
-        return message == WM_NCCREATE ? FALSE : 0;
-    }
-}
-
-static LRESULT CALLBACK HistoryWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-    auto* state = reinterpret_cast<HistoryWindowState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
-    try {
-        if (message == WM_NCCREATE) {
-            state = static_cast<HistoryWindowState*>(reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams);
-            state->window = window;
-            SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
-        }
-        if (!state) return DefWindowProcW(window, message, wParam, lParam);
-        switch (message) {
-            case WM_CREATE: {
-                state->dpi = WindowDpi(window);
-                HINSTANCE instance = GetModuleHandleW(nullptr);
-                struct Control { HWND* slot; PCWSTR kind; PCWSTR text; DWORD style; int id; };
-                const Control controls[] = {
-                    // Z-order alone doesn't clip sibling painting: the banner must not erase its overlaid button.
-                    {&state->recordingBanner, L"STATIC", L"   History recording is off.", SS_LEFT | SS_CENTERIMAGE | SS_NOPREFIX | WS_BORDER | WS_CLIPSIBLINGS, 0},
-                    {&state->enableButton, L"BUTTON", L"E&nable recording", WS_TABSTOP | BS_PUSHBUTTON, kHistoryEnableButton},
-                    {&state->accountLabel, L"STATIC", L"&Account:", SS_LEFT, 0},
-                    {&state->accountCombo, L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL, kHistoryAccountCombo},
-                    {&state->meterLabel, L"STATIC", L"&View:", SS_LEFT, 0},
-                    {&state->meterCombo, L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL, kHistoryMeterCombo},
-                    {&state->rangeLabel, L"STATIC", L"&Range:", SS_LEFT, 0},
-                    {&state->rangeCombo, L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST, kHistoryRangeCombo},
-                    {&state->overlayCheck, L"BUTTON", L"&Compare previous week", WS_TABSTOP | BS_AUTOCHECKBOX, kHistoryOverlayCheck},
-                    {&state->refreshButton, L"BUTTON", L"&Refresh (F5)", WS_TABSTOP | BS_PUSHBUTTON, kHistoryRefreshButton},
-                    {&state->exportButton, L"BUTTON", L"&Export CSV...", WS_TABSTOP | BS_PUSHBUTTON, kHistoryExportButton},
-                    {&state->clearButton, L"BUTTON", L"&Clear all history...", WS_TABSTOP | BS_PUSHBUTTON, kHistoryClearButton},
-                    {&state->settingsButton, L"BUTTON", L"&Settings...", WS_TABSTOP | BS_PUSHBUTTON, kHistorySettingsButton},
-                    {&state->infoButton, L"BUTTON", L"&Info...", WS_TABSTOP | BS_PUSHBUTTON, kHistoryInfoButton},
-                    {&state->legend, L"STATIC", L"Solid: current", SS_LEFT | SS_NOPREFIX, 0},
-                    {&state->graph, kHistoryGraphClass, L"Usage history graph and legend; arrows, Page Up/Down, Home/End scroll", WS_TABSTOP | WS_VSCROLL | WS_BORDER, kHistoryGraphControl},
-                    {&state->status, L"STATIC", L"Loading local history...", SS_LEFT | SS_NOPREFIX, 0},
-                };
-                for (const auto& control : controls) {
-                    *control.slot = CreateWindowExW(0, control.kind, control.text, WS_CHILD | WS_VISIBLE | control.style,
-                        0, 0, 0, 0, window, reinterpret_cast<HMENU>(INT_PTR(control.id)), instance,
-                        control.slot == &state->graph ? state : nullptr);
-                    if (!*control.slot) return -1;
-                }
-                state->exportTip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
-                    WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, CW_USEDEFAULT, CW_USEDEFAULT,
-                    CW_USEDEFAULT, CW_USEDEFAULT, window, nullptr, instance, nullptr);
-                if (state->exportTip) {
-                    TOOLINFOW tip{};
-                    tip.cbSize = sizeof(tip);
-                    tip.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-                    tip.hwnd = window;
-                    tip.uId = reinterpret_cast<UINT_PTR>(state->exportButton);
-                    tip.lpszText = const_cast<PWSTR>(L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.");
-                    SendMessageW(state->exportTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tip));
-                    SendMessageW(state->exportTip, TTM_SETMAXTIPWIDTH, 0, ScaleForDpi(420, state->dpi));
-                }
-                for (int view = 0; view < 3; ++view)
-                    SendMessageW(state->meterCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(kHistoryViewNames[view]));
-                for (auto range : {L"24 hours", L"7 days", L"30 days", L"90 days", L"All retained"})
-                    SendMessageW(state->rangeCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(range));
-                SendMessageW(state->meterCombo, CB_SETCURSEL, WPARAM(state->allAccountsView), 0);
-                SendMessageW(state->rangeCombo, CB_SETCURSEL, state->range, 0);
-                EnableWindow(state->exportButton, FALSE);
-                HistoryLayout(*state, true);
-                PostMessageW(window, kHistoryLoadMessage, 0, 0);
-                return 0;
-            }
-            case kHistoryActivateMessage:
-                if (state->closing || g_unloading || g_historyWindowCancelRequested) return 0;
-                ShowWindow(window, IsIconic(window) ? SW_RESTORE : SW_SHOW);
-                SetForegroundWindow(g_historyDialog.load() ? g_historyDialog.load() : window);
-                HistoryLoad(*state);
-                return 0;
-            case kHistoryLoadMessage:
-                // A journal change (wParam 1) under the window's own dialog reloads once it ends.
-                if (wParam && state->modal) state->reloadAfterModal = true;
-                else HistoryLoad(*state);
-                return 0;
-            case WM_ACTIVATE:
-                if (LOWORD(wParam) == WA_INACTIVE) HistoryClearHover(*state);
-                break;
-            case WM_ENABLE:
-                if (!wParam) HistoryClearHover(*state);
-                break;
-            case WM_SIZE: if (state->graph) HistoryLayout(*state, false); return 0;
-            case WM_DPICHANGED: {
-                state->dpi = HIWORD(wParam);
-                const auto* rect = reinterpret_cast<const RECT*>(lParam);
-                SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left,
-                             rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
-                HistoryLayout(*state, true);
-                if (state->exportTip) SendMessageW(state->exportTip, TTM_SETMAXTIPWIDTH, 0, ScaleForDpi(420, state->dpi));
-                return 0;
-            }
-            case WM_GETMINMAXINFO: {
-                auto* size = reinterpret_cast<MINMAXINFO*>(lParam);
-                size->ptMinTrackSize = {ScaleForDpi(800, state->dpi), ScaleForDpi(590, state->dpi)};
-                return 0;
-            }
-            case WM_SETFOCUS: if (state->accountCombo) SetFocus(state->accountCombo); return 0;
-            case WM_MOUSEWHEEL: return SendMessageW(state->graph, message, wParam, lParam);
-            case WM_CTLCOLORSTATIC:
-                if (reinterpret_cast<HWND>(lParam) == state->recordingBanner) {
-                    SetTextColor(reinterpret_cast<HDC>(wParam), GetSysColor(COLOR_INFOTEXT));
-                    SetBkColor(reinterpret_cast<HDC>(wParam), GetSysColor(COLOR_INFOBK));
-                    return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_INFOBK));
-                }
-                break;
-            case WM_COMMAND: {
-                int id = LOWORD(wParam), event = HIWORD(wParam);
-                if (id == IDCANCEL) { PostMessageW(window, WM_CLOSE, 0, 0); return 0; }
-                if (state->closing || state->modal || state->loading || g_unloading || g_historyWindowCancelRequested) return 0;
-                if (event == CBN_SELCHANGE) {
-                    if (id == kHistoryAccountCombo) {
-                        state->selected = int(SendMessageW(state->accountCombo, CB_GETCURSEL, 0, 0)) - 1;
-                        HistoryRebuildView(*state);
-                    } else if (id == kHistoryMeterCombo) {
-                        int choice = int(SendMessageW(state->meterCombo, CB_GETCURSEL, 0, 0));
-                        if (choice != CB_ERR) {
-                            auto& view = state->selected < 0 ? state->allAccountsView : state->accountView;
-                            view = HistoryView(std::clamp(choice, 0, int(HistoryView::AllMeters)));
-                            HistoryRebuildView(*state);
-                        }
-                    } else if (id == kHistoryRangeCombo) {
-                        state->range = std::clamp(int(SendMessageW(state->rangeCombo, CB_GETCURSEL, 0, 0)), 0, 4);
-                        HistoryLoad(*state);
-                    }
-                } else if (event == BN_CLICKED) {
-                    switch (id) {
-                        case kHistoryOverlayCheck:
-                            state->overlay = SendMessageW(state->overlayCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
-                            // Show the actual comparison range rather than a disabled,
-                            // misleading old selection. Restore the user's range afterward.
-                            SendMessageW(state->rangeCombo, CB_SETCURSEL, state->overlay ? 1 : state->range, 0);
-                            EnableWindow(state->rangeCombo, !state->overlay);
-                            HistoryLoad(*state);
-                            break;
-                        case kHistoryRefreshButton: HistoryLoad(*state); break;
-                        case kHistoryExportButton: HistoryExport(*state); break;
-                        case kHistorySettingsButton: OpenSettingsWindow(); break;
-                        case kHistoryEnableButton: {
-                            SettingsApplyResult applied;
-                            {
-                                std::lock_guard configLock(g_configEditMutex);
-                                if (g_unloading) break;
-                                Settings settings;
-                                {
-                                    std::lock_guard settingsLock(g_settingsMutex);
-                                    settings = g_settings;
-                                }
-                                settings.historyEnabled = true;
-                                applied = ApplyOwnedSettings(std::move(settings));
-                            }
-                            // The shared edit path persists this user's consent without
-                            // changing account selections. Never marshal with the edit lock held.
-                            if (applied == SettingsApplyResult::Changed) FinishSettingsApply();
-                            NotifySettingsWindowChanged(true);
-                            HistoryLoad(*state);
-                            if (applied == SettingsApplyResult::Failed) {
-                                HistorySetStatus(*state, L"Could not save recording consent. Recording is still off.");
-                            } else {
-                                SetFocus(state->accountCombo);
-                            }
-                            break;
-                        }
-                        case kHistoryInfoButton: {
-                            std::wstring info =
-                                L"Reading the charts\r\n"
-                                L"These are sampled quota levels, not tokens or daily consumption. Choose Short-term, Weekly, Extra usage, or All meters. "
-                                L"Weekly follows each Anthropic account's taskbar weekly selections; removed accounts keep both weeklies. "
-                                L"Refresh/F5 picks up changed selections. Antigravity Gemini and Claude/GPT quotas share the matching short/weekly views. "
-                                L"Each quota keeps its own line and resets; overlapping limits are never added or merged. "
-                                L"Short-window labels use recorded durations (or current limit when unknown). Antigravity shows limiting pools, which can change. "
-                                L"All accounts starts on Weekly. A single account starts on All meters. Both modes offer all four views; "
-                                L"All meters includes weeklies hidden on the taskbar. "
-                                L"Each mode remembers its view until the window closes.\r\n\r\n"
-                                L"Legend and hover\r\n"
-                                L"The wrapping legend above the plot identifies each plotted account/quota with its line color and width. "
-                                L"Hover a legend entry to emphasize that quota and dim the others; both comparison periods stay visible. "
-                                L"Hover the plot to identify every nearby or overlapping line, including current and previous weeks. "
-                                L"Each line reports a real recorded endpoint nearest its closest drawn segment, not an interpolated reading. "
-                                L"Previous-week dates remain the original sample dates. Gaps cannot be hovered as connected lines. "
-                                L"Details-only dollar spending and empty statuses have no line legend.\r\n\r\n"
-                                L"Extra usage and empty entries\r\n"
-                                L"Extra usage shows Anthropic budget used (%) on the left and OpenAI credits remaining on the right. "
-                                L"Usage rises with spending; remaining credits fall. Dollars appear in details, including accounts without percentage readings. "
-                                L"All meters also plots Anthropic dollar spending on its own axis, separate from percentages and credits. "
-                                L"Unsupported quotas are omitted; accounts without readings get a compact status entry. "
-                                L"Dollar details report sampled last/peak spending, not total spending across the selected range.\r\n\r\n"
-                                L"Lines and markers\r\n"
-                                L"All accounts uses an account color family: primary quotas are thicker, scoped quotas thinner and tinted. "
-                                L"Single-account colors stay tied to each meter. Solid lines: current. Dashed lines: previous. Dots mark only isolated samples "
-                                L"(filled: current, hollow: previous). Resets, missing or failed readings, gaps, restarts, "
-                                L"and recording changes break lines without extra markers. "
-                                L"Lines are reduced for drawing; statistics and CSV use the raw samples.\r\n\r\n"
-                                L"Statistics and time\r\n"
-                                L"Peak is the highest recorded value. Coverage counts connected intervals. Time above the red threshold is "
-                                L"estimated within those intervals, never across gaps or beyond the last sample. Dates are local. "
-                                L"Week comparison uses two elapsed seven-day periods; daylight saving can shift local clock times.\r\n\r\n"
-                                L"Recording and export\r\n"
-                                L"Recording is on by default. When it is off, enable it using the banner or Settings; the choice applies to "
-                                L"the current Windows user only, and per-account selections and hidden-account rules still apply. "
-                                L"Recording starts with the next poll. "
-                                L"Pending recording waits for account history IDs to be saved. "
-                                L"No data can also mean an unsupported meter, failed polls, or expired history. Nothing is backfilled. "
-                                L"Refresh / F5 reads local history only. CSV includes all supported meters for the selected accounts and range "
-                                L"(both weeks when comparing), with UTC times and IDs instead of labels. Credits are not dollars or a spending ledger.\r\n\r\n"
-                                L"Retention: " + std::to_wstring(state->retention) + L" days, also limited to 250,000 records / about 60 MB. "
-                                L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
-                                L"unless their history was deleted with them.";
-                            if (!state->snapshot.samples.empty()) {
-                                info += L"\r\nOldest loaded sample: " + HistoryLocalDate(state->snapshot.samples.front().timeMs);
-                            }
-                            HistoryModalScope modal(*state);
-                            if (modal.hook) MessageBoxW(window, info.c_str(), L"Usage history — Info", MB_OK | MB_ICONINFORMATION);
-                            break;
-                        }
-                        case kHistoryClearButton: {
-                            int answer = IDCANCEL;
-                            {
-                                HistoryModalScope modal(*state);
-                                if (!modal.hook) break;
-                                answer = MessageBoxW(window,
-                                    L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will record new history.",
-                                    L"Clear all usage history", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
-                            }
-                            if (state->closing || g_unloading || g_historyWindowCancelRequested) break;
-                            if (answer != IDOK) { HistorySetStatus(*state, L"Clear history cancelled."); break; }
-                            std::wstring error;
-                            bool cleared = ClearHistory(&error);
-                            // Clear changed the history epoch even if the rewrite failed.
-                            InvalidateBurnUpCurves();
-                            if (cleared) {
-                                HistoryLoad(*state);
-                                HistorySetStatus(*state, L"All local history cleared. Future polls can start recording again.");
-                            } else HistorySetStatus(*state, L"ERROR: could not clear all history. " + error);
-                            break;
-                        }
-                    }
-                }
-                return 0;
-            }
-            case WM_CLOSE:
-                state->closing = true;
-                HistoryClearHover(*state);
-                if (state->modal) {
-                    if (HWND dialog = g_historyDialog.load()) {
-                        PostMessageW(dialog, WM_COMMAND, IDCANCEL, 0);
-                        PostMessageW(dialog, WM_CLOSE, 0, 0);
-                    }
-                    return 0;
-                }
-                DestroyWindow(window);
-                return 0;
-            case WM_DESTROY:
-                g_historyWindow.store(nullptr);
-                PostQuitMessage(0);
-                return 0;
-            case WM_NCDESTROY:
-                // Children are gone; no control can still use the font or stack state.
-                if (state->font) { DeleteObject(state->font); state->font = nullptr; }
-                state->window = nullptr;
-                state->graph = nullptr;
-                SetWindowLongPtrW(window, GWLP_USERDATA, 0);
-                break;
-        }
-        return DefWindowProcW(window, message, wParam, lParam);
-    } catch (...) {
-        Wh_Log(L"History window callback failed");
-        if (message == WM_NCCREATE) return FALSE;
-        if (message == WM_CREATE) return -1;
-        if (state && state->status) SetWindowTextW(state->status, L"ERROR: history operation failed; closing the window.");
-        PostMessageW(window, WM_CLOSE, 0, 0);
-        return 0;
-    }
-}
-
-static DWORD WINAPI HistoryWindowThreadProc(LPVOID) {
-    // COM is only for the native file dialog. No XAML or WinRT references live here.
-    HINSTANCE instance = GetModuleHandleW(nullptr);
-    HistoryWindowState state;  // Outlives all callbacks, including DestroyWindow below.
-    bool registeredWindow = false, registeredGraph = false;
-    HRESULT apartment = E_FAIL;
-    try {
-        using SetThreadDpi_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-        if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-            auto setDpi = reinterpret_cast<SetThreadDpi_t>(GetProcAddress(user32, "SetThreadDpiAwarenessContext"));
-            if (setDpi) setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        }
-        apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        INITCOMMONCONTROLSEX controls{};
-        controls.dwSize = sizeof(controls);
-        controls.dwICC = ICC_WIN95_CLASSES;
-        InitCommonControlsEx(&controls);
-        if (g_unloading || g_historyWindowCancelRequested) {
-            if (SUCCEEDED(apartment)) CoUninitialize();
-            return 0;
-        }
-        WNDCLASSEXW cls{};
-        cls.cbSize = sizeof(cls);
-        cls.hInstance = instance;
-        cls.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        cls.hbrBackground = GetSysColorBrush(COLOR_BTNFACE);
-        cls.lpszClassName = kHistoryWindowClass;
-        cls.lpfnWndProc = HistoryWindowProc;
-        registeredWindow = RegisterClassExW(&cls) != 0;
-        if (!registeredWindow && GetLastError() == ERROR_CLASS_ALREADY_EXISTS &&
-            UnregisterClassW(kHistoryWindowClass, instance)) {
-            registeredWindow = RegisterClassExW(&cls) != 0;
-        }
-        cls.hbrBackground = nullptr;
-        cls.lpszClassName = kHistoryGraphClass;
-        cls.lpfnWndProc = HistoryGraphWndProc;
-        if (registeredWindow) {
-            registeredGraph = RegisterClassExW(&cls) != 0;
-            if (!registeredGraph && GetLastError() == ERROR_CLASS_ALREADY_EXISTS &&
-                UnregisterClassW(kHistoryGraphClass, instance)) {
-                registeredGraph = RegisterClassExW(&cls) != 0;
-            }
-        }
-        if (registeredWindow && registeredGraph && !g_unloading && !g_historyWindowCancelRequested) {
-            POINT cursor{};
-            GetCursorPos(&cursor);
-            MONITORINFO monitor{};
-            monitor.cbSize = sizeof(monitor);
-            GetMonitorInfoW(MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST), &monitor);
-            UINT dpi = WindowDpi(nullptr);
-            int width = std::min(ScaleForDpi(1100, dpi), int(monitor.rcWork.right - monitor.rcWork.left));
-            int height = std::min(ScaleForDpi(830, dpi), int(monitor.rcWork.bottom - monitor.rcWork.top));
-            int x = monitor.rcWork.left + (monitor.rcWork.right - monitor.rcWork.left - width) / 2;
-            int y = monitor.rcWork.top + (monitor.rcWork.bottom - monitor.rcWork.top - height) / 2;
-            HWND window = CreateWindowExW(WS_EX_APPWINDOW | WS_EX_CONTROLPARENT, kHistoryWindowClass,
-                L"Taskbar AI Quota Bars — Usage history", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-                x, y, width, height, nullptr, nullptr, instance, &state);
-            if (window) {
-                g_historyWindow.store(window);
-                if (g_unloading || g_historyWindowCancelRequested) PostMessageW(window, WM_CLOSE, 0, 0);
-                else { ShowWindow(window, SW_SHOW); SetForegroundWindow(window); }
-                MSG message{};
-                int result;
-                while ((result = GetMessageW(&message, nullptr, 0, 0)) > 0) {
-                    if (message.message == WM_KEYDOWN &&
-                        (message.wParam == VK_F5 || (message.wParam == 'R' && GetKeyState(VK_CONTROL) < 0))) {
-                        if (!state.modal) PostMessageW(window, kHistoryLoadMessage, 0, 0);
-                        continue;
-                    }
-                    if (!IsDialogMessageW(window, &message)) {
-                        TranslateMessage(&message);
-                        DispatchMessageW(&message);
-                    }
-                }
-                if (result < 0) Wh_Log(L"History message loop failed: %lu", GetLastError());
-            } else Wh_Log(L"Could not create history window: %lu", GetLastError());
-        } else if (!g_unloading && !g_historyWindowCancelRequested) {
-            Wh_Log(L"Could not register history window classes: %lu", GetLastError());
-        }
-    } catch (...) {
-        Wh_Log(L"History worker failed");
-    }
-    // Native modal APIs have unwound and their hooks are removed before this point.
-    if (state.window && IsWindow(state.window)) DestroyWindow(state.window);
-    if (state.font) DeleteObject(state.font);
-    g_historyDialog.store(nullptr);
-    g_historyWindow.store(nullptr);
-    if (registeredGraph) UnregisterClassW(kHistoryGraphClass, instance);
-    if (registeredWindow) UnregisterClassW(kHistoryWindowClass, instance);
-    if (SUCCEEDED(apartment)) CoUninitialize();
-    return 0;
-}
-
-// The custom-drawn window (history/ui-window.h). Its graphics and WinRT objects live inside
-// UiHostRun, which returns before the apartment is uninitialized.
+// The window (history/ui-window.h). Its graphics and WinRT objects live inside UiHostRun, which
+// returns before the apartment is uninitialized.
 static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
     using SetThreadDpi_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
     if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
@@ -24798,15 +23255,14 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
         }
     }
     g_historyDialog.store(nullptr);
-    g_historyUiWindow.store(nullptr);
     g_historyWindow.store(nullptr);
     if (apartmentInitialized) winrt::uninit_apartment();
     return 0;
 }
 
-// Opens a window of `kind`, or activates the open one of either kind, selecting the account with
-// `historyId` if it is listed; 0 keeps the current selection.
-static void OpenHistoryWindow(uint64_t historyId, HistoryWindowKind kind) {
+// Opens the window, or activates the open one, selecting the account with `historyId` if it is
+// listed; 0 keeps the current selection.
+static void OpenHistoryWindow(uint64_t historyId) {
     if (g_unloading) return;
     std::lock_guard lock(g_historyWindowMutex);
     // Recheck under the same lock as close/thread publication; never spawn during unload.
@@ -24824,24 +23280,12 @@ static void OpenHistoryWindow(uint64_t historyId, HistoryWindowKind kind) {
         CloseHandle(g_historyWindowThread);
         g_historyWindowThread = nullptr;
     }
-    g_historyWindowThread = CreateThread(
-        nullptr, 0, kind == HistoryWindowKind::Custom ? HistoryUiThreadProc : HistoryWindowThreadProc, nullptr, 0,
-        nullptr);
+    g_historyWindowThread = CreateThread(nullptr, 0, HistoryUiThreadProc, nullptr, 0, nullptr);
     if (!g_historyWindowThread) Wh_Log(L"Could not create history window thread: %lu", GetLastError());
 }
 
-// The journal changed outside the history windows' own loads (an account's history deleted): the
-// custom-drawn window refreshes from its notification; the classic one, which gets none, reloads,
-// after its own dialog if one is open (an export already past its dialog writes what it showed).
-// Never waits.
-static void NotifyHistoryJournalChanged() {
-    NotifySettingsWindowChanged();
-    HWND window = g_historyWindow.load();
-    if (window && window != g_historyUiWindow.load()) PostMessageW(window, kHistoryLoadMessage, 1, 0);
-}
-
-// Lifecycle API for either kind: call from the unload thread, after g_unloading=true. Never from
-// the window's thread and never while holding settings/history/auth locks.
+// Lifecycle API: call from the unload thread, after g_unloading=true. Never from the window's
+// thread and never while holding settings/history/auth locks.
 static void CloseHistoryWindow() {
     HANDLE thread = nullptr;
     {

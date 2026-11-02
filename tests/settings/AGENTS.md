@@ -6,7 +6,7 @@ window's view, chart, controller and frame builders on the shared history model)
 both windows, a native-host probe of the toolkit's window host (with its dropdown popup, tooltip
 and number box text boxes, and the history window's dialog scope), and a capture/foreground probe
 for the dropdown popup. Not a Windhawk,
-Explorer or XAML test. The history domain (journal, series, continuity, burn-up, the classic window) stays in
+Explorer or XAML test. The history domain (journal memory, series, continuity, burn-up, CSV) stays in
 `tests/history`.
 
 ## Run
@@ -134,8 +134,9 @@ regenerates.
   complete-text tooltips placed whole there; `OBSERVE` lines report widths and capacities) and
   `fixtures/history-chart.inc` (the chart through the controller on synthetic journals in the
   mockups' shapes: axes, the plot's layout on device pixels, local time ticks per range, across
-  daylight saving and over ten years; picking and readout rows ported from the classic
-  `tests/history` expectations; emphasis; the legend's filter; the scene's draw list; the
+  daylight saving and over ten years; picking (every nearby or coincident line in both periods at
+  a recorded endpoint, breaks never picked, extremes kept within a pixel) and readout rows;
+  emphasis; the legend's filter; the scene's draw list; the
   reduction cache's key). `history-render` paints `render-history-*` (every theme at 96/144/192
   DPI, `fixtures/history-render.inc`) as the host composes the window (main surface, navigation
   pane at its scroll, viewport, scrollbar, the More menu and a chart's readout where the host

@@ -406,8 +406,8 @@ static void EraseHistorySamplesLocked(uint64_t historyId) {
 }
 
 // Deletes a removed account's samples: the journal rewritten without them, then memory, then the
-// history windows told. Remove the account first: its settings publication fences out batches
-// still carrying its samples and drops its burn-up curves. Nothing ever recorded is a success; a
+// windows told. Remove the account first: its settings publication fences out batches still
+// carrying its samples and drops its burn-up curves. Nothing ever recorded is a success; a
 // journal that couldn't be read (damaged, unreadable, in use by another session) stays as it is,
 // with `error` saying why. An unsaved one (a torn tail, or past the size cap, whose eviction this
 // then saves) is rewritten even without the account's samples. Holds only the history lock.
@@ -430,7 +430,7 @@ static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
         EraseHistorySamplesLocked(historyId);
         if (!present) return true;
     }
-    NotifyHistoryJournalChanged();
+    NotifySettingsWindowChanged();
     return true;
 }
 

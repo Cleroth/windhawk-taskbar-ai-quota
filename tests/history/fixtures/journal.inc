@@ -195,7 +195,7 @@
             std::vector<HistoryUiAccount> accounts = HistoryCollectAccounts(configured, samples, baseTime,
                                                                             baseTime + span, Never);
             auto t4 = Clock::now();
-            HistorySeriesQuery all{-1, HistoryView::AllMeters, baseTime, baseTime + span, baseTime, false, true, true, 90};
+            HistorySeriesQuery all{-1, HistoryView::AllMeters, baseTime, baseTime + span, baseTime, false, 90};
             HistorySeriesSet series = HistoryBuildSeries(samples, accounts, all, Never);
             auto t5 = Clock::now();
             HistorySeriesQuery weekly = all;

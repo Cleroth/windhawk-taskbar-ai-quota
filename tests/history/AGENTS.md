@@ -1,7 +1,10 @@
 # History verification
 
-Source-extracted model/UI/GDI regressions plus isolated native tooltip contract probes. Not a
-Windhawk or Explorer integration test.
+Source-extracted regressions of the usage-history domain: the history model (grouping, labels,
+reduction, statistics, account collection, selection, cancellation), continuity, the flyout's
+burn-up curves, the journal's memory parts and the CSV writer. Not a Windhawk or Explorer
+integration test. The usage history window itself (view, chart, controller, frames, renders, its
+native host and dialog scope) is tested in `tests/settings`.
 
 ## Run
 
@@ -9,12 +12,10 @@ From the repo root:
 
 ```text
 python tests/history/run.py
-python tests/history/run.py --capture
 ```
 
-Prerequisites: Windows x64, Python 3.10+, PowerShell 7 (`pwsh`), Windhawk's bundled clang++ with
-its MinGW headers/libraries, and an interactive session with GDI/common controls. No Python
-packages or installs.
+Prerequisites: Windows x64, Python 3.10+, PowerShell 7 (`pwsh`) and Windhawk's bundled clang++
+with its MinGW headers/libraries. No Python packages or installs.
 
 Options: `--source PATH` (default: the repo-root generated file), `--compiler PATH` (default:
 `C:\Program Files\Windhawk\Compiler\bin\clang++.exe`), `--output DIRECTORY` (default:
@@ -32,35 +33,26 @@ Each invocation creates a unique, retained `.out/run-.../` directory:
 
 - `history.cpp`: generated TU of verbatim source sections and fixture includes.
 - `history.manifest.json`: extraction boundaries, section hashes and generated TU hash.
-- Executables, per-phase logs, and `results.json`: commands, exit codes, source/harness hashes
-  before and after, test totals, GDI resources and native control observations.
-- `--capture`: synthetic offscreen GDI BMPs/PNGs at 96/144/192 DPI. Render evidence, not desktop
-  screenshots or automated pixel-golden comparisons.
+- The executable, per-phase logs, and `results.json`: commands, exit codes, source/harness hashes
+  before and after, test totals.
 
-Capture runs can take tens to hundreds of MB. The tool never prunes; old `run-*` directories can
-be removed after their runners exit.
+The tool never prunes; old `run-*` directories can be removed after their runners exit.
 
-Compile/run phases are serial with timeouts. A failed compile never runs an old executable;
-concurrent invocations keep separate executables, logs and captures. The native probe creates
-hidden owner/child windows and an activated tooltip held at `-32000,-32000` by a tooltip-only
-subclass; it never activates the owner window. No Explorer messages/injection, Windhawk loading,
-network, credentials, consent, registry, or real journal/storage access; CSV serialization uses an
-in-memory sink. Never add user samples, account identities or replay paths to fixtures.
+Phases are serial with timeouts. A failed compile never runs an old executable; concurrent
+invocations keep separate executables and logs. No windows, Explorer messages/injection,
+Windhawk loading, network, credentials, consent, registry, or real journal/storage access; CSV
+serialization uses an in-memory sink. Never add user samples, account identities or replay paths
+to fixtures.
 
 ## Success and evidence limits
 
-Readiness (exit 0) requires every positive phase to pass: tooling checks, freshness (default
-source), extraction, model compile, model/UI/GDI tests, native compile, default-context probe,
-explicit-v6 probe. Missing summaries, source/harness changes, assertion failures, timeouts and
-GDI resource growth/deletion failures fail the run. Inspect `results.json` and phase logs;
-captures are optional human review. Readiness evidence is a fresh successful run, not a result
-from an older source hash.
+Readiness (exit 0) requires every phase to pass: tooling checks, freshness (default source),
+extraction, compile and the tests, with exactly one successful `RESULT` summary. Missing
+summaries, source/harness changes, assertion failures and timeouts fail the run. Readiness
+evidence is a fresh successful run, not a result from an older source hash.
 
-- **Extracted model/UI:** grouping, account collection, selection, continuity, reduction,
-  statistics, in-memory CSV, layout, picking, hover, cancellation and paint logic are actual
-  source. Fake HWND/tooltip seams
-  assert observable calls, text lifetime and failure handling. GDI rendering/resource counts are
-  real. Stubs don't prove native control semantics.
+- **Extracted model:** grouping, account collection, selection, continuity, reduction,
+  statistics, burn-up curves and in-memory CSV are actual source.
 - **Journal memory parts** (`fixtures/journal.inc`): the in-memory journal state, the status
   notifier (`SetHistoryStatus`, its window notification a counting stub), the history window's
   peek (`PeekHistorySnapshot`) and an account deletion's memory step
@@ -72,37 +64,9 @@ from an older source hash.
   rest of the build): an observation, not a readiness condition. The tail cache's reaction to
   retention pruning is `burn-up.inc`'s; the prune's revision bump in `MaintainHistory` is not
   extracted.
-- **Native contracts:** a separate hand-written positive probe (not extracted production code)
-  exercises V2 `TOOLINFO`, swap-backed active text changes without hide/show, offscreen first
-  activation then `GetWindowRect`, and no preactivation `TTM_GETBUBBLESIZE`. It records the actual
-  control context/version; the default context isn't assumed to be v5 or to match Explorer.
-  Explicit v6 must load v6.
 - **Host integration:** real taskbar threads, XAML, Windhawk unload, storage, OAuth, upgrades and
-  Explorer's activation context are outside this suite, and passing proves none of them. Follow
-  root/README guidance for separately authorized runtime verification.
-
-## Opt-in unsafe diagnostic
-
-`python tests/history/run.py --diagnose-native-preactivation` also runs the preactivation
-`TTM_GETBUBBLESIZE` diagnostic. Normal and `--capture` runs never execute it. Never run it as
-routine verification or to establish readiness.
-
-Only after this run's native compile succeeds, the runner reuses that executable in two child
-processes: `--preactivation` in default and explicit-v6 contexts, with the same offscreen
-controls, run directory and per-child timeout. No injection, new probe protocol, or stale
-executable after a compile failure.
-
-Abnormal exits are possible. Existing evidence: the default context (v5.82) ended in access
-violation `0xC0000005` (unsigned 3221225477, signed -1073741819); explicit v6 exited 0 but
-returned an unusably small preactivation size. Other systems may differ; even exit 0 doesn't
-prove the call is usable or safe in Explorer. No diagnostic result is a positive pass.
-
-`results.json` records diagnostic commands, logs, exit codes, raw observations and any
-timeout/start error under `diagnostics`, labeled `observations_not_readiness_tests`; they never
-enter `phases` or its evidence parser. Readiness status/exit depends only on mandatory positive
-phases and integrity checks, not on diagnostic crashes, zero exits or missing positive summaries.
-Verify this separation with mocked tooling tests; deliberate crashes aren't needed when existing
-native evidence suffices.
+  Explorer are outside this suite, and passing proves none of them. Follow root/README guidance
+  for separately authorized runtime verification.
 
 ## Maintenance rules
 
@@ -112,20 +76,17 @@ native evidence suffices.
   pass a test. Review extraction when production structure changes. Extraction reads the
   generated file, but every section is bounded by its own `// src/<path>` fragment: pure
   fragments (`core/model.h`, `history/types.h`, `continuity.h`, `burn-up.h`, `series.h`,
-  `csv.h`, `paint.h`) and the journal's coordination state (`history/state.h`) whole, other fragments by
+  `csv.h`) and the journal's coordination state (`history/state.h`) whole, other fragments by
   named definitions or anchors searched inside that fragment only, so include order can't change
   what is extracted. `history/journal.h` keeps its in-memory state before its storage state
   (`g_historyPath` ends the extracted block). Fix production code in `src/` and regenerate.
-- `fixtures/model.inc` tests the shared model (`history/series.h`) through its explicit inputs;
-  its trailing classic section and the interaction/tooltip/paint fixtures test the classic
-  window through its adapters. `fixtures/csv.inc` tests the CSV writer (`history/csv.h`, whole)
-  through the classic adapter and with frozen scopes: hand-derived bytes, 64 KiB pieces,
-  cancellation, a failing sink.
+- `fixtures/model.inc` tests the history model (`history/series.h`) through its explicit inputs.
+  `fixtures/csv.inc` tests the CSV writer (`history/csv.h`, whole) with frozen scopes:
+  hand-derived bytes, 64 KiB pieces, cancellation, a failing sink.
 - Fixtures are split by domain under `fixtures/`. Add independent expected behavior, not
   Python/C++ copies of production decision rules or source-text call-count audits.
 - Preserve synthetic continuity coverage for clock rollback, gaps, real resets, idle rolling
   deadlines and first-use anchoring. No real CSV replay.
-- Update the safe fake-window seams when extracted code gains Win32 calls; fake HWNDs must never
-  reach real window APIs. Keep native contract probes separate from stubs and align their protocol
-  with deliberate production changes.
+- `win32-stubs.hpp` holds only the prelude and the globals the extracted sections read; extracted
+  code that gains window or storage calls doesn't belong in this suite.
 - Keep generated artifacts under `.out/` by default; never promote them to source.

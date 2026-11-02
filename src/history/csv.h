@@ -1,6 +1,5 @@
 // Usage-history CSV export (pure): the rows an export writes, from a scope frozen when it starts,
-// to a sink. Both history windows write through it; the file around it is native
-// (history/ops.h, history/export.h).
+// to a sink. The file around it is native (history/ops.h).
 
 // What an export writes, fixed at its command: its own snapshot (time-sorted samples), the
 // account (0: every account) and the times [from, to) (the range, and the week before it while

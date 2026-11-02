@@ -1,4 +1,4 @@
-// Usage-history model shared by the history windows: meter and view tables, statistics,
+// Usage-history model of the usage history window: meter and view tables, statistics,
 // reduction, series building, account collection and selection resolution. Explicit inputs
 // only; loops stop as soon as `cancelled` returns true.
 
@@ -42,7 +42,7 @@ struct HistoryStatistics {
 struct HistoryRenderPoint {
     int x = 0;
     double value = 0;
-    size_t sourceRow = 0;  // Raw provenance for structural tests; paint never dereferences it.
+    size_t sourceRow = 0;  // Raw provenance: a pick reports this sample; paint never dereferences it.
     bool connect = false;
 };
 
@@ -53,7 +53,7 @@ struct HistoryRenderSeries {
 struct HistoryUiAccount {
     uint64_t id = 0;
     uint32_t provider = 0;
-    std::wstring title, label;
+    std::wstring label;  // Removed accounts: account_<16 hex digits>
     bool configured = false;
     bool recording = false;
     bool hidden = false;
@@ -64,7 +64,7 @@ struct HistoryUiAccount {
 struct HistorySeries {
     size_t account = 0;
     int meter = 0;
-    std::wstring title;
+    // Its short name (without the account in one account's view) and full title (with it)
     std::wstring legendTitle, hoverTitle;
     COLORREF color = 0;
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
@@ -73,27 +73,18 @@ struct HistorySeries {
     double low = 0, high = 0;  // Its readings' range in [readFrom, to), with 0
 };
 
-struct HistoryAxis {
-    double low = 0, high = 1;
-    bool visible = false;
-};
-
 // What a series build reads besides the samples and accounts.
 struct HistorySeriesQuery {
     int selected = -1;  // Account index; -1 is All accounts.
     HistoryView view = HistoryView::Weekly;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     bool overlay = false;  // Compare previous week: [readFrom, from) is the previous period.
-    bool enabled = false, skipHidden = true;  // Recording consent; hidden accounts not polled.
     int redThreshold = 90;
 };
 
 struct HistorySeriesSet {
     std::vector<HistorySeries> series;
-    // Accounts without readings: each one's title with its status, and its account index.
-    std::vector<std::wstring> noReadings;
-    std::vector<size_t> noReadingAccounts;
-    std::array<HistoryAxis, 3> axes;  // Percent, USD, credits; never share unlike units.
+    std::vector<size_t> noReadingAccounts;  // Accounts without readings, by account index
     int redThreshold = 90;  // The threshold the statistics' near-limit times used
 };
 
@@ -222,17 +213,14 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
 }
 
 // Series of the selected account (or every account) in the query's view: one per meter with
-// readings in either period, in account then meter order. An account with none gets one
-// no-readings entry carrying its recording status.
+// readings in either period, in account then meter order. An account with none is listed
+// without readings.
 static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& samples,
                                            const std::vector<HistoryUiAccount>& accounts,
                                            const HistorySeriesQuery& query,
                                            const std::function<bool()>& cancelled) {
     HistorySeriesSet result;
     result.redThreshold = query.redThreshold;
-    result.axes[0].high = 100;
-    // Keep percentages on the left even if only dollar/credit readings are available.
-    result.axes[0].visible = true;
     for (size_t i = 0; i < accounts.size(); ++i) {
         if (cancelled()) break;
         if (query.selected >= 0 && size_t(query.selected) != i) continue;
@@ -246,11 +234,6 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
         }
         if (!meters) continue;
         size_t firstSeries = result.series.size();
-        std::wstring status;
-        if (account.configured && query.enabled) {
-            if (!account.recording) status = L"  [recording off]";
-            else if (account.hidden && query.skipHidden) status = L"  [paused]";
-        }
         for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
             if (cancelled()) break;
             if (!(meters & (1U << meter))) continue;
@@ -278,8 +261,6 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             }
             std::wstring label = kHistoryMeterNames[meter];
             if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
-            auto& axis = result.axes[meter < 6 ? 0 : meter - 5];
-            if (series.plotted) axis.visible = true;
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;
             for (size_t row : account.rows) {
@@ -290,10 +271,6 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                 double value = sample.meters[meter].value;
                 series.low = std::min(series.low, value);
                 series.high = std::max(series.high, value);
-                if (series.plotted) {
-                    axis.low = std::min(axis.low, value);
-                    axis.high = std::max(axis.high, value);
-                }
                 if (meter == 0 || meter == 4) {
                     ULONGLONG duration = sample.meters[meter].durationMs;
                     if (hasDuration && shortDuration != duration) mixedDuration = true;
@@ -315,21 +292,16 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             std::wstring compact = label;
             if (compact.ends_with(L" used (%)")) compact.resize(compact.size() - 9);
             series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + compact;
-            if (!series.plotted) label += L" — details only";
-            series.title = (query.selected < 0 ? account.label + L" · " : L"") + label;
-            if (result.series.size() == firstSeries) series.title += status;
             result.series.push_back(std::move(series));
         }
-        if (result.series.size() == firstSeries) {
-            result.noReadings.push_back(account.title + status);
-            result.noReadingAccounts.push_back(i);
-        }
+        if (result.series.size() == firstSeries) result.noReadingAccounts.push_back(i);
     }
     return result;
 }
 
 // Configured accounts in settings order (zero and duplicate history IDs skipped), then removed
-// accounts with samples in [readFrom, to), in order of their first sample. Rows index `samples`.
+// accounts with samples in [readFrom, to), in order of their first sample, labelled by their
+// journal ID. Rows index `samples`.
 static std::vector<HistoryUiAccount> HistoryCollectAccounts(const std::vector<AccountConfig>& configured,
                                                             const std::vector<HistorySample>& samples,
                                                             ULONGLONG readFrom, ULONGLONG to,
@@ -348,7 +320,6 @@ static std::vector<HistoryUiAccount> HistoryCollectAccounts(const std::vector<Ac
         account.showWeekly = config.showBars[kWeeklyBar];
         account.showFableWeekly = config.showBars[kFableWeeklyBar];
         account.label = config.label;
-        account.title = std::wstring(ProviderDisplayName(config.provider)) + L" — " + config.label;
         index.emplace(account.id, accounts.size());
         accounts.push_back(std::move(account));
     }
@@ -361,10 +332,7 @@ static std::vector<HistoryUiAccount> HistoryCollectAccounts(const std::vector<Ac
             HistoryUiAccount account;
             account.id = sample.accountId;
             account.provider = sample.provider;
-            PCWSTR provider = sample.provider == 1 ? L"Anthropic" : sample.provider == 2 ? L"OpenAI" :
-                              sample.provider == 3 ? L"Google Antigravity" : L"Unknown provider";
-            account.label = L"removed " + Utf8ToWide(HistoryCsvId("account_", sample.accountId));
-            account.title = std::wstring(provider) + L" — " + account.label;
+            account.label = Utf8ToWide(HistoryCsvId("account_", sample.accountId));
             accounts.push_back(std::move(account));
         }
         accounts[it->second].rows.push_back(row);

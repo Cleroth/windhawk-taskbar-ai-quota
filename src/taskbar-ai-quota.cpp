@@ -323,12 +323,6 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "history/ui-window.h"
 
-#include "history/view-model.h"
-
-#include "history/export.h"
-
-#include "history/paint.h"
-
 #include "history/window.h"
 
 static HANDLE g_fetchThread = nullptr;

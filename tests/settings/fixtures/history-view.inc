@@ -51,8 +51,8 @@ static AccountConfig TestHistoryAccount(std::wstring provider, std::wstring labe
 
 // What the window's controller does for a load, on synthetic inputs: collects the accounts over
 // the range (and the previous week while comparing), lists them in the view as the window shows
-// them (slots in order, a removed one's label without its "removed " prefix, live state from
-// `live`), builds the series and their cards at kWeekTo.
+// them (slots in order, a removed one labelled by its journal ID, live state from `live`), builds
+// the series and their cards at kWeekTo.
 struct TestHistory {
     std::vector<AccountConfig> configured;
     std::vector<HistorySample> samples;
@@ -78,16 +78,16 @@ static HistoryUiView TestCards(const TestHistory& h,
         account.historyId = a.id;
         account.slot = uint32_t(i);
         account.provider = a.provider;
-        account.label = a.configured ? a.label : a.label.substr(std::wstring_view(L"removed ").size());
+        account.label = a.label;
         account.removed = !a.configured;
         account.recordingOff = a.configured && !a.recording;
         account.paused = a.hidden && h.skipHidden;
         view.accounts.push_back(std::move(account));
     }
     if (live) live(view);
-    HistorySeriesQuery query{h.selected, h.view, kWeekFrom, kWeekTo, readFrom, h.compare, h.enabled, h.skipHidden, 90};
+    HistorySeriesQuery query{h.selected, h.view, kWeekFrom, kWeekTo, readFrom, h.compare, 90};
     HistorySeriesSet set = HistoryBuildSeries(h.samples, collected, query, never);
-    HistoryUiSetCards(view, set, collected, kWeekFrom, kWeekTo, kWeekTo, TestZone());
+    HistoryUiSetCards(view, set, kWeekFrom, kWeekTo, kWeekTo, TestZone());
     return view;
 }
 
@@ -273,7 +273,7 @@ static void RunHistoryViewTests() {
                                                                  L"Coverage 1 h (0.6%)"}));
     });
 
-    Run("history cards: All accounts names each account (a removed one without its prefix), its "
+    Run("history cards: All accounts names each account (a removed one by its journal ID), its "
         "recording status once; accounts without readings in account order, unsupported ones left out", [] {
         TestHistory h;
         AccountConfig off = TestHistoryAccount(L"anthropic", L"CC 1", 0xC1);

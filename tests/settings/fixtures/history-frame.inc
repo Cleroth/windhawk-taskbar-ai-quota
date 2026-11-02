@@ -42,7 +42,7 @@ static HistoryUiViewAccount TestRemoved(uint64_t id, uint32_t slot, uint32_t pro
     return account;
 }
 
-// A card in the classic palette (`hue` indexes kHistoryColors; tinted as a scoped quota).
+// A card in the series palette (`hue` indexes kHistoryColors; tinted as a scoped quota).
 static HistoryUiCard TestCard(std::wstring title, size_t hue, std::wstring value, std::wstring when,
                               std::vector<std::wstring> lines, bool tinted = false) {
     HistoryUiCard card;
@@ -262,7 +262,7 @@ static void RunHistoryFrameTests() {
                   option.separator == (i == 3));
         }
         // Their tooltips (s-tooltips, q7a-icons): names; Export's in strong text by its scope, over
-        // the classic description.
+        // its description.
         CHECK(UiRunsText(UiFindItem(frame, kHistoryUiRefresh)->tooltip) == L"Refresh (F5)");
         CHECK(UiRunsText(more->tooltip) == L"More options" && more->tooltip[0].style == UiRunStyle::Normal);
         const std::vector<UiRun>& exportTip = UiFindItem(frame, kHistoryUiExport)->tooltip;

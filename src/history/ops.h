@@ -12,8 +12,8 @@ struct HistoryProductionOps final : HistoryOps {
 
     uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
 
-    // As the classic window's load: an explicit viewer read also prunes retained history while
-    // recording is off. Each call holds only the history leaf lock.
+    // An explicit viewer read also prunes retained history while recording is off. Each call
+    // holds only the history leaf lock.
     HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) override {
         MaintainHistory(retentionDays);
         return ReadHistorySnapshot(from);
@@ -39,10 +39,10 @@ struct HistoryProductionOps final : HistoryOps {
         return snapshot;
     }
 
-    // The classic window's Enable recording transaction (history/window.h): the edit lock, the
-    // unload check once it is held, consent through the shared edit path (it persists this
-    // user's consent without changing account selections), the lock released before marshaling
-    // to taskbar threads, then the windows notified whatever the result.
+    // Enable recording: the edit lock, the unload check once it is held, consent through the
+    // shared edit path (it persists this user's consent without changing account selections),
+    // the lock released before marshaling to taskbar threads, then the windows notified whatever
+    // the result.
     HistoryConsentResult ApplyConsent() override {
         SettingsApplyResult applied;
         {
@@ -84,7 +84,7 @@ struct HistoryProductionOps final : HistoryOps {
         return scope.hook ? MessageBoxW(host->main, text.c_str(), caption, type) : 0;
     }
 
-    // The classic export's save dialog (history/export.h).
+    // The export's save dialog; its overwrite prompt runs in the same scope.
     HistoryDestination ChooseDestination(const std::wstring& title) override {
         UiHostClosePopup(*host);
         HistoryDialogScope scope(dialogs);
@@ -106,14 +106,14 @@ struct HistoryProductionOps final : HistoryOps {
     }
 
     bool PostWrite() override {
-        HWND window = g_historyUiWindow.load();
+        HWND window = g_historyWindow.load();
         return window && PostMessageW(window, kHistoryWriteMessage, 0, 0);
     }
 
-    // The classic export's file safety (history/export.h): a new temporary file beside the
-    // destination (never an existing one), the rows, flushed and closed, then moved over the
-    // destination with write-through. On any failure, unload or exception the temporary file is
-    // deleted and the destination keeps its content. Progress goes out before each full piece.
+    // The export's file safety: a new temporary file beside the destination (never an existing
+    // one), the rows, flushed and closed, then moved over the destination with write-through. On
+    // any failure, unload or exception the temporary file is deleted and the destination keeps
+    // its content. Progress goes out before each full piece.
     HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
                               const std::function<void(size_t)>& progress) override {
         struct Temporary {
@@ -182,12 +182,12 @@ struct HistoryProductionOps final : HistoryOps {
     void InvalidateCurves() override { InvalidateBurnUpCurves(); }
 
     bool PostRefresh() override {
-        HWND window = g_historyUiWindow.load();
+        HWND window = g_historyWindow.load();
         return window && PostMessageW(window, kHistoryRefreshMessage, 0, 0);
     }
 
     void DeferralTimer(bool on) override {
-        HWND window = g_historyUiWindow.load();
+        HWND window = g_historyWindow.load();
         if (!window) return;
         if (!on) KillTimer(window, kHistoryDeferralTimer);
         else if (!SetTimer(window, kHistoryDeferralTimer, 250, nullptr)) winrt::throw_last_error();

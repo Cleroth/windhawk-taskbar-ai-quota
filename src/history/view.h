@@ -17,7 +17,7 @@ struct HistoryUiViewAccount {
     uint64_t historyId = 0;
     uint32_t slot = 0;          // Session-stable per history ID (below 0xFF000): its entry's item id
     uint32_t provider = 0;      // 1 Anthropic, 2 OpenAI, 3 Antigravity; else unknown
-    std::wstring label;         // Removed accounts: account_<16 hex digits>, without "removed "
+    std::wstring label;         // Removed accounts: account_<16 hex digits>
     bool removed = false;
     bool recordingOff = false;  // Its Record history is off
     bool paused = false;        // Hidden while hidden accounts aren't polled
@@ -29,7 +29,7 @@ struct HistoryUiViewAccount {
 
 // A summary card (approved Q10 a): a series' chip name and line, a headline with the current
 // period's latest value ("now" when it is the account's latest fresh poll, else its time), then
-// the classic lines. Details-only dollar spending has no line.
+// its statistics lines. Details-only dollar spending has no line.
 struct HistoryUiCard {
     std::wstring title;
     std::wstring status;        // After the title, muted: the account's recording status
@@ -49,7 +49,7 @@ struct HistoryUiNoReadings {
 
 // A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
 // the chip's item id (per history ID and meter, stable for the session), the chip's name (the
-// readout's too) and the full title, the classic color and width, the range of its readings in
+// readout's too) and the full title, the series' color and width, the range of its readings in
 // both periods (with 0), and whether the legend hides it.
 struct HistoryUiLine {
     uint32_t chip = 0;
@@ -224,12 +224,11 @@ static std::wstring HistoryUiValue(int meter, double value, int percentDecimals)
 }
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
-// accounts without readings, from the view's accounts (parallel to `collected`), selection,
-// comparison and consent. Classic parity: every peak and its time, coverage with its share, time
-// at or above the red threshold the set was analyzed with for percentages, dollar spending's last
-// and peak readings, and an account's recording status once (in All accounts, on its first card).
-static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set,
-                              const std::vector<HistoryUiAccount>& collected, ULONGLONG from, ULONGLONG to,
+// accounts without readings, from the view's accounts (parallel to the set's), selection,
+// comparison and consent: every peak and its time, coverage with its share, time at or above the
+// red threshold the set was analyzed with for percentages, dollar spending's last and peak
+// readings, and an account's recording status once (in All accounts, on its first card).
+static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, ULONGLONG from, ULONGLONG to,
                               ULONGLONG now, const HistoryUiLocalTime& localTime) {
     view.cards.clear();
     view.noReadings.clear();
@@ -241,16 +240,10 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set,
     double duration = double(to > from ? to - from : 0);
     size_t previousAccount = SIZE_MAX;
     for (const HistorySeries& series : set.series) {
-        if (series.account >= view.accounts.size() || series.account >= collected.size()) continue;
+        if (series.account >= view.accounts.size()) continue;
         const HistoryUiViewAccount& account = view.accounts[series.account];
         HistoryUiCard card;
-        // All accounts names the account by its label in the view (a removed one's without the
-        // collected "removed " prefix).
         card.title = series.legendTitle;
-        if (const std::wstring& collectedLabel = collected[series.account].label;
-            view.selected < 0 && card.title.starts_with(collectedLabel)) {
-            card.title = account.label + card.title.substr(collectedLabel.size());
-        }
         if (!series.plotted) card.title += L" \u2014 details only";
         if (view.selected < 0 && series.account != previousAccount) card.status = status(series.account);
         previousAccount = series.account;

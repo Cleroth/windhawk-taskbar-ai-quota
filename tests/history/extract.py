@@ -28,9 +28,8 @@ def balanced(text, start):
     raise ValueError("Unbalanced production definition")
 
 
-def definition(text, name, method=False):
-    pattern = (r"(?m)^    bool " if method else r"(?m)^static [^\n;{}]+?\b")
-    pattern += re.escape(name) + r"\([^;{}]*\)\s*\{"
+def definition(text, name):
+    pattern = r"(?m)^static [^\n;{}]+?\b" + re.escape(name) + r"\([^;{}]*\)\s*\{"
     matches = list(re.finditer(pattern, text))
     if len(matches) != 1:
         raise ValueError(f"Expected one definition of {name}, found {len(matches)}")
@@ -65,20 +64,6 @@ def within(text, path, find, *args):
     return a + start, a + end
 
 
-def constant(text, name):
-    matches = list(re.finditer(r"(?m)^static constexpr [^\n]*\b" + re.escape(name) + r"\b[^\n]+", text))
-    if len(matches) != 1:
-        raise ValueError(f"Expected one {name} constant, found {len(matches)}")
-    return matches[0].span()
-
-
-def branch(text, opening):
-    if text.count(opening) != 1:
-        raise ValueError(f"Ambiguous branch: {opening!r}")
-    a = text.index(opening)
-    return a, balanced(text, a)
-
-
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -89,7 +74,6 @@ def generate(source, output, expected_hash):
         raise ValueError("Source changed before extraction; rerun against settled source")
     # Preserve original line endings too: these exact strings are emitted as UTF-8 bytes.
     text = raw.decode("utf-8-sig")
-    here = Path(__file__).resolve().parent
     manifest = {"source": str(source), "sha256": digest(raw), "extractions": []}
     chunks = ["// GENERATED: production sections below are extracted verbatim.\n",
               '#include "win32-stubs.hpp"\n']
@@ -104,9 +88,9 @@ def generate(source, output, expected_hash):
         chunks.append(f'\n#line {line} {json.dumps(source.as_posix())}\n{code}\n')
 
     # Every section is bounded by its own fragment. Pure fragments are taken whole: the account
-    # model, sample types, continuity rules, the flyout's burn-up curves, the shared history
-    # model and its CSV writer; so is the journal's coordination state (a lock, counters and
-    # flags). Journal, store and window fragments only contribute named definitions.
+    # model, sample types, continuity rules, the flyout's burn-up curves, the history model and
+    # its CSV writer; so is the journal's coordination state (a lock, counters and flags). The
+    # journal and helper fragments only contribute named definitions.
     emit("core/model.h", fragment(text, "core/model.h"))
     emit("history/types.h", fragment(text, "history/types.h"))
     # The journal's memory-only parts: its in-memory state (never the storage state after it),
@@ -117,32 +101,11 @@ def generate(source, output, expected_hash):
     emit("journal memory state", within(text, journal, between, "static std::deque<HistorySample> g_historySamples;", "static std::wstring g_historyPath;"))
     for name in ["SetHistoryStatus", "PeekHistorySnapshot", "EraseHistorySamplesLocked"]:
         emit(name, within(text, journal, definition, name))
-    emit("filetime epoch", within(text, "core/helpers.h", constant, "kFileTimeUnixEpochOffsetMs"))
-    for name in ["Utf8ToWide", "WideToUtf8", "UnixMsToLocalSystemTime", "ProviderDisplayName"]:
+    for name in ["Utf8ToWide", "WideToUtf8"]:
         emit(name, within(text, "core/helpers.h", definition, name))
-    emit("ScaleForDpi", within(text, "settings/native.h", definition, "ScaleForDpi"))
     for path in ["history/continuity.h", "history/burn-up.h", "history/series.h", "history/csv.h"]:
         emit(path, fragment(text, path))
-    # Classic window: its view types, then view-model, export, paint and window definitions.
-    view = "history/view-model.h"
-    emit("history view definitions", within(text, "history/window-state.h", between, "static constexpr int kHistorySeriesHeight", "static void HistoryLayout(HistoryWindowState& state, bool newFont);"))
-    for name in ["HistoryLocalDate", "HistoryReducePeriod", "HistoryPlotRightPadding", "HistoryClearHover", "HistoryPlotPoint", "HistoryLineColor", "HistoryRebuildRenderCache"]:
-        emit(name, within(text, view, definition, name))
-    emit("HistoryHoverHit", within(text, view, between, "struct HistoryHoverHit {", "// Picking boundary:"))
-    for name in ["HistoryHitTest", "HistoryUpdateHover", "HistoryScroll", "HistoryRebuildView"]:
-        emit(name, within(text, view, definition, name))
-    # Storage/export dialogs are not linked. Only the classic serializer adapter writes to this
-    # memory sink.
-    chunks.append('\n#line 1 "harness-csv-wrapper"\nstruct CapturedCsv {\nstd::string bytes;\nbool Write(const std::string& text) { bytes += text; return true; }\n')
-    emit("HistoryCsvFile::WriteSnapshot", within(text, "history/export.h", definition, "WriteSnapshot", True))
-    chunks.append("\n};\n")
-    emit("history/paint.h", fragment(text, "history/paint.h"))
-    for name in ["HistoryLayout", "HistoryGraphWndProc"]:
-        emit(name, within(text, "history/window.h", definition, name))
-    # Extract the real selection branch, not an imitation of its state transitions.
-    chunks.append('\n#line 1 "harness-selection-wrapper"\nstatic void HistoryLoad(HistoryWindowState&) { throw std::runtime_error("HistoryLoad deliberately unavailable in isolated harness"); }\nstatic void DispatchSelection(HistoryWindowState* state, int id, int event = CBN_SELCHANGE) {\n')
-    emit("HistoryWindowProc selection branch", within(text, "history/window.h", branch, "if (event == CBN_SELCHANGE) {"))
-    chunks.append('\n}\n#include "fixtures/main.inc"\n')
+    chunks.append('\n#include "fixtures/main.inc"\n')
     if source.read_bytes() != raw:
         raise ValueError("Source changed during extraction; rerun against settled source")
     output.write_bytes("\n".join(chunks).encode("utf-8"))

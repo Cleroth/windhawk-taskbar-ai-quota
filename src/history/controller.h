@@ -687,11 +687,10 @@ struct HistoryController {
         return true;
     }
 
-    // The view from the state: the accounts with their slots, recording state and latest polls
-    // (a removed one named by its journal ID), the current mode's view, the settings, the pill,
-    // status and notice, then the summary cards once loaded (from the series, built again only
-    // when their key changed). A selection that isn't listed is All accounts. Returns whether the
-    // view changed.
+    // The view from the state: the accounts with their slots, recording state and latest polls,
+    // the current mode's view, the settings, the pill, status and notice, then the summary cards
+    // once loaded (from the series, built again only when their key changed). A selection that
+    // isn't listed is All accounts. Returns whether the view changed.
     bool Compose() {
         const Settings& s = settings.settings;
         ULONGLONG now = ops->Now();
@@ -704,7 +703,7 @@ struct HistoryController {
             account.historyId = a.id;
             account.slot = slots.try_emplace(a.id, uint32_t(slots.size())).first->second;
             account.provider = a.provider;
-            account.label = a.configured ? a.label : Utf8ToWide(HistoryCsvId("account_", a.id));
+            account.label = a.label;
             account.removed = !a.configured;
             account.recordingOff = a.configured && !a.recording;
             account.paused = a.hidden && s.skipHiddenPolling;
@@ -751,31 +750,26 @@ struct HistoryController {
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
                                  v.selected >= 0 ? selectedId : 0, compare};
             if (!(key == seriesKey)) {
-                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, s.historyEnabled,
-                                         s.skipHiddenPolling, v.redThreshold};
+                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold};
                 series = HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
                 // A build cut short is never taken for a complete one.
                 seriesKey = ops->Unloading() ? HistorySeriesKey{} : key;
             }
-            HistoryUiSetCards(v, series, accounts, from, to, now, localTime);
-            // The chart's lines: the plotted series in order, named as their cards (a removed
-            // account without the collected "removed " prefix), hidden as the legend left them.
+            HistoryUiSetCards(v, series, from, to, now, localTime);
+            // The chart's lines: the plotted series in order, named as their cards, hidden as the
+            // legend left them.
             for (size_t i = 0; i < series.series.size(); i++) {
                 const HistorySeries& line = series.series[i];
                 if (!line.plotted || line.account >= v.accounts.size()) continue;
                 const HistoryUiViewAccount& account = v.accounts[line.account];
-                std::wstring prefix = accounts[line.account].label + L" \u00B7 ";
-                auto named = [&](const std::wstring& title) {
-                    return title.starts_with(prefix) ? account.label + title.substr(prefix.size() - 3) : title;
-                };
                 HistoryUiLine& shown = v.lines.emplace_back();
                 shown.chip = kHistoryUiChip + account.slot * 8 + uint32_t(line.meter);
                 shown.historyId = account.historyId;
                 shown.meter = line.meter;
                 shown.series = i;
                 shown.account = line.account;
-                shown.name = named(line.legendTitle);
-                shown.title = named(line.hoverTitle);
+                shown.name = line.legendTitle;
+                shown.title = line.hoverTitle;
                 shown.color = line.color;
                 shown.stroke = line.stroke;
                 shown.low = line.low;

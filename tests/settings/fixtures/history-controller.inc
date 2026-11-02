@@ -300,7 +300,7 @@ static void RunHistoryControllerTests() {
         const HistoryUiViewAccount& removed = c.view.accounts[2];
         CHECK(removed.removed && removed.historyId == 0xDEAD && removed.provider == 1 && removed.slot == 2 &&
               removed.label == L"account_000000000000dead" && removed.weeklyPct < 0 && !removed.lastPollMs);
-        // All accounts names it without the "removed " prefix.
+        // All accounts names it by its journal ID.
         CHECK(c.view.cards.size() == 3 && c.view.cards[0].title == L"CC 1 \u00B7 Weekly" &&
               c.view.cards[1].title == L"OAI \u00B7 Weekly" &&
               c.view.cards[2].title == L"account_000000000000dead \u00B7 Weekly");
@@ -344,6 +344,13 @@ static void RunHistoryControllerTests() {
         CHECK(c.view.view == HistoryView::ExtraUsage);
         c.Command(HistoryUiCommand::Select, 0, 0xC1);
         CHECK(c.view.view == HistoryView::ShortTerm);
+        // Out-of-range values clamp to the first or last view; the other mode keeps its own.
+        c.Command(HistoryUiCommand::View, 99);
+        CHECK(c.view.view == HistoryView::AllMeters);
+        c.Command(HistoryUiCommand::Select);
+        CHECK(c.view.view == HistoryView::ExtraUsage);
+        c.Command(HistoryUiCommand::View, -2);
+        CHECK(c.view.view == HistoryView::ShortTerm && c.accountView == HistoryView::AllMeters);
     });
 
     Run("history controller: comparing loads 7 days and the week before, shows the range as 7 days "
@@ -451,6 +458,18 @@ static void RunHistoryControllerTests() {
         ops.settings.idsPendingSave = true;
         c.Load();
         CHECK(c.view.pill == HistoryUiPill::Waiting && c.view.cards.size() == 3);
+        // Each account's recording state: its Record history off; paused while hidden accounts
+        // aren't polled, not while they are; a removed account neither. Its first card says so.
+        s.accounts[0].recordHistory = false;
+        s.accounts[1].hidden = true;
+        c.Load();
+        CHECK(c.view.accounts[0].recordingOff && !c.view.accounts[0].paused && c.view.accounts[1].paused &&
+              !c.view.accounts[1].recordingOff && !c.view.accounts[2].recordingOff && !c.view.accounts[2].paused);
+        CHECK(c.view.cards[0].status == L"recording off" && c.view.cards[1].status == L"paused" &&
+              c.view.cards[2].status.empty());
+        s.skipHiddenPolling = false;
+        c.Load();
+        CHECK(!c.view.accounts[1].paused && c.view.cards[1].status.empty());
         // Recording off for this user: off, whatever else holds.
         s.historyEnabled = false;
         c.Load();

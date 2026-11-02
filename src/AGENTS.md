@@ -38,17 +38,16 @@ The mod is injected into `explorer.exe`. Execution domains:
   notifications reload its baseline and never commit drafts. Account edits and actions run the
   UI-free account commands (`settings/account-commands.h`: the rename's sign-in move, removal,
   reorder, visibility).
-- **History thread** (one at a time, its kind fixed when `OpenHistoryWindow` starts it; an open
-  window of either kind takes every open request): `HistoryWindowThreadProc` owns the classic
-  native history window, graph caches and export/confirmation dialogs; `HistoryUiThreadProc` runs
-  the custom-drawn window (`history/ui-window.h`, a client of the `ui/` toolkit host), whose
-  controller (`history/controller.h`) owns all window state and reaches the journal, settings and
-  live readings only through the stateless ops in `history/ops.h`. `NotifySettingsWindowChanged`
-  also reaches the custom-drawn window (never the classic one): its refresh reads the journal
-  only through the memory-only `PeekHistorySnapshot`; only its explicit loads may initialize or
-  retry storage. Its dialogs run in the scope of `history/modal.h` (the close latch, then unload,
-  ends them, nested and late ones included); a Yes/No prompt ignores Cancel, so the scope answers
-  No there. No XAML. Cancel tracked modal dialogs and join it before unloading.
+- **History thread** (`HistoryUiThreadProc`, one at a time; `OpenHistoryWindow` starts it, or
+  hands the open window its request): runs the custom-drawn usage history window
+  (`history/ui-window.h`, a client of the `ui/` toolkit host), whose controller
+  (`history/controller.h`) owns all window state and reaches the journal, settings and live
+  readings only through the stateless ops in `history/ops.h`. `NotifySettingsWindowChanged` also
+  reaches it: its refresh reads the journal only through the memory-only `PeekHistorySnapshot`;
+  only its explicit loads may initialize or retry storage. Its dialogs (message boxes, the save
+  dialog and its overwrite prompt) run in the scope of `history/modal.h` (the close latch, then
+  unload, ends them, nested and late ones included); a Yes/No prompt ignores Cancel, so the scope
+  answers No there. No XAML. Cancel tracked modal dialogs and join it before unloading.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
   `g_urlLaunchMutex`): `ShellExecuteExW` in an STA with error dialogs suppressed. `Wh_ModUninit`
   joins them after the login thread, which can start them; a stuck launch delays unload.
@@ -80,8 +79,8 @@ first, then reads/updates XAML.
   The fetch thread caches per-account journal tails and the history window keeps a snapshot by
   the journal's stamp, so any change to `g_historySamples` other than `AppendHistory` must bump
   `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning, an
-  account's deletion). The classic history window gets no notifications: a change outside its
-  own loads posts it a reload (`NotifyHistoryJournalChanged`).
+  account's deletion). An account's deletion also notifies the windows
+  (`NotifySettingsWindowChanged`).
 - `g_settingsGeneration` gates published data; `g_refreshGeneration` drives manual
   single-account refresh. Code that publishes to `g_data` must re-check the generation under
   lock (see the existing publish block).

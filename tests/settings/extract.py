@@ -36,7 +36,6 @@ HISTORY = [
     ("definition", "ApplyCreditsMax"),
     ("definition", "Utf8ToWide"),
     ("definition", "WideToUtf8"),
-    ("definition", "ProviderDisplayName"),
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,

@@ -1,7 +1,7 @@
 # Custom-drawn window toolkit
 
-Direct2D 1.0 + DirectWrite windows for the settings thread and the history thread's custom-drawn
-window. Never XAML; never a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
+Direct2D 1.0 + DirectWrite windows for the settings and usage history threads. Never XAML; never
+a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 
 ## Pure vs native
 

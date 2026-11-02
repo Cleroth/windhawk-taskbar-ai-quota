@@ -1,9 +1,8 @@
 // The history window's chart (history/chart.h, chart-paint.h) through its controller
 // (history/controller.h) on synthetic journals: axes and layout, local time ticks (a fixed zone
 // and one with daylight saving), picking, readout rows, emphasis, the legend's filter, the scene
-// (draw list) and the reduction cache's key. Classic expectations ported per plan section 4.5
-// (tests/history interaction.inc and paint.inc) with hand-derived values. The synthetic journals
-// in the mockups' shapes also feed the chart renders (history-render.inc).
+// (draw list) and the reduction cache's key, with hand-derived values. The synthetic journals in
+// the mockups' shapes also feed the chart renders (history-render.inc).
 
 // Journals -------------------------------------------------------------------------------------
 
@@ -433,7 +432,7 @@ static void RunHistoryChartTests() {
     // Picking and readout -----------------------------------------------------------------------
 
     Run("history chart: every coincident or nearby line in both periods, at its recorded endpoint; readout rows "
-        "by chip name, rounded, compact local times (classic interaction.inc)", [] {
+        "by chip name, rounded, compact local times", [] {
         // Three OpenAI accounts at 50, 50 and 53% an hour and five days into each week, comparing.
         std::vector<AccountConfig> accounts;
         std::vector<HistorySample> journal;
@@ -656,8 +655,9 @@ static void RunHistoryChartTests() {
         }
     });
 
-    Run("history chart: readout rows name removed accounts without their prefix, round values, print a previous "
-        "year's times without the weekday and the hint by selection; high contrast swatches", [] {
+    Run("history chart: readout rows name removed accounts by their journal IDs and one account's lines without "
+        "the account, round values, print a previous year's times without the weekday and the hint by selection; "
+        "high contrast swatches", [] {
         HistorySample removed = TestReading(0xDEAD, 1, kWeekFrom + kHourMs, {{1, 20.5}});
         HistorySample go = TestReading(0x60, 3, kWeekFrom + kHourMs, {{1, 19.999999999999996}});
         auto w = TestChartOf({removed, go});
@@ -671,9 +671,12 @@ static void RunHistoryChartTests() {
               UiRunsText(readout.rows[0].detail) == L"[Current] 20.0% \u00B7 Sat 24 Oct 15:32");
         UiPalette hc = TestPalette(UiThemeKind::HighContrast);
         CHECK(TestSameColor(readout.rows[0].color, hc.text) && TestSameColor(readout.rows[1].color, hc.link));
-        // One account: the hint drops "select one account".
+        // One account: its chip names drop the account, its full titles keep it; the hint drops
+        // "select one account".
         w->controller.Command(HistoryUiCommand::Select, 0, 0x60);
         HistoryChart& one = TestLaid(*w);
+        CHECK(one.lines.size() == 1 && one.lines[0].name == L"Gemini weekly" &&
+              one.lines[0].title == L"Go \u00B7 Gemini weekly used (%)");
         w->controller.Hover(TestAt(one, 0, 0, 0), readout, TestPalette(UiThemeKind::Dark));
         CHECK(readout.rows.size() == 1 && readout.rows[0].title == L"Gemini weekly" &&
               readout.more == L" \u2014 hide lines in the legend");

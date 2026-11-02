@@ -2,13 +2,13 @@
 // s-legend, s-band, q6a-tooltip, q8a-filter, q6-rows): line colors per theme, the axes, the
 // layout with its local time ticks, the projection painting and picking share, picking, readout
 // rows, emphasis and the scene, a draw list the painter executes (history/chart-paint.h). Pure:
-// explicit inputs; geometry in DIPs in the chart item's coordinates. The classic graph's rules
-// (history/view-model.h, paint.h) carry over: per-pixel reduction, every nearby line in both
-// periods picked at a recorded endpoint, muted lines first, the previous week dashed.
+// explicit inputs; geometry in DIPs in the chart item's coordinates. Per-pixel reduction, every
+// nearby line in both periods picked at a recorded endpoint, muted lines first, the previous week
+// dashed.
 
 // Colors -----------------------------------------------------------------------------------------
 
-// A series' classic color in the mockups' palette, dark or light; a scoped quota's tint keeps a
+// A series' color (history/series.h palette) in the mockups' palette, dark or light; a scoped quota's tint keeps a
 // quarter of the theme's text color over its account's hue.
 static D2D1_COLOR_F HistoryUiHue(COLORREF color, bool light) {
     static constexpr uint32_t kHues[][2] = {

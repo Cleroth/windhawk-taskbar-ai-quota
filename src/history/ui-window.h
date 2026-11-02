@@ -114,7 +114,6 @@ struct HistoryUiClient final : UiHostClient {
         ops.dialogs = {&g_historyDialog, [this] { return controller.closeRequested || ops.Unloading(); }};
         controller.Open();
         g_historyWindow.store(host.main);
-        g_historyUiWindow.store(host.main);
         PostMessageW(host.main, kHistoryLoadMessage, 0, 0);
         return true;
     }
@@ -131,10 +130,7 @@ struct HistoryUiClient final : UiHostClient {
 
     bool PrepareClose(UiHost&) override { return true; }
 
-    void Destroying() override {
-        g_historyUiWindow.store(nullptr);
-        g_historyWindow.store(nullptr);
-    }
+    void Destroying() override { g_historyWindow.store(nullptr); }
 
     void Destroyed() override {}
 
