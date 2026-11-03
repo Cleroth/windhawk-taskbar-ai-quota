@@ -265,6 +265,21 @@ static TilePalette TilePaletteFor(bool light) {
     return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C};
 }
 
+// The number badge's text (0: the taskbar's text color, inherited) and outline. White is the
+// taskbar's text, outlined in the taskbar's color; any other color stays on either taskbar,
+// outlined in a light taskbar's color when it's dark, else a dark one's.
+struct BadgeColors {
+    uint32_t text, halo;
+};
+
+static BadgeColors BadgeColorsFor(COLORREF color, bool light) {
+    color &= 0x00FFFFFF;
+    if (color == kBadgeTaskbarTextColor) return {0, TilePaletteFor(light).badgeHalo};
+    bool dark = GetRValue(color) * 299 + GetGValue(color) * 587 + GetBValue(color) * 114 < 128 * 1000;
+    return {0xFF000000 | uint32_t(GetRValue(color)) << 16 | uint32_t(GetGValue(color)) << 8 | GetBValue(color),
+            TilePaletteFor(dark).badgeHalo};
+}
+
 // Display inputs of every meter. Build it with MeterDisplayFor only; the ranges below hold.
 struct MeterDisplay {
     ULONGLONG now;
@@ -277,6 +292,7 @@ struct MeterDisplay {
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
+    COLORREF badgeColor;      // RGB only.
     int badgeOffsetX;         // Up to kBadgeOffsetMax DIPs either way.
     int badgeOffsetY;
     int yellowThreshold;      // 0-100, yellow <= orange <= red.
@@ -313,6 +329,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
+        .badgeColor = settings.badgeColor & 0x00FFFFFF,
         .badgeOffsetX = std::clamp(settings.badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax),
         .badgeOffsetY = std::clamp(settings.badgeOffsetY, -kBadgeOffsetMax, kBadgeOffsetMax),
         .yellowThreshold = yellow,

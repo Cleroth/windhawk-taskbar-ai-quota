@@ -99,6 +99,9 @@ enum class PaceTickStyle {
 };
 
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
+// The number badge's colors: white stands for the taskbar's text color, whatever the theme.
+static constexpr COLORREF kDefaultBadgeColor = RGB(0x4C, 0xC2, 0xFF);
+static constexpr COLORREF kBadgeTaskbarTextColor = RGB(0xFF, 0xFF, 0xFF);
 
 // Usage history window ranges: 24 hours, 7, 30 and 90 days, and every retained day.
 enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
@@ -126,8 +129,9 @@ struct Settings {
     int ringSize = 32;
     int ringThickness = 3;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
-    // The number badge's text size, and its move right and down from its default spot.
+    // The number badge's text size and color, and its move right and down from its default spot.
     int badgeSize = 9;
+    COLORREF badgeColor = kDefaultBadgeColor;
     int badgeOffsetX = 0;
     int badgeOffsetY = 0;
     int labelFontSize = 11;  // The Label identity on bars.

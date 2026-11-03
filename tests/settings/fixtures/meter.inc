@@ -429,6 +429,25 @@ static void RunBarTests() {
             CHECK(pink.core == 0xFFFF6EC7 && pink.halo == 0xC0000000);
         }
     });
+
+    Run("badge colors: white inherits the taskbar's text; any other color gets a contrasting outline", [] {
+        // White: no text color (inherited), outlined in the taskbar's own color.
+        BadgeColors dark = BadgeColorsFor(RGB(0xFF, 0xFF, 0xFF), false);
+        CHECK(dark.text == 0 && dark.halo == 0xFF1C1C1C);
+        BadgeColors light = BadgeColorsFor(RGB(0xFF, 0xFF, 0xFF), true);
+        CHECK(light.text == 0 && light.halo == 0xFFF3F3F3);
+        CHECK(BadgeColorsFor(0xAB000000 | RGB(0xFF, 0xFF, 0xFF), true).text == 0);
+        // Any other color stays on either taskbar: light ones outlined dark, dark ones light.
+        for (bool theme : {false, true}) {
+            BadgeColors blue = BadgeColorsFor(RGB(0x4C, 0xC2, 0xFF), theme);
+            CHECK(blue.text == 0xFF4CC2FF && blue.halo == 0xFF1C1C1C);
+            BadgeColors black = BadgeColorsFor(RGB(0x1C, 0x1C, 0x1C), theme);
+            CHECK(black.text == 0xFF1C1C1C && black.halo == 0xFFF3F3F3);
+        }
+        // The outline flips below mid luma (0.299 R + 0.587 G + 0.114 B < 128).
+        CHECK(BadgeColorsFor(RGB(0x80, 0x80, 0x80), true).halo == 0xFF1C1C1C);
+        CHECK(BadgeColorsFor(RGB(0x7F, 0x7F, 0x7F), false).halo == 0xFFF3F3F3);
+    });
 }
 
 static void RunTileTests() {
@@ -828,6 +847,8 @@ static void RunTileTests() {
         // 1 DIP outline around both: 7.4 x 8.3 DIPs for one character, 12.8 wide for two.
         MeterDisplay d = Display();
         CHECK(d.badgeSize == 9 && d.badgeOffsetX == 0 && d.badgeOffsetY == 0); CHECK_NEAR(d.logoScale, 1);
+        CHECK(d.badgeColor == RGB(0x4C, 0xC2, 0xFF));
+        CHECK(Display(With([](Settings& s) { s.badgeColor = 0xAB123456; })).badgeColor == 0x123456);
         BadgeBox one = LogoBadgeBox(d, 15, 1);
         CHECK_NEAR(one.width, 7.4); CHECK_NEAR(one.height, 8.3);
         // Beside bars: centred on the 15 DIP logo's lower-right corner.

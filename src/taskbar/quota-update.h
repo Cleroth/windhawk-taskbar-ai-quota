@@ -89,7 +89,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             if (tileLayout) {
                 UpdateAccountTile(state, i, meters, display, light);
             } else {
-                UpdateTileIdentity(ui.tile, ap, meters, light);
+                UpdateTileIdentity(ui.tile, ap, meters, display, light);
                 // The identity's margins: its box, then the identity gap toward the bars while
                 // any shows.
                 FrameworkElement identity{nullptr};

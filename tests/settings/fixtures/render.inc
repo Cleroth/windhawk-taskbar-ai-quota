@@ -101,8 +101,8 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 // styles and colors, extreme sizes, overflow (scrolled and not), hover, a 32 DIP taskbar, the
 // sample identities (label, badged logos, a stale logo) on stacked and vertical bars at every
 // identity position and two identity gaps, the hover box around each form (grown by tall vertical
-// bars), tile fills near their ends and at their minimums, and logo sizes with the badge's size
-// and offsets on bars, rings and headline tiles. Display sheet: percentage text never/hover/always, each alignment, bar modes
+// bars), tile fills near their ends and at their minimums, logo sizes with the badge's size
+// and offsets on bars, rings and headline tiles, and badge colors. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -346,6 +346,16 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
          }},
         {L"Headline, logo 150%, badge 11",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.logoScale = 150; s.badgeSize = 11; }},
+        // Badge colors: each swatch past the default (light blue), on bars and rings.
+        {L"Bars 60, badge taskbar text",
+         [](Settings& s) { s.barLength = 60; s.badgeColor = RGB(0xFF, 0xFF, 0xFF); }},
+        {L"Bars 60, badge dark", [](Settings& s) { s.barLength = 60; s.badgeColor = RGB(0x1C, 0x1C, 0x1C); }},
+        {L"Bars 60, badge pink", [](Settings& s) { s.barLength = 60; s.badgeColor = RGB(0xFF, 0x6E, 0xC7); }},
+        {L"Ring, badge 12, taskbar text", [](Settings& s) {
+             s.barLayout = BarLayout::SegmentedRing;
+             s.badgeSize = 12;
+             s.badgeColor = RGB(0xFF, 0xFF, 0xFF);
+         }},
     };
     // The Layout sheet's strips are the window's 680 DIPs; the Display sheet's fit four columns of
     // stacked bars, so every value shows.
@@ -611,6 +621,15 @@ static void RunRenders(const std::wstring& directory) {
                 RenderFrame(g, wic.get(), path(identityName), frame, view, client, 144, theme.input, state,
                             std::max(identity.rect.top - 300, 0.0f), false);
                 CHECK(identity.action.kind == UiActionKind::Navigate);
+
+                // Scrolled to the logo and badge cards, the focus ring on a badge color swatch.
+                const UiItem& badgeColor = *UiFindItem(frame, SettingsControlId(SettingsField::BadgeColor, 3));
+                state = {};
+                state.focus = {badgeColor.id};
+                state.focusVisible = true;
+                std::string badgeName = std::string("render-layout-badge-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(badgeName), frame, view, client, 144, theme.input, state,
+                            std::max(badgeColor.rect.top - 400, 0.0f), false);
             });
 
             // Overflow: bars too wide for the strip (left fade), then scrolled (both fades); a

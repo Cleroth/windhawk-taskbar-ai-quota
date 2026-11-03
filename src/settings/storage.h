@@ -122,6 +122,7 @@ static bool NormalizeSettings(Settings* s) {
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
     s->paceTickColor &= 0x00FFFFFF;
+    s->badgeColor &= 0x00FFFFFF;
     return historyIdsChanged;
 }
 
@@ -183,6 +184,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"ringThickness", s.ringThickness);
         setNumber(L"logoScale", s.logoScale);
         setNumber(L"badgeSize", s.badgeSize);
+        setNumber(L"badgeColor", (int)s.badgeColor);
         setNumber(L"badgeOffsetX", s.badgeOffsetX);
         setNumber(L"badgeOffsetY", s.badgeOffsetY);
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
@@ -334,6 +336,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?
                               (COLORREF)paceTickColor : kDefaultPaceTickColor;
+        double badgeColor = GetNum(root, L"badgeColor", kDefaultBadgeColor);
+        s.badgeColor = std::isfinite(badgeColor) && badgeColor >= 0 && badgeColor <= 0x00FFFFFF ?
+                           (COLORREF)badgeColor : kDefaultBadgeColor;
         std::wstring labelPosition = GetStr(root, L"labelPosition");
         if (labelPosition == L"hidden") s.labelPosition = LabelPosition::Hidden;
         else if (labelPosition == L"top") s.labelPosition = LabelPosition::Top;

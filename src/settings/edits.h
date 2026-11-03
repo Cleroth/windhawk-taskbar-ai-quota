@@ -35,6 +35,7 @@ enum class SettingsField : uint8_t {
     RingThickness,
     LogoScale,        // Percent
     BadgeSize,
+    BadgeColor,       // 0xBBGGRR
     BadgeOffsetX,
     BadgeOffsetY,
     LabelPosition,    // A LabelPosition
@@ -81,6 +82,7 @@ enum class SettingsField : uint8_t {
     OpenHistory,
     OpenHistoryFolder,
     PaceTickColorCustom,  // The color dialog
+    BadgeColorCustom,     // The color dialog
     ShowOnTaskbar,        // Visual test mode
     PreviewScroll,        // The preview strip's sideways scroll
     AccountAdd,           // The Add account menu: 0 Anthropic, 1 OpenAI, 2 Antigravity
@@ -136,8 +138,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::LogoScale,
-                    SettingsField::BadgeSize,       SettingsField::BadgeOffsetX,
-                    SettingsField::BadgeOffsetY,    SettingsField::LabelPosition,
+                    SettingsField::BadgeSize,       SettingsField::BadgeColor,
+                    SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
+                    SettingsField::LabelPosition,
                     SettingsField::LabelFontSize,   SettingsField::LabelGap,
                     SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
                     SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
@@ -176,6 +179,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RingThickness: return s.ringThickness;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::BadgeSize: return s.badgeSize;
+        case SettingsField::BadgeColor: return int(s.badgeColor & 0x00FFFFFF);
         case SettingsField::BadgeOffsetX: return s.badgeOffsetX;
         case SettingsField::BadgeOffsetY: return s.badgeOffsetY;
         case SettingsField::LabelPosition: return int(s.labelPosition);
@@ -242,6 +246,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::RingThickness: s.ringThickness = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::BadgeSize: s.badgeSize = value; break;
+        case SettingsField::BadgeColor: s.badgeColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::BadgeOffsetX: s.badgeOffsetX = value; break;
         case SettingsField::BadgeOffsetY: s.badgeOffsetY = value; break;
         case SettingsField::LabelPosition:
@@ -300,6 +305,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.ringThickness = defaults.ringThickness;
             s.logoScale = defaults.logoScale;
             s.badgeSize = defaults.badgeSize;
+            s.badgeColor = defaults.badgeColor;
             s.badgeOffsetX = defaults.badgeOffsetX;
             s.badgeOffsetY = defaults.badgeOffsetY;
             s.labelPosition = defaults.labelPosition;

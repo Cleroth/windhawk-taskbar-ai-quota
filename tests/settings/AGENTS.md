@@ -71,7 +71,7 @@ regenerates.
   form (label, badged logo, logo) at every identity position in Stacked and Vertical with its box
   and gap (the badge's overhang, the stale mark per form, no quotas, a logo above or below the
   bars keeping a label's distance at two label sizes), the logo size per style and the outlined
-  badge's size and offsets, pace marks,
+  badge's size, offsets and color with its contrasting outline, pace marks,
   bar styles with their shaded fills and tick overhang, ring tiles' model shapes, headline fills,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
@@ -84,7 +84,8 @@ regenerates.
   (segmented ring, as its mockup) at 96/144/192 DPI in light, dark and high contrast (Aquatic
   colors), plus interaction-state sheets (`render-states-*`, `render-controls-*`,
   `render-history-off-*`, `render-layout-states-*`, `render-layout-identity-*` (the Identity and
-  text section with its link to Accounts), `render-display-states-*`,
+  text section with its link to Accounts), `render-layout-badge-*` (the logo and badge cards, a
+  badge color swatch focused), `render-display-states-*`,
   `render-accounts-states-*`, `render-accounts-drag-*`), Accounts as its mockups
   (`render-accounts-expanded-*`, `render-accounts-add-*` with the menu painted where the host
   opens it, `render-accounts-empty-*`), Display at the mockup's full height

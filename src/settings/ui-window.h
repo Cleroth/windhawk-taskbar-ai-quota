@@ -268,8 +268,8 @@ struct SettingsUiClient final : UiHostClient {
                                 L"hidden accounts, threshold notifications on." :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
-                                L"on the left, 32 px rings, light grey caret pace markers and the "
-                                L"default spacing. Accounts are not changed." :
+                                L"on the left, 32 px rings, light blue number badges, light grey caret "
+                                L"pace markers and the default spacing. Accounts are not changed." :
                             field == SettingsField::ResetDisplay ?
                                 L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
                                 L"hover with adaptive alignment, no amounts, the standard palette with "
@@ -298,13 +298,16 @@ struct SettingsUiClient final : UiHostClient {
                         edits.Reload();
                         UiHostRequestRebuild(host, false);
                         break;
-                    case SettingsField::PaceTickColorCustom: {
-                        COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), SettingsField::PaceTickColor));
+                    case SettingsField::PaceTickColorCustom:
+                    case SettingsField::BadgeColorCustom: {
+                        SettingsField target = field == SettingsField::PaceTickColorCustom ?
+                                                   SettingsField::PaceTickColor : SettingsField::BadgeColor;
+                        COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), target));
                         std::optional<COLORREF> chosen = Modal(host, [&] {
                             return UiChooseColor(host.main, initial, customColors, colorDialog);
                         });
                         if (chosen && !Unloading() && !closePreparation && !host.closing) {
-                            Report(host, edits.Commit(0, SettingsField::PaceTickColor, int(*chosen)));
+                            Report(host, edits.Commit(0, target, int(*chosen)));
                         }
                         break;
                     }

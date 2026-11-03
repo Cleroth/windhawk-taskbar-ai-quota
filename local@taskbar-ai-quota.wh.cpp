@@ -48,7 +48,7 @@ local app or CLI session, which must remain running.
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
-  logo size, number badge size and position, identity position, pace markers, and spacing.
+  logo size, number badge size, color and position, identity position, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
@@ -275,6 +275,9 @@ enum class PaceTickStyle {
 };
 
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
+// The number badge's colors: white stands for the taskbar's text color, whatever the theme.
+static constexpr COLORREF kDefaultBadgeColor = RGB(0x4C, 0xC2, 0xFF);
+static constexpr COLORREF kBadgeTaskbarTextColor = RGB(0xFF, 0xFF, 0xFF);
 
 // Usage history window ranges: 24 hours, 7, 30 and 90 days, and every retained day.
 enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
@@ -302,8 +305,9 @@ struct Settings {
     int ringSize = 32;
     int ringThickness = 3;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
-    // The number badge's text size, and its move right and down from its default spot.
+    // The number badge's text size and color, and its move right and down from its default spot.
     int badgeSize = 9;
+    COLORREF badgeColor = kDefaultBadgeColor;
     int badgeOffsetX = 0;
     int badgeOffsetY = 0;
     int labelFontSize = 11;  // The Label identity on bars.
@@ -5985,6 +5989,21 @@ static TilePalette TilePaletteFor(bool light) {
     return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C};
 }
 
+// The number badge's text (0: the taskbar's text color, inherited) and outline. White is the
+// taskbar's text, outlined in the taskbar's color; any other color stays on either taskbar,
+// outlined in a light taskbar's color when it's dark, else a dark one's.
+struct BadgeColors {
+    uint32_t text, halo;
+};
+
+static BadgeColors BadgeColorsFor(COLORREF color, bool light) {
+    color &= 0x00FFFFFF;
+    if (color == kBadgeTaskbarTextColor) return {0, TilePaletteFor(light).badgeHalo};
+    bool dark = GetRValue(color) * 299 + GetGValue(color) * 587 + GetBValue(color) * 114 < 128 * 1000;
+    return {0xFF000000 | uint32_t(GetRValue(color)) << 16 | uint32_t(GetGValue(color)) << 8 | GetBValue(color),
+            TilePaletteFor(dark).badgeHalo};
+}
+
 // Display inputs of every meter. Build it with MeterDisplayFor only; the ranges below hold.
 struct MeterDisplay {
     ULONGLONG now;
@@ -5997,6 +6016,7 @@ struct MeterDisplay {
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
+    COLORREF badgeColor;      // RGB only.
     int badgeOffsetX;         // Up to kBadgeOffsetMax DIPs either way.
     int badgeOffsetY;
     int yellowThreshold;      // 0-100, yellow <= orange <= red.
@@ -6033,6 +6053,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
+        .badgeColor = settings.badgeColor & 0x00FFFFFF,
         .badgeOffsetX = std::clamp(settings.badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax),
         .badgeOffsetY = std::clamp(settings.badgeOffsetY, -kBadgeOffsetMax, kBadgeOffsetMax),
         .yellowThreshold = yellow,
@@ -6803,10 +6824,11 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     }
     TileIdentityText identityText = TileIdentityFor(accounts, index);
     if (tile.logo && identityText.badge) {
-        // The text over eight copies in the halo brush, kBadgeOutline DIPs around it, centred in
-        // a box that never clips them. The Canvas places the box from the identity's top-left
-        // without sizing the identity.
+        // The text, in the badge color unless it inherits the taskbar's, over eight copies in the
+        // halo brush, kBadgeOutline DIPs around it, centred in a box that never clips them. The
+        // Canvas places the box from the identity's top-left without sizing the identity.
         double size = display.badgeSize;
+        uint32_t color = BadgeColorsFor(display.badgeColor, false).text;
         tile.badgeHalo = SolidColorBrush{};
         tile.badge = Grid{};
         tile.badge.Width(4 * size);
@@ -6827,6 +6849,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
                 text.RenderTransform(shift);
                 text.Foreground(tile.badgeHalo);
             } else {
+                if (color) text.Foreground(SolidColorBrush(ArgbColor(color)));
                 tile.badgeText = text;
             }
             tile.badge.Children().Append(text);
@@ -6946,7 +6969,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
 // The identity's state: dimmed while stale, like a label; the warning mark in place of the
 // label's "!"; the badge's halo color for a light (`light`) or dark taskbar.
 static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, AccountMeters const& meters,
-                               bool light) {
+                               MeterDisplay const& display, bool light) {
     if (!tile.identity) return;
     if (meters.identityOpacity != ap.identityOpacity) {
         tile.identity.Opacity(meters.identityOpacity);
@@ -6957,7 +6980,7 @@ static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, Account
         ap.tileWarn = meters.warn ? 1 : 0;
     }
     if (tile.badgeHalo && (light ? 1 : 0) != ap.badgeLight) {
-        tile.badgeHalo.Color(ArgbColor(TilePaletteFor(light).badgeHalo));
+        tile.badgeHalo.Color(ArgbColor(BadgeColorsFor(display.badgeColor, light).halo));
         ap.badgeLight = light ? 1 : 0;
     }
 }
@@ -7120,7 +7143,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    UpdateTileIdentity(tile, ap, meters, light);
+    UpdateTileIdentity(tile, ap, meters, display, light);
 }
 
 // src/taskbar/actions.h
@@ -9374,7 +9397,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             if (tileLayout) {
                 UpdateAccountTile(state, i, meters, display, light);
             } else {
-                UpdateTileIdentity(ui.tile, ap, meters, light);
+                UpdateTileIdentity(ui.tile, ap, meters, display, light);
                 // The identity's margins: its box, then the identity gap toward the bars while
                 // any shows.
                 FrameworkElement identity{nullptr};
@@ -15412,6 +15435,7 @@ static bool NormalizeSettings(Settings* s) {
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
     s->paceTickColor &= 0x00FFFFFF;
+    s->badgeColor &= 0x00FFFFFF;
     return historyIdsChanged;
 }
 
@@ -15473,6 +15497,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"ringThickness", s.ringThickness);
         setNumber(L"logoScale", s.logoScale);
         setNumber(L"badgeSize", s.badgeSize);
+        setNumber(L"badgeColor", (int)s.badgeColor);
         setNumber(L"badgeOffsetX", s.badgeOffsetX);
         setNumber(L"badgeOffsetY", s.badgeOffsetY);
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
@@ -15624,6 +15649,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?
                               (COLORREF)paceTickColor : kDefaultPaceTickColor;
+        double badgeColor = GetNum(root, L"badgeColor", kDefaultBadgeColor);
+        s.badgeColor = std::isfinite(badgeColor) && badgeColor >= 0 && badgeColor <= 0x00FFFFFF ?
+                           (COLORREF)badgeColor : kDefaultBadgeColor;
         std::wstring labelPosition = GetStr(root, L"labelPosition");
         if (labelPosition == L"hidden") s.labelPosition = LabelPosition::Hidden;
         else if (labelPosition == L"top") s.labelPosition = LabelPosition::Top;
@@ -16543,6 +16571,7 @@ enum class SettingsField : uint8_t {
     RingThickness,
     LogoScale,        // Percent
     BadgeSize,
+    BadgeColor,       // 0xBBGGRR
     BadgeOffsetX,
     BadgeOffsetY,
     LabelPosition,    // A LabelPosition
@@ -16589,6 +16618,7 @@ enum class SettingsField : uint8_t {
     OpenHistory,
     OpenHistoryFolder,
     PaceTickColorCustom,  // The color dialog
+    BadgeColorCustom,     // The color dialog
     ShowOnTaskbar,        // Visual test mode
     PreviewScroll,        // The preview strip's sideways scroll
     AccountAdd,           // The Add account menu: 0 Anthropic, 1 OpenAI, 2 Antigravity
@@ -16644,8 +16674,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::LogoScale,
-                    SettingsField::BadgeSize,       SettingsField::BadgeOffsetX,
-                    SettingsField::BadgeOffsetY,    SettingsField::LabelPosition,
+                    SettingsField::BadgeSize,       SettingsField::BadgeColor,
+                    SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
+                    SettingsField::LabelPosition,
                     SettingsField::LabelFontSize,   SettingsField::LabelGap,
                     SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
                     SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
@@ -16684,6 +16715,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RingThickness: return s.ringThickness;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::BadgeSize: return s.badgeSize;
+        case SettingsField::BadgeColor: return int(s.badgeColor & 0x00FFFFFF);
         case SettingsField::BadgeOffsetX: return s.badgeOffsetX;
         case SettingsField::BadgeOffsetY: return s.badgeOffsetY;
         case SettingsField::LabelPosition: return int(s.labelPosition);
@@ -16750,6 +16782,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::RingThickness: s.ringThickness = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::BadgeSize: s.badgeSize = value; break;
+        case SettingsField::BadgeColor: s.badgeColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::BadgeOffsetX: s.badgeOffsetX = value; break;
         case SettingsField::BadgeOffsetY: s.badgeOffsetY = value; break;
         case SettingsField::LabelPosition:
@@ -16808,6 +16841,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.ringThickness = defaults.ringThickness;
             s.logoScale = defaults.logoScale;
             s.badgeSize = defaults.badgeSize;
+            s.badgeColor = defaults.badgeColor;
             s.badgeOffsetX = defaults.badgeOffsetX;
             s.badgeOffsetY = defaults.badgeOffsetY;
             s.labelPosition = defaults.labelPosition;
@@ -17946,9 +17980,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                   provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
         add(ops, std::move(op));
     };
-    // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text
-    // centered on the box's center by its cap height, over eight copies in the halo color
-    // kBadgeOutline DIPs around it.
+    // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text in the
+    // badge color (or the taskbar's text color) centered on the box's center by its cap height,
+    // over eight copies in the halo color kBadgeOutline DIPs around it.
+    const BadgeColors badgeColors = BadgeColorsFor(display.badgeColor, light);
     auto badge = [&](std::vector<Op>& ops, const BadgeBox& box, float x, float y, const std::wstring& s,
                      float opacity) {
         const UiTextStyle style{UiFamily::Small, float(display.badgeSize), 0, DWRITE_FONT_WEIGHT_BOLD};
@@ -17960,7 +17995,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const float dx = k < 8 ? float(std::cos(angle) * kBadgeOutline) : 0;
             const float dy = k < 8 ? float(std::sin(angle) * kBadgeOutline) : 0;
             label(ops, s, style, left + dx, top + dy, m.width, DWRITE_TEXT_ALIGNMENT_CENTER,
-                  k < 8 ? palette.badgeHalo : text, opacity, true);
+                  k < 8 ? badgeColors.halo : badgeColors.text ? badgeColors.text : text, opacity, true);
         }
     };
 
@@ -19010,6 +19045,8 @@ static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bar
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
+static constexpr COLORREF kSettingsBadgeColors[] = {kDefaultBadgeColor, kBadgeTaskbarTextColor,
+                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0xFF, 0x6E, 0xC7)};
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -19052,8 +19089,44 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
 
-    // Logo identities in every style: the logo and badge sizes, then the badge's offsets. Bars
-    // need an identity position.
+    // A color card's swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... (`custom`)
+    // 16 DIP after them. A color picked in Custom... shows as one more swatch.
+    auto colorCard = [&](float top, UiCardSpec spec, SettingsField field, SettingsField custom,
+                         std::vector<COLORREF> colors, COLORREF current) {
+        if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
+        PCWSTR customText = L"Custom...";
+        float buttonWidth =
+            std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
+        float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
+        spec.trailing = {swatches + 16 + buttonWidth, 32};
+        if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+        UiCardLayout card = UiAddCard(g, items, id, x, top, width, spec);
+        float center = (card.trailing.top + card.trailing.bottom) / 2;
+        for (size_t i = 0; i < colors.size(); i++) {
+            UiItem swatch;
+            swatch.id = SettingsControlId(field, uint32_t(1 + i));
+            swatch.kind = UiItemKind::Swatch;
+            float left = card.trailing.left + float(i) * 34;
+            swatch.rect = {left, center - 12, left + 24, center + 12};
+            swatch.selected = colors[i] == current;
+            swatch.enabled = spec.enabled;
+            swatch.action = SettingsCommand(field, int(colors[i]));
+            items.push_back(std::move(swatch));
+        }
+        UiItem button;
+        button.id = SettingsControlId(custom);
+        button.kind = UiItemKind::Button;
+        button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right,
+                       card.trailing.bottom};
+        button.text = customText;
+        button.enabled = spec.enabled;
+        button.action = SettingsCommand(custom);
+        items.push_back(std::move(button));
+        return card.card.bottom;
+    };
+
+    // Logo identities in every style: the logo size, the badge's size and color, then its offsets.
+    // Bars need an identity position.
     auto logoCards = [&](float top, bool placed) {
         auto slider = [&](float at, PCWSTR title, PCWSTR description, SettingsField field) {
             UiCardSpec spec;
@@ -19068,6 +19141,17 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         top = slider(top + 3, L"Badge size",
                      L"Text size of the number on a logo when several accounts share a provider, in pixels.",
                      SettingsField::BadgeSize);
+        {
+            UiCardSpec spec;
+            spec.title = L"Badge color";
+            spec.description = {{L"Light blue by default; white follows the taskbar\u2019s text color. Custom... "
+                                  L"opens the color picker."}};
+            spec.enabled = placed;
+            if (!placed) spec.reason = L"Choose an identity position to change this.";
+            top = colorCard(top + 3, spec, SettingsField::BadgeColor, SettingsField::BadgeColorCustom,
+                            {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
+                            s.badgeColor & 0x00FFFFFF);
+        }
         top = slider(top + 3, L"Badge horizontal offset",
                      L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
                      L"hole on rings).",
@@ -19208,47 +19292,14 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                         int(s.paceTickStyle));
         }
         {
-            // Swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... 16 DIP after them. A
-            // color picked in Custom... shows as one more swatch.
-            COLORREF current = s.paceTickColor & 0x00FFFFFF;
-            std::vector<COLORREF> colors(std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors));
-            if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
-            PCWSTR custom = L"Custom...";
-            float buttonWidth =
-                std::ceil(UiLayoutSize(UiLayout(g, custom, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
-            float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
             UiCardSpec spec;
             spec.title = L"Marker color";
             spec.description = {{L"Light grey by default, dark on a light taskbar. Custom... opens the color picker."}};
-            spec.trailing = {swatches + 16 + buttonWidth, 32};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";
-            if (const SettingsDraft* draft = SettingsViewDraft(view, SettingsField::PaceTickColor)) {
-                spec.error = draft->error;
-            }
-            UiCardLayout card = UiAddCard(g, items, id, x, y + 3, width, spec);
-            float center = (card.trailing.top + card.trailing.bottom) / 2;
-            for (size_t i = 0; i < colors.size(); i++) {
-                UiItem swatch;
-                swatch.id = SettingsControlId(SettingsField::PaceTickColor, uint32_t(1 + i));
-                swatch.kind = UiItemKind::Swatch;
-                float left = card.trailing.left + float(i) * 34;
-                swatch.rect = {left, center - 12, left + 24, center + 12};
-                swatch.selected = colors[i] == current;
-                swatch.enabled = on;
-                swatch.action = SettingsCommand(SettingsField::PaceTickColor, int(colors[i]));
-                items.push_back(std::move(swatch));
-            }
-            UiItem button;
-            button.id = SettingsControlId(SettingsField::PaceTickColorCustom);
-            button.kind = UiItemKind::Button;
-            button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right,
-                           card.trailing.bottom};
-            button.text = custom;
-            button.enabled = on;
-            button.action = SettingsCommand(SettingsField::PaceTickColorCustom);
-            items.push_back(std::move(button));
-            y = card.card.bottom;
+            y = colorCard(y + 3, spec, SettingsField::PaceTickColor, SettingsField::PaceTickColorCustom,
+                          {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
+                          s.paceTickColor & 0x00FFFFFF);
         }
     }
 
@@ -20253,8 +20304,8 @@ struct SettingsUiClient final : UiHostClient {
                                 L"hidden accounts, threshold notifications on." :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
-                                L"on the left, 32 px rings, light grey caret pace markers and the "
-                                L"default spacing. Accounts are not changed." :
+                                L"on the left, 32 px rings, light blue number badges, light grey caret "
+                                L"pace markers and the default spacing. Accounts are not changed." :
                             field == SettingsField::ResetDisplay ?
                                 L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
                                 L"hover with adaptive alignment, no amounts, the standard palette with "
@@ -20283,13 +20334,16 @@ struct SettingsUiClient final : UiHostClient {
                         edits.Reload();
                         UiHostRequestRebuild(host, false);
                         break;
-                    case SettingsField::PaceTickColorCustom: {
-                        COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), SettingsField::PaceTickColor));
+                    case SettingsField::PaceTickColorCustom:
+                    case SettingsField::BadgeColorCustom: {
+                        SettingsField target = field == SettingsField::PaceTickColorCustom ?
+                                                   SettingsField::PaceTickColor : SettingsField::BadgeColor;
+                        COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), target));
                         std::optional<COLORREF> chosen = Modal(host, [&] {
                             return UiChooseColor(host.main, initial, customColors, colorDialog);
                         });
                         if (chosen && !Unloading() && !closePreparation && !host.closing) {
-                            Report(host, edits.Commit(0, SettingsField::PaceTickColor, int(*chosen)));
+                            Report(host, edits.Commit(0, target, int(*chosen)));
                         }
                         break;
                     }

@@ -128,10 +128,11 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     }
     TileIdentityText identityText = TileIdentityFor(accounts, index);
     if (tile.logo && identityText.badge) {
-        // The text over eight copies in the halo brush, kBadgeOutline DIPs around it, centred in
-        // a box that never clips them. The Canvas places the box from the identity's top-left
-        // without sizing the identity.
+        // The text, in the badge color unless it inherits the taskbar's, over eight copies in the
+        // halo brush, kBadgeOutline DIPs around it, centred in a box that never clips them. The
+        // Canvas places the box from the identity's top-left without sizing the identity.
         double size = display.badgeSize;
+        uint32_t color = BadgeColorsFor(display.badgeColor, false).text;
         tile.badgeHalo = SolidColorBrush{};
         tile.badge = Grid{};
         tile.badge.Width(4 * size);
@@ -152,6 +153,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
                 text.RenderTransform(shift);
                 text.Foreground(tile.badgeHalo);
             } else {
+                if (color) text.Foreground(SolidColorBrush(ArgbColor(color)));
                 tile.badgeText = text;
             }
             tile.badge.Children().Append(text);
@@ -271,7 +273,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
 // The identity's state: dimmed while stale, like a label; the warning mark in place of the
 // label's "!"; the badge's halo color for a light (`light`) or dark taskbar.
 static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, AccountMeters const& meters,
-                               bool light) {
+                               MeterDisplay const& display, bool light) {
     if (!tile.identity) return;
     if (meters.identityOpacity != ap.identityOpacity) {
         tile.identity.Opacity(meters.identityOpacity);
@@ -282,7 +284,7 @@ static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, Account
         ap.tileWarn = meters.warn ? 1 : 0;
     }
     if (tile.badgeHalo && (light ? 1 : 0) != ap.badgeLight) {
-        tile.badgeHalo.Color(ArgbColor(TilePaletteFor(light).badgeHalo));
+        tile.badgeHalo.Color(ArgbColor(BadgeColorsFor(display.badgeColor, light).halo));
         ap.badgeLight = light ? 1 : 0;
     }
 }
@@ -445,5 +447,5 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    UpdateTileIdentity(tile, ap, meters, light);
+    UpdateTileIdentity(tile, ap, meters, display, light);
 }

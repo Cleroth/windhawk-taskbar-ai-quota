@@ -124,7 +124,7 @@ static void RunLayoutTests() {
             {SettingsField::BarLayout, 3},     {SettingsField::BarStyle, 1},
             {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
-            {SettingsField::LogoScale, 150},   {SettingsField::BadgeSize, 12},
+            {SettingsField::LogoScale, 150},   {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
             {SettingsField::LabelPosition, 2}, {SettingsField::LabelFontSize, 14}, {SettingsField::LabelGap, 7},
             {SettingsField::ShowBarLabels, 1}, {SettingsField::PercentFontSize, 10}, {SettingsField::ShowPaceTicks, 0},
@@ -136,7 +136,7 @@ static void RunLayoutTests() {
         }
         CHECK(s.barLayout == BarLayout::ConcentricRings && s.barStyle == BarStyle::Rail &&
               s.labelPosition == LabelPosition::Top &&
-              s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456);
+              s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456 && s.badgeColor == 0x654321);
         const std::tuple<SettingsField, int, int> clamps[] = {
             {SettingsField::BarLength, 99999, 500},   {SettingsField::BarThickness, 0, 2},
             {SettingsField::RingSize, 100, 40},       {SettingsField::RingThickness, -3, 1},
@@ -148,14 +148,14 @@ static void RunLayoutTests() {
             {SettingsField::LogoScale, 10, 50},       {SettingsField::LogoScale, 999, 200},
             {SettingsField::BadgeSize, 1, 6},         {SettingsField::BadgeSize, 99, 16},
             {SettingsField::BadgeOffsetX, -50, -20},  {SettingsField::BadgeOffsetY, 50, 20},
-            {SettingsField::PaceTickColor, 0x12345678, 0x345678}};
+            {SettingsField::PaceTickColor, 0x12345678, 0x345678}, {SettingsField::BadgeColor, 0x87654321, 0x654321}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == expected);
         }
     });
 
-    Run("layout reset: the twenty-one Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the twenty-two Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -166,6 +166,7 @@ static void RunLayoutTests() {
         changed.ringThickness = 5;
         changed.logoScale = 150;
         changed.badgeSize = 12;
+        changed.badgeColor = 0x00FF00;
         changed.badgeOffsetX = -5;
         changed.badgeOffsetY = 7;
         changed.labelPosition = LabelPosition::Bottom;
@@ -199,6 +200,7 @@ static void RunLayoutTests() {
         expected.ringThickness = defaults.ringThickness;
         expected.logoScale = defaults.logoScale;
         expected.badgeSize = defaults.badgeSize;
+        expected.badgeColor = defaults.badgeColor;
         expected.badgeOffsetX = defaults.badgeOffsetX;
         expected.badgeOffsetY = defaults.badgeOffsetY;
         expected.labelPosition = defaults.labelPosition;
@@ -214,7 +216,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 21);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 22);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -485,12 +487,12 @@ static void RunLayoutTests() {
             CHECK_NEAR(logos[0].rect.right - logos[0].rect.left, 15);
             CHECK_NEAR(logos[1].rect.bottom - logos[1].rect.top, 15);
             CHECK_NEAR(logos[0].opacity, 1);
-            // The badge: "1" in bold at 9 DIPs in the taskbar's text color, its cap height centred
-            // on the logo's lower-right corner, over eight copies in the halo color a DIP around
-            // it (Segoe UI Variable's cap height over its line, as for the label).
+            // The badge: "1" in bold at 9 DIPs in light blue, its cap height centred on the logo's
+            // lower-right corner, over eight copies in the halo color a DIP around it (Segoe UI
+            // Variable's cap height over its line, as for the label).
             CHECK(badges.size() == 9);
             const SettingsPreviewOp& number = badges[8];
-            CHECK(number.color == 0xFFFFFFFF && number.style.size == 9 && number.style.family == UiFamily::Small &&
+            CHECK(number.color == 0xFF4CC2FF && number.style.size == 9 && number.style.family == UiFamily::Small &&
                   number.style.weight == DWRITE_FONT_WEIGHT_BOLD && number.align == DWRITE_TEXT_ALIGNMENT_CENTER);
             CHECK(NearDip((number.rect.left + number.rect.right) / 2, logos[0].rect.right));
             CHECK(NearDip(number.rect.top + AboveCap(9) + CapHeight(9) / 2, logos[0].rect.bottom));
@@ -874,6 +876,27 @@ static void RunLayoutTests() {
         CHECK(number.style.size == 14 && TextOps(strip, L"1")[0].style.size == 14);
         CHECK(NearDip(numberX(number), logo[0].rect.right));
         CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.left, logo[0].rect.right + 5.2 + 3));
+
+        // The badge color: light blue by default on either taskbar, outlined dark; white is the
+        // taskbar's text (dark on a light taskbar) outlined in the taskbar's color; a dark color
+        // is outlined light. The logo keeps the taskbar's text color.
+        struct Case {
+            std::optional<COLORREF> color;
+            bool light;
+            uint32_t text, number, halo;
+        };
+        for (const Case& c : {Case{std::nullopt, false, 0xFFFFFFFF, 0xFF4CC2FF, 0xFF1C1C1C},
+                              Case{std::nullopt, true, 0xFF1A1A1A, 0xFF4CC2FF, 0xFF1C1C1C},
+                              Case{RGB(0xFF, 0xFF, 0xFF), false, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF1C1C1C},
+                              Case{RGB(0xFF, 0xFF, 0xFF), true, 0xFF1A1A1A, 0xFF1A1A1A, 0xFFF3F3F3},
+                              Case{RGB(0x1C, 0x1C, 0x1C), false, 0xFFFFFFFF, 0xFF1C1C1C, 0xFFF3F3F3}}) {
+            s = {};
+            if (c.color) s.badgeColor = *c.color;
+            strip = SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, c.light, c.text, &accounts, &data);
+            std::vector<SettingsPreviewOp> badge = TextOps(strip, L"1");
+            CHECK(badge.size() == 9 && badge[8].color == c.number && logos(strip)[0].color == c.text);
+            for (size_t k = 0; k < 8; k++) CHECK(badge[k].color == c.halo);
+        }
 
         // 6 left and 5 up: the box (5.3 to 12.7 across, 5.85 to 14.15 down) stays within the logo,
         // so the logo's box is a plain logo's.
@@ -1312,11 +1335,26 @@ static void RunLayoutTests() {
         CHECK(badgeSize.minimum == 6 && badgeSize.maximum == 16 && badgeSize.action.value == 9);
         CHECK(badgeX.minimum == -20 && badgeX.maximum == 20 && badgeX.action.value == 0 && badgeY.minimum == -20 &&
               badgeY.maximum == 20 && Control(frame, SettingsField::BadgeOffsetY).text == L"0");
+        // The badge color between its size and offsets: four swatches, the first (light blue)
+        // chosen, then white (the taskbar's text color), then Custom...
+        const UiItem& badgeDefault = Control(frame, SettingsField::BadgeColor, 1);
+        const UiItem& badgeCustom = Control(frame, SettingsField::BadgeColorCustom);
+        for (uint32_t i = 1; i <= 4; i++) {
+            const UiItem& swatch = Control(frame, SettingsField::BadgeColor, i);
+            CHECK(swatch.kind == UiItemKind::Swatch && swatch.selected == (i == 1) && swatch.enabled);
+        }
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BadgeColor, 5)));
+        CHECK(badgeDefault.action.value == int(RGB(0x4C, 0xC2, 0xFF)) &&
+              Control(frame, SettingsField::BadgeColor, 2).action.value == int(RGB(0xFF, 0xFF, 0xFF)) &&
+              Control(frame, SettingsField::BadgeColor, 3).action.value == int(RGB(0x1C, 0x1C, 0x1C)));
+        CHECK(badgeCustom.text == L"Custom..." && badgeCustom.enabled &&
+              badgeCustom.action.target == uint32_t(SettingsField::BadgeColorCustom));
         CHECK(Control(frame, SettingsField::LabelGap).rect.bottom < logoSize.rect.top && logoSize.rect.bottom < badgeSize.rect.top &&
-              badgeSize.rect.bottom < badgeX.rect.top && badgeX.rect.bottom < badgeY.rect.top &&
-              badgeY.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top);
+              badgeSize.rect.bottom < badgeDefault.rect.top && badgeDefault.rect.bottom < badgeX.rect.top &&
+              badgeX.rect.bottom < badgeY.rect.top && badgeY.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top);
         CHECK(HasText(frame, L"Logo size") && HasText(frame, L"Badge size") && HasText(frame, L"Badge horizontal offset") &&
-              HasText(frame, L"Badge vertical offset") && HasText(frame, L"Percent of the standard size; rings keep it inside the hole."));
+              HasText(frame, L"Badge vertical offset") && HasText(frame, L"Percent of the standard size; rings keep it inside the hole.") &&
+              HasText(frame, L"Badge color") && HasText(frame, L"white follows the taskbar\u2019s text color"));
         CHECK(!Control(frame, SettingsField::ShowBarLabels).selected);
         CHECK(Control(frame, SettingsField::PercentFontSize, 1).action.value == 9);
         CHECK(Control(frame, SettingsField::ShowPaceTicks).selected);
@@ -1406,13 +1444,15 @@ static void RunLayoutTests() {
         view.settings.showPaceTicks = false;
         view.settings.percentTextVisibility = PercentTextVisibility::Never;
         view.settings.paceTickColor = 0x123456;
+        view.settings.badgeColor = 0x654321;
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::LabelPosition).text == L"Hidden");
         CHECK(!Control(frame, SettingsField::LabelFontSize, 1).enabled && !Control(frame, SettingsField::LabelFontSize).enabled);
         CHECK(!Control(frame, SettingsField::LabelGap).enabled);
         CHECK(!Control(frame, SettingsField::LogoScale, 1).enabled && !Control(frame, SettingsField::BadgeSize).enabled &&
-              !Control(frame, SettingsField::BadgeOffsetX, 1).enabled && !Control(frame, SettingsField::BadgeOffsetY).enabled);
+              !Control(frame, SettingsField::BadgeOffsetX, 1).enabled && !Control(frame, SettingsField::BadgeOffsetY).enabled &&
+              !Control(frame, SettingsField::BadgeColor, 1).enabled && !Control(frame, SettingsField::BadgeColorCustom).enabled);
         CHECK(HasText(frame, L"Choose an identity position to change this.") &&
               !HasText(frame, L"Choose a label position"));
         CHECK(!Control(frame, SettingsField::PercentFontSize, 1).enabled);
@@ -1423,6 +1463,10 @@ static void RunLayoutTests() {
         const UiItem& custom = Control(frame, SettingsField::PaceTickColor, 6);
         CHECK(custom.selected && !custom.enabled && custom.action.value == 0x123456);
         CHECK(!Control(frame, SettingsField::PaceTickColor, 1).selected);
+        // And a custom badge color as a fifth.
+        const UiItem& customBadge = Control(frame, SettingsField::BadgeColor, 5);
+        CHECK(customBadge.selected && customBadge.action.value == 0x654321);
+        CHECK(!Control(frame, SettingsField::BadgeColor, 1).selected);
 
         // A slider's box shows its draft's text and error; the slider the last valid value.
         view = TestView(SettingsUiPage::Layout);

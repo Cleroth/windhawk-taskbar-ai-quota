@@ -53,7 +53,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - tile style: stacked bars, vertical bars, segmented ring, concentric rings, or headline %; settings the chosen style ignores are hidden or disabled with the reason
   - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); ring size and thickness (ring styles)
   - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label font size for label identities, and the identity gap
-  - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number badge's size and horizontal and vertical offsets; the badge is an outlined number centered on the logo's lower-right corner (on rings, pulled inside the hole)
+  - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number badge's size, color, and horizontal and vertical offsets; the badge is an outlined number centered on the logo's lower-right corner (on rings, pulled inside the hole), light blue by default, or a color from the swatches (white follows the taskbar's text color) or **Custom...**, outlined dark or light to contrast with it
   - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size
   - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on a light taskbar)
   - account margin and tray gap

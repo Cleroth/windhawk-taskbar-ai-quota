@@ -128,9 +128,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                   provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
         add(ops, std::move(op));
     };
-    // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text
-    // centered on the box's center by its cap height, over eight copies in the halo color
-    // kBadgeOutline DIPs around it.
+    // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text in the
+    // badge color (or the taskbar's text color) centered on the box's center by its cap height,
+    // over eight copies in the halo color kBadgeOutline DIPs around it.
+    const BadgeColors badgeColors = BadgeColorsFor(display.badgeColor, light);
     auto badge = [&](std::vector<Op>& ops, const BadgeBox& box, float x, float y, const std::wstring& s,
                      float opacity) {
         const UiTextStyle style{UiFamily::Small, float(display.badgeSize), 0, DWRITE_FONT_WEIGHT_BOLD};
@@ -142,7 +143,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const float dx = k < 8 ? float(std::cos(angle) * kBadgeOutline) : 0;
             const float dy = k < 8 ? float(std::sin(angle) * kBadgeOutline) : 0;
             label(ops, s, style, left + dx, top + dy, m.width, DWRITE_TEXT_ALIGNMENT_CENTER,
-                  k < 8 ? palette.badgeHalo : text, opacity, true);
+                  k < 8 ? badgeColors.halo : badgeColors.text ? badgeColors.text : text, opacity, true);
         }
     };
 
