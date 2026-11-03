@@ -235,7 +235,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             refs.historyId = accounts[i].historyId;
             StackPanel col{nullptr};
             if (tileLayout) {
-                col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
+                col = BuildAccountTile(accounts, i, barLayout, display, refs);
             } else {
                 // The tiles' box: at least the tile height, up to 7 DIPs inside each side, holding
                 // the content centred across it: the identity beside, above or below the bars at
@@ -269,7 +269,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         refs.label = label;
                         identity = label;
                     } else {
-                        identity = BuildTileIdentity(accounts, i, barLayout, refs.tile);
+                        identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
                         identities = true;
                     }
                     identity.VerticalAlignment(VerticalAlignment::Center);

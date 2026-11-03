@@ -99,10 +99,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     identity = ui.tile.identity;
                 }
                 if (identity) {
+                    double side = kBarLogoSide * display.logoScale;
+                    BadgeBox badge = ui.tile.badge ?
+                        LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
-                        settings.labelPosition, ui.label != nullptr, ui.tile.badge != nullptr,
-                        meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
-                        state.labelBelowBaseline);
+                        settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,
+                        barMask ? settings.labelGap : 0, state.labelAboveCap, state.labelBelowBaseline);
                     Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
                         identity.Margin(margin);

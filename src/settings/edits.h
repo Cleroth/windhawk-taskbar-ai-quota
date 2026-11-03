@@ -33,6 +33,10 @@ enum class SettingsField : uint8_t {
     BarGap,
     RingSize,
     RingThickness,
+    LogoScale,        // Percent
+    BadgeSize,
+    BadgeOffsetX,
+    BadgeOffsetY,
     LabelPosition,    // A LabelPosition
     LabelFontSize,
     LabelGap,
@@ -100,6 +104,10 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
         case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
         case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
+        case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
+        case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
+        case SettingsField::BadgeOffsetX:
+        case SettingsField::BadgeOffsetY: return SettingsNumberRange{-kBadgeOffsetMax, kBadgeOffsetMax};
         case SettingsField::LabelFontSize:
         case SettingsField::PercentFontSize: return SettingsNumberRange{6, 24};
         case SettingsField::BarGap:
@@ -127,7 +135,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::BarLayout,       SettingsField::BarStyle,
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
-                    SettingsField::RingThickness,   SettingsField::LabelPosition,
+                    SettingsField::RingThickness,   SettingsField::LogoScale,
+                    SettingsField::BadgeSize,       SettingsField::BadgeOffsetX,
+                    SettingsField::BadgeOffsetY,    SettingsField::LabelPosition,
                     SettingsField::LabelFontSize,   SettingsField::LabelGap,
                     SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
                     SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
@@ -164,6 +174,10 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::BarGap: return s.barGap;
         case SettingsField::RingSize: return s.ringSize;
         case SettingsField::RingThickness: return s.ringThickness;
+        case SettingsField::LogoScale: return s.logoScale;
+        case SettingsField::BadgeSize: return s.badgeSize;
+        case SettingsField::BadgeOffsetX: return s.badgeOffsetX;
+        case SettingsField::BadgeOffsetY: return s.badgeOffsetY;
         case SettingsField::LabelPosition: return int(s.labelPosition);
         case SettingsField::LabelFontSize: return s.labelFontSize;
         case SettingsField::LabelGap: return s.labelGap;
@@ -226,6 +240,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::BarGap: s.barGap = value; break;
         case SettingsField::RingSize: s.ringSize = value; break;
         case SettingsField::RingThickness: s.ringThickness = value; break;
+        case SettingsField::LogoScale: s.logoScale = value; break;
+        case SettingsField::BadgeSize: s.badgeSize = value; break;
+        case SettingsField::BadgeOffsetX: s.badgeOffsetX = value; break;
+        case SettingsField::BadgeOffsetY: s.badgeOffsetY = value; break;
         case SettingsField::LabelPosition:
             s.labelPosition = LabelPosition(std::clamp(value, int(LabelPosition::Hidden),
                                                        int(LabelPosition::Bottom)));
@@ -280,6 +298,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barGap = defaults.barGap;
             s.ringSize = defaults.ringSize;
             s.ringThickness = defaults.ringThickness;
+            s.logoScale = defaults.logoScale;
+            s.badgeSize = defaults.badgeSize;
+            s.badgeOffsetX = defaults.badgeOffsetX;
+            s.badgeOffsetY = defaults.badgeOffsetY;
             s.labelPosition = defaults.labelPosition;
             s.labelFontSize = defaults.labelFontSize;
             s.labelGap = defaults.labelGap;

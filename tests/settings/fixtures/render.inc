@@ -101,7 +101,8 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 // styles and colors, extreme sizes, overflow (scrolled and not), hover, a 32 DIP taskbar, the
 // sample identities (label, badged logos, a stale logo) on stacked and vertical bars at every
 // identity position and two identity gaps, the hover box around each form (grown by tall vertical
-// bars), and tile fills near their ends and at their minimums. Display sheet: percentage text never/hover/always, each alignment, bar modes
+// bars), tile fills near their ends and at their minimums, and logo sizes with the badge's size
+// and offsets on bars, rings and headline tiles. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -319,6 +320,32 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.barMode = BarMode::Remaining;
              thresholds(s, 6, 75, 90);
          }},
+        // Logo sizes and the number badge's size and offsets per style.
+        {L"Bars 60, logo 50%", [](Settings& s) { s.barLength = 60; s.logoScale = 50; }},
+        {L"Bars 60, logo 150%, badge 12", [](Settings& s) { s.barLength = 60; s.logoScale = 150; s.badgeSize = 12; }},
+        {L"Bars 60, logo 200%, top", [](Settings& s) {
+             s.barLength = 60;
+             s.logoScale = 200;
+             s.labelPosition = LabelPosition::Top;
+         }, -1, 96},
+        {L"Bars 60, badge 16, offset -4 / -4",
+         [](Settings& s) { s.barLength = 60; s.badgeSize = 16; s.badgeOffsetX = -4; s.badgeOffsetY = -4; }},
+        {L"Bars 60, badge offset -20 / 0", [](Settings& s) { s.barLength = 60; s.badgeOffsetX = -20; }},
+        {L"Ring, logo 150%", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.logoScale = 150; }},
+        {L"Ring, badge 12", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.badgeSize = 12; }},
+        {L"Ring, badge offset 4 / 4", [](Settings& s) {
+             s.barLayout = BarLayout::SegmentedRing;
+             s.badgeOffsetX = 4;
+             s.badgeOffsetY = 4;
+         }},
+        {L"Concentric 40 / 6, badge 12", [](Settings& s) {
+             s.barLayout = BarLayout::ConcentricRings;
+             s.ringSize = 40;
+             s.ringThickness = 6;
+             s.badgeSize = 12;
+         }},
+        {L"Headline, logo 150%, badge 11",
+         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.logoScale = 150; s.badgeSize = 11; }},
     };
     // The Layout sheet's strips are the window's 680 DIPs; the Display sheet's fit four columns of
     // stacked bars, so every value shows.

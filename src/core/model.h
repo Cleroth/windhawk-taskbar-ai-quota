@@ -56,6 +56,13 @@ static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
 static constexpr int kRingThicknessMax = 6;
+// Logo size in percent of each style's standard size; the number badge's text size and offsets
+// in DIPs.
+static constexpr int kLogoScaleMin = 50;
+static constexpr int kLogoScaleMax = 200;
+static constexpr int kBadgeSizeMin = 6;
+static constexpr int kBadgeSizeMax = 16;
+static constexpr int kBadgeOffsetMax = 20;
 
 enum class BarMode {
     Used,
@@ -118,6 +125,11 @@ struct Settings {
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
+    int logoScale = 100;  // Percent; rings keep the logo inside their hole.
+    // The number badge's text size, and its move right and down from its default spot.
+    int badgeSize = 9;
+    int badgeOffsetX = 0;
+    int badgeOffsetY = 0;
     int labelFontSize = 11;  // The Label identity on bars.
     int percentFontSize = 9;
     int accountMargin = 3;

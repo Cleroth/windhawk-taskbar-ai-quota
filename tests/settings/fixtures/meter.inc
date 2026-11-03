@@ -122,11 +122,9 @@ static void RunColorTests() {
     Run("tile palette per taskbar theme", [] {
         TilePalette light = TilePaletteFor(true), dark = TilePaletteFor(false);
         CHECK(light.track == 0x24000000); CHECK(light.hover == 0x0A000000);
-        CHECK(light.open == 0xB3FFFFFF); CHECK(light.badge == 0xFFD8DBE2);
-        CHECK(light.badgeOutline == 0xFFEEF0F4);
+        CHECK(light.open == 0xB3FFFFFF); CHECK(light.badgeHalo == 0xFFF3F3F3);
         CHECK(dark.track == 0x2BFFFFFF); CHECK(dark.hover == 0x0FFFFFFF);
-        CHECK(dark.open == 0x1AFFFFFF); CHECK(dark.badge == 0xFF3A3D44);
-        CHECK(dark.badgeOutline == 0xFF1F2126);
+        CHECK(dark.open == 0x1AFFFFFF); CHECK(dark.badgeHalo == 0xFF1C1C1C);
     });
 }
 
@@ -821,8 +819,61 @@ static void RunTileTests() {
         CHECK_NEAR(fit(3).ringTextFont, 7.56); CHECK_NEAR(fit(3).ringTextWidth, 22.758110);
         CHECK_NEAR(fit(10).ringTextFont, 7); CHECK_NEAR(fit(10).ringTextWidth, 22.850786);
         CHECK_NEAR(fit(0).ringTextFont, 10.56);
-        CHECK_NEAR(ring(BarLayout::SegmentedRing, {true, false, false, false}, 1).ring.badgeWidth, 10.88);
-        CHECK_NEAR(ring(BarLayout::SegmentedRing, {true, false, false, false}, 2).ring.badgeWidth, 15.27808);
+        // No badge: an empty box.
+        CHECK_NEAR(single.ringBadge.width, 0);
+    });
+
+    Run("logo size and the number badge's box", [] {
+        // The box: per character 0.6 of the 9 DIP badge size, the cap height 0.7 of it, and the
+        // 1 DIP outline around both: 7.4 x 8.3 DIPs for one character, 12.8 wide for two.
+        MeterDisplay d = Display();
+        CHECK(d.badgeSize == 9 && d.badgeOffsetX == 0 && d.badgeOffsetY == 0); CHECK_NEAR(d.logoScale, 1);
+        BadgeBox one = LogoBadgeBox(d, 15, 1);
+        CHECK_NEAR(one.width, 7.4); CHECK_NEAR(one.height, 8.3);
+        // Beside bars: centred on the 15 DIP logo's lower-right corner.
+        CHECK_NEAR(one.left, 15 - 3.7); CHECK_NEAR(one.top, 15 - 4.15);
+        CHECK_NEAR(LogoBadgeBox(d, 15, 2).width, 12.8); CHECK_NEAR(LogoBadgeBox(d, 15, 2).left, 15 - 6.4);
+        // The offsets move it; the size grows it about the same centre.
+        MeterDisplay moved = Display(With([](Settings& s) { s.badgeOffsetX = -6; s.badgeOffsetY = 4; s.badgeSize = 12; }));
+        BadgeBox big = LogoBadgeBox(moved, 15, 1);
+        CHECK_NEAR(big.width, 12 * 0.6 + 2); CHECK_NEAR(big.height, 12 * 0.7 + 2);
+        CHECK_NEAR(big.left + big.width / 2, 15 - 6); CHECK_NEAR(big.top + big.height / 2, 15 + 4);
+        // Sizes and offsets clamp at the entry.
+        MeterDisplay wild = Display(With([](Settings& s) {
+            s.logoScale = 900; s.badgeSize = 0; s.badgeOffsetX = -99; s.badgeOffsetY = 99;
+        }));
+        CHECK_NEAR(wild.logoScale, 2); CHECK(wild.badgeSize == 6 && wild.badgeOffsetX == -20 && wild.badgeOffsetY == 20);
+        CHECK_NEAR(Display(With([](Settings& s) { s.logoScale = 10; s.badgeSize = 40; })).logoScale, 0.5);
+        CHECK(Display(With([](Settings& s) { s.badgeSize = 40; })).badgeSize == 16);
+
+        // Rings: the logo is 0.44 of the 32 DIP ring at 100%, scaled, capped 1.2 DIPs inside the
+        // 12.5 DIP hole (22.6 DIPs).
+        auto ring = [](const MeterDisplay& display, int badge, BarLayout layout = BarLayout::SegmentedRing,
+                       std::array<bool, kQuotaBarCount> bars = {true, false, false, false}) {
+            return AccountMeterState(display, layout, Account(L"anthropic", L"A", bars), Fresh({10, 20, 30, 40}), badge, 0);
+        };
+        auto scaled = [](int percent) { return Display(With([&](Settings& s) { s.logoScale = percent; })); };
+        CHECK_NEAR(ring(scaled(100), 0).ring.logo, 14.08);
+        CHECK_NEAR(ring(scaled(150), 0).ring.logo, 21.12);
+        CHECK_NEAR(ring(scaled(200), 0).ring.logo, 22.6);
+        CHECK_NEAR(ring(scaled(50), 0).ring.logo, 7.04);
+        // The ring's badge sits on the diagonal through the centre (16, 16), pulled in until its
+        // far corner is half a DIP inside the hole.
+        BadgeBox inside = ring(d, 1).ringBadge;
+        CHECK_NEAR(inside.width, 7.4); CHECK_NEAR(inside.height, 8.3);
+        CHECK_NEAR(inside.left + 3.7 - 16, inside.top + 4.15 - 16);
+        CHECK_NEAR(std::hypot(inside.left + inside.width - 16, inside.top + inside.height - 16), 12);
+        CHECK(inside.left + 3.7 < 16 + 7.04);
+        // A small logo keeps it on the logo's corner; offsets move it from there.
+        BadgeBox corner = ring(scaled(50), 1).ringBadge;
+        CHECK_NEAR(corner.left + 3.7, 16 + 3.52); CHECK_NEAR(corner.top + 4.15, 16 + 3.52);
+        MeterDisplay nudged = Display(With([](Settings& s) { s.logoScale = 50; s.badgeOffsetX = 3; s.badgeOffsetY = -2; }));
+        CHECK_NEAR(ring(nudged, 1).ringBadge.left, corner.left + 3);
+        CHECK_NEAR(ring(nudged, 1).ringBadge.top, corner.top - 2);
+        // A badge too large for the hole centres on the logo.
+        MeterDisplay large = Display(With([](Settings& s) { s.badgeSize = 16; }));
+        BadgeBox centred = ring(large, 1, BarLayout::ConcentricRings, {true, true, true, true}).ringBadge;
+        CHECK_NEAR(centred.left + centred.width / 2, 16); CHECK_NEAR(centred.top + centred.height / 2, 16);
     });
 }
 

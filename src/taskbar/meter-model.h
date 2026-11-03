@@ -11,6 +11,9 @@
 static constexpr double kTileHeight = 40;
 static constexpr double kHeadlineSegmentLength = 9;
 static constexpr double kHeadlineSegmentThickness = 3;
+// Logo sides at 100% logo size beside bars and on headline tiles; rings size theirs to the hole.
+static constexpr double kBarLogoSide = 15;
+static constexpr double kHeadlineLogoSide = 16;
 // Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
@@ -132,17 +135,12 @@ struct TileRingGeometry {
     double gap = 0;          // Concentric: space between rings. Segmented: space between arcs.
     double radius = 0;       // Centreline radius of the outermost arc or ring.
     double hole = 0;         // Free centre radius, inside the innermost stroke.
-    double logo = 0;         // Logo side without a badge.
-    double badge = 0;        // Badge height.
-    double badgeWidth = 0;
-    double badgeFont = 0;
-    double badgeLeft = 0;    // From the ring area's top-left corner.
-    double badgeTop = 0;
+    double logo = 0;         // Logo side, centred in the ring area.
 };
 
-// `badgeChars`: length of the badge text, 0 without a badge.
+// `logoScale`: the logo size as a fraction of its standard size.
 static TileRingGeometry TileRingLayout(bool concentric, double size, int thickness, int count,
-                                       int badgeChars) {
+                                       double logoScale) {
     TileRingGeometry g;
     g.size = size;
     double edge = size / 2 - 0.5;  // Outer edge of the outermost stroke.
@@ -174,15 +172,7 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
     g.stroke = stroke;
     g.radius = edge - stroke / 2;
     g.hole = edge - used;
-    g.logo = std::min(size * 0.44, 2 * (g.hole - 1.2));
-    // Badge: a circle, or a pill for two characters, centred just inside the ring's lower-right
-    // edge and kept inside the ring area.
-    g.badge = std::clamp(size * 0.34, 10.0, 13.0);
-    g.badgeFont = g.badge * 0.68;
-    g.badgeWidth = std::max(g.badge, badgeChars * g.badgeFont * 0.6 + 6.4);
-    double badgeCenter = size / 2 + (edge + 1 - g.badge / 2) / std::numbers::sqrt2;
-    g.badgeLeft = std::min(badgeCenter - g.badgeWidth / 2, size - g.badgeWidth);
-    g.badgeTop = std::min(badgeCenter - g.badge / 2, size - g.badge);
+    g.logo = std::min(size * 0.44 * logoScale, 2 * (g.hole - 1.2));
     return g;
 }
 
@@ -266,14 +256,13 @@ static TileOutline TileSectorOutline(double center, double outer, double inner, 
 struct TilePalette {
     uint32_t track;
     uint32_t hover;
-    uint32_t open;  // Tile whose flyout is open.
-    uint32_t badge;
-    uint32_t badgeOutline;
+    uint32_t open;       // Tile whose flyout is open.
+    uint32_t badgeHalo;  // The number badge's outline, the taskbar's own color.
 };
 
 static TilePalette TilePaletteFor(bool light) {
-    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFD8DBE2, 0xFFEEF0F4};
-    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF3A3D44, 0xFF1F2126};
+    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFF3F3F3};
+    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C};
 }
 
 // Display inputs of every meter. Build it with MeterDisplayFor only; the ranges below hold.
@@ -286,6 +275,10 @@ struct MeterDisplay {
     BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
+    double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
+    int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
+    int badgeOffsetX;         // Up to kBadgeOffsetMax DIPs either way.
+    int badgeOffsetY;
     int yellowThreshold;      // 0-100, yellow <= orange <= red.
     int orangeThreshold;
     int redThreshold;
@@ -318,6 +311,10 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
+        .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
+        .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
+        .badgeOffsetX = std::clamp(settings.badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax),
+        .badgeOffsetY = std::clamp(settings.badgeOffsetY, -kBadgeOffsetMax, kBadgeOffsetMax),
         .yellowThreshold = yellow,
         .orangeThreshold = orange,
         .redThreshold = std::clamp(settings.redThreshold, orange, 100),
@@ -572,26 +569,55 @@ static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accoun
     return identity;
 }
 
+// The number badge: its text in bold at the badge size, outlined kBadgeOutline DIPs in the
+// palette's halo color. Its box (text and outline) is estimated from the text's length;
+// renderers centre the text on the box's centre.
+static constexpr double kBadgeOutline = 1;
+
+struct BadgeBox {
+    double left = 0, top = 0, width = 0, height = 0;  // Empty without a badge.
+};
+
+// The badge's box from the top-left of a `side` DIP logo, for `chars` characters: centred on the
+// logo's lower-right corner, then moved by the badge offsets. A `hole` radius around the logo's
+// centre (rings) pulls it in along the diagonal until the box fits inside it, at most to the
+// centre.
+static BadgeBox LogoBadgeBox(const MeterDisplay& display, double side, int chars, double hole = 0) {
+    double width = std::max(chars, 1) * display.badgeSize * 0.6 + 2 * kBadgeOutline;
+    double height = display.badgeSize * 0.7 + 2 * kBadgeOutline;
+    double along = side / 2;  // From the logo's centre, on both axes.
+    if (hole > 0) {
+        // The far corner (along + width / 2, along + height / 2) at `hole` from the centre.
+        double a = (width + height) / 2;
+        double disc = a * a - 2 * (width * width / 4 + height * height / 4 - hole * hole);
+        along = std::clamp(disc >= 0 ? (std::sqrt(disc) - a) / 2 : 0.0, 0.0, along);
+    }
+    double x = side / 2 + along + display.badgeOffsetX, y = side / 2 + along + display.badgeOffsetY;
+    return {x - width / 2, y - height / 2, width, height};
+}
+
 // A bar column's identity margins in DIPs, which make its box: the identity gap (`gap`; 0
 // without bars) on the side facing the bars. A Label identity beside them sits 2 DIPs high. A
-// logo's box takes its badge's and stale mark's overhangs while they show (4 DIPs right; the
-// badge 4 below, the mark 3 above), and above or below the bars the label line's space beyond
-// its text at the label font size (`aboveCap`, over its cap height; `belowBaseline`), so the
-// logo keeps a label's distance from them.
+// `side` DIP logo's box takes the overhangs of its badge (`badge`, from the logo's top-left) and
+// its stale mark (4 DIPs right, 3 above) while they show, and above or below the bars the label
+// line's space beyond its text at the label font size (`aboveCap`, over its cap height;
+// `belowBaseline`), so the logo keeps a label's distance from them.
 struct BarIdentityMargin {
     double left = 0, top = 0, right = 0, bottom = 0;
 };
 
-static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, bool badge, bool warn,
-                                              double gap, double aboveCap, double belowBaseline) {
+static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, double side, BadgeBox badge,
+                                              bool warn, double gap, double aboveCap, double belowBaseline) {
     BarIdentityMargin m;
     bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
     if (label) {
         m.top = across ? 0 : -2;
     } else {
-        m.top = (warn ? 3 : 0) + (across ? aboveCap : 0);
-        m.right = badge || warn ? 4 : 0;
-        m.bottom = (badge ? 4 : 0) + (across ? belowBaseline : 0);
+        bool shown = badge.width > 0;
+        m.left = shown ? std::max(-badge.left, 0.0) : 0;
+        m.top = std::max({warn ? 3.0 : 0.0, shown ? -badge.top : 0.0}) + (across ? aboveCap : 0);
+        m.right = std::max({warn ? 4.0 : 0.0, shown ? badge.left + badge.width - side : 0.0});
+        m.bottom = (shown ? std::max(badge.top + badge.height - side, 0.0) : 0) + (across ? belowBaseline : 0);
     }
     if (position == LabelPosition::Left) {
         m.right += gap;
@@ -649,9 +675,10 @@ struct AccountMeters {
     std::wstring labelText;    // Bars' Label identity.
     double labelOpacity = 0;
     double identityOpacity = 0;  // Tiles' identity, and bars' logo identity.
-    // Ring tiles: the identity text's fitted font size and width, and the warning mark's top
-    // margin, into the tile's padding.
+    // Ring tiles: the badge's box from the ring area's top-left, the identity text's fitted font
+    // size and width, and the warning mark's top margin, into the tile's padding.
     TileRingGeometry ring;
+    BadgeBox ringBadge;
     double ringTextFont = 0;
     double ringTextWidth = 0;
     double ringWarnTop = 0;
@@ -700,7 +727,14 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     if (ring) {
         meters.ring = TileRingLayout(concentric,
                                      std::min<double>(display.ringSize, display.tileHeight),
-                                     display.ringThickness, count, badgeChars);
+                                     display.ringThickness, count, display.logoScale);
+        if (badgeChars) {
+            // Kept half a DIP inside the hole by default.
+            const TileRingGeometry& g = meters.ring;
+            meters.ringBadge = LogoBadgeBox(display, g.logo, badgeChars, g.hole - 0.5);
+            meters.ringBadge.left += (g.size - g.logo) / 2;
+            meters.ringBadge.top += (g.size - g.logo) / 2;
+        }
         // The largest font, from min(12, size / 3) down to 7, whose text fits across the hole at
         // half its cap height; clipped beyond that.
         double radius = meters.ring.hole - 0.8;

@@ -23,9 +23,7 @@ struct SettingsPreviewOp {
     // 0: flat
     uint32_t shade = 0;
     bool shadeLeft = false;
-    float stroke = 0;                   // Rect border (inside)
     uint32_t color = 0;                 // Fill or text color
-    uint32_t outline = 0;               // Rect border
     float opacity = 1;
     TileOutline shape;                  // Shape: a ring tile shape, filled, moved to `origin`
     D2D1_POINT_2F origin{};
@@ -130,25 +128,27 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                   provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
         add(ops, std::move(op));
     };
-    // A number badge (tiles.h): a pill with a border, its bold text centered by its cap height.
-    auto badge = [&](std::vector<Op>& ops, D2D1_RECT_F box, const std::wstring& s, float font, float opacity) {
-        Op op;
-        op.rect = box;
-        op.radius = (box.bottom - box.top) / 2;
-        op.color = palette.badge;
-        op.outline = palette.badgeOutline;
-        op.stroke = 1.2f;
-        op.opacity = opacity;
-        add(ops, std::move(op));
-        UiTextStyle style{UiFamily::Small, font, 0, DWRITE_FONT_WEIGHT_BOLD};
-        label(ops, s, style, box.left, (box.top + box.bottom) / 2 - measure(s, style).cap / 2,
-              box.right - box.left, DWRITE_TEXT_ALIGNMENT_CENTER, text, opacity, true);
+    // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text
+    // centered on the box's center by its cap height, over eight copies in the halo color
+    // kBadgeOutline DIPs around it.
+    auto badge = [&](std::vector<Op>& ops, const BadgeBox& box, float x, float y, const std::wstring& s,
+                     float opacity) {
+        const UiTextStyle style{UiFamily::Small, float(display.badgeSize), 0, DWRITE_FONT_WEIGHT_BOLD};
+        const Measured m = measure(s, style);
+        const float left = x + float(box.left + box.width / 2) - m.width / 2;
+        const float top = y + float(box.top + box.height / 2) - m.cap / 2;
+        for (int k = 0; k <= 8; k++) {
+            const double angle = k * std::numbers::pi / 4;
+            const float dx = k < 8 ? float(std::cos(angle) * kBadgeOutline) : 0;
+            const float dy = k < 8 ? float(std::sin(angle) * kBadgeOutline) : 0;
+            label(ops, s, style, left + dx, top + dy, m.width, DWRITE_TEXT_ALIGNMENT_CENTER,
+                  k < 8 ? palette.badgeHalo : text, opacity, true);
+        }
     };
 
-    // The identity (tiles.h): a `side` DIP logo with its number badge centered on the logo's
-    // lower-right corner, overhanging it by 4 DIPs, or the short text, shrunk to fit 26 DIPs, then
-    // clipped; "!" at its top-right corner while warned. From `left`, centered on `center`;
-    // returns its width.
+    // The identity (tiles.h): a `side` DIP logo with its number badge, or the short text, shrunk
+    // to fit 26 DIPs, then clipped; "!" at its top-right corner while warned. From `left`,
+    // centered on `center`; returns its width.
     const UiTextStyle warnStyle{UiFamily::Taskbar, 10, 0, DWRITE_FONT_WEIGHT_BOLD};
     auto identityOps = [&](std::vector<Op>& ops, size_t i, const AccountMeters& meters, float side, float left,
                            float center) {
@@ -160,10 +160,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             float top = center - side / 2;
             logo(ops, account.provider, {left, top, left + side, top + side}, opacity);
             if (identity.badge) {
-                UiTextStyle style{UiFamily::Small, 6.8f, 0, DWRITE_FONT_WEIGHT_BOLD};
-                float badgeWidth = std::max(10.0f, measure(identity.badgeText, style).width + 3 + 2.4f);
-                float right = left + side + 4, bottom = top + side + 4;
-                badge(ops, {right - badgeWidth, bottom - 10, right, bottom}, identity.badgeText, 6.8f, opacity);
+                badge(ops, LogoBadgeBox(display, side, int(identity.badgeText.size())), left, top,
+                      identity.badgeText, opacity);
             }
         } else {
             const UiTextStyle measured{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
@@ -228,19 +226,23 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
             }
             // The identity: the account label in the label font, its "!" while warned, or the
-            // 15 DIP logo; its margins (BarIdentityMarginFor) make its box, with the label line's
-            // space beyond its text as DirectWrite lays it out.
+            // logo at its size; its margins (BarIdentityMarginFor) make its box, with the label
+            // line's space beyond its text as DirectWrite lays it out.
             const bool shown = position != LabelPosition::Hidden;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
+            const float logoSide = float(kBarLogoSide * display.logoScale);
+            const TileIdentityText identity = TileIdentityFor(accounts, i);
             const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
             const BarIdentityMargin margin = BarIdentityMarginFor(
-                position, labelForm, !labelForm && TileIdentityFor(accounts, i).badge, meters.warn, count ? labelGap : 0,
-                line.baseline - line.cap, line.height - line.baseline);
+                position, labelForm, logoSide,
+                !labelForm && identity.badge ? LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) :
+                                               BadgeBox{},
+                meters.warn, count ? labelGap : 0, line.baseline - line.cap, line.height - line.baseline);
             float boxWidth = 0, boxHeight = 0;
             if (shown) {
-                boxWidth = (labelForm ? labelText.width : 15) + float(margin.left + margin.right);
-                boxHeight = (labelForm ? labelText.height : 15) + float(margin.top + margin.bottom);
+                boxWidth = (labelForm ? labelText.width : logoSide) + float(margin.left + margin.right);
+                boxHeight = (labelForm ? labelText.height : logoSide) + float(margin.top + margin.bottom);
             }
             float contentWidth = barsWidth, contentHeight = barsHeight;
             if (side) {
@@ -268,7 +270,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, meters.labelText, labelStyle, left, idTop, labelText.width, DWRITE_TEXT_ALIGNMENT_LEADING,
                           text, meters.labelOpacity);
                 } else {
-                    identityOps(ops, i, meters, 15, left, idTop + 7.5f);
+                    identityOps(ops, i, meters, logoSide, left, idTop + logoSide / 2);
                 }
             }
             float barsLeft = position == LabelPosition::Left ? contentLeft + boxWidth :
@@ -403,17 +405,12 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         }
                     }
                 }
-                // Identity, sized to the hole; with a badge the logo shifts up-left by a DIP.
+                // Identity, sized to the hole, with its badge in the model's box.
                 if (hasLogo) {
-                    float side = float(hasBadge ? geometry.logo - 1 : geometry.logo);
-                    float area = hasBadge ? S - 2 : S;
-                    float left = faceLeft + (area - side) / 2, logoTop = faceTop + (area - side) / 2;
+                    float side = float(geometry.logo);
+                    float left = faceLeft + (S - side) / 2, logoTop = faceTop + (S - side) / 2;
                     logo(ops, account.provider, {left, logoTop, left + side, logoTop + side}, opacity);
-                    if (hasBadge) {
-                        float left2 = faceLeft + float(geometry.badgeLeft), top2 = faceTop + float(geometry.badgeTop);
-                        badge(ops, {left2, top2, left2 + float(geometry.badgeWidth), top2 + float(geometry.badge)},
-                              identity.badgeText, float(geometry.badgeFont), opacity);
-                    }
+                    if (hasBadge) badge(ops, meters.ringBadge, faceLeft, faceTop, identity.badgeText, opacity);
                 } else {
                     UiTextStyle style{UiFamily::Display, float(meters.ringTextFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                     Measured m = measure(identity.text, style);
@@ -431,7 +428,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 // window key (bottom-aligned on the baseline) over per-quota segments: corners a
                 // quarter of their thickness, fills cut flat toward the end and shaded like the
                 // bars'.
-                float idWidth = identityOps(ops, i, meters, 16, x0 + padLeft, top + T / 2);
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
                 float metersLeft = x0 + padLeft + idWidth + 6;
                 UiTextStyle numberStyle{UiFamily::Display, 14, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, 9, 0, DWRITE_FONT_WEIGHT_NORMAL};
@@ -598,13 +596,6 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     }
                     float radius = std::min({op.radius, (r.right - r.left) / 2, (r.bottom - r.top) / 2});
                     UiFillRect(target, cache, r, radius, color(op.color, op.opacity), scale * zoom);
-                    if (op.stroke > 0) {
-                        D2D1_ROUNDED_RECT edge{UiInflate(r, -op.stroke / 2, -op.stroke / 2),
-                                               std::max(radius - op.stroke / 2, 0.0f),
-                                               std::max(radius - op.stroke / 2, 0.0f)};
-                        target->DrawRoundedRectangle(&edge, UiBrush(target, cache, color(op.outline, op.opacity)),
-                                                     op.stroke);
-                    }
                     break;
                 }
                 case Op::Kind::Shape:

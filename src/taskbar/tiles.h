@@ -101,12 +101,13 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 
 // Builds account `index`'s identity into `tile`: the provider logo, with a number badge when
 // several configured accounts share the provider, or text, and the stale-warning mark. Rings
-// resize it to their hole; headline tiles take a 16 DIP logo, other columns 15 DIP.
-// UpdateTileIdentity applies its state.
+// resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
+// columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
-                              BarLayout layout, TileUiRefs& tile) {
+                              BarLayout layout, MeterDisplay const& display, TileUiRefs& tile) {
     AccountConfig const& account = accounts[index];
     bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+    double side = (layout == BarLayout::LogoHeadline ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale;
     Grid identity;
     identity.IsHitTestVisible(false);
     if (!ring) identity.VerticalAlignment(VerticalAlignment::Center);
@@ -114,7 +115,6 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     if (account.tileIdentity != TileIdentity::Text) {
         try {
             Viewbox logo;
-            double side = layout == BarLayout::LogoHeadline ? 16 : 15;
             logo.Width(side);
             logo.Height(side);
             logo.HorizontalAlignment(HorizontalAlignment::Center);
@@ -128,32 +128,42 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     }
     TileIdentityText identityText = TileIdentityFor(accounts, index);
     if (tile.logo && identityText.badge) {
-        tile.badgeText = TextBlock{};
-        tile.badgeText.Text(identityText.badgeText);
-        tile.badgeText.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
-        tile.badgeText.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
-        tile.badgeText.FontSize(6.8);
-        tile.badgeText.TextLineBounds(TextLineBounds::Tight);
-        tile.badgeText.HorizontalAlignment(HorizontalAlignment::Center);
-        tile.badgeText.VerticalAlignment(VerticalAlignment::Center);
-        tile.badge = Border{};
-        tile.badge.Height(10);
-        tile.badge.MinWidth(10);
-        tile.badge.Padding({1.5, 0, 1.5, 0});
-        tile.badge.CornerRadius({5, 5, 5, 5});
-        tile.badge.BorderThickness({1.2, 1.2, 1.2, 1.2});
-        tile.badge.Child(tile.badgeText);
-        if (ring) {
-            tile.badge.HorizontalAlignment(HorizontalAlignment::Left);
-            tile.badge.VerticalAlignment(VerticalAlignment::Top);
-            tile.logo.Margin({0, 0, 2, 2});  // Shifts the logo up-left, away from the badge.
-        } else {
-            // Centred on the logo's lower-right corner.
-            tile.badge.HorizontalAlignment(HorizontalAlignment::Right);
-            tile.badge.VerticalAlignment(VerticalAlignment::Bottom);
-            tile.badge.Margin({0, 0, -4, -4});
+        // The text over eight copies in the halo brush, kBadgeOutline DIPs around it, centred in
+        // a box that never clips them. The Canvas places the box from the identity's top-left
+        // without sizing the identity.
+        double size = display.badgeSize;
+        tile.badgeHalo = SolidColorBrush{};
+        tile.badge = Grid{};
+        tile.badge.Width(4 * size);
+        tile.badge.Height(2 * size);
+        for (int k = 0; k <= 8; k++) {
+            TextBlock text;
+            text.Text(identityText.badgeText);
+            text.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
+            text.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
+            text.FontSize(size);
+            text.TextLineBounds(TextLineBounds::Tight);
+            text.HorizontalAlignment(HorizontalAlignment::Center);
+            text.VerticalAlignment(VerticalAlignment::Center);
+            if (k < 8) {
+                TranslateTransform shift;
+                shift.X(std::cos(k * std::numbers::pi / 4) * kBadgeOutline);
+                shift.Y(std::sin(k * std::numbers::pi / 4) * kBadgeOutline);
+                text.RenderTransform(shift);
+                text.Foreground(tile.badgeHalo);
+            } else {
+                tile.badgeText = text;
+            }
+            tile.badge.Children().Append(text);
         }
-        identity.Children().Append(tile.badge);
+        if (!ring) {
+            BadgeBox box = LogoBadgeBox(display, side, (int)identityText.badgeText.size());
+            Canvas::SetLeft(tile.badge, box.left + box.width / 2 - 2 * size);
+            Canvas::SetTop(tile.badge, box.top + box.height / 2 - size);
+        }
+        Canvas place;
+        place.Children().Append(tile.badge);
+        identity.Children().Append(place);
     }
     if (!tile.logo) {
         tile.text = TextBlock{};
@@ -192,7 +202,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
 // Builds account `index`'s tile: its root (hit target and flyout anchor), identity and meter
 // containers. UpdateAccountTile sizes and fills the meters.
 static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, size_t index,
-                                   BarLayout layout, double height, AccountUiRefs& refs) {
+                                   BarLayout layout, MeterDisplay const& display, AccountUiRefs& refs) {
     TileUiRefs& tile = refs.tile;
     tile.layout = layout;
     bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
@@ -200,11 +210,11 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     StackPanel column;
     column.Orientation(Orientation::Horizontal);
     column.VerticalAlignment(VerticalAlignment::Center);
-    column.Height(height);
+    column.Height(display.tileHeight);
     column.CornerRadius({4, 4, 4, 4});
     column.Padding(ring ? Thickness{4, 0, 4, 0} : Thickness{7, 0, 8, 0});
     column.Spacing(6);
-    Grid identity = BuildTileIdentity(accounts, index, layout, tile);
+    Grid identity = BuildTileIdentity(accounts, index, layout, display, tile);
 
     if (ring) {
         Grid face;
@@ -259,7 +269,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
 }
 
 // The identity's state: dimmed while stale, like a label; the warning mark in place of the
-// label's "!"; badge colors for a light (`light`) or dark taskbar.
+// label's "!"; the badge's halo color for a light (`light`) or dark taskbar.
 static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, AccountMeters const& meters,
                                bool light) {
     if (!tile.identity) return;
@@ -271,10 +281,8 @@ static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, Account
         tile.warn.Visibility(meters.warn ? Visibility::Visible : Visibility::Collapsed);
         ap.tileWarn = meters.warn ? 1 : 0;
     }
-    if (tile.badge && (light ? 1 : 0) != ap.badgeLight) {
-        TilePalette palette = TilePaletteFor(light);
-        tile.badge.Background(SolidColorBrush(ArgbColor(palette.badge)));
-        tile.badge.BorderBrush(SolidColorBrush(ArgbColor(palette.badgeOutline)));
+    if (tile.badgeHalo && (light ? 1 : 0) != ap.badgeLight) {
+        tile.badgeHalo.Color(ArgbColor(TilePaletteFor(light).badgeHalo));
         ap.badgeLight = light ? 1 : 0;
     }
 }
@@ -347,19 +355,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 meterShapes.Append(tile.paceCores[w]);
             }
 
-            // Identity, sized to the hole.
+            // Identity, sized to the hole; the badge's box centred on the model's.
             if (tile.logo) {
-                double side = tile.badge ? geometry.logo - 1 : geometry.logo;
-                tile.logo.Width(side);
-                tile.logo.Height(side);
+                tile.logo.Width(geometry.logo);
+                tile.logo.Height(geometry.logo);
             }
             if (tile.badge) {
-                double radius = geometry.badge / 2;
-                tile.badge.Width(geometry.badgeWidth);
-                tile.badge.Height(geometry.badge);
-                tile.badge.CornerRadius({radius, radius, radius, radius});
-                tile.badge.Margin({geometry.badgeLeft, geometry.badgeTop, 0, 0});
-                tile.badgeText.FontSize(geometry.badgeFont);
+                BadgeBox const& box = meters.ringBadge;
+                Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
+                Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
             }
             if (tile.text) {
                 tile.text.FontSize(meters.ringTextFont);

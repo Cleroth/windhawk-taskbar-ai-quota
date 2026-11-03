@@ -49,6 +49,30 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
 
+    // Logo identities in every style: the logo and badge sizes, then the badge's offsets. Bars
+    // need an identity position.
+    auto logoCards = [&](float top, bool placed) {
+        auto slider = [&](float at, PCWSTR title, PCWSTR description, SettingsField field) {
+            UiCardSpec spec;
+            spec.title = title;
+            spec.description = {{description}};
+            spec.enabled = placed;
+            if (!placed) spec.reason = L"Choose an identity position to change this.";
+            return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
+        };
+        top = slider(top, L"Logo size", L"Percent of the standard size; rings keep it inside the hole.",
+                     SettingsField::LogoScale);
+        top = slider(top + 3, L"Badge size",
+                     L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+                     SettingsField::BadgeSize);
+        top = slider(top + 3, L"Badge horizontal offset",
+                     L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
+                     L"hole on rings).",
+                     SettingsField::BadgeOffsetX);
+        return slider(top + 3, L"Badge vertical offset", L"Pixels down, or up when negative.",
+                      SettingsField::BadgeOffsetY);
+    };
+
     if (bars) {
         y = UiAddSection(items, id, x, y + 20, width, L"Bars");
         {
@@ -79,8 +103,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
 
         // Identity and text: the link to each account's identity, where it sits; the Label form's
-        // size and the gap need a position. Then quota keys, and the bar text size for them or
-        // percentage text.
+        // size, the gap and the logo cards need a position. Then quota keys, and the bar text size
+        // for them or percentage text.
         y = UiAddSection(items, id, x, y + 20, width, L"Identity and text");
         bool placed = s.labelPosition != LabelPosition::Hidden;
         y = identityCard(y);
@@ -112,6 +136,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             if (!placed) spec.reason = L"Choose an identity position to change this.";
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, L"px");
         }
+        y = logoCards(y + 3, placed);
         {
             UiCardSpec spec;
             spec.title = L"Quota keys";
@@ -142,15 +167,17 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                  L"around the logo or text."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
-        y = identityCard(y + 3);
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
     } else {
-        // Headline tiles have no size settings.
+        // Headline tiles have no meter size settings.
         y = UiAddSection(items, id, x, y + 20, width, L"Tile");
         y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
                          {{std::wstring(kSettingsTileStyles[int(layout)]) +
                            L" tiles have a fixed size that follows the taskbar\u2019s height. Bar sizes and "
                            L"the identity position apply to Stacked and Vertical bars."}});
-        y = identityCard(y + 3);
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
     }
 
     // Pace markers: none on headline tiles; the marker style is the bars'. Style and color

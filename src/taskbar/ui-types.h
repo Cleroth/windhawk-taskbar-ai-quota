@@ -35,7 +35,7 @@ struct AppliedState {
     // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
     int tileWarn = -1;
-    int badgeLight = -1;  // Badge colors for a light (1) or dark (0) taskbar.
+    int badgeLight = -1;  // Badge halo color for a light (1) or dark (0) taskbar.
     // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
     int highlight = -1;
     std::wstring headline;
@@ -75,8 +75,10 @@ struct TileUiRefs {
     FrameworkElement logo{nullptr};
     TextBlock text{nullptr};
     double textWidthPerPt = 0;  // Text width per DIP of font size.
-    Border badge{nullptr};
+    // Number badge: its text over copies in the halo brush, in a box placed on a Canvas.
+    Grid badge{nullptr};
     TextBlock badgeText{nullptr};
+    SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
     // Logo + headline: the most-used quota's number and window key.
     TextBlock headline{nullptr};

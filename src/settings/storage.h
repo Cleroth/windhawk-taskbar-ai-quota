@@ -86,6 +86,10 @@ static bool NormalizeSettings(Settings* s) {
     s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
     s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
                                   kRingThicknessMin, kRingThicknessMax);
+    s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
+    s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 9, kBadgeSizeMin, kBadgeSizeMax);
+    s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
+    s->badgeOffsetY = std::clamp(s->badgeOffsetY, -kBadgeOffsetMax, kBadgeOffsetMax);
     s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
     s->percentFontSize = std::clamp(s->percentFontSize > 0 ? s->percentFontSize : 9, 6, 24);
     s->accountMargin = std::clamp(s->accountMargin, 0, 500);
@@ -177,6 +181,10 @@ static std::wstring SerializeSettings(const Settings& s) {
         setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
+        setNumber(L"logoScale", s.logoScale);
+        setNumber(L"badgeSize", s.badgeSize);
+        setNumber(L"badgeOffsetX", s.badgeOffsetX);
+        setNumber(L"badgeOffsetY", s.badgeOffsetY);
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
                                 s.barLayout == BarLayout::SegmentedRing ? L"segmentedRing" :
                                 s.barLayout == BarLayout::ConcentricRings ? L"concentricRings" :
@@ -297,6 +305,18 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                          (int)std::clamp(ringSize, 0.0, (double)kRingSizeMax) : 0;
         s.ringThickness = std::isfinite(ringThickness) ?
                               (int)std::clamp(ringThickness, 0.0, (double)kRingThicknessMax) : 0;
+        double logoScale = GetNum(root, L"logoScale", 100);
+        double badgeSize = GetNum(root, L"badgeSize", 9);
+        double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
+        double badgeOffsetY = GetNum(root, L"badgeOffsetY", 0);
+        s.logoScale = std::isfinite(logoScale) ?
+                          (int)std::clamp(logoScale, 0.0, (double)kLogoScaleMax) : 0;
+        s.badgeSize = std::isfinite(badgeSize) ?
+                          (int)std::clamp(badgeSize, 0.0, (double)kBadgeSizeMax) : 0;
+        s.badgeOffsetX = std::isfinite(badgeOffsetX) ?
+                             (int)std::clamp(badgeOffsetX, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
+        s.badgeOffsetY = std::isfinite(badgeOffsetY) ?
+                             (int)std::clamp(badgeOffsetY, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
         std::wstring barLayout = GetStr(root, L"barLayout");
         s.barLayout = barLayout == L"vertical" ? BarLayout::Vertical :
                       barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :

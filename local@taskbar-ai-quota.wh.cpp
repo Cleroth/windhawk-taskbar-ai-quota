@@ -48,7 +48,7 @@ local app or CLI session, which must remain running.
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
-  identity position, pace markers, and spacing.
+  logo size, number badge size and position, identity position, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
@@ -232,6 +232,13 @@ static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
 static constexpr int kRingThicknessMax = 6;
+// Logo size in percent of each style's standard size; the number badge's text size and offsets
+// in DIPs.
+static constexpr int kLogoScaleMin = 50;
+static constexpr int kLogoScaleMax = 200;
+static constexpr int kBadgeSizeMin = 6;
+static constexpr int kBadgeSizeMax = 16;
+static constexpr int kBadgeOffsetMax = 20;
 
 enum class BarMode {
     Used,
@@ -294,6 +301,11 @@ struct Settings {
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
+    int logoScale = 100;  // Percent; rings keep the logo inside their hole.
+    // The number badge's text size, and its move right and down from its default spot.
+    int badgeSize = 9;
+    int badgeOffsetX = 0;
+    int badgeOffsetY = 0;
     int labelFontSize = 11;  // The Label identity on bars.
     int percentFontSize = 9;
     int accountMargin = 3;
@@ -476,7 +488,7 @@ struct AppliedState {
     // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
     int tileWarn = -1;
-    int badgeLight = -1;  // Badge colors for a light (1) or dark (0) taskbar.
+    int badgeLight = -1;  // Badge halo color for a light (1) or dark (0) taskbar.
     // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
     int highlight = -1;
     std::wstring headline;
@@ -516,8 +528,10 @@ struct TileUiRefs {
     FrameworkElement logo{nullptr};
     TextBlock text{nullptr};
     double textWidthPerPt = 0;  // Text width per DIP of font size.
-    Border badge{nullptr};
+    // Number badge: its text over copies in the halo brush, in a box placed on a Canvas.
+    Grid badge{nullptr};
     TextBlock badgeText{nullptr};
+    SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
     // Logo + headline: the most-used quota's number and window key.
     TextBlock headline{nullptr};
@@ -5717,6 +5731,9 @@ static FlyoutTheme LoadFlyoutTheme() {
 static constexpr double kTileHeight = 40;
 static constexpr double kHeadlineSegmentLength = 9;
 static constexpr double kHeadlineSegmentThickness = 3;
+// Logo sides at 100% logo size beside bars and on headline tiles; rings size theirs to the hole.
+static constexpr double kBarLogoSide = 15;
+static constexpr double kHeadlineLogoSide = 16;
 // Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
@@ -5838,17 +5855,12 @@ struct TileRingGeometry {
     double gap = 0;          // Concentric: space between rings. Segmented: space between arcs.
     double radius = 0;       // Centreline radius of the outermost arc or ring.
     double hole = 0;         // Free centre radius, inside the innermost stroke.
-    double logo = 0;         // Logo side without a badge.
-    double badge = 0;        // Badge height.
-    double badgeWidth = 0;
-    double badgeFont = 0;
-    double badgeLeft = 0;    // From the ring area's top-left corner.
-    double badgeTop = 0;
+    double logo = 0;         // Logo side, centred in the ring area.
 };
 
-// `badgeChars`: length of the badge text, 0 without a badge.
+// `logoScale`: the logo size as a fraction of its standard size.
 static TileRingGeometry TileRingLayout(bool concentric, double size, int thickness, int count,
-                                       int badgeChars) {
+                                       double logoScale) {
     TileRingGeometry g;
     g.size = size;
     double edge = size / 2 - 0.5;  // Outer edge of the outermost stroke.
@@ -5880,15 +5892,7 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
     g.stroke = stroke;
     g.radius = edge - stroke / 2;
     g.hole = edge - used;
-    g.logo = std::min(size * 0.44, 2 * (g.hole - 1.2));
-    // Badge: a circle, or a pill for two characters, centred just inside the ring's lower-right
-    // edge and kept inside the ring area.
-    g.badge = std::clamp(size * 0.34, 10.0, 13.0);
-    g.badgeFont = g.badge * 0.68;
-    g.badgeWidth = std::max(g.badge, badgeChars * g.badgeFont * 0.6 + 6.4);
-    double badgeCenter = size / 2 + (edge + 1 - g.badge / 2) / std::numbers::sqrt2;
-    g.badgeLeft = std::min(badgeCenter - g.badgeWidth / 2, size - g.badgeWidth);
-    g.badgeTop = std::min(badgeCenter - g.badge / 2, size - g.badge);
+    g.logo = std::min(size * 0.44 * logoScale, 2 * (g.hole - 1.2));
     return g;
 }
 
@@ -5972,14 +5976,13 @@ static TileOutline TileSectorOutline(double center, double outer, double inner, 
 struct TilePalette {
     uint32_t track;
     uint32_t hover;
-    uint32_t open;  // Tile whose flyout is open.
-    uint32_t badge;
-    uint32_t badgeOutline;
+    uint32_t open;       // Tile whose flyout is open.
+    uint32_t badgeHalo;  // The number badge's outline, the taskbar's own color.
 };
 
 static TilePalette TilePaletteFor(bool light) {
-    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFD8DBE2, 0xFFEEF0F4};
-    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF3A3D44, 0xFF1F2126};
+    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFF3F3F3};
+    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C};
 }
 
 // Display inputs of every meter. Build it with MeterDisplayFor only; the ranges below hold.
@@ -5992,6 +5995,10 @@ struct MeterDisplay {
     BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
+    double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
+    int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
+    int badgeOffsetX;         // Up to kBadgeOffsetMax DIPs either way.
+    int badgeOffsetY;
     int yellowThreshold;      // 0-100, yellow <= orange <= red.
     int orangeThreshold;
     int redThreshold;
@@ -6024,6 +6031,10 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
+        .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
+        .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
+        .badgeOffsetX = std::clamp(settings.badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax),
+        .badgeOffsetY = std::clamp(settings.badgeOffsetY, -kBadgeOffsetMax, kBadgeOffsetMax),
         .yellowThreshold = yellow,
         .orangeThreshold = orange,
         .redThreshold = std::clamp(settings.redThreshold, orange, 100),
@@ -6278,26 +6289,55 @@ static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accoun
     return identity;
 }
 
+// The number badge: its text in bold at the badge size, outlined kBadgeOutline DIPs in the
+// palette's halo color. Its box (text and outline) is estimated from the text's length;
+// renderers centre the text on the box's centre.
+static constexpr double kBadgeOutline = 1;
+
+struct BadgeBox {
+    double left = 0, top = 0, width = 0, height = 0;  // Empty without a badge.
+};
+
+// The badge's box from the top-left of a `side` DIP logo, for `chars` characters: centred on the
+// logo's lower-right corner, then moved by the badge offsets. A `hole` radius around the logo's
+// centre (rings) pulls it in along the diagonal until the box fits inside it, at most to the
+// centre.
+static BadgeBox LogoBadgeBox(const MeterDisplay& display, double side, int chars, double hole = 0) {
+    double width = std::max(chars, 1) * display.badgeSize * 0.6 + 2 * kBadgeOutline;
+    double height = display.badgeSize * 0.7 + 2 * kBadgeOutline;
+    double along = side / 2;  // From the logo's centre, on both axes.
+    if (hole > 0) {
+        // The far corner (along + width / 2, along + height / 2) at `hole` from the centre.
+        double a = (width + height) / 2;
+        double disc = a * a - 2 * (width * width / 4 + height * height / 4 - hole * hole);
+        along = std::clamp(disc >= 0 ? (std::sqrt(disc) - a) / 2 : 0.0, 0.0, along);
+    }
+    double x = side / 2 + along + display.badgeOffsetX, y = side / 2 + along + display.badgeOffsetY;
+    return {x - width / 2, y - height / 2, width, height};
+}
+
 // A bar column's identity margins in DIPs, which make its box: the identity gap (`gap`; 0
 // without bars) on the side facing the bars. A Label identity beside them sits 2 DIPs high. A
-// logo's box takes its badge's and stale mark's overhangs while they show (4 DIPs right; the
-// badge 4 below, the mark 3 above), and above or below the bars the label line's space beyond
-// its text at the label font size (`aboveCap`, over its cap height; `belowBaseline`), so the
-// logo keeps a label's distance from them.
+// `side` DIP logo's box takes the overhangs of its badge (`badge`, from the logo's top-left) and
+// its stale mark (4 DIPs right, 3 above) while they show, and above or below the bars the label
+// line's space beyond its text at the label font size (`aboveCap`, over its cap height;
+// `belowBaseline`), so the logo keeps a label's distance from them.
 struct BarIdentityMargin {
     double left = 0, top = 0, right = 0, bottom = 0;
 };
 
-static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, bool badge, bool warn,
-                                              double gap, double aboveCap, double belowBaseline) {
+static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, double side, BadgeBox badge,
+                                              bool warn, double gap, double aboveCap, double belowBaseline) {
     BarIdentityMargin m;
     bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
     if (label) {
         m.top = across ? 0 : -2;
     } else {
-        m.top = (warn ? 3 : 0) + (across ? aboveCap : 0);
-        m.right = badge || warn ? 4 : 0;
-        m.bottom = (badge ? 4 : 0) + (across ? belowBaseline : 0);
+        bool shown = badge.width > 0;
+        m.left = shown ? std::max(-badge.left, 0.0) : 0;
+        m.top = std::max({warn ? 3.0 : 0.0, shown ? -badge.top : 0.0}) + (across ? aboveCap : 0);
+        m.right = std::max({warn ? 4.0 : 0.0, shown ? badge.left + badge.width - side : 0.0});
+        m.bottom = (shown ? std::max(badge.top + badge.height - side, 0.0) : 0) + (across ? belowBaseline : 0);
     }
     if (position == LabelPosition::Left) {
         m.right += gap;
@@ -6355,9 +6395,10 @@ struct AccountMeters {
     std::wstring labelText;    // Bars' Label identity.
     double labelOpacity = 0;
     double identityOpacity = 0;  // Tiles' identity, and bars' logo identity.
-    // Ring tiles: the identity text's fitted font size and width, and the warning mark's top
-    // margin, into the tile's padding.
+    // Ring tiles: the badge's box from the ring area's top-left, the identity text's fitted font
+    // size and width, and the warning mark's top margin, into the tile's padding.
     TileRingGeometry ring;
+    BadgeBox ringBadge;
     double ringTextFont = 0;
     double ringTextWidth = 0;
     double ringWarnTop = 0;
@@ -6406,7 +6447,14 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     if (ring) {
         meters.ring = TileRingLayout(concentric,
                                      std::min<double>(display.ringSize, display.tileHeight),
-                                     display.ringThickness, count, badgeChars);
+                                     display.ringThickness, count, display.logoScale);
+        if (badgeChars) {
+            // Kept half a DIP inside the hole by default.
+            const TileRingGeometry& g = meters.ring;
+            meters.ringBadge = LogoBadgeBox(display, g.logo, badgeChars, g.hole - 0.5);
+            meters.ringBadge.left += (g.size - g.logo) / 2;
+            meters.ringBadge.top += (g.size - g.logo) / 2;
+        }
         // The largest font, from min(12, size / 3) down to 7, whose text fits across the hole at
         // half its cap height; clipped beyond that.
         double radius = meters.ring.hole - 0.8;
@@ -6728,12 +6776,13 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 
 // Builds account `index`'s identity into `tile`: the provider logo, with a number badge when
 // several configured accounts share the provider, or text, and the stale-warning mark. Rings
-// resize it to their hole; headline tiles take a 16 DIP logo, other columns 15 DIP.
-// UpdateTileIdentity applies its state.
+// resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
+// columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
-                              BarLayout layout, TileUiRefs& tile) {
+                              BarLayout layout, MeterDisplay const& display, TileUiRefs& tile) {
     AccountConfig const& account = accounts[index];
     bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+    double side = (layout == BarLayout::LogoHeadline ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale;
     Grid identity;
     identity.IsHitTestVisible(false);
     if (!ring) identity.VerticalAlignment(VerticalAlignment::Center);
@@ -6741,7 +6790,6 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     if (account.tileIdentity != TileIdentity::Text) {
         try {
             Viewbox logo;
-            double side = layout == BarLayout::LogoHeadline ? 16 : 15;
             logo.Width(side);
             logo.Height(side);
             logo.HorizontalAlignment(HorizontalAlignment::Center);
@@ -6755,32 +6803,42 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     }
     TileIdentityText identityText = TileIdentityFor(accounts, index);
     if (tile.logo && identityText.badge) {
-        tile.badgeText = TextBlock{};
-        tile.badgeText.Text(identityText.badgeText);
-        tile.badgeText.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
-        tile.badgeText.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
-        tile.badgeText.FontSize(6.8);
-        tile.badgeText.TextLineBounds(TextLineBounds::Tight);
-        tile.badgeText.HorizontalAlignment(HorizontalAlignment::Center);
-        tile.badgeText.VerticalAlignment(VerticalAlignment::Center);
-        tile.badge = Border{};
-        tile.badge.Height(10);
-        tile.badge.MinWidth(10);
-        tile.badge.Padding({1.5, 0, 1.5, 0});
-        tile.badge.CornerRadius({5, 5, 5, 5});
-        tile.badge.BorderThickness({1.2, 1.2, 1.2, 1.2});
-        tile.badge.Child(tile.badgeText);
-        if (ring) {
-            tile.badge.HorizontalAlignment(HorizontalAlignment::Left);
-            tile.badge.VerticalAlignment(VerticalAlignment::Top);
-            tile.logo.Margin({0, 0, 2, 2});  // Shifts the logo up-left, away from the badge.
-        } else {
-            // Centred on the logo's lower-right corner.
-            tile.badge.HorizontalAlignment(HorizontalAlignment::Right);
-            tile.badge.VerticalAlignment(VerticalAlignment::Bottom);
-            tile.badge.Margin({0, 0, -4, -4});
+        // The text over eight copies in the halo brush, kBadgeOutline DIPs around it, centred in
+        // a box that never clips them. The Canvas places the box from the identity's top-left
+        // without sizing the identity.
+        double size = display.badgeSize;
+        tile.badgeHalo = SolidColorBrush{};
+        tile.badge = Grid{};
+        tile.badge.Width(4 * size);
+        tile.badge.Height(2 * size);
+        for (int k = 0; k <= 8; k++) {
+            TextBlock text;
+            text.Text(identityText.badgeText);
+            text.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
+            text.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
+            text.FontSize(size);
+            text.TextLineBounds(TextLineBounds::Tight);
+            text.HorizontalAlignment(HorizontalAlignment::Center);
+            text.VerticalAlignment(VerticalAlignment::Center);
+            if (k < 8) {
+                TranslateTransform shift;
+                shift.X(std::cos(k * std::numbers::pi / 4) * kBadgeOutline);
+                shift.Y(std::sin(k * std::numbers::pi / 4) * kBadgeOutline);
+                text.RenderTransform(shift);
+                text.Foreground(tile.badgeHalo);
+            } else {
+                tile.badgeText = text;
+            }
+            tile.badge.Children().Append(text);
         }
-        identity.Children().Append(tile.badge);
+        if (!ring) {
+            BadgeBox box = LogoBadgeBox(display, side, (int)identityText.badgeText.size());
+            Canvas::SetLeft(tile.badge, box.left + box.width / 2 - 2 * size);
+            Canvas::SetTop(tile.badge, box.top + box.height / 2 - size);
+        }
+        Canvas place;
+        place.Children().Append(tile.badge);
+        identity.Children().Append(place);
     }
     if (!tile.logo) {
         tile.text = TextBlock{};
@@ -6819,7 +6877,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
 // Builds account `index`'s tile: its root (hit target and flyout anchor), identity and meter
 // containers. UpdateAccountTile sizes and fills the meters.
 static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, size_t index,
-                                   BarLayout layout, double height, AccountUiRefs& refs) {
+                                   BarLayout layout, MeterDisplay const& display, AccountUiRefs& refs) {
     TileUiRefs& tile = refs.tile;
     tile.layout = layout;
     bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
@@ -6827,11 +6885,11 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     StackPanel column;
     column.Orientation(Orientation::Horizontal);
     column.VerticalAlignment(VerticalAlignment::Center);
-    column.Height(height);
+    column.Height(display.tileHeight);
     column.CornerRadius({4, 4, 4, 4});
     column.Padding(ring ? Thickness{4, 0, 4, 0} : Thickness{7, 0, 8, 0});
     column.Spacing(6);
-    Grid identity = BuildTileIdentity(accounts, index, layout, tile);
+    Grid identity = BuildTileIdentity(accounts, index, layout, display, tile);
 
     if (ring) {
         Grid face;
@@ -6886,7 +6944,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
 }
 
 // The identity's state: dimmed while stale, like a label; the warning mark in place of the
-// label's "!"; badge colors for a light (`light`) or dark taskbar.
+// label's "!"; the badge's halo color for a light (`light`) or dark taskbar.
 static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, AccountMeters const& meters,
                                bool light) {
     if (!tile.identity) return;
@@ -6898,10 +6956,8 @@ static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, Account
         tile.warn.Visibility(meters.warn ? Visibility::Visible : Visibility::Collapsed);
         ap.tileWarn = meters.warn ? 1 : 0;
     }
-    if (tile.badge && (light ? 1 : 0) != ap.badgeLight) {
-        TilePalette palette = TilePaletteFor(light);
-        tile.badge.Background(SolidColorBrush(ArgbColor(palette.badge)));
-        tile.badge.BorderBrush(SolidColorBrush(ArgbColor(palette.badgeOutline)));
+    if (tile.badgeHalo && (light ? 1 : 0) != ap.badgeLight) {
+        tile.badgeHalo.Color(ArgbColor(TilePaletteFor(light).badgeHalo));
         ap.badgeLight = light ? 1 : 0;
     }
 }
@@ -6974,19 +7030,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 meterShapes.Append(tile.paceCores[w]);
             }
 
-            // Identity, sized to the hole.
+            // Identity, sized to the hole; the badge's box centred on the model's.
             if (tile.logo) {
-                double side = tile.badge ? geometry.logo - 1 : geometry.logo;
-                tile.logo.Width(side);
-                tile.logo.Height(side);
+                tile.logo.Width(geometry.logo);
+                tile.logo.Height(geometry.logo);
             }
             if (tile.badge) {
-                double radius = geometry.badge / 2;
-                tile.badge.Width(geometry.badgeWidth);
-                tile.badge.Height(geometry.badge);
-                tile.badge.CornerRadius({radius, radius, radius, radius});
-                tile.badge.Margin({geometry.badgeLeft, geometry.badgeTop, 0, 0});
-                tile.badgeText.FontSize(geometry.badgeFont);
+                BadgeBox const& box = meters.ringBadge;
+                Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
+                Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
             }
             if (tile.text) {
                 tile.text.FontSize(meters.ringTextFont);
@@ -8657,7 +8709,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             refs.historyId = accounts[i].historyId;
             StackPanel col{nullptr};
             if (tileLayout) {
-                col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
+                col = BuildAccountTile(accounts, i, barLayout, display, refs);
             } else {
                 // The tiles' box: at least the tile height, up to 7 DIPs inside each side, holding
                 // the content centred across it: the identity beside, above or below the bars at
@@ -8691,7 +8743,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         refs.label = label;
                         identity = label;
                     } else {
-                        identity = BuildTileIdentity(accounts, i, barLayout, refs.tile);
+                        identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
                         identities = true;
                     }
                     identity.VerticalAlignment(VerticalAlignment::Center);
@@ -9332,10 +9384,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     identity = ui.tile.identity;
                 }
                 if (identity) {
+                    double side = kBarLogoSide * display.logoScale;
+                    BadgeBox badge = ui.tile.badge ?
+                        LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
-                        settings.labelPosition, ui.label != nullptr, ui.tile.badge != nullptr,
-                        meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
-                        state.labelBelowBaseline);
+                        settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,
+                        barMask ? settings.labelGap : 0, state.labelAboveCap, state.labelBelowBaseline);
                     Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
                         identity.Margin(margin);
@@ -15322,6 +15376,10 @@ static bool NormalizeSettings(Settings* s) {
     s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
     s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
                                   kRingThicknessMin, kRingThicknessMax);
+    s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
+    s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 9, kBadgeSizeMin, kBadgeSizeMax);
+    s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
+    s->badgeOffsetY = std::clamp(s->badgeOffsetY, -kBadgeOffsetMax, kBadgeOffsetMax);
     s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
     s->percentFontSize = std::clamp(s->percentFontSize > 0 ? s->percentFontSize : 9, 6, 24);
     s->accountMargin = std::clamp(s->accountMargin, 0, 500);
@@ -15413,6 +15471,10 @@ static std::wstring SerializeSettings(const Settings& s) {
         setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
+        setNumber(L"logoScale", s.logoScale);
+        setNumber(L"badgeSize", s.badgeSize);
+        setNumber(L"badgeOffsetX", s.badgeOffsetX);
+        setNumber(L"badgeOffsetY", s.badgeOffsetY);
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
                                 s.barLayout == BarLayout::SegmentedRing ? L"segmentedRing" :
                                 s.barLayout == BarLayout::ConcentricRings ? L"concentricRings" :
@@ -15533,6 +15595,18 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                          (int)std::clamp(ringSize, 0.0, (double)kRingSizeMax) : 0;
         s.ringThickness = std::isfinite(ringThickness) ?
                               (int)std::clamp(ringThickness, 0.0, (double)kRingThicknessMax) : 0;
+        double logoScale = GetNum(root, L"logoScale", 100);
+        double badgeSize = GetNum(root, L"badgeSize", 9);
+        double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
+        double badgeOffsetY = GetNum(root, L"badgeOffsetY", 0);
+        s.logoScale = std::isfinite(logoScale) ?
+                          (int)std::clamp(logoScale, 0.0, (double)kLogoScaleMax) : 0;
+        s.badgeSize = std::isfinite(badgeSize) ?
+                          (int)std::clamp(badgeSize, 0.0, (double)kBadgeSizeMax) : 0;
+        s.badgeOffsetX = std::isfinite(badgeOffsetX) ?
+                             (int)std::clamp(badgeOffsetX, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
+        s.badgeOffsetY = std::isfinite(badgeOffsetY) ?
+                             (int)std::clamp(badgeOffsetY, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
         std::wstring barLayout = GetStr(root, L"barLayout");
         s.barLayout = barLayout == L"vertical" ? BarLayout::Vertical :
                       barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :
@@ -16467,6 +16541,10 @@ enum class SettingsField : uint8_t {
     BarGap,
     RingSize,
     RingThickness,
+    LogoScale,        // Percent
+    BadgeSize,
+    BadgeOffsetX,
+    BadgeOffsetY,
     LabelPosition,    // A LabelPosition
     LabelFontSize,
     LabelGap,
@@ -16534,6 +16612,10 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
         case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
         case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
+        case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
+        case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
+        case SettingsField::BadgeOffsetX:
+        case SettingsField::BadgeOffsetY: return SettingsNumberRange{-kBadgeOffsetMax, kBadgeOffsetMax};
         case SettingsField::LabelFontSize:
         case SettingsField::PercentFontSize: return SettingsNumberRange{6, 24};
         case SettingsField::BarGap:
@@ -16561,7 +16643,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::BarLayout,       SettingsField::BarStyle,
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
-                    SettingsField::RingThickness,   SettingsField::LabelPosition,
+                    SettingsField::RingThickness,   SettingsField::LogoScale,
+                    SettingsField::BadgeSize,       SettingsField::BadgeOffsetX,
+                    SettingsField::BadgeOffsetY,    SettingsField::LabelPosition,
                     SettingsField::LabelFontSize,   SettingsField::LabelGap,
                     SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
                     SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
@@ -16598,6 +16682,10 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::BarGap: return s.barGap;
         case SettingsField::RingSize: return s.ringSize;
         case SettingsField::RingThickness: return s.ringThickness;
+        case SettingsField::LogoScale: return s.logoScale;
+        case SettingsField::BadgeSize: return s.badgeSize;
+        case SettingsField::BadgeOffsetX: return s.badgeOffsetX;
+        case SettingsField::BadgeOffsetY: return s.badgeOffsetY;
         case SettingsField::LabelPosition: return int(s.labelPosition);
         case SettingsField::LabelFontSize: return s.labelFontSize;
         case SettingsField::LabelGap: return s.labelGap;
@@ -16660,6 +16748,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::BarGap: s.barGap = value; break;
         case SettingsField::RingSize: s.ringSize = value; break;
         case SettingsField::RingThickness: s.ringThickness = value; break;
+        case SettingsField::LogoScale: s.logoScale = value; break;
+        case SettingsField::BadgeSize: s.badgeSize = value; break;
+        case SettingsField::BadgeOffsetX: s.badgeOffsetX = value; break;
+        case SettingsField::BadgeOffsetY: s.badgeOffsetY = value; break;
         case SettingsField::LabelPosition:
             s.labelPosition = LabelPosition(std::clamp(value, int(LabelPosition::Hidden),
                                                        int(LabelPosition::Bottom)));
@@ -16714,6 +16806,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barGap = defaults.barGap;
             s.ringSize = defaults.ringSize;
             s.ringThickness = defaults.ringThickness;
+            s.logoScale = defaults.logoScale;
+            s.badgeSize = defaults.badgeSize;
+            s.badgeOffsetX = defaults.badgeOffsetX;
+            s.badgeOffsetY = defaults.badgeOffsetY;
             s.labelPosition = defaults.labelPosition;
             s.labelFontSize = defaults.labelFontSize;
             s.labelGap = defaults.labelGap;
@@ -17745,9 +17841,7 @@ struct SettingsPreviewOp {
     // 0: flat
     uint32_t shade = 0;
     bool shadeLeft = false;
-    float stroke = 0;                   // Rect border (inside)
     uint32_t color = 0;                 // Fill or text color
-    uint32_t outline = 0;               // Rect border
     float opacity = 1;
     TileOutline shape;                  // Shape: a ring tile shape, filled, moved to `origin`
     D2D1_POINT_2F origin{};
@@ -17852,25 +17946,27 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                   provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
         add(ops, std::move(op));
     };
-    // A number badge (tiles.h): a pill with a border, its bold text centered by its cap height.
-    auto badge = [&](std::vector<Op>& ops, D2D1_RECT_F box, const std::wstring& s, float font, float opacity) {
-        Op op;
-        op.rect = box;
-        op.radius = (box.bottom - box.top) / 2;
-        op.color = palette.badge;
-        op.outline = palette.badgeOutline;
-        op.stroke = 1.2f;
-        op.opacity = opacity;
-        add(ops, std::move(op));
-        UiTextStyle style{UiFamily::Small, font, 0, DWRITE_FONT_WEIGHT_BOLD};
-        label(ops, s, style, box.left, (box.top + box.bottom) / 2 - measure(s, style).cap / 2,
-              box.right - box.left, DWRITE_TEXT_ALIGNMENT_CENTER, text, opacity, true);
+    // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text
+    // centered on the box's center by its cap height, over eight copies in the halo color
+    // kBadgeOutline DIPs around it.
+    auto badge = [&](std::vector<Op>& ops, const BadgeBox& box, float x, float y, const std::wstring& s,
+                     float opacity) {
+        const UiTextStyle style{UiFamily::Small, float(display.badgeSize), 0, DWRITE_FONT_WEIGHT_BOLD};
+        const Measured m = measure(s, style);
+        const float left = x + float(box.left + box.width / 2) - m.width / 2;
+        const float top = y + float(box.top + box.height / 2) - m.cap / 2;
+        for (int k = 0; k <= 8; k++) {
+            const double angle = k * std::numbers::pi / 4;
+            const float dx = k < 8 ? float(std::cos(angle) * kBadgeOutline) : 0;
+            const float dy = k < 8 ? float(std::sin(angle) * kBadgeOutline) : 0;
+            label(ops, s, style, left + dx, top + dy, m.width, DWRITE_TEXT_ALIGNMENT_CENTER,
+                  k < 8 ? palette.badgeHalo : text, opacity, true);
+        }
     };
 
-    // The identity (tiles.h): a `side` DIP logo with its number badge centered on the logo's
-    // lower-right corner, overhanging it by 4 DIPs, or the short text, shrunk to fit 26 DIPs, then
-    // clipped; "!" at its top-right corner while warned. From `left`, centered on `center`;
-    // returns its width.
+    // The identity (tiles.h): a `side` DIP logo with its number badge, or the short text, shrunk
+    // to fit 26 DIPs, then clipped; "!" at its top-right corner while warned. From `left`,
+    // centered on `center`; returns its width.
     const UiTextStyle warnStyle{UiFamily::Taskbar, 10, 0, DWRITE_FONT_WEIGHT_BOLD};
     auto identityOps = [&](std::vector<Op>& ops, size_t i, const AccountMeters& meters, float side, float left,
                            float center) {
@@ -17882,10 +17978,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             float top = center - side / 2;
             logo(ops, account.provider, {left, top, left + side, top + side}, opacity);
             if (identity.badge) {
-                UiTextStyle style{UiFamily::Small, 6.8f, 0, DWRITE_FONT_WEIGHT_BOLD};
-                float badgeWidth = std::max(10.0f, measure(identity.badgeText, style).width + 3 + 2.4f);
-                float right = left + side + 4, bottom = top + side + 4;
-                badge(ops, {right - badgeWidth, bottom - 10, right, bottom}, identity.badgeText, 6.8f, opacity);
+                badge(ops, LogoBadgeBox(display, side, int(identity.badgeText.size())), left, top,
+                      identity.badgeText, opacity);
             }
         } else {
             const UiTextStyle measured{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
@@ -17950,19 +18044,23 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
             }
             // The identity: the account label in the label font, its "!" while warned, or the
-            // 15 DIP logo; its margins (BarIdentityMarginFor) make its box, with the label line's
-            // space beyond its text as DirectWrite lays it out.
+            // logo at its size; its margins (BarIdentityMarginFor) make its box, with the label
+            // line's space beyond its text as DirectWrite lays it out.
             const bool shown = position != LabelPosition::Hidden;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
+            const float logoSide = float(kBarLogoSide * display.logoScale);
+            const TileIdentityText identity = TileIdentityFor(accounts, i);
             const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
             const BarIdentityMargin margin = BarIdentityMarginFor(
-                position, labelForm, !labelForm && TileIdentityFor(accounts, i).badge, meters.warn, count ? labelGap : 0,
-                line.baseline - line.cap, line.height - line.baseline);
+                position, labelForm, logoSide,
+                !labelForm && identity.badge ? LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) :
+                                               BadgeBox{},
+                meters.warn, count ? labelGap : 0, line.baseline - line.cap, line.height - line.baseline);
             float boxWidth = 0, boxHeight = 0;
             if (shown) {
-                boxWidth = (labelForm ? labelText.width : 15) + float(margin.left + margin.right);
-                boxHeight = (labelForm ? labelText.height : 15) + float(margin.top + margin.bottom);
+                boxWidth = (labelForm ? labelText.width : logoSide) + float(margin.left + margin.right);
+                boxHeight = (labelForm ? labelText.height : logoSide) + float(margin.top + margin.bottom);
             }
             float contentWidth = barsWidth, contentHeight = barsHeight;
             if (side) {
@@ -17990,7 +18088,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, meters.labelText, labelStyle, left, idTop, labelText.width, DWRITE_TEXT_ALIGNMENT_LEADING,
                           text, meters.labelOpacity);
                 } else {
-                    identityOps(ops, i, meters, 15, left, idTop + 7.5f);
+                    identityOps(ops, i, meters, logoSide, left, idTop + logoSide / 2);
                 }
             }
             float barsLeft = position == LabelPosition::Left ? contentLeft + boxWidth :
@@ -18125,17 +18223,12 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         }
                     }
                 }
-                // Identity, sized to the hole; with a badge the logo shifts up-left by a DIP.
+                // Identity, sized to the hole, with its badge in the model's box.
                 if (hasLogo) {
-                    float side = float(hasBadge ? geometry.logo - 1 : geometry.logo);
-                    float area = hasBadge ? S - 2 : S;
-                    float left = faceLeft + (area - side) / 2, logoTop = faceTop + (area - side) / 2;
+                    float side = float(geometry.logo);
+                    float left = faceLeft + (S - side) / 2, logoTop = faceTop + (S - side) / 2;
                     logo(ops, account.provider, {left, logoTop, left + side, logoTop + side}, opacity);
-                    if (hasBadge) {
-                        float left2 = faceLeft + float(geometry.badgeLeft), top2 = faceTop + float(geometry.badgeTop);
-                        badge(ops, {left2, top2, left2 + float(geometry.badgeWidth), top2 + float(geometry.badge)},
-                              identity.badgeText, float(geometry.badgeFont), opacity);
-                    }
+                    if (hasBadge) badge(ops, meters.ringBadge, faceLeft, faceTop, identity.badgeText, opacity);
                 } else {
                     UiTextStyle style{UiFamily::Display, float(meters.ringTextFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                     Measured m = measure(identity.text, style);
@@ -18153,7 +18246,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 // window key (bottom-aligned on the baseline) over per-quota segments: corners a
                 // quarter of their thickness, fills cut flat toward the end and shaded like the
                 // bars'.
-                float idWidth = identityOps(ops, i, meters, 16, x0 + padLeft, top + T / 2);
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
                 float metersLeft = x0 + padLeft + idWidth + 6;
                 UiTextStyle numberStyle{UiFamily::Display, 14, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, 9, 0, DWRITE_FONT_WEIGHT_NORMAL};
@@ -18320,13 +18414,6 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     }
                     float radius = std::min({op.radius, (r.right - r.left) / 2, (r.bottom - r.top) / 2});
                     UiFillRect(target, cache, r, radius, color(op.color, op.opacity), scale * zoom);
-                    if (op.stroke > 0) {
-                        D2D1_ROUNDED_RECT edge{UiInflate(r, -op.stroke / 2, -op.stroke / 2),
-                                               std::max(radius - op.stroke / 2, 0.0f),
-                                               std::max(radius - op.stroke / 2, 0.0f)};
-                        target->DrawRoundedRectangle(&edge, UiBrush(target, cache, color(op.outline, op.opacity)),
-                                                     op.stroke);
-                    }
                     break;
                 }
                 case Op::Kind::Shape:
@@ -18965,6 +19052,30 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
 
+    // Logo identities in every style: the logo and badge sizes, then the badge's offsets. Bars
+    // need an identity position.
+    auto logoCards = [&](float top, bool placed) {
+        auto slider = [&](float at, PCWSTR title, PCWSTR description, SettingsField field) {
+            UiCardSpec spec;
+            spec.title = title;
+            spec.description = {{description}};
+            spec.enabled = placed;
+            if (!placed) spec.reason = L"Choose an identity position to change this.";
+            return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
+        };
+        top = slider(top, L"Logo size", L"Percent of the standard size; rings keep it inside the hole.",
+                     SettingsField::LogoScale);
+        top = slider(top + 3, L"Badge size",
+                     L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+                     SettingsField::BadgeSize);
+        top = slider(top + 3, L"Badge horizontal offset",
+                     L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
+                     L"hole on rings).",
+                     SettingsField::BadgeOffsetX);
+        return slider(top + 3, L"Badge vertical offset", L"Pixels down, or up when negative.",
+                      SettingsField::BadgeOffsetY);
+    };
+
     if (bars) {
         y = UiAddSection(items, id, x, y + 20, width, L"Bars");
         {
@@ -18995,8 +19106,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
 
         // Identity and text: the link to each account's identity, where it sits; the Label form's
-        // size and the gap need a position. Then quota keys, and the bar text size for them or
-        // percentage text.
+        // size, the gap and the logo cards need a position. Then quota keys, and the bar text size
+        // for them or percentage text.
         y = UiAddSection(items, id, x, y + 20, width, L"Identity and text");
         bool placed = s.labelPosition != LabelPosition::Hidden;
         y = identityCard(y);
@@ -19028,6 +19139,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             if (!placed) spec.reason = L"Choose an identity position to change this.";
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, L"px");
         }
+        y = logoCards(y + 3, placed);
         {
             UiCardSpec spec;
             spec.title = L"Quota keys";
@@ -19058,15 +19170,17 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                  L"around the logo or text."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
-        y = identityCard(y + 3);
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
     } else {
-        // Headline tiles have no size settings.
+        // Headline tiles have no meter size settings.
         y = UiAddSection(items, id, x, y + 20, width, L"Tile");
         y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
                          {{std::wstring(kSettingsTileStyles[int(layout)]) +
                            L" tiles have a fixed size that follows the taskbar\u2019s height. Bar sizes and "
                            L"the identity position apply to Stacked and Vertical bars."}});
-        y = identityCard(y + 3);
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
     }
 
     // Pace markers: none on headline tiles; the marker style is the bars'. Style and color

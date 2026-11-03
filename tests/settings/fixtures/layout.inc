@@ -38,6 +38,10 @@ static double CapHeight(double size) { return size * 1434 / 2048.0; }
 // DIP positions built from DirectWrite's float metrics.
 static bool NearDip(double actual, double expected) { return std::abs(actual - expected) < 1e-3; }
 
+// The default number badge's overhang past a logo's lower-right corner, which it centres on: one
+// character at 9 DIPs makes a 0.6 * 9 + 2 = 7.4 by 0.7 * 9 + 2 = 8.3 DIP box, outline included.
+static constexpr double kBadgeRight = 3.7, kBadgeBelow = 4.15;
+
 static std::vector<SettingsPreviewOp> OpsOfKind(const SettingsPreviewStrip& strip, SettingsPreviewOp::Kind kind) {
     std::vector<SettingsPreviewOp> ops;
     for (const SettingsPreviewOp& op : strip.ops) {
@@ -120,6 +124,8 @@ static void RunLayoutTests() {
             {SettingsField::BarLayout, 3},     {SettingsField::BarStyle, 1},
             {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
+            {SettingsField::LogoScale, 150},   {SettingsField::BadgeSize, 12},
+            {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
             {SettingsField::LabelPosition, 2}, {SettingsField::LabelFontSize, 14}, {SettingsField::LabelGap, 7},
             {SettingsField::ShowBarLabels, 1}, {SettingsField::PercentFontSize, 10}, {SettingsField::ShowPaceTicks, 0},
             {SettingsField::PaceTickStyle, 2}, {SettingsField::PaceTickColor, 0x123456},
@@ -139,6 +145,9 @@ static void RunLayoutTests() {
             {SettingsField::BarLayout, 9, 4},         {SettingsField::BarLayout, -1, 0},
             {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 3},
             {SettingsField::BarStyle, 5, 1},          {SettingsField::BarStyle, -1, 0},
+            {SettingsField::LogoScale, 10, 50},       {SettingsField::LogoScale, 999, 200},
+            {SettingsField::BadgeSize, 1, 6},         {SettingsField::BadgeSize, 99, 16},
+            {SettingsField::BadgeOffsetX, -50, -20},  {SettingsField::BadgeOffsetY, 50, 20},
             {SettingsField::PaceTickColor, 0x12345678, 0x345678}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
@@ -146,7 +155,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the seventeen Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the twenty-one Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -155,6 +164,10 @@ static void RunLayoutTests() {
         changed.barGap = 6;
         changed.ringSize = 38;
         changed.ringThickness = 5;
+        changed.logoScale = 150;
+        changed.badgeSize = 12;
+        changed.badgeOffsetX = -5;
+        changed.badgeOffsetY = 7;
         changed.labelPosition = LabelPosition::Bottom;
         changed.labelFontSize = 15;
         changed.labelGap = 9;
@@ -184,6 +197,10 @@ static void RunLayoutTests() {
         expected.barGap = defaults.barGap;
         expected.ringSize = defaults.ringSize;
         expected.ringThickness = defaults.ringThickness;
+        expected.logoScale = defaults.logoScale;
+        expected.badgeSize = defaults.badgeSize;
+        expected.badgeOffsetX = defaults.badgeOffsetX;
+        expected.badgeOffsetY = defaults.badgeOffsetY;
         expected.labelPosition = defaults.labelPosition;
         expected.labelFontSize = defaults.labelFontSize;
         expected.labelGap = defaults.labelGap;
@@ -197,7 +214,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 17);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 21);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -376,8 +393,9 @@ static void RunLayoutTests() {
                 }
                 const float padding = float(std::min(margin, 7)), outside = float(margin) - padding;
                 CHECK_NEAR(strip.columns[0].left, outside);
-                for (size_t i = 1; i < 4; i++) CHECK_NEAR(strip.columns[i].left - strip.columns[i - 1].right, 2 * outside);
-                CHECK_NEAR(strip.width, strip.columns[3].right + outside);
+                // Badged columns are fractional DIPs wide: positions sum in floats.
+                for (size_t i = 1; i < 4; i++) CHECK(NearDip(strip.columns[i].left - strip.columns[i - 1].right, 2 * outside));
+                CHECK(NearDip(strip.width, strip.columns[3].right + outside));
                 // The bars alone: the padding around them; the first track that far into its box.
                 s.labelPosition = LabelPosition::Hidden;
                 strip = Strip(s);
@@ -414,16 +432,16 @@ static void RunLayoutTests() {
         CHECK_NEAR(strip.columns[0].top, 4); CHECK_NEAR(strip.columns[0].bottom, 44);
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.top, 8);
 
-        // The gallery's Anthropic pair: their logos badged "1" and "2", the bars after the badge's
-        // 19 DIP box and the 3 DIP gap; no label.
+        // The gallery's Anthropic pair: their logos badged "1" and "2" (each the number over eight
+        // halo copies), the bars after the logo, the badge's overhang and the 3 DIP gap; no label.
         s = {};
         strip = Strip(s, 48, true);
         std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
-        CHECK(logos.size() == 2 && OpsOfColor(strip, TilePaletteFor(false).badge).size() == 2 &&
+        CHECK(logos.size() == 2 && OpsOfColor(strip, TilePaletteFor(false).badgeHalo).size() == 16 &&
               OpsOfColor(strip, hover).size() == 2);
-        CHECK(TextOps(strip, L"1").size() == 1 && TextOps(strip, L"2").size() == 1 && TextOps(strip, L"CC 1").empty());
+        CHECK(TextOps(strip, L"1").size() == 9 && TextOps(strip, L"2").size() == 9 && TextOps(strip, L"CC 1").empty());
         CHECK_NEAR(logos[0].rect.left, strip.columns[0].left + 3);
-        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, strip.columns[0].left + 3 + 19 + 3);
+        CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.left, strip.columns[0].left + 3 + 15 + kBadgeRight + 3));
     });
 
     Run("preview: each identity form at every identity position in Stacked; the badge counts in its box", [] {
@@ -437,7 +455,6 @@ static void RunLayoutTests() {
         accounts[1].tileText = L"AB";
         accounts[2].tileIdentity = TileIdentity::Logo;
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
-        const uint32_t badgeColor = TilePaletteFor(false).badge;
         for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
                                        LabelPosition::Bottom, LabelPosition::Hidden}) {
             // The box's full 7 DIP padding, 3 DIPs outside it.
@@ -448,7 +465,7 @@ static void RunLayoutTests() {
             CHECK(strip.columns.size() == 3);
             const D2D1_RECT_F cc1 = strip.columns[0], cc2 = strip.columns[1], oai = strip.columns[2];
             std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
-            std::vector<SettingsPreviewOp> badges = OpsOfColor(strip, badgeColor);
+            std::vector<SettingsPreviewOp> badges = TextOps(strip, L"1");
             std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
             std::vector<SettingsPreviewOp> labels = TextOps(strip, L"CC 2");
             CHECK(tracks.size() == 6);
@@ -468,11 +485,21 @@ static void RunLayoutTests() {
             CHECK_NEAR(logos[0].rect.right - logos[0].rect.left, 15);
             CHECK_NEAR(logos[1].rect.bottom - logos[1].rect.top, 15);
             CHECK_NEAR(logos[0].opacity, 1);
-            // The badge: a 10 DIP pill on the logo's lower-right corner, 4 DIPs past it.
-            CHECK(badges.size() == 1 && TextOps(strip, L"1").size() == 1);
-            CHECK_NEAR(badges[0].rect.right, logos[0].rect.right + 4);
-            CHECK_NEAR(badges[0].rect.bottom, logos[0].rect.bottom + 4);
-            CHECK_NEAR(badges[0].rect.bottom - badges[0].rect.top, 10);
+            // The badge: "1" in bold at 9 DIPs in the taskbar's text color, its cap height centred
+            // on the logo's lower-right corner, over eight copies in the halo color a DIP around
+            // it (Segoe UI Variable's cap height over its line, as for the label).
+            CHECK(badges.size() == 9);
+            const SettingsPreviewOp& number = badges[8];
+            CHECK(number.color == 0xFFFFFFFF && number.style.size == 9 && number.style.family == UiFamily::Small &&
+                  number.style.weight == DWRITE_FONT_WEIGHT_BOLD && number.align == DWRITE_TEXT_ALIGNMENT_CENTER);
+            CHECK(NearDip((number.rect.left + number.rect.right) / 2, logos[0].rect.right));
+            CHECK(NearDip(number.rect.top + AboveCap(9) + CapHeight(9) / 2, logos[0].rect.bottom));
+            for (size_t k = 0; k < 8; k++) {
+                CHECK(badges[k].color == TilePaletteFor(false).badgeHalo && badges[k].style.size == 9);
+                const double dx = badges[k].rect.left - number.rect.left, dy = badges[k].rect.top - number.rect.top;
+                CHECK(NearDip(std::hypot(dx, dy), 1));
+            }
+            CHECK(NearDip(badges[0].rect.left - number.rect.left, 1) && NearDip(badges[2].rect.top - number.rect.top, 1));
             // The label in the label font at 0.8.
             CHECK(labels.size() == 1 && labels[0].style.size == 11 && labels[0].style.family == UiFamily::Taskbar);
             CHECK_NEAR(labels[0].opacity, 0.8);
@@ -480,11 +507,12 @@ static void RunLayoutTests() {
             const float labelWidth = label.rect.right - label.rect.left;
             switch (position) {
                 case LabelPosition::Left:
-                    // CC 1: its 19 DIP box (logo and badge) 7 DIPs into the 40 DIP box, centred across
-                    // the 20 DIP bars (y 14 to 34), then the 3 DIP gap from the badge.
+                    // CC 1: its box (logo and badge, 18.7 x 19.15 DIPs) 7 DIPs into the 40 DIP box,
+                    // centred across the 20 DIP bars (y 14 to 34), then the 3 DIP gap from the badge.
                     CHECK_NEAR(cc1.top, 4); CHECK_NEAR(cc1.bottom, 44);
-                    CHECK_NEAR(logos[0].rect.left, 10); CHECK_NEAR(logos[0].rect.top, 14.5);
-                    CHECK_NEAR(tracks[0].rect.left, badges[0].rect.right + 3); CHECK_NEAR(tracks[0].rect.left, 32);
+                    CHECK_NEAR(logos[0].rect.left, 10); CHECK(NearDip(logos[0].rect.top, 14 + (20 - 15 - kBadgeBelow) / 2));
+                    CHECK(NearDip(tracks[0].rect.left, logos[0].rect.right + kBadgeRight + 3));
+                    CHECK(NearDip(tracks[0].rect.left, 31.7));
                     CHECK_NEAR(tracks[0].rect.top, 15);
                     CHECK_NEAR(cc1.right, tracks[0].rect.right + 7);
                     // CC 2's label as ever: 7 DIPs in, the gap, the bars.
@@ -498,8 +526,9 @@ static void RunLayoutTests() {
                     break;
                 case LabelPosition::Right:
                     CHECK_NEAR(tracks[0].rect.left, 10);
-                    CHECK_NEAR(logos[0].rect.left, tracks[0].rect.right + 3); CHECK_NEAR(logos[0].rect.top, 14.5);
-                    CHECK_NEAR(cc1.right, badges[0].rect.right + 7);
+                    CHECK_NEAR(logos[0].rect.left, tracks[0].rect.right + 3);
+                    CHECK(NearDip(logos[0].rect.top, 14 + (20 - 15 - kBadgeBelow) / 2));
+                    CHECK(NearDip(cc1.right, logos[0].rect.right + kBadgeRight + 7));
                     CHECK_NEAR(label.rect.left, tracks[2].rect.right + 3);
                     CHECK_NEAR(cc2.right, label.rect.right + 7);
                     CHECK_NEAR(logos[1].rect.left, tracks[4].rect.right + 3);
@@ -508,20 +537,22 @@ static void RunLayoutTests() {
                 case LabelPosition::Top: {
                     // Centred over the bars, a logo's box padded like the label's line: its space
                     // over the cap height above, under the baseline below, then the gap to the bars'
-                    // panel (a DIP above the first track). CC 1: 19 + 4.17 + 2.76 + 3 + 20 DIPs grow
-                    // its column, centred on the strip.
+                    // panel (a DIP above the first track). CC 1: 19.15 + 4.17 + 2.76 + 3 + 20 DIPs
+                    // grow its column, centred on the strip.
                     const double a = AboveCap(11), b = BelowBaseline(11);
-                    CHECK(NearDip(cc1.bottom - cc1.top, 19 + a + b + 3 + 20) && NearDip(cc1.top + cc1.bottom, 48));
+                    const double badgeBottom = logos[0].rect.bottom + kBadgeBelow;
+                    CHECK(NearDip(cc1.bottom - cc1.top, 15 + kBadgeBelow + a + b + 3 + 20) &&
+                          NearDip(cc1.top + cc1.bottom, 48));
                     CHECK(NearDip(logos[0].rect.top, cc1.top + a));
-                    CHECK_NEAR(logos[0].rect.left, 10 + (100 - 19) / 2.0);
-                    CHECK(NearDip(tracks[0].rect.top - 1 - badges[0].rect.bottom, 3 + b));
+                    CHECK(NearDip(logos[0].rect.left, 10 + (100 - 15 - kBadgeRight) / 2));
+                    CHECK(NearDip(tracks[0].rect.top - 1 - badgeBottom, 3 + b));
                     CHECK_NEAR(tracks[0].rect.left, 10); CHECK_NEAR(cc1.right, 10 + 100 + 7);
                     // CC 2's label as ever, its line box a + cap + b; the bars as far from its
                     // baseline as from CC 1's badge.
                     CHECK_NEAR(label.rect.left, cc2.left + 7 + (100 - labelWidth) / 2);
                     CHECK_NEAR(tracks[2].rect.top - 1, label.rect.bottom + 3);
                     CHECK(NearDip(label.rect.bottom - label.rect.top, a + CapHeight(11) + b));
-                    CHECK(NearDip(tracks[2].rect.top - (label.rect.bottom - b), tracks[0].rect.top - badges[0].rect.bottom));
+                    CHECK(NearDip(tracks[2].rect.top - (label.rect.bottom - b), tracks[0].rect.top - badgeBottom));
                     // OAI: 15 + 4.17 + 2.76 + 3 + 20 DIPs.
                     CHECK(NearDip(oai.bottom - oai.top, 15 + a + b + 3 + 20));
                     CHECK(NearDip(logos[1].rect.top, oai.top + a));
@@ -535,8 +566,8 @@ static void RunLayoutTests() {
                     const double a = AboveCap(11), b = BelowBaseline(11);
                     CHECK(NearDip(tracks[0].rect.top - 1, cc1.top));
                     CHECK(NearDip(logos[0].rect.top - (tracks[1].rect.bottom + 1), 3 + a));
-                    CHECK(NearDip(cc1.bottom - badges[0].rect.bottom, b));
-                    CHECK_NEAR(logos[0].rect.left, 10 + (100 - 19) / 2.0);
+                    CHECK(NearDip(cc1.bottom - (logos[0].rect.bottom + kBadgeBelow), b));
+                    CHECK(NearDip(logos[0].rect.left, 10 + (100 - 15 - kBadgeRight) / 2));
                     // CC 2's label as ever; the bars as far from its cap height as from CC 1's logo.
                     CHECK_NEAR(label.rect.top, tracks[3].rect.bottom + 1 + 3);
                     CHECK(NearDip(label.rect.top + a - tracks[3].rect.bottom, logos[0].rect.top - tracks[1].rect.bottom));
@@ -556,18 +587,20 @@ static void RunLayoutTests() {
         s.labelGap = 0;
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
         std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
-        CHECK_NEAR(tracks[0].rect.left, OpsOfColor(strip, badgeColor)[0].rect.right);
-        CHECK_NEAR(tracks[4].rect.left, OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[1].rect.right);
+        std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
+        CHECK(NearDip(tracks[0].rect.left, logos[0].rect.right + kBadgeRight));
+        CHECK_NEAR(tracks[4].rect.left, logos[1].rect.right);
         s.labelPosition = LabelPosition::Top;
         strip = StripOf(s, accounts, data);
-        CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.top - 1 - OpsOfColor(strip, badgeColor)[0].rect.bottom,
+        CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.top - 1 -
+                          (OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.bottom + kBadgeBelow),
                       BelowBaseline(11)));
         // A wider gap moves every form's bars alike.
         s = {};
         s.labelGap = 9;
         strip = StripOf(s, accounts, data);
         tracks = OpsOfColor(strip, 0x46808080);
-        CHECK_NEAR(tracks[0].rect.left, OpsOfColor(strip, badgeColor)[0].rect.right + 9);
+        CHECK(NearDip(tracks[0].rect.left, OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.right + kBadgeRight + 9));
         CHECK_NEAR(tracks[2].rect.left, TextOps(strip, L"CC 2")[0].rect.right + 9);
         // Tiles show the Label form's short text instead.
         s = {};
@@ -584,7 +617,6 @@ static void RunLayoutTests() {
         accounts[1].tileIdentity = TileIdentity::Text;
         accounts[2].tileIdentity = TileIdentity::Logo;
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
-        const uint32_t badgeColor = TilePaletteFor(false).badge;
         Settings s;
         s.accountMargin = 10;  // The box's full 7 DIP padding, 3 DIPs outside it.
         s.barLayout = BarLayout::Vertical;
@@ -593,37 +625,36 @@ static void RunLayoutTests() {
             return (a.rect.left + b.rect.right) / 2;
         };
 
-        // Left: CC 1's 19 DIP box, the gap, the bars, inside the 40 DIP box (bars y 8 to 40).
+        // Left: CC 1's 18.7 x 19.15 DIP box, the gap, the bars, inside the 40 DIP box (bars y 8 to
+        // 40).
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
         std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
-        SettingsPreviewOp badge = OpsOfColor(strip, badgeColor)[0];
         SettingsPreviewOp label = TextOps(strip, L"CC 2")[0];
         D2D1_RECT_F cc1 = strip.columns[0];
         CHECK_NEAR(cc1.top, 4); CHECK_NEAR(cc1.bottom, 44);
-        CHECK_NEAR(logos[0].rect.left, 10); CHECK_NEAR(logos[0].rect.top, 14.5);
-        CHECK_NEAR(tracks[0].rect.left, badge.rect.right + 3); CHECK_NEAR(tracks[0].rect.top, 8);
+        CHECK_NEAR(logos[0].rect.left, 10); CHECK(NearDip(logos[0].rect.top, 8 + (32 - 15 - kBadgeBelow) / 2));
+        CHECK(NearDip(tracks[0].rect.left, logos[0].rect.right + kBadgeRight + 3)); CHECK_NEAR(tracks[0].rect.top, 8);
         CHECK_NEAR(tracks[1].rect.left, tracks[0].rect.right + 2);
         CHECK_NEAR(cc1.right, tracks[1].rect.right + 7);
         CHECK_NEAR(tracks[2].rect.left, label.rect.right + 3);
         CHECK_NEAR(tracks[4].rect.left, logos[1].rect.right + 3);
 
         // Top: centred over the bars and the bars under them, whichever is wider; a logo's box
-        // padded like the label's line. CC 1: 19 + 4.17 + 2.76 + 3 + 32 DIPs grow its column,
+        // padded like the label's line. CC 1: 19.15 + 4.17 + 2.76 + 3 + 32 DIPs grow its column,
         // centred on the strip.
         const double a = AboveCap(11), b = BelowBaseline(11);
         s.labelPosition = LabelPosition::Top;
         strip = StripOf(s, accounts, data);
         logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         tracks = OpsOfColor(strip, 0x46808080);
-        badge = OpsOfColor(strip, badgeColor)[0];
         label = TextOps(strip, L"CC 2")[0];
         cc1 = strip.columns[0];
-        CHECK(NearDip(cc1.bottom - cc1.top, 19 + a + b + 3 + 32) && NearDip(cc1.top + cc1.bottom, 48));
-        CHECK_NEAR(cc1.right - cc1.left, 7 + 19 + 7);
+        CHECK(NearDip(cc1.bottom - cc1.top, 15 + kBadgeBelow + a + b + 3 + 32) && NearDip(cc1.top + cc1.bottom, 48));
+        CHECK(NearDip(cc1.right - cc1.left, 7 + 15 + kBadgeRight + 7));
         CHECK_NEAR(logos[0].rect.left, 10); CHECK(NearDip(logos[0].rect.top, cc1.top + a));
-        CHECK(NearDip(tracks[0].rect.top - badge.rect.bottom, 3 + b));
-        CHECK_NEAR(tracks[0].rect.left, 10.5);
+        CHECK(NearDip(tracks[0].rect.top - (logos[0].rect.bottom + kBadgeBelow), 3 + b));
+        CHECK(NearDip(tracks[0].rect.left, 10 + (15 + kBadgeRight - 18) / 2));
         CHECK_NEAR(center(tracks[2], tracks[3]), (label.rect.left + label.rect.right) / 2);
         CHECK_NEAR(tracks[2].rect.top, label.rect.bottom + 3);
         CHECK_NEAR(center(tracks[4], tracks[5]), (logos[1].rect.left + logos[1].rect.right) / 2);
@@ -637,7 +668,7 @@ static void RunLayoutTests() {
         logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         tracks = OpsOfColor(strip, 0x46808080);
         CHECK(NearDip(logos[0].rect.top - tracks[0].rect.bottom, 3 + a));
-        CHECK(NearDip(strip.columns[0].bottom - OpsOfColor(strip, badgeColor)[0].rect.bottom, b));
+        CHECK(NearDip(strip.columns[0].bottom - (logos[0].rect.bottom + kBadgeBelow), b));
         CHECK_NEAR(TextOps(strip, L"CC 2")[0].rect.top, tracks[2].rect.bottom + 3);
         CHECK(NearDip(logos[1].rect.top - tracks[4].rect.bottom, 3 + a));
 
@@ -647,7 +678,7 @@ static void RunLayoutTests() {
         logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         tracks = OpsOfColor(strip, 0x46808080);
         CHECK_NEAR(logos[0].rect.left, tracks[1].rect.right + 3);
-        CHECK_NEAR(strip.columns[0].right, OpsOfColor(strip, badgeColor)[0].rect.right + 7);
+        CHECK(NearDip(strip.columns[0].right, logos[0].rect.right + kBadgeRight + 7));
         s.labelPosition = LabelPosition::Hidden;
         strip = StripOf(s, accounts, data);
         CHECK(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo).empty() && TextOps(strip, L"CC 2").empty());
@@ -666,7 +697,6 @@ static void RunLayoutTests() {
             d.stale = true;
             d.error = L"timeout";
         }
-        const uint32_t badgeColor = TilePaletteFor(false).badge;
 
         // Stale with an error: "!" on each logo's top-right corner, 4 DIPs past it, dimmed with it;
         // the label ends in "!" instead.
@@ -682,10 +712,10 @@ static void RunLayoutTests() {
             CHECK_NEAR(marks[m].opacity, 0.45); CHECK_NEAR(logos[m].opacity, 0.45);
             CHECK(marks[m].style.size == 10 && marks[m].style.weight == DWRITE_FONT_WEIGHT_BOLD);
         }
-        CHECK_NEAR(OpsOfColor(strip, badgeColor)[0].opacity, 0.45);
-        // The mark counts in the box while shown: 4 DIPs right (the badge's own), 3 above. CC 1:
-        // 19 x 22 DIPs, centred across the 40 DIP box (y 13 to 35), its bars centred on it.
-        CHECK_NEAR(logos[0].rect.top, 13 + 3);
+        for (const SettingsPreviewOp& badge : TextOps(strip, L"1")) CHECK_NEAR(badge.opacity, 0.45);
+        // The mark counts in the box while shown: 4 DIPs right (past the badge's 3.7), 3 above.
+        // CC 1: 19 x 22.15 DIPs, centred across the 40 DIP box, its bars centred on it.
+        CHECK(NearDip(logos[0].rect.top, 4 + (40 - 3 - 15 - kBadgeBelow) / 2 + 3));
         CHECK_NEAR(tracks[0].rect.left, logos[0].rect.right + 4 + 3); CHECK_NEAR(tracks[0].rect.top, 15);
         // OAI: 19 x 18, within its bars' 20 (y 14 to 34): the gap from the mark.
         CHECK_NEAR(logos[1].rect.top, 15 + 3);
@@ -724,13 +754,13 @@ static void RunLayoutTests() {
                 CHECK(OpsOfColor(strip, 0x46808080).empty());
                 logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
                 const SettingsPreviewOp label = TextOps(strip, L"CC 2")[0];
-                CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + 19 + 7);
+                CHECK(NearDip(strip.columns[0].right - strip.columns[0].left, 7 + 15 + kBadgeRight + 7));
                 CHECK_NEAR(strip.columns[1].right - strip.columns[1].left, 7 + label.rect.right - label.rect.left + 7);
                 CHECK_NEAR(strip.columns[2].right - strip.columns[2].left, 7 + 15 + 7);
                 CHECK_NEAR(logos[0].rect.left, strip.columns[0].left + 7);
                 const bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
                 const double a = across ? AboveCap(11) : 0, b = across ? BelowBaseline(11) : 0;
-                CHECK(NearDip(logos[0].rect.top, 4 + (40 - 19 - a - b) / 2 + a));
+                CHECK(NearDip(logos[0].rect.top, 4 + (40 - 15 - kBadgeBelow - a - b) / 2 + a));
                 CHECK(NearDip(logos[1].rect.top, 4 + (40 - 15 - a - b) / 2 + a));
                 for (const D2D1_RECT_F& box : strip.columns) {
                     CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
@@ -751,7 +781,6 @@ static void RunLayoutTests() {
                                                Account(L"openai", L"OAI", {true, true, false, false})};
         accounts[1].tileIdentity = TileIdentity::Text;
         accounts[2].tileIdentity = TileIdentity::Logo;
-        const uint32_t badgeColor = TilePaletteFor(false).badge;
         for (int size : {11, 15}) {
             const double a = AboveCap(size), b = BelowBaseline(size);
             for (bool stale : {false, true}) {
@@ -768,7 +797,7 @@ static void RunLayoutTests() {
                     SettingsPreviewStrip strip = StripOf(s, accounts, data);
                     std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
                     std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
-                    const SettingsPreviewOp badge = OpsOfColor(strip, badgeColor)[0];
+                    const double badgeBottom = logos[0].rect.bottom + kBadgeBelow;
                     const SettingsPreviewOp label = TextOps(strip, stale ? L"CC 2!" : L"CC 2")[0];
                     CHECK(logos.size() == 2 && tracks.size() == 6 && TextOps(strip, L"!").size() == (stale ? 2u : 0u));
                     // The label's line box: the space over the cap height, the cap height, the space
@@ -780,7 +809,7 @@ static void RunLayoutTests() {
                         // The bars' panel starts gap + b under the visible bottom: the badge's, the
                         // logo's, the label's baseline. Over the visible top (the mark, else the
                         // logo) the space over the cap height.
-                        CHECK(NearDip(tracks[0].rect.top - 1 - badge.rect.bottom, 3 + b));
+                        CHECK(NearDip(tracks[0].rect.top - 1 - badgeBottom, 3 + b));
                         CHECK(NearDip(tracks[4].rect.top - 1 - logos[1].rect.bottom, 3 + b));
                         CHECK(NearDip(tracks[2].rect.top - 1 - (label.rect.bottom - b), 3 + b));
                         CHECK(NearDip(logos[0].rect.top - mark - strip.columns[0].top, a));
@@ -791,19 +820,109 @@ static void RunLayoutTests() {
                         CHECK(NearDip(logos[0].rect.top - mark - (tracks[1].rect.bottom + 1), 3 + a));
                         CHECK(NearDip(logos[1].rect.top - mark - (tracks[5].rect.bottom + 1), 3 + a));
                         CHECK(NearDip(label.rect.top + a - (tracks[3].rect.bottom + 1), 3 + a));
-                        CHECK(NearDip(strip.columns[0].bottom - badge.rect.bottom, b));
+                        CHECK(NearDip(strip.columns[0].bottom - badgeBottom, b));
                         CHECK(NearDip(strip.columns[2].bottom - logos[1].rect.bottom, b));
                     }
                 }
             }
         }
-        // Beside the bars nothing changes with the label size: CC 1's box is 19 DIPs, centred.
+        // Beside the bars nothing changes with the label size: CC 1's box is 19.15 DIPs tall,
+        // centred.
         Settings s;
         s.labelFontSize = 15;
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
-        CHECK_NEAR(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.top, 14.5);
-        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, OpsOfColor(strip, badgeColor)[0].rect.right + 3);
+        const SettingsPreviewOp logo = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0];
+        CHECK(NearDip(logo.rect.top, 14 + (20 - 15 - kBadgeBelow) / 2));
+        CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.left, logo.rect.right + kBadgeRight + 3));
+    });
+
+    Run("preview: the logo size in every style; the badge's size and offsets", [] {
+        // CC 1: its logo badged "1"; CC 2: its label; OAI: its logo alone; two bars each.
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC 1", {true, true, false, false}),
+                                               Account(L"anthropic", L"CC 2", {true, true, false, false}),
+                                               Account(L"openai", L"OAI", {true, true, false, false})};
+        accounts[1].tileIdentity = TileIdentity::Text;
+        accounts[2].tileIdentity = TileIdentity::Logo;
+        std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
+        auto logos = [](const SettingsPreviewStrip& strip) { return OpsOfKind(strip, SettingsPreviewOp::Kind::Logo); };
+        // The number's centre: across, and down its cap height.
+        auto numberX = [](const SettingsPreviewOp& op) { return (op.rect.left + op.rect.right) / 2; };
+        auto numberY = [](const SettingsPreviewOp& op) { return op.rect.top + AboveCap(op.style.size) + CapHeight(op.style.size) / 2; };
+
+        // Beside bars: 15 DIP logos at 100%, 7.5 at 50%, 30 at 200%; the badge stays on the
+        // corner, the bars after its overhang.
+        for (auto [percent, side] : {std::pair{50, 7.5}, std::pair{100, 15.0}, std::pair{200, 30.0}}) {
+            Settings s;
+            s.logoScale = percent;
+            SettingsPreviewStrip strip = StripOf(s, accounts, data);
+            std::vector<SettingsPreviewOp> logo = logos(strip);
+            std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
+            CHECK(NearDip(logo[0].rect.right - logo[0].rect.left, side) && NearDip(logo[1].rect.bottom - logo[1].rect.top, side));
+            const SettingsPreviewOp number = TextOps(strip, L"1")[8];
+            CHECK(NearDip(numberX(number), logo[0].rect.right) && NearDip(numberY(number), logo[0].rect.bottom));
+            CHECK(NearDip(tracks[0].rect.left, logo[0].rect.right + kBadgeRight + 3));
+            CHECK(NearDip(tracks[4].rect.left, logo[1].rect.right + 3));
+        }
+
+        // The badge size: the number at 14 DIPs, its box 0.6 * 14 + 2 = 10.4 DIPs wide.
+        Settings s;
+        s.badgeSize = 14;
+        SettingsPreviewStrip strip = StripOf(s, accounts, data);
+        std::vector<SettingsPreviewOp> logo = logos(strip);
+        SettingsPreviewOp number = TextOps(strip, L"1")[8];
+        CHECK(number.style.size == 14 && TextOps(strip, L"1")[0].style.size == 14);
+        CHECK(NearDip(numberX(number), logo[0].rect.right));
+        CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.left, logo[0].rect.right + 5.2 + 3));
+
+        // 6 left and 5 up: the box (5.3 to 12.7 across, 5.85 to 14.15 down) stays within the logo,
+        // so the logo's box is a plain logo's.
+        s = {};
+        s.badgeOffsetX = -6;
+        s.badgeOffsetY = -5;
+        strip = StripOf(s, accounts, data);
+        logo = logos(strip);
+        number = TextOps(strip, L"1")[8];
+        CHECK(NearDip(numberX(number), logo[0].rect.right - 6) && NearDip(numberY(number), logo[0].rect.bottom - 5));
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, logo[0].rect.right + 3);
+        CHECK_NEAR(logo[0].rect.top, 16.5);
+        // 20 left: 8.7 DIPs past the logo's left edge, which the box takes.
+        s.badgeOffsetX = -20;
+        strip = StripOf(s, accounts, data);
+        CHECK(NearDip(logos(strip)[0].rect.left, strip.columns[0].left + 3 + 20 + kBadgeRight - 15));
+
+        // Headline tiles: 16 DIP logos at 100%, 24 at 150%, badged on the corner.
+        s = {};
+        s.barLayout = BarLayout::LogoHeadline;
+        s.logoScale = 150;
+        strip = StripOf(s, accounts, data);
+        logo = logos(strip);
+        number = TextOps(strip, L"1")[8];
+        CHECK(NearDip(logo[0].rect.right - logo[0].rect.left, 24) && NearDip(logo[1].rect.right - logo[1].rect.left, 24));
+        CHECK(NearDip(numberX(number), logo[0].rect.right) && NearDip(numberY(number), logo[0].rect.bottom));
+
+        // Rings: 0.44 of the 32 DIP ring at 100%, scaled, centred; at most 1.2 DIPs inside the
+        // 12.5 DIP hole. The badge on the diagonal, its box's far corner half a DIP inside the hole.
+        s.barLayout = BarLayout::SegmentedRing;
+        strip = StripOf(s, accounts, data);
+        logo = logos(strip);
+        number = TextOps(strip, L"1")[8];
+        CHECK(NearDip(logo[0].rect.right - logo[0].rect.left, 0.44 * 32 * 1.5));
+        const double cx = (logo[0].rect.left + logo[0].rect.right) / 2, cy = (logo[0].rect.top + logo[0].rect.bottom) / 2;
+        CHECK(NearDip(cx, strip.columns[0].left + 3 + 16));
+        const double along = numberX(number) - cx;
+        CHECK(along > 0 && NearDip(numberY(number) - cy, along));
+        CHECK(NearDip(std::hypot(along + kBadgeRight, along + kBadgeBelow), 12));
+        // Offsets move it from there.
+        s.badgeOffsetX = 2;
+        s.badgeOffsetY = -3;
+        number = TextOps(StripOf(s, accounts, data), L"1")[8];
+        CHECK(NearDip(numberX(number) - cx, along + 2) && NearDip(numberY(number) - cy, along - 3));
+        s = {};
+        s.barLayout = BarLayout::SegmentedRing;
+        s.logoScale = 200;
+        logo = logos(StripOf(s, accounts, data));
+        CHECK(NearDip(logo[0].rect.right - logo[0].rect.left, 22.6));
     });
 
     Run("preview: pace marks per layout; none on headline tiles", [] {
@@ -1183,6 +1302,21 @@ static void RunLayoutTests() {
         CHECK(position.rect.bottom < Control(frame, SettingsField::LabelFontSize, 1).rect.top &&
               Control(frame, SettingsField::LabelFontSize, 1).rect.bottom < Control(frame, SettingsField::LabelGap).rect.top);
         CHECK(Control(frame, SettingsField::LabelFontSize, 1).enabled);
+        // Then the logo and badge sliders, before Quota keys.
+        const UiItem& logoSize = Control(frame, SettingsField::LogoScale, 1);
+        const UiItem& badgeSize = Control(frame, SettingsField::BadgeSize, 1);
+        const UiItem& badgeX = Control(frame, SettingsField::BadgeOffsetX, 1);
+        const UiItem& badgeY = Control(frame, SettingsField::BadgeOffsetY, 1);
+        CHECK(logoSize.kind == UiItemKind::Slider && logoSize.minimum == 50 && logoSize.maximum == 200 &&
+              logoSize.action.value == 100 && logoSize.enabled && Control(frame, SettingsField::LogoScale).text == L"100");
+        CHECK(badgeSize.minimum == 6 && badgeSize.maximum == 16 && badgeSize.action.value == 9);
+        CHECK(badgeX.minimum == -20 && badgeX.maximum == 20 && badgeX.action.value == 0 && badgeY.minimum == -20 &&
+              badgeY.maximum == 20 && Control(frame, SettingsField::BadgeOffsetY).text == L"0");
+        CHECK(Control(frame, SettingsField::LabelGap).rect.bottom < logoSize.rect.top && logoSize.rect.bottom < badgeSize.rect.top &&
+              badgeSize.rect.bottom < badgeX.rect.top && badgeX.rect.bottom < badgeY.rect.top &&
+              badgeY.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top);
+        CHECK(HasText(frame, L"Logo size") && HasText(frame, L"Badge size") && HasText(frame, L"Badge horizontal offset") &&
+              HasText(frame, L"Badge vertical offset") && HasText(frame, L"Percent of the standard size; rings keep it inside the hole."));
         CHECK(!Control(frame, SettingsField::ShowBarLabels).selected);
         CHECK(Control(frame, SettingsField::PercentFontSize, 1).action.value == 9);
         CHECK(Control(frame, SettingsField::ShowPaceTicks).selected);
@@ -1233,6 +1367,18 @@ static void RunLayoutTests() {
         CHECK(identity.kind == UiItemKind::Card && identity.action.kind == UiActionKind::Navigate &&
               identity.action.value == int(SettingsUiPage::Accounts));
         CHECK(HasText(frame, L"Account identity is set per account in Accounts"));
+        // The Identity section: the identity's card, then the logo and badge sliders, enabled.
+        CHECK(Control(frame, SettingsField::RingThickness, 1).rect.bottom < identity.rect.top &&
+              identity.rect.bottom < Control(frame, SettingsField::LogoScale, 1).rect.top);
+        CHECK(Control(frame, SettingsField::LogoScale, 1).enabled && Control(frame, SettingsField::BadgeOffsetY, 1).enabled &&
+              HasText(frame, L"Identity"));
+        // A negative offset shows signed.
+        view.settings.badgeOffsetX = -5;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::BadgeOffsetX).text == L"-5" &&
+              Control(frame, SettingsField::BadgeOffsetX, 1).action.value == -5);
+        view.settings.badgeOffsetX = 0;
         CHECK(HasText(frame, L"Ticks mark how much") && HasText(frame, L"dark on a light taskbar"));
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::BarStyle)) &&
@@ -1246,6 +1392,8 @@ static void RunLayoutTests() {
         CHECK(HasText(frame, L"Headline % tiles have a fixed size") &&
               HasText(frame, L"Bar sizes and the identity position apply to Stacked and Vertical bars."));
         CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate);
+        CHECK(Control(frame, SettingsField::BarLayout, 8).rect.bottom < Control(frame, SettingsField::LogoScale, 1).rect.top &&
+              Control(frame, SettingsField::BadgeSize, 1).enabled);
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::ShowPaceTicks)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickColor, 1)) && !HasText(frame, L"Pace markers"));
         CHECK(Control(frame, SettingsField::AccountMargin).kind == UiItemKind::NumberBox);
@@ -1263,6 +1411,8 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::LabelPosition).text == L"Hidden");
         CHECK(!Control(frame, SettingsField::LabelFontSize, 1).enabled && !Control(frame, SettingsField::LabelFontSize).enabled);
         CHECK(!Control(frame, SettingsField::LabelGap).enabled);
+        CHECK(!Control(frame, SettingsField::LogoScale, 1).enabled && !Control(frame, SettingsField::BadgeSize).enabled &&
+              !Control(frame, SettingsField::BadgeOffsetX, 1).enabled && !Control(frame, SettingsField::BadgeOffsetY).enabled);
         CHECK(HasText(frame, L"Choose an identity position to change this.") &&
               !HasText(frame, L"Choose a label position"));
         CHECK(!Control(frame, SettingsField::PercentFontSize, 1).enabled);
