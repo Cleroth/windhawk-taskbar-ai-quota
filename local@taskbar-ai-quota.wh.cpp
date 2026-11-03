@@ -218,9 +218,9 @@ enum class TaskbarMonitorMode {
 enum class BarLayout {
     Stacked,
     Vertical,
+    LogoHeadline,
     SegmentedRing,
     ConcentricRings,
-    LogoHeadline,
 };
 
 // How Stacked and Vertical bars draw behind their fill.
@@ -15560,7 +15560,7 @@ static bool NormalizeSettings(Settings* s) {
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
-    if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::LogoHeadline) {
+    if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::ConcentricRings) {
         s->barLayout = BarLayout::Stacked;
     }
     if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
@@ -16955,7 +16955,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.historyDefaultRange = HistoryUiRange(std::clamp(value, int(HistoryUiRange::Day), int(HistoryUiRange::All)));
             break;
         case SettingsField::BarLayout:
-            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
+            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::ConcentricRings)));
             break;
         case SettingsField::BarStyle:
             s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
@@ -18117,7 +18117,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         data = {data[1], data[2]};
     }
     const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Stacked),
-                                                  int(BarLayout::LogoHeadline)));
+                                                  int(BarLayout::ConcentricRings)));
     const float H = gallery ? 48 : float(std::clamp(taskbarHeight > 0 ? taskbarHeight : 48.0, 24.0, 96.0));
     const float margin = float(std::clamp(settings.accountMargin, 0, 500));
     strip.height = H;
@@ -19253,8 +19253,8 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 // markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bars", L"Segmented ring",
-                                                 L"Concentric rings", L"Headline %"};
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bars", L"Headline %",
+                                                 L"Segmented ring", L"Concentric rings"};
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};

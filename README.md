@@ -50,7 +50,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - record history for this account
   - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
 - **Layout**, with a live preview of the taskbar:
-  - tile style: stacked bars, vertical bars, segmented ring, concentric rings, or headline %; settings the chosen style ignores are hidden or disabled with the reason
+  - tile style: stacked bars, vertical bars, headline %, segmented ring, or concentric rings; settings the chosen style ignores are hidden or disabled with the reason
   - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); ring size and thickness (ring styles); the number size, and the length and thickness of the bars under it, with the same bar gap (headline %)
   - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label font size for label identities, and the identity gap
   - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number badge's size (6 to 20 px, default 13), color, and horizontal and vertical offsets; the badge is an outlined number centered on the logo's lower-right corner (on rings, pulled inside the hole), light blue by default, or a color from the swatches (white follows the taskbar's text color) or **Custom...**, outlined dark or light to contrast with it

@@ -121,7 +121,7 @@ static void RunLayoutTests() {
     Run("layout fields: desired values, ranges and choices clamp", [] {
         Settings s;
         const std::pair<SettingsField, int> values[] = {
-            {SettingsField::BarLayout, 3},     {SettingsField::BarStyle, 1},
+            {SettingsField::BarLayout, 4},     {SettingsField::BarStyle, 1},
             {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
             {SettingsField::HeadlineFontSize, 18}, {SettingsField::HeadlineBarLength, 24},
@@ -1371,7 +1371,7 @@ static void RunLayoutTests() {
         wild.labelPosition = LabelPosition(42);
         wild.barLayout = BarLayout(42);
         for (const Settings& base : {large, wild}) {
-            for (int layout = 0; layout <= int(BarLayout::LogoHeadline); layout++) {
+            for (int layout = 0; layout <= int(BarLayout::ConcentricRings); layout++) {
                 Settings s = base;
                 if (&base == &large || layout) s.barLayout = BarLayout(layout);
                 for (double taskbar : {0.0, 24.0, 48.0, 1e9}) {
@@ -1402,15 +1402,16 @@ static void RunLayoutTests() {
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         // Five gallery cards, three a row: the tile styles in BarLayout order.
-        const PCWSTR styles[] = {L"Stacked bars", L"Vertical bars", L"Segmented ring", L"Concentric rings",
-                                 L"Headline %"};
+        const PCWSTR styles[] = {L"Stacked bars", L"Vertical bars", L"Headline %", L"Segmented ring",
+                                 L"Concentric rings"};
         for (int i = 0; i < 5; i++) {
             const UiItem& card = Control(frame, SettingsField::BarLayout, uint32_t(i));
             CHECK(card.kind == UiItemKind::Gallery && card.selected == (i == 0) && card.action.value == i);
             CHECK(card.text == styles[i]);
         }
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 5)));
-        CHECK(std::size(kSettingsTileStyles) == 5 && int(BarLayout::LogoHeadline) == 4);
+        CHECK(std::size(kSettingsTileStyles) == 5 && int(BarLayout::LogoHeadline) == 2 &&
+              int(BarLayout::ConcentricRings) == 4);
         const UiItem& first = Control(frame, SettingsField::BarLayout, 0);
         const UiItem& fourth = Control(frame, SettingsField::BarLayout, 3);
         const UiItem& fifth = Control(frame, SettingsField::BarLayout, 4);
@@ -1563,12 +1564,12 @@ static void RunLayoutTests() {
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::BarStyle)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickStyle)));
-        CHECK(Control(frame, SettingsField::BarLayout, 3).selected);
+        CHECK(Control(frame, SettingsField::BarLayout, 4).selected);
 
         view.settings.barLayout = BarLayout::LogoHeadline;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        CHECK(Control(frame, SettingsField::BarLayout, 4).selected);
+        CHECK(Control(frame, SettingsField::BarLayout, 2).selected);
         // The Headline section: the number size, its bars' length and thickness, then the bars'
         // gap, before the Identity section.
         const UiItem& number = Control(frame, SettingsField::HeadlineFontSize, 1);

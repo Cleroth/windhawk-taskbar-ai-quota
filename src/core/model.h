@@ -41,9 +41,9 @@ enum class TaskbarMonitorMode {
 enum class BarLayout {
     Stacked,
     Vertical,
+    LogoHeadline,
     SegmentedRing,
     ConcentricRings,
-    LogoHeadline,
 };
 
 // How Stacked and Vertical bars draw behind their fill.

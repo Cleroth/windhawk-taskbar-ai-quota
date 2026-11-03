@@ -446,7 +446,7 @@ static void RunRenders(const std::wstring& directory) {
         auto path = [&](const std::string& name) {
             return directory + L"\\" + std::wstring(name.begin(), name.end());
         };
-        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "ring", "concentric", "headline"};
+        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "headline", "ring", "concentric"};
         for (const RenderTheme& theme : RenderThemes()) {
             for (UINT dpi : {96u, 144u, 192u}) {
                 const std::pair<SettingsUiPage, const char*> pages[] = {
@@ -469,7 +469,7 @@ static void RunRenders(const std::wstring& directory) {
                 }
                 // Layout with each tile style (every DPI for stacked bars and the segmented ring).
                 for (int style = 0; style < int(std::size(kStyleNames)); style++) {
-                    if (dpi != 144 && style != 0 && style != 2) continue;
+                    if (dpi != 144 && style != 0 && style != 3) continue;
                     std::string name = std::string("render-layout-") + kStyleNames[style] + "-" + theme.name +
                                        "-" + std::to_string(dpi) + ".png";
                     Run(name, [&] {
