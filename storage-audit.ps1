@@ -362,7 +362,8 @@ if (-not (& $same $base.consent $latest.consent)) {
 }
 
 # Journal: growth and pruning older than the retention window are tolerated; anything removed inside
-# it (except storage-cap compaction) or added before the baseline's last day is unexpected.
+# it (except storage-cap compaction) or added before the baseline's last day is unexpected. Kept
+# forever in both snapshots, nothing may be pruned or compacted.
 $bj = $base.journal; $cj = $latest.journal
 if ($bj.present -and -not $cj.present) {
     $found.unexpected.Add('History journal disappeared')
@@ -373,11 +374,13 @@ if ($bj.present -and -not $cj.present) {
     if ($cj.lastUtc -and $bj.lastUtc -and [DateTimeOffset]$cj.lastUtc -lt [DateTimeOffset]$bj.lastUtc) {
         $found.unexpected.Add("Newest journal sample went back from $($bj.lastUtc) to $($cj.lastUtc)")
     }
-    $retention = if ($cs.historyRetentionDays) { [int]$cs.historyRetentionDays } else { 90 }
+    # A day count in either snapshot may have pruned; the current one's wins.
+    $limited = @($cs, $bs) | Where-Object { $_ -and $_.historyKeepForever -ne $true } | Select-Object -First 1
+    $retention = if (-not $limited) { 0 } elseif ($limited.historyRetentionDays) { [int]$limited.historyRetentionDays } else { 90 }
     # Day keys are UTC dates; pruning may reach one day past the cutoff's date.
-    $prunable = ([DateTimeOffset]$latest.createdUtc).AddDays(-$retention - 1).UtcDateTime.ToString('yyyy-MM-dd')
+    $prunable = if ($retention) { ([DateTimeOffset]$latest.createdUtc).AddDays(-$retention - 1).UtcDateTime.ToString('yyyy-MM-dd') } else { '' }
     $baseLastDay = if ($bj.lastUtc) { ([DateTimeOffset]$bj.lastUtc).UtcDateTime.ToString('yyyy-MM-dd') } else { '' }
-    $capped = $cj.samples -ge [int]($sampleCap * 0.89)
+    $capped = $retention -and $cj.samples -ge [int]($sampleCap * 0.89)
     $grown = 0; $pruned = 0; $compacted = 0
     foreach ($day in @($bj.days.Keys) + @($cj.days.Keys) | Sort-Object -Unique) {
         $before = [int]$bj.days[$day]; $after = [int]$cj.days[$day]
@@ -387,7 +390,8 @@ if ($bj.present -and -not $cj.present) {
         } elseif ($after -lt $before) {
             if ($day -le $prunable) { $pruned += $before - $after }
             elseif ($capped) { $compacted += $before - $after }
-            else { $found.unexpected.Add("Journal day $day lost $($before - $after) of $before samples inside the $retention-day retention window") }
+            elseif ($retention) { $found.unexpected.Add("Journal day $day lost $($before - $after) of $before samples inside the $retention-day retention window") }
+            else { $found.unexpected.Add("Journal day $day lost $($before - $after) of $before samples while history is kept forever") }
         }
     }
     if ($grown) { $found.tolerated.Add("Journal grew by $grown samples") }

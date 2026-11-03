@@ -22,7 +22,8 @@ enum class SettingsField : uint8_t {
     Notifications,
     // History
     RecordHistory,  // This Windows user's recording consent
-    RetentionDays,
+    KeepHistory,    // The retention: days, or 0 for forever
+    RetentionDays,  // A day count's custom days; changes nothing while kept forever
     // Layout
     BarLayout,        // Tile style: a BarLayout
     BarLength,
@@ -118,7 +119,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
                     SettingsField::SkipHiddenPolling, SettingsField::Notifications};
         case SettingsField::ResetHistory:
-            return {SettingsField::RecordHistory, SettingsField::RetentionDays};
+            return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays};
         case SettingsField::ResetLayout:
             return {SettingsField::BarLayout,     SettingsField::BarLength,
                     SettingsField::BarThickness,  SettingsField::BarGap,
@@ -149,7 +150,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
         case SettingsField::Notifications: return s.enableNotifications;
         case SettingsField::RecordHistory: return s.historyEnabled;
-        case SettingsField::RetentionDays: return s.historyRetentionDays;
+        case SettingsField::KeepHistory: return s.historyRetentionDays;
+        case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
         case SettingsField::BarLayout: return int(s.barLayout);
         case SettingsField::BarLength: return s.barLength;
         case SettingsField::BarThickness: return s.barThickness;
@@ -199,7 +201,11 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SkipHiddenPolling: s.skipHiddenPolling = value != 0; break;
         case SettingsField::Notifications: s.enableNotifications = value != 0; break;
         case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
-        case SettingsField::RetentionDays: s.historyRetentionDays = value; break;
+        case SettingsField::KeepHistory: s.historyRetentionDays = std::clamp(value, 0, 3650); break;
+        case SettingsField::RetentionDays:
+            // Only Keep history leaves forever: the window asks first.
+            if (s.historyRetentionDays > 0) s.historyRetentionDays = value;
+            break;
         case SettingsField::BarLayout:
             s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
             break;
@@ -839,7 +845,12 @@ struct SettingsEdits {
 
 private:
     // The draft of a user action, created from the projection; a new revision clears any error.
+    // Keep history and its custom days set the same retention: either one's edit drops the
+    // other's draft and requests.
     SettingsDraft& Touch(uint64_t key, SettingsField field) {
+        if (!key && (field == SettingsField::KeepHistory || field == SettingsField::RetentionDays)) {
+            Revert(0, field == SettingsField::KeepHistory ? SettingsField::RetentionDays : SettingsField::KeepHistory);
+        }
         SettingsDraft* draft = Find(key, field);
         if (!draft) {
             SettingsDraft created;

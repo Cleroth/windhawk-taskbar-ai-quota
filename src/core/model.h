@@ -97,7 +97,8 @@ struct Settings {
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
     bool historyEnabled = true;
-    int historyRetentionDays = 90;
+    // Days of usage history kept; 0: forever, with neither the age limit nor the size cap.
+    int historyRetentionDays = 0;
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;

@@ -70,7 +70,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
   - do not poll hidden accounts (on by default; overrides per-account history recording)
   - threshold notifications (toast when an account crosses the red threshold)
-- **History**: record usage history (on by default, per Windows user, with its live status), retention in days (90 by default, 1 to 3650), **Open usage history**, and the storage folder
+- **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, and the storage folder
 - **About**: version, project links, credits, and license
 
 Sizes and thresholds combine a slider with a number box; spacing, polling, retention, and credits use number boxes with step buttons. Changes save as you make them; a number or text box saves on Enter or when you leave it, and Esc reverts it. A value that can't be saved stays in its box with the error, and closing the window then asks before discarding it. Layout, Display, Behavior, and History each have a reset that restores that page's defaults without touching accounts or sign-ins.
@@ -169,13 +169,20 @@ The recording choice is stored per user in
 another Windows user's choice cannot change yours. Other settings, including per-account selection and retention, follow
 Windhawk's existing machine-shared configuration. Opening an empty viewer does not create files.
 
-Retention defaults to **90 days**. Hourly maintenance prunes older samples while recording or
-when refreshing the viewer (including with recording off); loading a journal also permits
-maintenance. Retention edits do not bypass that hourly cadence. A **250,000-sample cap
-(about 60 MB)** also evicts oldest records in batches; many accounts or frequent polls can
-shorten effective retention. Only the taskbar-owning Explorer records, with exclusive journal
-ownership to prevent competing writers. Storage failures appear in the viewer. Downgrading to a version without history support can discard
-saved history IDs when settings are edited; old samples then appear as anonymous retained history.
+History is kept **forever** by default: nothing is pruned and there is no size limit, so the
+journal keeps growing on disk and in Explorer's memory (for example, six accounts polled every
+10 minutes around the clock add about 75 MB a year; **All retained** in the viewer holds another
+copy while open). Settings saved before this option keep their day count. With a number of days, hourly
+maintenance prunes older samples while recording or when refreshing the viewer (including with
+recording off); loading a journal also permits maintenance. Retention edits do not bypass that
+hourly cadence. A **250,000-sample cap (about 60 MB)** then also evicts oldest records in
+batches; many accounts or frequent polls can shorten effective retention. Leaving **Forever**
+asks first, since both limits apply again. Only the taskbar-owning Explorer records, with
+exclusive journal ownership to prevent competing writers. Storage failures appear in the viewer.
+Downgrading to a version without history support can discard saved history IDs when settings are
+edited; old samples then appear as anonymous retained history. Downgrading to a version without
+**Forever** keeps 3650 days but applies its size cap, permanently discarding samples beyond the
+newest 250,000.
 
 ### Verification
 
@@ -190,6 +197,12 @@ open: its samples leave the open window, CSV export and a restart; other account
 Removing one without the checkbox keeps it under **Removed**; select it there and use
 **Delete history...**: it leaves the list (All accounts is selected), and its samples leave CSV
 export and a restart while other accounts keep theirs.
+
+For retention, upgrade with an existing day count: it must stay selected, while a fresh install
+and **Reset** show **Forever**. Kept forever, the header reads **Recording · forever** and
+**All retained** starts at the oldest sample; after a restart and an hour of maintenance no
+sample is gone. Choosing a day count or **Custom** from **Forever** asks first (No keeps
+Forever); **Custom** then shows 3650 days.
 
 With multiple accounts and retained readings, check:
 

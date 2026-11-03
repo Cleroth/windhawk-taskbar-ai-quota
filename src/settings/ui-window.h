@@ -19,11 +19,11 @@ struct SettingsUiClient final : UiHostClient {
     SettingsEdits edits{store};
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
-    // Window state. Custom poll mode sticks once chosen or typed into, so the box doesn't
-    // disable itself when a partial number happens to match a preset. The last built view
-    // paints the preview; the color dialog's custom colors last for the window.
+    // Window state. Custom poll and retention modes stick once chosen or typed into, so their
+    // boxes don't disable themselves when a partial number happens to match a preset. The last
+    // built view paints the preview; the color dialog's custom colors last for the window.
     SettingsUiPage page = SettingsUiPage::Accounts;
-    bool pollCustom = false;
+    bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
@@ -141,6 +141,7 @@ struct SettingsUiClient final : UiHostClient {
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
+        view.retentionCustom = retentionCustom;
         view.scale = UiHostScale(host);
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
@@ -223,6 +224,39 @@ struct SettingsUiClient final : UiHostClient {
                         KillStepTimer(host, field);
                         Report(host, edits.Commit(0, field, action.value));
                         break;
+                    case SettingsField::KeepHistory: {
+                        // The retention dropdown: days, 0 for Forever, or -1 for Custom, which
+                        // drops a failed choice, enables the custom box and moves focus there.
+                        // Leaving the committed Forever asks first (pruning is shared and final);
+                        // Custom then starts at the most days. A commit drops the custom box's
+                        // draft (settings/edits.h).
+                        bool forever = edits.baseline.settings.historyRetentionDays <= 0;
+                        int days = action.value < 0 ? 3650 : action.value;
+                        if (forever && days) {
+                            std::wstring question =
+                                L"Stop keeping history forever?\n\nHistory will be kept for " +
+                                std::to_wstring(days) + L" days and limited to 250,000 samples (about "
+                                L"60 MB) again. Older samples, and the oldest beyond that limit, will be "
+                                L"deleted permanently, for every Windows user.";
+                            if (Ask(host, question.c_str(), L"Keep history",
+                                    MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES ||
+                                Unloading() || closePreparation || host.closing) {
+                                break;
+                            }
+                        }
+                        retentionCustom = action.value < 0;
+                        if (retentionCustom && !forever) {
+                            edits.Revert(0, field);
+                            UiHostRequestRebuild(host, false);
+                        } else {
+                            KillStepTimer(host, SettingsField::RetentionDays);
+                            Report(host, edits.Commit(0, field, days));
+                        }
+                        if (retentionCustom) {
+                            UiHostRequestFocus(host, {SettingsControlId(SettingsField::RetentionDays), -1}, true);
+                        }
+                        break;
+                    }
                     case SettingsField::ResetBehavior:
                     case SettingsField::ResetHistory:
                     case SettingsField::ResetLayout:
@@ -242,16 +276,7 @@ struct SettingsUiClient final : UiHostClient {
                                 L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
                                 L"additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
-                                L"Windows user and history is kept for 90 days. Saved history stays.";
-                        // Never shorten retention without saying so: pruning is shared and final.
-                        // The committed value counts, not a draft (which may have failed).
-                        int retention = edits.baseline.settings.historyRetentionDays;
-                        if (field == SettingsField::ResetHistory &&
-                            retention > Settings{}.historyRetentionDays) {
-                            question += L"\n\nHistory is kept for " + std::to_wstring(retention) +
-                                        L" days now: samples older than 90 days will be deleted "
-                                        L"permanently, for every Windows user.";
-                        }
+                                L"Windows user and history is kept forever. Saved history stays.";
                         if (Ask(host, question.c_str(), L"Reset settings",
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {
@@ -259,6 +284,7 @@ struct SettingsUiClient final : UiHostClient {
                         }
                         KillStepTimers(host);
                         if (field == SettingsField::ResetBehavior) pollCustom = false;
+                        if (field == SettingsField::ResetHistory) retentionCustom = false;
                         Report(host, edits.Reset(field));
                         break;
                     }
@@ -390,6 +416,7 @@ struct SettingsUiClient final : UiHostClient {
                 // Typing supersedes a pending step: its timer no longer commits.
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::RetentionDays) retentionCustom = true;
                 edits.SetText(action.key, field, std::move(action.text));
                 UiHostRequestRebuild(host, false);
                 break;
@@ -421,6 +448,7 @@ struct SettingsUiClient final : UiHostClient {
                     break;
                 }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::RetentionDays) retentionCustom = true;
                 steps[field] = {action.key, edits.Step(action.key, field, action.value)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);

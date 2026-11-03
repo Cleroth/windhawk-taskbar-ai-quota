@@ -15,7 +15,12 @@ struct TestHistoryOps final : HistoryOps {
     HistoryJournalStamp stamp{true, 1, 1, 0};
     std::wstring status;
     bool capped = false;
-    HistorySettingsSnapshot settings;
+    // Kept for 90 days, so All retained spans a fixed period (kept forever: its own cases)
+    HistorySettingsSnapshot settings = [] {
+        HistorySettingsSnapshot s;
+        s.settings.historyRetentionDays = 90;
+        return s;
+    }();
     ULONGLONG now = kWeekTo;
     bool unloading = false;
     // Refresh messages posted and not handled yet (failPost: posting fails), the timer, and what
@@ -54,7 +59,7 @@ struct TestHistoryOps final : HistoryOps {
     std::wstring deleteError = L"History storage is in use by another Explorer session, or is inaccessible.";
     std::function<void()> deleting;
     bool folder = true;
-    // "take", "settings", "snapshot <days before now>d keep <retention>", "peek" (status only),
+    // "take", "settings", "snapshot <days before now>d", "peek" (status only),
     // "peek <days before now>d" (samples too), "consent", "notify", "post" ("post failed"),
     // "timer on", "timer off", "open settings", "open folder" ("no folder"), "ask <caption>",
     // "choose <title>", "post write" ("post write failed"), "write <path>", "clear", "invalidate",
@@ -72,8 +77,8 @@ struct TestHistoryOps final : HistoryOps {
         log.push_back(L"take");
         return std::exchange(request, 0);
     }
-    HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) override {
-        log.push_back(L"snapshot " + Days(from) + L" keep " + std::to_wstring(retentionDays));
+    HistorySnapshot ExplicitSnapshot(ULONGLONG from) override {
+        log.push_back(L"snapshot " + Days(from));
         HistorySnapshot snapshot;
         for (const HistorySample& sample : journal) {
             if (sample.timeMs >= from) snapshot.samples.push_back(sample);
@@ -252,7 +257,7 @@ static void RunHistoryControllerTests() {
         ops.request = 0xC1;
         c.Open();
         c.Load();
-        CHECK((ops.log == TestLog{L"settings", L"take", L"settings", L"snapshot 7d keep 90"}));
+        CHECK((ops.log == TestLog{L"settings", L"take", L"settings", L"snapshot 7d"}));
         CHECK(ops.request == 0 && c.selectedId == 0xC1 && c.view.selected == 0 && c.view.view == HistoryView::AllMeters);
         CHECK(!c.view.loading && c.view.status == L"Updated Sat 31 Oct 14:32" && c.view.pill == HistoryUiPill::Recording);
         CHECK(c.from == kWeekFrom && c.to == kWeekTo && c.readFrom == kWeekFrom);
@@ -276,8 +281,8 @@ static void RunHistoryControllerTests() {
         c.Load();
         c.Load();
         CHECK(c.selectedId == 0x0A);
-        CHECK((ops.log == TestLog{L"take", L"settings", L"snapshot 7d keep 90", L"take", L"settings",
-                                  L"snapshot 7d keep 90"}));
+        CHECK((ops.log == TestLog{L"take", L"settings", L"snapshot 7d", L"take", L"settings",
+                                  L"snapshot 7d"}));
         // One activation after the other: each selects its account.
         ops.request = 0xC1;
         c.Load();
@@ -386,11 +391,11 @@ static void RunHistoryControllerTests() {
             return std::pair{item->enabled, UiSelectedSegment(*item)};
         };
         c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Month));
-        CHECK(ops.log.back() == L"snapshot 30d keep 90" && c.view.range == HistoryUiRange::Month && !c.view.compare);
+        CHECK(ops.log.back() == L"snapshot 30d" && c.view.range == HistoryUiRange::Month && !c.view.compare);
         CHECK(c.from == kWeekTo - 30 * kHistoryDayMs && c.readFrom == c.from);
         CHECK((ranges() == std::pair{true, int(HistoryUiRange::Month)}));
         c.Command(HistoryUiCommand::Compare, 1);
-        CHECK(ops.log.back() == L"snapshot 14d keep 90" && c.view.compare && c.view.range == HistoryUiRange::Month);
+        CHECK(ops.log.back() == L"snapshot 14d" && c.view.compare && c.view.range == HistoryUiRange::Month);
         CHECK(c.from == kWeekFrom && c.readFrom == kWeekFrom - kHistoryWeekMs);
         CHECK((ranges() == std::pair{false, int(HistoryUiRange::Week)}));
         // The cards hold both periods.
@@ -399,14 +404,28 @@ static void RunHistoryControllerTests() {
         CHECK(c.view.cards[0].lines[0] == L"Current: Peak 45% \u00B7 Sat 24 Oct 16:32" &&
               c.view.cards[0].lines[3] == L"Previous: Peak 30% \u00B7 Wed 21 Oct 14:32");
         c.Command(HistoryUiCommand::Compare, 0);
-        CHECK(ops.log.back() == L"snapshot 30d keep 90" && !c.view.compare && c.view.range == HistoryUiRange::Month);
+        CHECK(ops.log.back() == L"snapshot 30d" && !c.view.compare && c.view.range == HistoryUiRange::Month);
         CHECK((ranges() == std::pair{true, int(HistoryUiRange::Month)}));
         // All retained follows the retention; comparing still loads 7 days and the week before.
         ops.settings.settings.historyRetentionDays = 120;
         c.Command(HistoryUiCommand::Range, int(HistoryUiRange::All));
-        CHECK(ops.log.back() == L"snapshot 120d keep 120");
+        CHECK(ops.log.back() == L"snapshot 120d");
         c.Command(HistoryUiCommand::Compare, 1);
-        CHECK(ops.log.back() == L"snapshot 14d keep 120" && c.view.range == HistoryUiRange::All);
+        CHECK(ops.log.back() == L"snapshot 14d" && c.view.range == HistoryUiRange::All);
+        // Kept forever, All retained reads everything and starts at the oldest sample held (three
+        // days before the week); with none, it shows the last day.
+        c.Command(HistoryUiCommand::Compare, 0);
+        ops.settings.settings.historyRetentionDays = 0;
+        c.Load();
+        CHECK(ops.log.back() == L"snapshot " + std::to_wstring(kWeekTo / kHistoryDayMs) + L"d");
+        CHECK(c.from == kWeekFrom - 3 * kHistoryDayMs && c.readFrom == 0 && c.view.retentionDays == 0);
+        ops.journal.clear();
+        ops.stamp.revision++;
+        c.Load();
+        CHECK(c.from == kWeekTo - kHistoryDayMs && c.readFrom == 0);
+        // Comparing still loads 7 days and the week before.
+        c.Command(HistoryUiCommand::Compare, 1);
+        CHECK(ops.log.back() == L"snapshot 14d" && c.from == kWeekFrom);
     });
 
     Run("history controller: after the close request nothing loads or acts, and a pending request stays "

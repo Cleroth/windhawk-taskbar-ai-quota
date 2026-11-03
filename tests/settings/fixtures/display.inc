@@ -110,7 +110,8 @@ static void RunDisplayPageTests() {
         }
 
         // All 34 scalar settings changed: the four page resets restore every one, and no field
-        // belongs to two groups (Show on holds the monitor mode and number).
+        // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
+        // custom days both set the retention).
         Settings every = changed;
         every.taskbarMonitorMode = TaskbarMonitorMode::Specific;
         every.taskbarMonitorNumber = 2;
@@ -146,7 +147,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 33 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 34 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {

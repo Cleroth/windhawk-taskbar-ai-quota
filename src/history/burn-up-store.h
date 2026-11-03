@@ -29,7 +29,7 @@ static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<Acco
     try {
         std::vector<BurnUpRequest> targets;
         ULONGLONG now = NowUnixMs();
-        ULONGLONG retention = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
+        ULONGLONG retained = HistoryRetentionStart(retentionDays, now);
         for (size_t i = 0; i < accounts.size() && i < readings.size() && i < rebuild.size(); i++) {
             const AccountConfig& account = accounts[i];
             if (!rebuild[i] || !account.recordHistory || !account.historyId) continue;
@@ -48,9 +48,7 @@ static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<Acco
                 target.from = std::min(target.from, start > kHistoryResetToleranceMs ?
                                                         start - kHistoryResetToleranceMs : 0);
             }
-            if (target.from != ULLONG_MAX) {
-                target.from = std::max(target.from, now > retention ? now - retention : 0);
-            }
+            if (target.from != ULLONG_MAX) target.from = std::max(target.from, retained);
         }
 
         uint64_t epoch;
@@ -120,7 +118,7 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
         return std::nullopt;
     }
     uint32_t provider = account->provider == L"anthropic" ? 1 : account->provider == L"openai" ? 2 : 3;
-    ULONGLONG retention = (ULONGLONG)std::clamp(g_settings.historyRetentionDays, 1, 3650) * kHistoryDayMs;
+    int retentionDays = g_settings.historyRetentionDays;
     std::lock_guard<std::mutex> dataLock(g_dataMutex);
     const BurnUpCurve* curve = FindBurnUpCurve(g_burnUpCurves, g_historyEpoch.load(),
                                                g_burnUpPolicyGeneration.load(), historyId, provider,
@@ -128,10 +126,8 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
     if (!curve) return std::nullopt;
     // Retention maintenance can prune readings between rebuilds; never chart them.
     BurnUpCurve copy = *curve;
-    ULONGLONG now = NowUnixMs();
-    std::erase_if(copy.points, [&](const BurnUpPoint& point) {
-        return now > retention && point.timeMs < now - retention;
-    });
+    ULONGLONG retained = HistoryRetentionStart(retentionDays, NowUnixMs());
+    std::erase_if(copy.points, [&](const BurnUpPoint& point) { return point.timeMs < retained; });
     if (copy.points.empty()) return std::nullopt;
     copy.points.front().connect = false;
     return copy;

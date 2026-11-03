@@ -93,7 +93,7 @@ static void RunHistoryOperationsTests() {
         ops.log.clear();
         c.Write(true, [&] { repaints++; });
         TestSettled(c, ops);
-        CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"take", L"settings", L"snapshot 7d keep 90"}));
+        CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"take", L"settings", L"snapshot 7d"}));
         CHECK(ops.written.size() == 1 && ops.written[0].snapshot == held && ops.written[0].accountId == 0xC1 &&
               ops.written[0].from == readFrom && ops.written[0].to == to);
         CHECK(c.operation == HistoryOperation::None && !c.loadPending && !c.exportScope && !c.view.exporting);
@@ -306,7 +306,7 @@ static void RunHistoryOperationsTests() {
             c.Write(true, [] {});
             TestSettled(c, ops);
             if (load) {
-                CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"take", L"settings", L"snapshot 7d keep 90"}));
+                CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"take", L"settings", L"snapshot 7d"}));
                 CHECK(!c.liveDirty && !c.samplesDirty && ops.posted == 0);
             } else {
                 CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"post"}));
@@ -329,7 +329,7 @@ static void RunHistoryOperationsTests() {
         c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Clear));
         TestSettled(c, ops);
         CHECK((ops.log == TestLog{L"ask Clear all usage history", L"clear", L"invalidate", L"take", L"settings",
-                                  L"snapshot 7d keep 90"}));
+                                  L"snapshot 7d"}));
         CHECK(ops.asked.at(0).second == (MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2));
         CHECK(ops.asked.at(0).first == L"Permanently clear ALL local usage history for this Windows user, including "
                                        L"deleted accounts?\r\n\r\nThis cannot be undone. Settings and sign-ins are not "
@@ -422,7 +422,7 @@ static void RunHistoryOperationsTests() {
         c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
         TestSettled(c, ops);
         CHECK((ops.log == TestLog{L"ask Delete account history", L"delete dead", L"take", L"settings",
-                                  L"snapshot 7d keep 90"}));
+                                  L"snapshot 7d"}));
         CHECK(ops.asked.at(0).second == (MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2));
         CHECK(ops.asked.at(0).first == L"Permanently delete all usage history of the removed Anthropic account "
                                        L"account_000000000000dead?\r\n\r\nEvery recorded sample of it is deleted, not "
@@ -515,7 +515,7 @@ static void RunHistoryOperationsTests() {
             c.RequestLoad();
         };
         c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::About));
-        CHECK((ops.log == TestLog{L"ask About these charts", L"take", L"settings", L"snapshot 7d keep 90"}));
+        CHECK((ops.log == TestLog{L"ask About these charts", L"take", L"settings", L"snapshot 7d"}));
         CHECK(ops.asked.at(0).second == (MB_OK | MB_ICONINFORMATION));
         const std::wstring& text = ops.asked.at(0).first;
         CHECK(text.starts_with(L"Reading the charts\r\n") && text.find(L"Legend and readout\r\n") != std::wstring::npos);
@@ -523,12 +523,14 @@ static void RunHistoryOperationsTests() {
         CHECK(text.ends_with(L"\r\nOldest loaded sample: Sat 24 Oct 15:32"));
         CHECK(c.modal == 0 && !c.loadPending &&
               c.view.notice.text == L"Nothing has been recorded yet. The folder is created with the first recorded sample.");
-        // Before the first load: no oldest sample.
+        // Before the first load: no oldest sample. Kept forever: no size limit.
         TestHistoryOps fresh = TestControllerOps();
+        fresh.settings.settings.historyRetentionDays = 0;
         HistoryController f(fresh);
         f.Open();
         f.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::About));
         CHECK(fresh.asked.size() == 1 && fresh.asked[0].first.find(L"Oldest loaded sample") == std::wstring::npos);
+        CHECK(fresh.asked[0].first.find(L"Retention: forever, with no size limit. Turning") != std::wstring::npos);
     });
 
     Run("history operations: after the close request or unload nothing exports, clears, deletes, asks or opens", [] {

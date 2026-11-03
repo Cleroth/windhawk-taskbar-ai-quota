@@ -153,8 +153,10 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     Pill pill = view.pill == HistoryUiPill::Off       ? Pill{L"Off", UiInk::Secondary, false} :
                 view.pill == HistoryUiPill::NotSaving ? Pill{L"Not saving", UiInk::Danger, true} :
                 view.pill == HistoryUiPill::Waiting   ? Pill{L"Waiting", UiInk::Caution, true} :
-                Pill{L"Recording \u00B7 " + std::to_wstring(view.retentionDays) +
-                         (view.retentionDays == 1 ? L" day" : L" days"), UiInk::Success, true};
+                Pill{L"Recording \u00B7 " +
+                         (view.retentionDays <= 0 ? std::wstring(L"forever") :
+                          std::to_wstring(view.retentionDays) + (view.retentionDays == 1 ? L" day" : L" days")),
+                     UiInk::Success, true};
     PCWSTR title = selected ? selected->label.c_str() : L"All accounts";
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, UiTextStyleFor(UiFont::Title), 100000, false)).width);

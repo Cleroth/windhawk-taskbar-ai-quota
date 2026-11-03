@@ -14,8 +14,8 @@ struct HistoryProductionOps final : HistoryOps {
 
     // An explicit viewer read also prunes retained history while recording is off. Each call
     // holds only the history leaf lock.
-    HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) override {
-        MaintainHistory(retentionDays);
+    HistorySnapshot ExplicitSnapshot(ULONGLONG from) override {
+        MaintainHistory();
         return ReadHistorySnapshot(from);
     }
 

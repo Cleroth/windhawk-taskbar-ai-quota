@@ -87,7 +87,8 @@ settings or sign-ins.
 `pwsh storage-audit.ps1 compare -Baseline <snapshot.json>` saves a new snapshot (or reads
 `-Current`) and classifies each difference: expected (`-Edited` fields: top-level names,
 `<label>.<field>`, `accountOrder`, `consent`; `-Disposable` account labels), tolerated (sign-in hash
-changed while present, journal growth, retention pruning, storage-cap compaction) or unexpected
+changed while present, journal growth, retention pruning, storage-cap compaction; neither of the
+last two while both snapshots keep history forever) or unexpected
 (anything else, including history ID changes and sign-ins appearing or disappearing). Exit 1 means
 something unexpected.
 

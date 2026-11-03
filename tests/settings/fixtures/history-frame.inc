@@ -288,7 +288,8 @@ static void RunHistoryFrameTests() {
         for (const PillCase& c : {PillCase{HistoryUiPill::Off, 90, L"Off", UiInk::Secondary, false},
                                   PillCase{HistoryUiPill::NotSaving, 90, L"Not saving", UiInk::Danger, true},
                                   PillCase{HistoryUiPill::Waiting, 90, L"Waiting", UiInk::Caution, true},
-                                  PillCase{HistoryUiPill::Recording, 1, L"Recording \u00B7 1 day", UiInk::Success, true}}) {
+                                  PillCase{HistoryUiPill::Recording, 1, L"Recording \u00B7 1 day", UiInk::Success, true},
+                                  PillCase{HistoryUiPill::Recording, 0, L"Recording \u00B7 forever", UiInk::Success, true}}) {
             view.pill = c.pill;
             view.retentionDays = c.days;
             frame = TestHistoryFrame(view);

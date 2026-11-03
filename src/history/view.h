@@ -86,7 +86,7 @@ struct HistoryUiView {
     // disabled), retention and the usage colors of navigation values
     bool recordingEnabled = true;
     bool canEnableRecording = false;
-    int retentionDays = 90;
+    int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
     bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
 

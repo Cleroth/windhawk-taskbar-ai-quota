@@ -73,7 +73,8 @@ first, then reads/updates XAML.
   I/O, dialogs, notifications, UI marshaling or `FinishSettingsApply`.
 - `g_historyMutex` is an independent leaf: never hold settings/auth/UI locks across journal
   operations, or acquire them inside history operations. Clear invalidates in-flight batches via
-  `g_historyEpoch`; settings publication updates the history admission generation.
+  `g_historyEpoch`; settings publication updates the history admission generation and the
+  retention journal operations read once loaded (`g_historyRetentionDays`), never a caller's copy.
 - Burn-up curves (`history/burn-up-store.h`): only the fetch thread publishes; settings
   publication and Clear history reset it via `ResetBurnUpCurvesLocked` (under `g_dataMutex`).
   The fetch thread caches per-account journal tails and the history window keeps a snapshot by
@@ -125,9 +126,10 @@ access+refresh tokens, and refreshes/rotates them itself.
   get orphaned.
 - Usage history belongs in per-user LocalAppData, not Windhawk's machine-shared writable storage.
   Recording consent is a separate HKCU setting, never a field in machine-shared `settings_v1`.
-- Keep the journal size/read bounds, checksum validation, atomic compaction and exclusive writer
-  handle. A load that stops part-way (out of memory, unload) leaves the journal unwritable until
-  Clear. Only the shell process records; save pending history IDs before recording. History IDs
+- Keep the journal's size cap (maintenance and appends apply it with a number of days; kept
+  forever, nothing may prune or cap it), checksum validation, atomic compaction and exclusive
+  writer handle. Loads read the whole file whatever the retention; one that stops part-way (out
+  of memory, unload) leaves the journal unwritable until Clear. Only the shell process records; save pending history IDs before recording. History IDs
   are separate from auth identities and follow configured entries, not verified logins.
 - User-facing recording/storage/export behavior and its manual verification:
   [README > Usage history](../README.md#usage-history).

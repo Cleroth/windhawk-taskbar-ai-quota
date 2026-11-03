@@ -75,7 +75,7 @@ static bool NormalizeSettings(Settings* s) {
         s->accounts[0].hidden = false;
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
-    s->historyRetentionDays = std::clamp(s->historyRetentionDays, 1, 3650);
+    s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
@@ -158,7 +158,9 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"monitorNumber", s.taskbarMonitorNumber);
         setBool(L"showDetailsOnHover", s.showDetailsOnHover);
         setNumber(L"pollMinutes", s.pollMinutes);
-        setNumber(L"historyRetentionDays", s.historyRetentionDays);
+        // Forever is its own key: builds without it read the longest day count instead.
+        setNumber(L"historyRetentionDays", s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650);
+        setBool(L"historyKeepForever", s.historyRetentionDays <= 0);
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
@@ -263,8 +265,10 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.taskbarMonitorNumber = (int)GetNum(root, L"monitorNumber", 1);
         s.showDetailsOnHover = getBoolDefault(L"showDetailsOnHover", true);
         s.pollMinutes = (int)GetNum(root, L"pollMinutes", 10);
+        // Settings saved before forever retention keep their day count.
         double retentionDays = GetNum(root, L"historyRetentionDays", 90);
-        s.historyRetentionDays = std::isfinite(retentionDays) ?
+        s.historyRetentionDays = getBoolDefault(L"historyKeepForever", false) ? 0 :
+                                 std::isfinite(retentionDays) ?
                                      (int)std::clamp(retentionDays, 1.0, 3650.0) : 90;
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
@@ -603,6 +607,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
             }
         }
     }
+    g_historyRetentionDays.store(s.historyRetentionDays);
     g_settings = std::move(s);
     g_settingsGeneration++;
     g_historySettingsGeneration.store(g_settingsGeneration);

@@ -42,9 +42,9 @@ struct HistoryCsvResult {
 struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
-    // Prunes the journal to the retention, then reads its samples from `from` on with their
-    // stamp; may initialize or retry the storage.
-    virtual HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) = 0;
+    // Prunes the journal to the published retention, then reads its samples from `from` on with
+    // their stamp; may initialize or retry the storage.
+    virtual HistorySnapshot ExplicitSnapshot(ULONGLONG from) = 0;
     // Memory only, never initializing or retrying the storage: the journal's stamp, status and
     // cap, and, when `samples` asks, a replacement for a snapshot held with `held` from
     // `heldFrom` (the journal loaded, and another stamp or `from` further back).
@@ -209,9 +209,8 @@ struct HistoryController {
         loadPending = false;
         uint64_t request = ops->TakeRequest();
         HistorySettingsSnapshot read = ops->ReadSettings();
-        int retention = read.settings.historyRetentionDays;
-        auto [start, end, readStart] = Times(retention);
-        auto loaded = std::make_shared<HistorySnapshot>(ops->ExplicitSnapshot(readStart, retention));
+        auto [start, end, readStart] = Times(read.settings.historyRetentionDays);
+        auto loaded = std::make_shared<HistorySnapshot>(ops->ExplicitSnapshot(readStart));
         HistorySortSamples(loaded->samples);
         std::wstring status = loaded->status;
         bool capped = loaded->capped;
@@ -503,8 +502,12 @@ struct HistoryController {
             L"writes every supported meter of the selected account, or of every account under All accounts, over "
             L"the selected range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are "
             L"not dollars or a spending ledger.\r\n\r\n"
-            L"Retention: " + std::to_wstring(settings.settings.historyRetentionDays) +
-            L" days, also limited to 250,000 records / about 60 MB. Turning recording off keeps saved history. Removed "
+            L"Retention: " +
+            (settings.settings.historyRetentionDays > 0 ?
+                 std::to_wstring(settings.settings.historyRetentionDays) +
+                     L" days, also limited to 250,000 records / about 60 MB." :
+                 std::wstring(L"forever, with no size limit.")) +
+            L" Turning recording off keeps saved history. Removed "
             L"accounts remain under their IDs until expiry or Clear, unless their history was deleted with them; "
             L"select one to delete its history.";
         if (snapshot && !snapshot->samples.empty()) {
@@ -684,24 +687,30 @@ struct HistoryController {
         return true;
     }
 
-    // The shown times at the clock's now: [start, now) over the range (All: the retention's days;
-    // comparing: 7 days), read from the week before start while comparing.
+    // The shown times at the clock's now: [start, now) over the range (All: the retention's days,
+    // or start 0 when kept forever, which Adopt resolves; comparing: 7 days), read from the week
+    // before start while comparing.
     std::array<ULONGLONG, 3> Times(int retention) {
         static constexpr int kDays[] = {1, 7, 30, 90};
         ULONGLONG now = ops->Now();
         ULONGLONG span = (compare                         ? 7 :
-                          range == HistoryUiRange::All    ? ULONGLONG(std::max(1, retention)) :
+                          range == HistoryUiRange::All    ? ULONGLONG(std::max(0, retention)) :
                                                             ULONGLONG(kDays[int(range)])) * kHistoryDayMs;
-        ULONGLONG start = now > span ? now - span : 0;
+        ULONGLONG start = span && now > span ? now - span : 0;
         return {start, now, compare && start > kHistoryWeekMs ? start - kHistoryWeekMs : start};
     }
 
     // Takes `read` and the `next` snapshot (read from `nextFrom`) for the times [start, end) read
     // from `readStart`: collects the accounts over them and resolves the selection (a listed
     // request wins; else it stays while listed, else All accounts; a change drops the notice).
+    // Start 0 (All kept forever) begins at the oldest sample held, showing at least a day.
     // False when unload cut the collection short: nothing changes then.
     bool Adopt(HistorySettingsSnapshot read, std::shared_ptr<const HistorySnapshot> next, ULONGLONG nextFrom,
                ULONGLONG start, ULONGLONG end, ULONGLONG readStart, uint64_t request) {
+        if (!start && end) {
+            start = end > kHistoryDayMs ? end - kHistoryDayMs : 0;
+            if (next && !next->samples.empty()) start = std::min(start, next->samples.front().timeMs);
+        }
         const std::vector<HistorySample> none;
         std::vector<HistoryUiAccount> collected = HistoryCollectAccounts(
             read.settings.accounts, next ? next->samples : none, readStart, end, [this] { return ops->Unloading(); });

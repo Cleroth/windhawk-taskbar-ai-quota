@@ -189,7 +189,7 @@ static void RunHistoryRefreshTests() {
         c.Open();
         c.Load();
         c.Command(HistoryUiCommand::Range, int(HistoryUiRange::All));
-        CHECK(ops.log.back() == L"snapshot 90d keep 90" && c.generation == 2 && c.heldFrom == kWeekTo - 90 * kHistoryDayMs);
+        CHECK(ops.log.back() == L"snapshot 90d" && c.generation == 2 && c.heldFrom == kWeekTo - 90 * kHistoryDayMs);
         auto refresh = [&] {
             c.Notify();
             TestDeliver(c, ops);
@@ -329,7 +329,7 @@ static void RunHistoryRefreshTests() {
         const UiItem* enable = UiFindItem(frame, kHistoryUiEnableRecording);
         CHECK(enable && enable->enabled && TestFind(frame.content, L"History recording is off. Saved history stays; "
                                                                    L"nothing new is recorded."));
-        CHECK(TestCount(ops.log, L"snapshot 7d keep 90") == 1 && TestCount(ops.log, L"peek 7d") == 0);
+        CHECK(TestCount(ops.log, L"snapshot 7d") == 1 && TestCount(ops.log, L"peek 7d") == 0);
     });
 
     Run("history refresh: during one inspection, two polls handled apart update the live values twice and hold the "
@@ -539,7 +539,7 @@ static void RunHistoryRefreshTests() {
         off(ops, c);
         ops.request = 0x0A;
         c.Command(HistoryUiCommand::EnableRecording);
-        CHECK((ops.log == TestLog{L"consent", L"notify", L"take", L"settings", L"snapshot 7d keep 90"}));
+        CHECK((ops.log == TestLog{L"consent", L"notify", L"take", L"settings", L"snapshot 7d"}));
         CHECK(c.view.recordingEnabled && c.view.pill == HistoryUiPill::Recording && c.view.notice.text.empty());
         // The load took the open request; the window focuses the selected entry.
         CHECK(c.selectedId == 0x0A && c.focusSelected);
@@ -553,7 +553,7 @@ static void RunHistoryRefreshTests() {
         ops.consent = HistoryConsentResult::Failed;
         PCWSTR failed = L"Could not save recording consent. Recording is still off.";
         c.Command(HistoryUiCommand::EnableRecording);
-        CHECK((ops.log == TestLog{L"consent", L"notify", L"take", L"settings", L"snapshot 7d keep 90"}));
+        CHECK((ops.log == TestLog{L"consent", L"notify", L"take", L"settings", L"snapshot 7d"}));
         CHECK(c.view.notice.text == failed && c.view.notice.severity == UiSeverity::Error && !c.focusSelected);
         CHECK(!c.view.recordingEnabled && c.view.pill == HistoryUiPill::Off);
         // The notice is the first info bar, above the recording-off banner with its button.

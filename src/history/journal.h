@@ -5,7 +5,8 @@ struct HistoryFileHeader {
     uint32_t version = 1;
     uint32_t recordBytes = sizeof(HistorySample);
 };
-static constexpr size_t kHistoryMaxSamples = 250000;  // ~60 MB, independent of retention.
+// ~60 MB, independent of the days kept; forever retention has no cap.
+static constexpr size_t kHistoryMaxSamples = 250000;
 static constexpr ULONGLONG kHistoryTimestampLimitMs = 100000000000000ULL;
 static constexpr ULONGLONG kHistoryMaxWindowMs = 3650 * kHistoryDayMs;
 static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
@@ -52,7 +53,8 @@ static uint64_t HistoryChecksum(const HistorySample& sample) {
     return hash;
 }
 
-// Callers hold only g_historyMutex. An invalid format is preserved until explicit Clear.
+// Callers hold only g_historyMutex. An invalid format is preserved until explicit Clear. Reads
+// the whole journal whatever the retention: maintenance and appends apply it.
 static void LoadHistoryLocked(bool create = false) {
     if (g_historyLoaded) return;
     g_historyLoaded = true;
@@ -134,17 +136,6 @@ static void LoadHistoryLocked(bool create = false) {
     size_t count = (size_t)((size.QuadPart - sizeof(header)) / sizeof(HistorySample));
     // A crash may leave only a partial final record. Retain complete checksummed samples.
     g_historyDirty = (size.QuadPart - sizeof(header)) % sizeof(HistorySample) != 0;
-    if (count > kHistoryMaxSamples) {
-        LARGE_INTEGER offset;
-        offset.QuadPart = sizeof(header) + (count - kHistoryMaxSamples) * sizeof(HistorySample);
-        if (!SetFilePointerEx(file.get(), offset, nullptr, FILE_BEGIN)) {
-            g_historyWritable = false;
-            SetHistoryStatus(L"Cannot seek in history file.");
-            return;
-        }
-        count = kHistoryMaxSamples;
-        g_historyDirty = g_historyCapped = true;
-    }
     std::array<HistorySample, 256> batch;
     while (count && !g_unloading) {
         size_t n = std::min(count, batch.size());
@@ -234,7 +225,9 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint6
     return true;
 }
 
-static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
+// At most hourly: prunes samples older than the published retention and, for a number of days,
+// beyond the size cap; then saves an unsaved journal.
+static ULONGLONG MaintainHistory(bool create = false) {
     try {
         std::lock_guard lock(g_historyMutex);
         LoadHistoryLocked(create);
@@ -246,12 +239,16 @@ static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
             return g_historyMaintenanceMs + kHistoryMaintenanceIntervalMs;
         }
         g_historyMaintenanceMs = now;
-        ULONGLONG age = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
-        ULONGLONG cutoff = now > age ? now - age : 0;
+        int retentionDays = g_historyRetentionDays.load();
+        ULONGLONG cutoff = HistoryRetentionStart(retentionDays, now);
         auto previousSize = g_historySamples.size();
         std::erase_if(g_historySamples, [cutoff](const auto& sample) {
             return sample.timeMs < cutoff;
         });
+        if (retentionDays > 0 && g_historySamples.size() > kHistoryMaxSamples) {
+            g_historySamples.erase(g_historySamples.begin(), g_historySamples.end() - kHistoryMaxSamples);
+            g_historyCapped = true;
+        }
         if (g_historySamples.size() != previousSize) {
             g_historyDirty = true;
             ++g_historyRevision;
@@ -266,8 +263,7 @@ static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
     }
 }
 
-static void AppendHistory(const std::vector<HistorySample>& samples,
-                          uint64_t epoch, ULONGLONG generation, int retentionDays) {
+static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t epoch, ULONGLONG generation) {
     if (samples.empty() || g_unloading) return;
     try {
         std::lock_guard lock(g_historyMutex);
@@ -277,10 +273,11 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
         LoadHistoryLocked(true);
         if (!g_historyWritable || g_historyPath.empty()) return;
         ULONGLONG now = NowUnixMs();
-        ULONGLONG age = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
+        int retentionDays = g_historyRetentionDays.load();
+        ULONGLONG cutoff = HistoryRetentionStart(retentionDays, now);
         std::vector<HistorySample> admitted;
         for (auto sample : samples) {
-            if ((now > age && sample.timeMs < now - age) ||
+            if (sample.timeMs < cutoff ||
                 (!g_historySamples.empty() && sample.timeMs < g_historySamples.back().timeMs)) {
                 continue;  // Never turn a backwards system-clock adjustment into negative time.
             }
@@ -307,7 +304,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
             admitted.push_back(sample);
         }
         if (admitted.empty()) return;
-        if (g_historySamples.size() > kHistoryMaxSamples) {
+        if (retentionDays > 0 && g_historySamples.size() > kHistoryMaxSamples) {
             // Amortize compaction instead of rewriting a full journal every new sample.
             while (g_historySamples.size() > kHistoryMaxSamples * 9 / 10) {
                 g_historySamples.pop_front();

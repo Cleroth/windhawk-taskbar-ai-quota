@@ -6,7 +6,12 @@
 // production store does; a rename moves the account's stored sign-in, a removal deletes it and,
 // when asked, the account's history.
 struct TestStore final : SettingsStore {
-    Settings settings;
+    // Kept for 90 days, so the custom retention box edits it (kept forever: its own cases)
+    Settings settings = [] {
+        Settings s;
+        s.historyRetentionDays = 90;
+        return s;
+    }();
     SettingsStatus status;
     std::vector<std::wstring> log;  // "load", "apply <field>=<value>",
                                     // "account <field> <label>=<value or text>", "add <provider> <label>"
@@ -170,6 +175,7 @@ static std::wstring Op(SettingsField field, int value) {
 }
 
 static constexpr SettingsField kRetention = SettingsField::RetentionDays;
+static constexpr SettingsField kKeep = SettingsField::KeepHistory;
 static constexpr SettingsField kPoll = SettingsField::PollMinutes;
 
 static void RunEditTests() {
@@ -222,6 +228,15 @@ static void RunEditTests() {
         CHECK(!s.showDetailsOnHover);
         SettingsAssign(s, kPoll, 1);
         CHECK(s.pollMinutes == 2);
+        // Kept forever by default: the custom box shows the most days and changes nothing.
+        CHECK(s.historyRetentionDays == 0 && SettingsFieldValue(s, kKeep) == 0);
+        CHECK(SettingsFieldValue(s, kRetention) == 3650);
+        SettingsAssign(s, kRetention, 30);
+        CHECK(s.historyRetentionDays == 0);
+        SettingsAssign(s, kKeep, 99999);
+        CHECK(s.historyRetentionDays == 3650);
+        SettingsAssign(s, kRetention, 30);
+        CHECK(s.historyRetentionDays == 30 && SettingsFieldValue(s, kKeep) == 30);
         SettingsAssign(s, kRetention, 99999);
         CHECK(s.historyRetentionDays == 3650);
         s.historyEnabled = false;
@@ -231,7 +246,7 @@ static void RunEditTests() {
         CHECK(s.showDetailsOnHover && s.pollMinutes == 10 && s.enableNotifications);
         CHECK(!s.historyEnabled && s.historyRetentionDays == 3650);  // Not Behavior's
         SettingsAssign(s, SettingsField::ResetHistory, 0);
-        CHECK(s.historyEnabled && s.historyRetentionDays == 90);
+        CHECK(s.historyEnabled && s.historyRetentionDays == 0);
     });
 
     Run("projection: valid drafts show; invalid, empty and overflowing text keeps the last valid value", [] {
@@ -264,7 +279,7 @@ static void RunEditTests() {
         CHECK(edits.Reset(SettingsField::ResetHistory) == 0);
         CHECK(edits.Process() == 0);
         CHECK(store.Applied() == std::vector<std::wstring>{Op(SettingsField::ResetHistory, 0)});
-        CHECK(store.settings.historyRetentionDays == 90 && edits.drafts.empty());
+        CHECK(store.settings.historyRetentionDays == 0 && edits.drafts.empty());  // Forever
     });
 
     Run("controller: Esc after a deferred commit skips it", [] {
@@ -349,6 +364,32 @@ static void RunEditTests() {
         CHECK(edits.Commit(0, kPoll, 5) == 0);  // The preset dropdown
         CHECK(store.Applied() == std::vector<std::wstring>{Op(kPoll, 5)});
         CHECK(edits.drafts.empty() && store.settings.pollMinutes == 5);
+    });
+
+    Run("controller: Keep history and its custom days drop each other's drafts, failed ones included", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        // A preset whose save failed, then days typed: closing saves only the typed days.
+        store.failNext = 1;
+        CHECK(edits.Commit(0, kKeep, 30) == 1);
+        CHECK(edits.Projection().historyRetentionDays == 30);
+        edits.SetText(0, kRetention, L"180");
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kRetention);
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Saved);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(kKeep, 30), Op(kRetention, 180)}));
+        CHECK(store.settings.historyRetentionDays == 180);
+        // Days typed and queued, then Forever: the typed days go with their request.
+        edits.SetText(0, kRetention, L"45");
+        CHECK(edits.RequestCommit(0, kRetention));
+        CHECK(edits.Commit(0, kKeep, 0) == 0);
+        CHECK(edits.drafts.empty() && edits.queue.empty() && store.settings.historyRetentionDays == 0);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(kKeep, 30), Op(kRetention, 180), Op(kKeep, 0)}));
+        // Kept forever, custom days that still arrive change nothing.
+        edits.SetText(0, kRetention, L"45");
+        CHECK(edits.Projection().historyRetentionDays == 0);
+        CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 0);
+        CHECK(edits.drafts.empty() && store.settings.historyRetentionDays == 0);
     });
 
     Run("controller: steps start from the last valid value, clamped, as text", [] {
@@ -532,16 +573,39 @@ static void RunPageTests() {
         CHECK(Control(frame, kPoll, 8).text == L"Custom" && Control(frame, kPoll).enabled);
     });
 
-    Run("history page: status lines, retention needs consent, links, folder", [] {
+    Run("history page: status lines, retention presets, forever and custom, consent, links, folder", [] {
         UiGraphics& g = TestGraphics();
         SettingsView view = TestView(SettingsUiPage::History);
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(HasText(frame, L"\u25CF Recording \u00B7 New samples arrive with each poll."));
         CHECK(Control(frame, SettingsField::RecordHistory).selected);
-        const UiItem& keep = Control(frame, kRetention);
-        CHECK(keep.enabled && keep.text == L"90");
+        // Kept forever by default: the custom box shows the most days, disabled.
+        const UiItem& keep = Control(frame, kKeep);
+        CHECK(keep.kind == UiItemKind::Dropdown && keep.enabled && keep.text == L"Forever");
+        CHECK(keep.options.size() == 5 && keep.options[2].text == L"1 year" && keep.options[2].value == 365 &&
+              keep.options[4].text == L"Custom");
+        CHECK(!Control(frame, kRetention).enabled && Control(frame, kRetention).text == L"3,650");
+        CHECK(HasText(frame, L"Choose Custom in Keep history to edit."));
+        CHECK(HasText(frame, L"keep history forever"));
         CHECK(Control(frame, kRetention, 3).runs[0].text == L"days");
+        // A preset; days no preset has, or Custom chosen: Custom with its box enabled. Kept forever,
+        // Custom chosen earlier enables nothing.
+        struct RetentionCase {
+            int days;
+            bool custom;
+            PCWSTR shown;
+            bool enabled;
+        };
+        for (const RetentionCase& c : {RetentionCase{365, false, L"1 year", false}, RetentionCase{120, false, L"Custom", true},
+                                       RetentionCase{90, true, L"Custom", true}, RetentionCase{0, true, L"Forever", false}}) {
+            view.settings.historyRetentionDays = c.days;
+            view.retentionCustom = c.custom;
+            frame = {};
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            CHECK(Control(frame, kKeep).text == c.shown && Control(frame, kRetention).enabled == c.enabled);
+        }
+        view.retentionCustom = false;
         CHECK(HasText(frame, view.status.historyFolder));
         CHECK(Control(frame, SettingsField::OpenHistory).text == L"Open usage history");
         CHECK(Control(frame, SettingsField::OpenHistoryFolder).icon == L"\uE838");
@@ -554,6 +618,7 @@ static void RunPageTests() {
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(HasText(frame, L"\u25CB Off"));
+        CHECK(!Control(frame, kKeep).enabled && Control(frame, kKeep).text == L"Custom");
         CHECK(!Control(frame, kRetention).enabled && Control(frame, kRetention).text == L"1,500");
         CHECK(HasText(frame, L"Turn on Record usage history to change this."));
         view.settings.historyEnabled = true;

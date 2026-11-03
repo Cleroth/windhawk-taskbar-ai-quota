@@ -212,7 +212,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
         }
         ULONGLONG nextHistoryMaintenanceMs = historyOwner && historyEnabled
-            ? MaintainHistory(historyRetentionDays, true) : 0;
+            ? MaintainHistory(true) : 0;
         bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
                                lastLoggedErrorStates.size() != accounts.size();
         if (settingsChanged) {
@@ -447,7 +447,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         // Admission is fenced against settings edits and Clear history. Never store a
         // carried-forward result or let a settings refresh manufacture a sample.
-        AppendHistory(historyBatch, historyEpoch, settingsGeneration, historyRetentionDays);
+        AppendHistory(historyBatch, historyEpoch, settingsGeneration);
         // Flyout burn-up curves from local history: the accounts recorded this round, or every
         // recorded account after an invalidation or once recording starts here.
         bool curvesPublished = false;

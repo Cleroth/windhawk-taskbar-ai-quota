@@ -23,6 +23,7 @@ struct SettingsView {
     uint64_t dragKey = 0;               // The account card being dragged, drawn lifted at dragTop
     float dragTop = 0;                  // Content DIPs
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
+    bool retentionCustom = false;       // Custom chosen in Keep history
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
     ULONGLONG now = 0;                  // The preview's sample time

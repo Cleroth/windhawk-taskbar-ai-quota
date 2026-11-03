@@ -49,10 +49,10 @@ local app or CLI session, which must remain running.
 - **Layout:** Tile style with a live taskbar preview, sizes, labels, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
-- **History:** Local recording is on by default per Windows user; set retention (90 days by
-  default) and choose recording per account independently of taskbar visibility. Hidden
-  accounts stop polling unless you disable **Do not poll hidden accounts** and enable their
-  recording.
+- **History:** Local recording is on by default per Windows user; keep history forever (the
+  default) or for a number of days, and choose recording per account independently of taskbar
+  visibility. Hidden accounts stop polling unless you disable **Do not poll hidden accounts**
+  and enable their recording.
 
 ## Usage history
 
@@ -69,9 +69,10 @@ Percentages from different accounts or overlapping windows are not added togethe
 
 History follows the configured entry: use a new entry for a different login. Data stays under
 `%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>` with your user-folder permissions, without tokens or
-labels. It is not encrypted and survives mod removal. Retention and a roughly 60 MB size cap
-prune old samples; **Clear all history...** removes recordings without changing sign-ins, and
-**Delete history...** on a removed account's page removes just its recordings.
+labels. It is not encrypted and survives mod removal. Kept forever, it grows without limit;
+with a number of days, retention and a roughly 60 MB size cap prune old samples. **Clear all
+history...** removes recordings without changing sign-ins, and **Delete history...** on a
+removed account's page removes just its recordings.
 See the [usage history guide](https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history)
 for recording rules, export, and verification.
 
@@ -269,7 +270,8 @@ struct Settings {
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
     bool historyEnabled = true;
-    int historyRetentionDays = 90;
+    // Days of usage history kept; 0: forever, with neither the age limit nor the size cap.
+    int historyRetentionDays = 0;
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;
@@ -360,6 +362,11 @@ static uint64_t AccountIdentityHash(const AccountConfig& a) {
 static constexpr size_t kHistoryMeterCount = 8;
 static constexpr ULONGLONG kHistoryDayMs = 24ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
+// The oldest time `retentionDays` keeps at `now`; 0 (forever) keeps every time.
+static ULONGLONG HistoryRetentionStart(int retentionDays, ULONGLONG now) {
+    ULONGLONG age = ULONGLONG(std::clamp(retentionDays, 0, 3650)) * kHistoryDayMs;
+    return age && now > age ? now - age : 0;
+}
 struct HistoryValue {
     double value = -1;
     ULONGLONG resetMs = 0;
@@ -409,6 +416,9 @@ static std::atomic<bool> g_historyIdsPendingSave{false};
 static std::mutex g_historyMutex;  // Leaf: never acquire settings/UI/auth locks inside it.
 static std::atomic<uint64_t> g_historyEpoch{1};  // Clear invalidates in-flight fetch batches.
 static std::atomic<ULONGLONG> g_historySettingsGeneration{0};
+// The published retention in days (0: forever, no size cap). Journal operations read it under the
+// history lock once loaded, so none prunes or caps by a setting superseded before it ran.
+static std::atomic<int> g_historyRetentionDays{0};
 static std::atomic<bool> g_historyStorageError{false};
 
 static ULONGLONG g_historyContinuityGeneration = 0;  // Protected by g_settingsMutex.
@@ -3365,7 +3375,8 @@ struct HistoryFileHeader {
     uint32_t version = 1;
     uint32_t recordBytes = sizeof(HistorySample);
 };
-static constexpr size_t kHistoryMaxSamples = 250000;  // ~60 MB, independent of retention.
+// ~60 MB, independent of the days kept; forever retention has no cap.
+static constexpr size_t kHistoryMaxSamples = 250000;
 static constexpr ULONGLONG kHistoryTimestampLimitMs = 100000000000000ULL;
 static constexpr ULONGLONG kHistoryMaxWindowMs = 3650 * kHistoryDayMs;
 static constexpr ULONGLONG kHistoryMaintenanceIntervalMs = 3600000;
@@ -3412,7 +3423,8 @@ static uint64_t HistoryChecksum(const HistorySample& sample) {
     return hash;
 }
 
-// Callers hold only g_historyMutex. An invalid format is preserved until explicit Clear.
+// Callers hold only g_historyMutex. An invalid format is preserved until explicit Clear. Reads
+// the whole journal whatever the retention: maintenance and appends apply it.
 static void LoadHistoryLocked(bool create = false) {
     if (g_historyLoaded) return;
     g_historyLoaded = true;
@@ -3494,17 +3506,6 @@ static void LoadHistoryLocked(bool create = false) {
     size_t count = (size_t)((size.QuadPart - sizeof(header)) / sizeof(HistorySample));
     // A crash may leave only a partial final record. Retain complete checksummed samples.
     g_historyDirty = (size.QuadPart - sizeof(header)) % sizeof(HistorySample) != 0;
-    if (count > kHistoryMaxSamples) {
-        LARGE_INTEGER offset;
-        offset.QuadPart = sizeof(header) + (count - kHistoryMaxSamples) * sizeof(HistorySample);
-        if (!SetFilePointerEx(file.get(), offset, nullptr, FILE_BEGIN)) {
-            g_historyWritable = false;
-            SetHistoryStatus(L"Cannot seek in history file.");
-            return;
-        }
-        count = kHistoryMaxSamples;
-        g_historyDirty = g_historyCapped = true;
-    }
     std::array<HistorySample, 256> batch;
     while (count && !g_unloading) {
         size_t n = std::min(count, batch.size());
@@ -3594,7 +3595,9 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint6
     return true;
 }
 
-static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
+// At most hourly: prunes samples older than the published retention and, for a number of days,
+// beyond the size cap; then saves an unsaved journal.
+static ULONGLONG MaintainHistory(bool create = false) {
     try {
         std::lock_guard lock(g_historyMutex);
         LoadHistoryLocked(create);
@@ -3606,12 +3609,16 @@ static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
             return g_historyMaintenanceMs + kHistoryMaintenanceIntervalMs;
         }
         g_historyMaintenanceMs = now;
-        ULONGLONG age = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
-        ULONGLONG cutoff = now > age ? now - age : 0;
+        int retentionDays = g_historyRetentionDays.load();
+        ULONGLONG cutoff = HistoryRetentionStart(retentionDays, now);
         auto previousSize = g_historySamples.size();
         std::erase_if(g_historySamples, [cutoff](const auto& sample) {
             return sample.timeMs < cutoff;
         });
+        if (retentionDays > 0 && g_historySamples.size() > kHistoryMaxSamples) {
+            g_historySamples.erase(g_historySamples.begin(), g_historySamples.end() - kHistoryMaxSamples);
+            g_historyCapped = true;
+        }
         if (g_historySamples.size() != previousSize) {
             g_historyDirty = true;
             ++g_historyRevision;
@@ -3626,8 +3633,7 @@ static ULONGLONG MaintainHistory(int retentionDays, bool create = false) {
     }
 }
 
-static void AppendHistory(const std::vector<HistorySample>& samples,
-                          uint64_t epoch, ULONGLONG generation, int retentionDays) {
+static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t epoch, ULONGLONG generation) {
     if (samples.empty() || g_unloading) return;
     try {
         std::lock_guard lock(g_historyMutex);
@@ -3637,10 +3643,11 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
         LoadHistoryLocked(true);
         if (!g_historyWritable || g_historyPath.empty()) return;
         ULONGLONG now = NowUnixMs();
-        ULONGLONG age = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
+        int retentionDays = g_historyRetentionDays.load();
+        ULONGLONG cutoff = HistoryRetentionStart(retentionDays, now);
         std::vector<HistorySample> admitted;
         for (auto sample : samples) {
-            if ((now > age && sample.timeMs < now - age) ||
+            if (sample.timeMs < cutoff ||
                 (!g_historySamples.empty() && sample.timeMs < g_historySamples.back().timeMs)) {
                 continue;  // Never turn a backwards system-clock adjustment into negative time.
             }
@@ -3667,7 +3674,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples,
             admitted.push_back(sample);
         }
         if (admitted.empty()) return;
-        if (g_historySamples.size() > kHistoryMaxSamples) {
+        if (retentionDays > 0 && g_historySamples.size() > kHistoryMaxSamples) {
             // Amortize compaction instead of rewriting a full journal every new sample.
             while (g_historySamples.size() > kHistoryMaxSamples * 9 / 10) {
                 g_historySamples.pop_front();
@@ -4167,7 +4174,7 @@ static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<Acco
     try {
         std::vector<BurnUpRequest> targets;
         ULONGLONG now = NowUnixMs();
-        ULONGLONG retention = (ULONGLONG)std::clamp(retentionDays, 1, 3650) * kHistoryDayMs;
+        ULONGLONG retained = HistoryRetentionStart(retentionDays, now);
         for (size_t i = 0; i < accounts.size() && i < readings.size() && i < rebuild.size(); i++) {
             const AccountConfig& account = accounts[i];
             if (!rebuild[i] || !account.recordHistory || !account.historyId) continue;
@@ -4186,9 +4193,7 @@ static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<Acco
                 target.from = std::min(target.from, start > kHistoryResetToleranceMs ?
                                                         start - kHistoryResetToleranceMs : 0);
             }
-            if (target.from != ULLONG_MAX) {
-                target.from = std::max(target.from, now > retention ? now - retention : 0);
-            }
+            if (target.from != ULLONG_MAX) target.from = std::max(target.from, retained);
         }
 
         uint64_t epoch;
@@ -4258,7 +4263,7 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
         return std::nullopt;
     }
     uint32_t provider = account->provider == L"anthropic" ? 1 : account->provider == L"openai" ? 2 : 3;
-    ULONGLONG retention = (ULONGLONG)std::clamp(g_settings.historyRetentionDays, 1, 3650) * kHistoryDayMs;
+    int retentionDays = g_settings.historyRetentionDays;
     std::lock_guard<std::mutex> dataLock(g_dataMutex);
     const BurnUpCurve* curve = FindBurnUpCurve(g_burnUpCurves, g_historyEpoch.load(),
                                                g_burnUpPolicyGeneration.load(), historyId, provider,
@@ -4266,10 +4271,8 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
     if (!curve) return std::nullopt;
     // Retention maintenance can prune readings between rebuilds; never chart them.
     BurnUpCurve copy = *curve;
-    ULONGLONG now = NowUnixMs();
-    std::erase_if(copy.points, [&](const BurnUpPoint& point) {
-        return now > retention && point.timeMs < now - retention;
-    });
+    ULONGLONG retained = HistoryRetentionStart(retentionDays, NowUnixMs());
+    std::erase_if(copy.points, [&](const BurnUpPoint& point) { return point.timeMs < retained; });
     if (copy.points.empty()) return std::nullopt;
     copy.points.front().connect = false;
     return copy;
@@ -4567,7 +4570,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
         }
         ULONGLONG nextHistoryMaintenanceMs = historyOwner && historyEnabled
-            ? MaintainHistory(historyRetentionDays, true) : 0;
+            ? MaintainHistory(true) : 0;
         bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
                                lastLoggedErrorStates.size() != accounts.size();
         if (settingsChanged) {
@@ -4802,7 +4805,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         // Admission is fenced against settings edits and Clear history. Never store a
         // carried-forward result or let a settings refresh manufacture a sample.
-        AppendHistory(historyBatch, historyEpoch, settingsGeneration, historyRetentionDays);
+        AppendHistory(historyBatch, historyEpoch, settingsGeneration);
         // Flyout burn-up curves from local history: the accounts recorded this round, or every
         // recorded account after an invalidation or once recording starts here.
         bool curvesPublished = false;
@@ -14879,7 +14882,7 @@ static bool NormalizeSettings(Settings* s) {
         s->accounts[0].hidden = false;
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
-    s->historyRetentionDays = std::clamp(s->historyRetentionDays, 1, 3650);
+    s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
@@ -14962,7 +14965,9 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"monitorNumber", s.taskbarMonitorNumber);
         setBool(L"showDetailsOnHover", s.showDetailsOnHover);
         setNumber(L"pollMinutes", s.pollMinutes);
-        setNumber(L"historyRetentionDays", s.historyRetentionDays);
+        // Forever is its own key: builds without it read the longest day count instead.
+        setNumber(L"historyRetentionDays", s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650);
+        setBool(L"historyKeepForever", s.historyRetentionDays <= 0);
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
@@ -15067,8 +15072,10 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.taskbarMonitorNumber = (int)GetNum(root, L"monitorNumber", 1);
         s.showDetailsOnHover = getBoolDefault(L"showDetailsOnHover", true);
         s.pollMinutes = (int)GetNum(root, L"pollMinutes", 10);
+        // Settings saved before forever retention keep their day count.
         double retentionDays = GetNum(root, L"historyRetentionDays", 90);
-        s.historyRetentionDays = std::isfinite(retentionDays) ?
+        s.historyRetentionDays = getBoolDefault(L"historyKeepForever", false) ? 0 :
+                                 std::isfinite(retentionDays) ?
                                      (int)std::clamp(retentionDays, 1.0, 3650.0) : 90;
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
@@ -15407,6 +15414,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
             }
         }
     }
+    g_historyRetentionDays.store(s.historyRetentionDays);
     g_settings = std::move(s);
     g_settingsGeneration++;
     g_historySettingsGeneration.store(g_settingsGeneration);
@@ -16004,7 +16012,8 @@ enum class SettingsField : uint8_t {
     Notifications,
     // History
     RecordHistory,  // This Windows user's recording consent
-    RetentionDays,
+    KeepHistory,    // The retention: days, or 0 for forever
+    RetentionDays,  // A day count's custom days; changes nothing while kept forever
     // Layout
     BarLayout,        // Tile style: a BarLayout
     BarLength,
@@ -16100,7 +16109,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
                     SettingsField::SkipHiddenPolling, SettingsField::Notifications};
         case SettingsField::ResetHistory:
-            return {SettingsField::RecordHistory, SettingsField::RetentionDays};
+            return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays};
         case SettingsField::ResetLayout:
             return {SettingsField::BarLayout,     SettingsField::BarLength,
                     SettingsField::BarThickness,  SettingsField::BarGap,
@@ -16131,7 +16140,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
         case SettingsField::Notifications: return s.enableNotifications;
         case SettingsField::RecordHistory: return s.historyEnabled;
-        case SettingsField::RetentionDays: return s.historyRetentionDays;
+        case SettingsField::KeepHistory: return s.historyRetentionDays;
+        case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
         case SettingsField::BarLayout: return int(s.barLayout);
         case SettingsField::BarLength: return s.barLength;
         case SettingsField::BarThickness: return s.barThickness;
@@ -16181,7 +16191,11 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SkipHiddenPolling: s.skipHiddenPolling = value != 0; break;
         case SettingsField::Notifications: s.enableNotifications = value != 0; break;
         case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
-        case SettingsField::RetentionDays: s.historyRetentionDays = value; break;
+        case SettingsField::KeepHistory: s.historyRetentionDays = std::clamp(value, 0, 3650); break;
+        case SettingsField::RetentionDays:
+            // Only Keep history leaves forever: the window asks first.
+            if (s.historyRetentionDays > 0) s.historyRetentionDays = value;
+            break;
         case SettingsField::BarLayout:
             s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
             break;
@@ -16821,7 +16835,12 @@ struct SettingsEdits {
 
 private:
     // The draft of a user action, created from the projection; a new revision clears any error.
+    // Keep history and its custom days set the same retention: either one's edit drops the
+    // other's draft and requests.
     SettingsDraft& Touch(uint64_t key, SettingsField field) {
+        if (!key && (field == SettingsField::KeepHistory || field == SettingsField::RetentionDays)) {
+            Revert(0, field == SettingsField::KeepHistory ? SettingsField::RetentionDays : SettingsField::KeepHistory);
+        }
         SettingsDraft* draft = Find(key, field);
         if (!draft) {
             SettingsDraft created;
@@ -17122,6 +17141,7 @@ struct SettingsView {
     uint64_t dragKey = 0;               // The account card being dragged, drawn lifted at dragTop
     float dragTop = 0;                  // Content DIPs
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
+    bool retentionCustom = false;       // Custom chosen in Keep history
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
     ULONGLONG now = 0;                  // The preview's sample time
@@ -18261,13 +18281,32 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                             {L"Applies to this Windows user only. Turning it off keeps saved history."}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::RecordHistory);
     }
+    // Retention: a preset, Forever (0) or Custom (-1) with its own number. Text typed into the
+    // custom box keeps Custom even while a partial number matches a preset.
+    std::vector<UiOption> options = {{L"30 days", 30}, {L"90 days", 90}, {L"1 year", 365},
+                                     {L"Forever", 0},  {L"Custom", -1}};
+    bool preset = std::any_of(options.begin(), options.end(),
+                              [&](const UiOption& option) { return option.value == s.historyRetentionDays; });
+    const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::RetentionDays);
+    bool custom = s.historyRetentionDays > 0 && (view.retentionCustom || !preset || (typed && typed->text));
     {
         UiCardSpec spec;
         spec.title = L"Keep history";
-        spec.description = {{L"1 to 3650 days, shared across Windows users. Older samples are pruned "
-                             L"hourly; a cap of about 60 MB can shorten this."}};
+        spec.description = {{L"Shared across Windows users. Forever deletes nothing and has no size limit, "
+                             L"so history keeps growing in Explorer's memory and on disk. Day limits prune "
+                             L"hourly, with a cap of about 60 MB."}};
         spec.enabled = s.historyEnabled;
         if (!s.historyEnabled) spec.reason = L"Turn on Record usage history to change this.";
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
+                                    200, std::move(options), custom ? -1 : s.historyRetentionDays);
+    }
+    {
+        UiCardSpec spec;
+        spec.title = L"Custom retention";
+        spec.description = {{L"1 to 3650 days."}};
+        spec.enabled = s.historyEnabled && custom;
+        if (!s.historyEnabled) spec.reason = L"Turn on Record usage history to change this.";
+        else if (!custom) spec.reason = L"Choose Custom in Keep history to edit.";
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec,
                                   SettingsField::RetentionDays, L"days");
     }
@@ -18305,7 +18344,7 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 
     UiCardSpec reset;
     reset.title = L"Reset History to defaults";
-    reset.description = {{L"Recording on for this Windows user, keep 90 days. Saved history stays."}};
+    reset.description = {{L"Recording on for this Windows user, keep history forever. Saved history stays."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
                                  SettingsField::ResetHistory, L"Reset");
 }
@@ -19275,11 +19314,11 @@ struct SettingsUiClient final : UiHostClient {
     SettingsEdits edits{store};
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
-    // Window state. Custom poll mode sticks once chosen or typed into, so the box doesn't
-    // disable itself when a partial number happens to match a preset. The last built view
-    // paints the preview; the color dialog's custom colors last for the window.
+    // Window state. Custom poll and retention modes stick once chosen or typed into, so their
+    // boxes don't disable themselves when a partial number happens to match a preset. The last
+    // built view paints the preview; the color dialog's custom colors last for the window.
     SettingsUiPage page = SettingsUiPage::Accounts;
-    bool pollCustom = false;
+    bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
@@ -19397,6 +19436,7 @@ struct SettingsUiClient final : UiHostClient {
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
+        view.retentionCustom = retentionCustom;
         view.scale = UiHostScale(host);
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
@@ -19479,6 +19519,39 @@ struct SettingsUiClient final : UiHostClient {
                         KillStepTimer(host, field);
                         Report(host, edits.Commit(0, field, action.value));
                         break;
+                    case SettingsField::KeepHistory: {
+                        // The retention dropdown: days, 0 for Forever, or -1 for Custom, which
+                        // drops a failed choice, enables the custom box and moves focus there.
+                        // Leaving the committed Forever asks first (pruning is shared and final);
+                        // Custom then starts at the most days. A commit drops the custom box's
+                        // draft (settings/edits.h).
+                        bool forever = edits.baseline.settings.historyRetentionDays <= 0;
+                        int days = action.value < 0 ? 3650 : action.value;
+                        if (forever && days) {
+                            std::wstring question =
+                                L"Stop keeping history forever?\n\nHistory will be kept for " +
+                                std::to_wstring(days) + L" days and limited to 250,000 samples (about "
+                                L"60 MB) again. Older samples, and the oldest beyond that limit, will be "
+                                L"deleted permanently, for every Windows user.";
+                            if (Ask(host, question.c_str(), L"Keep history",
+                                    MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES ||
+                                Unloading() || closePreparation || host.closing) {
+                                break;
+                            }
+                        }
+                        retentionCustom = action.value < 0;
+                        if (retentionCustom && !forever) {
+                            edits.Revert(0, field);
+                            UiHostRequestRebuild(host, false);
+                        } else {
+                            KillStepTimer(host, SettingsField::RetentionDays);
+                            Report(host, edits.Commit(0, field, days));
+                        }
+                        if (retentionCustom) {
+                            UiHostRequestFocus(host, {SettingsControlId(SettingsField::RetentionDays), -1}, true);
+                        }
+                        break;
+                    }
                     case SettingsField::ResetBehavior:
                     case SettingsField::ResetHistory:
                     case SettingsField::ResetLayout:
@@ -19498,16 +19571,7 @@ struct SettingsUiClient final : UiHostClient {
                                 L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
                                 L"additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
-                                L"Windows user and history is kept for 90 days. Saved history stays.";
-                        // Never shorten retention without saying so: pruning is shared and final.
-                        // The committed value counts, not a draft (which may have failed).
-                        int retention = edits.baseline.settings.historyRetentionDays;
-                        if (field == SettingsField::ResetHistory &&
-                            retention > Settings{}.historyRetentionDays) {
-                            question += L"\n\nHistory is kept for " + std::to_wstring(retention) +
-                                        L" days now: samples older than 90 days will be deleted "
-                                        L"permanently, for every Windows user.";
-                        }
+                                L"Windows user and history is kept forever. Saved history stays.";
                         if (Ask(host, question.c_str(), L"Reset settings",
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {
@@ -19515,6 +19579,7 @@ struct SettingsUiClient final : UiHostClient {
                         }
                         KillStepTimers(host);
                         if (field == SettingsField::ResetBehavior) pollCustom = false;
+                        if (field == SettingsField::ResetHistory) retentionCustom = false;
                         Report(host, edits.Reset(field));
                         break;
                     }
@@ -19646,6 +19711,7 @@ struct SettingsUiClient final : UiHostClient {
                 // Typing supersedes a pending step: its timer no longer commits.
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::RetentionDays) retentionCustom = true;
                 edits.SetText(action.key, field, std::move(action.text));
                 UiHostRequestRebuild(host, false);
                 break;
@@ -19677,6 +19743,7 @@ struct SettingsUiClient final : UiHostClient {
                     break;
                 }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::RetentionDays) retentionCustom = true;
                 steps[field] = {action.key, edits.Step(action.key, field, action.value)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);
@@ -20480,7 +20547,7 @@ struct HistoryUiView {
     // disabled), retention and the usage colors of navigation values
     bool recordingEnabled = true;
     bool canEnableRecording = false;
-    int retentionDays = 90;
+    int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
     bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
 
@@ -21324,9 +21391,9 @@ struct HistoryCsvResult {
 struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
-    // Prunes the journal to the retention, then reads its samples from `from` on with their
-    // stamp; may initialize or retry the storage.
-    virtual HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) = 0;
+    // Prunes the journal to the published retention, then reads its samples from `from` on with
+    // their stamp; may initialize or retry the storage.
+    virtual HistorySnapshot ExplicitSnapshot(ULONGLONG from) = 0;
     // Memory only, never initializing or retrying the storage: the journal's stamp, status and
     // cap, and, when `samples` asks, a replacement for a snapshot held with `held` from
     // `heldFrom` (the journal loaded, and another stamp or `from` further back).
@@ -21491,9 +21558,8 @@ struct HistoryController {
         loadPending = false;
         uint64_t request = ops->TakeRequest();
         HistorySettingsSnapshot read = ops->ReadSettings();
-        int retention = read.settings.historyRetentionDays;
-        auto [start, end, readStart] = Times(retention);
-        auto loaded = std::make_shared<HistorySnapshot>(ops->ExplicitSnapshot(readStart, retention));
+        auto [start, end, readStart] = Times(read.settings.historyRetentionDays);
+        auto loaded = std::make_shared<HistorySnapshot>(ops->ExplicitSnapshot(readStart));
         HistorySortSamples(loaded->samples);
         std::wstring status = loaded->status;
         bool capped = loaded->capped;
@@ -21785,8 +21851,12 @@ struct HistoryController {
             L"writes every supported meter of the selected account, or of every account under All accounts, over "
             L"the selected range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are "
             L"not dollars or a spending ledger.\r\n\r\n"
-            L"Retention: " + std::to_wstring(settings.settings.historyRetentionDays) +
-            L" days, also limited to 250,000 records / about 60 MB. Turning recording off keeps saved history. Removed "
+            L"Retention: " +
+            (settings.settings.historyRetentionDays > 0 ?
+                 std::to_wstring(settings.settings.historyRetentionDays) +
+                     L" days, also limited to 250,000 records / about 60 MB." :
+                 std::wstring(L"forever, with no size limit.")) +
+            L" Turning recording off keeps saved history. Removed "
             L"accounts remain under their IDs until expiry or Clear, unless their history was deleted with them; "
             L"select one to delete its history.";
         if (snapshot && !snapshot->samples.empty()) {
@@ -21966,24 +22036,30 @@ struct HistoryController {
         return true;
     }
 
-    // The shown times at the clock's now: [start, now) over the range (All: the retention's days;
-    // comparing: 7 days), read from the week before start while comparing.
+    // The shown times at the clock's now: [start, now) over the range (All: the retention's days,
+    // or start 0 when kept forever, which Adopt resolves; comparing: 7 days), read from the week
+    // before start while comparing.
     std::array<ULONGLONG, 3> Times(int retention) {
         static constexpr int kDays[] = {1, 7, 30, 90};
         ULONGLONG now = ops->Now();
         ULONGLONG span = (compare                         ? 7 :
-                          range == HistoryUiRange::All    ? ULONGLONG(std::max(1, retention)) :
+                          range == HistoryUiRange::All    ? ULONGLONG(std::max(0, retention)) :
                                                             ULONGLONG(kDays[int(range)])) * kHistoryDayMs;
-        ULONGLONG start = now > span ? now - span : 0;
+        ULONGLONG start = span && now > span ? now - span : 0;
         return {start, now, compare && start > kHistoryWeekMs ? start - kHistoryWeekMs : start};
     }
 
     // Takes `read` and the `next` snapshot (read from `nextFrom`) for the times [start, end) read
     // from `readStart`: collects the accounts over them and resolves the selection (a listed
     // request wins; else it stays while listed, else All accounts; a change drops the notice).
+    // Start 0 (All kept forever) begins at the oldest sample held, showing at least a day.
     // False when unload cut the collection short: nothing changes then.
     bool Adopt(HistorySettingsSnapshot read, std::shared_ptr<const HistorySnapshot> next, ULONGLONG nextFrom,
                ULONGLONG start, ULONGLONG end, ULONGLONG readStart, uint64_t request) {
+        if (!start && end) {
+            start = end > kHistoryDayMs ? end - kHistoryDayMs : 0;
+            if (next && !next->samples.empty()) start = std::min(start, next->samples.front().timeMs);
+        }
         const std::vector<HistorySample> none;
         std::vector<HistoryUiAccount> collected = HistoryCollectAccounts(
             read.settings.accounts, next ? next->samples : none, readStart, end, [this] { return ops->Unloading(); });
@@ -22724,8 +22800,10 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     Pill pill = view.pill == HistoryUiPill::Off       ? Pill{L"Off", UiInk::Secondary, false} :
                 view.pill == HistoryUiPill::NotSaving ? Pill{L"Not saving", UiInk::Danger, true} :
                 view.pill == HistoryUiPill::Waiting   ? Pill{L"Waiting", UiInk::Caution, true} :
-                Pill{L"Recording \u00B7 " + std::to_wstring(view.retentionDays) +
-                         (view.retentionDays == 1 ? L" day" : L" days"), UiInk::Success, true};
+                Pill{L"Recording \u00B7 " +
+                         (view.retentionDays <= 0 ? std::wstring(L"forever") :
+                          std::to_wstring(view.retentionDays) + (view.retentionDays == 1 ? L" day" : L" days")),
+                     UiInk::Success, true};
     PCWSTR title = selected ? selected->label.c_str() : L"All accounts";
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, UiTextStyleFor(UiFont::Title), 100000, false)).width);
@@ -22934,8 +23012,8 @@ struct HistoryProductionOps final : HistoryOps {
 
     // An explicit viewer read also prunes retained history while recording is off. Each call
     // holds only the history leaf lock.
-    HistorySnapshot ExplicitSnapshot(ULONGLONG from, int retentionDays) override {
-        MaintainHistory(retentionDays);
+    HistorySnapshot ExplicitSnapshot(ULONGLONG from) override {
+        MaintainHistory();
         return ReadHistorySnapshot(from);
     }
 

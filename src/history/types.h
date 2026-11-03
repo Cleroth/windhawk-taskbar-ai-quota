@@ -5,6 +5,11 @@
 static constexpr size_t kHistoryMeterCount = 8;
 static constexpr ULONGLONG kHistoryDayMs = 24ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kHistoryWeekMs = 7 * kHistoryDayMs;
+// The oldest time `retentionDays` keeps at `now`; 0 (forever) keeps every time.
+static ULONGLONG HistoryRetentionStart(int retentionDays, ULONGLONG now) {
+    ULONGLONG age = ULONGLONG(std::clamp(retentionDays, 0, 3650)) * kHistoryDayMs;
+    return age && now > age ? now - age : 0;
+}
 struct HistoryValue {
     double value = -1;
     ULONGLONG resetMs = 0;

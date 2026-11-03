@@ -31,13 +31,32 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                             {L"Applies to this Windows user only. Turning it off keeps saved history."}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::RecordHistory);
     }
+    // Retention: a preset, Forever (0) or Custom (-1) with its own number. Text typed into the
+    // custom box keeps Custom even while a partial number matches a preset.
+    std::vector<UiOption> options = {{L"30 days", 30}, {L"90 days", 90}, {L"1 year", 365},
+                                     {L"Forever", 0},  {L"Custom", -1}};
+    bool preset = std::any_of(options.begin(), options.end(),
+                              [&](const UiOption& option) { return option.value == s.historyRetentionDays; });
+    const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::RetentionDays);
+    bool custom = s.historyRetentionDays > 0 && (view.retentionCustom || !preset || (typed && typed->text));
     {
         UiCardSpec spec;
         spec.title = L"Keep history";
-        spec.description = {{L"1 to 3650 days, shared across Windows users. Older samples are pruned "
-                             L"hourly; a cap of about 60 MB can shorten this."}};
+        spec.description = {{L"Shared across Windows users. Forever deletes nothing and has no size limit, "
+                             L"so history keeps growing in Explorer's memory and on disk. Day limits prune "
+                             L"hourly, with a cap of about 60 MB."}};
         spec.enabled = s.historyEnabled;
         if (!s.historyEnabled) spec.reason = L"Turn on Record usage history to change this.";
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
+                                    200, std::move(options), custom ? -1 : s.historyRetentionDays);
+    }
+    {
+        UiCardSpec spec;
+        spec.title = L"Custom retention";
+        spec.description = {{L"1 to 3650 days."}};
+        spec.enabled = s.historyEnabled && custom;
+        if (!s.historyEnabled) spec.reason = L"Turn on Record usage history to change this.";
+        else if (!custom) spec.reason = L"Choose Custom in Keep history to edit.";
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec,
                                   SettingsField::RetentionDays, L"days");
     }
@@ -75,7 +94,7 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 
     UiCardSpec reset;
     reset.title = L"Reset History to defaults";
-    reset.description = {{L"Recording on for this Windows user, keep 90 days. Saved history stays."}};
+    reset.description = {{L"Recording on for this Windows user, keep history forever. Saved history stays."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
                                  SettingsField::ResetHistory, L"Reset");
 }
