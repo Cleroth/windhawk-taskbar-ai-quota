@@ -776,6 +776,7 @@ struct HistoryController {
         v.redThreshold = display.redThreshold;
         v.colorblind = s.colorblindMode;
         v.remaining = s.barMode == BarMode::Remaining;
+        v.logoBrands = s.logoBrands;
         v.notice = notice;
         v.canExport = snapshot != nullptr;
         v.exporting = operation == HistoryOperation::Writing;

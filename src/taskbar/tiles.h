@@ -99,8 +99,9 @@ static double TileTextWidthPerPt(TextBlock const& text) {
     }
 }
 
-// Builds account `index`'s identity into `tile`: the provider logo, with a number badge when
-// several configured accounts share the provider, or text, and the stale-warning mark. Rings
+// Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
+// chosen), with a number badge when several configured accounts share the provider, or text, and
+// the stale-warning mark. Rings
 // resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
@@ -119,7 +120,10 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
             logo.Height(side);
             logo.HorizontalAlignment(HorizontalAlignment::Center);
             logo.VerticalAlignment(VerticalAlignment::Center);
-            logo.Child(LoadProviderLogo(account.provider, nullptr));
+            // Brand colors, except in high contrast, where it inherits the text color.
+            const LogoBrand* brand = ProviderLogoBrand(display.logoBrands, account.provider);
+            logo.Child(LoadProviderLogo(account.provider,
+                                        brand && !IsHighContrast() ? LogoBrandBrush(*brand) : Brush{nullptr}));
             identity.Children().Append(logo);
             tile.logo = logo;
         } catch (...) {

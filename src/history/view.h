@@ -82,12 +82,13 @@ struct HistoryUiView {
     bool compare = false;                    // Shows the range as 7 days, disabled
 
     // Settings: recording (and whether the banner's Enable recording can run; else it shows
-    // disabled), retention and the usage colors of navigation values
+    // disabled), retention, the usage colors of navigation values and the logos' brand colors
     bool recordingEnabled = true;
     bool canEnableRecording = false;
     int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
     bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
+    LogoBrands logoBrands;
 
     // Status: the pill, the header's status text ("Updated Sat 31 Oct 14:32"; empty before the
     // first load), the journal's state (its status without the cap note, the cap) and an
@@ -145,10 +146,21 @@ static PCWSTR HistoryUiProviderName(uint32_t provider) {
            provider == 3 ? L"Google Antigravity" : L"Unknown provider";
 }
 
-// A provider's logo path (taskbar/logo-paths.h, 24 DIP view box), or nullptr.
-static PCWSTR HistoryUiLogo(uint32_t provider) {
-    return provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
-           provider == 3 ? kGeminiLogoPath : nullptr;
+// A provider's logo (taskbar/logo-paths.h, 24 DIP view box) in the primary ink, or in its brand
+// colors when chosen and `brand`; none for an unknown provider.
+static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_t provider, bool brand) {
+    PCWSTR path = provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
+                  provider == 3 ? kGeminiLogoPath : nullptr;
+    if (!path) return {};
+    UiShapePart part{path, {}, UiInk::Primary};
+    const LogoBrand* colors =
+        brand ? ProviderLogoBrand(view.logoBrands, provider == 1 ? L"anthropic" : provider == 3 ? L"antigravity" : L"")
+              : nullptr;
+    if (colors) {
+        part.fill = UiPartFill{UiRgb(colors->from & 0xFFFFFF), UiRgb(colors->to & 0xFFFFFF),
+                               {colors->x0, colors->y0}, {colors->x1, colors->y1}};
+    }
+    return {part};
 }
 
 // Compact display formats (approved with the phase-3 mockups), English and independent of the

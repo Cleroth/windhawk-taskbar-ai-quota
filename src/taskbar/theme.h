@@ -1,8 +1,29 @@
-// XAML colors for the meter model's ARGB values, and the details flyout's theme. Every flyout
-// brush is created in this file.
+// XAML colors for the meter model's ARGB values, logo brand brushes, and the details flyout's
+// theme. Every flyout brush is created in this file.
 
 static winrt::Windows::UI::Color ArgbColor(uint32_t argb) {
     return {(uint8_t)(argb >> 24), (uint8_t)(argb >> 16), (uint8_t)(argb >> 8), (uint8_t)argb};
+}
+
+static bool IsHighContrast() {
+    HIGHCONTRASTW highContrast{sizeof(highContrast)};
+    return SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast), &highContrast, 0) &&
+           (highContrast.dwFlags & HCF_HIGHCONTRASTON);
+}
+
+// A logo's brand colors (logo-paths.h) as a gradient, also when flat (see FlyoutBrush), relative
+// to the logo's bounding box: the gradient logo spans its whole viewBox. Throws on failure.
+static Brush LogoBrandBrush(LogoBrand const& brand) {
+    LinearGradientBrush brush;
+    brush.StartPoint({brand.x0 / 24, brand.y0 / 24});
+    brush.EndPoint({brand.x1 / 24, brand.y1 / 24});
+    for (auto [offset, color] : {std::pair{0.0, brand.from}, std::pair{1.0, brand.to}}) {
+        GradientStop stop;
+        stop.Color(ArgbColor(color));
+        stop.Offset(offset);
+        brush.GradientStops().Append(stop);
+    }
+    return brush;
 }
 
 // The single constructor of solid flyout brushes (backgrounds, text, borders and shapes). A
@@ -60,10 +81,7 @@ static Brush FlyoutFillBrush(winrt::Windows::UI::Color color) {
 static FlyoutTheme LoadFlyoutTheme() {
     using Color = winrt::Windows::UI::Color;
     FlyoutTheme theme;
-    HIGHCONTRASTW highContrast{sizeof(highContrast)};
-    theme.highContrast =
-        SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast), &highContrast, 0) &&
-        (highContrast.dwFlags & HCF_HIGHCONTRASTON);
+    theme.highContrast = IsHighContrast();
     auto personalizeValue = [](PCWSTR name, DWORD fallback) {
         DWORD value = fallback;
         DWORD size = sizeof(value);

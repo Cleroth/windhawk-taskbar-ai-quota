@@ -87,8 +87,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         return card.card.bottom;
     };
 
-    // Logo identities in every style: the logo size, the badge's size and color, then its offsets.
-    // Bars need an identity position.
+    // Logo identities in every style: the logo size and the colors of the logos that have brand
+    // colors, the badge's size and color, then its offsets. Bars need an identity position, except
+    // for the logo colors, which the flyout and the windows also show.
     auto logoCards = [&](float top, bool placed) {
         auto slider = [&](float at, PCWSTR title, PCWSTR description, SettingsField field) {
             UiCardSpec spec;
@@ -98,8 +99,23 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             if (!placed) spec.reason = L"Choose an identity position to change this.";
             return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
         };
+        auto brand = [&](float at, PCWSTR title, PCWSTR description, SettingsField field, PCWSTR colors) {
+            UiCardSpec spec;
+            spec.title = title;
+            spec.description = {{description}};
+            return SettingsAddDropdownCard(g, view, items, id, x, at, width, spec, field, 200,
+                                           {{L"Taskbar text color", 0}, {colors, 1}},
+                                           SettingsFieldValue(s, field));
+        };
         top = slider(top, L"Logo size", L"Percent of the standard size; rings keep it inside the hole.",
                      SettingsField::LogoScale);
+        top = brand(top + 3, L"Claude logo",
+                    L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history "
+                    L"match.",
+                    SettingsField::ClaudeLogoBrand, L"Orange");
+        top = brand(top + 3, L"Antigravity logo",
+                    L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient.",
+                    SettingsField::GeminiLogoBrand, L"Gemini gradient");
         top = slider(top + 3, L"Badge size",
                      L"Text size of the number on a logo when several accounts share a provider, in pixels.",
                      SettingsField::BadgeSize);

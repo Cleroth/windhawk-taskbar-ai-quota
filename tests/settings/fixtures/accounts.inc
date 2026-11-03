@@ -407,6 +407,30 @@ static void RunAccountEditTests() {
             if (item.kind == UiItemKind::Chip && item.rect.top < 14 + 68) keys.push_back(item.text);
         }
         CHECK((keys == std::vector<std::wstring>{L"5h", L"7d", L"Cr"}));
+        // Each card's logo (OAI, CC 1, CC 2, Go) in the primary ink; with brand colors chosen,
+        // Claude's fill orange and Gemini's purple to blue, OpenAI's stays.
+        auto logos = [](const UiFrame& f) {
+            std::vector<const UiShapePart*> parts;
+            for (const UiItem& item : f.content) {
+                if (item.kind != UiItemKind::Shape || item.parts.size() != 1) continue;
+                PCWSTR path = item.parts[0].path;
+                if (path == kOpenAiLogoPath || path == kClaudeLogoPath || path == kGeminiLogoPath) parts.push_back(&item.parts[0]);
+            }
+            return parts;
+        };
+        std::vector<const UiShapePart*> plain = logos(frame);
+        CHECK(plain.size() == 4 && plain[0]->path == kOpenAiLogoPath && plain[1]->path == kClaudeLogoPath &&
+              plain[3]->path == kGeminiLogoPath);
+        for (const UiShapePart* logo : plain) CHECK(logo->ink == UiInk::Primary && !logo->fill);
+        SettingsView branded = view;
+        branded.settings.logoBrands = {true, true};
+        UiFrame brandedFrame;
+        SettingsUiBuildFrame(g, branded, {1000, 820}, brandedFrame);
+        std::vector<const UiShapePart*> brand = logos(brandedFrame);
+        CHECK(brand.size() == 4 && !brand[0]->fill && brand[1]->fill && brand[2]->fill && brand[3]->fill);
+        CHECK(UiColorKey(brand[1]->fill->from) == 0xFFD97757 && UiColorKey(brand[1]->fill->to) == 0xFFD97757 &&
+              UiColorKey(brand[3]->fill->from) == 0xFF9168C0 && UiColorKey(brand[3]->fill->to) == 0xFF1BA1E3);
+        for (const UiShapePart* logo : brand) CHECK(logo->ink == UiInk::Primary);
         // Chips that only show pass the pointer to the header.
         const UiItem* chip = &*std::find_if(frame.content.begin(), frame.content.end(),
                                             [](const UiItem& item) { return item.kind == UiItemKind::Chip; });

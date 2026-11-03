@@ -268,8 +268,9 @@ struct SettingsUiClient final : UiHostClient {
                                 L"hidden accounts, threshold notifications on." :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
-                                L"on the left, 32 px rings, light blue number badges, light grey caret "
-                                L"pace markers and the default spacing. Accounts are not changed." :
+                                L"on the left, 32 px rings, logos in the taskbar\u2019s text color, light "
+                                L"blue number badges, light grey caret pace markers and the default "
+                                L"spacing. Accounts are not changed." :
                             field == SettingsField::ResetDisplay ?
                                 L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
                                 L"hover with adaptive alignment, no amounts, the standard palette with "

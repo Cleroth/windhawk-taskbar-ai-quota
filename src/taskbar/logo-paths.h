@@ -1,5 +1,5 @@
 // Provider logo path data from Simple Icons (CC0-1.0): SVG path strings in a 24x24 viewBox,
-// filled with the text color. Pure data, shared by every renderer.
+// filled with the text color or the logo's brand colors. Pure data, shared by every renderer.
 
 // openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
 static constexpr PCWSTR kOpenAiLogoPath =
@@ -51,3 +51,24 @@ static constexpr PCWSTR kGeminiLogoPath =
     L".49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-."
     L"96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93"
     L" 3.81 2.55t2.55 3.81";
+
+// A logo's brand colors (ARGB): `from` at (x0, y0) of the 24x24 viewBox shading linearly to `to`
+// at (x1, y1), clamped beyond them; flat when the colors match.
+struct LogoBrand {
+    uint32_t from, to;
+    float x0, y0, x1, y1;
+};
+
+// The Claude symbol's orange.
+static constexpr LogoBrand kClaudeLogoBrand{0xFFD97757, 0xFFD97757, 0, 0, 24, 24};
+// The Gemini sparkle's purple-to-blue gradient. The official radial gradient is stretched so far
+// that it shades along one axis: this runs along it from the first stop to the last; the middle
+// stop lies within a few levels of the line. The sparkle spans the whole viewBox.
+static constexpr LogoBrand kGeminiLogoBrand{0xFF9168C0, 0xFF1BA1E3, 4.006f, 10.303f, 18.645f, 15.253f};
+
+// The brand colors `brands` chooses for `provider`'s logo; nullptr: the text color.
+static const LogoBrand* ProviderLogoBrand(LogoBrands brands, std::wstring_view provider) {
+    if (provider == L"anthropic") return brands.claude ? &kClaudeLogoBrand : nullptr;
+    if (provider == L"antigravity") return brands.gemini ? &kGeminiLogoBrand : nullptr;
+    return nullptr;
+}

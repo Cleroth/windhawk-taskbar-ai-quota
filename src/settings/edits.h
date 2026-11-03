@@ -34,6 +34,8 @@ enum class SettingsField : uint8_t {
     RingSize,
     RingThickness,
     LogoScale,        // Percent
+    ClaudeLogoBrand,  // 1: Anthropic's orange
+    GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
     BadgeSize,
     BadgeColor,       // 0xBBGGRR
     BadgeOffsetX,
@@ -138,6 +140,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::LogoScale,
+                    SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
                     SettingsField::LabelPosition,
@@ -178,6 +181,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RingSize: return s.ringSize;
         case SettingsField::RingThickness: return s.ringThickness;
         case SettingsField::LogoScale: return s.logoScale;
+        case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
+        case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
         case SettingsField::BadgeSize: return s.badgeSize;
         case SettingsField::BadgeColor: return int(s.badgeColor & 0x00FFFFFF);
         case SettingsField::BadgeOffsetX: return s.badgeOffsetX;
@@ -245,6 +250,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::RingSize: s.ringSize = value; break;
         case SettingsField::RingThickness: s.ringThickness = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
+        case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
+        case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
         case SettingsField::BadgeSize: s.badgeSize = value; break;
         case SettingsField::BadgeColor: s.badgeColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::BadgeOffsetX: s.badgeOffsetX = value; break;
@@ -304,6 +311,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.ringSize = defaults.ringSize;
             s.ringThickness = defaults.ringThickness;
             s.logoScale = defaults.logoScale;
+            s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;
             s.badgeColor = defaults.badgeColor;
             s.badgeOffsetX = defaults.badgeOffsetX;

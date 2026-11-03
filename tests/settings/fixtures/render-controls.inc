@@ -22,7 +22,8 @@ static void RenderControlsSheet(UiGraphics& g, IWICImagingFactory* wic, const st
 
     // Navigation entries as the history sidebar shows them: All accounts, accounts with logos and
     // weekly values in usage colors (a long label, an unknown stale value, a selected and a
-    // disabled entry), the Removed header and removed accounts in muted ink.
+    // disabled entry; brand-colored logos on CC 1, Go, the selected CC 6 and the disabled Go 3,
+    // which keeps its ink), the Removed header and removed accounts in muted ink.
     std::vector<UiItem> nav;
     float navHeight = 0;
     {
@@ -83,6 +84,11 @@ static void RenderControlsSheet(UiGraphics& g, IWICImagingFactory* wic, const st
             item.rect = {8, y, 252, y + 38};
             item.text = entry.label;
             item.parts = {{entry.logo, {}, UiInk::Primary}};
+            for (PCWSTR branded : {L"CC 1", L"Go", L"CC 6", L"Go 3"}) {
+                if (std::wstring_view(entry.label) != branded) continue;
+                const LogoBrand& b = entry.logo == kClaudeLogoPath ? kClaudeLogoBrand : kGeminiLogoBrand;
+                item.parts[0].fill = UiPartFill{UiRgb(b.from & 0xFFFFFF), UiRgb(b.to & 0xFFFFFF), {b.x0, b.y0}, {b.x1, b.y1}};
+            }
             item.ink = entry.removed ? UiInk::Muted : UiInk::Primary;
             if (entry.value) {
                 UiRun value{entry.value};

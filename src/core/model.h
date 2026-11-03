@@ -98,6 +98,14 @@ enum class PaceTickStyle {
     Dot,
 };
 
+// Provider logos drawn in their brand colors instead of the taskbar's text color.
+struct LogoBrands {
+    bool claude = false;  // Anthropic's orange
+    bool gemini = false;  // The Gemini sparkle's gradient (Antigravity)
+
+    bool operator==(const LogoBrands&) const = default;
+};
+
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 // The number badge's colors: white stands for the taskbar's text color, whatever the theme.
 static constexpr COLORREF kDefaultBadgeColor = RGB(0x4C, 0xC2, 0xFF);
@@ -129,6 +137,7 @@ struct Settings {
     int ringSize = 32;
     int ringThickness = 3;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
+    LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
     int badgeSize = 9;
     COLORREF badgeColor = kDefaultBadgeColor;

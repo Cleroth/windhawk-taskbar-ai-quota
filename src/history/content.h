@@ -171,8 +171,8 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
                 text({left, y + 11, right, y + 27}, {{L"No readings in range"}}, UiFont::Caption, UiInk::Primary, true);
                 float row = y + 31;
                 for (const HistoryUiNoReadings& entry : view.noReadings) {
-                    if (PCWSTR logo = HistoryUiLogo(entry.provider)) {
-                        shape({left, row + 4, left + 16, row + 20}, 24, {{logo, {}, UiInk::Primary}});
+                    if (std::vector<UiShapePart> logo = HistoryUiLogo(view, entry.provider, true); !logo.empty()) {
+                        shape({left, row + 4, left + 16, row + 20}, 24, std::move(logo));
                     }
                     float labelLeft = left + 24;
                     float labelWidth = std::min(

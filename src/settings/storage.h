@@ -183,6 +183,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
         setNumber(L"logoScale", s.logoScale);
+        setBool(L"brandClaudeLogo", s.logoBrands.claude);
+        setBool(L"brandGeminiLogo", s.logoBrands.gemini);
         setNumber(L"badgeSize", s.badgeSize);
         setNumber(L"badgeColor", (int)s.badgeColor);
         setNumber(L"badgeOffsetX", s.badgeOffsetX);
@@ -313,6 +315,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         double badgeOffsetY = GetNum(root, L"badgeOffsetY", 0);
         s.logoScale = std::isfinite(logoScale) ?
                           (int)std::clamp(logoScale, 0.0, (double)kLogoScaleMax) : 0;
+        s.logoBrands.claude = getBoolDefault(L"brandClaudeLogo", false);
+        s.logoBrands.gemini = getBoolDefault(L"brandGeminiLogo", false);
         s.badgeSize = std::isfinite(badgeSize) ?
                           (int)std::clamp(badgeSize, 0.0, (double)kBadgeSizeMax) : 0;
         s.badgeOffsetX = std::isfinite(badgeOffsetX) ?

@@ -63,7 +63,7 @@ regenerates.
   committed before an account action and an invalid label blocking it, removal invalidation,
   removal's sign-in and history deletion with a kept history's notice, the
   Add account label choice skipping stored sign-ins, desired visibility and moves, vanished
-  accounts) and the Accounts page (cards, header controls, expanded rows per provider, empty
+  accounts) and the Accounts page (cards with their logos' brand colors, header controls, expanded rows per provider, empty
   state, a lifted dragged card, the reorder target, a drag's in-place card moves matching a rebuild
   of nine accounts). `fixtures/layout.inc`: slider input, the
   Layout fields and reset group, the projection the preview reads, the preview strip model
@@ -72,7 +72,7 @@ regenerates.
   and gap (the badge's overhang, the stale mark per form, no quotas, a logo above or below the
   bars keeping a label's distance at two label sizes), the logo size per style and the outlined
   badge's size, offsets (the logo staying centred across its bars) and color with its contrasting
-  outline, pace marks,
+  outline, the logos' brand colors per provider, pace marks,
   bar styles with their shaded fills and tick overhang, ring tiles' model shapes, headline fills,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
@@ -87,7 +87,7 @@ regenerates.
   `render-history-off-*`, `render-layout-states-*`, `render-layout-identity-*` (the Identity and
   text section with its link to Accounts), `render-layout-badge-*` (the logo and badge cards, a
   badge color swatch focused), `render-display-states-*`,
-  `render-accounts-states-*`, `render-accounts-drag-*`), Accounts as its mockups
+  `render-accounts-states-*`, `render-accounts-drag-*` with brand-colored logos), Accounts as its mockups
   (`render-accounts-expanded-*`, `render-accounts-add-*` with the menu painted where the host
   opens it, `render-accounts-empty-*`), Display at the mockup's full height
   (`render-display-full-*`, `render-display-bars-*`), the preview's overflow, scrolled and
@@ -97,7 +97,7 @@ regenerates.
   (`render-popup-*`). Client-drawn previews use the production painter. The history window's
   controls sheet (`render-controls-history-*`, every theme at 96/144/192 DPI,
   `fixtures/render-controls.inc`): two scrolled navigation panes through the production pane
-  painter (logos, usage-colored values, a cut label, selected, disabled, the Removed group,
+  painter (logos, some brand-colored, usage-colored values, a cut label, selected, disabled, the Removed group,
   focus, hover, thin and expanded scrollbars), then segmented controls (hover, focus, pressed,
   disabled), leading switches, pills, a cut label, info bar severities with buttons and an
   icon-only menu button holding its one-line menu open (glyph rows, a separator). PNGs for
@@ -135,7 +135,7 @@ regenerates.
   or unlisted accounts start nothing); About these charts; one operation at a time with only the
   legend acting) and
   `fixtures/history-frame.inc` (the frame per
-  state: navigation entries and their ids per history ID, values and inks, the Removed group;
+  state: navigation entries and their ids per history ID, values and inks, logo brand fills, the Removed group;
   header title, status, pill, icon buttons, the narrow rule; segments, Compare disabling range;
   info bars (a removed account's with Delete history); the chart's card (legend chips with their ids, actions and tooltips, wrapping; the
   key line; the chart item) and the empty states; card grid and contents; one-line menu rows
@@ -157,9 +157,9 @@ regenerates.
   a synthetic journal), modeled on the approved phase-3 mockups: `default` (s-light), `account`
   (s-account, plus a removed account's Delete history bar), `compare`, `states` (recording off, Enable recording's failure notice, storage
   failing, waiting with focus and hover, an export's progress, also at the minimum width),
-  `notices` (each operation's notice), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings,
+  `notices` (each operation's notice), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings with brand-colored logos,
   dollars only, the No readings card beside cards), `menu`, `min` (the minimum window scrolled),
-  `nav` (the scrolled sidebar), `band` (above 100%), `chart-views` (every view, both extra axes),
+  `nav` (the scrolled sidebar, brand-colored logos), `band` (above 100%), `chart-views` (every view, both extra axes),
   `chart-ticks` (each range's ticks) and `chart-states` (comparing, above 100%, every line hidden,
   chips off, hot and focused, chart focus, a readout on the chart). `render-history-tooltips-*`
   (same themes and DPIs): the readout placed on each side of the pointer by the production

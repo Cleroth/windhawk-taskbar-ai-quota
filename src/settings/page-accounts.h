@@ -166,6 +166,10 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         logo.rect = {x + 41, cy - 11, x + 63, cy + 11};
         logo.parts.push_back({anthropic ? kClaudeLogoPath : openai ? kOpenAiLogoPath : kGeminiLogoPath, {},
                               UiInk::Primary});
+        if (const LogoBrand* brand = ProviderLogoBrand(s.logoBrands, account.provider)) {
+            logo.parts[0].fill = UiPartFill{UiRgb(brand->from & 0xFFFFFF), UiRgb(brand->to & 0xFFFFFF),
+                                            {brand->x0, brand->y0}, {brand->x1, brand->y1}};
+        }
         push(logo);
         float right = x + width - 17;
         std::vector<UiItem> trailing;

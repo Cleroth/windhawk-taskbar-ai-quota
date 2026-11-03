@@ -41,7 +41,8 @@ static void RunUiTests() {
     Run("svg paths: logos and app icon parse with the expected extent", [] {
         UiGraphics& g = TestGraphics();
         D2D1_RECT_F bounds{};
-        // The Gemini star touches every edge of its 24 view box.
+        // The Gemini star touches every edge of its 24 view box (its XAML brand gradient maps
+        // relative to its bounds).
         CHECK(SUCCEEDED(UiPathGeometry(g, kGeminiLogoPath)->GetBounds(nullptr, &bounds)));
         CHECK_NEAR(bounds.left, 0);
         CHECK_NEAR(bounds.top, 0);

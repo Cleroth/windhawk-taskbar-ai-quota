@@ -253,6 +253,9 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         }
     } else if (message == WM_DISPLAYCHANGE && !g_unloading) {
         StartRetryInject(true);
+    } else if (message == WM_SETTINGCHANGE && wParam == SPI_SETHIGHCONTRAST && !g_unloading) {
+        // Brand-colored logos give way to the text color in high contrast: rebuild them.
+        StartRetryInject(true);
     } else if (message == WM_SETTINGCHANGE && lParam && !g_unloading &&
                wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
         // Light/dark switch: once the taskbar has handled it, repaint the tiles' theme colors.

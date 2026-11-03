@@ -21,6 +21,20 @@ static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
     return color;
 }
 
+// A filled part's brush: its own fill faded by `opacity`, unless `plain` (high contrast, a
+// disabled item) or it has none; else `color`.
+static ID2D1Brush* UiPartBrush(ID2D1RenderTarget* target, UiTargetCache& cache, const UiShapePart& part,
+                               D2D1_COLOR_F color, float opacity, bool plain) {
+    if (plain || !part.fill) return UiBrush(target, cache, color);
+    const UiPartFill& fill = *part.fill;
+    if (UiColorKey(fill.from) == UiColorKey(fill.to)) return UiBrush(target, cache, UiFade(fill.from, opacity));
+    ID2D1LinearGradientBrush* brush =
+        UiGradientBrush(target, cache, UiFade(fill.from, opacity), UiFade(fill.to, opacity));
+    brush->SetStartPoint(fill.start);
+    brush->SetEndPoint(fill.end);
+    return brush;
+}
+
 // Paints `items` with their DIP coordinates shifted by `offset` (pixel-aligned by the caller),
 // skipping items entirely outside the vertical range [top, bottom) of item coordinates.
 static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache,
@@ -62,7 +76,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                     target->SetTransform(&local);
                     for (const UiShapePart& part : item.parts) {
                         D2D1_COLOR_F color = part.ink == UiInk::Inherit ? part.color : UiFade(ink, part.alpha);
-                        target->FillGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color), nullptr);
+                        target->FillGeometry(UiPathGeometry(g, part.path),
+                                             UiPartBrush(target, cache, part, color, 1, hc), nullptr);
                     }
                     target->SetTransform(&shifted);
                     float textWidth = std::max(r.right - r.left - 44 - 12, 0.0f);
@@ -112,7 +127,9 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                             target->DrawGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color),
                                                  part.stroke, g.roundCaps.get());
                         } else {
-                            target->FillGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color), nullptr);
+                            target->FillGeometry(UiPathGeometry(g, part.path),
+                                                 UiPartBrush(target, cache, part, color, 1, hc || !item.enabled),
+                                                 nullptr);
                         }
                     }
                     target->SetTransform(&shifted);
@@ -207,9 +224,13 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                                                      UiFade(UiInkColor(p, part.ink), part.alpha);
                     color = UiFade(color, item.opacity);
                     ID2D1PathGeometry* geometry = UiPathGeometry(g, part.path);
+                    bool plain = hc || !item.enabled;
                     if (part.stroke > 0) {
                         target->DrawGeometry(geometry, UiBrush(target, cache, color), part.stroke,
                                              g.roundCaps.get());
+                    } else if (part.fill && !plain) {
+                        target->FillGeometry(geometry, UiPartBrush(target, cache, part, color, item.opacity, plain),
+                                             nullptr);
                     } else if (part.shade.a > 0) {
                         D2D1_RECT_F bounds{};
                         winrt::check_hresult(geometry->GetBounds(nullptr, &bounds));

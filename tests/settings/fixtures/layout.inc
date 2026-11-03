@@ -124,7 +124,8 @@ static void RunLayoutTests() {
             {SettingsField::BarLayout, 3},     {SettingsField::BarStyle, 1},
             {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
-            {SettingsField::LogoScale, 150},   {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
+            {SettingsField::LogoScale, 150},   {SettingsField::ClaudeLogoBrand, 1}, {SettingsField::GeminiLogoBrand, 1},
+            {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
             {SettingsField::LabelPosition, 2}, {SettingsField::LabelFontSize, 14}, {SettingsField::LabelGap, 7},
             {SettingsField::ShowBarLabels, 1}, {SettingsField::PercentFontSize, 10}, {SettingsField::ShowPaceTicks, 0},
@@ -136,7 +137,8 @@ static void RunLayoutTests() {
         }
         CHECK(s.barLayout == BarLayout::ConcentricRings && s.barStyle == BarStyle::Rail &&
               s.labelPosition == LabelPosition::Top &&
-              s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456 && s.badgeColor == 0x654321);
+              s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456 && s.badgeColor == 0x654321 &&
+              s.logoBrands.claude && s.logoBrands.gemini);
         const std::tuple<SettingsField, int, int> clamps[] = {
             {SettingsField::BarLength, 99999, 500},   {SettingsField::BarThickness, 0, 2},
             {SettingsField::RingSize, 100, 40},       {SettingsField::RingThickness, -3, 1},
@@ -148,14 +150,15 @@ static void RunLayoutTests() {
             {SettingsField::LogoScale, 10, 50},       {SettingsField::LogoScale, 999, 200},
             {SettingsField::BadgeSize, 1, 6},         {SettingsField::BadgeSize, 99, 16},
             {SettingsField::BadgeOffsetX, -50, -20},  {SettingsField::BadgeOffsetY, 50, 20},
-            {SettingsField::PaceTickColor, 0x12345678, 0x345678}, {SettingsField::BadgeColor, 0x87654321, 0x654321}};
+            {SettingsField::PaceTickColor, 0x12345678, 0x345678}, {SettingsField::BadgeColor, 0x87654321, 0x654321},
+            {SettingsField::ClaudeLogoBrand, 7, 1},  {SettingsField::GeminiLogoBrand, 0, 0}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == expected);
         }
     });
 
-    Run("layout reset: the twenty-two Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the twenty-four Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -165,6 +168,7 @@ static void RunLayoutTests() {
         changed.ringSize = 38;
         changed.ringThickness = 5;
         changed.logoScale = 150;
+        changed.logoBrands = {true, true};
         changed.badgeSize = 12;
         changed.badgeColor = 0x00FF00;
         changed.badgeOffsetX = -5;
@@ -199,6 +203,7 @@ static void RunLayoutTests() {
         expected.ringSize = defaults.ringSize;
         expected.ringThickness = defaults.ringThickness;
         expected.logoScale = defaults.logoScale;
+        expected.logoBrands = defaults.logoBrands;
         expected.badgeSize = defaults.badgeSize;
         expected.badgeColor = defaults.badgeColor;
         expected.badgeOffsetX = defaults.badgeOffsetX;
@@ -216,7 +221,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 22);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 24);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -976,6 +981,35 @@ static void RunLayoutTests() {
         CHECK(NearDip(logo[0].rect.right - logo[0].rect.left, 22.6));
     });
 
+    Run("preview: logos take their brand colors only when chosen, in the same boxes", [] {
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC", {true, true, false, false}),
+                                               Account(L"openai", L"OAI", {true, true, false, false}),
+                                               Account(L"antigravity", L"Go", {true, true, false, false})};
+        std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::SegmentedRing, BarLayout::LogoHeadline}) {
+            Settings s;
+            s.barLayout = layout;
+            const std::vector<SettingsPreviewOp> plain = OpsOfKind(
+                SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xFF1A1A1A, &accounts, &data),
+                SettingsPreviewOp::Kind::Logo);
+            CHECK(plain.size() == 3);
+            for (const SettingsPreviewOp& op : plain) CHECK(!op.brand && op.color == 0xFF1A1A1A);
+            // Claude and Gemini only: OpenAI's mark has none. The text color stays the high
+            // contrast fallback.
+            s.logoBrands = {true, true};
+            const std::vector<SettingsPreviewOp> brand = OpsOfKind(
+                SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xFF1A1A1A, &accounts, &data),
+                SettingsPreviewOp::Kind::Logo);
+            CHECK(brand.size() == 3 && brand[0].brand == &kClaudeLogoBrand && !brand[1].brand &&
+                  brand[2].brand == &kGeminiLogoBrand);
+            for (size_t i = 0; i < brand.size(); i++) {
+                CHECK(brand[i].color == 0xFF1A1A1A && brand[i].path == plain[i].path);
+                CHECK(NearDip(brand[i].rect.left, plain[i].rect.left) && NearDip(brand[i].rect.top, plain[i].rect.top) &&
+                      NearDip(brand[i].rect.right, plain[i].rect.right));
+            }
+        }
+    });
+
     Run("preview: pace marks per layout; none on headline tiles", [] {
         const uint32_t pace = 0xFF000000 | 0xDEDEDE;
         Settings s;
@@ -1377,6 +1411,19 @@ static void RunLayoutTests() {
               Control(frame, SettingsField::BadgeColor, 3).action.value == int(RGB(0x1C, 0x1C, 0x1C)));
         CHECK(badgeCustom.text == L"Custom..." && badgeCustom.enabled &&
               badgeCustom.action.target == uint32_t(SettingsField::BadgeColorCustom));
+        // The logo colors after Logo size: a dropdown per logo with brand colors, the taskbar's
+        // text color chosen.
+        const UiItem& claudeLogo = Control(frame, SettingsField::ClaudeLogoBrand);
+        const UiItem& geminiLogo = Control(frame, SettingsField::GeminiLogoBrand);
+        for (const UiItem* logo : {&claudeLogo, &geminiLogo}) {
+            CHECK(logo->kind == UiItemKind::Dropdown && logo->enabled && logo->text == L"Taskbar text color" &&
+                  logo->options.size() == 2 && logo->options[0].value == 0 && logo->options[1].value == 1);
+        }
+        CHECK(claudeLogo.options[1].text == L"Orange" && geminiLogo.options[1].text == L"Gemini gradient");
+        CHECK(HasText(frame, L"Claude logo") && HasText(frame, L"Antigravity logo") &&
+              HasText(frame, L"or Claude\u2019s orange") && HasText(frame, L"its purple-to-blue gradient"));
+        CHECK(logoSize.rect.bottom < claudeLogo.rect.top && claudeLogo.rect.bottom < geminiLogo.rect.top &&
+              geminiLogo.rect.bottom < badgeSize.rect.top);
         CHECK(Control(frame, SettingsField::LabelGap).rect.bottom < logoSize.rect.top && logoSize.rect.bottom < badgeSize.rect.top &&
               badgeSize.rect.bottom < badgeDefault.rect.top && badgeDefault.rect.bottom < badgeX.rect.top &&
               badgeX.rect.bottom < badgeY.rect.top && badgeY.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top);
@@ -1438,6 +1485,8 @@ static void RunLayoutTests() {
               identity.rect.bottom < Control(frame, SettingsField::LogoScale, 1).rect.top);
         CHECK(Control(frame, SettingsField::LogoScale, 1).enabled && Control(frame, SettingsField::BadgeOffsetY, 1).enabled &&
               HasText(frame, L"Identity"));
+        CHECK(Control(frame, SettingsField::LogoScale, 1).rect.bottom < Control(frame, SettingsField::ClaudeLogoBrand).rect.top &&
+              Control(frame, SettingsField::GeminiLogoBrand).rect.bottom < Control(frame, SettingsField::BadgeSize, 1).rect.top);
         // A negative offset shows signed.
         view.settings.badgeOffsetX = -5;
         frame = {};
@@ -1473,9 +1522,14 @@ static void RunLayoutTests() {
         view.settings.percentTextVisibility = PercentTextVisibility::Never;
         view.settings.paceTickColor = 0x123456;
         view.settings.badgeColor = 0x654321;
+        view.settings.logoBrands.claude = true;
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::LabelPosition).text == L"Hidden");
+        // The logo colors stay: the flyout and the windows show the logos without an identity.
+        CHECK(Control(frame, SettingsField::ClaudeLogoBrand).enabled && Control(frame, SettingsField::GeminiLogoBrand).enabled &&
+              Control(frame, SettingsField::ClaudeLogoBrand).text == L"Orange" &&
+              Control(frame, SettingsField::GeminiLogoBrand).text == L"Taskbar text color");
         CHECK(!Control(frame, SettingsField::LabelFontSize, 1).enabled && !Control(frame, SettingsField::LabelFontSize).enabled);
         CHECK(!Control(frame, SettingsField::LabelGap).enabled);
         CHECK(!Control(frame, SettingsField::LogoScale, 1).enabled && !Control(frame, SettingsField::BadgeSize).enabled &&

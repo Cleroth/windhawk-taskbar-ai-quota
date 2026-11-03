@@ -50,7 +50,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         entry.kind = UiItemKind::Nav;
         entry.rect = {8, y, kHistoryUiNavWidth - 8, y + 38};
         entry.text = account.label;
-        if (PCWSTR logo = HistoryUiLogo(account.provider)) entry.parts = {{logo, {}, UiInk::Primary}};
+        entry.parts = HistoryUiLogo(view, account.provider, !account.removed);
         entry.ink = account.removed ? UiInk::Muted : UiInk::Primary;
         entry.selected = selected == &account;
         entry.enabled = active;

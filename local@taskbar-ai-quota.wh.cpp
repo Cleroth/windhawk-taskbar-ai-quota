@@ -48,7 +48,8 @@ local app or CLI session, which must remain running.
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
-  logo size, number badge size, color and position, identity position, pace markers, and spacing.
+  logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
+  position, identity position, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
@@ -274,6 +275,14 @@ enum class PaceTickStyle {
     Dot,
 };
 
+// Provider logos drawn in their brand colors instead of the taskbar's text color.
+struct LogoBrands {
+    bool claude = false;  // Anthropic's orange
+    bool gemini = false;  // The Gemini sparkle's gradient (Antigravity)
+
+    bool operator==(const LogoBrands&) const = default;
+};
+
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 // The number badge's colors: white stands for the taskbar's text color, whatever the theme.
 static constexpr COLORREF kDefaultBadgeColor = RGB(0x4C, 0xC2, 0xFF);
@@ -305,6 +314,7 @@ struct Settings {
     int ringSize = 32;
     int ringThickness = 3;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
+    LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
     int badgeSize = 9;
     COLORREF badgeColor = kDefaultBadgeColor;
@@ -5452,7 +5462,7 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
 
 // src/taskbar/logo-paths.h
 // Provider logo path data from Simple Icons (CC0-1.0): SVG path strings in a 24x24 viewBox,
-// filled with the text color. Pure data, shared by every renderer.
+// filled with the text color or the logo's brand colors. Pure data, shared by every renderer.
 
 // openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
 static constexpr PCWSTR kOpenAiLogoPath =
@@ -5505,12 +5515,54 @@ static constexpr PCWSTR kGeminiLogoPath =
     L"96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93"
     L" 3.81 2.55t2.55 3.81";
 
+// A logo's brand colors (ARGB): `from` at (x0, y0) of the 24x24 viewBox shading linearly to `to`
+// at (x1, y1), clamped beyond them; flat when the colors match.
+struct LogoBrand {
+    uint32_t from, to;
+    float x0, y0, x1, y1;
+};
+
+// The Claude symbol's orange.
+static constexpr LogoBrand kClaudeLogoBrand{0xFFD97757, 0xFFD97757, 0, 0, 24, 24};
+// The Gemini sparkle's purple-to-blue gradient. The official radial gradient is stretched so far
+// that it shades along one axis: this runs along it from the first stop to the last; the middle
+// stop lies within a few levels of the line. The sparkle spans the whole viewBox.
+static constexpr LogoBrand kGeminiLogoBrand{0xFF9168C0, 0xFF1BA1E3, 4.006f, 10.303f, 18.645f, 15.253f};
+
+// The brand colors `brands` chooses for `provider`'s logo; nullptr: the text color.
+static const LogoBrand* ProviderLogoBrand(LogoBrands brands, std::wstring_view provider) {
+    if (provider == L"anthropic") return brands.claude ? &kClaudeLogoBrand : nullptr;
+    if (provider == L"antigravity") return brands.gemini ? &kGeminiLogoBrand : nullptr;
+    return nullptr;
+}
+
 // src/taskbar/theme.h
-// XAML colors for the meter model's ARGB values, and the details flyout's theme. Every flyout
-// brush is created in this file.
+// XAML colors for the meter model's ARGB values, logo brand brushes, and the details flyout's
+// theme. Every flyout brush is created in this file.
 
 static winrt::Windows::UI::Color ArgbColor(uint32_t argb) {
     return {(uint8_t)(argb >> 24), (uint8_t)(argb >> 16), (uint8_t)(argb >> 8), (uint8_t)argb};
+}
+
+static bool IsHighContrast() {
+    HIGHCONTRASTW highContrast{sizeof(highContrast)};
+    return SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast), &highContrast, 0) &&
+           (highContrast.dwFlags & HCF_HIGHCONTRASTON);
+}
+
+// A logo's brand colors (logo-paths.h) as a gradient, also when flat (see FlyoutBrush), relative
+// to the logo's bounding box: the gradient logo spans its whole viewBox. Throws on failure.
+static Brush LogoBrandBrush(LogoBrand const& brand) {
+    LinearGradientBrush brush;
+    brush.StartPoint({brand.x0 / 24, brand.y0 / 24});
+    brush.EndPoint({brand.x1 / 24, brand.y1 / 24});
+    for (auto [offset, color] : {std::pair{0.0, brand.from}, std::pair{1.0, brand.to}}) {
+        GradientStop stop;
+        stop.Color(ArgbColor(color));
+        stop.Offset(offset);
+        brush.GradientStops().Append(stop);
+    }
+    return brush;
 }
 
 // The single constructor of solid flyout brushes (backgrounds, text, borders and shapes). A
@@ -5568,10 +5620,7 @@ static Brush FlyoutFillBrush(winrt::Windows::UI::Color color) {
 static FlyoutTheme LoadFlyoutTheme() {
     using Color = winrt::Windows::UI::Color;
     FlyoutTheme theme;
-    HIGHCONTRASTW highContrast{sizeof(highContrast)};
-    theme.highContrast =
-        SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast), &highContrast, 0) &&
-        (highContrast.dwFlags & HCF_HIGHCONTRASTON);
+    theme.highContrast = IsHighContrast();
     auto personalizeValue = [](PCWSTR name, DWORD fallback) {
         DWORD value = fallback;
         DWORD size = sizeof(value);
@@ -6015,6 +6064,7 @@ struct MeterDisplay {
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
+    LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
     COLORREF badgeColor;      // RGB only.
     int badgeOffsetX;         // Up to kBadgeOffsetMax DIPs either way.
@@ -6052,6 +6102,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
+        .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
         .badgeColor = settings.badgeColor & 0x00FFFFFF,
         .badgeOffsetX = std::clamp(settings.badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax),
@@ -6804,8 +6855,9 @@ static double TileTextWidthPerPt(TextBlock const& text) {
     }
 }
 
-// Builds account `index`'s identity into `tile`: the provider logo, with a number badge when
-// several configured accounts share the provider, or text, and the stale-warning mark. Rings
+// Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
+// chosen), with a number badge when several configured accounts share the provider, or text, and
+// the stale-warning mark. Rings
 // resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
@@ -6824,7 +6876,10 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
             logo.Height(side);
             logo.HorizontalAlignment(HorizontalAlignment::Center);
             logo.VerticalAlignment(VerticalAlignment::Center);
-            logo.Child(LoadProviderLogo(account.provider, nullptr));
+            // Brand colors, except in high contrast, where it inherits the text color.
+            const LogoBrand* brand = ProviderLogoBrand(display.logoBrands, account.provider);
+            logo.Child(LoadProviderLogo(account.provider,
+                                        brand && !IsHighContrast() ? LogoBrandBrush(*brand) : Brush{nullptr}));
             identity.Children().Append(logo);
             tile.logo = logo;
         } catch (...) {
@@ -7394,18 +7449,25 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
 
     StackPanel content;
 
-    // Header: logo, account label, provider, stale marker and plan chip.
+    // Header: logo (in its brand colors when chosen, except in high contrast), account label,
+    // provider, stale marker and plan chip.
     Grid header;
     header.Padding({16, 12, 16, 12});
     for (int column = 0; column < 5; column++) addColumn(header, column == 2 ? kStar : kAuto);
     try {
+        LogoBrands brands;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            brands = g_settings.logoBrands;
+        }
+        const LogoBrand* brand = theme.highContrast ? nullptr : ProviderLogoBrand(brands, provider);
         Viewbox logo;
         logo.Width(20);
         logo.Height(20);
         logo.Margin({0, 0, 10, 0});
         logo.VerticalAlignment(VerticalAlignment::Center);
         logo.IsHitTestVisible(false);
-        logo.Child(LoadProviderLogo(provider, theme.text));
+        logo.Child(LoadProviderLogo(provider, brand ? LogoBrandBrush(*brand) : theme.text));
         header.Children().Append(logo);
     } catch (...) {
         Wh_Log(L"Flyout logo failed to load");
@@ -9913,6 +9975,9 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         }
     } else if (message == WM_DISPLAYCHANGE && !g_unloading) {
         StartRetryInject(true);
+    } else if (message == WM_SETTINGCHANGE && wParam == SPI_SETHIGHCONTRAST && !g_unloading) {
+        // Brand-colored logos give way to the text color in high contrast: rebuild them.
+        StartRetryInject(true);
     } else if (message == WM_SETTINGCHANGE && lParam && !g_unloading &&
                wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
         // Light/dark switch: once the taskbar has handled it, repaint the tiles' theme colors.
@@ -11040,6 +11105,14 @@ enum class UiItemKind : uint8_t {
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
+// A part's own fill in place of its color or ink, built from client colors (high contrast and
+// disabled items ignore it): `from` at `start` shading linearly to `to` at `end` (view-box units),
+// clamped beyond them; flat when the colors match.
+struct UiPartFill {
+    D2D1_COLOR_F from{}, to{};
+    D2D1_POINT_2F start{}, end{};
+};
+
 // One filled or stroked path of a Shape item, in the item's view box. A part with an Inherit
 // ink keeps its own color (illustrations); others follow the theme.
 struct UiShapePart {
@@ -11051,6 +11124,7 @@ struct UiShapePart {
     // Shape fills: the color at the part's top edge, blending into its own color 60% down;
     // transparent: flat.
     D2D1_COLOR_F shade{};
+    std::optional<UiPartFill> fill;  // Fills
 };
 
 // A dropdown or menu choice. Menus give each a detail line and an icon (two-line rows), or a glyph
@@ -11825,6 +11899,20 @@ static D2D1_COLOR_F UiFade(D2D1_COLOR_F color, float opacity) {
     return color;
 }
 
+// A filled part's brush: its own fill faded by `opacity`, unless `plain` (high contrast, a
+// disabled item) or it has none; else `color`.
+static ID2D1Brush* UiPartBrush(ID2D1RenderTarget* target, UiTargetCache& cache, const UiShapePart& part,
+                               D2D1_COLOR_F color, float opacity, bool plain) {
+    if (plain || !part.fill) return UiBrush(target, cache, color);
+    const UiPartFill& fill = *part.fill;
+    if (UiColorKey(fill.from) == UiColorKey(fill.to)) return UiBrush(target, cache, UiFade(fill.from, opacity));
+    ID2D1LinearGradientBrush* brush =
+        UiGradientBrush(target, cache, UiFade(fill.from, opacity), UiFade(fill.to, opacity));
+    brush->SetStartPoint(fill.start);
+    brush->SetEndPoint(fill.end);
+    return brush;
+}
+
 // Paints `items` with their DIP coordinates shifted by `offset` (pixel-aligned by the caller),
 // skipping items entirely outside the vertical range [top, bottom) of item coordinates.
 static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache,
@@ -11866,7 +11954,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                     target->SetTransform(&local);
                     for (const UiShapePart& part : item.parts) {
                         D2D1_COLOR_F color = part.ink == UiInk::Inherit ? part.color : UiFade(ink, part.alpha);
-                        target->FillGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color), nullptr);
+                        target->FillGeometry(UiPathGeometry(g, part.path),
+                                             UiPartBrush(target, cache, part, color, 1, hc), nullptr);
                     }
                     target->SetTransform(&shifted);
                     float textWidth = std::max(r.right - r.left - 44 - 12, 0.0f);
@@ -11916,7 +12005,9 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                             target->DrawGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color),
                                                  part.stroke, g.roundCaps.get());
                         } else {
-                            target->FillGeometry(UiPathGeometry(g, part.path), UiBrush(target, cache, color), nullptr);
+                            target->FillGeometry(UiPathGeometry(g, part.path),
+                                                 UiPartBrush(target, cache, part, color, 1, hc || !item.enabled),
+                                                 nullptr);
                         }
                     }
                     target->SetTransform(&shifted);
@@ -12011,9 +12102,13 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                                                      UiFade(UiInkColor(p, part.ink), part.alpha);
                     color = UiFade(color, item.opacity);
                     ID2D1PathGeometry* geometry = UiPathGeometry(g, part.path);
+                    bool plain = hc || !item.enabled;
                     if (part.stroke > 0) {
                         target->DrawGeometry(geometry, UiBrush(target, cache, color), part.stroke,
                                              g.roundCaps.get());
+                    } else if (part.fill && !plain) {
+                        target->FillGeometry(geometry, UiPartBrush(target, cache, part, color, item.opacity, plain),
+                                             nullptr);
                     } else if (part.shade.a > 0) {
                         D2D1_RECT_F bounds{};
                         winrt::check_hresult(geometry->GetBounds(nullptr, &bounds));
@@ -15505,6 +15600,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
         setNumber(L"logoScale", s.logoScale);
+        setBool(L"brandClaudeLogo", s.logoBrands.claude);
+        setBool(L"brandGeminiLogo", s.logoBrands.gemini);
         setNumber(L"badgeSize", s.badgeSize);
         setNumber(L"badgeColor", (int)s.badgeColor);
         setNumber(L"badgeOffsetX", s.badgeOffsetX);
@@ -15635,6 +15732,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         double badgeOffsetY = GetNum(root, L"badgeOffsetY", 0);
         s.logoScale = std::isfinite(logoScale) ?
                           (int)std::clamp(logoScale, 0.0, (double)kLogoScaleMax) : 0;
+        s.logoBrands.claude = getBoolDefault(L"brandClaudeLogo", false);
+        s.logoBrands.gemini = getBoolDefault(L"brandGeminiLogo", false);
         s.badgeSize = std::isfinite(badgeSize) ?
                           (int)std::clamp(badgeSize, 0.0, (double)kBadgeSizeMax) : 0;
         s.badgeOffsetX = std::isfinite(badgeOffsetX) ?
@@ -16579,6 +16678,8 @@ enum class SettingsField : uint8_t {
     RingSize,
     RingThickness,
     LogoScale,        // Percent
+    ClaudeLogoBrand,  // 1: Anthropic's orange
+    GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
     BadgeSize,
     BadgeColor,       // 0xBBGGRR
     BadgeOffsetX,
@@ -16683,6 +16784,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::LogoScale,
+                    SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
                     SettingsField::LabelPosition,
@@ -16723,6 +16825,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RingSize: return s.ringSize;
         case SettingsField::RingThickness: return s.ringThickness;
         case SettingsField::LogoScale: return s.logoScale;
+        case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
+        case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
         case SettingsField::BadgeSize: return s.badgeSize;
         case SettingsField::BadgeColor: return int(s.badgeColor & 0x00FFFFFF);
         case SettingsField::BadgeOffsetX: return s.badgeOffsetX;
@@ -16790,6 +16894,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::RingSize: s.ringSize = value; break;
         case SettingsField::RingThickness: s.ringThickness = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
+        case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
+        case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
         case SettingsField::BadgeSize: s.badgeSize = value; break;
         case SettingsField::BadgeColor: s.badgeColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::BadgeOffsetX: s.badgeOffsetX = value; break;
@@ -16849,6 +16955,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.ringSize = defaults.ringSize;
             s.ringThickness = defaults.ringThickness;
             s.logoScale = defaults.logoScale;
+            s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;
             s.badgeColor = defaults.badgeColor;
             s.badgeOffsetX = defaults.badgeOffsetX;
@@ -17894,6 +18001,7 @@ struct SettingsPreviewOp {
     DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
     bool clip = false;                  // Text clipped to its box (XAML MaxWidth, clip trimming)
     PCWSTR path = nullptr;              // Logo path data (24 DIP view box), scaled to the box
+    const LogoBrand* brand = nullptr;   // Logo: its brand colors outside high contrast, else `color`
 };
 
 // A strip: one column per sample account, laid out from x 0 (the first column's margin box) and
@@ -17909,8 +18017,8 @@ struct SettingsPreviewStrip {
 
 // The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
 // accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
-// taskbar's text (logos, labels, keys, tray). Tests may pass accounts with their data to lay out
-// instead of the samples.
+// taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
+// their data to lay out instead of the samples.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
@@ -17987,6 +18095,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         op.opacity = opacity;
         op.path = provider == L"openai" ? kOpenAiLogoPath :
                   provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+        op.brand = ProviderLogoBrand(display.logoBrands, provider);
         add(ops, std::move(op));
     };
     // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text in the
@@ -18515,8 +18624,19 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     D2D1::Matrix3x2F logo = D2D1::Matrix3x2F::Scale(s, s) *
                                             D2D1::Matrix3x2F::Translation(r.left, r.top) * local;
                     target->SetTransform(&logo);
-                    target->FillGeometry(UiPathGeometry(g, op.path),
-                                         UiBrush(target, cache, color(op.color, op.opacity)), nullptr);
+                    ID2D1Brush* brush = nullptr;
+                    if (!op.brand || hc) {
+                        brush = UiBrush(target, cache, color(op.color, op.opacity));
+                    } else if (op.brand->from == op.brand->to) {
+                        brush = UiBrush(target, cache, color(op.brand->from, op.opacity));
+                    } else {
+                        ID2D1LinearGradientBrush* gradient = UiGradientBrush(
+                            target, cache, color(op.brand->from, op.opacity), color(op.brand->to, op.opacity));
+                        gradient->SetStartPoint({op.brand->x0, op.brand->y0});
+                        gradient->SetEndPoint({op.brand->x1, op.brand->y1});
+                        brush = gradient;
+                    }
+                    target->FillGeometry(UiPathGeometry(g, op.path), brush, nullptr);
                     target->SetTransform(&local);
                     break;
                 }
@@ -19134,8 +19254,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         return card.card.bottom;
     };
 
-    // Logo identities in every style: the logo size, the badge's size and color, then its offsets.
-    // Bars need an identity position.
+    // Logo identities in every style: the logo size and the colors of the logos that have brand
+    // colors, the badge's size and color, then its offsets. Bars need an identity position, except
+    // for the logo colors, which the flyout and the windows also show.
     auto logoCards = [&](float top, bool placed) {
         auto slider = [&](float at, PCWSTR title, PCWSTR description, SettingsField field) {
             UiCardSpec spec;
@@ -19145,8 +19266,23 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             if (!placed) spec.reason = L"Choose an identity position to change this.";
             return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
         };
+        auto brand = [&](float at, PCWSTR title, PCWSTR description, SettingsField field, PCWSTR colors) {
+            UiCardSpec spec;
+            spec.title = title;
+            spec.description = {{description}};
+            return SettingsAddDropdownCard(g, view, items, id, x, at, width, spec, field, 200,
+                                           {{L"Taskbar text color", 0}, {colors, 1}},
+                                           SettingsFieldValue(s, field));
+        };
         top = slider(top, L"Logo size", L"Percent of the standard size; rings keep it inside the hole.",
                      SettingsField::LogoScale);
+        top = brand(top + 3, L"Claude logo",
+                    L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history "
+                    L"match.",
+                    SettingsField::ClaudeLogoBrand, L"Orange");
+        top = brand(top + 3, L"Antigravity logo",
+                    L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient.",
+                    SettingsField::GeminiLogoBrand, L"Gemini gradient");
         top = slider(top + 3, L"Badge size",
                      L"Text size of the number on a logo when several accounts share a provider, in pixels.",
                      SettingsField::BadgeSize);
@@ -19615,6 +19751,10 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         logo.rect = {x + 41, cy - 11, x + 63, cy + 11};
         logo.parts.push_back({anthropic ? kClaudeLogoPath : openai ? kOpenAiLogoPath : kGeminiLogoPath, {},
                               UiInk::Primary});
+        if (const LogoBrand* brand = ProviderLogoBrand(s.logoBrands, account.provider)) {
+            logo.parts[0].fill = UiPartFill{UiRgb(brand->from & 0xFFFFFF), UiRgb(brand->to & 0xFFFFFF),
+                                            {brand->x0, brand->y0}, {brand->x1, brand->y1}};
+        }
         push(logo);
         float right = x + width - 17;
         std::vector<UiItem> trailing;
@@ -20313,8 +20453,9 @@ struct SettingsUiClient final : UiHostClient {
                                 L"hidden accounts, threshold notifications on." :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
-                                L"on the left, 32 px rings, light blue number badges, light grey caret "
-                                L"pace markers and the default spacing. Accounts are not changed." :
+                                L"on the left, 32 px rings, logos in the taskbar\u2019s text color, light "
+                                L"blue number badges, light grey caret pace markers and the default "
+                                L"spacing. Accounts are not changed." :
                             field == SettingsField::ResetDisplay ?
                                 L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
                                 L"hover with adaptive alignment, no amounts, the standard palette with "
@@ -21297,12 +21438,13 @@ struct HistoryUiView {
     bool compare = false;                    // Shows the range as 7 days, disabled
 
     // Settings: recording (and whether the banner's Enable recording can run; else it shows
-    // disabled), retention and the usage colors of navigation values
+    // disabled), retention, the usage colors of navigation values and the logos' brand colors
     bool recordingEnabled = true;
     bool canEnableRecording = false;
     int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
     bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
+    LogoBrands logoBrands;
 
     // Status: the pill, the header's status text ("Updated Sat 31 Oct 14:32"; empty before the
     // first load), the journal's state (its status without the cap note, the cap) and an
@@ -21360,10 +21502,21 @@ static PCWSTR HistoryUiProviderName(uint32_t provider) {
            provider == 3 ? L"Google Antigravity" : L"Unknown provider";
 }
 
-// A provider's logo path (taskbar/logo-paths.h, 24 DIP view box), or nullptr.
-static PCWSTR HistoryUiLogo(uint32_t provider) {
-    return provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
-           provider == 3 ? kGeminiLogoPath : nullptr;
+// A provider's logo (taskbar/logo-paths.h, 24 DIP view box) in the primary ink, or in its brand
+// colors when chosen and `brand`; none for an unknown provider.
+static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_t provider, bool brand) {
+    PCWSTR path = provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
+                  provider == 3 ? kGeminiLogoPath : nullptr;
+    if (!path) return {};
+    UiShapePart part{path, {}, UiInk::Primary};
+    const LogoBrand* colors =
+        brand ? ProviderLogoBrand(view.logoBrands, provider == 1 ? L"anthropic" : provider == 3 ? L"antigravity" : L"")
+              : nullptr;
+    if (colors) {
+        part.fill = UiPartFill{UiRgb(colors->from & 0xFFFFFF), UiRgb(colors->to & 0xFFFFFF),
+                               {colors->x0, colors->y0}, {colors->x1, colors->y1}};
+    }
+    return {part};
 }
 
 // Compact display formats (approved with the phase-3 mockups), English and independent of the
@@ -22878,6 +23031,7 @@ struct HistoryController {
         v.redThreshold = display.redThreshold;
         v.colorblind = s.colorblindMode;
         v.remaining = s.barMode == BarMode::Remaining;
+        v.logoBrands = s.logoBrands;
         v.notice = notice;
         v.canExport = snapshot != nullptr;
         v.exporting = operation == HistoryOperation::Writing;
@@ -23342,8 +23496,8 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
                 text({left, y + 11, right, y + 27}, {{L"No readings in range"}}, UiFont::Caption, UiInk::Primary, true);
                 float row = y + 31;
                 for (const HistoryUiNoReadings& entry : view.noReadings) {
-                    if (PCWSTR logo = HistoryUiLogo(entry.provider)) {
-                        shape({left, row + 4, left + 16, row + 20}, 24, {{logo, {}, UiInk::Primary}});
+                    if (std::vector<UiShapePart> logo = HistoryUiLogo(view, entry.provider, true); !logo.empty()) {
+                        shape({left, row + 4, left + 16, row + 20}, 24, std::move(logo));
                     }
                     float labelLeft = left + 24;
                     float labelWidth = std::min(
@@ -23453,7 +23607,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         entry.kind = UiItemKind::Nav;
         entry.rect = {8, y, kHistoryUiNavWidth - 8, y + 38};
         entry.text = account.label;
-        if (PCWSTR logo = HistoryUiLogo(account.provider)) entry.parts = {{logo, {}, UiInk::Primary}};
+        entry.parts = HistoryUiLogo(view, account.provider, !account.removed);
         entry.ink = account.removed ? UiInk::Muted : UiInk::Primary;
         entry.selected = selected == &account;
         entry.enabled = active;

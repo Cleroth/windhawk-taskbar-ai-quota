@@ -180,6 +180,21 @@ static void RunHistoryFrameTests() {
         CHECK_NEAR(frame.navHeight, frame.nav.back().rect.bottom + 6);
         // Without removed accounts, no group.
         CHECK(!TestFind(TestHistoryFrame(TestHistoryView()).nav, L"Removed"));
+        // Logos in the primary ink; with brand colors chosen, the configured Claude and Gemini
+        // logos fill with them (orange; purple to blue), OpenAI's and removed accounts' don't.
+        for (size_t i = 1; i < frame.nav.size(); i++) CHECK(frame.nav[i].parts.empty() || !frame.nav[i].parts[0].fill);
+        view.logoBrands = {true, true};
+        frame = TestHistoryFrame(view);
+        for (size_t i = 0; i < 4; i++) {
+            const UiShapePart& logo = UiFindItem(frame, kHistoryUiNavAccount + view.accounts[i].slot)->parts[0];
+            CHECK(logo.ink == UiInk::Primary && bool(logo.fill) == (i > 0));
+            if (!logo.fill) continue;
+            uint32_t from = i == 3 ? 0xFF9168C0 : 0xFFD97757, to = i == 3 ? 0xFF1BA1E3 : 0xFFD97757;
+            CHECK(UiColorKey(logo.fill->from) == from && UiColorKey(logo.fill->to) == to);
+            CHECK(i < 3 || (logo.fill->start.x < logo.fill->end.x && logo.fill->start.y < logo.fill->end.y));
+        }
+        CHECK(!frame.nav[6].parts[0].fill && !frame.nav.back().parts[0].fill);
+        view.logoBrands = {};
 
         // Reordered and with one more account, each entry keeps its id; the selected one is marked.
         std::rotate(view.accounts.begin(), view.accounts.begin() + 2, view.accounts.begin() + 4);
@@ -679,8 +694,20 @@ static void RunHistoryFrameTests() {
         CHECK(go->font == UiFont::Note && go->rect.left == panels[3]->rect.left + 13 + 24 && go->rect.top == heading->rect.top + 20 + 24 + 2.5f);
         CHECK(goDetail->ink == UiInk::Muted && goDetail->rect.left == go->rect.right + 8);
         CHECK(std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
-            return item.kind == UiItemKind::Shape && item.parts[0].path == kGeminiLogoPath && item.rect.top == go->rect.top - 2.5f + 4;
+            return item.kind == UiItemKind::Shape && item.parts[0].path == kGeminiLogoPath && item.rect.top == go->rect.top - 2.5f + 4 &&
+                   !item.parts[0].fill;
         }));
+        // Its logos take the brand colors too.
+        view.logoBrands = {false, true};
+        frame = TestHistoryFrame(view);
+        auto logoOf = [&](PCWSTR path) {
+            return std::find_if(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+                return item.kind == UiItemKind::Shape && item.parts[0].path == path;
+            });
+        };
+        CHECK(logoOf(kGeminiLogoPath) != frame.content.end() && logoOf(kGeminiLogoPath)->parts[0].fill &&
+              UiColorKey(logoOf(kGeminiLogoPath)->parts[0].fill->from) == 0xFF9168C0);
+        CHECK(logoOf(kClaudeLogoPath) != frame.content.end() && !logoOf(kClaudeLogoPath)->parts[0].fill);
     });
 
     Run("menus: one-line rows with glyphs; a separator adds 5 DIP above its row and is no row", [] {

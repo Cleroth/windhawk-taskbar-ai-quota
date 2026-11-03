@@ -33,6 +33,7 @@ struct SettingsPreviewOp {
     DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING;
     bool clip = false;                  // Text clipped to its box (XAML MaxWidth, clip trimming)
     PCWSTR path = nullptr;              // Logo path data (24 DIP view box), scaled to the box
+    const LogoBrand* brand = nullptr;   // Logo: its brand colors outside high contrast, else `color`
 };
 
 // A strip: one column per sample account, laid out from x 0 (the first column's margin box) and
@@ -48,8 +49,8 @@ struct SettingsPreviewStrip {
 
 // The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
 // accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
-// taskbar's text (logos, labels, keys, tray). Tests may pass accounts with their data to lay out
-// instead of the samples.
+// taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
+// their data to lay out instead of the samples.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
@@ -126,6 +127,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         op.opacity = opacity;
         op.path = provider == L"openai" ? kOpenAiLogoPath :
                   provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+        op.brand = ProviderLogoBrand(display.logoBrands, provider);
         add(ops, std::move(op));
     };
     // A number badge (tiles.h) in the model's box (`box`, moved by `x`, `y`): its bold text in the
@@ -654,8 +656,19 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     D2D1::Matrix3x2F logo = D2D1::Matrix3x2F::Scale(s, s) *
                                             D2D1::Matrix3x2F::Translation(r.left, r.top) * local;
                     target->SetTransform(&logo);
-                    target->FillGeometry(UiPathGeometry(g, op.path),
-                                         UiBrush(target, cache, color(op.color, op.opacity)), nullptr);
+                    ID2D1Brush* brush = nullptr;
+                    if (!op.brand || hc) {
+                        brush = UiBrush(target, cache, color(op.color, op.opacity));
+                    } else if (op.brand->from == op.brand->to) {
+                        brush = UiBrush(target, cache, color(op.brand->from, op.opacity));
+                    } else {
+                        ID2D1LinearGradientBrush* gradient = UiGradientBrush(
+                            target, cache, color(op.brand->from, op.opacity), color(op.brand->to, op.opacity));
+                        gradient->SetStartPoint({op.brand->x0, op.brand->y0});
+                        gradient->SetEndPoint({op.brand->x1, op.brand->y1});
+                        brush = gradient;
+                    }
+                    target->FillGeometry(UiPathGeometry(g, op.path), brush, nullptr);
                     target->SetTransform(&local);
                     break;
                 }

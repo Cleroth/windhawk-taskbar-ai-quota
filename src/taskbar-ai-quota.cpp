@@ -45,7 +45,8 @@ local app or CLI session, which must remain running.
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
-  logo size, number badge size, color and position, identity position, pace markers, and spacing.
+  logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
+  position, identity position, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the

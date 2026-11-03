@@ -37,6 +37,14 @@ enum class UiItemKind : uint8_t {
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
+// A part's own fill in place of its color or ink, built from client colors (high contrast and
+// disabled items ignore it): `from` at `start` shading linearly to `to` at `end` (view-box units),
+// clamped beyond them; flat when the colors match.
+struct UiPartFill {
+    D2D1_COLOR_F from{}, to{};
+    D2D1_POINT_2F start{}, end{};
+};
+
 // One filled or stroked path of a Shape item, in the item's view box. A part with an Inherit
 // ink keeps its own color (illustrations); others follow the theme.
 struct UiShapePart {
@@ -48,6 +56,7 @@ struct UiShapePart {
     // Shape fills: the color at the part's top edge, blending into its own color 60% down;
     // transparent: flat.
     D2D1_COLOR_F shade{};
+    std::optional<UiPartFill> fill;  // Fills
 };
 
 // A dropdown or menu choice. Menus give each a detail line and an icon (two-line rows), or a glyph

@@ -319,6 +319,8 @@ static void RunHistoryRenders(const std::wstring& directory) {
     noReadings.view.range = HistoryUiRange::Day;
     noReadings.view.noReadings = {{2, L"OAI", L"OpenAI"}, {1, L"CC 1", L"Anthropic"}, {1, L"CC 2", L"Anthropic"},
                                   {3, L"Go", L"Google Antigravity"}};
+    // Brand-colored logos in the sidebar and the No readings card (high contrast: the ink).
+    noReadings.view.logoBrands = {true, true};
     noReadings.chart = TestChartOf({}, [](HistoryController& c) { c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Day)); });
     HistoryRenderPart dollars{L"Dollars only: no percentage line, the spending card below", TestHistoryView(),
                               {1100, 790}, 640};
@@ -352,6 +354,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     HistoryRenderPart nav{L"", TestManyAccounts(), {1100, 550}};
     nav.view.selected = 12;
     nav.view.view = HistoryView::AllMeters;
+    nav.view.logoBrands = {true, true};
     nav.navEnd = true;
     nav.state.focus = {kHistoryUiNavAccount + 61};
     nav.state.focusVisible = true;

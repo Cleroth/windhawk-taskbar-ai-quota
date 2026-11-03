@@ -102,7 +102,7 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 // sample identities (label, badged logos, a stale logo) on stacked and vertical bars at every
 // identity position and two identity gaps, the hover box around each form (grown by tall vertical
 // bars), tile fills near their ends and at their minimums, logo sizes with the badge's size
-// and offsets on bars, rings and headline tiles, and badge colors. Display sheet: percentage text never/hover/always, each alignment, bar modes
+// and offsets on bars, rings and headline tiles, badge colors and logo brand colors. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -358,6 +358,21 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.badgeSize = 12;
              s.badgeColor = RGB(0xFF, 0xFF, 0xFF);
          }},
+        // Logo brand colors (high contrast: the text color): Claude's orange and the Gemini
+        // gradient on bars, rings and headline tiles; each alone.
+        {L"Bars 60, brand logos", [](Settings& s) { s.barLength = 60; s.logoBrands = {true, true}; }},
+        {L"Ring, logo 150%, brand logos", [](Settings& s) {
+             s.barLayout = BarLayout::SegmentedRing;
+             s.logoScale = 150;
+             s.logoBrands = {true, true};
+         }},
+        {L"Headline, logo 200%, brand logos", [](Settings& s) {
+             s.barLayout = BarLayout::LogoHeadline;
+             s.logoScale = 200;
+             s.logoBrands = {true, true};
+         }},
+        {L"Bars 60, orange Claude only", [](Settings& s) { s.barLength = 60; s.logoBrands.claude = true; }},
+        {L"Bars 60, Gemini gradient only", [](Settings& s) { s.barLength = 60; s.logoBrands.gemini = true; }},
     };
     // The Layout sheet's strips are the window's 680 DIPs; the Display sheet's fit four columns of
     // stacked bars, so every value shows.
@@ -511,7 +526,8 @@ static void RunRenders(const std::wstring& directory) {
             // the Add account menu open with OpenAI under the pointer, painted where the host opens
             // it; no accounts. Then the states: CC 1 expanded with a duplicate label typed (its box
             // editing, its error), the pointer on a chip and the focus ring on Remove account; Go
-            // dragged by its handle between OAI and CC 1, lifted under the pointer.
+            // dragged by its handle between OAI and CC 1, lifted under the pointer, with brand-colored
+            // logos.
             std::string expanded = std::string("render-accounts-expanded-") + theme.name + "-144.png";
             Run(expanded, [&] {
                 const D2D1_SIZE_F tall{1000, 913};
@@ -561,7 +577,9 @@ static void RunRenders(const std::wstring& directory) {
                 std::string states = std::string("render-accounts-states-") + theme.name + "-144.png";
                 RenderFrame(g, wic.get(), path(states), frame, view, client, 144, theme.input, state, 0, false);
 
+                // The dragged sheet with brand-colored logos (high contrast: the ink).
                 view = AccountsView();
+                view.settings.logoBrands = {true, true};
                 std::rotate(view.settings.accounts.begin() + 1, view.settings.accounts.begin() + 3,
                             view.settings.accounts.end());
                 std::rotate(view.accounts.begin() + 1, view.accounts.begin() + 3, view.accounts.end());

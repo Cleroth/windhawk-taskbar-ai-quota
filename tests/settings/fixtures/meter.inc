@@ -849,6 +849,9 @@ static void RunTileTests() {
         CHECK(d.badgeSize == 9 && d.badgeOffsetX == 0 && d.badgeOffsetY == 0); CHECK_NEAR(d.logoScale, 1);
         CHECK(d.badgeColor == RGB(0x4C, 0xC2, 0xFF));
         CHECK(Display(With([](Settings& s) { s.badgeColor = 0xAB123456; })).badgeColor == 0x123456);
+        // Logos in the text color by default; the brand choices pass through.
+        CHECK(d.logoBrands == LogoBrands{});
+        CHECK((Display(With([](Settings& s) { s.logoBrands.gemini = true; })).logoBrands == LogoBrands{false, true}));
         BadgeBox one = LogoBadgeBox(d, 15, 1);
         CHECK_NEAR(one.width, 7.4); CHECK_NEAR(one.height, 8.3);
         // Beside bars: centred on the 15 DIP logo's lower-right corner.

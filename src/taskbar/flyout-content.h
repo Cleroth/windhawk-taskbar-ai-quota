@@ -120,18 +120,25 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
 
     StackPanel content;
 
-    // Header: logo, account label, provider, stale marker and plan chip.
+    // Header: logo (in its brand colors when chosen, except in high contrast), account label,
+    // provider, stale marker and plan chip.
     Grid header;
     header.Padding({16, 12, 16, 12});
     for (int column = 0; column < 5; column++) addColumn(header, column == 2 ? kStar : kAuto);
     try {
+        LogoBrands brands;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            brands = g_settings.logoBrands;
+        }
+        const LogoBrand* brand = theme.highContrast ? nullptr : ProviderLogoBrand(brands, provider);
         Viewbox logo;
         logo.Width(20);
         logo.Height(20);
         logo.Margin({0, 0, 10, 0});
         logo.VerticalAlignment(VerticalAlignment::Center);
         logo.IsHitTestVisible(false);
-        logo.Child(LoadProviderLogo(provider, theme.text));
+        logo.Child(LoadProviderLogo(provider, brand ? LogoBrandBrush(*brand) : theme.text));
         header.Children().Append(logo);
     } catch (...) {
         Wh_Log(L"Flyout logo failed to load");
