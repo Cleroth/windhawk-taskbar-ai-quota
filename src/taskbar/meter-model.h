@@ -7,10 +7,8 @@
 // function here relies on them (clamp bounds, ring and pace tick fit).
 
 // Tile sizes, in DIPs.
-static constexpr double kTileHeight = 40;  // Nominal; shorter taskbars get shorter tiles.
-static constexpr double kMiniBarLength = 38;
-static constexpr double kMiniBarThickness = 4;
-static constexpr double kMiniBarGap = 3;
+// Nominal; shorter taskbars get shorter tiles. Bar columns are at least as tall.
+static constexpr double kTileHeight = 40;
 static constexpr double kHeadlineSegmentLength = 9;
 static constexpr double kHeadlineSegmentThickness = 3;
 // Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
@@ -351,18 +349,20 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     const ULONGLONG now = display.now;
     // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
     // share a provider so tiles show number badges. A negative value is a quota not reported.
-    // Antigravity is stale, with an error.
+    // Antigravity is stale, with an error. CC 1 (badged) and Go (marked) lead their bars with
+    // their identity.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
         std::array<double, kQuotaBarCount> pct;
         std::array<bool, kQuotaBarCount> showBars;
+        bool barLogo;
     };
     const std::array<Sample, 4> samples = {{
-        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}},
-        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}},
-        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}},
-        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}},
+        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, false},
+        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, true},
+        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, false},
+        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}, true},
     }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
@@ -387,6 +387,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         account.provider = sample.provider;
         account.label = sample.label;
         account.showBars = sample.showBars;
+        account.barLogo = sample.barLogo;
         bool openAi = account.provider == L"openai";
         if (openAi) account.creditsMax = (int)kCreditsMax;
         accounts->push_back(account);
@@ -523,18 +524,7 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     return g;
 }
 
-// Logo + bars mini bars: the bars' corners and full-line pace tick over a full track, at the
-// mini bars' thickness and gap.
-static BarGeometry MiniBarGeometryFor(const MeterDisplay& display) {
-    MeterDisplay mini = display;
-    mini.barThickness = (int)kMiniBarThickness;
-    mini.barGap = (int)kMiniBarGap;
-    mini.barStyle = BarStyle::Track;
-    mini.paceTickStyle = PaceTickStyle::Line;
-    return BarGeometryFor(mini);
-}
-
-// A tile's identity text. Logo identities show a number badge when several configured accounts
+// The identity text of a tile, or of a bar column with barLogo. Logo identities show a number badge when several configured accounts
 // share the provider; text identities, and logos that fail to load, show `text`.
 struct TileIdentityText {
     bool badge = false;
@@ -587,7 +577,7 @@ struct QuotaMeter {
     uint32_t color = 0;        // Usage color: follows used % in either bar mode.
     bool paceVisible = false;  // Pace mark shown, in layouts that draw one.
 
-    // The fill's corner radius toward 100%, in bars, mini bars, headline segments and ring arcs;
+    // The fill's corner radius toward 100%, in bars, headline segments and ring arcs;
     // its start corners are the track's. Over a full track the fill ends in a straight cut until
     // it comes within a corner's radius of the track's end.
     double fillEndRadius = 0;
@@ -604,8 +594,7 @@ struct QuotaMeter {
     // below follows them.
     int fillUnits = 0;
     int paceUnits = 0;
-    double fillLength = 0;     // Mini bar or headline segment fill.
-    double paceOffset = 0;     // Mini bar pace tick's start.
+    double fillLength = 0;     // Headline segment fill.
     // Rings: the drawn arc and its centreline radius. Partial arcs reach half a stroke past
     // their slot's ends along the centreline.
     TileArc arc{};
@@ -620,12 +609,12 @@ struct QuotaMeter {
 
 struct AccountMeters {
     bool stale = false;
-    bool warn = false;         // Stale with an error: the bars' "!" or the tiles' mark.
+    bool warn = false;         // Stale with an error: the label's "!" or the identity's mark.
     int barMask = 0;           // Quota slots shown.
     std::array<QuotaMeter, kQuotaBarCount> quotas;
     std::wstring labelText;    // Bars' label.
     double labelOpacity = 0;
-    double identityOpacity = 0;  // Tiles' identity.
+    double identityOpacity = 0;  // Tiles' identity, and bars' with barLogo.
     // Ring tiles: the identity text's fitted font size and width, and the warning mark's top
     // margin, into the tile's padding.
     TileRingGeometry ring;
@@ -658,7 +647,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
                    display.now - data.lastSuccessMs > staleAfterMs;
     meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
-    meters.labelText = meters.warn ? account.label + L"!" : account.label;
+    // With barLogo the identity carries the mark instead.
+    meters.labelText = meters.warn && !account.barLogo ? account.label + L"!" : account.label;
     meters.labelOpacity = meters.stale ? 0.45 : 0.8;
     meters.identityOpacity = meters.stale ? 0.45 : 1.0;
     // Every selected quota until the first success, then the reported ones.
@@ -673,7 +663,6 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     bool tiles = IsTileLayout(layout);
     bool concentric = layout == BarLayout::ConcentricRings;
     bool ring = concentric || layout == BarLayout::SegmentedRing;
-    bool miniBars = layout == BarLayout::LogoBars;
     bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline;
     if (ring) {
         meters.ring = TileRingLayout(concentric,
@@ -700,7 +689,6 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     };
 
     BarGeometry bar = BarGeometryFor(display);
-    BarGeometry miniBar = MiniBarGeometryFor(display);
     int position = 0;
     for (int w = 0; w < kQuotaBarCount; w++) {
         const WindowUsage& wu = *usage[w];
@@ -838,19 +826,11 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 m.paceCore = tick(inner - inside + kCoreInset, outer + outside - kCoreInset, kCore);
             }
         } else {
-            // Corners a quarter of the thickness; the fill cut flat until the track's end. Any
-            // usage fills at least 2 DIPs, as on the bars.
-            double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
-            double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
+            // Headline segments: corners a quarter of the thickness; the fill cut flat until the
+            // track's end. Any usage fills at least 2 DIPs, as on the bars.
+            double length = kHeadlineSegmentLength;
             m.fillLength = m.fillUnits ? std::clamp(length * fill, 2.0, length) : 0;
-            m.fillEndRadius = std::max(0.0, thickness / 4 - (length - m.fillLength));
-            if (miniBars) {
-                // The bars' line tick, centred on the pace, kept inside the bar's rounded ends.
-                double radius = std::clamp(miniBar.radius, miniBar.paceLength / 2,
-                                           (length - miniBar.paceLength) / 2);
-                m.paceOffset = std::clamp(length * pace, radius, length - radius) -
-                               miniBar.paceLength / 2;
-            }
+            m.fillEndRadius = std::max(0.0, kHeadlineSegmentThickness / 4 - (length - m.fillLength));
         }
     }
 

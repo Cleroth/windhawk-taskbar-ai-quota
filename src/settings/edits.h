@@ -58,6 +58,7 @@ enum class SettingsField : uint8_t {
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
     AccountTileText,      // Text, up to 4 characters
+    AccountBarLogo,       // Logo on bars: Stacked and Vertical bars lead with the identity
     AccountBars,          // The quotas shown: bit i = QuotaBarIndex i
     AccountCreditsMax,    // OpenAI credits that count as 100%; 0 hides the credits bar
     AccountRecordHistory,
@@ -370,6 +371,7 @@ static std::wstring SettingsRangeError(SettingsNumberRange range) {
 static int SettingsAccountValue(const AccountConfig& a, SettingsField field) {
     switch (field) {
         case SettingsField::AccountTileIdentity: return int(a.tileIdentity);
+        case SettingsField::AccountBarLogo: return a.barLogo;
         case SettingsField::AccountBars: {
             int mask = 0;
             for (int i = 0; i < kQuotaBarCount; i++) mask |= a.showBars[size_t(i)] ? 1 << i : 0;
@@ -391,6 +393,7 @@ static void SettingsAccountAssign(AccountConfig& a, SettingsField field, int val
         case SettingsField::AccountTileIdentity:
             a.tileIdentity = TileIdentity(std::clamp(value, int(TileIdentity::LogoBadge), int(TileIdentity::Text)));
             break;
+        case SettingsField::AccountBarLogo: a.barLogo = value != 0; break;
         case SettingsField::AccountBars:
             for (int i = 0; i < kQuotaBarCount; i++) a.showBars[size_t(i)] = (value >> i) & 1;
             break;

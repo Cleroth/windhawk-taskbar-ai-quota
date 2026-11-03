@@ -341,9 +341,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             }
             {
                 UiCardSpec spec;
-                spec.title = L"Tile identity";
-                spec.description = {{L"Ring and logo tile styles. The number badge appears only when several "
-                                     L"accounts share a provider."}};
+                spec.title = L"Identity";
+                spec.description = {{L"Ring and headline tiles, and bars with Logo on bars. The number badge "
+                                     L"appears only when several accounts share a provider."}};
                 spec.trailing = {220, 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
                 UiCardLayout layout = row(spec);
@@ -362,7 +362,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.description = {{L"Up to 4 characters. Empty uses the label without spaces."}};
                 spec.trailing = {96, 32};
                 spec.enabled = used;
-                if (!used) spec.reason = L"Used when Tile identity is Label text.";
+                if (!used) spec.reason = L"Used when Identity is Label text.";
                 if (draft) spec.error = draft->error;
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -378,6 +378,15 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 box.enabled = used;
                 box.action = command(SettingsField::AccountTileText);
                 push(box);
+            }
+            {
+                UiCardSpec spec;
+                spec.title = L"Logo on bars";
+                spec.description = {{L"Show the identity before this account\u2019s Stacked and Vertical bars."}};
+                spec.trailing = UiToggleSize(g);
+                UiCardLayout layout = row(spec);
+                UiAddToggle(cardItems, control(SettingsField::AccountBarLogo), layout.trailing, account.barLogo,
+                            true, command(SettingsField::AccountBarLogo, !account.barLogo));
             }
             {
                 // Whether it records: this entry's choice, this Windows user's consent, then the

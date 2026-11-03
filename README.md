@@ -14,9 +14,9 @@ Each visible account gets one compact taskbar column. Choose among the provider'
 - stacked layout: horizontal bars stack vertically and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
 
-Hover a column to open its details flyout: percentages, reset times, pace, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Click a column to refresh it. Right-click a column for Settings, Usage history, Refresh all, provider actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several accounts. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
+Hover a column to highlight it and open its details flyout: percentages, reset times, pace, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Click a column to refresh it. Right-click a column for Settings, Usage history, Refresh all, provider actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several accounts. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
 
-Bars can show compact quota labels and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark labels with `!` and the details flyout with a warning icon.
+Bars can show compact quota labels and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark labels (or the account's logo) with `!` and the details flyout with a warning icon.
 
 It can also fire a Windows notification when an account first crosses the red threshold on a selected bar. The notification re-arms once usage drops back below the threshold.
 
@@ -46,11 +46,12 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - label: unique per provider; renaming keeps the sign-in and history
   - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and monthly extra usage, OpenAI credits; unavailable quotas auto-hide
   - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
-  - tile identity for the ring and logo styles: provider logo with a number badge when several accounts share a provider, logo only, or label text (up to 4 characters of short text, else the label without spaces)
+  - identity for the ring and headline styles, and for bars with logo on bars: provider logo with a number badge when several accounts share a provider, logo only, or label text (up to 4 characters of short text, else the label without spaces)
+  - logo on bars: shows the identity before the account's stacked or vertical bars, where it also carries the stale-data `!` (off by default)
   - record history for this account
   - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
 - **Layout**, with a live preview of the taskbar:
-  - tile style: stacked bars, vertical bars, segmented ring, concentric rings, logo + bars, or headline %; settings the chosen style ignores are hidden or disabled with the reason
+  - tile style: stacked bars, vertical bars, segmented ring, concentric rings, or headline %; settings the chosen style ignores are hidden or disabled with the reason
   - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); ring size and thickness (ring styles)
   - label position (left, right, top, bottom, or hidden), label font size, and label gap
   - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size

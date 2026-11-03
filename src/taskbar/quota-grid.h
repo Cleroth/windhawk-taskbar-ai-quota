@@ -37,9 +37,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         state.buildVisualTestMode = visualTestMode;
         state.buildBarLayout = barLayout;
         bool tileLayout = IsTileLayout(barLayout);
-        // Tiles are kTileHeight tall, less on a taskbar too short for that.
+        // Tiles are kTileHeight tall, less on a taskbar too short for that; bar columns at least.
         state.taskbarHeight = 0;
-        if (tileLayout && state.injectionParent) {
+        if (state.injectionParent) {
             try {
                 if (auto xamlRoot = state.injectionParent.XamlRoot()) {
                     state.taskbarHeight = xamlRoot.Size().Height;
@@ -133,6 +133,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
+        // Tiles, or a bar column with barLogo.
+        bool identities = tileLayout;
 
         // Drops a show/hide toggle's keep-open request on the next dispatcher pass if no close
         // request followed its click.
@@ -212,13 +214,29 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             if (tileLayout) {
                 col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
             } else {
+                // The tiles' box: at least the tile height, 7 DIPs inside each side, with the
+                // identity (barLogo) 6 DIPs before the content, both centred across it. The
+                // content is the label beside, above or below the bars.
                 bool labelOnSide = labelPosition == LabelPosition::Left ||
                                    labelPosition == LabelPosition::Right;
                 bool labelBeforeBars = labelPosition == LabelPosition::Left ||
                                        labelPosition == LabelPosition::Top;
                 col = StackPanel{};
-                col.Orientation(labelOnSide ? Orientation::Horizontal : Orientation::Vertical);
+                col.Orientation(Orientation::Horizontal);
                 col.VerticalAlignment(VerticalAlignment::Center);
+                col.MinHeight(display.tileHeight);
+                col.Padding({7, 0, 7, 0});
+                col.CornerRadius({4, 4, 4, 4});
+                StackPanel content;
+                content.Orientation(labelOnSide ? Orientation::Horizontal : Orientation::Vertical);
+                content.VerticalAlignment(VerticalAlignment::Center);
+                refs.content = content;
+                if (accounts[i].barLogo) {
+                    // A margin, not panel spacing: a collapsed content takes the gap with it.
+                    col.Children().Append(BuildTileIdentity(accounts, i, barLayout, refs.tile));
+                    content.Margin({6, 0, 0, 0});
+                    identities = true;
+                }
 
                 TextBlock label{nullptr};
                 if (labelPosition != LabelPosition::Hidden) {
@@ -241,7 +259,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
                     label.Name(name);
                     refs.label = label;
-                    if (labelBeforeBars) col.Children().Append(label);
+                    if (labelBeforeBars) content.Children().Append(label);
                 }
 
                 StackPanel bars;
@@ -416,8 +434,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
 
                 refs.barArea = bars.as<FrameworkElement>();
-                col.Children().Append(bars);
-                if (label && !labelBeforeBars) col.Children().Append(label);
+                content.Children().Append(bars);
+                if (label && !labelBeforeBars) content.Children().Append(label);
+                col.Children().Append(content);
             }
 
             col.Margin({(double)accountMargin, 0, (double)accountMargin, 0});
@@ -741,8 +760,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
 
         root.Children().Append(panel);
-        // Moves pace marks each minute; tiles also pick up a missed light/dark switch with it.
-        if (showPaceTicks || tileLayout) {
+        // Moves pace marks each minute; identities also pick up a missed light/dark switch with it.
+        if (showPaceTicks || identities) {
             DispatcherTimer paceTimer;
             paceTimer.Interval(std::chrono::minutes(1));
             auto paceTimerToken = paceTimer.Tick(

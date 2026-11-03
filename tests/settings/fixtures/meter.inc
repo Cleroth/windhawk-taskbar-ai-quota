@@ -434,36 +434,25 @@ static void RunBarTests() {
 }
 
 static void RunTileTests() {
-    Run("mini bar and headline segment fills", [] {
-        auto mini = [](double pct, const MeterDisplay& d = Display()) {
-            return First({pct, 0, 0}, d, BarLayout::LogoBars).quotas[0];
+    Run("headline segment fills", [] {
+        auto segment = [](double pct, const MeterDisplay& d = Display()) {
+            return First({pct, 0, 0}, d, BarLayout::LogoHeadline).quotas[0];
         };
         // Any usage fills at least 2 DIPs, as on the bars.
-        CHECK(mini(50).fillUnits == 500); CHECK_NEAR(mini(50).fillLength, 19);
-        CHECK(mini(1).fillUnits == 10); CHECK_NEAR(mini(1).fillLength, 2);
-        CHECK(mini(10).fillUnits == 100); CHECK_NEAR(mini(10).fillLength, 3.8);
-        CHECK(mini(0).fillUnits == 0); CHECK_NEAR(mini(0).fillLength, 0);
-        CHECK(mini(120).fillUnits == 1000); CHECK_NEAR(mini(120).fillLength, 38);
-        CHECK(mini(0.04).fillUnits == 1); CHECK_NEAR(mini(0.04).fillLength, 2);
-        MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
-        CHECK(mini(30, remaining).fillUnits == 700); CHECK_NEAR(mini(30, remaining).fillLength, 26.6);
-        auto segment = [](double pct) {
-            return First({pct, 0, 0}, Display(), BarLayout::LogoHeadline).quotas[0];
-        };
-        CHECK_NEAR(segment(50).fillLength, 4.5); CHECK_NEAR(segment(10).fillLength, 2);
+        CHECK(segment(50).fillUnits == 500); CHECK_NEAR(segment(50).fillLength, 4.5);
+        CHECK(segment(10).fillUnits == 100); CHECK_NEAR(segment(10).fillLength, 2);
         CHECK_NEAR(segment(25).fillLength, 2.25);
-        CHECK_NEAR(segment(100).fillLength, 9); CHECK_NEAR(segment(0).fillLength, 0);
+        CHECK(segment(120).fillUnits == 1000); CHECK_NEAR(segment(120).fillLength, 9);
+        CHECK(segment(0).fillUnits == 0); CHECK_NEAR(segment(0).fillLength, 0);
+        CHECK(segment(0.04).fillUnits == 1); CHECK_NEAR(segment(0.04).fillLength, 2);
+        MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
+        CHECK(segment(30, remaining).fillUnits == 700); CHECK_NEAR(segment(30, remaining).fillLength, 6.3);
     });
 
-    Run("mini bar and headline fills: cut flat until a quarter-thickness corner from the end", [] {
-        auto mini = [](double pct) { return First({pct, 0, 0}, Display(), BarLayout::LogoBars).quotas[0]; };
+    Run("headline fills: cut flat until a quarter-thickness corner from the end", [] {
         auto segment = [](double pct) {
             return First({pct, 0, 0}, Display(), BarLayout::LogoHeadline).quotas[0];
         };
-        // 38 x 4 mini bars: 1 DIP corners. 37.62 DIPs leave 0.38 of the corner's DIP to the end.
-        CHECK_NEAR(mini(120).fillEndRadius, 1); CHECK_NEAR(mini(100).fillEndRadius, 1);
-        CHECK_NEAR(mini(99).fillEndRadius, 1 - 0.38); CHECK_NEAR(mini(97).fillEndRadius, 0);
-        CHECK_NEAR(mini(50).fillEndRadius, 0); CHECK_NEAR(mini(1).fillEndRadius, 0);
         // 9 x 3 headline segments: 0.75 DIP corners; 95% leaves 0.45 DIPs.
         CHECK_NEAR(segment(100).fillEndRadius, 0.75); CHECK_NEAR(segment(95).fillEndRadius, 0.3);
         CHECK_NEAR(segment(50).fillEndRadius, 0); CHECK_NEAR(segment(10).fillEndRadius, 0);
@@ -641,23 +630,20 @@ static void RunTileTests() {
         }
     });
 
-    Run("tile pace: thousandths, then offsets and angles from them", [] {
-        auto mini = [](long long resetIn, const MeterDisplay& d = Display()) {
-            QuotaMeter m = First(Window(10, resetIn), d, BarLayout::LogoBars).quotas[0];
+    Run("tile pace: thousandths, then angles from them", [] {
+        auto ring = [](long long resetIn, const MeterDisplay& d = Display()) {
+            QuotaMeter m = First(Window(10, resetIn), d, BarLayout::SegmentedRing).quotas[0];
             CHECK(m.paceVisible);
             return m;
         };
-        // A 4 DIP tick centred on the pace, its centre kept 2 DIPs (half the tick, more than the
-        // 1 DIP corner) inside either end of the 38 DIP bar.
-        CHECK(mini(13500000).paceUnits == 250); CHECK_NEAR(mini(13500000).paceOffset, 9.5 - 2);
-        CHECK(mini(kFiveHours).paceUnits == 0); CHECK_NEAR(mini(kFiveHours).paceOffset, 0);
-        CHECK(mini(0).paceUnits == 1000); CHECK_NEAR(mini(0).paceOffset, 34);
-        CHECK(mini(12000000).paceUnits == 333); CHECK_NEAR(mini(12000000).paceOffset, 12.654 - 2);
+        // A quarter, none, all and a third of the 5-hour window elapsed; the full ring's tick
+        // turns clockwise from the top.
+        CHECK(ring(13500000).paceUnits == 250); CHECK_NEAR(ring(13500000).paceAngle, 270 + 90);
+        CHECK(ring(kFiveHours).paceUnits == 0); CHECK_NEAR(ring(kFiveHours).paceAngle, 270);
+        CHECK(ring(0).paceUnits == 1000); CHECK_NEAR(ring(0).paceAngle, 270 + 360);
+        CHECK(ring(12000000).paceUnits == 333); CHECK_NEAR(ring(12000000).paceAngle, 270 + 0.333 * 360);
         MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
-        CHECK(mini(13500000, remaining).paceUnits == 750);
-        CHECK_NEAR(mini(13500000, remaining).paceOffset, 28.5 - 2);
-        CHECK_NEAR(First(Window(10, 13500000), Display(), BarLayout::SegmentedRing)
-                       .quotas[0].paceAngle, 360);
+        CHECK(ring(13500000, remaining).paceUnits == 750);
         AccountData data = Fresh();
         data.win5h = Window(10, 13500000);
         data.winWeek = Window(10, 13500000);
@@ -801,35 +787,6 @@ static void RunTileTests() {
         }
     });
 
-    Run("mini bar pace tick: the bars' full line at the mini bars' size and gap", [] {
-        // 100%: a 4 px halo across the 4 DIP bar and a pixel past each side (3 DIP gap); the 2 px
-        // core a pixel short of it at both ends; square.
-        BarGeometry one = MiniBarGeometryFor(Display());
-        CHECK_NEAR(one.radius, 1); CHECK_NEAR(one.overhang, 1);
-        CHECK_NEAR(one.paceLength, 4); CHECK_NEAR(one.paceCrossSize, 6);
-        CHECK_NEAR(one.coreLength, 2); CHECK_NEAR(one.coreCrossSize, 4); CHECK_NEAR(one.coreCrossOffset, 1);
-        CHECK_NEAR(one.paceRadius, 0); CHECK_NEAR(one.coreRadius, 0);
-        // 150%: the 3 DIP gap rounds to 5 px, a DIP to 2: min(2, 5 / 2) = 2 px past each side.
-        const double px = 1 / 1.5;
-        BarGeometry half = MiniBarGeometryFor(Display({}, 1.5));
-        CHECK_NEAR(half.overhang, 2 * px);
-        CHECK_NEAR(half.paceLength, 4 * px); CHECK_NEAR(half.paceCrossSize, 4 + 4 * px);
-        CHECK_NEAR(half.coreLength, 2 * px); CHECK_NEAR(half.coreCrossSize, 4 + 2 * px);
-        CHECK_NEAR(half.coreCrossOffset, px);
-        // The bars' settings don't reach it.
-        MeterDisplay other = Display(With([](Settings& s) {
-            s.barGap = 0; s.barThickness = 20; s.barStyle = BarStyle::Rail; s.paceTickStyle = PaceTickStyle::Dot;
-        }));
-        BarGeometry same = MiniBarGeometryFor(other);
-        CHECK_NEAR(same.overhang, 1); CHECK_NEAR(same.paceCrossSize, 6); CHECK_NEAR(same.radius, 1);
-        // At 150% the tick's centre keeps 4 / 3 DIPs (half the tick) inside either end.
-        auto offset = [](long long resetIn) {
-            return First(Window(10, resetIn), Display({}, 1.5), BarLayout::LogoBars).quotas[0].paceOffset;
-        };
-        CHECK_NEAR(offset(kFiveHours), 0); CHECK_NEAR(offset(0), 38 - 4 * px);
-        CHECK_NEAR(offset(13500000), 9.5 - 2 * px);
-    });
-
     Run("ring capped by tile height; warning mark margin", [] {
         auto ring = [](int size, double taskbar) {
             MeterDisplay d = Display(With([&](Settings& s) { s.ringSize = size; }), 1, taskbar);
@@ -908,6 +865,20 @@ static void RunAccountTests() {
         AccountMeters fresh = meters(false, L"timeout");
         CHECK(!fresh.warn); CHECK(fresh.labelText == L"A");
         CHECK_NEAR(fresh.labelOpacity, 0.8); CHECK_NEAR(fresh.identityOpacity, 1);
+        // Logo on bars: the identity carries the mark, so the label drops its "!" in both bar
+        // layouts; the account stays warned and dimmed.
+        AccountData failed = Fresh({10, -1, -1, -1});
+        failed.stale = true;
+        failed.error = L"timeout";
+        AccountConfig logo = Account();
+        logo.barLogo = true;
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+            AccountMeters marked = AccountMeterState(Display(), layout, logo, failed, 0, 0);
+            CHECK(marked.warn && marked.labelText == L"A");
+            CHECK_NEAR(marked.labelOpacity, 0.45); CHECK_NEAR(marked.identityOpacity, 0.45);
+        }
+        AccountMeters plain = AccountMeterState(Display(), BarLayout::Vertical, Account(), failed, 0, 0);
+        CHECK(plain.warn && plain.labelText == L"A!");
     });
 
     Run("quota mask before and after the first success", [] {
@@ -1001,6 +972,9 @@ static void RunSnapshotTests() {
         CHECK(accounts[0].provider == L"openai"); CHECK(accounts[0].label == L"OAI");
         CHECK(accounts[1].label == L"CC 1"); CHECK(accounts[2].label == L"CC 2");
         CHECK(accounts[3].provider == L"antigravity");
+        // Logo on bars: CC 1 (badged) and Go (stale); every identity the default logo and badge.
+        CHECK(!accounts[0].barLogo && accounts[1].barLogo && !accounts[2].barLogo && accounts[3].barLogo);
+        for (const AccountConfig& account : accounts) CHECK(account.tileIdentity == TileIdentity::LogoBadge);
         CHECK((accounts[0].showBars == std::array<bool, kQuotaBarCount>{true, true, false, true}));
         CHECK(accounts[0].creditsMax == 1000);
         CHECK_NEAR(data[0].win5h.pct, 25); CHECK_NEAR(data[0].winWeek.pct, 62.5);
@@ -1047,8 +1021,11 @@ static void RunSnapshotTests() {
         std::vector<AccountConfig> accounts;
         std::vector<AccountData> data;
         BuildVisualTestSnapshot(display, &accounts, &data);
+        // Go leads its bars with its logo, which carries the mark: its label has no "!".
         AccountMeters go = AccountMeterState(display, BarLayout::Stacked, accounts[3], data[3], 0, 0);
-        CHECK(go.labelText == L"Go!" && go.quotas[0].color == 0xFF9E9E9E && !go.quotas[0].paceVisible);
+        CHECK(go.warn && go.labelText == L"Go" && go.quotas[0].color == 0xFF9E9E9E && !go.quotas[0].paceVisible);
+        accounts[3].barLogo = false;
+        CHECK(AccountMeterState(display, BarLayout::Stacked, accounts[3], data[3], 0, 0).labelText == L"Go!");
         MeterDisplay unmarked = Display(With([](Settings& s) { s.showStaleWarning = false; }));
         go = AccountMeterState(unmarked, BarLayout::Stacked, accounts[3], data[3], 0, 0);
         CHECK(go.stale && !go.warn && go.labelText == L"Go");

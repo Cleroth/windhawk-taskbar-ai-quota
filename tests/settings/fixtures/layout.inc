@@ -21,6 +21,37 @@ static SettingsPreviewStrip Strip(const Settings& settings, double taskbar = 48,
     return SettingsPreviewLayout(TestGraphics(), settings, taskbar, scale, kNow, gallery, false, 0xFFFFFFFF);
 }
 
+// The preview of `accounts` with their `data` in place of the sample accounts.
+static SettingsPreviewStrip StripOf(const Settings& settings, const std::vector<AccountConfig>& accounts,
+                                    const std::vector<AccountData>& data, double taskbar = 48) {
+    return SettingsPreviewLayout(TestGraphics(), settings, taskbar, 1, kNow, false, false, 0xFFFFFFFF, &accounts,
+                                 &data);
+}
+
+static std::vector<SettingsPreviewOp> OpsOfKind(const SettingsPreviewStrip& strip, SettingsPreviewOp::Kind kind) {
+    std::vector<SettingsPreviewOp> ops;
+    for (const SettingsPreviewOp& op : strip.ops) {
+        if (op.kind == kind) ops.push_back(op);
+    }
+    return ops;
+}
+
+// The text operations showing `text`.
+static std::vector<SettingsPreviewOp> TextOps(const SettingsPreviewStrip& strip, std::wstring_view text) {
+    std::vector<SettingsPreviewOp> ops;
+    for (const SettingsPreviewOp& op : OpsOfKind(strip, SettingsPreviewOp::Kind::Text)) {
+        if (op.text == text) ops.push_back(op);
+    }
+    return ops;
+}
+
+static SettingsPreviewOp FirstText(const SettingsPreviewStrip& strip) {
+    auto text = std::find_if(strip.ops.begin(), strip.ops.end(), [](const SettingsPreviewOp& op) {
+        return op.kind == SettingsPreviewOp::Kind::Text;
+    });
+    return text == strip.ops.end() ? SettingsPreviewOp{} : *text;
+}
+
 static bool Finite(const SettingsPreviewStrip& strip) {
     auto finite = [](D2D1_RECT_F r) {
         return std::isfinite(r.left) && std::isfinite(r.top) && std::isfinite(r.right) && std::isfinite(r.bottom);
@@ -95,7 +126,7 @@ static void RunLayoutTests() {
             {SettingsField::RingSize, 100, 40},       {SettingsField::RingThickness, -3, 1},
             {SettingsField::LabelFontSize, 100, 24},  {SettingsField::PercentFontSize, 1, 6},
             {SettingsField::BarGap, -1, 0},           {SettingsField::AccountMargin, 501, 500},
-            {SettingsField::BarLayout, 9, 5},         {SettingsField::BarLayout, -1, 0},
+            {SettingsField::BarLayout, 9, 4},         {SettingsField::BarLayout, -1, 0},
             {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 3},
             {SettingsField::BarStyle, 5, 1},          {SettingsField::BarStyle, -1, 0},
             {SettingsField::PaceTickColor, 0x12345678, 0x345678}};
@@ -107,7 +138,7 @@ static void RunLayoutTests() {
 
     Run("layout reset: the seventeen Layout fields back to defaults, nothing else", [] {
         Settings changed;
-        changed.barLayout = BarLayout::LogoBars;
+        changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
         changed.barLength = 220;
         changed.barThickness = 14;
@@ -131,7 +162,9 @@ static void RunLayoutTests() {
         changed.yellowThreshold = 40;
         changed.percentTextVisibility = PercentTextVisibility::Always;
         changed.showDetailsOnHover = false;
+        // Logo on bars is the account's: the Layout reset keeps it.
         changed.accounts.push_back(Account());
+        changed.accounts.back().barLogo = true;
         Settings expected = changed;
         const Settings defaults;
         expected.barLayout = defaults.barLayout;
@@ -264,22 +297,24 @@ static void RunLayoutTests() {
         CHECK(always.size() == 10 && always[0].hover == -1);
         s.percentTextVisibility = PercentTextVisibility::Never;
         CHECK(percents(Strip(s)).empty());
-        // Left labels: label, the label gap, then the 100 DIP bars.
+        // Left labels: 7 DIPs into the box, the label, the label gap, then the 100 DIP bars, 7 DIPs
+        // before its end.
         s = {};
         strip = Strip(s);
-        const SettingsPreviewOp& label = strip.ops[0];
-        CHECK(label.kind == SettingsPreviewOp::Kind::Text && label.text == L"OAI");
+        const SettingsPreviewOp label = FirstText(strip);
+        CHECK(label.text == L"OAI");
+        CHECK_NEAR(label.rect.left, strip.columns[0].left + 7);
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, label.rect.right + 3);
-        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, label.rect.right - label.rect.left + 3 + 100);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + label.rect.right - label.rect.left + 3 + 100 + 7);
         // Quota keys add a ceil(9 * 1.4) + 3 DIP column before each track.
         s.showBarLabels = true;
         strip = Strip(s);
-        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left - strip.ops[0].rect.right, 3 + 16);
-        // Hidden labels: just the bars.
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left - FirstText(strip).rect.right, 3 + 16);
+        // Hidden labels: just the bars in the box.
         s = {};
         s.labelPosition = LabelPosition::Hidden;
         strip = Strip(s);
-        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 100);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + 100 + 7);
         // Vertical bars stand 100 DIPs tall.
         s.barLayout = BarLayout::Vertical;
         strip = Strip(s);
@@ -287,11 +322,243 @@ static void RunLayoutTests() {
         CHECK_NEAR(strip.columns[0].bottom - strip.columns[0].top, 100);
     });
 
+    Run("preview: bar columns take the tiles' box and hover fill, with or without a logo", [] {
+        const uint32_t hover = TilePaletteFor(false).hover;
+        // Every sample column (CC 1 and Go with logos, OAI and CC 2 without), Stacked and
+        // Vertical: the hover fill first, the box's 4 DIP rounded rectangle, only while hovered;
+        // the 3 DIP account margins outside it.
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+            Settings s;
+            s.barLayout = layout;
+            SettingsPreviewStrip strip = Strip(s);
+            std::vector<SettingsPreviewOp> fills = OpsOfColor(strip, hover);
+            CHECK(fills.size() == 4 && strip.columns.size() == 4);
+            CHECK(strip.ops[0].color == hover && strip.ops[0].hover == 0);
+            for (size_t i = 0; i < fills.size(); i++) {
+                const D2D1_RECT_F& box = strip.columns[i];
+                CHECK(fills[i].hover == int(i) && fills[i].kind == SettingsPreviewOp::Kind::Rect);
+                CHECK_NEAR(fills[i].radius, 4);
+                CHECK_NEAR(fills[i].rect.left, box.left); CHECK_NEAR(fills[i].rect.right, box.right);
+                CHECK_NEAR(fills[i].rect.top, box.top); CHECK_NEAR(fills[i].rect.bottom, box.bottom);
+            }
+            CHECK_NEAR(strip.columns[0].left, 3);
+            for (size_t i = 1; i < 4; i++) CHECK_NEAR(strip.columns[i].left - strip.columns[i - 1].right, 6);
+            CHECK_NEAR(strip.width, strip.columns[3].right + 3);
+        }
+
+        // Stacked: the tile height, 40 DIPs on a 48 DIP taskbar (CC 2's four bars just fill it:
+        // 4 * 8 + 3 * 2 + 2 DIPs), the content centred across it.
+        Settings s;
+        SettingsPreviewStrip strip = Strip(s);
+        for (const D2D1_RECT_F& box : strip.columns) {
+            CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
+        }
+        // OAI's three bars: 3 * 8 + 2 * 2 + 2 DIPs, 5 DIPs from either edge.
+        std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
+        CHECK_NEAR(tracks[0].rect.top - 1, 4 + 5); CHECK_NEAR(tracks[2].rect.bottom + 1, 44 - 5);
+        // A 32 DIP taskbar: 24 DIP tiles. Go's one bar keeps that height; OAI's 30 DIPs and CC 2's
+        // 40 grow their boxes, centred on the strip.
+        strip = Strip(s, 32);
+        CHECK_NEAR(strip.columns[3].top, 4); CHECK_NEAR(strip.columns[3].bottom, 28);
+        CHECK_NEAR(strip.columns[0].top, 1); CHECK_NEAR(strip.columns[0].bottom, 31);
+        CHECK_NEAR(strip.columns[2].top, -4); CHECK_NEAR(strip.columns[2].bottom, 36);
+        // Vertical: 100 DIP bars grow it, still centred on the strip; 32 DIP ones sit in the
+        // middle of the 40 DIP box.
+        s.barLayout = BarLayout::Vertical;
+        strip = Strip(s);
+        CHECK_NEAR(strip.columns[0].top, -26); CHECK_NEAR(strip.columns[0].bottom, 74);
+        s.barLength = 32;
+        strip = Strip(s);
+        CHECK_NEAR(strip.columns[0].top, 4); CHECK_NEAR(strip.columns[0].bottom, 44);
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.top, 8);
+
+        // The gallery's Anthropic pair: CC 1 with its logo, CC 2 without, in the same boxes.
+        s = {};
+        strip = Strip(s, 48, true);
+        CHECK(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo).size() == 1 && OpsOfColor(strip, hover).size() == 2);
+        CHECK_NEAR(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.left, strip.columns[0].left + 7);
+        CHECK_NEAR(TextOps(strip, L"CC 1")[0].rect.left, strip.columns[0].left + 7 + 15 + 6);
+    });
+
+    Run("preview: logo on bars leads the column at every label position and in Vertical", [] {
+        // CC 1 leads with its logo, badged "1" as CC 2 shares its provider; CC 2 has none. Both
+        // fresh, with two bars: 2 * 8 + 2 + 2 = 20 DIPs, inside 40 DIP boxes from y 4 to 44.
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC 1", {true, true, false, false}),
+                                               Account(L"anthropic", L"CC 2", {true, true, false, false})};
+        accounts[0].barLogo = true;
+        std::vector<AccountData> data = {Fresh({30, 40, -1, -1}), Fresh({30, 40, -1, -1})};
+        const uint32_t outline = TilePaletteFor(false).badgeOutline;
+        for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
+                                       LabelPosition::Bottom, LabelPosition::Hidden}) {
+            Settings s;
+            s.labelPosition = position;
+            SettingsPreviewStrip strip = StripOf(s, accounts, data);
+            const D2D1_RECT_F box = strip.columns[0], other = strip.columns[1];
+            CHECK_NEAR(box.left, 3); CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
+            // The 15 DIP logo 7 DIPs into the box, centred across it; the badge's 10 DIP pill on
+            // its lower-right corner, 4 DIPs past it.
+            std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
+            CHECK(logos.size() == 1 && logos[0].path == kClaudeLogoPath);
+            CHECK_NEAR(logos[0].rect.left, 10); CHECK_NEAR(logos[0].rect.right, 25);
+            CHECK_NEAR(logos[0].rect.top, 16.5); CHECK_NEAR(logos[0].rect.bottom, 31.5);
+            std::vector<SettingsPreviewOp> badges = OpsOfColor(strip, TilePaletteFor(false).badge);
+            CHECK(badges.size() == 1 && badges[0].outline == outline && TextOps(strip, L"1").size() == 1);
+            CHECK_NEAR(badges[0].rect.right, 29); CHECK_NEAR(badges[0].rect.bottom, 35.5);
+            CHECK_NEAR(badges[0].rect.bottom - badges[0].rect.top, 10);
+            CHECK(badges[0].rect.right - badges[0].rect.left >= 10);
+            // The content 6 DIPs after the logo; the box 7 DIPs past it.
+            const float content = 10 + 15 + 6;
+            std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
+            CHECK(tracks.size() == 4);
+            std::vector<SettingsPreviewOp> labels = TextOps(strip, L"CC 1");
+            CHECK(labels.size() == (position == LabelPosition::Hidden ? 0u : 1u));
+            switch (position) {
+                case LabelPosition::Left:
+                    CHECK_NEAR(labels[0].rect.left, content);
+                    CHECK_NEAR(tracks[0].rect.left, labels[0].rect.right + 3);
+                    CHECK_NEAR(tracks[0].rect.top, 4 + 10 + 1);
+                    CHECK_NEAR(box.right, tracks[0].rect.right + 7);
+                    break;
+                case LabelPosition::Right:
+                    CHECK_NEAR(tracks[0].rect.left, content);
+                    CHECK_NEAR(labels[0].rect.left, tracks[0].rect.right + 3);
+                    CHECK_NEAR(box.right, labels[0].rect.right + 7);
+                    break;
+                case LabelPosition::Top:
+                    // The label centred over the bars, the label gap between; both centred.
+                    CHECK_NEAR(tracks[0].rect.left, content);
+                    CHECK_NEAR(labels[0].rect.left, content + (100 - (labels[0].rect.right - labels[0].rect.left)) / 2);
+                    CHECK_NEAR(tracks[0].rect.top, labels[0].rect.bottom + 3 + 1);
+                    CHECK_NEAR(labels[0].rect.top - 4, 44 - (tracks[1].rect.bottom + 1));
+                    CHECK_NEAR(box.right, content + 100 + 7);
+                    break;
+                case LabelPosition::Bottom:
+                    CHECK_NEAR(tracks[0].rect.left, content);
+                    CHECK_NEAR(labels[0].rect.top, tracks[1].rect.bottom + 1 + 3);
+                    CHECK_NEAR(tracks[0].rect.top - 1 - 4, 44 - labels[0].rect.bottom);
+                    CHECK_NEAR(box.right, content + 100 + 7);
+                    break;
+                case LabelPosition::Hidden:
+                    CHECK_NEAR(tracks[0].rect.left, content);
+                    CHECK_NEAR(box.right, content + 100 + 7);
+                    break;
+            }
+            // CC 2: no logo, its content 7 DIPs into its box.
+            CHECK_NEAR(other.left, box.right + 6);
+            float first = position == LabelPosition::Left ? TextOps(strip, L"CC 2")[0].rect.left : tracks[2].rect.left;
+            CHECK_NEAR(first, other.left + 7);
+            // As wide but for the logo and its gap, and a side label's own width.
+            float wider = 0;
+            if (position == LabelPosition::Left || position == LabelPosition::Right) {
+                const SettingsPreviewOp label2 = TextOps(strip, L"CC 2")[0];
+                wider = (label2.rect.right - label2.rect.left) - (labels[0].rect.right - labels[0].rect.left);
+            }
+            CHECK_NEAR(other.right - other.left, box.right - box.left - 15 - 6 + wider);
+        }
+
+        // Vertical: in front of the upright bars, centred across the 100 DIP box.
+        Settings s;
+        s.barLayout = BarLayout::Vertical;
+        SettingsPreviewStrip strip = StripOf(s, accounts, data);
+        D2D1_RECT_F box = strip.columns[0];
+        CHECK_NEAR(box.top, -26); CHECK_NEAR(box.bottom, 74);
+        SettingsPreviewOp logo = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0];
+        CHECK_NEAR(logo.rect.left, 10); CHECK_NEAR(logo.rect.top, 16.5);
+        std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
+        SettingsPreviewOp label = TextOps(strip, L"CC 1")[0];
+        CHECK_NEAR(label.rect.left, 31); CHECK_NEAR(tracks[0].rect.left, label.rect.right + 3);
+        CHECK_NEAR(tracks[1].rect.left, tracks[0].rect.right + 2);
+        CHECK_NEAR(box.right, tracks[1].rect.right + 7);
+        s.labelPosition = LabelPosition::Hidden;
+        s.barLength = 32;
+        strip = StripOf(s, accounts, data);
+        box = strip.columns[0];
+        tracks = OpsOfColor(strip, 0x46808080);
+        CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
+        CHECK_NEAR(tracks[0].rect.left, 31); CHECK_NEAR(tracks[0].rect.top, 8);
+        CHECK_NEAR(box.right - box.left, 7 + 15 + 6 + 8 + 2 + 8 + 7);
+        CHECK_NEAR(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.top, 16.5);
+    });
+
+    Run("preview: logo on bars: short text, the stale mark, and accounts without quotas", [] {
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC 1", {true, true, false, false}),
+                                               Account(L"openai", L"OAI", {true, true, false, false})};
+        accounts[0].barLogo = true;
+        std::vector<AccountData> data = {Fresh({30, 40, -1, -1}), Fresh({30, 40, -1, -1})};
+        Settings s;
+
+        // Short text: shrunk to fit 26 DIPs (at least 8), then clipped; the content 6 DIPs after it.
+        accounts[0].tileIdentity = TileIdentity::Text;
+        accounts[0].tileText = L"WWWW";
+        SettingsPreviewStrip strip = StripOf(s, accounts, data);
+        CHECK(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo).empty() && OpsOfColor(strip, TilePaletteFor(false).badge).empty());
+        SettingsPreviewOp text = TextOps(strip, L"WWWW")[0];
+        CHECK(text.clip && text.style.family == UiFamily::Display && text.style.size == 8 &&
+              text.style.weight == DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        CHECK_NEAR(text.rect.left, 10); CHECK_NEAR(text.rect.right, 10 + 26);
+        CHECK_NEAR(TextOps(strip, L"CC 1")[0].rect.left, 10 + 26 + 6);
+        accounts[0].tileText = L"AB";
+        strip = StripOf(s, accounts, data);
+        text = TextOps(strip, L"AB")[0];
+        CHECK(text.style.size == 12 && text.rect.right - text.rect.left < 26);
+        CHECK_NEAR(TextOps(strip, L"CC 1")[0].rect.left, text.rect.right + 6);
+
+        // Stale with an error: the "!" on the identity's top-right corner, 4 DIPs past it, dimmed
+        // with it; the label keeps no "!". OAI, without a logo, keeps the label's.
+        for (TileIdentity identity : {TileIdentity::Logo, TileIdentity::Text}) {
+            accounts[0].tileIdentity = identity;
+            data[0].stale = data[1].stale = true;
+            data[0].error = data[1].error = L"timeout";
+            strip = StripOf(s, accounts, data);
+            std::vector<SettingsPreviewOp> marks = TextOps(strip, L"!");
+            CHECK(marks.size() == 1);
+            float right = identity == TileIdentity::Logo ? OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.right :
+                                                           TextOps(strip, L"AB")[0].rect.right;
+            CHECK_NEAR(marks[0].rect.right, right + 4);
+            CHECK_NEAR(marks[0].opacity, 0.45);
+            CHECK(TextOps(strip, L"CC 1").size() == 1 && TextOps(strip, L"CC 1!").empty());
+            CHECK_NEAR(TextOps(strip, L"CC 1")[0].opacity, 0.45);
+            CHECK(TextOps(strip, L"OAI!").size() == 1);
+            // Marks off: neither.
+            s.showStaleWarning = false;
+            strip = StripOf(s, accounts, data);
+            CHECK(TextOps(strip, L"!").empty() && TextOps(strip, L"OAI").size() == 1);
+            s.showStaleWarning = true;
+        }
+        data = {Fresh({30, 40, -1, -1}), Fresh({30, 40, -1, -1})};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+
+        // No quota reported: no bars. With a label it stays beside the logo; hidden, the logo
+        // alone; without a logo, the 8 DIP context-menu target. The box keeps the tile height.
+        data[0] = Fresh();
+        strip = StripOf(s, accounts, data);
+        D2D1_RECT_F box = strip.columns[0];
+        SettingsPreviewOp label = TextOps(strip, L"CC 1")[0];
+        CHECK(OpsOfColor(strip, 0x46808080).size() == 2);
+        CHECK_NEAR(label.rect.left, 10 + 15 + 6);
+        CHECK_NEAR(box.right - box.left, 7 + 15 + 6 + (label.rect.right - label.rect.left) + 3 + 7);
+        CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
+        s.labelPosition = LabelPosition::Hidden;
+        strip = StripOf(s, accounts, data);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + 15 + 7);
+        CHECK_NEAR(strip.columns[0].bottom - strip.columns[0].top, 40);
+        CHECK_NEAR(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.top, 16.5);
+        accounts[0].barLogo = false;
+        strip = StripOf(s, accounts, data);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + 8 + 7);
+        CHECK(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo).empty());
+        // The same in Vertical.
+        s.barLayout = BarLayout::Vertical;
+        accounts[0].barLogo = true;
+        strip = StripOf(s, accounts, data);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + 15 + 7);
+    });
+
     Run("preview: pace marks per layout; none on headline tiles", [] {
         const uint32_t pace = 0xFF000000 | 0xDEDEDE;
         Settings s;
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical, BarLayout::SegmentedRing,
-                                 BarLayout::ConcentricRings, BarLayout::LogoBars}) {
+                                 BarLayout::ConcentricRings}) {
             s.barLayout = layout;
             CHECK(!OpsOfColor(Strip(s), pace).empty());
         }
@@ -467,7 +734,7 @@ static void RunLayoutTests() {
         CHECK_NEAR(rails[0].rect.left, fills(strip)[0].rect.left + 3);
     });
 
-    Run("preview: ring tiles fill the model's shapes; mini bars and segments cut flat and shaded", [] {
+    Run("preview: ring tiles fill the model's shapes; headline segments cut flat and shaded", [] {
         auto roughly = [](double actual, double expected) { return std::abs(actual - expected) < 1e-4; };  // Floats
         auto shaded = [](const SettingsPreviewStrip& strip) {
             std::vector<SettingsPreviewOp> ops;
@@ -502,53 +769,17 @@ static void RunLayoutTests() {
         CHECK(green != strip.ops.end() && green->kind == SettingsPreviewOp::Kind::Shape && green->shade == 0);
         CHECK_NEAR(green->shape[0].x, oai.quotas[0].fill[0].x);
 
-        // Logo + bars: 38 x 4 tracks with 1 DIP corners.
-        s.barLayout = BarLayout::LogoBars;
-        strip = Strip(s);
-        tracks = OpsOfColor(strip, track);
-        CHECK(tracks.size() == 10 && tracks[0].kind == SettingsPreviewOp::Kind::Rect);
-        CHECK_NEAR(tracks[0].radius, 1);
-        CHECK_NEAR(tracks[0].rect.right - tracks[0].rect.left, 38); CHECK_NEAR(tracks[0].rect.bottom - tracks[0].rect.top, 4);
-        // OAI's 25% 5-hour fill: 9.5 DIPs, the track's corners at its start, cut flat, shaded.
-        std::vector<SettingsPreviewOp> fills = shaded(strip);
-        CHECK(fills.size() == 10);
-        CHECK(roughly(fills[0].rect.right - fills[0].rect.left, 9.5) && roughly(fills[0].rect.left, tracks[0].rect.left));
-        CHECK((*fills[0].corners == Corners{1, 0, 0, 1}));
-        CHECK(fills[0].color == 0xFF43A047 && fills[0].shade == UsageHighlight(0xFF43A047) && !fills[0].shadeLeft);
-        // CC 2's weekly quota, past 100%: full, rounded at both ends.
-        auto full = std::find_if(fills.begin(), fills.end(), [&](const SettingsPreviewOp& op) {
-            return roughly(op.rect.right - op.rect.left, 38);
-        });
-        CHECK(full != fills.end() && full->color == 0xFFE53935 && (*full->corners == Corners{1, 1, 1, 1}));
-        // OAI's 5-hour pace at 65% of its window: the 4 DIP halo centred 24.7 DIPs along, from a DIP
-        // above the bar to a DIP below; the 2 x 4 core a DIP inside it.
-        std::vector<SettingsPreviewOp> halos = OpsOfColor(strip, 0xC0000000), cores = OpsOfColor(strip, 0xFFDEDEDE);
-        // Eight ticks: the fresh accounts' quotas but OAI's credits, which have no window.
-        CHECK(halos.size() == 8 && cores.size() == 8);
-        CHECK(roughly(halos[0].rect.left, tracks[0].rect.left + 24.7 - 2) && roughly(halos[0].rect.top, tracks[0].rect.top - 1));
-        CHECK_NEAR(halos[0].rect.right - halos[0].rect.left, 4); CHECK_NEAR(halos[0].rect.bottom - halos[0].rect.top, 6);
-        CHECK_NEAR(halos[0].radius, 0);
-        CHECK(roughly(cores[0].rect.left, halos[0].rect.left + 1) && roughly(cores[0].rect.top, halos[0].rect.top + 1));
-        CHECK_NEAR(cores[0].rect.right - cores[0].rect.left, 2); CHECK_NEAR(cores[0].rect.bottom - cores[0].rect.top, 4);
-        CHECK_NEAR(cores[0].radius, 0);
-        // 150%: 4 and 2 px wide, two pixels past each side (the 3 DIP gap is 4.5 px).
-        strip = Strip(s, 48, false, 1.5f);
-        halos = OpsOfColor(strip, 0xC0000000);
-        cores = OpsOfColor(strip, 0xFFDEDEDE);
-        CHECK(roughly(halos[0].rect.right - halos[0].rect.left, 4 / 1.5) && roughly(halos[0].rect.bottom - halos[0].rect.top, 4 + 4 / 1.5));
-        CHECK(roughly(cores[0].rect.right - cores[0].rect.left, 2 / 1.5) && roughly(cores[0].rect.bottom - cores[0].rect.top, 4 + 2 / 1.5));
-
         // Headline segments: 9 x 3 tracks with 0.75 DIP corners, fills shaded and cut flat, no ticks.
         s.barLayout = BarLayout::LogoHeadline;
         strip = Strip(s);
         tracks = OpsOfColor(strip, track);
-        fills = shaded(strip);
+        std::vector<SettingsPreviewOp> fills = shaded(strip);
         CHECK(tracks.size() == 10 && fills.size() == 10);
         CHECK_NEAR(tracks[0].radius, 0.75); CHECK_NEAR(tracks[0].rect.right - tracks[0].rect.left, 9);
         // OAI's 5-hour quota: 25% of 9 DIPs, cut flat; CC 2's weekly one fills the segment.
         CHECK(roughly(fills[0].rect.right - fills[0].rect.left, 2.25) && (*fills[0].corners == Corners{0.75f, 0, 0, 0.75f}));
         CHECK(fills[0].shade == UsageHighlight(fills[0].color));
-        full = std::find_if(fills.begin(), fills.end(), [&](const SettingsPreviewOp& op) { return op.color == 0xFFE53935; });
+        auto full = std::find_if(fills.begin(), fills.end(), [&](const SettingsPreviewOp& op) { return op.color == 0xFFE53935; });
         CHECK(full != fills.end() && roughly(full->rect.right - full->rect.left, 9) &&
               (*full->corners == Corners{0.75f, 0.75f, 0.75f, 0.75f}));
         CHECK(OpsOfColor(strip, 0xC0000000).empty() && OpsOfColor(strip, 0xFFDEDEDE).empty());
@@ -573,7 +804,7 @@ static void RunLayoutTests() {
         CHECK(OpsOfColor(lightStrip, 0xFFFF6EC7).size() == marks && OpsOfColor(lightStrip, 0xC0000000).size() == marks);
         // Tile ticks follow the taskbar the same way.
         s = {};
-        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings, BarLayout::LogoBars}) {
+        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
             s.barLayout = layout;
             size_t ticks = OpsOfColor(strip(s, false), 0xFFDEDEDE).size();
             lightStrip = strip(s, true);
@@ -649,11 +880,23 @@ static void RunLayoutTests() {
         SettingsView view = TestView(SettingsUiPage::Layout);
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        for (int i = 0; i < 6; i++) {
+        // Five gallery cards, three a row: the tile styles in BarLayout order.
+        const PCWSTR styles[] = {L"Stacked bars", L"Vertical bars", L"Segmented ring", L"Concentric rings",
+                                 L"Headline %"};
+        for (int i = 0; i < 5; i++) {
             const UiItem& card = Control(frame, SettingsField::BarLayout, uint32_t(i));
             CHECK(card.kind == UiItemKind::Gallery && card.selected == (i == 0) && card.action.value == i);
+            CHECK(card.text == styles[i]);
         }
-        CHECK(Control(frame, SettingsField::BarLayout, 2).text == L"Segmented ring");
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 5)));
+        CHECK(std::size(kSettingsTileStyles) == 5 && int(BarLayout::LogoHeadline) == 4);
+        const UiItem& first = Control(frame, SettingsField::BarLayout, 0);
+        const UiItem& fourth = Control(frame, SettingsField::BarLayout, 3);
+        const UiItem& fifth = Control(frame, SettingsField::BarLayout, 4);
+        CHECK_NEAR(fourth.rect.left, first.rect.left);
+        CHECK_NEAR(fourth.rect.top - first.rect.top, (first.rect.bottom - first.rect.top) + 8);
+        CHECK_NEAR(fifth.rect.top, fourth.rect.top);
+        CHECK_NEAR(fifth.rect.left - fourth.rect.right, 8);
         const UiItem& barStyle = Control(frame, SettingsField::BarStyle);
         CHECK(barStyle.kind == UiItemKind::Dropdown && barStyle.text == L"Full track" && barStyle.options.size() == 2 &&
               barStyle.options[1].text == L"Thin rail" && barStyle.options[1].value == int(BarStyle::Rail));
@@ -669,7 +912,17 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::BarThickness, 1).action.value == 8);
         CHECK(Control(frame, SettingsField::BarGap).text == L"2" &&
               Control(frame, SettingsField::BarGap, 3).runs[0].text == L"px");
+        // Logo on bars is per account: the Bars section's last card goes to Accounts, 3 DIPs under
+        // Bar gap's and before Labels.
+        const UiItem& logos = Control(frame, SettingsField::BarLayout, 8);
+        CHECK(logos.kind == UiItemKind::Card && logos.action.kind == UiActionKind::Navigate &&
+              logos.action.value == int(SettingsUiPage::Accounts));
+        CHECK(HasText(frame, L"Logo on bars and identity are set per account in Accounts") &&
+              HasText(frame, L"An account can lead its bars with its logo, a number badge, or label text.") &&
+              !HasText(frame, L"Account identity is set per account in Accounts"));
         const UiItem& position = Control(frame, SettingsField::LabelPosition);
+        CHECK(logos.rect.top > Control(frame, SettingsField::BarGap).rect.bottom &&
+              logos.rect.bottom < position.rect.top);
         CHECK(position.text == L"Left" && position.options.size() == 5);
         CHECK(Control(frame, SettingsField::LabelFontSize, 1).enabled);
         CHECK(!Control(frame, SettingsField::ShowBarLabels).selected);
@@ -696,12 +949,19 @@ static void RunLayoutTests() {
         auto stop = [&](uint32_t id) {
             return std::any_of(stops.begin(), stops.end(), [&](const UiFocusStop& s) { return s.ref.id == id; });
         };
-        CHECK(stop(SettingsControlId(SettingsField::BarLayout, 5)) && stop(SettingsControlId(SettingsField::BarLength, 1)) &&
+        CHECK(stop(SettingsControlId(SettingsField::BarLayout, 4)) && stop(SettingsControlId(SettingsField::BarLength, 1)) &&
               stop(SettingsControlId(SettingsField::PaceTickColor, 3)) &&
+              stop(SettingsControlId(SettingsField::BarLayout, 8)) &&
               !stop(SettingsControlId(SettingsField::PreviewScroll)));
+        // Vertical bars have it too.
+        view.settings.barLayout = BarLayout::Vertical;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate &&
+              HasText(frame, L"Logo on bars and identity are set per account in Accounts"));
     });
 
-    Run("layout page: ring, logo + bars and headline sections", [] {
+    Run("layout page: ring and headline sections", [] {
         UiGraphics& g = TestGraphics();
         SettingsView view = TestView(SettingsUiPage::Layout);
         view.settings.barLayout = BarLayout::ConcentricRings;
@@ -720,19 +980,12 @@ static void RunLayoutTests() {
               !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickStyle)));
         CHECK(Control(frame, SettingsField::BarLayout, 3).selected);
 
-        view.settings.barLayout = BarLayout::LogoBars;
-        frame = {};
-        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        CHECK(HasText(frame, L"Logo + bars tiles have a fixed size"));
-        CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate);
-        CHECK(Control(frame, SettingsField::ShowPaceTicks).kind == UiItemKind::Toggle && HasText(frame, L"Ticks mark"));
-        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::PaceTickStyle)) &&
-              !UiFindItem(frame, SettingsControlId(SettingsField::RingSize, 1)));
-
         view.settings.barLayout = BarLayout::LogoHeadline;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::BarLayout, 4).selected);
         CHECK(HasText(frame, L"Headline % tiles have a fixed size"));
+        CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate);
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::ShowPaceTicks)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickColor, 1)) && !HasText(frame, L"Pace markers"));
         CHECK(Control(frame, SettingsField::AccountMargin).kind == UiItemKind::NumberBox);
@@ -795,7 +1048,7 @@ static void RunLayoutTests() {
         CHECK_NEAR(frame.viewport.top, 56 + 106 + 12);
         CHECK(frame.content.front().runs[0].text == L"Tile style");
         CHECK_NEAR(frame.content.front().rect.top, 16);
-        CHECK(strip->maximum == 0 && HasTextIn(frame.main, L"Sample data, updates as you change settings"));
+        CHECK(strip->maximum == 0 && HasTextIn(frame.main, L"Example accounts, updates as you change settings"));
         const UiItem* toggle = UiFindItem(frame, SettingsControlId(SettingsField::ShowOnTaskbar));
         CHECK(toggle && toggle->kind == UiItemKind::Toggle && !toggle->selected && toggle->action.value == 1 &&
               toggle->text.empty());
@@ -809,14 +1062,14 @@ static void RunLayoutTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         strip = UiFindItem(frame, SettingsControlId(SettingsField::PreviewScroll));
         CHECK(strip->maximum > 0 && strip->action.value >= strip->maximum - 1 && strip->action.value <= strip->maximum);
-        CHECK(HasTextIn(frame.main, L"Sample data, wider than shown: drag to scroll"));
+        CHECK(HasTextIn(frame.main, L"Example accounts, wider than shown: drag to scroll"));
         CHECK(UiFindItem(frame, SettingsControlId(SettingsField::ShowOnTaskbar))->selected);
 
         // The narrowest window: the note and the switch's label give way to the title.
         view = TestView(SettingsUiPage::Layout);
         frame = {};
         SettingsUiBuildFrame(g, view, {484, 820}, frame);
-        CHECK(!HasTextIn(frame.main, L"Sample data") && !HasTextIn(frame.main, L"Show on taskbar"));
+        CHECK(!HasTextIn(frame.main, L"Example accounts") && !HasTextIn(frame.main, L"Show on taskbar"));
         const UiItem* title = nullptr;
         for (const UiItem& item : frame.main) {
             if (!item.runs.empty() && item.runs[0].text == L"Preview") title = &item;

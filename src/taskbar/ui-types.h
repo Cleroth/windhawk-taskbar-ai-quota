@@ -31,9 +31,12 @@ struct AppliedState {
     // Tile layouts. Per slot, fillPx and pacePx hold the fill and pace position in thousandths of
     // the meter.
     TileShapeKey tileShape;
+    // Identity (tiles, bars with barLogo).
     double identityOpacity = -1;
     int tileWarn = -1;
-    int highlight = -1;  // 0 none, 1 hover, 2 open flyout.
+    int badgeLight = -1;  // Badge colors for a light (1) or dark (0) taskbar.
+    // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
+    int highlight = -1;
     std::wstring headline;
     uint32_t headlineColor = 0;
 };
@@ -58,8 +61,8 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
-// A tile layout's elements (rings, logo + mini bars, logo + headline). Mini bar and headline
-// segment fills and ticks use AccountUiRefs::fills and paceTicks.
+// A tile layout's elements (rings, logo + headline); bar columns with barLogo hold only the
+// identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
     // Rings: the ring area, holding the meters with the identity on top.
@@ -87,8 +90,10 @@ struct TileUiRefs {
 };
 
 struct AccountUiRefs {
-    // Tile root in every layout: hit target and flyout anchor.
+    // Tile root in every layout: hit target, flyout anchor and hover background.
     StackPanel column{nullptr};
+    // Bar layouts: the label and bars beside the identity, and the bars alone.
+    FrameworkElement content{nullptr};
     FrameworkElement barArea{nullptr};
     // Captured at build time so the flyout matches the tile, including visual-test accounts.
     std::wstring provider;
@@ -271,7 +276,7 @@ struct QuotaUiInstance {
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
-    double taskbarHeight = 0;  // DIPs, measured at build for tile layouts; 0 if unknown.
+    double taskbarHeight = 0;  // DIPs, measured at build; 0 if unknown.
     // Light taskbar at the last update; picks tile chrome and the bars' default pace tick colors.
     bool lightTheme = false;
     Grid quotaGrid{nullptr};

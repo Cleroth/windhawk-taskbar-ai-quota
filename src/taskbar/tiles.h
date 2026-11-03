@@ -1,8 +1,10 @@
-// Tile layouts: segmented ring, concentric rings, logo + mini bars and logo + headline %. A tile
-// shows the account's identity (provider logo, optionally with a number badge, or short text) and
-// its tile quotas: the meters the bar layouts show, in slot order. BuildAccountTile creates a tile;
-// UpdateAccountTile regenerates its meter shapes whenever their inputs change, then applies values
-// in place. Values, identity text and geometry come from the meter model (meter-model.h).
+// Tile layouts: segmented ring, concentric rings and logo + headline %. A tile shows the account's
+// identity (provider logo, optionally with a number badge, or short text) and its tile quotas: the
+// meters the bar layouts show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
+// regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
+// columns with barLogo lead with the same identity (BuildTileIdentity, UpdateTileIdentity), and
+// every column takes the tiles' hover and open-flyout background. Values, identity text and
+// geometry come from the meter model (meter-model.h).
 
 // A ring tile shape (meter-model.h), moved `offset` DIPs right and down. PathGeometry fills
 // even-odd by default, as the outline expects.
@@ -34,8 +36,8 @@ static Geometry TileOutlineGeometry(TileOutline const& outline, double offset) {
     return geometry;
 }
 
-// A bar, mini bar or headline segment fill: the usage color's highlight at its top (vertical
-// bars: left) edge, shading to the color 60% across.
+// A bar or headline segment fill: the usage color's highlight at its top (vertical bars: left)
+// edge, shading to the color 60% across.
 static LinearGradientBrush UsageFillBrush(uint32_t color, bool vertical) {
     LinearGradientBrush shade;
     shade.StartPoint({0.f, 0.f});
@@ -52,18 +54,17 @@ static LinearGradientBrush UsageFillBrush(uint32_t color, bool vertical) {
     return shade;
 }
 
-// Whether the mouse is over a tile of a tile layout.
+// Whether the mouse is over a column, in any layout.
 static bool IsTileHovered(QuotaUiInstance const& state) {
     int index = state.flyout.hoverIndex;
-    return index >= 0 && index < (int)state.accountRefs.size() &&
-           state.accountRefs[index].tile.identity;
+    return index >= 0 && index < (int)state.accountRefs.size();
 }
 
-// Hover and open-flyout background of a tile; bar layouts have none.
+// Hover and open-flyout background of a column, in any layout.
 static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
     if (g_unloading || index < 0 || index >= (int)state.accountRefs.size()) return;
     AccountUiRefs const& ui = state.accountRefs[index];
-    if (!ui.tile.identity || !ui.column) return;
+    if (!ui.column) return;
     FlyoutUi const& fo = state.flyout;
     int level = 0;
     if (fo.popup.flyout && fo.popup.accountIndex == index) {
@@ -74,13 +75,15 @@ static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
         RECT rect{};
         if (GetCursorPos(&pt) && GetWindowRect(state.hWnd, &rect) && PtInRect(&rect, pt)) level = 1;
     }
+    // Hover and open colors follow the taskbar theme, which can change while either lasts.
+    int key = level ? level * 2 + (state.lightTheme ? 1 : 0) : 0;
     int* applied = index < (int)state.applied.size() ? &state.applied[index].highlight : nullptr;
-    if (applied && *applied == level) return;
+    if (applied && *applied == key) return;
     TilePalette palette = TilePaletteFor(state.lightTheme);
     try {
         ui.column.Background(SolidColorBrush(ArgbColor(level == 2 ? palette.open :
                                                        level == 1 ? palette.hover : 0)));
-        if (applied) *applied = level;
+        if (applied) *applied = key;
     } catch (...) {}
 }
 
@@ -96,28 +99,14 @@ static double TileTextWidthPerPt(TextBlock const& text) {
     }
 }
 
-// Builds account `index`'s tile: its root (hit target and flyout anchor), identity and meter
-// containers. UpdateAccountTile sizes and fills the meters.
-static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, size_t index,
-                                   BarLayout layout, double height, AccountUiRefs& refs) {
+// Builds account `index`'s identity into `tile`: the provider logo, with a number badge when
+// several configured accounts share the provider, or text, and the stale-warning mark. Rings
+// resize it to their hole; headline tiles take a 16 DIP logo, other columns 15 DIP.
+// UpdateTileIdentity applies its state.
+static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
+                              BarLayout layout, TileUiRefs& tile) {
     AccountConfig const& account = accounts[index];
-    TileUiRefs& tile = refs.tile;
-    tile.layout = layout;
     bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
-    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
-
-    StackPanel column;
-    column.Orientation(Orientation::Horizontal);
-    column.VerticalAlignment(VerticalAlignment::Center);
-    column.Height(height);
-    column.CornerRadius({4, 4, 4, 4});
-    column.Padding(ring ? Thickness{4, 0, 4, 0} :
-                   layout == BarLayout::LogoBars ? Thickness{7, 0, 7, 0} :
-                                                   Thickness{7, 0, 8, 0});
-    column.Spacing(6);
-
-    // Identity: the provider logo, with a number badge when several configured accounts share
-    // the provider, or text. Rings resize it to their hole.
     Grid identity;
     identity.IsHitTestVisible(false);
     if (!ring) identity.VerticalAlignment(VerticalAlignment::Center);
@@ -169,7 +158,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     if (!tile.logo) {
         tile.text = TextBlock{};
         tile.text.Text(identityText.text);
-        tile.text.FontFamily(displayFont);
+        tile.text.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
         tile.text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         tile.text.FontSize(10);
         tile.text.TextWrapping(TextWrapping::NoWrap);
@@ -185,7 +174,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         }
         identity.Children().Append(tile.text);
     }
-    // Stale-warning mark, like the bars' "!" after the label: at the logo or text's top-right
+    // Stale-warning mark, in place of the "!" after a label: at the logo or text's top-right
     // corner; UpdateAccountTile moves it to the tile's top-right corner in rings.
     tile.warn = TextBlock{};
     tile.warn.Text(L"!");
@@ -197,6 +186,25 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     tile.warn.Margin({0, -3, -4, 0});
     tile.warn.Visibility(Visibility::Collapsed);
     identity.Children().Append(tile.warn);
+    return identity;
+}
+
+// Builds account `index`'s tile: its root (hit target and flyout anchor), identity and meter
+// containers. UpdateAccountTile sizes and fills the meters.
+static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, size_t index,
+                                   BarLayout layout, double height, AccountUiRefs& refs) {
+    TileUiRefs& tile = refs.tile;
+    tile.layout = layout;
+    bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+
+    StackPanel column;
+    column.Orientation(Orientation::Horizontal);
+    column.VerticalAlignment(VerticalAlignment::Center);
+    column.Height(height);
+    column.CornerRadius({4, 4, 4, 4});
+    column.Padding(ring ? Thickness{4, 0, 4, 0} : Thickness{7, 0, 8, 0});
+    column.Spacing(6);
+    Grid identity = BuildTileIdentity(accounts, index, layout, tile);
 
     if (ring) {
         Grid face;
@@ -211,18 +219,12 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         return column;
     }
 
+    // Headline: the most-used quota's number and window key over per-quota segments.
     column.Children().Append(identity);
     StackPanel meters;
     meters.IsHitTestVisible(false);
     meters.VerticalAlignment(VerticalAlignment::Center);
     tile.meters = meters;
-    if (layout == BarLayout::LogoBars) {
-        meters.Spacing(kMiniBarGap);
-        column.Children().Append(meters);
-        return column;
-    }
-
-    // Headline: the most-used quota's number and window key over per-quota segments.
     StackPanel headline;
     headline.IsHitTestVisible(false);
     headline.VerticalAlignment(VerticalAlignment::Center);
@@ -230,7 +232,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     StackPanel numberRow;
     numberRow.Orientation(Orientation::Horizontal);
     tile.headline = TextBlock{};
-    tile.headline.FontFamily(displayFont);
+    tile.headline.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
     tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     tile.headline.FontSize(14);
     tile.headline.TextLineBounds(TextLineBounds::Tight);
@@ -256,6 +258,27 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     return column;
 }
 
+// The identity's state: dimmed while stale, like a label; the warning mark in place of the
+// label's "!"; badge colors for a light (`light`) or dark taskbar.
+static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, AccountMeters const& meters,
+                               bool light) {
+    if (!tile.identity) return;
+    if (meters.identityOpacity != ap.identityOpacity) {
+        tile.identity.Opacity(meters.identityOpacity);
+        ap.identityOpacity = meters.identityOpacity;
+    }
+    if ((meters.warn ? 1 : 0) != ap.tileWarn) {
+        tile.warn.Visibility(meters.warn ? Visibility::Visible : Visibility::Collapsed);
+        ap.tileWarn = meters.warn ? 1 : 0;
+    }
+    if (tile.badge && (light ? 1 : 0) != ap.badgeLight) {
+        TilePalette palette = TilePaletteFor(light);
+        tile.badge.Background(SolidColorBrush(ArgbColor(palette.badge)));
+        tile.badge.BorderBrush(SolidColorBrush(ArgbColor(palette.badgeOutline)));
+        ap.badgeLight = light ? 1 : 0;
+    }
+}
+
 // `meters`: AccountMeterState of the account in the tile's layout. `light`: light taskbar chrome.
 static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeters const& meters,
                               MeterDisplay const& display, bool light) {
@@ -265,12 +288,9 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     if (!tile.identity || !tile.meters) return;
     BarLayout layout = tile.layout;
     bool ring = layout == BarLayout::ConcentricRings || layout == BarLayout::SegmentedRing;
-    bool miniBars = layout == BarLayout::LogoBars;
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
-    // Mini bars: corners a quarter of the thickness, the bars' line pace tick.
-    BarGeometry miniBar = MiniBarGeometryFor(display);
-    double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
+    double thickness = kHeadlineSegmentThickness;
 
     // Meter shapes: regenerated, and the identity resized, whenever an input changes.
     TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
@@ -284,7 +304,6 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         auto meterShapes = tile.meters.Children();
         meterShapes.Clear();
         ui.fills.fill(nullptr);
-        ui.paceTicks.fill(nullptr);
         tile.arcs.fill(nullptr);
         tile.paceHalos.fill(nullptr);
         tile.paceCores.fill(nullptr);
@@ -348,12 +367,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             }
             tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
         } else {
-            double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
+            // Headline segments: corners a quarter of the thickness.
             double radius = thickness / 4;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 Grid bar;
-                bar.Width(length);
+                bar.Width(kHeadlineSegmentLength);
                 bar.Height(thickness);
                 Border trackBar;
                 trackBar.CornerRadius({radius, radius, radius, radius});
@@ -364,33 +383,8 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 fill.Width(0);
                 bar.Children().Append(fill);
                 ui.fills[w] = fill;
-                if (miniBars && display.showPaceTicks) {
-                    // Past the bar's sides by its overhang through negative margins, which keep
-                    // it unclipped; the core centred along it, a pixel short of either end.
-                    Border tick;
-                    tick.Width(miniBar.paceLength);
-                    tick.Height(miniBar.paceCrossSize);
-                    tick.HorizontalAlignment(HorizontalAlignment::Left);
-                    tick.VerticalAlignment(VerticalAlignment::Center);
-                    tick.Background(paceHalo);
-                    Border core;
-                    core.Width(miniBar.coreLength);
-                    core.Height(miniBar.coreCrossSize);
-                    core.HorizontalAlignment(HorizontalAlignment::Center);
-                    core.VerticalAlignment(VerticalAlignment::Top);
-                    core.Margin({0, miniBar.coreCrossOffset, 0, 0});
-                    core.Background(paceCore);
-                    tick.Child(core);
-                    tick.Visibility(Visibility::Collapsed);
-                    bar.Children().Append(tick);
-                    ui.paceTicks[w] = tick;
-                }
                 meterShapes.Append(bar);
             }
-        }
-        if (tile.badge) {
-            tile.badge.Background(SolidColorBrush(ArgbColor(palette.badge)));
-            tile.badge.BorderBrush(SolidColorBrush(ArgbColor(palette.badgeOutline)));
         }
         ap.tileShape = shape;
         ap.fillPx.fill(-1);
@@ -421,23 +415,17 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             ap.fillColor[w] = m.color;
         }
 
-        // A ring's tick is a halo and a core shape; a mini bar's a Border holding its core.
-        FrameworkElement marker = ring ? tile.paceHalos[w].try_as<FrameworkElement>() :
-                                         ui.paceTicks[w].try_as<FrameworkElement>();
-        bool paceVisible = marker && m.paceVisible;
+        // A ring's tick is a halo and a core shape; headline segments have none.
+        bool paceVisible = tile.paceHalos[w] && tile.paceCores[w] && m.paceVisible;
         if ((paceVisible ? 1 : 0) != ap.paceVisible[w]) {
             Visibility visibility = paceVisible ? Visibility::Visible : Visibility::Collapsed;
-            if (marker) marker.Visibility(visibility);
-            if (ring && tile.paceCores[w]) tile.paceCores[w].Visibility(visibility);
+            if (tile.paceHalos[w]) tile.paceHalos[w].Visibility(visibility);
+            if (tile.paceCores[w]) tile.paceCores[w].Visibility(visibility);
             ap.paceVisible[w] = paceVisible ? 1 : 0;
         }
         if (paceVisible && m.paceUnits != ap.pacePx[w]) {
-            if (ring) {
-                tile.paceHalos[w].Data(TileOutlineGeometry(m.paceHalo, kTileRingOverflow));
-                tile.paceCores[w].Data(TileOutlineGeometry(m.paceCore, kTileRingOverflow));
-            } else {
-                ui.paceTicks[w].Margin({m.paceOffset, -miniBar.overhang, 0, -miniBar.overhang});
-            }
+            tile.paceHalos[w].Data(TileOutlineGeometry(m.paceHalo, kTileRingOverflow));
+            tile.paceCores[w].Data(TileOutlineGeometry(m.paceCore, kTileRingOverflow));
             ap.pacePx[w] = m.paceUnits;
         }
     }
@@ -453,13 +441,5 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    // Identity dims while stale, like the bars' label; the warning mark replaces their "!".
-    if (meters.identityOpacity != ap.identityOpacity) {
-        tile.identity.Opacity(meters.identityOpacity);
-        ap.identityOpacity = meters.identityOpacity;
-    }
-    if ((meters.warn ? 1 : 0) != ap.tileWarn) {
-        tile.warn.Visibility(meters.warn ? Visibility::Visible : Visibility::Collapsed);
-        ap.tileWarn = meters.warn ? 1 : 0;
-    }
+    UpdateTileIdentity(tile, ap, meters, light);
 }

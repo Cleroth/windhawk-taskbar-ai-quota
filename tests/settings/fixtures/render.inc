@@ -99,7 +99,9 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 // Preview strips at 1:1, one row per variant with its caption. Layout sheet: every layout,
 // percent text modes and alignments, quota keys, bar modes, amounts, colorblind colors, pace
 // styles and colors, label positions, extreme sizes, overflow (scrolled and not), hover, a 32 DIP
-// taskbar, and tile fills near their ends and at their minimums. Display sheet: percentage text never/hover/always, each alignment, bar modes
+// taskbar, logos on stacked and vertical bars at every label position, the hover box with and
+// without a logo (grown by tall vertical bars), and tile fills near their ends and at their
+// minimums. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -154,7 +156,12 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Ring, remaining", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.barMode = BarMode::Remaining; }},
         {L"Concentric, 20 / 40 / 60",
          [&](Settings& s) { s.barLayout = BarLayout::ConcentricRings; thresholds(s, 20, 40, 60); }},
-        {L"Logo + bars, colorblind", [](Settings& s) { s.barLayout = BarLayout::LogoBars; s.colorblindMode = true; }},
+        {L"Vertical 32, label top, colorblind", [](Settings& s) {
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+             s.labelPosition = LabelPosition::Top;
+             s.colorblindMode = true;
+         }, -1, 72},
         {L"Headline, colorblind",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.colorblindMode = true; }},
         {L"Headline, remaining", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.barMode = BarMode::Remaining; }},
@@ -250,17 +257,45 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.ringSize = 40;
              s.ringThickness = 6;
          }},
-        {L"Logo + bars", [](Settings& s) { s.barLayout = BarLayout::LogoBars; }},
-        {L"Logo + bars, hover CC 1", [](Settings& s) { s.barLayout = BarLayout::LogoBars; }, 1},
-        {L"Logo + bars, near full", [&](Settings& s) {
-             s.barLayout = BarLayout::LogoBars;
-             s.barMode = BarMode::Remaining;
-             thresholds(s, 6, 75, 90);
+        // Logos on bars (CC 1 badged, Go stale) at each label position, and the hover box with
+        // and without a logo.
+        {L"Logos, label left", [](Settings&) {}},
+        {L"Logos, label right", [](Settings& s) { s.labelPosition = LabelPosition::Right; }},
+        {L"Logos, label top", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, -1, 64},
+        {L"Logos, label bottom", [](Settings& s) { s.labelPosition = LabelPosition::Bottom; }, -1, 64},
+        {L"Logos, label hidden", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }},
+        {L"Vertical 32, logos, left", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }},
+        {L"Vertical 32, logos, right", [](Settings& s) {
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+             s.labelPosition = LabelPosition::Right;
          }},
-        {L"Logo + bars, pink pace", [](Settings& s) {
-             s.barLayout = BarLayout::LogoBars;
-             s.paceTickColor = RGB(0xFF, 0x6E, 0xC7);
+        {L"Vertical 32, logos, top", [](Settings& s) {
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+             s.labelPosition = LabelPosition::Top;
+         }, -1, 72},
+        {L"Vertical 32, logos, bottom", [](Settings& s) {
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+             s.labelPosition = LabelPosition::Bottom;
+         }, -1, 72},
+        {L"Vertical 32, logos, hidden", [](Settings& s) {
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+             s.labelPosition = LabelPosition::Hidden;
          }},
+        {L"Hover CC 1 (logo)", [](Settings&) {}, 1},
+        {L"Vertical 32, hover OAI (no logo)",
+         [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }, 0},
+        {L"Label top, hover Go (logo, stale)", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, 3, 64},
+        {L"Label hidden, hover CC 2", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }, 2},
+        {L"Vertical 32, hover CC 1", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }, 1},
+        {L"Vertical 80, hover Go (box grows)", [](Settings& s) {
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 80;
+         }, 3, 96},
+        {L"Hover CC 1, 32 DIP taskbar", [](Settings&) {}, 1, 32},
         {L"Headline %", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; }},
         {L"Headline, remaining",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.barMode = BarMode::Remaining; }},
@@ -320,8 +355,7 @@ static void RunRenders(const std::wstring& directory) {
         auto path = [&](const std::string& name) {
             return directory + L"\\" + std::wstring(name.begin(), name.end());
         };
-        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "ring", "concentric",
-                                                      "logobars", "headline"};
+        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "ring", "concentric", "headline"};
         for (const RenderTheme& theme : RenderThemes()) {
             for (UINT dpi : {96u, 144u, 192u}) {
                 const std::pair<SettingsUiPage, const char*> pages[] = {
@@ -343,7 +377,7 @@ static void RunRenders(const std::wstring& directory) {
                     });
                 }
                 // Layout with each tile style (every DPI for stacked bars and the segmented ring).
-                for (int style = 0; style < 6; style++) {
+                for (int style = 0; style < int(std::size(kStyleNames)); style++) {
                     if (dpi != 144 && style != 0 && style != 2) continue;
                     std::string name = std::string("render-layout-") + kStyleNames[style] + "-" + theme.name +
                                        "-" + std::to_string(dpi) + ".png";
@@ -526,7 +560,15 @@ static void RunRenders(const std::wstring& directory) {
                 float end = frame.contentHeight - (frame.viewport.bottom - frame.viewport.top);
                 RenderFrame(g, wic.get(), path(barStates), frame, view, client, 144, theme.input, state, end, true,
                             false);
-                CHECK(true);
+
+                // Scrolled to the Bars section's link to Accounts (Logo on bars), hovered.
+                const UiItem& logos = *UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 8));
+                state = {};
+                state.hot = {logos.id};
+                std::string barLogos = std::string("render-layout-bar-logos-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(barLogos), frame, view, client, 144, theme.input, state,
+                            std::max(logos.rect.top - 300, 0.0f), false);
+                CHECK(logos.action.kind == UiActionKind::Navigate);
             });
 
             // Overflow: bars too wide for the strip (left fade), then scrolled (both fades); a

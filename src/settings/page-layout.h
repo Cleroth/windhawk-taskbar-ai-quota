@@ -2,8 +2,8 @@
 // and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",     L"Vertical bars", L"Segmented ring",
-                                                 L"Concentric rings", L"Logo + bars",   L"Headline %"};
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bars", L"Segmented ring",
+                                                 L"Concentric rings", L"Headline %"};
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
@@ -35,13 +35,15 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y += 2 * kCardHeight + kGap;
     }
 
-    // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays
-    // on it when cards above it change.
+    // Account identity, and on bars Logo on bars, is per account: a card that goes to Accounts.
+    // Fixed ids, so focus stays on it when cards above it change.
     auto identityCard = [&](float top) {
         UiCardSpec spec;
         spec.glyph = L"\uE716";
-        spec.title = L"Account identity is set per account in Accounts";
-        spec.description = {{L"Logo + number badge, logo only, or label text."}};
+        spec.title = bars ? L"Logo on bars and identity are set per account in Accounts" :
+                            L"Account identity is set per account in Accounts";
+        spec.description = {{bars ? L"An account can lead its bars with its logo, a number badge, or label text." :
+                                    L"Logo + number badge, logo only, or label text."}};
         spec.trailingGlyph = L"\uE76C";
         spec.action = {UiActionKind::Navigate, int(SettingsUiPage::Accounts)};
         spec.minHeight = 62;
@@ -77,6 +79,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.description = {{L"Space between an account\u2019s bars."}};
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
         }
+        y = identityCard(y + 3);
 
         // Labels: their size and gap need a position; the bar text size, quota keys or
         // percentage text.
@@ -142,7 +145,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
         y = identityCard(y + 3);
     } else {
-        // Logo + bars and headline tiles have no size settings.
+        // Headline tiles have no size settings.
         y = UiAddSection(items, id, x, y + 20, width, L"Tile");
         y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
                          {{std::wstring(kSettingsTileStyles[int(layout)]) +

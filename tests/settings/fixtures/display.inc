@@ -120,7 +120,7 @@ static void RunDisplayPageTests() {
         every.enableNotifications = false;
         every.historyEnabled = false;
         every.historyDefaultRange = HistoryUiRange::Quarter;
-        every.barLayout = BarLayout::LogoBars;
+        every.barLayout = BarLayout::LogoHeadline;
         every.barStyle = BarStyle::Rail;
         every.barThickness = 14;
         every.barGap = 6;
@@ -295,7 +295,7 @@ static void RunDisplayPageTests() {
 
     Run("display page: bar-only rows disable for tile styles; hidden text disables alignment and amounts", [] {
         SettingsView view = TestView(SettingsUiPage::Display);
-        for (int style = 2; style < 6; style++) {
+        for (int style = 2; style < 5; style++) {
             view.settings.barLayout = BarLayout(style);
             UiFrame frame = DisplayFrame(view);
             CHECK(Control(frame, SettingsField::BarMode).enabled);
@@ -339,7 +339,7 @@ static void RunDisplayPageTests() {
         CHECK(frame.content.front().runs[0].text == L"Values");
         CHECK_NEAR(frame.content.front().rect.top, 16);
         CHECK(UiFindItem(frame, SettingsControlId(SettingsField::ShowOnTaskbar))->kind == UiItemKind::Toggle);
-        CHECK(HasTextIn(frame.main, L"Sample data, updates as you change settings"));
+        CHECK(HasTextIn(frame.main, L"Example accounts, updates as you change settings"));
         frame = DisplayFrame(view, {1000, 440});
         strip = UiFindItem(frame, SettingsControlId(SettingsField::PreviewScroll), &surface);
         CHECK(strip && surface == UiSurfaceId::Content);
@@ -429,19 +429,24 @@ static void RunDisplayPageTests() {
         values = Values(Strip(s));
         CHECK(values[0].text == L"40%" && values[6].text == L"110%" && Finite(Strip(s)));
 
-        // Mark stale data: the stale account's label ends in "!" on bars; tiles add the mark.
+        // Mark stale data: Go, the stale account, leads its bars with its logo, which takes the
+        // mark; its label has none. Tiles add the mark.
         auto marks = [](const SettingsPreviewStrip& strip, std::wstring_view text) {
             return std::count_if(strip.ops.begin(), strip.ops.end(), [&](const SettingsPreviewOp& op) {
                 return op.kind == SettingsPreviewOp::Kind::Text && op.text == text;
             });
         };
         s = {};
-        SettingsPreviewStrip marked = Strip(s);
-        CHECK(marks(marked, L"Go!") == 1 && marks(marked, L"Go") == 0);
-        s.showStaleWarning = false;
-        SettingsPreviewStrip unmarked = Strip(s);
-        CHECK(marks(unmarked, L"Go!") == 0 && marks(unmarked, L"Go") == 1);
-        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::LogoBars, BarLayout::LogoHeadline}) {
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+            s.barLayout = layout;
+            s.showStaleWarning = true;
+            SettingsPreviewStrip marked = Strip(s);
+            CHECK(marks(marked, L"Go!") == 0 && marks(marked, L"Go") == 1 && marks(marked, L"!") == 1);
+            s.showStaleWarning = false;
+            SettingsPreviewStrip unmarked = Strip(s);
+            CHECK(marks(unmarked, L"Go!") == 0 && marks(unmarked, L"Go") == 1 && marks(unmarked, L"!") == 0);
+        }
+        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::LogoHeadline}) {
             s.barLayout = layout;
             s.showStaleWarning = true;
             CHECK(marks(Strip(s), L"!") == 1);

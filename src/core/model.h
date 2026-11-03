@@ -8,8 +8,8 @@ enum QuotaBarIndex {
     kQuotaBarCount,
 };
 
-// How a tile layout (ring, concentric, logo + bars, headline) marks which account it shows.
-// Stacked and vertical bars use the label and label position instead.
+// How a tile layout (ring, concentric, headline), and stacked and vertical bars with barLogo,
+// mark which account they show.
 enum class TileIdentity {
     LogoBadge,  // Provider logo, plus a number badge when several accounts share the provider.
     Logo,
@@ -21,6 +21,7 @@ struct AccountConfig {
     std::wstring label;
     TileIdentity tileIdentity = TileIdentity::LogoBadge;
     std::wstring tileText;  // Optional short text for TileIdentity::Text.
+    bool barLogo = false;   // Stacked and vertical bars lead with the identity.
     std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
     // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
     // used-percent bar in the extra-usage slot. 0 disables the bar.
@@ -43,7 +44,6 @@ enum class BarLayout {
     Vertical,
     SegmentedRing,
     ConcentricRings,
-    LogoBars,
     LogoHeadline,
 };
 

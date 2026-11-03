@@ -36,14 +36,14 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool verticalBars = settings.barLayout == BarLayout::Vertical;
     // Tiles follow the layout the grid was built with.
     bool tileLayout = IsTileLayout(state.buildBarLayout);
-    // Tile chrome and the bars' default pace tick match the taskbar text color that the tiles'
-    // logo and text and the bars' labels inherit: dark text means a light taskbar. Else the
-    // tree's theme.
+    // Tile chrome and the bars' default pace tick match the taskbar text color that the
+    // identities' logo and text and the bars' labels inherit: dark text means a light taskbar.
+    // Else the tree's theme.
     bool light = state.lightTheme;
     try {
         SolidColorBrush text{nullptr};
         for (auto const& refs : state.accountRefs) {
-            TextBlock const& inherits = tileLayout ? refs.tile.warn : refs.label;
+            TextBlock const& inherits = refs.label ? refs.label : refs.tile.warn;
             if (!inherits) continue;
             text = inherits.Foreground().try_as<SolidColorBrush>();
             break;
@@ -88,8 +88,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             int barMask = meters.barMask;
             if (tileLayout) {
                 UpdateAccountTile(state, i, meters, display, light);
-                UpdateTileHighlight(state, (int)i);
             } else {
+                UpdateTileIdentity(ui.tile, ap, meters, light);
                 int paceLight = light ? 1 : 0;
                 if (paceLight != ap.paceLight) {
                     if (ui.paceCore && ui.paceHalo) {
@@ -129,12 +129,17 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         ui.barArea.Visibility(visibleCount ? Visibility::Visible :
                                                              Visibility::Collapsed);
                     }
-                    if (ui.column) {
-                        // Preserve a small context-menu target if every selected quota is unavailable.
+                    if (ui.content) {
+                        // Without a quota shown the content keeps a small target, unless the
+                        // identity leads it; then a content without a label collapses, so
+                        // the identity alone stays.
+                        bool identity = ui.tile.identity != nullptr;
                         double minimumHitSize =
-                            visibleCount ? 0.0 : std::max(display.barThickness, 8);
-                        ui.column.MinWidth(minimumHitSize);
-                        ui.column.MinHeight(minimumHitSize);
+                            visibleCount || identity ? 0.0 : std::max(display.barThickness, 8);
+                        ui.content.MinWidth(minimumHitSize);
+                        ui.content.MinHeight(minimumHitSize);
+                        ui.content.Visibility(visibleCount || ui.label || !identity ?
+                                                  Visibility::Visible : Visibility::Collapsed);
                     }
                     ap.barMask = barMask;
                 }
@@ -225,6 +230,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                 }
             }
+            UpdateTileHighlight(state, (int)i);
 
             if (flyout.flyout && flyout.accountIndex == (int)i) {
                 if (AccountIdentityHash(accounts[i]) != flyout.accountIdentity) {

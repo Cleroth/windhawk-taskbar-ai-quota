@@ -50,16 +50,23 @@ struct SettingsPreviewStrip {
 
 // The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
 // accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
-// taskbar's text (logos, labels, keys, tray).
+// taskbar's text (logos, labels, keys, tray). Tests may pass accounts with their data to lay out
+// instead of the samples.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
                                                   double taskbarHeight, float scale, ULONGLONG now,
-                                                  bool gallery, bool light, uint32_t text) {
+                                                  bool gallery, bool light, uint32_t text,
+                                                  const std::vector<AccountConfig>* testAccounts = nullptr,
+                                                  const std::vector<AccountData>* testData = nullptr) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
     MeterDisplay display = MeterDisplayFor(settings, now, scale, taskbarHeight);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
+    if (testAccounts && testData && testAccounts->size() == testData->size()) {
+        accounts = *testAccounts;
+        data = *testData;
+    }
     if (gallery) {
         accounts = {accounts[1], accounts[2]};
         data = {data[1], data[2]};
@@ -138,17 +145,59 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
               box.right - box.left, DWRITE_TEXT_ALIGNMENT_CENTER, text, opacity, true);
     };
 
+    // The identity (tiles.h): a `side` DIP logo with its number badge centered on the logo's
+    // lower-right corner, overhanging it by 4 DIPs, or the short text, shrunk to fit 26 DIPs, then
+    // clipped; "!" at its top-right corner while warned. From `left`, centered on `center`;
+    // returns its width.
+    const UiTextStyle warnStyle{UiFamily::Taskbar, 10, 0, DWRITE_FONT_WEIGHT_BOLD};
+    auto identityOps = [&](std::vector<Op>& ops, size_t i, const AccountMeters& meters, float side, float left,
+                           float center) {
+        const AccountConfig& account = accounts[i];
+        const TileIdentityText identity = TileIdentityFor(accounts, i);
+        const float opacity = float(meters.identityOpacity);
+        float width = side, height = side;
+        if (account.tileIdentity != TileIdentity::Text) {
+            float top = center - side / 2;
+            logo(ops, account.provider, {left, top, left + side, top + side}, opacity);
+            if (identity.badge) {
+                UiTextStyle style{UiFamily::Small, 6.8f, 0, DWRITE_FONT_WEIGHT_BOLD};
+                float badgeWidth = std::max(10.0f, measure(identity.badgeText, style).width + 3 + 2.4f);
+                float right = left + side + 4, bottom = top + side + 4;
+                badge(ops, {right - badgeWidth, bottom - 10, right, bottom}, identity.badgeText, 6.8f, opacity);
+            }
+        } else {
+            const UiTextStyle measured{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+            double perPt = std::max(measure(identity.text, measured).width, 0.1f) / 10.0;
+            const UiTextStyle style{UiFamily::Display, float(std::clamp(26 / perPt, 8.0, 12.0)), 0,
+                                    DWRITE_FONT_WEIGHT_SEMI_BOLD};
+            Measured m = measure(identity.text, style);
+            width = std::min(m.width, 26.0f);
+            height = m.cap;
+            label(ops, identity.text, style, left, center - height / 2, width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
+                  opacity, true, -1, true);
+        }
+        if (meters.warn) {
+            Measured m = measure(L"!", warnStyle);
+            label(ops, L"!", warnStyle, left + width + 4 - m.width, center - height / 2 - 3, m.width,
+                  DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
+        }
+        return width;
+    };
+
     float x = 0;
     for (size_t i = 0; i < accounts.size(); i++) {
         const AccountConfig& account = accounts[i];
         const int column = int(i);
+        const float T = float(display.tileHeight);
         float x0 = x + margin, width = 0, top = 0, height = 0;
         std::vector<Op>& ops = strip.ops;
+        size_t hoverAt = ops.size();
 
         if (!IsTileLayout(layout)) {
-            // Bars (quota-grid.h): a label beside, above or below a stack of bars; each bar a
-            // track or thin rail, its fill and pace tick, an optional quota key and the percentage
-            // text.
+            // Bars (quota-grid.h): the tiles' box, at least the tile height, 7 DIPs inside each
+            // side, with the identity (barLogo) 6 DIPs before the content, both centered across it.
+            // The content: a label beside, above or below a stack of bars; each bar a track or thin
+            // rail, its fill and pace tick, an optional quota key and the percentage text.
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -177,32 +226,44 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             Measured labelText = measure(meters.labelText, labelStyle);
             float labelWidth = labelled ? labelText.width : 0;
             // Side labels have a -2 DIP top margin; stacked ones the label gap toward the bars.
+            float contentWidth, contentHeight;
             if (side) {
-                width = labelWidth + labelGap + barsWidth;
-                height = std::max(labelText.height - 2, barsHeight);
+                contentWidth = labelWidth + labelGap + barsWidth;
+                contentHeight = std::max(labelText.height - 2, barsHeight);
             } else {
-                width = std::max(labelWidth, barsWidth);
-                height = (labelled ? labelText.height + labelGap : 0) + barsHeight;
+                contentWidth = std::max(labelWidth, barsWidth);
+                contentHeight = (labelled ? labelText.height + labelGap : 0) + barsHeight;
             }
-            if (!count) {
-                // A small context-menu target stays when no quota shows.
-                width = std::max(width, float(std::max(th, 8)));
-                height = std::max(height, float(std::max(th, 8)));
+            // Without a quota shown the content keeps a small context-menu target, unless the
+            // identity leads it; then a content without a label collapses.
+            const bool identity = account.barLogo;
+            const bool shown = count || labelled || !identity;
+            if (!count && !identity) {
+                contentWidth = std::max(contentWidth, float(std::max(th, 8)));
+                contentHeight = std::max(contentHeight, float(std::max(th, 8)));
             }
+            if (!shown) contentWidth = contentHeight = 0;
+            height = std::max(T, contentHeight);
             top = (H - height) / 2;
+            float contentLeft = x0 + 7;
+            if (identity) {
+                contentLeft += identityOps(ops, i, meters, 15, x0 + 7, top + height / 2) + (shown ? 6 : 0);
+            }
+            width = contentLeft - x0 + contentWidth + 7;
+            const float contentTop = top + (height - contentHeight) / 2;
 
             if (labelled) {
                 float left = position == LabelPosition::Right ? barsWidth + labelGap :
-                             side ? 0 : (width - labelWidth) / 2;
-                float labelTop = side ? top + (height - labelText.height) / 2 - 1 :
-                                 position == LabelPosition::Top ? top : top + barsHeight + labelGap;
-                label(ops, meters.labelText, labelStyle, x0 + left, labelTop, labelWidth,
+                             side ? 0 : (contentWidth - labelWidth) / 2;
+                float labelTop = side ? contentTop + (contentHeight - labelText.height) / 2 - 1 :
+                                 position == LabelPosition::Top ? contentTop : contentTop + barsHeight + labelGap;
+                label(ops, meters.labelText, labelStyle, contentLeft + left, labelTop, labelWidth,
                       DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
             }
-            float barsLeft = x0 + (position == LabelPosition::Left ? labelWidth + labelGap : 0);
-            float barsTop = side ? top + (height - barsHeight) / 2 :
-                            position == LabelPosition::Top ? top + labelText.height + labelGap : top;
-            float panelWidth = side ? barsWidth : width;
+            float barsLeft = contentLeft + (position == LabelPosition::Left ? labelWidth + labelGap : 0);
+            float barsTop = side ? contentTop + (contentHeight - barsHeight) / 2 :
+                            position == LabelPosition::Top ? contentTop + labelText.height + labelGap : contentTop;
+            float panelWidth = side ? barsWidth : contentWidth;
             int k = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(meters.barMask & (1 << w))) continue;
@@ -290,11 +351,9 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 k++;
             }
         } else {
-            // Tiles (tiles.h): the identity (logo, badge, or text) and the meters in a 4 DIP
-            // rounded column; hovered, the column takes the tile hover fill.
-            const float T = float(display.tileHeight);
+            // Tiles (tiles.h): the identity (logo, badge, or text) and the meters in the 4 DIP
+            // rounded box.
             const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
-            const bool miniBars = layout == BarLayout::LogoBars;
             TileIdentityText identity = TileIdentityFor(accounts, i);
             const bool hasLogo = account.tileIdentity != TileIdentity::Text;
             const bool hasBadge = hasLogo && identity.badge;
@@ -303,11 +362,9 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             AccountMeters meters = AccountMeterState(display, layout, account, data[i],
                                                      hasBadge ? int(identity.badgeText.size()) : 0, perPt);
             const float opacity = float(meters.identityOpacity);
-            const UiTextStyle warnStyle{UiFamily::Taskbar, 10, 0, DWRITE_FONT_WEIGHT_BOLD};
-            const float padLeft = ring ? 4 : 7, padRight = ring ? 4 : miniBars ? 7 : 8;
+            const float padLeft = ring ? 4 : 7, padRight = ring ? 4 : 8;
             top = (H - T) / 2;
             height = T;
-            size_t hoverAt = ops.size();
             int count = std::popcount(unsigned(meters.barMask));
 
             if (ring) {
@@ -362,111 +419,56 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                           m.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
                 }
             } else {
-                // Logo + bars and headline: the identity, then the meters 6 DIP after it.
-                float idWidth, idHeight, font = 0;
-                if (hasLogo) {
-                    idWidth = idHeight = miniBars ? 15 : 16;
-                } else {
-                    font = float(std::clamp(26 / perPt, 8.0, 12.0));
-                    Measured m = measure(identity.text, {UiFamily::Display, font, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD});
-                    idWidth = std::min(m.width, 26.0f);
-                    idHeight = m.cap;
+                // Headline: the identity, then 6 DIP after it the most-used quota's number and
+                // window key (bottom-aligned on the baseline) over per-quota segments: corners a
+                // quarter of their thickness, fills cut flat toward the end and shaded like the
+                // bars'.
+                float idWidth = identityOps(ops, i, meters, 16, x0 + padLeft, top + T / 2);
+                float metersLeft = x0 + padLeft + idWidth + 6;
+                UiTextStyle numberStyle{UiFamily::Display, 14, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                UiTextStyle keyStyle{UiFamily::Taskbar, 9, 0, DWRITE_FONT_WEIGHT_NORMAL};
+                Measured number = measure(meters.headline, numberStyle);
+                float numberWidth = std::max(number.width, std::ceil(measure(L"100%", numberStyle).width));
+                Measured key = measure(meters.headlineKey, keyStyle);
+                float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
+                float segments = count ? count * float(kHeadlineSegmentLength) + (count - 1) * 2.0f : 0;
+                float panelHeight = rowHeight + (count ? 3 + float(kHeadlineSegmentThickness) : 0);
+                float panelTop = top + (T - panelHeight) / 2;
+                label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
+                      numberWidth, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
+                if (!meters.headlineKey.empty()) {
+                    label(ops, meters.headlineKey, keyStyle, metersLeft + numberWidth + 3,
+                          panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
+                          0.6f, true);
                 }
-                float idLeft = x0 + padLeft, idTop = top + (T - idHeight) / 2;
-                if (hasLogo) {
-                    logo(ops, account.provider, {idLeft, idTop, idLeft + idWidth, idTop + idHeight}, opacity);
-                    if (hasBadge) {
-                        // Centered on the logo's lower-right corner, overhanging it by 4 DIPs.
-                        UiTextStyle style{UiFamily::Small, 6.8f, 0, DWRITE_FONT_WEIGHT_BOLD};
-                        float badgeWidth = std::max(10.0f, measure(identity.badgeText, style).width + 3 + 2.4f);
-                        float right = idLeft + idWidth + 4, bottom = idTop + idHeight + 4;
-                        badge(ops, {right - badgeWidth, bottom - 10, right, bottom}, identity.badgeText, 6.8f, opacity);
-                    }
-                } else {
-                    label(ops, identity.text, {UiFamily::Display, font, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD}, idLeft,
-                          idTop, idWidth, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true, -1, true);
-                }
-                if (meters.warn) {
-                    Measured m = measure(L"!", warnStyle);
-                    label(ops, L"!", warnStyle, idLeft + idWidth + 4 - m.width, idTop - 3, m.width,
-                          DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
-                }
-                float metersLeft = idLeft + idWidth + 6;
-                float content = 0;
-                // A mini bar or headline segment: corners a quarter of its thickness, its fill cut
-                // flat toward the end and shaded like the bars'.
-                auto meterBar = [&](const QuotaMeter& q, float left, float y, float length, float thick) {
+                const float length = float(kHeadlineSegmentLength), thick = float(kHeadlineSegmentThickness);
+                float left = metersLeft, y = panelTop + rowHeight + 3;
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    if (!(meters.barMask & (1 << w))) continue;
+                    const QuotaMeter& q = meters.quotas[w];
                     rect(ops, {left, y, left + length, y + thick}, thick / 4, palette.track);
-                    if (!q.fillUnits) return;
-                    Op fill;
-                    fill.rect = {left, y, left + float(q.fillLength), y + thick};
-                    float start = thick / 4, end = float(q.fillEndRadius);
-                    fill.corners = std::array<float, 4>{start, end, end, start};
-                    fill.color = q.color;
-                    fill.shade = UsageHighlight(q.color);
-                    add(ops, std::move(fill));
-                };
-                if (miniBars) {
-                    // Bars 38 x 4 DIP, 3 DIP apart; pace: the bars' line tick, past the bar by its
-                    // overhang, the core a pixel short of the halo at either end.
-                    const BarGeometry tick = MiniBarGeometryFor(display);
-                    float barsHeight = count ? count * kMiniBarThickness + (count - 1) * kMiniBarGap : 0;
-                    float y = top + (T - float(barsHeight)) / 2;
-                    for (int w = 0; w < kQuotaBarCount; w++) {
-                        const QuotaMeter& q = meters.quotas[w];
-                        if (!(meters.barMask & (1 << w))) continue;
-                        float left = metersLeft, thick = float(kMiniBarThickness);
-                        meterBar(q, left, y, float(kMiniBarLength), thick);
-                        if (display.showPaceTicks && q.paceVisible) {
-                            float tickLeft = left + float(q.paceOffset);
-                            float tickTop = y + (thick - float(tick.paceCrossSize)) / 2;
-                            rect(ops, {tickLeft, tickTop, tickLeft + float(tick.paceLength),
-                                       tickTop + float(tick.paceCrossSize)}, 0, pace.halo);
-                            float coreLeft = tickLeft + float(tick.paceLength - tick.coreLength) / 2;
-                            float coreTop = tickTop + float(tick.coreCrossOffset);
-                            rect(ops, {coreLeft, coreTop, coreLeft + float(tick.coreLength),
-                                       coreTop + float(tick.coreCrossSize)}, 0, pace.core);
-                        }
-                        y += thick + float(kMiniBarGap);
+                    if (q.fillUnits) {
+                        Op fill;
+                        fill.rect = {left, y, left + float(q.fillLength), y + thick};
+                        float start = thick / 4, end = float(q.fillEndRadius);
+                        fill.corners = std::array<float, 4>{start, end, end, start};
+                        fill.color = q.color;
+                        fill.shade = UsageHighlight(q.color);
+                        add(ops, std::move(fill));
                     }
-                    content = count ? float(kMiniBarLength) : 0;
-                } else {
-                    // Headline: the most-used quota's number and window key (bottom-aligned on
-                    // the baseline), over per-quota segments.
-                    UiTextStyle numberStyle{UiFamily::Display, 14, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
-                    UiTextStyle keyStyle{UiFamily::Taskbar, 9, 0, DWRITE_FONT_WEIGHT_NORMAL};
-                    Measured number = measure(meters.headline, numberStyle);
-                    float numberWidth = std::max(number.width, std::ceil(measure(L"100%", numberStyle).width));
-                    Measured key = measure(meters.headlineKey, keyStyle);
-                    float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
-                    float segments = count ? count * float(kHeadlineSegmentLength) + (count - 1) * 2.0f : 0;
-                    float panelHeight = rowHeight + (count ? 3 + float(kHeadlineSegmentThickness) : 0);
-                    float panelTop = top + (T - panelHeight) / 2;
-                    label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
-                          numberWidth, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
-                    if (!meters.headlineKey.empty()) {
-                        label(ops, meters.headlineKey, keyStyle, metersLeft + numberWidth + 3,
-                              panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
-                              0.6f, true);
-                    }
-                    float left = metersLeft, y = panelTop + rowHeight + 3;
-                    for (int w = 0; w < kQuotaBarCount; w++) {
-                        if (!(meters.barMask & (1 << w))) continue;
-                        meterBar(meters.quotas[w], left, y, float(kHeadlineSegmentLength),
-                                 float(kHeadlineSegmentThickness));
-                        left += float(kHeadlineSegmentLength) + 2;
-                    }
-                    content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
+                    left += length + 2;
                 }
-                width = padLeft + idWidth + (content > 0 ? 6 + content : 0) + padRight;
+                float content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
+                width = padLeft + idWidth + 6 + content + padRight;
             }
-            Op hover;
-            hover.rect = {x0, top, x0 + width, top + T};
-            hover.radius = 4;
-            hover.color = palette.hover;
-            hover.hover = column;
-            ops.insert(ops.begin() + std::ptrdiff_t(hoverAt), std::move(hover));
         }
+        // Hovered, the box takes the tile hover fill.
+        Op hover;
+        hover.rect = {x0, top, x0 + width, top + height};
+        hover.radius = 4;
+        hover.color = palette.hover;
+        hover.hover = column;
+        ops.insert(ops.begin() + std::ptrdiff_t(hoverAt), std::move(hover));
         strip.columns.push_back({x0, top, x0 + width, top + height});
         x = x0 + width + margin;
     }
@@ -730,9 +732,9 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
     target->SetTextAntialiasMode(antialias);
 }
 
-// The preview card (mockup .pvcard): "Preview", the sample-data note, the Show on taskbar switch
-// and the strip, as tall as the taskbar. Items take `items`' coordinates from (x, y); returns
-// the card's bottom.
+// The preview card (mockup .pvcard): "Preview", the example-accounts note, the Show on taskbar
+// switch and the strip, as tall as the taskbar. Items take `items`' coordinates from (x, y);
+// returns the card's bottom.
 static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                     uint32_t& id, float x, float y, float width) {
     constexpr float kPadX = 1 + 14, kPadTop = 1 + 12, kRow = 20, kGap = 10, kPadBottom = 14 + 1;
@@ -771,8 +773,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
         items.push_back(std::move(line));
     };
     text(L"Preview", UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
-    std::wstring note = overflow > 0 ? L"Sample data, wider than shown: drag to scroll" :
-                                       L"Sample data, updates as you change settings";
+    std::wstring note = overflow > 0 ? L"Example accounts, wider than shown: drag to scroll" :
+                                       L"Example accounts, updates as you change settings";
     float noteLeft = x + kPadX + titleWidth + 12;
     if (UiLayoutSize(UiLayout(g, note, caption, 10000, false)).width <= labelLeft - 12 - noteLeft) {
         text(std::move(note), UiFont::Caption, UiInk::Muted, {noteLeft, center - 8, labelLeft - 12, center + 8});

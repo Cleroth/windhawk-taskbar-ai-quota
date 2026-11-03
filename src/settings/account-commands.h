@@ -115,11 +115,13 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         result.icon = MB_ICONWARNING;
         return result;
     }
-    // Tile identity is read only while building tiles, so its edits take the rebuild path.
+    // The identity and Logo on bars are read only while building columns, so their edits take
+    // the rebuild path.
     bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
                                    oldAccount.label == newAccount.label &&
                                    oldAccount.tileIdentity == newAccount.tileIdentity &&
                                    oldAccount.tileText == newAccount.tileText &&
+                                   oldAccount.barLogo == newAccount.barLogo &&
                                    oldAccount.creditsMax == newAccount.creditsMax &&
                                    oldAccount.recordHistory == newAccount.recordHistory &&
                                    oldAccount.historyId == newAccount.historyId &&
