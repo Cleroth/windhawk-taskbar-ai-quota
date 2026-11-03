@@ -90,10 +90,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 UpdateAccountTile(state, i, meters, display, light);
             } else {
                 UpdateTileIdentity(ui.tile, ap, meters, light);
-                // The identity's margins. Its box: a logo's badge and stale mark overhang it
-                // (4 DIPs right; the badge 4 below, the mark 3 above) and count while they show;
-                // a side label sits 2 DIPs high. Then the identity gap toward the bars while any
-                // shows.
+                // The identity's margins: its box, then the identity gap toward the bars while
+                // any shows.
                 FrameworkElement identity{nullptr};
                 if (ui.label) {
                     identity = ui.label;
@@ -101,27 +99,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     identity = ui.tile.identity;
                 }
                 if (identity) {
-                    LabelPosition position = settings.labelPosition;
-                    double gap = barMask ? settings.labelGap : 0;
-                    Thickness margin{};
-                    if (ui.label) {
-                        bool side = position == LabelPosition::Left ||
-                                    position == LabelPosition::Right;
-                        margin.Top = side ? -2 : 0;
-                    } else {
-                        bool badge = ui.tile.badge != nullptr;
-                        margin = {0, meters.warn ? 3.0 : 0.0, badge || meters.warn ? 4.0 : 0.0,
-                                  badge ? 4.0 : 0.0};
-                    }
-                    if (position == LabelPosition::Left) {
-                        margin.Right += gap;
-                    } else if (position == LabelPosition::Right) {
-                        margin.Left += gap;
-                    } else if (position == LabelPosition::Top) {
-                        margin.Bottom += gap;
-                    } else if (position == LabelPosition::Bottom) {
-                        margin.Top += gap;
-                    }
+                    BarIdentityMargin m = BarIdentityMarginFor(
+                        settings.labelPosition, ui.label != nullptr, ui.tile.badge != nullptr,
+                        meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
+                        state.labelBelowBaseline);
+                    Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
                         identity.Margin(margin);
                         ap.identityMargin = margin;

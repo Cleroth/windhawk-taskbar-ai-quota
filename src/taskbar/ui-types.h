@@ -278,6 +278,10 @@ struct QuotaUiInstance {
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
     double taskbarHeight = 0;  // DIPs, measured at build; 0 if unknown.
+    // Bar layouts: the label line's space beyond its text at the label font size, over its cap
+    // height and under its baseline, measured at build (BarIdentityMarginFor).
+    double labelAboveCap = 0;
+    double labelBelowBaseline = 0;
     // Light taskbar at the last update; picks tile chrome and the bars' default pace tick colors.
     bool lightTheme = false;
     Grid quotaGrid{nullptr};

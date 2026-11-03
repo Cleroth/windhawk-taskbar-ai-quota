@@ -69,7 +69,8 @@ regenerates.
   Layout fields and reset group, the projection the preview reads, the preview strip model
   (`settings/preview.h`: column geometry, the bar columns' tile box and hover fill, each identity
   form (label, badged logo, logo) at every identity position in Stacked and Vertical with its box
-  and gap (the badge's overhang, the stale mark per form, no quotas), pace marks,
+  and gap (the badge's overhang, the stale mark per form, no quotas, a logo above or below the
+  bars keeping a label's distance at two label sizes), pace marks,
   bar styles with their shaded fills and tick overhang, ring tiles' model shapes, headline fills,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the

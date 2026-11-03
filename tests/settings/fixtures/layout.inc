@@ -28,6 +28,16 @@ static SettingsPreviewStrip StripOf(const Settings& settings, const std::vector<
                                  &data);
 }
 
+// The bar label's line at `size` DIPs, from Segoe UI Variable's design metrics (2048 units per em:
+// ascent 2210, descent 514, cap height 1434, no line gap): its space over the cap height and
+// under the baseline, and the cap height.
+static double AboveCap(double size) { return size * (2210 - 1434) / 2048.0; }
+static double BelowBaseline(double size) { return size * 514 / 2048.0; }
+static double CapHeight(double size) { return size * 1434 / 2048.0; }
+
+// DIP positions built from DirectWrite's float metrics.
+static bool NearDip(double actual, double expected) { return std::abs(actual - expected) < 1e-3; }
+
 static std::vector<SettingsPreviewOp> OpsOfKind(const SettingsPreviewStrip& strip, SettingsPreviewOp::Kind kind) {
     std::vector<SettingsPreviewOp> ops;
     for (const SettingsPreviewOp& op : strip.ops) {
@@ -461,37 +471,53 @@ static void RunLayoutTests() {
                     CHECK_NEAR(logos[1].rect.left, tracks[4].rect.right + 3);
                     CHECK_NEAR(oai.right, logos[1].rect.right + 7);
                     break;
-                case LabelPosition::Top:
-                    // Centred over the bars. CC 1: 19 + 3 + 20 = 42 DIPs grow its box, centred on the
-                    // strip; the gap from the badge's bottom to the bars' panel (a DIP above the
-                    // first track).
-                    CHECK_NEAR(cc1.top, 3); CHECK_NEAR(cc1.bottom, 45);
-                    CHECK_NEAR(logos[0].rect.top, 3); CHECK_NEAR(logos[0].rect.left, 10 + (100 - 19) / 2.0);
-                    CHECK_NEAR(tracks[0].rect.top - 1, badges[0].rect.bottom + 3);
+                case LabelPosition::Top: {
+                    // Centred over the bars, a logo's box padded like the label's line: its space
+                    // over the cap height above, under the baseline below, then the gap to the bars'
+                    // panel (a DIP above the first track). CC 1: 19 + 4.17 + 2.76 + 3 + 20 DIPs grow
+                    // its column, centred on the strip.
+                    const double a = AboveCap(11), b = BelowBaseline(11);
+                    CHECK(NearDip(cc1.bottom - cc1.top, 19 + a + b + 3 + 20) && NearDip(cc1.top + cc1.bottom, 48));
+                    CHECK(NearDip(logos[0].rect.top, cc1.top + a));
+                    CHECK_NEAR(logos[0].rect.left, 10 + (100 - 19) / 2.0);
+                    CHECK(NearDip(tracks[0].rect.top - 1 - badges[0].rect.bottom, 3 + b));
                     CHECK_NEAR(tracks[0].rect.left, 10); CHECK_NEAR(cc1.right, 10 + 100 + 7);
+                    // CC 2's label as ever, its line box a + cap + b; the bars as far from its
+                    // baseline as from CC 1's badge.
                     CHECK_NEAR(label.rect.left, cc2.left + 7 + (100 - labelWidth) / 2);
                     CHECK_NEAR(tracks[2].rect.top - 1, label.rect.bottom + 3);
-                    // OAI: 15 + 3 + 20 = 38 DIPs, inside the 40 DIP box.
-                    CHECK_NEAR(oai.top, 4); CHECK_NEAR(oai.bottom, 44);
-                    CHECK_NEAR(logos[1].rect.top, 5); CHECK_NEAR(logos[1].rect.left, oai.left + 7 + 42.5);
-                    CHECK_NEAR(tracks[4].rect.top - 1, logos[1].rect.bottom + 3);
+                    CHECK(NearDip(label.rect.bottom - label.rect.top, a + CapHeight(11) + b));
+                    CHECK(NearDip(tracks[2].rect.top - (label.rect.bottom - b), tracks[0].rect.top - badges[0].rect.bottom));
+                    // OAI: 15 + 4.17 + 2.76 + 3 + 20 DIPs.
+                    CHECK(NearDip(oai.bottom - oai.top, 15 + a + b + 3 + 20));
+                    CHECK(NearDip(logos[1].rect.top, oai.top + a));
+                    CHECK_NEAR(logos[1].rect.left, oai.left + 7 + 42.5);
+                    CHECK(NearDip(tracks[4].rect.top - 1 - logos[1].rect.bottom, 3 + b));
                     break;
-                case LabelPosition::Bottom:
-                    // Under the bars: the gap from their panel; the badge reaches CC 1's box bottom.
-                    CHECK_NEAR(cc1.top, 3); CHECK_NEAR(tracks[0].rect.top - 1, 3);
-                    CHECK_NEAR(logos[0].rect.top, tracks[1].rect.bottom + 1 + 3);
-                    CHECK_NEAR(badges[0].rect.bottom, cc1.bottom);
+                }
+                case LabelPosition::Bottom: {
+                    // Under the bars: the gap, the label line's space over its cap height, the logo's
+                    // box; its space under the baseline at the column's bottom.
+                    const double a = AboveCap(11), b = BelowBaseline(11);
+                    CHECK(NearDip(tracks[0].rect.top - 1, cc1.top));
+                    CHECK(NearDip(logos[0].rect.top - (tracks[1].rect.bottom + 1), 3 + a));
+                    CHECK(NearDip(cc1.bottom - badges[0].rect.bottom, b));
                     CHECK_NEAR(logos[0].rect.left, 10 + (100 - 19) / 2.0);
+                    // CC 2's label as ever; the bars as far from its cap height as from CC 1's logo.
                     CHECK_NEAR(label.rect.top, tracks[3].rect.bottom + 1 + 3);
-                    CHECK_NEAR(logos[1].rect.top, tracks[5].rect.bottom + 1 + 3);
+                    CHECK(NearDip(label.rect.top + a - tracks[3].rect.bottom, logos[0].rect.top - tracks[1].rect.bottom));
+                    CHECK(NearDip(logos[1].rect.top - (tracks[5].rect.bottom + 1), 3 + a));
+                    CHECK(NearDip(oai.bottom - logos[1].rect.bottom, b));
                     CHECK_NEAR(logos[1].rect.left, oai.left + 7 + 42.5);
                     break;
+                }
                 case LabelPosition::Hidden:
                     break;
             }
         }
 
-        // No gap: the bars meet the badge's overhang, never under it; a plain logo's edge.
+        // No gap: beside the bars they meet the badge's overhang, never under it, or a plain logo's
+        // edge; over them the label line's space under its baseline stays.
         Settings s;
         s.labelGap = 0;
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
@@ -500,7 +526,8 @@ static void RunLayoutTests() {
         CHECK_NEAR(tracks[4].rect.left, OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[1].rect.right);
         s.labelPosition = LabelPosition::Top;
         strip = StripOf(s, accounts, data);
-        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.top - 1, OpsOfColor(strip, badgeColor)[0].rect.bottom);
+        CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.top - 1 - OpsOfColor(strip, badgeColor)[0].rect.bottom,
+                      BelowBaseline(11)));
         // A wider gap moves every form's bars alike.
         s = {};
         s.labelGap = 9;
@@ -546,8 +573,10 @@ static void RunLayoutTests() {
         CHECK_NEAR(tracks[2].rect.left, label.rect.right + 3);
         CHECK_NEAR(tracks[4].rect.left, logos[1].rect.right + 3);
 
-        // Top: centred over the bars and the bars under them, whichever is wider. CC 1: 19 + 3 +
-        // 32 = 54 DIPs grow its box, centred on the strip.
+        // Top: centred over the bars and the bars under them, whichever is wider; a logo's box
+        // padded like the label's line. CC 1: 19 + 4.17 + 2.76 + 3 + 32 DIPs grow its column,
+        // centred on the strip.
+        const double a = AboveCap(11), b = BelowBaseline(11);
         s.labelPosition = LabelPosition::Top;
         strip = StripOf(s, accounts, data);
         logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
@@ -555,24 +584,27 @@ static void RunLayoutTests() {
         badge = OpsOfColor(strip, badgeColor)[0];
         label = TextOps(strip, L"CC 2")[0];
         cc1 = strip.columns[0];
-        CHECK_NEAR(cc1.top, -3); CHECK_NEAR(cc1.bottom, 51); CHECK_NEAR(cc1.right - cc1.left, 7 + 19 + 7);
-        CHECK_NEAR(logos[0].rect.left, 10); CHECK_NEAR(logos[0].rect.top, -3);
-        CHECK_NEAR(tracks[0].rect.top, badge.rect.bottom + 3);
+        CHECK(NearDip(cc1.bottom - cc1.top, 19 + a + b + 3 + 32) && NearDip(cc1.top + cc1.bottom, 48));
+        CHECK_NEAR(cc1.right - cc1.left, 7 + 19 + 7);
+        CHECK_NEAR(logos[0].rect.left, 10); CHECK(NearDip(logos[0].rect.top, cc1.top + a));
+        CHECK(NearDip(tracks[0].rect.top - badge.rect.bottom, 3 + b));
         CHECK_NEAR(tracks[0].rect.left, 10.5);
         CHECK_NEAR(center(tracks[2], tracks[3]), (label.rect.left + label.rect.right) / 2);
+        CHECK_NEAR(tracks[2].rect.top, label.rect.bottom + 3);
         CHECK_NEAR(center(tracks[4], tracks[5]), (logos[1].rect.left + logos[1].rect.right) / 2);
-        CHECK_NEAR(tracks[4].rect.top, logos[1].rect.bottom + 3);
+        CHECK(NearDip(tracks[4].rect.top - logos[1].rect.bottom, 3 + b));
         CHECK_NEAR(strip.columns[2].right - strip.columns[2].left, 7 + 18 + 7);
 
-        // Bottom: the gap under the bars.
+        // Bottom: the gap and the line's space over the cap height under the bars, the space under
+        // the baseline at the column's bottom.
         s.labelPosition = LabelPosition::Bottom;
         strip = StripOf(s, accounts, data);
         logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         tracks = OpsOfColor(strip, 0x46808080);
-        CHECK_NEAR(logos[0].rect.top, tracks[0].rect.bottom + 3);
-        CHECK_NEAR(OpsOfColor(strip, badgeColor)[0].rect.bottom, strip.columns[0].bottom);
+        CHECK(NearDip(logos[0].rect.top - tracks[0].rect.bottom, 3 + a));
+        CHECK(NearDip(strip.columns[0].bottom - OpsOfColor(strip, badgeColor)[0].rect.bottom, b));
         CHECK_NEAR(TextOps(strip, L"CC 2")[0].rect.top, tracks[2].rect.bottom + 3);
-        CHECK_NEAR(logos[1].rect.top, tracks[4].rect.bottom + 3);
+        CHECK(NearDip(logos[1].rect.top - tracks[4].rect.bottom, 3 + a));
 
         // Right and Hidden.
         s.labelPosition = LabelPosition::Right;
@@ -623,15 +655,18 @@ static void RunLayoutTests() {
         // OAI: 19 x 18, within its bars' 20 (y 14 to 34): the gap from the mark.
         CHECK_NEAR(logos[1].rect.top, 15 + 3);
         CHECK_NEAR(tracks[4].rect.left, marks[1].rect.right + 3);
-        // Bottom: the mark's 3 DIPs, then the gap, under the bars.
+        // Bottom: the gap and the label line's space over its cap height, then the mark's 3 DIPs,
+        // under the bars.
         s.labelPosition = LabelPosition::Bottom;
         strip = StripOf(s, accounts, data);
         tracks = OpsOfColor(strip, 0x46808080);
-        CHECK_NEAR(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[1].rect.top, tracks[5].rect.bottom + 1 + 3 + 3);
-        // Top: the mark inside the box, above the logo.
+        CHECK(NearDip(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[1].rect.top - (tracks[5].rect.bottom + 1),
+                      3 + AboveCap(11) + 3));
+        // Top: the mark inside the box, above the logo, under the line's space over the cap height.
         s.labelPosition = LabelPosition::Top;
         strip = StripOf(s, accounts, data);
-        CHECK_NEAR(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.top, strip.columns[0].top + 3);
+        CHECK(NearDip(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.top - strip.columns[0].top,
+                      AboveCap(11) + 3));
         // Marks off: none; the boxes as fresh ones'.
         s = {};
         s.showStaleWarning = false;
@@ -639,8 +674,9 @@ static void RunLayoutTests() {
         CHECK(TextOps(strip, L"!").empty() && TextOps(strip, L"CC 2").size() == 1);
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[4].rect.left, OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[1].rect.right + 3);
 
-        // No quota reported: no bars and no gap; the identity alone in the 40 DIP box, the badge's
-        // box included. Hidden: the 8 DIP context-menu target.
+        // No quota reported: no bars and no gap; the identity alone in the 40 DIP box, its box
+        // included (above or below the bars' place, padded like the label's line). Hidden: the
+        // 8 DIP context-menu target.
         data = {Fresh(), Fresh(), Fresh()};
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
             for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
@@ -656,7 +692,10 @@ static void RunLayoutTests() {
                 CHECK_NEAR(strip.columns[1].right - strip.columns[1].left, 7 + label.rect.right - label.rect.left + 7);
                 CHECK_NEAR(strip.columns[2].right - strip.columns[2].left, 7 + 15 + 7);
                 CHECK_NEAR(logos[0].rect.left, strip.columns[0].left + 7);
-                CHECK_NEAR(logos[0].rect.top, 4 + (40 - 19) / 2.0); CHECK_NEAR(logos[1].rect.top, 16.5);
+                const bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
+                const double a = across ? AboveCap(11) : 0, b = across ? BelowBaseline(11) : 0;
+                CHECK(NearDip(logos[0].rect.top, 4 + (40 - 19 - a - b) / 2 + a));
+                CHECK(NearDip(logos[1].rect.top, 4 + (40 - 15 - a - b) / 2 + a));
                 for (const D2D1_RECT_F& box : strip.columns) {
                     CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
                 }
@@ -665,6 +704,70 @@ static void RunLayoutTests() {
             strip = StripOf(s, accounts, data);
             for (const D2D1_RECT_F& box : strip.columns) CHECK_NEAR(box.right - box.left, 7 + 8 + 7);
         }
+    });
+
+    Run("preview: above or below the bars a logo keeps a label's distance, at 11 and 15 DIP labels", [] {
+        // CC 1: its logo badged "1"; CC 2: its label; OAI: its logo alone; two bars each (the bars'
+        // panel a DIP past the tracks). Fresh, then stale with an error (the mark 3 DIPs over the
+        // logo, the label's "!").
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC 1", {true, true, false, false}),
+                                               Account(L"anthropic", L"CC 2", {true, true, false, false}),
+                                               Account(L"openai", L"OAI", {true, true, false, false})};
+        accounts[1].tileIdentity = TileIdentity::Text;
+        accounts[2].tileIdentity = TileIdentity::Logo;
+        const uint32_t badgeColor = TilePaletteFor(false).badge;
+        for (int size : {11, 15}) {
+            const double a = AboveCap(size), b = BelowBaseline(size);
+            for (bool stale : {false, true}) {
+                std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
+                for (AccountData& d : data) {
+                    d.stale = stale;
+                    if (stale) d.error = L"timeout";
+                }
+                const double mark = stale ? 3 : 0;
+                for (LabelPosition position : {LabelPosition::Top, LabelPosition::Bottom}) {
+                    Settings s;
+                    s.labelFontSize = size;
+                    s.labelPosition = position;
+                    SettingsPreviewStrip strip = StripOf(s, accounts, data);
+                    std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
+                    std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
+                    const SettingsPreviewOp badge = OpsOfColor(strip, badgeColor)[0];
+                    const SettingsPreviewOp label = TextOps(strip, stale ? L"CC 2!" : L"CC 2")[0];
+                    CHECK(logos.size() == 2 && tracks.size() == 6 && TextOps(strip, L"!").size() == (stale ? 2u : 0u));
+                    // The label's line box: the space over the cap height, the cap height, the space
+                    // under the baseline.
+                    CHECK(label.style.size == float(size));
+                    CHECK(NearDip(label.rect.bottom - label.rect.top, a + CapHeight(size) + b));
+                    // Each column outgrows the tile height: its box is its content.
+                    if (position == LabelPosition::Top) {
+                        // The bars' panel starts gap + b under the visible bottom: the badge's, the
+                        // logo's, the label's baseline. Over the visible top (the mark, else the
+                        // logo) the space over the cap height.
+                        CHECK(NearDip(tracks[0].rect.top - 1 - badge.rect.bottom, 3 + b));
+                        CHECK(NearDip(tracks[4].rect.top - 1 - logos[1].rect.bottom, 3 + b));
+                        CHECK(NearDip(tracks[2].rect.top - 1 - (label.rect.bottom - b), 3 + b));
+                        CHECK(NearDip(logos[0].rect.top - mark - strip.columns[0].top, a));
+                        CHECK(NearDip(logos[1].rect.top - mark - strip.columns[2].top, a));
+                    } else {
+                        // The visible top (the mark, else the logo; the label's cap height) starts
+                        // gap + a under the bars' panel; the space under the baseline closes the box.
+                        CHECK(NearDip(logos[0].rect.top - mark - (tracks[1].rect.bottom + 1), 3 + a));
+                        CHECK(NearDip(logos[1].rect.top - mark - (tracks[5].rect.bottom + 1), 3 + a));
+                        CHECK(NearDip(label.rect.top + a - (tracks[3].rect.bottom + 1), 3 + a));
+                        CHECK(NearDip(strip.columns[0].bottom - badge.rect.bottom, b));
+                        CHECK(NearDip(strip.columns[2].bottom - logos[1].rect.bottom, b));
+                    }
+                }
+            }
+        }
+        // Beside the bars nothing changes with the label size: CC 1's box is 19 DIPs, centred.
+        Settings s;
+        s.labelFontSize = 15;
+        std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
+        SettingsPreviewStrip strip = StripOf(s, accounts, data);
+        CHECK_NEAR(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.top, 14.5);
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, OpsOfColor(strip, badgeColor)[0].rect.right + 3);
     });
 
     Run("preview: pace marks per layout; none on headline tiles", [] {

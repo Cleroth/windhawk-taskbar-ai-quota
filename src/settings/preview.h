@@ -222,32 +222,28 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
                 barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
             }
-            // The identity's box. Label: the account label in the label font, its "!" while
-            // warned, a side label 2 DIPs high (a -2 DIP top margin). Logo: 15 DIPs, with the
-            // overhangs of its badge (4 DIPs right and below) and of its stale mark while shown
-            // (4 right, 3 above).
+            // The identity: the account label in the label font, its "!" while warned, or the
+            // 15 DIP logo; its margins (BarIdentityMarginFor) make its box, with the label line's
+            // space beyond its text as DirectWrite lays it out.
             const bool shown = position != LabelPosition::Hidden;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
-            const bool badge = !labelForm && TileIdentityFor(accounts, i).badge;
-            const Measured labelText = measure(meters.labelText, labelStyle);
-            float idWidth = 0, idHeight = 0;
-            const float markTop = meters.warn ? 3 : 0;
-            if (shown && labelForm) {
-                idWidth = labelText.width;
-                idHeight = side ? labelText.height - 2 : labelText.height;
-            } else if (shown) {
-                idWidth = 15 + (badge || meters.warn ? 4 : 0);
-                idHeight = markTop + 15 + (badge ? 4 : 0);
+            const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
+            const BarIdentityMargin margin = BarIdentityMarginFor(
+                position, labelForm, !labelForm && TileIdentityFor(accounts, i).badge, meters.warn, count ? labelGap : 0,
+                line.baseline - line.cap, line.height - line.baseline);
+            float boxWidth = 0, boxHeight = 0;
+            if (shown) {
+                boxWidth = (labelForm ? labelText.width : 15) + float(margin.left + margin.right);
+                boxHeight = (labelForm ? labelText.height : 15) + float(margin.top + margin.bottom);
             }
-            const float idGap = shown && count ? labelGap : 0;
             float contentWidth = barsWidth, contentHeight = barsHeight;
             if (side) {
-                contentWidth = idWidth + idGap + barsWidth;
-                contentHeight = std::max(idHeight, barsHeight);
+                contentWidth = boxWidth + barsWidth;
+                contentHeight = std::max(boxHeight, barsHeight);
             } else if (shown) {
-                contentWidth = std::max(idWidth, barsWidth);
-                contentHeight = idHeight + idGap + barsHeight;
+                contentWidth = std::max(boxWidth, barsWidth);
+                contentHeight = boxHeight + barsHeight;
             } else if (!count) {
                 // Without a quota or an identity shown, a small context-menu target stays.
                 contentWidth = contentHeight = float(std::max(th, 8));
@@ -258,21 +254,22 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const float contentLeft = x0 + 7, contentTop = top + (height - contentHeight) / 2;
 
             if (shown) {
-                float idLeft = position == LabelPosition::Right ? contentLeft + barsWidth + idGap :
-                               side ? contentLeft : contentLeft + (contentWidth - idWidth) / 2;
-                float idTop = side ? contentTop + (contentHeight - idHeight) / 2 :
-                              position == LabelPosition::Top ? contentTop : contentTop + barsHeight + idGap;
+                float boxLeft = position == LabelPosition::Right ? contentLeft + barsWidth :
+                                side ? contentLeft : contentLeft + (contentWidth - boxWidth) / 2;
+                float boxTop = side ? contentTop + (contentHeight - boxHeight) / 2 :
+                               position == LabelPosition::Top ? contentTop : contentTop + barsHeight;
+                float left = boxLeft + float(margin.left), idTop = boxTop + float(margin.top);
                 if (labelForm) {
-                    label(ops, meters.labelText, labelStyle, idLeft, idTop - (side ? 2 : 0), labelText.width,
-                          DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
+                    label(ops, meters.labelText, labelStyle, left, idTop, labelText.width, DWRITE_TEXT_ALIGNMENT_LEADING,
+                          text, meters.labelOpacity);
                 } else {
-                    identityOps(ops, i, meters, 15, idLeft, idTop + markTop + 7.5f);
+                    identityOps(ops, i, meters, 15, left, idTop + 7.5f);
                 }
             }
-            float barsLeft = position == LabelPosition::Left ? contentLeft + idWidth + idGap :
+            float barsLeft = position == LabelPosition::Left ? contentLeft + boxWidth :
                              side ? contentLeft : contentLeft + (contentWidth - barsWidth) / 2;
             float barsTop = side ? contentTop + (contentHeight - barsHeight) / 2 :
-                            position == LabelPosition::Top ? contentTop + idHeight + idGap : contentTop;
+                            position == LabelPosition::Top ? contentTop + boxHeight : contentTop;
             int k = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(meters.barMask & (1 << w))) continue;

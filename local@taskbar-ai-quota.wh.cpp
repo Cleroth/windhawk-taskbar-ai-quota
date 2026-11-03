@@ -719,6 +719,10 @@ struct QuotaUiInstance {
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
     double taskbarHeight = 0;  // DIPs, measured at build; 0 if unknown.
+    // Bar layouts: the label line's space beyond its text at the label font size, over its cap
+    // height and under its baseline, measured at build (BarIdentityMarginFor).
+    double labelAboveCap = 0;
+    double labelBelowBaseline = 0;
     // Light taskbar at the last update; picks tile chrome and the bars' default pace tick colors.
     bool lightTheme = false;
     Grid quotaGrid{nullptr};
@@ -6274,6 +6278,39 @@ static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accoun
     return identity;
 }
 
+// A bar column's identity margins in DIPs, which make its box: the identity gap (`gap`; 0
+// without bars) on the side facing the bars. A Label identity beside them sits 2 DIPs high. A
+// logo's box takes its badge's and stale mark's overhangs while they show (4 DIPs right; the
+// badge 4 below, the mark 3 above), and above or below the bars the label line's space beyond
+// its text at the label font size (`aboveCap`, over its cap height; `belowBaseline`), so the
+// logo keeps a label's distance from them.
+struct BarIdentityMargin {
+    double left = 0, top = 0, right = 0, bottom = 0;
+};
+
+static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, bool badge, bool warn,
+                                              double gap, double aboveCap, double belowBaseline) {
+    BarIdentityMargin m;
+    bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
+    if (label) {
+        m.top = across ? 0 : -2;
+    } else {
+        m.top = (warn ? 3 : 0) + (across ? aboveCap : 0);
+        m.right = badge || warn ? 4 : 0;
+        m.bottom = (badge ? 4 : 0) + (across ? belowBaseline : 0);
+    }
+    if (position == LabelPosition::Left) {
+        m.right += gap;
+    } else if (position == LabelPosition::Right) {
+        m.left += gap;
+    } else if (position == LabelPosition::Top) {
+        m.bottom += gap;
+    } else if (position == LabelPosition::Bottom) {
+        m.top += gap;
+    }
+    return m;
+}
+
 // One quota slot's meter. Bar fields cover every slot of a bar layout; tile fields cover a tile
 // layout's slots in the mask.
 struct QuotaMeter {
@@ -8518,6 +8555,29 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
+        // The label line's space over its cap height and under its baseline, as the labels lay
+        // out: the line box less each trimmed one, out of the tree and unrounded.
+        state.labelAboveCap = state.labelBelowBaseline = 0;
+        if (!tileLayout) {
+            try {
+                TextBlock line;
+                line.Text(L"A");
+                line.FontSize(labelFontSize);
+                line.UseLayoutRounding(false);
+                auto lineHeight = [&](TextLineBounds bounds) {
+                    line.TextLineBounds(bounds);
+                    line.Measure({INFINITY, INFINITY});
+                    return (double)line.DesiredSize().Height;
+                };
+                double full = lineHeight(TextLineBounds::Full);
+                double belowCap = lineHeight(TextLineBounds::TrimToCapHeight);
+                double aboveBaseline = lineHeight(TextLineBounds::TrimToBaseline);
+                state.labelAboveCap = std::max(0.0, full - belowCap);
+                state.labelBelowBaseline = std::max(0.0, full - aboveBaseline);
+            } catch (...) {
+                Wh_Log(L"Label line metrics failed");
+            }
+        }
         // Tiles, or a bar column with a logo identity.
         bool identities = tileLayout;
 
@@ -9257,10 +9317,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 UpdateAccountTile(state, i, meters, display, light);
             } else {
                 UpdateTileIdentity(ui.tile, ap, meters, light);
-                // The identity's margins. Its box: a logo's badge and stale mark overhang it
-                // (4 DIPs right; the badge 4 below, the mark 3 above) and count while they show;
-                // a side label sits 2 DIPs high. Then the identity gap toward the bars while any
-                // shows.
+                // The identity's margins: its box, then the identity gap toward the bars while
+                // any shows.
                 FrameworkElement identity{nullptr};
                 if (ui.label) {
                     identity = ui.label;
@@ -9268,27 +9326,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     identity = ui.tile.identity;
                 }
                 if (identity) {
-                    LabelPosition position = settings.labelPosition;
-                    double gap = barMask ? settings.labelGap : 0;
-                    Thickness margin{};
-                    if (ui.label) {
-                        bool side = position == LabelPosition::Left ||
-                                    position == LabelPosition::Right;
-                        margin.Top = side ? -2 : 0;
-                    } else {
-                        bool badge = ui.tile.badge != nullptr;
-                        margin = {0, meters.warn ? 3.0 : 0.0, badge || meters.warn ? 4.0 : 0.0,
-                                  badge ? 4.0 : 0.0};
-                    }
-                    if (position == LabelPosition::Left) {
-                        margin.Right += gap;
-                    } else if (position == LabelPosition::Right) {
-                        margin.Left += gap;
-                    } else if (position == LabelPosition::Top) {
-                        margin.Bottom += gap;
-                    } else if (position == LabelPosition::Bottom) {
-                        margin.Top += gap;
-                    }
+                    BarIdentityMargin m = BarIdentityMarginFor(
+                        settings.labelPosition, ui.label != nullptr, ui.tile.badge != nullptr,
+                        meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
+                        state.labelBelowBaseline);
+                    Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
                         identity.Margin(margin);
                         ap.identityMargin = margin;
@@ -17896,32 +17938,28 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
                 barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
             }
-            // The identity's box. Label: the account label in the label font, its "!" while
-            // warned, a side label 2 DIPs high (a -2 DIP top margin). Logo: 15 DIPs, with the
-            // overhangs of its badge (4 DIPs right and below) and of its stale mark while shown
-            // (4 right, 3 above).
+            // The identity: the account label in the label font, its "!" while warned, or the
+            // 15 DIP logo; its margins (BarIdentityMarginFor) make its box, with the label line's
+            // space beyond its text as DirectWrite lays it out.
             const bool shown = position != LabelPosition::Hidden;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
-            const bool badge = !labelForm && TileIdentityFor(accounts, i).badge;
-            const Measured labelText = measure(meters.labelText, labelStyle);
-            float idWidth = 0, idHeight = 0;
-            const float markTop = meters.warn ? 3 : 0;
-            if (shown && labelForm) {
-                idWidth = labelText.width;
-                idHeight = side ? labelText.height - 2 : labelText.height;
-            } else if (shown) {
-                idWidth = 15 + (badge || meters.warn ? 4 : 0);
-                idHeight = markTop + 15 + (badge ? 4 : 0);
+            const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
+            const BarIdentityMargin margin = BarIdentityMarginFor(
+                position, labelForm, !labelForm && TileIdentityFor(accounts, i).badge, meters.warn, count ? labelGap : 0,
+                line.baseline - line.cap, line.height - line.baseline);
+            float boxWidth = 0, boxHeight = 0;
+            if (shown) {
+                boxWidth = (labelForm ? labelText.width : 15) + float(margin.left + margin.right);
+                boxHeight = (labelForm ? labelText.height : 15) + float(margin.top + margin.bottom);
             }
-            const float idGap = shown && count ? labelGap : 0;
             float contentWidth = barsWidth, contentHeight = barsHeight;
             if (side) {
-                contentWidth = idWidth + idGap + barsWidth;
-                contentHeight = std::max(idHeight, barsHeight);
+                contentWidth = boxWidth + barsWidth;
+                contentHeight = std::max(boxHeight, barsHeight);
             } else if (shown) {
-                contentWidth = std::max(idWidth, barsWidth);
-                contentHeight = idHeight + idGap + barsHeight;
+                contentWidth = std::max(boxWidth, barsWidth);
+                contentHeight = boxHeight + barsHeight;
             } else if (!count) {
                 // Without a quota or an identity shown, a small context-menu target stays.
                 contentWidth = contentHeight = float(std::max(th, 8));
@@ -17932,21 +17970,22 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const float contentLeft = x0 + 7, contentTop = top + (height - contentHeight) / 2;
 
             if (shown) {
-                float idLeft = position == LabelPosition::Right ? contentLeft + barsWidth + idGap :
-                               side ? contentLeft : contentLeft + (contentWidth - idWidth) / 2;
-                float idTop = side ? contentTop + (contentHeight - idHeight) / 2 :
-                              position == LabelPosition::Top ? contentTop : contentTop + barsHeight + idGap;
+                float boxLeft = position == LabelPosition::Right ? contentLeft + barsWidth :
+                                side ? contentLeft : contentLeft + (contentWidth - boxWidth) / 2;
+                float boxTop = side ? contentTop + (contentHeight - boxHeight) / 2 :
+                               position == LabelPosition::Top ? contentTop : contentTop + barsHeight;
+                float left = boxLeft + float(margin.left), idTop = boxTop + float(margin.top);
                 if (labelForm) {
-                    label(ops, meters.labelText, labelStyle, idLeft, idTop - (side ? 2 : 0), labelText.width,
-                          DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
+                    label(ops, meters.labelText, labelStyle, left, idTop, labelText.width, DWRITE_TEXT_ALIGNMENT_LEADING,
+                          text, meters.labelOpacity);
                 } else {
-                    identityOps(ops, i, meters, 15, idLeft, idTop + markTop + 7.5f);
+                    identityOps(ops, i, meters, 15, left, idTop + 7.5f);
                 }
             }
-            float barsLeft = position == LabelPosition::Left ? contentLeft + idWidth + idGap :
+            float barsLeft = position == LabelPosition::Left ? contentLeft + boxWidth :
                              side ? contentLeft : contentLeft + (contentWidth - barsWidth) / 2;
             float barsTop = side ? contentTop + (contentHeight - barsHeight) / 2 :
-                            position == LabelPosition::Top ? contentTop + idHeight + idGap : contentTop;
+                            position == LabelPosition::Top ? contentTop + boxHeight : contentTop;
             int k = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(meters.barMask & (1 << w))) continue;

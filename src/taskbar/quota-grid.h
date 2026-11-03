@@ -133,6 +133,29 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
+        // The label line's space over its cap height and under its baseline, as the labels lay
+        // out: the line box less each trimmed one, out of the tree and unrounded.
+        state.labelAboveCap = state.labelBelowBaseline = 0;
+        if (!tileLayout) {
+            try {
+                TextBlock line;
+                line.Text(L"A");
+                line.FontSize(labelFontSize);
+                line.UseLayoutRounding(false);
+                auto lineHeight = [&](TextLineBounds bounds) {
+                    line.TextLineBounds(bounds);
+                    line.Measure({INFINITY, INFINITY});
+                    return (double)line.DesiredSize().Height;
+                };
+                double full = lineHeight(TextLineBounds::Full);
+                double belowCap = lineHeight(TextLineBounds::TrimToCapHeight);
+                double aboveBaseline = lineHeight(TextLineBounds::TrimToBaseline);
+                state.labelAboveCap = std::max(0.0, full - belowCap);
+                state.labelBelowBaseline = std::max(0.0, full - aboveBaseline);
+            } catch (...) {
+                Wh_Log(L"Label line metrics failed");
+            }
+        }
         // Tiles, or a bar column with a logo identity.
         bool identities = tileLayout;
 

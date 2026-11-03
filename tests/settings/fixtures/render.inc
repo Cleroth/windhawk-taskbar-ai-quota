@@ -254,21 +254,32 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.ringThickness = 6;
          }},
         // The sample identities (OAI's label, the Anthropic pair's badged logos, Go's logo with
-        // its stale mark) at each identity position, Stacked (60 DIP bars, so every column fits)
-        // and Vertical; the identity gap; the hover box around each form.
+        // its stale mark) at each identity position, Stacked (60 DIP bars, so every column fits;
+        // Top and Bottom also with 15 DIP labels) and Vertical; the identity gap; the hover box
+        // around each form.
         {L"Bars 60, identity left", [](Settings& s) { s.barLength = 60; }},
         {L"Bars 60, identity right", [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Right; }},
         {L"Bars 60, identity top",
-         [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Top; }, -1, 64},
+         [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Top; }, -1, 72},
         {L"Bars 60, identity bottom",
-         [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Bottom; }, -1, 64},
+         [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Bottom; }, -1, 72},
+        {L"Bars 60, label 15, top", [](Settings& s) {
+             s.barLength = 60;
+             s.labelFontSize = 15;
+             s.labelPosition = LabelPosition::Top;
+         }, -1, 72},
+        {L"Bars 60, label 15, bottom", [](Settings& s) {
+             s.barLength = 60;
+             s.labelFontSize = 15;
+             s.labelPosition = LabelPosition::Bottom;
+         }, -1, 72},
         {L"Bars 60, identity hidden", [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Hidden; }},
         {L"Bars 60, identity gap 0", [](Settings& s) { s.barLength = 60; s.labelGap = 0; }},
         {L"Bars 60, gap 8, top", [](Settings& s) {
              s.barLength = 60;
              s.labelGap = 8;
              s.labelPosition = LabelPosition::Top;
-         }, -1, 72},
+         }, -1, 80},
         {L"Vertical 32, identity left", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }},
         {L"Vertical 32, identity right", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
@@ -292,7 +303,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
          }},
         {L"Hover CC 1 (badged logo)", [](Settings&) {}, 1},
         {L"Bars 60, hover OAI (label)", [](Settings& s) { s.barLength = 60; }, 0},
-        {L"Identity top, hover Go (stale)", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, 3, 64},
+        {L"Identity top, hover Go (stale)", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, 3, 72},
         {L"Identity hidden, hover CC 2", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }, 2},
         {L"Vertical 32, hover CC 1", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }, 1},
         {L"Vertical 80, hover Go (box grows)", [](Settings& s) {

@@ -572,6 +572,39 @@ static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accoun
     return identity;
 }
 
+// A bar column's identity margins in DIPs, which make its box: the identity gap (`gap`; 0
+// without bars) on the side facing the bars. A Label identity beside them sits 2 DIPs high. A
+// logo's box takes its badge's and stale mark's overhangs while they show (4 DIPs right; the
+// badge 4 below, the mark 3 above), and above or below the bars the label line's space beyond
+// its text at the label font size (`aboveCap`, over its cap height; `belowBaseline`), so the
+// logo keeps a label's distance from them.
+struct BarIdentityMargin {
+    double left = 0, top = 0, right = 0, bottom = 0;
+};
+
+static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, bool badge, bool warn,
+                                              double gap, double aboveCap, double belowBaseline) {
+    BarIdentityMargin m;
+    bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
+    if (label) {
+        m.top = across ? 0 : -2;
+    } else {
+        m.top = (warn ? 3 : 0) + (across ? aboveCap : 0);
+        m.right = badge || warn ? 4 : 0;
+        m.bottom = (badge ? 4 : 0) + (across ? belowBaseline : 0);
+    }
+    if (position == LabelPosition::Left) {
+        m.right += gap;
+    } else if (position == LabelPosition::Right) {
+        m.left += gap;
+    } else if (position == LabelPosition::Top) {
+        m.bottom += gap;
+    } else if (position == LabelPosition::Bottom) {
+        m.top += gap;
+    }
+    return m;
+}
+
 // One quota slot's meter. Bar fields cover every slot of a bar layout; tile fields cover a tile
 // layout's slots in the mask.
 struct QuotaMeter {
