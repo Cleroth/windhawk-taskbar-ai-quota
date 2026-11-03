@@ -1,10 +1,10 @@
 // Usage history window controller: the selection by history ID, each mode's view, the range and
 // the week comparison, the lines the legend hides, explicit loads with the open request they
-// take, live refresh from notifications, Enable recording, the operations (Export, Clear) and the
-// More menu's dialogs, the view the frame builders read (history/view.h), and the chart laid out
-// for its item with the lines the pointer picks on it (history/chart.h). Pure, like the settings
-// edit controller: it talks to HistoryOps (production: history/ops.h; tests: in-memory ops) and
-// reads no globals.
+// take, live refresh from notifications, Enable recording, the operations (Export, Clear, Delete
+// history) and the More menu's dialogs, the view the frame builders read (history/view.h), and
+// the chart laid out for its item with the lines the pointer picks on it (history/chart.h). Pure,
+// like the settings edit controller: it talks to HistoryOps (production: history/ops.h; tests:
+// in-memory ops) and reads no globals.
 
 // What ReadSettings returns: the published settings (with this user's recording consent),
 // whether the taskbar has yet to save account history IDs, the journal's storage error flag, and
@@ -73,6 +73,9 @@ struct HistoryOps {
     // Clears the journal (`error`: why it couldn't), then the flyout's burn-up curves are dropped.
     virtual bool Clear(std::wstring& error) = 0;
     virtual void InvalidateCurves() = 0;
+    // Deletes every sample of a removed account (`error`: why it couldn't, including an account in
+    // the settings holding its history ID again).
+    virtual bool DeleteHistory(uint64_t historyId, std::wstring& error) = 0;
     // Posts the window's refresh message (ProcessRefresh); false when it couldn't.
     virtual bool PostRefresh() = 0;
     // Starts or stops the window's 250 ms deferral check (DeferralTick). A check that can't
@@ -101,8 +104,9 @@ struct HistorySeriesKey {
 };
 
 // The running operation: Export (its warning and save dialog), its write (posted once the
-// dialog chose a file), Clear (its confirmation, then the clear).
-enum class HistoryOperation : uint8_t { None, Export, Writing, Clear };
+// dialog chose a file), Clear (its confirmation, then the clear), Delete (its confirmation, then
+// the deletion).
+enum class HistoryOperation : uint8_t { None, Export, Writing, Clear, Delete };
 
 // Operation notices shared by several of their ends. A cancelled operation shows none.
 static constexpr PCWSTR kHistoryExportNotStarted = L"CSV export could not start; no file written.";
@@ -228,10 +232,11 @@ struct HistoryController {
     }
 
     // A control's command (history/view.h): the selection, the view and a legend chip's line
-    // recompose; the range, the comparison and Refresh load; Export and the More menu's Clear
-    // all history start their operations; its Settings, Open history folder and About these
-    // charts open those; Enable recording turns recording on. During a modal or an operation only
-    // the legend's chips act (the rest are disabled or behind the modal).
+    // recompose; the range, the comparison and Refresh load; Export, the More menu's Clear all
+    // history and a removed account's Delete history start their operations; the menu's
+    // Settings, Open history folder and About these charts open those; Enable recording turns
+    // recording on. During a modal or an operation only the legend's chips act (the rest are
+    // disabled or behind the modal).
     void Command(HistoryUiCommand command, int value = 0, uint64_t key = 0) {
         if (closeRequested || ops->Unloading() || (Busy() && command != HistoryUiCommand::Line)) return;
         switch (command) {
@@ -281,6 +286,9 @@ struct HistoryController {
                 break;
             case HistoryUiCommand::EnableRecording:
                 EnableRecording();
+                break;
+            case HistoryUiCommand::DeleteHistory:
+                DeleteHistory(key);
                 break;
             case HistoryUiCommand::Line: {
                 auto line = std::find(hidden.begin(), hidden.end(), std::pair{key, value});
@@ -424,6 +432,32 @@ struct HistoryController {
         Finish({L"All local history cleared. Future polls can start recording again."});
     }
 
+    // Delete history (a listed removed account's info bar): asked first, naming the account
+    // (Cancel the default). A success loads, which no longer lists the account (All accounts is
+    // selected); a failure keeps it selected. Its notice after either.
+    void DeleteHistory(uint64_t id) {
+        auto account = std::find_if(accounts.begin(), accounts.end(), [&](const HistoryUiAccount& a) { return a.id == id; });
+        if (!snapshot || account == accounts.end() || account->configured) return;
+        std::wstring label = account->label;
+        notice = {};
+        operation = HistoryOperation::Delete;
+        int answer = Ask(L"Permanently delete all usage history of the removed " +
+                             std::wstring(HistoryUiProviderName(account->provider)) + L" account " + label +
+                             L"?\r\n\r\nEvery recorded sample of it is deleted, not only the selected range. This cannot "
+                             L"be undone.",
+                         L"Delete account history", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+        if (Stopped()) return;
+        if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+        if (answer != IDOK) return Finish({});
+        std::wstring error;
+        bool deleted = ops->DeleteHistory(id, error);
+        if (Stopped()) return;
+        operation = HistoryOperation::None;
+        if (!deleted) return Finish({L"Could not delete this account's history. " + error, UiSeverity::Error});
+        Load();
+        Finish({L"Deleted the history of removed account " + label + L"."});
+    }
+
     // About these charts (the More menu): how to read the window, the retention and the oldest
     // sample loaded.
     void About() {
@@ -471,7 +505,8 @@ struct HistoryController {
             L"not dollars or a spending ledger.\r\n\r\n"
             L"Retention: " + std::to_wstring(settings.settings.historyRetentionDays) +
             L" days, also limited to 250,000 records / about 60 MB. Turning recording off keeps saved history. Removed "
-            L"accounts remain under their IDs until expiry or Clear, unless their history was deleted with them.";
+            L"accounts remain under their IDs until expiry or Clear, unless their history was deleted with them; "
+            L"select one to delete its history.";
         if (snapshot && !snapshot->samples.empty()) {
             text += L"\r\nOldest loaded sample: " +
                     HistoryUiTime(snapshot->samples.front().timeMs, ops->Now(),

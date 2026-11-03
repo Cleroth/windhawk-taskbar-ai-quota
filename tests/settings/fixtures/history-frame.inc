@@ -445,6 +445,28 @@ static void RunHistoryFrameTests() {
         view.selected = -1;
         view.accounts[0].removed = false;
         CHECK(!TestFind(TestHistoryFrame(view).content, paused));
+
+        // A removed account: its bar with Delete history for its history ID, whatever this user's
+        // recording; disabled while an export writes.
+        PCWSTR removed = L"This account was removed. Its saved history stays until it expires or is deleted.";
+        view = TestHistoryView();
+        view.accounts.push_back(TestRemoved(0x3F9C1A2B4D5E6F70, 20, 1));
+        view.selected = 4;
+        frame = TestHistoryFrame(view);
+        const UiItem* remove = UiFindItem(frame, kHistoryUiDeleteHistory);
+        CHECK(TestPanels(frame)[0]->ink == UiInk::Primary && TestFind(frame.content, removed));
+        CHECK(remove && remove->kind == UiItemKind::Button && remove->text == L"Delete history\u2026" &&
+              remove->enabled && remove->action.target == uint32_t(HistoryUiCommand::DeleteHistory) &&
+              remove->action.key == 0x3F9C1A2B4D5E6F70 && stop(frame, kHistoryUiDeleteHistory));
+        view.recordingEnabled = false;
+        frame = TestHistoryFrame(view);
+        CHECK(TestPanels(frame)[0]->ink == UiInk::Caution && TestPanels(frame)[1]->ink == UiInk::Primary &&
+              TestFind(frame.content, removed));
+        view.exporting = true;
+        CHECK(!UiFindItem(TestHistoryFrame(view), kHistoryUiDeleteHistory)->enabled);
+        view.exporting = false;
+        view.selected = 0;
+        CHECK(!UiFindItem(TestHistoryFrame(view), kHistoryUiDeleteHistory));
     });
 
     Run("history frame: the chart's card: legend chips, the key line and the chart, by the mockups' "

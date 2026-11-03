@@ -120,6 +120,7 @@ struct HistoryUiView {
 enum HistoryUiControl : uint32_t {
     kHistoryUiNavAll = 1, kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore, kHistoryUiViews,
     kHistoryUiRanges, kHistoryUiCompare, kHistoryUiEnableRecording, kHistoryUiChart, kHistoryUiProgress,
+    kHistoryUiDeleteHistory,
     kHistoryUiNavAccount = 0x1000,
     kHistoryUiFirstRunning = 0x100000,
     kHistoryUiChip = 0x800000,
@@ -128,9 +129,10 @@ enum HistoryUiControl : uint32_t {
 // What an item's action asks for (UiAction::target): Select (key = history ID, 0: All accounts),
 // View (value = HistoryView), Range (value = HistoryUiRange), Compare (value = the desired state),
 // Refresh, Export, Menu (value = HistoryUiMenuItem), EnableRecording, Line (a legend chip: key =
-// history ID, value = meter; shows or hides that line).
+// history ID, value = meter; shows or hides that line), DeleteHistory (key = a removed account's
+// history ID).
 enum class HistoryUiCommand : uint32_t {
-    None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording, Line
+    None, Select, View, Range, Compare, Refresh, Export, Menu, EnableRecording, Line, DeleteHistory
 };
 // The More menu (approved Q9 a, s-menu).
 enum class HistoryUiMenuItem : int { Settings, Folder, About, Clear };

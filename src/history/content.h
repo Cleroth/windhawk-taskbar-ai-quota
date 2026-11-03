@@ -38,7 +38,7 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
 
     // Info bars (mockup .ibar), 10 DIP apart: an operation's notice, this user's recording off
     // (caution, with Enable recording), a storage error, the storage cap (caution), then the
-    // selected account's own recording off or pause (info).
+    // selected account's removal (with Delete history), or its own recording off or pause (info).
     if (!view.notice.text.empty()) {
         y = UiAddInfoBar(g, items, id, id++, x, y, width, {{view.notice.text}}, view.notice.severity) + 10;
     }
@@ -57,9 +57,16 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
         y = UiAddInfoBar(g, items, id, id++, x, y, width, {{L"Storage cap reached; oldest samples were pruned."}},
                          UiSeverity::Caution) + 10;
     }
-    if (view.selected >= 0 && size_t(view.selected) < view.accounts.size() && view.recordingEnabled) {
+    if (view.selected >= 0 && size_t(view.selected) < view.accounts.size()) {
         const HistoryUiViewAccount& account = view.accounts[size_t(view.selected)];
-        if (!account.removed && (account.recordingOff || account.paused)) {
+        if (account.removed) {
+            y = UiAddInfoBar(g, items, id, id++, x, y, width,
+                             {{L"This account was removed. Its saved history stays until it expires or is deleted."}},
+                             UiSeverity::Info,
+                             UiInfoButton{kHistoryUiDeleteHistory, L"Delete history\u2026",
+                                          HistoryUiAction(HistoryUiCommand::DeleteHistory, 0, account.historyId),
+                                          !view.exporting}) + 10;
+        } else if (view.recordingEnabled && (account.recordingOff || account.paused)) {
             y = UiAddInfoBar(g, items, id, id++, x, y, width,
                              {{account.recordingOff ?
                                    L"Recording is off for this account. Its saved history stays; turn on Record "

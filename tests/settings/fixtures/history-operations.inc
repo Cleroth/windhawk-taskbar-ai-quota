@@ -1,11 +1,12 @@
 // The history window's operations through its controller, against the in-memory ops of
 // history-controller.inc: Export (its scope frozen across the large-export warning and the save
 // dialog, the posted write and its progress, cancellations and failures), Clear all history (its
-// confirmation, result and the burn-up curves), About these charts, and the close latch or unload
-// arriving inside each dialog; loads, commands and refreshes meanwhile, with the no-stranding
-// invariant (history-refresh.inc) checked after the events. Orchestration only: the production
-// dialogs and their scope (host probe), the CSV file (tests/history: the writer) and the journal's
-// Clear are outside this suite. Hand-derived expectations.
+// confirmation, result and the burn-up curves), a removed account's Delete history (its
+// confirmation, result and selection), About these charts, and the close latch or unload arriving
+// inside each dialog; loads, commands and refreshes meanwhile, with the no-stranding invariant
+// (history-refresh.inc) checked after the events. Orchestration only: the production dialogs and
+// their scope (host probe), the CSV file (tests/history: the writer) and the journal's Clear and
+// account deletion are outside this suite. Hand-derived expectations.
 
 static const PCWSTR kTestExportAll = L"choose Export all accounts \u2014 all meters, selected range (both weeks if comparing)";
 static const PCWSTR kTestExportOne =
@@ -290,6 +291,7 @@ static void RunHistoryOperationsTests() {
                                            HistoryUiMenuItem::About, HistoryUiMenuItem::Clear}) {
                 c.Command(HistoryUiCommand::Menu, int(item));
             }
+            c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
             CHECK(ops.log.empty() && c.selectedId == 0xC1 && c.view.view == HistoryView::AllMeters &&
                   c.range == HistoryUiRange::Week && !c.compare && c.operation == HistoryOperation::Writing);
             c.Command(HistoryUiCommand::Line, line.meter, line.historyId);
@@ -404,6 +406,99 @@ static void RunHistoryOperationsTests() {
         }
     });
 
+    // Delete history ------------------------------------------------------------------------------
+
+    Run("history delete: a listed removed account's Delete history asks first, naming it (Cancel the default), "
+        "deletes it and loads: the account leaves the list, All accounts is selected and the notice says so; "
+        "configured or unlisted accounts and the window before its first load start nothing", [] {
+        TestHistoryOps ops = TestControllerOps();
+        HistoryController c(ops);
+        c.Open();
+        c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+        CHECK(ops.log == TestLog{L"settings"});
+        TestLoaded(c, ops, 0xDEAD);
+        for (uint64_t id : {uint64_t(0xC1), uint64_t(0xBEEF), uint64_t(0)}) c.Command(HistoryUiCommand::DeleteHistory, 0, id);
+        CHECK(ops.log.empty() && ops.asked.empty() && c.operation == HistoryOperation::None);
+        c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+        TestSettled(c, ops);
+        CHECK((ops.log == TestLog{L"ask Delete account history", L"delete dead", L"take", L"settings",
+                                  L"snapshot 7d keep 90"}));
+        CHECK(ops.asked.at(0).second == (MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2));
+        CHECK(ops.asked.at(0).first == L"Permanently delete all usage history of the removed Anthropic account "
+                                       L"account_000000000000dead?\r\n\r\nEvery recorded sample of it is deleted, not "
+                                       L"only the selected range. This cannot be undone.");
+        CHECK(c.selectedId == 0 && c.view.selected == -1 && c.view.accounts.size() == 2 &&
+              c.operation == HistoryOperation::None);
+        CHECK(c.view.notice.text == L"Deleted the history of removed account account_000000000000dead." &&
+              c.view.notice.severity == UiSeverity::Info);
+    });
+
+    Run("history delete: a failure says why, loads nothing and keeps the account selected; Cancel and dialogs that "
+        "can't be tracked delete nothing", [] {
+        TestHistoryOps ops = TestControllerOps();
+        ops.deleteResult = false;
+        HistoryController c(ops);
+        TestLoaded(c, ops, 0xDEAD);
+        uint64_t generation = c.generation;
+        c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+        TestSettled(c, ops);
+        CHECK((ops.log == TestLog{L"ask Delete account history", L"delete dead"}));
+        CHECK(c.view.notice.text == L"Could not delete this account's history. History storage is in use by another "
+                                    L"Explorer session, or is inaccessible." && c.view.notice.severity == UiSeverity::Error);
+        CHECK(c.generation == generation && c.selectedId == 0xDEAD && c.operation == HistoryOperation::None);
+        for (int answer : {IDCANCEL, 0}) {
+            ops.log.clear();
+            ops.answers = {answer};
+            c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+            CHECK(ops.log == TestLog{L"ask Delete account history"});
+            CHECK(c.view.notice.text == (answer ? L"" : L"Cannot track native dialogs safely; operation cancelled."));
+            CHECK(c.view.notice.severity == (answer ? UiSeverity::Info : UiSeverity::Error));
+            CHECK(c.selectedId == 0xDEAD && c.operation == HistoryOperation::None);
+        }
+    });
+
+    Run("history delete: a close latched or unload inside the confirmation deletes nothing; unload during the "
+        "deletion neither loads nor shows; a load asked for inside the confirmation runs once after it, and its "
+        "notice stays", [] {
+        for (bool unload : {false, true}) {
+            TestHistoryOps ops = TestControllerOps();
+            HistoryController c(ops);
+            TestLoaded(c, ops, 0xDEAD);
+            ops.asking = [&] {
+                if (unload) ops.unloading = true;
+                else c.RequestClose();
+            };
+            c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+            CHECK(ops.log == TestLog{L"ask Delete account history"});
+            CHECK(c.operation == HistoryOperation::None && c.view.notice.text.empty());
+        }
+        {
+            TestHistoryOps ops = TestControllerOps();
+            HistoryController c(ops);
+            TestLoaded(c, ops, 0xDEAD);
+            ops.deleting = [&] { ops.unloading = true; };
+            c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+            CHECK((ops.log == TestLog{L"ask Delete account history", L"delete dead"}));
+            CHECK(c.operation == HistoryOperation::None && c.view.notice.text.empty());
+        }
+        for (bool deleted : {false, true}) {
+            TestHistoryOps ops = TestControllerOps();
+            ops.deleteResult = deleted;
+            HistoryController c(ops);
+            TestLoaded(c, ops, 0xDEAD);
+            ops.asking = [&] {
+                c.RequestLoad();
+                c.Notify();
+                TestSettled(c, ops);
+            };
+            c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+            TestSettled(c, ops);
+            CHECK(TestCount(ops.log, L"take") == 1 && c.selectedId == (deleted ? 0 : 0xDEAD) && !c.loadPending);
+            CHECK(!c.view.notice.text.empty() && c.view.notice.severity == (deleted ? UiSeverity::Info : UiSeverity::Error));
+            CHECK(!c.liveDirty && !c.samplesDirty);
+        }
+    });
+
     // About these charts ----------------------------------------------------------------------------
 
     Run("history about: a message box with how to read the window, the retention and the oldest loaded sample; "
@@ -436,14 +531,15 @@ static void RunHistoryOperationsTests() {
         CHECK(fresh.asked.size() == 1 && fresh.asked[0].first.find(L"Oldest loaded sample") == std::wstring::npos);
     });
 
-    Run("history operations: after the close request or unload nothing exports, clears, asks or opens", [] {
+    Run("history operations: after the close request or unload nothing exports, clears, deletes, asks or opens", [] {
         for (bool unload : {false, true}) {
             TestHistoryOps ops = TestControllerOps();
             HistoryController c(ops);
-            TestLoaded(c, ops);
+            TestLoaded(c, ops, 0xDEAD);
             if (unload) ops.unloading = true;
             else c.RequestClose();
             c.Command(HistoryUiCommand::Export);
+            c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
             for (HistoryUiMenuItem item : {HistoryUiMenuItem::Settings, HistoryUiMenuItem::Folder,
                                            HistoryUiMenuItem::About, HistoryUiMenuItem::Clear}) {
                 c.Command(HistoryUiCommand::Menu, int(item));

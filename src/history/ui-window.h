@@ -40,16 +40,18 @@ struct HistoryUiClient final : UiHostClient {
     }
 
     // A new selection or view scrolls the content back to its top; a successful Enable recording
-    // focuses the selected entry, and so does a load that waited for a command's dialogs (Export,
-    // the More menu's) and changed the selection, as an activation's load does. Those commands
-    // return once their dialogs are done; an export's write then waits for its posted message.
+    // focuses the selected entry, and so does a command with dialogs (Export, the More menu's,
+    // Delete history) whose loads changed the selection, as an activation's load does. Those
+    // commands return once their dialogs are done; an export's write then waits for its posted
+    // message.
     void Invoke(UiHost& host, UiAction action) override {
         if (Unloading() || action.kind != UiActionKind::Command) return;
         uint64_t selected = controller.selectedId;
         HistoryView shown = controller.view.view;
         HistoryUiCommand command = HistoryUiCommand(action.target);
         controller.Command(command, action.value, action.key);
-        bool waited = command == HistoryUiCommand::Export || command == HistoryUiCommand::Menu;
+        bool waited = command == HistoryUiCommand::Export || command == HistoryUiCommand::Menu ||
+                      command == HistoryUiCommand::DeleteHistory;
         if (std::exchange(controller.focusSelected, false) || (waited && controller.selectedId != selected)) {
             UiHostRequestFocus(host, SelectedEntry(), false);
         }

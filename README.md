@@ -139,6 +139,9 @@ state and storage errors stay visible in the main window.
   To delete one account's samples, remove the account with **Also delete its usage history**
   checked. If they can't be deleted (damaged or inaccessible storage, or another Explorer
   session holding it), the account is still removed and you are told its history was kept.
+- To delete an already removed account's samples, select it under **Removed** and click
+  **Delete history...** in its banner. After confirmation every sample of that account goes, not
+  only the selected range; other accounts keep theirs.
 
 ### Recording and storage
 
@@ -149,8 +152,9 @@ it off to poll hidden accounts only when both global and per-account recording a
 
 History follows the **configured account entry**, not a verified provider login. Renaming keeps
 its history. Use a new entry for a different provider or login, including an Antigravity login
-changed in its app. Removing an entry retains anonymous history until expiry or Clear, unless
-you check **Also delete its usage history** when removing it; re-adding it starts fresh.
+changed in its app. Removing an entry retains anonymous history until expiry, Clear, or
+**Delete history...** on its page in the viewer, unless you check **Also delete its usage
+history** when removing it; re-adding it starts fresh.
 Duplicate entries for the same login remain separate lines. Antigravity graphs track the
 displayed limiting pools, which can change; they are not cumulative consumption meters.
 
@@ -183,7 +187,9 @@ restriction, and resume only when that restriction is off and recording is enabl
 export, restart persistence, and Clear without changing sign-ins. Remove a disposable recorded
 account with **Also delete its usage history** checked, once with each kind of history window
 open: its samples leave the open window, CSV export and a restart; other accounts keep theirs.
-Removing one without the checkbox keeps it under **Removed**.
+Removing one without the checkbox keeps it under **Removed**; select it there and use
+**Delete history...**: it leaves the list (All accounts is selected), and its samples leave CSV
+export and a restart while other accounts keep theirs.
 
 With multiple accounts and retained readings, check:
 

@@ -181,6 +181,20 @@ struct HistoryProductionOps final : HistoryOps {
 
     void InvalidateCurves() override { InvalidateBurnUpCurves(); }
 
+    // Refused while an account in the settings holds the history ID: only a removal's settings
+    // publication fences out batches still carrying its samples (DeleteAccountHistory).
+    bool DeleteHistory(uint64_t historyId, std::wstring& error) override {
+        {
+            std::lock_guard lock(g_settingsMutex);
+            if (std::any_of(g_settings.accounts.begin(), g_settings.accounts.end(),
+                            [&](const AccountConfig& account) { return account.historyId == historyId; })) {
+                error = L"An account in Settings uses this history again.";
+                return false;
+            }
+        }
+        return DeleteAccountHistory(historyId, &error);
+    }
+
     bool PostRefresh() override {
         HWND window = g_historyWindow.load();
         return window && PostMessageW(window, kHistoryRefreshMessage, 0, 0);

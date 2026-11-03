@@ -8,7 +8,7 @@
 // In-memory ops: the open request (overwritten by each open, as the shared global is), a journal
 // with its stamp, status and cap, settings with their polls, the clock, unload, the window's
 // posted refresh messages and deferral timer, the consent transaction, the dialogs, the CSV write,
-// Clear and the folder, and an operation log.
+// Clear, Delete history and the folder, and an operation log.
 struct TestHistoryOps final : HistoryOps {
     uint64_t request = 0;
     std::vector<HistorySample> journal;
@@ -48,11 +48,17 @@ struct TestHistoryOps final : HistoryOps {
     bool clearResult = true;
     std::wstring clearError = L"History storage is in use by another Explorer session, or is inaccessible.";
     std::function<void()> clearing;
+    // Delete history's result (and its error; a success removes the account's samples and moves
+    // the revision, as the journal's does), what happens during it
+    bool deleteResult = true;
+    std::wstring deleteError = L"History storage is in use by another Explorer session, or is inaccessible.";
+    std::function<void()> deleting;
     bool folder = true;
     // "take", "settings", "snapshot <days before now>d keep <retention>", "peek" (status only),
     // "peek <days before now>d" (samples too), "consent", "notify", "post" ("post failed"),
     // "timer on", "timer off", "open settings", "open folder" ("no folder"), "ask <caption>",
-    // "choose <title>", "post write" ("post write failed"), "write <path>", "clear", "invalidate"
+    // "choose <title>", "post write" ("post write failed"), "write <path>", "clear", "invalidate",
+    // "delete <history ID in hex>"
     std::vector<std::wstring> log;
 
     // A poll's reading recorded: appended, counted in the stamp.
@@ -156,6 +162,19 @@ struct TestHistoryOps final : HistoryOps {
         return clearResult;
     }
     void InvalidateCurves() override { log.push_back(L"invalidate"); }
+    bool DeleteHistory(uint64_t historyId, std::wstring& error) override {
+        wchar_t entry[32];
+        swprintf(entry, ARRAYSIZE(entry), L"delete %llx", static_cast<unsigned long long>(historyId));
+        log.push_back(entry);
+        if (deleting) deleting();
+        if (!deleteResult) {
+            error = deleteError;
+            return false;
+        }
+        std::erase_if(journal, [&](const HistorySample& sample) { return sample.accountId == historyId; });
+        stamp.revision++;
+        return true;
+    }
     bool PostRefresh() override {
         log.push_back(failPost ? L"post failed" : L"post");
         posted += !failPost;

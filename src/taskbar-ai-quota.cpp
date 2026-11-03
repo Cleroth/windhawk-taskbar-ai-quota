@@ -67,7 +67,8 @@ Percentages from different accounts or overlapping windows are not added togethe
 History follows the configured entry: use a new entry for a different login. Data stays under
 `%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>` with your user-folder permissions, without tokens or
 labels. It is not encrypted and survives mod removal. Retention and a roughly 60 MB size cap
-prune old samples; **Clear all history...** removes recordings without changing sign-ins.
+prune old samples; **Clear all history...** removes recordings without changing sign-ins, and
+**Delete history...** on a removed account's page removes just its recordings.
 See the [usage history guide](https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history)
 for recording rules, export, and verification.
 

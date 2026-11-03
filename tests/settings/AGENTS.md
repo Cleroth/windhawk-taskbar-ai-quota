@@ -120,11 +120,14 @@ regenerates.
   save dialog, the write posted with its progress shown, progress reports changing only the row
   count, cancellations, failed dialogs and writes, the close latch or unload inside each dialog and
   during the write; Clear's success, failure (curves dropped either way, no load), cancel and
-  waiting loads; About these charts; one operation at a time with only the legend acting) and
+  waiting loads; a removed account's Delete history (confirmation naming it, success leaving the
+  list, failure keeping it selected, cancel, the close latch or unload, waiting loads; configured
+  or unlisted accounts start nothing); About these charts; one operation at a time with only the
+  legend acting) and
   `fixtures/history-frame.inc` (the frame per
   state: navigation entries and their ids per history ID, values and inks, the Removed group;
   header title, status, pill, icon buttons, the narrow rule; segments, Compare disabling range;
-  info bars; the chart's card (legend chips with their ids, actions and tooltips, wrapping; the
+  info bars (a removed account's with Delete history); the chart's card (legend chips with their ids, actions and tooltips, wrapping; the
   key line; the chart item) and the empty states; card grid and contents; one-line menu rows
   with separators and the More menu; an icon-only button's centered glyph, measured in pixels;
   the icon buttons' tooltips; an export's progress in the status slot with every control but the
@@ -142,7 +145,7 @@ regenerates.
   pane at its scroll, viewport, scrollbar, the More menu and a chart's readout where the host
   shows them; the chart and its chips by the production painter, laid out by a controller over
   a synthetic journal), modeled on the approved phase-3 mockups: `default` (s-light), `account`
-  (s-account), `compare`, `states` (recording off, Enable recording's failure notice, storage
+  (s-account, plus a removed account's Delete history bar), `compare`, `states` (recording off, Enable recording's failure notice, storage
   failing, waiting with focus and hover, an export's progress, also at the minimum width),
   `notices` (each operation's notice), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings,
   dollars only, the No readings card beside cards), `menu`, `min` (the minimum window scrolled),

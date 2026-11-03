@@ -284,6 +284,10 @@ static void RunHistoryRenders(const std::wstring& directory) {
                      UiSeverity::Info},
           std::tuple{L"Clear failed", L"Could not clear all history. History storage is in use by another Explorer "
                                       L"session, or is inaccessible.", UiSeverity::Error},
+          std::tuple{L"Delete history done", L"Deleted the history of removed account account_3f9c1a2b4d5e6f70.",
+                     UiSeverity::Info},
+          std::tuple{L"Delete history failed", L"Could not delete this account's history. History storage is in use "
+                                               L"by another Explorer session, or is inaccessible.", UiSeverity::Error},
           std::tuple{L"Nothing recorded yet (Open history folder)", L"Nothing has been recorded yet. The folder is "
                                                                     L"created with the first recorded sample.",
                      UiSeverity::Info}}) {
@@ -452,12 +456,21 @@ static void RunHistoryRenders(const std::wstring& directory) {
         return HistoryChartPoint(c, c.lines[0], points[best]);
     };
 
+    // One removed account (CC 2 no longer configured): its info bar with Delete history.
+    std::vector<AccountConfig> kept = TestMockupAccounts();
+    kept.erase(kept.begin() + 2);
+    auto removedChart = TestChartOf(TestMockupWeek(), select(0xC2, HistoryView::AllMeters), kept);
+    removedChart->ops.settings.polls.erase(removedChart->ops.settings.polls.begin() + 2);
+    removedChart->controller.Load();
+    HistoryRenderPart removed = real(L"One account: removed (CC 2 no longer configured), its bar with Delete history",
+                                     removedChart, 640);
+
     const std::pair<const char*, std::vector<HistoryRenderPart>> sheets[] = {
         {"chart-views", views},
         {"chart-ticks", ticks},
         {"chart-states", states},
         {"default", {defaults}},
-        {"account", {oai, cc1}},
+        {"account", {oai, cc1, removed}},
         {"compare", {compare}},
         {"states", {off, consent, storage, waiting, exporting, exportingMin}},
         {"notices", notices},
