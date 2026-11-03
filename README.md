@@ -272,3 +272,7 @@ Windhawk and its catalog take a single file, so the source lives in `src/` as fr
 ## Suggestions & Bugs
 
 Have a suggestion or found a bug? [Open an issue](https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new).
+
+## License
+
+[MIT](LICENSE)
