@@ -159,8 +159,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Pace markers";
-            spec.description = {{std::wstring(ring ? L"Dots" : L"Ticks") +
-                                 L" mark how much of each quota window has elapsed, to compare with its usage."}};
+            spec.description = {{L"Ticks mark how much of each quota window has elapsed, to compare with its usage."}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
         if (bars) {
@@ -188,8 +187,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
             UiCardSpec spec;
             spec.title = L"Marker color";
-            spec.description = {{bars ? L"Light grey by default, dark on a light taskbar. Custom... opens the color picker." :
-                                        L"Light grey by default. Custom... opens the color picker."}};
+            spec.description = {{L"Light grey by default, dark on a light taskbar. Custom... opens the color picker."}};
             spec.trailing = {swatches + 16 + buttonWidth, 32};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";

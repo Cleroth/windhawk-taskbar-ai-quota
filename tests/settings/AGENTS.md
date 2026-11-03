@@ -45,8 +45,9 @@ regenerates.
 
 ## Phases
 
-- `model`: pure fixtures (meter model, logos, toolkit palette/input/focus/hit testing/scroll,
-  controls, popup rows/placement/keys, settings shell and pages). `fixtures/controls.inc`: the
+- `model`: pure fixtures (meter model with ring tile outlines, logos, toolkit palette/input/focus/
+  hit testing/scroll, controls, popup rows/placement/keys, settings shell and pages).
+  `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,
   status pills, info bar severities with a button). `fixtures/tooltip.inc`: the readout layout
@@ -67,7 +68,8 @@ regenerates.
   of nine accounts). `fixtures/layout.inc`: slider input, the
   Layout fields and reset group, the projection the preview reads, the preview strip model
   (`settings/preview.h`: column geometry, hover, pace marks, bar styles with their shaded fills and
-  tick overhang, the theme-aware pace color, overflow, extreme settings), the
+  tick overhang, ring tiles' model shapes, mini bar and headline fills and ticks, the theme-aware
+  pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), threshold
   ordering in the projection and after a save (the test store's `normalize` hook), the Display

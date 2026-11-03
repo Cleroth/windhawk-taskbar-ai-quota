@@ -108,8 +108,11 @@ static PaceMarkColors PaceMarkColorsFor(COLORREF color, bool light) {
 // fits; strokes and gaps shrink instead, down to kTileRingStrokeMin.
 static constexpr double kTileRingHoleMin = 7.0;
 static constexpr double kTileRingStrokeMin = 0.75;
-// Visible space between neighbouring segmented arcs, after their round caps.
+// Space between neighbouring segmented arcs along their centreline.
 static constexpr double kTileArcGapMin = 1.0;
+// Room for ring shapes past the ring area: a pace tick reaches 1.5 DIPs past the outer edge,
+// which lies 0.5 DIPs inside the area, and its square corners a little further.
+static constexpr double kTileRingOverflow = 2.0;
 
 struct TileArc {
     double start;  // Degrees: 0 = right, positive = clockwise.
@@ -131,7 +134,6 @@ struct TileRingGeometry {
     double gap = 0;          // Concentric: space between rings. Segmented: space between arcs.
     double radius = 0;       // Centreline radius of the outermost arc or ring.
     double hole = 0;         // Free centre radius, inside the innermost stroke.
-    double dot = 0;          // Pace dot radius; its outline straddles it.
     double logo = 0;         // Logo side without a badge.
     double badge = 0;        // Badge height.
     double badgeWidth = 0;
@@ -161,7 +163,7 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
         }
         used = count * stroke + (count - 1) * g.gap;
     } else if (count > 0) {
-        // Round caps reach into the angular gaps between arcs.
+        // Arcs reach half a stroke into the angular gaps between them at either end.
         double gapAngle = (count == 1 ? 0.0 : count == 4 ? 20.0 : 30.0) * std::numbers::pi / 180;
         if (gapAngle > 0) {
             stroke = std::max(std::min(stroke, (gapAngle * edge - kTileArcGapMin) /
@@ -174,7 +176,6 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
     g.stroke = stroke;
     g.radius = edge - stroke / 2;
     g.hole = edge - used;
-    g.dot = std::clamp(stroke * 0.57, 1.15, 1.9);
     g.logo = std::min(size * 0.44, 2 * (g.hole - 1.2));
     // Badge: a circle, or a pill for two characters, centred just inside the ring's lower-right
     // edge and kept inside the ring area.
@@ -185,6 +186,82 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
     g.badgeLeft = std::min(badgeCenter - g.badgeWidth / 2, size - g.badgeWidth);
     g.badgeTop = std::min(badgeCenter - g.badge / 2, size - g.badge);
     return g;
+}
+
+// A ring tile shape: closed figures of lines and circular arcs, filled even-odd, in DIPs from
+// the ring area's top-left corner. No arc turns more than 180 degrees.
+struct TileOutlineSegment {
+    double x = 0, y = 0;    // End point.
+    double radius = 0;      // Arc radius; 0 for a line.
+    bool clockwise = true;  // On screen, y down.
+};
+
+struct TileOutlineFigure {
+    double x = 0, y = 0;    // Start point.
+    std::vector<TileOutlineSegment> segments;
+};
+
+using TileOutline = std::vector<TileOutlineFigure>;
+
+// The band between radii `inner` and `outer` around (center, center), clockwise from `from` to
+// `to` degrees (0 = right), its corners at either end rounded by `fromCorner` and `toCorner`; a
+// full annulus from 360 degrees on. Corners too wide for the span shrink together.
+static TileOutline TileSectorOutline(double center, double outer, double inner, double from,
+                                     double to, double fromCorner, double toCorner) {
+    constexpr double kDegrees = 180 / std::numbers::pi;
+    auto at = [&](double radius, double degrees, double arc = 0, bool clockwise = true) {
+        return TileOutlineSegment{center + radius * std::cos(degrees / kDegrees),
+                                  center + radius * std::sin(degrees / kDegrees), arc, clockwise};
+    };
+    // Edges in two halves, so none turns more than 180 degrees.
+    auto edge = [&](std::vector<TileOutlineSegment>& segments, double radius, double start,
+                    double end) {
+        segments.push_back(at(radius, (start + end) / 2, radius, end > start));
+        segments.push_back(at(radius, end, radius, end > start));
+    };
+    TileOutline outline;
+    if (to - from >= 360) {
+        for (double radius : {outer, inner}) {
+            TileOutlineSegment start = at(radius, 0);
+            outline.push_back({start.x, start.y, {}});
+            edge(outline.back().segments, radius, 0, 360);
+        }
+        return outline;
+    }
+
+    // A corner of radius r touches its circular edge this many degrees from its end, and its
+    // radial edge this far from the centre. Corners reach furthest along the inner edge.
+    auto outerReach = [&](double r) { return std::asin(r / (outer - r)) * kDegrees; };
+    auto innerReach = [&](double r) { return std::asin(r / (inner + r)) * kDegrees; };
+    auto outerRadial = [&](double r) { return std::sqrt((outer - r) * (outer - r) - r * r); };
+    auto innerRadial = [&](double r) { return std::sqrt((inner + r) * (inner + r) - r * r); };
+    if (innerReach(fromCorner) + innerReach(toCorner) > to - from) {
+        double fits = 0, wide = 1;
+        for (int i = 0; i < 30; i++) {
+            double mid = (fits + wide) / 2;
+            bool fit = innerReach(fromCorner * mid) + innerReach(toCorner * mid) <= to - from;
+            (fit ? fits : wide) = mid;
+        }
+        fromCorner *= fits;
+        toCorner *= fits;
+    }
+    TileOutlineSegment start = at(outerRadial(fromCorner), from);
+    TileOutlineFigure figure{start.x, start.y, {}};
+    std::vector<TileOutlineSegment>& segments = figure.segments;
+    auto corner = [&](double r, double radius, double degrees) {
+        if (r > 0) segments.push_back(at(radius, degrees, r));
+    };
+    double outerFrom = from + outerReach(fromCorner), outerTo = to - outerReach(toCorner);
+    double innerFrom = from + innerReach(fromCorner), innerTo = to - innerReach(toCorner);
+    corner(fromCorner, outer, outerFrom);
+    edge(segments, outer, outerFrom, outerTo);
+    corner(toCorner, outerRadial(toCorner), to);
+    segments.push_back(at(innerRadial(toCorner), to));
+    corner(toCorner, inner, innerTo);
+    edge(segments, inner, innerTo, innerFrom);
+    corner(fromCorner, innerRadial(fromCorner), from);
+    outline.push_back(std::move(figure));
+    return outline;
 }
 
 // Tile chrome for the taskbar theme. Logo and text inherit the taskbar's text color instead.
@@ -446,6 +523,17 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     return g;
 }
 
+// Logo + bars mini bars: the bars' corners and full-line pace tick over a full track, at the
+// mini bars' thickness and gap.
+static BarGeometry MiniBarGeometryFor(const MeterDisplay& display) {
+    MeterDisplay mini = display;
+    mini.barThickness = (int)kMiniBarThickness;
+    mini.barGap = (int)kMiniBarGap;
+    mini.barStyle = BarStyle::Track;
+    mini.paceTickStyle = PaceTickStyle::Line;
+    return BarGeometryFor(mini);
+}
+
 // A tile's identity text. Logo identities show a number badge when several configured accounts
 // share the provider; text identities, and logos that fail to load, show `text`.
 struct TileIdentityText {
@@ -499,11 +587,13 @@ struct QuotaMeter {
     uint32_t color = 0;        // Usage color: follows used % in either bar mode.
     bool paceVisible = false;  // Pace mark shown, in layouts that draw one.
 
+    // The fill's corner radius toward 100%, in bars, mini bars, headline segments and ring arcs;
+    // its start corners are the track's. Over a full track the fill ends in a straight cut until
+    // it comes within a corner's radius of the track's end.
+    double fillEndRadius = 0;
+
     // Bars, in DIPs along the bar.
     int fillPx = 0;
-    // The fill's corner radius toward 100%; its start corners take BarGeometry::radius. Over a
-    // full track the fill ends in a straight cut until it reaches the track's rounded end.
-    double fillEndRadius = 0;
     int pacePx = 0;            // Pace tick's start.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
@@ -516,10 +606,16 @@ struct QuotaMeter {
     int paceUnits = 0;
     double fillLength = 0;     // Mini bar or headline segment fill.
     double paceOffset = 0;     // Mini bar pace tick's start.
-    TileArc arc{};             // Ring arc and its centreline radius.
+    // Rings: the drawn arc and its centreline radius. Partial arcs reach half a stroke past
+    // their slot's ends along the centreline.
+    TileArc arc{};
     double radius = 0;
     double fillSweep = 0;      // Ring fill, in degrees from the arc's start.
-    double paceAngle = 0;      // Ring pace dot centre, in degrees.
+    double paceAngle = 0;      // Ring pace tick, in degrees; clear of a partial arc's corners.
+    TileOutline track;
+    TileOutline fill;          // Empty without usage.
+    TileOutline paceHalo;      // Empty while the pace mark is hidden.
+    TileOutline paceCore;
 };
 
 struct AccountMeters {
@@ -604,6 +700,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     };
 
     BarGeometry bar = BarGeometryFor(display);
+    BarGeometry miniBar = MiniBarGeometryFor(display);
     int position = 0;
     for (int w = 0; w < kQuotaBarCount; w++) {
         const WindowUsage& wu = *usage[w];
@@ -668,14 +765,23 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         if (!(meters.barMask & (1 << w))) continue;
         double shown = tileShown(wu.pct);
         double fill = shown / 100;
+        const TileRingGeometry& geometry = meters.ring;
+        bool fullRing = false;
         if (ring) {
-            m.arc = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
-            m.radius = meters.ring.radius -
-                       (concentric ? position * (meters.ring.stroke + meters.ring.gap) : 0.0);
+            TileArc slot = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
+            m.radius = geometry.radius -
+                       (concentric ? position * (geometry.stroke + geometry.gap) : 0.0);
+            // Partial arcs reach half a stroke past their slot at both ends, along the
+            // centreline.
+            fullRing = std::abs(slot.sweep) >= 360;
+            double grow = fullRing ? 0.0 :
+                geometry.stroke / 2 / m.radius * 180 / std::numbers::pi;
+            double direction = slot.sweep < 0 ? -1 : 1;
+            m.arc = {slot.start - direction * grow, slot.sweep + 2 * direction * grow};
             // Any usage fills at least 5 degrees.
             if (shown > 0) fill = std::max(fill, 5.0 / std::abs(m.arc.sweep));
         }
-        position++;
+        int slotPosition = position++;
         m.fillUnits = shown > 0 ? std::max(1, (int)std::lround(fill * 1000)) : 0;
         if (m.paceVisible) {
             double pace = remainingMode ? remainingFraction : 1.0 - remainingFraction;
@@ -683,14 +789,68 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
         double pace = m.paceUnits / 1000.0;
         if (ring) {
+            // Annular sectors with stroke / 4 corners at a partial arc's ends; full rings have
+            // none. Fills start with the track's corners and end in a radial cut at their value.
+            double center = geometry.size / 2;
+            double outer = m.radius + geometry.stroke / 2, inner = m.radius - geometry.stroke / 2;
+            double corner = fullRing ? 0.0 : geometry.stroke / 4;
+            double end = m.arc.start + m.arc.sweep;
+            double low = std::min(m.arc.start, end), high = std::max(m.arc.start, end);
+            m.track = TileSectorOutline(center, outer, inner, low, high, corner, corner);
             m.fillSweep = m.arc.sweep * fill;
+            m.fillEndRadius = std::max(0.0, corner - std::abs(m.arc.sweep - m.fillSweep) *
+                                                         std::numbers::pi / 180 * m.radius);
+            if (m.fillUnits) {
+                double fillEnd = m.arc.start + m.fillSweep;
+                m.fill = m.arc.sweep > 0 ?
+                    TileSectorOutline(center, outer, inner, m.arc.start, fillEnd, corner,
+                                      m.fillEndRadius) :
+                    TileSectorOutline(center, outer, inner, fillEnd, m.arc.start, m.fillEndRadius,
+                                      corner);
+            }
             m.paceAngle = m.arc.start + m.arc.sweep * pace;
+            if (m.paceVisible) {
+                // A radial tick: a 2 DIP core over a 3.5 DIP halo, square ended, kept clear of a
+                // partial arc's corners. It reaches 1.5 DIPs past the ring, at most half the gap
+                // toward a neighbouring ring, and the core stops half a DIP short of the halo.
+                static constexpr double kHalo = 3.5, kCore = 2, kOverhang = 1.5, kCoreInset = 0.5;
+                if (!fullRing) {
+                    double pad = (corner + kHalo / 2) / m.radius * 180 / std::numbers::pi;
+                    m.paceAngle = std::max(low + pad, std::min(m.paceAngle, high - pad));
+                }
+                double between = std::min(kOverhang, geometry.gap / 2);
+                double outside = concentric && slotPosition > 0 ? between : kOverhang;
+                double inside = concentric && slotPosition < count - 1 ? between : kOverhang;
+                double radians = m.paceAngle * std::numbers::pi / 180;
+                double alongX = std::cos(radians), alongY = std::sin(radians);
+                // From `from` to `to` DIPs out from the centre, `width` across.
+                auto tick = [&](double from, double to, double width) {
+                    double acrossX = -alongY * width / 2, acrossY = alongX * width / 2;
+                    auto point = [&](double distance, double side) {
+                        return TileOutlineSegment{center + alongX * distance + side * acrossX,
+                                                  center + alongY * distance + side * acrossY};
+                    };
+                    TileOutlineSegment start = point(from, 1);
+                    return TileOutline{
+                        {start.x, start.y, {point(to, 1), point(to, -1), point(from, -1)}}};
+                };
+                m.paceHalo = tick(inner - inside, outer + outside, kHalo);
+                m.paceCore = tick(inner - inside + kCoreInset, outer + outside - kCoreInset, kCore);
+            }
         } else {
+            // Corners a quarter of the thickness; the fill cut flat until the track's end. Any
+            // usage fills at least 2 DIPs, as on the bars.
             double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
-            double minimum = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
-            m.fillLength = m.fillUnits ? std::clamp(length * fill, minimum, length) : 0;
-            // Line tick, 3.5 DIPs wide, centred on the pace.
-            m.paceOffset = kMiniBarLength * pace - 1.75;
+            double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
+            m.fillLength = m.fillUnits ? std::clamp(length * fill, 2.0, length) : 0;
+            m.fillEndRadius = std::max(0.0, thickness / 4 - (length - m.fillLength));
+            if (miniBars) {
+                // The bars' line tick, centred on the pace, kept inside the bar's rounded ends.
+                double radius = std::clamp(miniBar.radius, miniBar.paceLength / 2,
+                                           (length - miniBar.paceLength) / 2);
+                m.paceOffset = std::clamp(length * pace, radius, length - radius) -
+                               miniBar.paceLength / 2;
+            }
         }
     }
 

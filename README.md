@@ -54,7 +54,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); ring size and thickness (ring styles)
   - label position (left, right, top, bottom, or hidden), label font size, and label gap
   - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size
-  - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on bars on a light taskbar)
+  - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on a light taskbar)
   - account margin and tray gap
   - **Show on taskbar**: replaces the taskbar accounts with sample accounts while it is on and the window is open
 - **Display**, with the same preview:

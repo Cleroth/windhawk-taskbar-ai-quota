@@ -77,10 +77,12 @@ struct TileUiRefs {
     // Logo + headline: the most-used quota's number and window key.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
-    // Ring fills and pace dots per quota slot.
+    // Ring fills and pace ticks (halo and core) per quota slot.
     std::array<wuxs::Path, kQuotaBarCount> arcs{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
-    std::array<wuxs::Path, kQuotaBarCount> dots{
+    std::array<wuxs::Path, kQuotaBarCount> paceHalos{
+        wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
+    std::array<wuxs::Path, kQuotaBarCount> paceCores{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
 };
 

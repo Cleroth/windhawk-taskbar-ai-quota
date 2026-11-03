@@ -157,21 +157,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                     if (m.color != ap.fillColor[w]) {
                         if (ui.fills[w]) {
-                            // Shaded across the bar: the highlight at its top (vertical: left)
-                            // edge, the usage color from 60% on.
-                            LinearGradientBrush shade;
-                            shade.StartPoint({0.f, 0.f});
-                            shade.EndPoint(verticalBars ? winrt::Windows::Foundation::Point{1.f, 0.f} :
-                                                          winrt::Windows::Foundation::Point{0.f, 1.f});
-                            GradientStop top;
-                            top.Color(ArgbColor(UsageHighlight(m.color)));
-                            top.Offset(0.0);
-                            GradientStop body;
-                            body.Color(ArgbColor(m.color));
-                            body.Offset(0.6);
-                            shade.GradientStops().Append(top);
-                            shade.GradientStops().Append(body);
-                            ui.fills[w].Background(shade);
+                            ui.fills[w].Background(UsageFillBrush(m.color, verticalBars));
                         }
                         ap.fillColor[w] = m.color;
                     }

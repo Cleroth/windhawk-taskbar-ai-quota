@@ -11,11 +11,11 @@
 
 // One draw operation, in strip DIPs. Colors are ARGB.
 struct SettingsPreviewOp {
-    enum class Kind : uint8_t { Rect, Arc, Dot, Polygon, Text, Logo };
+    enum class Kind : uint8_t { Rect, Shape, Polygon, Text, Logo };
     Kind kind = Kind::Rect;
     int hover = -1;                     // Drawn only while this column is hovered; -1: always
-    D2D1_RECT_F rect{};                 // Rect, Dot bounds, Text box (aligns in its width), Logo box
-    float radius = 0;                   // Rect corners; Arc centerline radius
+    D2D1_RECT_F rect{};                 // Rect, Text box (aligns in its width), Logo box
+    float radius = 0;                   // Rect corners
     // Rect corners one by one instead (top-left, top-right, bottom-right, bottom-left), scaled
     // down together where they don't fit
     std::optional<std::array<float, 4>> corners;
@@ -23,12 +23,12 @@ struct SettingsPreviewOp {
     // 0: flat
     uint32_t shade = 0;
     bool shadeLeft = false;
-    float stroke = 0;                   // Rect border (inside), Arc width, Dot outline
-    uint32_t color = 0;                 // Fill, arc or text color
-    uint32_t outline = 0;               // Rect border and Dot outline
+    float stroke = 0;                   // Rect border (inside)
+    uint32_t color = 0;                 // Fill or text color
+    uint32_t outline = 0;               // Rect border
     float opacity = 1;
-    D2D1_POINT_2F center{};             // Arc
-    float start = 0, sweep = 0;         // Arc: degrees clockwise from the right
+    TileOutline shape;                  // Shape: a ring tile shape, filled, moved to `origin`
+    D2D1_POINT_2F origin{};
     std::vector<D2D1_POINT_2F> points;  // Polygon
     std::wstring text;
     UiTextStyle style;
@@ -71,9 +71,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     strip.height = H;
     strip.rightMargin = float(std::clamp(settings.rightMargin, 0, 500));
     const TilePalette palette = TilePaletteFor(light);
-    const uint32_t pace = 0xFF000000 | uint32_t(GetRValue(display.paceTickColor)) << 16 |
-                          uint32_t(GetGValue(display.paceTickColor)) << 8 | GetBValue(display.paceTickColor);
-    const PaceMarkColors barPace = PaceMarkColorsFor(display.paceTickColor, light);
+    const PaceMarkColors pace = PaceMarkColorsFor(display.paceTickColor, light);
 
     // Text as XAML lays it out: natural line height, width rounded up to device pixels.
     struct Measured {
@@ -248,7 +246,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         for (int layer = 0; layer < 2; layer++) {
                             Op op;
                             op.kind = Op::Kind::Polygon;
-                            op.color = layer ? barPace.core : barPace.halo;
+                            op.color = layer ? pace.core : pace.halo;
                             for (auto [a, c] : geometry.caret[layer]) {
                                 op.points.push_back(vertical ? D2D1_POINT_2F{at.x + float(c), at.y + float(a)} :
                                                                D2D1_POINT_2F{at.x + float(a), at.y + float(c)});
@@ -258,14 +256,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     } else {
                         float boxWidth = vertical ? cross : along, boxHeight = vertical ? along : cross;
                         rect(ops, {at.x, at.y, at.x + boxWidth, at.y + boxHeight}, geometry.paceRadius,
-                             barPace.halo);
+                             pace.halo);
                         // The core centred along the tick, at its offset across it.
                         float coreWidth = vertical ? geometry.coreCrossSize : geometry.coreLength;
                         float coreHeight = vertical ? geometry.coreLength : geometry.coreCrossSize;
                         float offset = float(geometry.coreCrossOffset);
                         float cx = vertical ? at.x + offset : at.x + (boxWidth - coreWidth) / 2;
                         float cy = vertical ? at.y + (boxHeight - coreHeight) / 2 : at.y + offset;
-                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, barPace.core);
+                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, pace.core);
                     }
                 }
                 if (keys) {
@@ -316,38 +314,28 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 const TileRingGeometry& geometry = meters.ring;
                 const float S = float(geometry.size);
                 const float faceLeft = x0 + padLeft, faceTop = top + (T - S) / 2;
-                const D2D1_POINT_2F center{faceLeft + S / 2, faceTop + S / 2};
                 width = padLeft + S + padRight;
-                // Tracks, then fills, then pace dots on top.
+                // Tracks, then flat fills, then pace ticks (halo, then core) on top.
+                auto shape = [&](const TileOutline& outline, uint32_t color) {
+                    Op op;
+                    op.kind = Op::Kind::Shape;
+                    op.shape = outline;
+                    op.origin = {faceLeft, faceTop};
+                    op.color = color;
+                    add(ops, std::move(op));
+                };
                 for (int pass = 0; pass < 3; pass++) {
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         const QuotaMeter& q = meters.quotas[w];
                         if (!(meters.barMask & (1 << w))) continue;
-                        if (pass == 2) {
-                            if (!display.showPaceTicks || !q.paceVisible) continue;
-                            double radians = q.paceAngle * std::numbers::pi / 180;
-                            float px = center.x + float(q.radius * std::cos(radians));
-                            float py = center.y + float(q.radius * std::sin(radians));
-                            float dot = float(geometry.dot);
-                            Op op;
-                            op.kind = Op::Kind::Dot;
-                            op.rect = {px - dot, py - dot, px + dot, py + dot};
-                            op.color = pace;
-                            op.outline = 0x8C000000;
-                            op.stroke = 0.8f;
-                            add(ops, std::move(op));
-                            continue;
+                        if (pass == 0) {
+                            shape(q.track, palette.track);
+                        } else if (pass == 1 && q.fillUnits) {
+                            shape(q.fill, q.color);
+                        } else if (pass == 2 && display.showPaceTicks && q.paceVisible) {
+                            shape(q.paceHalo, pace.halo);
+                            shape(q.paceCore, pace.core);
                         }
-                        if (pass == 1 && !q.fillUnits) continue;
-                        Op op;
-                        op.kind = Op::Kind::Arc;
-                        op.center = center;
-                        op.radius = float(q.radius);
-                        op.stroke = float(geometry.stroke);
-                        op.start = float(q.arc.start);
-                        op.sweep = float(pass ? q.fillSweep : q.arc.sweep);
-                        op.color = pass ? q.color : palette.track;
-                        add(ops, std::move(op));
                     }
                 }
                 // Identity, sized to the hole; with a badge the logo shifts up-left by a DIP.
@@ -405,23 +393,39 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
                 float metersLeft = idLeft + idWidth + 6;
                 float content = 0;
+                // A mini bar or headline segment: corners a quarter of its thickness, its fill cut
+                // flat toward the end and shaded like the bars'.
+                auto meterBar = [&](const QuotaMeter& q, float left, float y, float length, float thick) {
+                    rect(ops, {left, y, left + length, y + thick}, thick / 4, palette.track);
+                    if (!q.fillUnits) return;
+                    Op fill;
+                    fill.rect = {left, y, left + float(q.fillLength), y + thick};
+                    float start = thick / 4, end = float(q.fillEndRadius);
+                    fill.corners = std::array<float, 4>{start, end, end, start};
+                    fill.color = q.color;
+                    fill.shade = UsageHighlight(q.color);
+                    add(ops, std::move(fill));
+                };
                 if (miniBars) {
-                    // Bars 38 x 4 DIP, 3 DIP apart; pace: a line tick with a dark outline,
-                    // overhanging the bar by 2 DIPs.
+                    // Bars 38 x 4 DIP, 3 DIP apart; pace: the bars' line tick, past the bar by its
+                    // overhang, the core a pixel short of the halo at either end.
+                    const BarGeometry tick = MiniBarGeometryFor(display);
                     float barsHeight = count ? count * kMiniBarThickness + (count - 1) * kMiniBarGap : 0;
                     float y = top + (T - float(barsHeight)) / 2;
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         const QuotaMeter& q = meters.quotas[w];
                         if (!(meters.barMask & (1 << w))) continue;
                         float left = metersLeft, thick = float(kMiniBarThickness);
-                        rect(ops, {left, y, left + float(kMiniBarLength), y + thick}, thick / 2, palette.track);
-                        if (q.fillUnits) {
-                            rect(ops, {left, y, left + float(q.fillLength), y + thick}, thick / 2, q.color);
-                        }
+                        meterBar(q, left, y, float(kMiniBarLength), thick);
                         if (display.showPaceTicks && q.paceVisible) {
-                            float tick = left + float(q.paceOffset);
-                            rect(ops, {tick, y - 2, tick + 3.5f, y + thick + 2}, 1.5f, 0x8C000000);
-                            rect(ops, {tick + 0.75f, y - 1.25f, tick + 2.75f, y + thick + 1.25f}, 1, pace);
+                            float tickLeft = left + float(q.paceOffset);
+                            float tickTop = y + (thick - float(tick.paceCrossSize)) / 2;
+                            rect(ops, {tickLeft, tickTop, tickLeft + float(tick.paceLength),
+                                       tickTop + float(tick.paceCrossSize)}, 0, pace.halo);
+                            float coreLeft = tickLeft + float(tick.paceLength - tick.coreLength) / 2;
+                            float coreTop = tickTop + float(tick.coreCrossOffset);
+                            rect(ops, {coreLeft, coreTop, coreLeft + float(tick.coreLength),
+                                       coreTop + float(tick.coreCrossSize)}, 0, pace.core);
                         }
                         y += thick + float(kMiniBarGap);
                     }
@@ -446,15 +450,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                               0.6f, true);
                     }
                     float left = metersLeft, y = panelTop + rowHeight + 3;
-                    float thick = float(kHeadlineSegmentThickness);
                     for (int w = 0; w < kQuotaBarCount; w++) {
-                        const QuotaMeter& q = meters.quotas[w];
                         if (!(meters.barMask & (1 << w))) continue;
-                        rect(ops, {left, y, left + float(kHeadlineSegmentLength), y + thick}, thick / 2,
-                             palette.track);
-                        if (q.fillUnits) {
-                            rect(ops, {left, y, left + float(q.fillLength), y + thick}, thick / 2, q.color);
-                        }
+                        meterBar(meters.quotas[w], left, y, float(kHeadlineSegmentLength),
+                                 float(kHeadlineSegmentThickness));
                         left += float(kHeadlineSegmentLength) + 2;
                     }
                     content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
@@ -598,29 +597,34 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     }
                     break;
                 }
-                case Op::Kind::Arc:
+                case Op::Kind::Shape:
                 case Op::Kind::Polygon: {
-                    // Arcs in two halves, so a full circle draws too.
                     winrt::com_ptr<ID2D1PathGeometry> path;
                     winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
                     winrt::com_ptr<ID2D1GeometrySink> sink;
                     winrt::check_hresult(path->Open(sink.put()));
-                    auto point = [&](float degrees) {
-                        double radians = degrees * std::numbers::pi / 180;
-                        return D2D1::Point2F(op.center.x + float(op.radius * std::cos(radians)),
-                                             op.center.y + float(op.radius * std::sin(radians)));
-                    };
-                    if (op.kind == Op::Kind::Arc) {
-                        sink->BeginFigure(point(op.start), D2D1_FIGURE_BEGIN_HOLLOW);
-                        for (int half = 1; half <= 2; half++) {
-                            D2D1_ARC_SEGMENT arc{point(op.start + op.sweep * float(half) / 2),
-                                                 {op.radius, op.radius}, 0,
-                                                 op.sweep >= 0 ? D2D1_SWEEP_DIRECTION_CLOCKWISE :
-                                                                 D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
-                                                 D2D1_ARC_SIZE_SMALL};
-                            sink->AddArc(&arc);
+                    if (op.kind == Op::Kind::Shape) {
+                        // As XAML's PathGeometry draws it: filled even-odd (the sink's default),
+                        // not snapped.
+                        auto point = [&](double x, double y) {
+                            return D2D1::Point2F(op.origin.x + float(x), op.origin.y + float(y));
+                        };
+                        for (const TileOutlineFigure& figure : op.shape) {
+                            sink->BeginFigure(point(figure.x, figure.y), D2D1_FIGURE_BEGIN_FILLED);
+                            for (const TileOutlineSegment& segment : figure.segments) {
+                                if (segment.radius <= 0) {
+                                    sink->AddLine(point(segment.x, segment.y));
+                                    continue;
+                                }
+                                D2D1_ARC_SEGMENT arc{point(segment.x, segment.y),
+                                                     {float(segment.radius), float(segment.radius)}, 0,
+                                                     segment.clockwise ? D2D1_SWEEP_DIRECTION_CLOCKWISE :
+                                                                         D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+                                                     D2D1_ARC_SIZE_SMALL};
+                                sink->AddArc(&arc);
+                            }
+                            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                         }
-                        sink->EndFigure(D2D1_FIGURE_END_OPEN);
                     } else if (!op.points.empty()) {
                         // On device pixels, like XAML's layout rounding of the tick and its
                         // pixel-sized parts.
@@ -632,16 +636,7 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                     }
                     winrt::check_hresult(sink->Close());
-                    ID2D1SolidColorBrush* brush = UiBrush(target, cache, color(op.color, op.opacity));
-                    if (op.kind == Op::Kind::Arc) target->DrawGeometry(path.get(), brush, op.stroke, g.roundCaps.get());
-                    else target->FillGeometry(path.get(), brush, nullptr);
-                    break;
-                }
-                case Op::Kind::Dot: {
-                    D2D1_ELLIPSE dot{{(r.left + r.right) / 2, (r.top + r.bottom) / 2}, (r.right - r.left) / 2,
-                                     (r.bottom - r.top) / 2};
-                    target->FillEllipse(&dot, UiBrush(target, cache, color(op.color, op.opacity)));
-                    target->DrawEllipse(&dot, UiBrush(target, cache, color(op.outline, op.opacity)), op.stroke);
+                    target->FillGeometry(path.get(), UiBrush(target, cache, color(op.color, op.opacity)), nullptr);
                     break;
                 }
                 case Op::Kind::Text: {

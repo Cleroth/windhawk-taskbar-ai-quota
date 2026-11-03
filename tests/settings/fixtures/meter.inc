@@ -438,18 +438,35 @@ static void RunTileTests() {
         auto mini = [](double pct, const MeterDisplay& d = Display()) {
             return First({pct, 0, 0}, d, BarLayout::LogoBars).quotas[0];
         };
+        // Any usage fills at least 2 DIPs, as on the bars.
         CHECK(mini(50).fillUnits == 500); CHECK_NEAR(mini(50).fillLength, 19);
-        CHECK(mini(1).fillUnits == 10); CHECK_NEAR(mini(1).fillLength, 4);
+        CHECK(mini(1).fillUnits == 10); CHECK_NEAR(mini(1).fillLength, 2);
+        CHECK(mini(10).fillUnits == 100); CHECK_NEAR(mini(10).fillLength, 3.8);
         CHECK(mini(0).fillUnits == 0); CHECK_NEAR(mini(0).fillLength, 0);
         CHECK(mini(120).fillUnits == 1000); CHECK_NEAR(mini(120).fillLength, 38);
-        CHECK(mini(0.04).fillUnits == 1); CHECK_NEAR(mini(0.04).fillLength, 4);
+        CHECK(mini(0.04).fillUnits == 1); CHECK_NEAR(mini(0.04).fillLength, 2);
         MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
         CHECK(mini(30, remaining).fillUnits == 700); CHECK_NEAR(mini(30, remaining).fillLength, 26.6);
         auto segment = [](double pct) {
-            return First({pct, 0, 0}, Display(), BarLayout::LogoHeadline).quotas[0].fillLength;
+            return First({pct, 0, 0}, Display(), BarLayout::LogoHeadline).quotas[0];
         };
-        CHECK_NEAR(segment(50), 4.5); CHECK_NEAR(segment(10), 3);
-        CHECK_NEAR(segment(100), 9); CHECK_NEAR(segment(0), 0);
+        CHECK_NEAR(segment(50).fillLength, 4.5); CHECK_NEAR(segment(10).fillLength, 2);
+        CHECK_NEAR(segment(25).fillLength, 2.25);
+        CHECK_NEAR(segment(100).fillLength, 9); CHECK_NEAR(segment(0).fillLength, 0);
+    });
+
+    Run("mini bar and headline fills: cut flat until a quarter-thickness corner from the end", [] {
+        auto mini = [](double pct) { return First({pct, 0, 0}, Display(), BarLayout::LogoBars).quotas[0]; };
+        auto segment = [](double pct) {
+            return First({pct, 0, 0}, Display(), BarLayout::LogoHeadline).quotas[0];
+        };
+        // 38 x 4 mini bars: 1 DIP corners. 37.62 DIPs leave 0.38 of the corner's DIP to the end.
+        CHECK_NEAR(mini(120).fillEndRadius, 1); CHECK_NEAR(mini(100).fillEndRadius, 1);
+        CHECK_NEAR(mini(99).fillEndRadius, 1 - 0.38); CHECK_NEAR(mini(97).fillEndRadius, 0);
+        CHECK_NEAR(mini(50).fillEndRadius, 0); CHECK_NEAR(mini(1).fillEndRadius, 0);
+        // 9 x 3 headline segments: 0.75 DIP corners; 95% leaves 0.45 DIPs.
+        CHECK_NEAR(segment(100).fillEndRadius, 0.75); CHECK_NEAR(segment(95).fillEndRadius, 0.3);
+        CHECK_NEAR(segment(50).fillEndRadius, 0); CHECK_NEAR(segment(10).fillEndRadius, 0);
     });
 
     Run("ring fills keep a 5-degree minimum per arc sweep", [] {
@@ -463,19 +480,24 @@ static void RunTileTests() {
         CHECK(single(0.5, BarLayout::ConcentricRings).fillUnits == 14);
         MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
         CHECK(single(99.9, BarLayout::SegmentedRing, remaining).fillUnits == 14);
+        // Two arcs of 150 degrees, each grown by 2 x 6.14 (below): 5 of 162.28 degrees.
         AccountMeters two = AccountMeterState(Display(), BarLayout::SegmentedRing,
             Account(L"anthropic", L"A", {true, true, false, false}), Fresh({1, 1, -1, -1}), 0, 0);
-        CHECK(two.quotas[0].fillUnits == 33); CHECK_NEAR(two.quotas[0].fillSweep, 5);
-        CHECK(two.quotas[1].fillUnits == 33); CHECK_NEAR(two.quotas[1].fillSweep, -5);
+        CHECK(two.quotas[0].fillUnits == 31); CHECK_NEAR(two.quotas[0].fillSweep, 5);
+        CHECK(two.quotas[1].fillUnits == 31); CHECK_NEAR(two.quotas[1].fillSweep, -5);
     });
 
-    Run("ring arcs follow mask positions; concentric radii step inward", [] {
+    Run("ring arcs follow mask positions, segmented ones grown half a stroke at each end", [] {
         auto arcs = [](BarLayout layout, std::array<bool, kQuotaBarCount> bars) {
             return AccountMeterState(Display(), layout, Account(L"anthropic", L"A", bars),
                                      Fresh({10, 20, 30, 40}), 0, 0);
         };
-        auto arc = [](const QuotaMeter& m, double start, double sweep) {
-            CHECK_NEAR(m.arc.start, start); CHECK_NEAR(m.arc.sweep, sweep);
+        // Slots grow at both ends by half the 3 DIP stroke along the 14 DIP centreline.
+        const double grow = 1.5 / 14 * 180 / std::numbers::pi;
+        auto arc = [&](const QuotaMeter& m, double start, double sweep) {
+            double direction = sweep < 0 ? -1 : 1;
+            CHECK_NEAR(m.arc.start, start - direction * grow);
+            CHECK_NEAR(m.arc.sweep, sweep + 2 * direction * grow);
         };
         AccountMeters gap = arcs(BarLayout::SegmentedRing, {true, false, false, true});
         arc(gap.quotas[0], 195, 150); arc(gap.quotas[3], 165, -150);
@@ -484,10 +506,139 @@ static void RunTileTests() {
         AccountMeters four = arcs(BarLayout::SegmentedRing, {true, true, true, true});
         arc(four.quotas[0], 190, 70); arc(four.quotas[1], 280, 70);
         arc(four.quotas[2], 10, 70); arc(four.quotas[3], 100, 70);
-        CHECK_NEAR(arcs(BarLayout::SegmentedRing, {true, false, false, false}).quotas[0].radius, 14);
+        // Full rings don't grow.
+        AccountMeters single = arcs(BarLayout::SegmentedRing, {true, false, false, false});
+        CHECK_NEAR(single.quotas[0].radius, 14);
+        CHECK_NEAR(single.quotas[0].arc.start, 270); CHECK_NEAR(single.quotas[0].arc.sweep, 360);
         AccountMeters rings = arcs(BarLayout::ConcentricRings, {true, true, false, false});
-        arc(rings.quotas[0], 270, 360); arc(rings.quotas[1], 270, 360);
+        CHECK_NEAR(rings.quotas[0].arc.start, 270); CHECK_NEAR(rings.quotas[0].arc.sweep, 360);
+        CHECK_NEAR(rings.quotas[1].arc.start, 270); CHECK_NEAR(rings.quotas[1].arc.sweep, 360);
         CHECK_NEAR(rings.quotas[0].radius, 14.195); CHECK_NEAR(rings.quotas[1].radius, 10.295);
+    });
+
+    Run("segmented arcs keep the ring's gap between them along the centreline", [] {
+        auto pair = [](int thickness) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.ringThickness = thickness; }));
+            return AccountMeterState(d, BarLayout::SegmentedRing,
+                                     Account(L"anthropic", L"A", {true, true, false, false}),
+                                     Fresh({10, 20, -1, -1}), 0, 0);
+        };
+        for (int thickness : {1, 3, 6}) {
+            AccountMeters meters = pair(thickness);
+            const QuotaMeter& first = meters.quotas[0];   // Clockwise from the left.
+            const QuotaMeter& second = meters.quotas[1];  // Counterclockwise from the left.
+            // Degrees left between the first arc's end and the second's, at the top and bottom.
+            double top = (second.arc.start + second.arc.sweep + 360) - (first.arc.start + first.arc.sweep);
+            double bottom = first.arc.start - second.arc.start;
+            CHECK_NEAR(top * std::numbers::pi / 180 * first.radius, meters.ring.gap);
+            CHECK_NEAR(bottom * std::numbers::pi / 180 * first.radius, meters.ring.gap);
+        }
+        // 6 DIPs would close the 30 degree gaps: the stroke stops where a 1 DIP gap stays.
+        CHECK_NEAR(pair(6).ring.gap, 1);
+    });
+
+    Run("ring outline: annular sectors, square and rounded corners, full annuli", [] {
+        auto point = [](const auto& p, double x, double y) { CHECK_NEAR(p.x, x); CHECK_NEAR(p.y, y); };
+        auto arc = [](const TileOutlineSegment& s, double radius, bool clockwise) {
+            CHECK_NEAR(s.radius, radius); CHECK(s.clockwise == clockwise);
+        };
+        const double half = 1 / std::sqrt(2.0);
+        // Radii 10 and 6 around the origin, 0 to 90 degrees, square: the outer edge clockwise in
+        // two halves, the radial cut inward, the inner edge back in two halves.
+        TileOutline square = TileSectorOutline(0, 10, 6, 0, 90, 0, 0);
+        CHECK(square.size() == 1 && square[0].segments.size() == 5);
+        const std::vector<TileOutlineSegment>& s = square[0].segments;
+        point(square[0], 10, 0);
+        point(s[0], 10 * half, 10 * half); arc(s[0], 10, true);
+        point(s[1], 0, 10); arc(s[1], 10, true);
+        point(s[2], 0, 6); arc(s[2], 0, true);
+        point(s[3], 6 * half, 6 * half); arc(s[3], 6, false);
+        point(s[4], 6, 0); arc(s[4], 6, false);
+        // 1 DIP corners, each a clockwise arc tangent to both edges. Outer corners' circles sit 9
+        // out from the centre: they touch the radial edge sqrt(9^2 - 1) out and the outer edge
+        // 10 / 9 off the radial line. Inner ones sit 7 out: sqrt(7^2 - 1) and 6 / 7.
+        TileOutline round = TileSectorOutline(0, 10, 6, 0, 90, 1, 1);
+        CHECK(round.size() == 1 && round[0].segments.size() == 9);
+        const std::vector<TileOutlineSegment>& r = round[0].segments;
+        const double outerTouch = std::sqrt(100 - 100.0 / 81), innerTouch = std::sqrt(36 - 36.0 / 49);
+        point(round[0], std::sqrt(80.0), 0);
+        point(r[0], outerTouch, 10.0 / 9); arc(r[0], 1, true);
+        point(r[1], 10 * half, 10 * half); arc(r[1], 10, true);
+        point(r[2], 10.0 / 9, outerTouch); arc(r[2], 10, true);
+        point(r[3], 0, std::sqrt(80.0)); arc(r[3], 1, true);
+        point(r[4], 0, std::sqrt(48.0)); arc(r[4], 0, true);
+        point(r[5], 6.0 / 7, innerTouch); arc(r[5], 1, true);
+        point(r[6], 6 * half, 6 * half); arc(r[6], 6, false);
+        point(r[7], innerTouch, 6.0 / 7); arc(r[7], 6, false);
+        point(r[8], std::sqrt(48.0), 0); arc(r[8], 1, true);
+        // Offset by the centre; a rounded start with a square end has 7 segments.
+        TileOutline mixed = TileSectorOutline(16, 10, 6, 0, 90, 1, 0);
+        CHECK(mixed[0].segments.size() == 7);
+        point(mixed[0], 16 + std::sqrt(80.0), 16);
+        point(mixed[0].segments[2], 16, 26); point(mixed[0].segments[3], 16, 22);
+        // From 360 degrees on: an annulus, two circles each in two halves, corners ignored.
+        TileOutline annulus = TileSectorOutline(16, 15, 12, 270, 630, 1, 1);
+        CHECK(annulus.size() == 2);
+        for (int i = 0; i < 2; i++) {
+            double radius = i ? 12 : 15;
+            CHECK(annulus[i].segments.size() == 2);
+            point(annulus[i], 16 + radius, 16);
+            point(annulus[i].segments[0], 16 - radius, 16); arc(annulus[i].segments[0], radius, true);
+            point(annulus[i].segments[1], 16 + radius, 16); arc(annulus[i].segments[1], radius, true);
+        }
+    });
+
+    Run("ring outline: corners too wide for a short span shrink together", [] {
+        // 5 degrees: two corners of radius k reach 2.5 degrees each along the 6 DIP inner edge,
+        // k / (6 + k) = sin 2.5; one alone reaches all 5.
+        auto fit = [](double degrees) {
+            double s = std::sin(degrees * std::numbers::pi / 180);
+            return 6 * s / (1 - s);
+        };
+        TileOutline both = TileSectorOutline(0, 10, 6, 0, 5, 1, 1);
+        CHECK(both[0].segments.size() == 9);
+        CHECK_NEAR(both[0].segments[0].radius, fit(2.5)); CHECK_NEAR(both[0].segments[3].radius, fit(2.5));
+        TileOutline one = TileSectorOutline(0, 10, 6, 0, 5, 1, 0);
+        CHECK(one[0].segments.size() == 7);
+        CHECK_NEAR(one[0].segments[0].radius, fit(5)); CHECK_NEAR(one[0].segments[6].radius, fit(5));
+        // Corners that fit stay.
+        CHECK_NEAR(TileSectorOutline(0, 10, 6, 0, 20, 1, 1)[0].segments[0].radius, 1);
+    });
+
+    Run("ring fill: track corners at its start, a radial cut at its value, rounded only near the end", [] {
+        auto pair = [](double first, BarLayout layout = BarLayout::SegmentedRing,
+                       std::array<bool, kQuotaBarCount> bars = {true, true, false, false}) {
+            return AccountMeterState(Display(), layout, Account(L"anthropic", L"A", bars),
+                                     Fresh({first, 20, -1, -1}), 0, 0).quotas[0];
+        };
+        // Stroke 3 on a 14 DIP centreline: 0.75 DIP corners; the 150 degree slot grown by half
+        // the stroke at each end is 14 x 5 pi / 6 + 3 = 35 pi / 3 + 3 DIPs long.
+        const double length = 35 * std::numbers::pi / 3 + 3;
+        CHECK_NEAR(pair(100).fillEndRadius, 0.75);
+        CHECK_NEAR(pair(99).fillEndRadius, 0.75 - 0.01 * length);
+        CHECK_NEAR(pair(98).fillEndRadius, 0);
+        CHECK_NEAR(pair(50).fillEndRadius, 0);
+        // Half full: the cut is radial at the top (270 degrees), square, from the 15.5 DIP outer
+        // edge to the 12.5 DIP inner one; the start keeps the track's corners.
+        QuotaMeter half = pair(50);
+        CHECK_NEAR(half.arc.start + half.fillSweep, 270);
+        const std::vector<TileOutlineSegment>& cut = half.fill[0].segments;
+        CHECK(half.fill.size() == 1 && cut.size() == 7);
+        CHECK_NEAR(cut[0].radius, 0.75);
+        CHECK_NEAR(cut[2].x, 16); CHECK_NEAR(cut[2].y, 0.5);
+        CHECK_NEAR(cut[3].x, 16); CHECK_NEAR(cut[3].y, 3.5); CHECK_NEAR(cut[3].radius, 0);
+        CHECK_NEAR(cut[6].radius, 0.75);
+        // The track: rounded at both ends.
+        CHECK(half.track.size() == 1 && half.track[0].segments.size() == 9);
+        CHECK(pair(0).fill.empty() && pair(0).fillUnits == 0);
+        // Full rings: square ends at any value, a whole annulus at 100%; tracks are annuli.
+        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
+            QuotaMeter almost = pair(99, layout, {true, false, false, false});
+            CHECK_NEAR(almost.fillEndRadius, 0);
+            CHECK(almost.fill.size() == 1 && almost.fill[0].segments.size() == 5);
+            CHECK(pair(100, layout, {true, false, false, false}).fill.size() == 2);
+            CHECK(almost.track.size() == 2);
+        }
     });
 
     Run("tile pace: thousandths, then offsets and angles from them", [] {
@@ -496,13 +647,15 @@ static void RunTileTests() {
             CHECK(m.paceVisible);
             return m;
         };
-        CHECK(mini(13500000).paceUnits == 250); CHECK_NEAR(mini(13500000).paceOffset, 7.75);
-        CHECK(mini(kFiveHours).paceUnits == 0); CHECK_NEAR(mini(kFiveHours).paceOffset, -1.75);
-        CHECK(mini(0).paceUnits == 1000); CHECK_NEAR(mini(0).paceOffset, 36.25);
-        CHECK(mini(12000000).paceUnits == 333); CHECK_NEAR(mini(12000000).paceOffset, 10.904);
+        // A 4 DIP tick centred on the pace, its centre kept 2 DIPs (half the tick, more than the
+        // 1 DIP corner) inside either end of the 38 DIP bar.
+        CHECK(mini(13500000).paceUnits == 250); CHECK_NEAR(mini(13500000).paceOffset, 9.5 - 2);
+        CHECK(mini(kFiveHours).paceUnits == 0); CHECK_NEAR(mini(kFiveHours).paceOffset, 0);
+        CHECK(mini(0).paceUnits == 1000); CHECK_NEAR(mini(0).paceOffset, 34);
+        CHECK(mini(12000000).paceUnits == 333); CHECK_NEAR(mini(12000000).paceOffset, 12.654 - 2);
         MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
         CHECK(mini(13500000, remaining).paceUnits == 750);
-        CHECK_NEAR(mini(13500000, remaining).paceOffset, 26.75);
+        CHECK_NEAR(mini(13500000, remaining).paceOffset, 28.5 - 2);
         CHECK_NEAR(First(Window(10, 13500000), Display(), BarLayout::SegmentedRing)
                        .quotas[0].paceAngle, 360);
         AccountData data = Fresh();
@@ -510,8 +663,171 @@ static void RunTileTests() {
         data.winWeek = Window(10, 13500000);
         AccountMeters two = AccountMeterState(Display(), BarLayout::SegmentedRing,
             Account(L"anthropic", L"A", {true, true, false, false}), data, 0, 0);
-        CHECK_NEAR(two.quotas[1].paceAngle, 127.5);
+        // A quarter along the grown arc from 165 degrees counterclockwise: 165 + 6.14 - 162.28 / 4.
+        const double grow = 1.5 / 14 * 180 / std::numbers::pi;
+        CHECK_NEAR(two.quotas[1].paceAngle, 165 + grow - (150 + 2 * grow) / 4);
         CHECK(!First(Window(10, 1000), Display(), BarLayout::LogoHeadline).quotas[0].paceVisible);
+    });
+
+    Run("ring pace tick: clamped clear of a partial arc's corners; free on full rings", [] {
+        auto two = [](long long resetIn) {
+            AccountData data = Fresh();
+            data.win5h = Window(10, resetIn);
+            data.winWeek = Window(10, resetIn);
+            return AccountMeterState(Display(), BarLayout::SegmentedRing,
+                                     Account(L"anthropic", L"A", {true, true, false, false}), data, 0, 0);
+        };
+        // Grown arcs: 195 - g to 345 + g clockwise, and 165 + g to 15 - g counterclockwise. The
+        // tick's centre keeps a 0.75 DIP corner plus half the 3.5 DIP halo from either end, along
+        // the 14 DIP centreline.
+        const double degrees = 180 / std::numbers::pi;
+        const double grow = 1.5 / 14 * degrees, pad = (0.75 + 1.75) / 14 * degrees;
+        AccountMeters start = two(kFiveHours), end = two(0), middle = two(9000000);
+        CHECK_NEAR(start.quotas[0].paceAngle, 195 - grow + pad);
+        CHECK_NEAR(end.quotas[0].paceAngle, 345 + grow - pad);
+        CHECK_NEAR(start.quotas[1].paceAngle, 165 + grow - pad);
+        CHECK_NEAR(end.quotas[1].paceAngle, 15 - grow + pad);
+        CHECK_NEAR(middle.quotas[0].paceAngle, 270); CHECK_NEAR(middle.quotas[1].paceAngle, 90);
+        // A full ring has no ends to keep clear of.
+        CHECK_NEAR(First(Window(10, kFiveHours), Display(), BarLayout::SegmentedRing).quotas[0].paceAngle, 270);
+        CHECK_NEAR(First(Window(10, 0), Display(), BarLayout::ConcentricRings).quotas[0].paceAngle, 630);
+        // Hidden: no tick shapes.
+        AccountData stale = Fresh();
+        stale.win5h = Window(10, 9000000);
+        stale.stale = true;
+        QuotaMeter hidden = AccountMeterState(Display(), BarLayout::SegmentedRing,
+                                              Account(L"anthropic", L"A", {true, false, false, false}), stale, 0, 0)
+                                .quotas[0];
+        CHECK(!hidden.paceVisible && hidden.paceHalo.empty() && hidden.paceCore.empty());
+    });
+
+    Run("ring pace tick: radial, 1.5 DIPs past the ring, half the gap toward a neighbouring ring", [] {
+        // The tick's extent along its angle from the centre, and its width across.
+        struct Extent {
+            double from, to, width;
+        };
+        auto extent = [](const TileOutline& outline, double center, double degrees) {
+            double radians = degrees * std::numbers::pi / 180, ax = std::cos(radians), ay = std::sin(radians);
+            Extent e{1e9, -1e9, 0};
+            auto add = [&](double x, double y) {
+                double along = (x - center) * ax + (y - center) * ay;
+                double across = (y - center) * ax - (x - center) * ay;
+                e.from = std::min(e.from, along);
+                e.to = std::max(e.to, along);
+                e.width = std::max(e.width, 2 * std::abs(across));
+            };
+            CHECK(outline.size() == 1 && outline[0].segments.size() == 3);
+            add(outline[0].x, outline[0].y);
+            for (const TileOutlineSegment& s : outline[0].segments) {
+                CHECK_NEAR(s.radius, 0);
+                add(s.x, s.y);
+            }
+            return e;
+        };
+        auto check = [&](const QuotaMeter& m, double center, double from, double to) {
+            Extent halo = extent(m.paceHalo, center, m.paceAngle), core = extent(m.paceCore, center, m.paceAngle);
+            CHECK_NEAR(halo.from, from); CHECK_NEAR(halo.to, to); CHECK_NEAR(halo.width, 3.5);
+            CHECK_NEAR(core.from, from + 0.5); CHECK_NEAR(core.to, to - 0.5); CHECK_NEAR(core.width, 2);
+        };
+        auto rings = [](BarLayout layout, int count, int thickness, int size) {
+            AccountData data = Fresh();
+            for (WindowUsage* u : {&data.win5h, &data.winWeek, &data.fableWeek}) *u = Window(10, 13500000);
+            MeterDisplay d = Display(With([&](Settings& s) { s.ringThickness = thickness; s.ringSize = size; }));
+            return AccountMeterState(d, layout, Account(L"anthropic", L"A", {count > 0, count > 1, count > 2, false}),
+                                     data, 0, 0);
+        };
+        // One 3 DIP ring 32 across: edges 12.5 and 15.5 from the centre.
+        check(rings(BarLayout::SegmentedRing, 1, 3, 32).quotas[0], 16, 11, 17);
+        // Segmented arcs: past both edges by 1.5.
+        AccountMeters pair = rings(BarLayout::SegmentedRing, 2, 3, 32);
+        check(pair.quotas[0], 16, 11, 17); check(pair.quotas[1], 16, 11, 17);
+        // Concentric, thickness 1: 0.87 DIP strokes 0.8 apart. The outer ring spans 14.63-15.5,
+        // the inner one 12.96-13.83; facing sides reach 0.4, to the gap's middle.
+        AccountMeters thin = rings(BarLayout::ConcentricRings, 2, 1, 32);
+        check(thin.quotas[0], 16, 14.63 - 0.4, 15.5 + 1.5);
+        check(thin.quotas[1], 16, 12.96 - 1.5, 13.83 + 0.4);
+        // Three rings, thickness 1: 0.75 DIP strokes 0.8 apart; the middle one reaches 0.4 both ways.
+        AccountMeters three = rings(BarLayout::ConcentricRings, 3, 1, 32);
+        check(three.quotas[0], 16, 14.75 - 0.4, 15.5 + 1.5);
+        check(three.quotas[1], 16, 13.2 - 0.4, 13.95 + 0.4);
+        check(three.quotas[2], 16, 11.65 - 1.5, 12.4 + 0.4);
+        // Thickness 5 on a 40 DIP ring: 4.35 DIP strokes 2 apart (19.5 out to 15.15, 13.15 to
+        // 8.8); facing sides reach 1.
+        AccountMeters wide = rings(BarLayout::ConcentricRings, 2, 5, 40);
+        check(wide.quotas[0], 20, 15.15 - 1, 19.5 + 1.5);
+        check(wide.quotas[1], 20, 8.8 - 1.5, 13.15 + 1);
+    });
+
+    Run("ring shapes: arcs inside the ring area's 0.5 DIP margin, ticks within kTileRingOverflow", [] {
+        // Every size, thickness and quota count at pace positions around the ring.
+        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
+            for (int size : {24, 32, 40}) {
+                for (int thickness : {1, 3, 6}) {
+                    for (int count = 1; count <= 4; count++) {
+                        for (long long resetIn : {0LL, 2250000LL, 4500000LL, 6750000LL, 9000000LL, 13500000LL,
+                                                  (long long)kFiveHours}) {
+                            AccountData data = Fresh();
+                            for (WindowUsage* u : {&data.win5h, &data.winWeek, &data.fableWeek, &data.extraUsage}) {
+                                *u = Window(100, resetIn);
+                            }
+                            MeterDisplay d = Display(With([&](Settings& s) { s.ringSize = size; s.ringThickness = thickness; }));
+                            AccountMeters meters = AccountMeterState(
+                                d, layout, Account(L"anthropic", L"A", {count > 0, count > 1, count > 2, count > 3}), data, 0, 0);
+                            double center = meters.ring.size / 2;
+                            auto points = [](const TileOutline& outline, auto&& visit) {
+                                for (const TileOutlineFigure& figure : outline) {
+                                    visit(figure.x, figure.y);
+                                    for (const TileOutlineSegment& s : figure.segments) visit(s.x, s.y);
+                                }
+                            };
+                            for (int w = 0; w < count; w++) {
+                                const QuotaMeter& m = meters.quotas[w];
+                                CHECK(!m.track.empty() && !m.fill.empty() && !m.paceHalo.empty());
+                                // Arc outlines lie on circles no larger than the outer edge.
+                                for (const TileOutline* outline : {&m.track, &m.fill}) {
+                                    points(*outline, [&](double x, double y) {
+                                        CHECK(std::hypot(x - center, y - center) <= center - 0.5 + 1e-9);
+                                    });
+                                }
+                                points(m.paceHalo, [&](double x, double y) {
+                                    CHECK(x >= -kTileRingOverflow && x <= meters.ring.size + kTileRingOverflow);
+                                    CHECK(y >= -kTileRingOverflow && y <= meters.ring.size + kTileRingOverflow);
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    Run("mini bar pace tick: the bars' full line at the mini bars' size and gap", [] {
+        // 100%: a 4 px halo across the 4 DIP bar and a pixel past each side (3 DIP gap); the 2 px
+        // core a pixel short of it at both ends; square.
+        BarGeometry one = MiniBarGeometryFor(Display());
+        CHECK_NEAR(one.radius, 1); CHECK_NEAR(one.overhang, 1);
+        CHECK_NEAR(one.paceLength, 4); CHECK_NEAR(one.paceCrossSize, 6);
+        CHECK_NEAR(one.coreLength, 2); CHECK_NEAR(one.coreCrossSize, 4); CHECK_NEAR(one.coreCrossOffset, 1);
+        CHECK_NEAR(one.paceRadius, 0); CHECK_NEAR(one.coreRadius, 0);
+        // 150%: the 3 DIP gap rounds to 5 px, a DIP to 2: min(2, 5 / 2) = 2 px past each side.
+        const double px = 1 / 1.5;
+        BarGeometry half = MiniBarGeometryFor(Display({}, 1.5));
+        CHECK_NEAR(half.overhang, 2 * px);
+        CHECK_NEAR(half.paceLength, 4 * px); CHECK_NEAR(half.paceCrossSize, 4 + 4 * px);
+        CHECK_NEAR(half.coreLength, 2 * px); CHECK_NEAR(half.coreCrossSize, 4 + 2 * px);
+        CHECK_NEAR(half.coreCrossOffset, px);
+        // The bars' settings don't reach it.
+        MeterDisplay other = Display(With([](Settings& s) {
+            s.barGap = 0; s.barThickness = 20; s.barStyle = BarStyle::Rail; s.paceTickStyle = PaceTickStyle::Dot;
+        }));
+        BarGeometry same = MiniBarGeometryFor(other);
+        CHECK_NEAR(same.overhang, 1); CHECK_NEAR(same.paceCrossSize, 6); CHECK_NEAR(same.radius, 1);
+        // At 150% the tick's centre keeps 4 / 3 DIPs (half the tick) inside either end.
+        auto offset = [](long long resetIn) {
+            return First(Window(10, resetIn), Display({}, 1.5), BarLayout::LogoBars).quotas[0].paceOffset;
+        };
+        CHECK_NEAR(offset(kFiveHours), 0); CHECK_NEAR(offset(0), 38 - 4 * px);
+        CHECK_NEAR(offset(13500000), 9.5 - 2 * px);
     });
 
     Run("ring capped by tile height; warning mark margin", [] {
@@ -535,7 +851,7 @@ static void RunTileTests() {
         AccountMeters single = ring(BarLayout::SegmentedRing, {true, false, false, false});
         CHECK_NEAR(single.ring.stroke, 3); CHECK_NEAR(single.ring.gap, 0);
         CHECK_NEAR(single.ring.radius, 14); CHECK_NEAR(single.ring.hole, 12.5);
-        CHECK_NEAR(single.ring.dot, 1.71); CHECK_NEAR(single.ring.logo, 14.08);
+        CHECK_NEAR(single.ring.logo, 14.08);
         AccountMeters pair = ring(BarLayout::SegmentedRing, {true, true, false, false});
         CHECK_NEAR(pair.ring.stroke, 3); CHECK_NEAR(pair.ring.gap, 4.330383);
         AccountMeters concentric = ring(BarLayout::ConcentricRings, {true, true, false, false});
@@ -605,7 +921,9 @@ static void RunAccountTests() {
                   .barMask == 0b0011);
         // Rings lay out every selected quota until then.
         AccountMeters ring = AccountMeterState(Display(), BarLayout::SegmentedRing, account, before, 0, 0);
-        CHECK_NEAR(ring.quotas[3].arc.start, 285); CHECK(ring.quotas[3].fillUnits == 0);
+        // The third arc's slot starts at 285 degrees; it grows by half its 3 DIP stroke.
+        CHECK_NEAR(ring.quotas[3].arc.start, 285 - 1.5 / 14 * 180 / std::numbers::pi);
+        CHECK(ring.quotas[3].fillUnits == 0);
     });
 
     Run("headline: most-used quota, its key and color", [] {

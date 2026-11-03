@@ -4,30 +4,52 @@
 // UpdateAccountTile regenerates its meter shapes whenever their inputs change, then applies values
 // in place. Values, identity text and geometry come from the meter model (meter-model.h).
 
-static winrt::Windows::Foundation::Point TileRingPoint(double center, double radius,
-                                                       double degrees) {
-    double radians = degrees * std::numbers::pi / 180;
-    return {(float)(center + radius * std::cos(radians)),
-            (float)(center + radius * std::sin(radians))};
+// A ring tile shape (meter-model.h), moved `offset` DIPs right and down. PathGeometry fills
+// even-odd by default, as the outline expects.
+static Geometry TileOutlineGeometry(TileOutline const& outline, double offset) {
+    PathGeometry geometry;
+    for (TileOutlineFigure const& source : outline) {
+        PathFigure figure;
+        figure.StartPoint({(float)(source.x + offset), (float)(source.y + offset)});
+        figure.IsClosed(true);
+        figure.IsFilled(true);
+        for (TileOutlineSegment const& segment : source.segments) {
+            winrt::Windows::Foundation::Point end{(float)(segment.x + offset),
+                                                  (float)(segment.y + offset)};
+            if (segment.radius > 0) {
+                ArcSegment arc;
+                arc.Point(end);
+                arc.Size({(float)segment.radius, (float)segment.radius});
+                arc.SweepDirection(segment.clockwise ? SweepDirection::Clockwise :
+                                                       SweepDirection::Counterclockwise);
+                figure.Segments().Append(arc);
+            } else {
+                LineSegment line;
+                line.Point(end);
+                figure.Segments().Append(line);
+            }
+        }
+        geometry.Figures().Append(figure);
+    }
+    return geometry;
 }
 
-// Open arc in two segments, so a full circle renders too.
-static Geometry TileArcGeometry(double center, double radius, double start, double sweep) {
-    PathFigure figure;
-    figure.StartPoint(TileRingPoint(center, radius, start));
-    figure.IsClosed(false);
-    figure.IsFilled(false);
-    for (int half = 1; half <= 2; half++) {
-        ArcSegment arc;
-        arc.Point(TileRingPoint(center, radius, start + sweep * half / 2));
-        arc.Size({(float)radius, (float)radius});
-        arc.SweepDirection(sweep >= 0 ? SweepDirection::Clockwise :
-                                        SweepDirection::Counterclockwise);
-        figure.Segments().Append(arc);
-    }
-    PathGeometry geometry;
-    geometry.Figures().Append(figure);
-    return geometry;
+// A bar, mini bar or headline segment fill: the usage color's highlight at its top (vertical
+// bars: left) edge, shading to the color 60% across.
+static LinearGradientBrush UsageFillBrush(uint32_t color, bool vertical) {
+    LinearGradientBrush shade;
+    shade.StartPoint({0.f, 0.f});
+    shade.EndPoint(vertical ? winrt::Windows::Foundation::Point{1.f, 0.f} :
+                              winrt::Windows::Foundation::Point{0.f, 1.f});
+    GradientStop top;
+    top.Color(ArgbColor(UsageHighlight(color)));
+    top.Offset(0.0);
+    GradientStop body;
+    body.Color(ArgbColor(color));
+    body.Offset(0.6);
+    shade.GradientStops().Append(top);
+    shade.GradientStops().Append(body);
+    return shade;
 }
 
 // Whether the mouse is over a tile of a tile layout.
@@ -246,7 +268,9 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     bool miniBars = layout == BarLayout::LogoBars;
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
-    double center = geometry.size / 2;
+    // Mini bars: corners a quarter of the thickness, the bars' line pace tick.
+    BarGeometry miniBar = MiniBarGeometryFor(display);
+    double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
 
     // Meter shapes: regenerated, and the identity resized, whenever an input changes.
     TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
@@ -254,58 +278,54 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     if (shape != ap.tileShape) {
         TilePalette palette = TilePaletteFor(light);
         SolidColorBrush track(ArgbColor(palette.track));
-        SolidColorBrush paceCore(winrt::Windows::UI::Color{
-            0xFF, GetRValue(display.paceTickColor), GetGValue(display.paceTickColor),
-            GetBValue(display.paceTickColor)});
-        SolidColorBrush paceOutline(winrt::Windows::UI::Color{0x8C, 0, 0, 0});
+        PaceMarkColors paceColors = PaceMarkColorsFor(display.paceTickColor, light);
+        SolidColorBrush paceCore(ArgbColor(paceColors.core));
+        SolidColorBrush paceHalo(ArgbColor(paceColors.halo));
         auto meterShapes = tile.meters.Children();
         meterShapes.Clear();
         ui.fills.fill(nullptr);
         ui.paceTicks.fill(nullptr);
         tile.arcs.fill(nullptr);
-        tile.dots.fill(nullptr);
+        tile.paceHalos.fill(nullptr);
+        tile.paceCores.fill(nullptr);
         tile.meters.Visibility(barMask ? Visibility::Visible : Visibility::Collapsed);
 
         if (ring) {
             double size = geometry.size;
             tile.face.Width(size);
             tile.face.Height(size);
-            auto ringShape = [&]() {
+            // Larger than the ring area by kTileRingOverflow on every side, pulled back by
+            // negative margins, so layout never clips the pace ticks.
+            auto ringShape = [&](Brush const& fill) {
                 wuxs::Path path;
-                path.Width(size);
-                path.Height(size);
+                path.Width(size + 2 * kTileRingOverflow);
+                path.Height(size + 2 * kTileRingOverflow);
+                path.Margin({-kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow,
+                             -kTileRingOverflow});
+                path.Fill(fill);
                 return path;
             };
-            auto arcShape = [&](Brush const& stroke) {
-                wuxs::Path path = ringShape();
-                path.Stroke(stroke);
-                path.StrokeThickness(geometry.stroke);
-                path.StrokeStartLineCap(PenLineCap::Round);
-                path.StrokeEndLineCap(PenLineCap::Round);
-                return path;
-            };
-            // Tracks, then fills, then pace dots on top.
+            // Tracks, then fills, then pace ticks on top.
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
-                QuotaMeter const& m = meters.quotas[w];
-                wuxs::Path trackArc = arcShape(track);
-                trackArc.Data(TileArcGeometry(center, m.radius, m.arc.start, m.arc.sweep));
+                wuxs::Path trackArc = ringShape(track);
+                trackArc.Data(TileOutlineGeometry(meters.quotas[w].track, kTileRingOverflow));
                 meterShapes.Append(trackArc);
             }
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
-                tile.arcs[w] = arcShape(track);
+                tile.arcs[w] = ringShape(track);
                 tile.arcs[w].Visibility(Visibility::Collapsed);
                 meterShapes.Append(tile.arcs[w]);
             }
             for (int w = 0; display.showPaceTicks && w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
-                tile.dots[w] = ringShape();
-                tile.dots[w].Fill(paceCore);
-                tile.dots[w].Stroke(paceOutline);
-                tile.dots[w].StrokeThickness(0.8);
-                tile.dots[w].Visibility(Visibility::Collapsed);
-                meterShapes.Append(tile.dots[w]);
+                tile.paceHalos[w] = ringShape(paceHalo);
+                tile.paceCores[w] = ringShape(paceCore);
+                tile.paceHalos[w].Visibility(Visibility::Collapsed);
+                tile.paceCores[w].Visibility(Visibility::Collapsed);
+                meterShapes.Append(tile.paceHalos[w]);
+                meterShapes.Append(tile.paceCores[w]);
             }
 
             // Identity, sized to the hole.
@@ -329,38 +349,36 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
         } else {
             double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
-            double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
-            CornerRadius round{thickness / 2, thickness / 2, thickness / 2, thickness / 2};
+            double radius = thickness / 4;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 Grid bar;
                 bar.Width(length);
                 bar.Height(thickness);
                 Border trackBar;
-                trackBar.CornerRadius(round);
+                trackBar.CornerRadius({radius, radius, radius, radius});
                 trackBar.Background(track);
                 bar.Children().Append(trackBar);
                 Border fill;
                 fill.HorizontalAlignment(HorizontalAlignment::Left);
-                fill.CornerRadius(round);
                 fill.Width(0);
                 bar.Children().Append(fill);
                 ui.fills[w] = fill;
                 if (miniBars && display.showPaceTicks) {
-                    // Line tick with a dark outline, overhanging the bar by 2 DIPs.
+                    // Past the bar's sides by its overhang through negative margins, which keep
+                    // it unclipped; the core centred along it, a pixel short of either end.
                     Border tick;
-                    tick.Width(3.5);
-                    tick.Height(thickness + 4);
-                    tick.Margin({0, -2, 0, -2});
+                    tick.Width(miniBar.paceLength);
+                    tick.Height(miniBar.paceCrossSize);
                     tick.HorizontalAlignment(HorizontalAlignment::Left);
-                    tick.CornerRadius({1.5, 1.5, 1.5, 1.5});
-                    tick.Background(paceOutline);
+                    tick.VerticalAlignment(VerticalAlignment::Center);
+                    tick.Background(paceHalo);
                     Border core;
-                    core.Width(2);
-                    core.Height(thickness + 2.5);
-                    core.CornerRadius({1, 1, 1, 1});
+                    core.Width(miniBar.coreLength);
+                    core.Height(miniBar.coreCrossSize);
                     core.HorizontalAlignment(HorizontalAlignment::Center);
-                    core.VerticalAlignment(VerticalAlignment::Center);
+                    core.VerticalAlignment(VerticalAlignment::Top);
+                    core.Margin({0, miniBar.coreCrossOffset, 0, 0});
                     core.Background(paceCore);
                     tick.Child(core);
                     tick.Visibility(Visibility::Collapsed);
@@ -387,39 +405,38 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
-            SolidColorBrush brush(ArgbColor(m.color));
             if (ring && tile.arcs[w]) {
+                // Ring fills are flat.
                 tile.arcs[w].Visibility(m.fillUnits ? Visibility::Visible : Visibility::Collapsed);
-                if (m.fillUnits) {
-                    tile.arcs[w].Data(TileArcGeometry(center, m.radius, m.arc.start, m.fillSweep));
-                }
-                tile.arcs[w].Stroke(brush);
+                if (m.fillUnits) tile.arcs[w].Data(TileOutlineGeometry(m.fill, kTileRingOverflow));
+                tile.arcs[w].Fill(SolidColorBrush(ArgbColor(m.color)));
             } else if (!ring && ui.fills[w]) {
+                // Start corners round with the track, shaded like the bars' fills.
+                double start = thickness / 4, end = m.fillEndRadius;
                 ui.fills[w].Width(m.fillLength);
-                ui.fills[w].Background(brush);
+                ui.fills[w].CornerRadius({start, end, end, start});
+                ui.fills[w].Background(UsageFillBrush(m.color, false));
             }
             ap.fillPx[w] = m.fillUnits;
             ap.fillColor[w] = m.color;
         }
 
-        FrameworkElement marker = ring ? tile.dots[w].try_as<FrameworkElement>() :
+        // A ring's tick is a halo and a core shape; a mini bar's a Border holding its core.
+        FrameworkElement marker = ring ? tile.paceHalos[w].try_as<FrameworkElement>() :
                                          ui.paceTicks[w].try_as<FrameworkElement>();
         bool paceVisible = marker && m.paceVisible;
         if ((paceVisible ? 1 : 0) != ap.paceVisible[w]) {
-            if (marker) {
-                marker.Visibility(paceVisible ? Visibility::Visible : Visibility::Collapsed);
-            }
+            Visibility visibility = paceVisible ? Visibility::Visible : Visibility::Collapsed;
+            if (marker) marker.Visibility(visibility);
+            if (ring && tile.paceCores[w]) tile.paceCores[w].Visibility(visibility);
             ap.paceVisible[w] = paceVisible ? 1 : 0;
         }
         if (paceVisible && m.paceUnits != ap.pacePx[w]) {
             if (ring) {
-                EllipseGeometry dot;
-                dot.Center(TileRingPoint(center, m.radius, m.paceAngle));
-                dot.RadiusX(geometry.dot);
-                dot.RadiusY(geometry.dot);
-                tile.dots[w].Data(dot);
+                tile.paceHalos[w].Data(TileOutlineGeometry(m.paceHalo, kTileRingOverflow));
+                tile.paceCores[w].Data(TileOutlineGeometry(m.paceCore, kTileRingOverflow));
             } else {
-                ui.paceTicks[w].Margin({m.paceOffset, -2, 0, -2});
+                ui.paceTicks[w].Margin({m.paceOffset, -miniBar.overhang, 0, -miniBar.overhang});
             }
             ap.pacePx[w] = m.paceUnits;
         }

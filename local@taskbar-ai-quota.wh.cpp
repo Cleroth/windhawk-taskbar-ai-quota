@@ -517,10 +517,12 @@ struct TileUiRefs {
     // Logo + headline: the most-used quota's number and window key.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
-    // Ring fills and pace dots per quota slot.
+    // Ring fills and pace ticks (halo and core) per quota slot.
     std::array<wuxs::Path, kQuotaBarCount> arcs{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
-    std::array<wuxs::Path, kQuotaBarCount> dots{
+    std::array<wuxs::Path, kQuotaBarCount> paceHalos{
+        wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
+    std::array<wuxs::Path, kQuotaBarCount> paceCores{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
 };
 
@@ -5801,8 +5803,11 @@ static PaceMarkColors PaceMarkColorsFor(COLORREF color, bool light) {
 // fits; strokes and gaps shrink instead, down to kTileRingStrokeMin.
 static constexpr double kTileRingHoleMin = 7.0;
 static constexpr double kTileRingStrokeMin = 0.75;
-// Visible space between neighbouring segmented arcs, after their round caps.
+// Space between neighbouring segmented arcs along their centreline.
 static constexpr double kTileArcGapMin = 1.0;
+// Room for ring shapes past the ring area: a pace tick reaches 1.5 DIPs past the outer edge,
+// which lies 0.5 DIPs inside the area, and its square corners a little further.
+static constexpr double kTileRingOverflow = 2.0;
 
 struct TileArc {
     double start;  // Degrees: 0 = right, positive = clockwise.
@@ -5824,7 +5829,6 @@ struct TileRingGeometry {
     double gap = 0;          // Concentric: space between rings. Segmented: space between arcs.
     double radius = 0;       // Centreline radius of the outermost arc or ring.
     double hole = 0;         // Free centre radius, inside the innermost stroke.
-    double dot = 0;          // Pace dot radius; its outline straddles it.
     double logo = 0;         // Logo side without a badge.
     double badge = 0;        // Badge height.
     double badgeWidth = 0;
@@ -5854,7 +5858,7 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
         }
         used = count * stroke + (count - 1) * g.gap;
     } else if (count > 0) {
-        // Round caps reach into the angular gaps between arcs.
+        // Arcs reach half a stroke into the angular gaps between them at either end.
         double gapAngle = (count == 1 ? 0.0 : count == 4 ? 20.0 : 30.0) * std::numbers::pi / 180;
         if (gapAngle > 0) {
             stroke = std::max(std::min(stroke, (gapAngle * edge - kTileArcGapMin) /
@@ -5867,7 +5871,6 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
     g.stroke = stroke;
     g.radius = edge - stroke / 2;
     g.hole = edge - used;
-    g.dot = std::clamp(stroke * 0.57, 1.15, 1.9);
     g.logo = std::min(size * 0.44, 2 * (g.hole - 1.2));
     // Badge: a circle, or a pill for two characters, centred just inside the ring's lower-right
     // edge and kept inside the ring area.
@@ -5878,6 +5881,82 @@ static TileRingGeometry TileRingLayout(bool concentric, double size, int thickne
     g.badgeLeft = std::min(badgeCenter - g.badgeWidth / 2, size - g.badgeWidth);
     g.badgeTop = std::min(badgeCenter - g.badge / 2, size - g.badge);
     return g;
+}
+
+// A ring tile shape: closed figures of lines and circular arcs, filled even-odd, in DIPs from
+// the ring area's top-left corner. No arc turns more than 180 degrees.
+struct TileOutlineSegment {
+    double x = 0, y = 0;    // End point.
+    double radius = 0;      // Arc radius; 0 for a line.
+    bool clockwise = true;  // On screen, y down.
+};
+
+struct TileOutlineFigure {
+    double x = 0, y = 0;    // Start point.
+    std::vector<TileOutlineSegment> segments;
+};
+
+using TileOutline = std::vector<TileOutlineFigure>;
+
+// The band between radii `inner` and `outer` around (center, center), clockwise from `from` to
+// `to` degrees (0 = right), its corners at either end rounded by `fromCorner` and `toCorner`; a
+// full annulus from 360 degrees on. Corners too wide for the span shrink together.
+static TileOutline TileSectorOutline(double center, double outer, double inner, double from,
+                                     double to, double fromCorner, double toCorner) {
+    constexpr double kDegrees = 180 / std::numbers::pi;
+    auto at = [&](double radius, double degrees, double arc = 0, bool clockwise = true) {
+        return TileOutlineSegment{center + radius * std::cos(degrees / kDegrees),
+                                  center + radius * std::sin(degrees / kDegrees), arc, clockwise};
+    };
+    // Edges in two halves, so none turns more than 180 degrees.
+    auto edge = [&](std::vector<TileOutlineSegment>& segments, double radius, double start,
+                    double end) {
+        segments.push_back(at(radius, (start + end) / 2, radius, end > start));
+        segments.push_back(at(radius, end, radius, end > start));
+    };
+    TileOutline outline;
+    if (to - from >= 360) {
+        for (double radius : {outer, inner}) {
+            TileOutlineSegment start = at(radius, 0);
+            outline.push_back({start.x, start.y, {}});
+            edge(outline.back().segments, radius, 0, 360);
+        }
+        return outline;
+    }
+
+    // A corner of radius r touches its circular edge this many degrees from its end, and its
+    // radial edge this far from the centre. Corners reach furthest along the inner edge.
+    auto outerReach = [&](double r) { return std::asin(r / (outer - r)) * kDegrees; };
+    auto innerReach = [&](double r) { return std::asin(r / (inner + r)) * kDegrees; };
+    auto outerRadial = [&](double r) { return std::sqrt((outer - r) * (outer - r) - r * r); };
+    auto innerRadial = [&](double r) { return std::sqrt((inner + r) * (inner + r) - r * r); };
+    if (innerReach(fromCorner) + innerReach(toCorner) > to - from) {
+        double fits = 0, wide = 1;
+        for (int i = 0; i < 30; i++) {
+            double mid = (fits + wide) / 2;
+            bool fit = innerReach(fromCorner * mid) + innerReach(toCorner * mid) <= to - from;
+            (fit ? fits : wide) = mid;
+        }
+        fromCorner *= fits;
+        toCorner *= fits;
+    }
+    TileOutlineSegment start = at(outerRadial(fromCorner), from);
+    TileOutlineFigure figure{start.x, start.y, {}};
+    std::vector<TileOutlineSegment>& segments = figure.segments;
+    auto corner = [&](double r, double radius, double degrees) {
+        if (r > 0) segments.push_back(at(radius, degrees, r));
+    };
+    double outerFrom = from + outerReach(fromCorner), outerTo = to - outerReach(toCorner);
+    double innerFrom = from + innerReach(fromCorner), innerTo = to - innerReach(toCorner);
+    corner(fromCorner, outer, outerFrom);
+    edge(segments, outer, outerFrom, outerTo);
+    corner(toCorner, outerRadial(toCorner), to);
+    segments.push_back(at(innerRadial(toCorner), to));
+    corner(toCorner, inner, innerTo);
+    edge(segments, inner, innerTo, innerFrom);
+    corner(fromCorner, innerRadial(fromCorner), from);
+    outline.push_back(std::move(figure));
+    return outline;
 }
 
 // Tile chrome for the taskbar theme. Logo and text inherit the taskbar's text color instead.
@@ -6139,6 +6218,17 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     return g;
 }
 
+// Logo + bars mini bars: the bars' corners and full-line pace tick over a full track, at the
+// mini bars' thickness and gap.
+static BarGeometry MiniBarGeometryFor(const MeterDisplay& display) {
+    MeterDisplay mini = display;
+    mini.barThickness = (int)kMiniBarThickness;
+    mini.barGap = (int)kMiniBarGap;
+    mini.barStyle = BarStyle::Track;
+    mini.paceTickStyle = PaceTickStyle::Line;
+    return BarGeometryFor(mini);
+}
+
 // A tile's identity text. Logo identities show a number badge when several configured accounts
 // share the provider; text identities, and logos that fail to load, show `text`.
 struct TileIdentityText {
@@ -6192,11 +6282,13 @@ struct QuotaMeter {
     uint32_t color = 0;        // Usage color: follows used % in either bar mode.
     bool paceVisible = false;  // Pace mark shown, in layouts that draw one.
 
+    // The fill's corner radius toward 100%, in bars, mini bars, headline segments and ring arcs;
+    // its start corners are the track's. Over a full track the fill ends in a straight cut until
+    // it comes within a corner's radius of the track's end.
+    double fillEndRadius = 0;
+
     // Bars, in DIPs along the bar.
     int fillPx = 0;
-    // The fill's corner radius toward 100%; its start corners take BarGeometry::radius. Over a
-    // full track the fill ends in a straight cut until it reaches the track's rounded end.
-    double fillEndRadius = 0;
     int pacePx = 0;            // Pace tick's start.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
@@ -6209,10 +6301,16 @@ struct QuotaMeter {
     int paceUnits = 0;
     double fillLength = 0;     // Mini bar or headline segment fill.
     double paceOffset = 0;     // Mini bar pace tick's start.
-    TileArc arc{};             // Ring arc and its centreline radius.
+    // Rings: the drawn arc and its centreline radius. Partial arcs reach half a stroke past
+    // their slot's ends along the centreline.
+    TileArc arc{};
     double radius = 0;
     double fillSweep = 0;      // Ring fill, in degrees from the arc's start.
-    double paceAngle = 0;      // Ring pace dot centre, in degrees.
+    double paceAngle = 0;      // Ring pace tick, in degrees; clear of a partial arc's corners.
+    TileOutline track;
+    TileOutline fill;          // Empty without usage.
+    TileOutline paceHalo;      // Empty while the pace mark is hidden.
+    TileOutline paceCore;
 };
 
 struct AccountMeters {
@@ -6297,6 +6395,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     };
 
     BarGeometry bar = BarGeometryFor(display);
+    BarGeometry miniBar = MiniBarGeometryFor(display);
     int position = 0;
     for (int w = 0; w < kQuotaBarCount; w++) {
         const WindowUsage& wu = *usage[w];
@@ -6361,14 +6460,23 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         if (!(meters.barMask & (1 << w))) continue;
         double shown = tileShown(wu.pct);
         double fill = shown / 100;
+        const TileRingGeometry& geometry = meters.ring;
+        bool fullRing = false;
         if (ring) {
-            m.arc = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
-            m.radius = meters.ring.radius -
-                       (concentric ? position * (meters.ring.stroke + meters.ring.gap) : 0.0);
+            TileArc slot = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
+            m.radius = geometry.radius -
+                       (concentric ? position * (geometry.stroke + geometry.gap) : 0.0);
+            // Partial arcs reach half a stroke past their slot at both ends, along the
+            // centreline.
+            fullRing = std::abs(slot.sweep) >= 360;
+            double grow = fullRing ? 0.0 :
+                geometry.stroke / 2 / m.radius * 180 / std::numbers::pi;
+            double direction = slot.sweep < 0 ? -1 : 1;
+            m.arc = {slot.start - direction * grow, slot.sweep + 2 * direction * grow};
             // Any usage fills at least 5 degrees.
             if (shown > 0) fill = std::max(fill, 5.0 / std::abs(m.arc.sweep));
         }
-        position++;
+        int slotPosition = position++;
         m.fillUnits = shown > 0 ? std::max(1, (int)std::lround(fill * 1000)) : 0;
         if (m.paceVisible) {
             double pace = remainingMode ? remainingFraction : 1.0 - remainingFraction;
@@ -6376,14 +6484,68 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
         double pace = m.paceUnits / 1000.0;
         if (ring) {
+            // Annular sectors with stroke / 4 corners at a partial arc's ends; full rings have
+            // none. Fills start with the track's corners and end in a radial cut at their value.
+            double center = geometry.size / 2;
+            double outer = m.radius + geometry.stroke / 2, inner = m.radius - geometry.stroke / 2;
+            double corner = fullRing ? 0.0 : geometry.stroke / 4;
+            double end = m.arc.start + m.arc.sweep;
+            double low = std::min(m.arc.start, end), high = std::max(m.arc.start, end);
+            m.track = TileSectorOutline(center, outer, inner, low, high, corner, corner);
             m.fillSweep = m.arc.sweep * fill;
+            m.fillEndRadius = std::max(0.0, corner - std::abs(m.arc.sweep - m.fillSweep) *
+                                                         std::numbers::pi / 180 * m.radius);
+            if (m.fillUnits) {
+                double fillEnd = m.arc.start + m.fillSweep;
+                m.fill = m.arc.sweep > 0 ?
+                    TileSectorOutline(center, outer, inner, m.arc.start, fillEnd, corner,
+                                      m.fillEndRadius) :
+                    TileSectorOutline(center, outer, inner, fillEnd, m.arc.start, m.fillEndRadius,
+                                      corner);
+            }
             m.paceAngle = m.arc.start + m.arc.sweep * pace;
+            if (m.paceVisible) {
+                // A radial tick: a 2 DIP core over a 3.5 DIP halo, square ended, kept clear of a
+                // partial arc's corners. It reaches 1.5 DIPs past the ring, at most half the gap
+                // toward a neighbouring ring, and the core stops half a DIP short of the halo.
+                static constexpr double kHalo = 3.5, kCore = 2, kOverhang = 1.5, kCoreInset = 0.5;
+                if (!fullRing) {
+                    double pad = (corner + kHalo / 2) / m.radius * 180 / std::numbers::pi;
+                    m.paceAngle = std::max(low + pad, std::min(m.paceAngle, high - pad));
+                }
+                double between = std::min(kOverhang, geometry.gap / 2);
+                double outside = concentric && slotPosition > 0 ? between : kOverhang;
+                double inside = concentric && slotPosition < count - 1 ? between : kOverhang;
+                double radians = m.paceAngle * std::numbers::pi / 180;
+                double alongX = std::cos(radians), alongY = std::sin(radians);
+                // From `from` to `to` DIPs out from the centre, `width` across.
+                auto tick = [&](double from, double to, double width) {
+                    double acrossX = -alongY * width / 2, acrossY = alongX * width / 2;
+                    auto point = [&](double distance, double side) {
+                        return TileOutlineSegment{center + alongX * distance + side * acrossX,
+                                                  center + alongY * distance + side * acrossY};
+                    };
+                    TileOutlineSegment start = point(from, 1);
+                    return TileOutline{
+                        {start.x, start.y, {point(to, 1), point(to, -1), point(from, -1)}}};
+                };
+                m.paceHalo = tick(inner - inside, outer + outside, kHalo);
+                m.paceCore = tick(inner - inside + kCoreInset, outer + outside - kCoreInset, kCore);
+            }
         } else {
+            // Corners a quarter of the thickness; the fill cut flat until the track's end. Any
+            // usage fills at least 2 DIPs, as on the bars.
             double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
-            double minimum = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
-            m.fillLength = m.fillUnits ? std::clamp(length * fill, minimum, length) : 0;
-            // Line tick, 3.5 DIPs wide, centred on the pace.
-            m.paceOffset = kMiniBarLength * pace - 1.75;
+            double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
+            m.fillLength = m.fillUnits ? std::clamp(length * fill, 2.0, length) : 0;
+            m.fillEndRadius = std::max(0.0, thickness / 4 - (length - m.fillLength));
+            if (miniBars) {
+                // The bars' line tick, centred on the pace, kept inside the bar's rounded ends.
+                double radius = std::clamp(miniBar.radius, miniBar.paceLength / 2,
+                                           (length - miniBar.paceLength) / 2);
+                m.paceOffset = std::clamp(length * pace, radius, length - radius) -
+                               miniBar.paceLength / 2;
+            }
         }
     }
 
@@ -6445,30 +6607,52 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 // UpdateAccountTile regenerates its meter shapes whenever their inputs change, then applies values
 // in place. Values, identity text and geometry come from the meter model (meter-model.h).
 
-static winrt::Windows::Foundation::Point TileRingPoint(double center, double radius,
-                                                       double degrees) {
-    double radians = degrees * std::numbers::pi / 180;
-    return {(float)(center + radius * std::cos(radians)),
-            (float)(center + radius * std::sin(radians))};
+// A ring tile shape (meter-model.h), moved `offset` DIPs right and down. PathGeometry fills
+// even-odd by default, as the outline expects.
+static Geometry TileOutlineGeometry(TileOutline const& outline, double offset) {
+    PathGeometry geometry;
+    for (TileOutlineFigure const& source : outline) {
+        PathFigure figure;
+        figure.StartPoint({(float)(source.x + offset), (float)(source.y + offset)});
+        figure.IsClosed(true);
+        figure.IsFilled(true);
+        for (TileOutlineSegment const& segment : source.segments) {
+            winrt::Windows::Foundation::Point end{(float)(segment.x + offset),
+                                                  (float)(segment.y + offset)};
+            if (segment.radius > 0) {
+                ArcSegment arc;
+                arc.Point(end);
+                arc.Size({(float)segment.radius, (float)segment.radius});
+                arc.SweepDirection(segment.clockwise ? SweepDirection::Clockwise :
+                                                       SweepDirection::Counterclockwise);
+                figure.Segments().Append(arc);
+            } else {
+                LineSegment line;
+                line.Point(end);
+                figure.Segments().Append(line);
+            }
+        }
+        geometry.Figures().Append(figure);
+    }
+    return geometry;
 }
 
-// Open arc in two segments, so a full circle renders too.
-static Geometry TileArcGeometry(double center, double radius, double start, double sweep) {
-    PathFigure figure;
-    figure.StartPoint(TileRingPoint(center, radius, start));
-    figure.IsClosed(false);
-    figure.IsFilled(false);
-    for (int half = 1; half <= 2; half++) {
-        ArcSegment arc;
-        arc.Point(TileRingPoint(center, radius, start + sweep * half / 2));
-        arc.Size({(float)radius, (float)radius});
-        arc.SweepDirection(sweep >= 0 ? SweepDirection::Clockwise :
-                                        SweepDirection::Counterclockwise);
-        figure.Segments().Append(arc);
-    }
-    PathGeometry geometry;
-    geometry.Figures().Append(figure);
-    return geometry;
+// A bar, mini bar or headline segment fill: the usage color's highlight at its top (vertical
+// bars: left) edge, shading to the color 60% across.
+static LinearGradientBrush UsageFillBrush(uint32_t color, bool vertical) {
+    LinearGradientBrush shade;
+    shade.StartPoint({0.f, 0.f});
+    shade.EndPoint(vertical ? winrt::Windows::Foundation::Point{1.f, 0.f} :
+                              winrt::Windows::Foundation::Point{0.f, 1.f});
+    GradientStop top;
+    top.Color(ArgbColor(UsageHighlight(color)));
+    top.Offset(0.0);
+    GradientStop body;
+    body.Color(ArgbColor(color));
+    body.Offset(0.6);
+    shade.GradientStops().Append(top);
+    shade.GradientStops().Append(body);
+    return shade;
 }
 
 // Whether the mouse is over a tile of a tile layout.
@@ -6687,7 +6871,9 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     bool miniBars = layout == BarLayout::LogoBars;
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
-    double center = geometry.size / 2;
+    // Mini bars: corners a quarter of the thickness, the bars' line pace tick.
+    BarGeometry miniBar = MiniBarGeometryFor(display);
+    double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
 
     // Meter shapes: regenerated, and the identity resized, whenever an input changes.
     TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
@@ -6695,58 +6881,54 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     if (shape != ap.tileShape) {
         TilePalette palette = TilePaletteFor(light);
         SolidColorBrush track(ArgbColor(palette.track));
-        SolidColorBrush paceCore(winrt::Windows::UI::Color{
-            0xFF, GetRValue(display.paceTickColor), GetGValue(display.paceTickColor),
-            GetBValue(display.paceTickColor)});
-        SolidColorBrush paceOutline(winrt::Windows::UI::Color{0x8C, 0, 0, 0});
+        PaceMarkColors paceColors = PaceMarkColorsFor(display.paceTickColor, light);
+        SolidColorBrush paceCore(ArgbColor(paceColors.core));
+        SolidColorBrush paceHalo(ArgbColor(paceColors.halo));
         auto meterShapes = tile.meters.Children();
         meterShapes.Clear();
         ui.fills.fill(nullptr);
         ui.paceTicks.fill(nullptr);
         tile.arcs.fill(nullptr);
-        tile.dots.fill(nullptr);
+        tile.paceHalos.fill(nullptr);
+        tile.paceCores.fill(nullptr);
         tile.meters.Visibility(barMask ? Visibility::Visible : Visibility::Collapsed);
 
         if (ring) {
             double size = geometry.size;
             tile.face.Width(size);
             tile.face.Height(size);
-            auto ringShape = [&]() {
+            // Larger than the ring area by kTileRingOverflow on every side, pulled back by
+            // negative margins, so layout never clips the pace ticks.
+            auto ringShape = [&](Brush const& fill) {
                 wuxs::Path path;
-                path.Width(size);
-                path.Height(size);
+                path.Width(size + 2 * kTileRingOverflow);
+                path.Height(size + 2 * kTileRingOverflow);
+                path.Margin({-kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow,
+                             -kTileRingOverflow});
+                path.Fill(fill);
                 return path;
             };
-            auto arcShape = [&](Brush const& stroke) {
-                wuxs::Path path = ringShape();
-                path.Stroke(stroke);
-                path.StrokeThickness(geometry.stroke);
-                path.StrokeStartLineCap(PenLineCap::Round);
-                path.StrokeEndLineCap(PenLineCap::Round);
-                return path;
-            };
-            // Tracks, then fills, then pace dots on top.
+            // Tracks, then fills, then pace ticks on top.
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
-                QuotaMeter const& m = meters.quotas[w];
-                wuxs::Path trackArc = arcShape(track);
-                trackArc.Data(TileArcGeometry(center, m.radius, m.arc.start, m.arc.sweep));
+                wuxs::Path trackArc = ringShape(track);
+                trackArc.Data(TileOutlineGeometry(meters.quotas[w].track, kTileRingOverflow));
                 meterShapes.Append(trackArc);
             }
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
-                tile.arcs[w] = arcShape(track);
+                tile.arcs[w] = ringShape(track);
                 tile.arcs[w].Visibility(Visibility::Collapsed);
                 meterShapes.Append(tile.arcs[w]);
             }
             for (int w = 0; display.showPaceTicks && w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
-                tile.dots[w] = ringShape();
-                tile.dots[w].Fill(paceCore);
-                tile.dots[w].Stroke(paceOutline);
-                tile.dots[w].StrokeThickness(0.8);
-                tile.dots[w].Visibility(Visibility::Collapsed);
-                meterShapes.Append(tile.dots[w]);
+                tile.paceHalos[w] = ringShape(paceHalo);
+                tile.paceCores[w] = ringShape(paceCore);
+                tile.paceHalos[w].Visibility(Visibility::Collapsed);
+                tile.paceCores[w].Visibility(Visibility::Collapsed);
+                meterShapes.Append(tile.paceHalos[w]);
+                meterShapes.Append(tile.paceCores[w]);
             }
 
             // Identity, sized to the hole.
@@ -6770,38 +6952,36 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
         } else {
             double length = miniBars ? kMiniBarLength : kHeadlineSegmentLength;
-            double thickness = miniBars ? kMiniBarThickness : kHeadlineSegmentThickness;
-            CornerRadius round{thickness / 2, thickness / 2, thickness / 2, thickness / 2};
+            double radius = thickness / 4;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 Grid bar;
                 bar.Width(length);
                 bar.Height(thickness);
                 Border trackBar;
-                trackBar.CornerRadius(round);
+                trackBar.CornerRadius({radius, radius, radius, radius});
                 trackBar.Background(track);
                 bar.Children().Append(trackBar);
                 Border fill;
                 fill.HorizontalAlignment(HorizontalAlignment::Left);
-                fill.CornerRadius(round);
                 fill.Width(0);
                 bar.Children().Append(fill);
                 ui.fills[w] = fill;
                 if (miniBars && display.showPaceTicks) {
-                    // Line tick with a dark outline, overhanging the bar by 2 DIPs.
+                    // Past the bar's sides by its overhang through negative margins, which keep
+                    // it unclipped; the core centred along it, a pixel short of either end.
                     Border tick;
-                    tick.Width(3.5);
-                    tick.Height(thickness + 4);
-                    tick.Margin({0, -2, 0, -2});
+                    tick.Width(miniBar.paceLength);
+                    tick.Height(miniBar.paceCrossSize);
                     tick.HorizontalAlignment(HorizontalAlignment::Left);
-                    tick.CornerRadius({1.5, 1.5, 1.5, 1.5});
-                    tick.Background(paceOutline);
+                    tick.VerticalAlignment(VerticalAlignment::Center);
+                    tick.Background(paceHalo);
                     Border core;
-                    core.Width(2);
-                    core.Height(thickness + 2.5);
-                    core.CornerRadius({1, 1, 1, 1});
+                    core.Width(miniBar.coreLength);
+                    core.Height(miniBar.coreCrossSize);
                     core.HorizontalAlignment(HorizontalAlignment::Center);
-                    core.VerticalAlignment(VerticalAlignment::Center);
+                    core.VerticalAlignment(VerticalAlignment::Top);
+                    core.Margin({0, miniBar.coreCrossOffset, 0, 0});
                     core.Background(paceCore);
                     tick.Child(core);
                     tick.Visibility(Visibility::Collapsed);
@@ -6828,39 +7008,38 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
-            SolidColorBrush brush(ArgbColor(m.color));
             if (ring && tile.arcs[w]) {
+                // Ring fills are flat.
                 tile.arcs[w].Visibility(m.fillUnits ? Visibility::Visible : Visibility::Collapsed);
-                if (m.fillUnits) {
-                    tile.arcs[w].Data(TileArcGeometry(center, m.radius, m.arc.start, m.fillSweep));
-                }
-                tile.arcs[w].Stroke(brush);
+                if (m.fillUnits) tile.arcs[w].Data(TileOutlineGeometry(m.fill, kTileRingOverflow));
+                tile.arcs[w].Fill(SolidColorBrush(ArgbColor(m.color)));
             } else if (!ring && ui.fills[w]) {
+                // Start corners round with the track, shaded like the bars' fills.
+                double start = thickness / 4, end = m.fillEndRadius;
                 ui.fills[w].Width(m.fillLength);
-                ui.fills[w].Background(brush);
+                ui.fills[w].CornerRadius({start, end, end, start});
+                ui.fills[w].Background(UsageFillBrush(m.color, false));
             }
             ap.fillPx[w] = m.fillUnits;
             ap.fillColor[w] = m.color;
         }
 
-        FrameworkElement marker = ring ? tile.dots[w].try_as<FrameworkElement>() :
+        // A ring's tick is a halo and a core shape; a mini bar's a Border holding its core.
+        FrameworkElement marker = ring ? tile.paceHalos[w].try_as<FrameworkElement>() :
                                          ui.paceTicks[w].try_as<FrameworkElement>();
         bool paceVisible = marker && m.paceVisible;
         if ((paceVisible ? 1 : 0) != ap.paceVisible[w]) {
-            if (marker) {
-                marker.Visibility(paceVisible ? Visibility::Visible : Visibility::Collapsed);
-            }
+            Visibility visibility = paceVisible ? Visibility::Visible : Visibility::Collapsed;
+            if (marker) marker.Visibility(visibility);
+            if (ring && tile.paceCores[w]) tile.paceCores[w].Visibility(visibility);
             ap.paceVisible[w] = paceVisible ? 1 : 0;
         }
         if (paceVisible && m.paceUnits != ap.pacePx[w]) {
             if (ring) {
-                EllipseGeometry dot;
-                dot.Center(TileRingPoint(center, m.radius, m.paceAngle));
-                dot.RadiusX(geometry.dot);
-                dot.RadiusY(geometry.dot);
-                tile.dots[w].Data(dot);
+                tile.paceHalos[w].Data(TileOutlineGeometry(m.paceHalo, kTileRingOverflow));
+                tile.paceCores[w].Data(TileOutlineGeometry(m.paceCore, kTileRingOverflow));
             } else {
-                ui.paceTicks[w].Margin({m.paceOffset, -2, 0, -2});
+                ui.paceTicks[w].Margin({m.paceOffset, -miniBar.overhang, 0, -miniBar.overhang});
             }
             ap.pacePx[w] = m.paceUnits;
         }
@@ -9165,21 +9344,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                     if (m.color != ap.fillColor[w]) {
                         if (ui.fills[w]) {
-                            // Shaded across the bar: the highlight at its top (vertical: left)
-                            // edge, the usage color from 60% on.
-                            LinearGradientBrush shade;
-                            shade.StartPoint({0.f, 0.f});
-                            shade.EndPoint(verticalBars ? winrt::Windows::Foundation::Point{1.f, 0.f} :
-                                                          winrt::Windows::Foundation::Point{0.f, 1.f});
-                            GradientStop top;
-                            top.Color(ArgbColor(UsageHighlight(m.color)));
-                            top.Offset(0.0);
-                            GradientStop body;
-                            body.Color(ArgbColor(m.color));
-                            body.Offset(0.6);
-                            shade.GradientStops().Append(top);
-                            shade.GradientStops().Append(body);
-                            ui.fills[w].Background(shade);
+                            ui.fills[w].Background(UsageFillBrush(m.color, verticalBars));
                         }
                         ap.fillColor[w] = m.color;
                     }
@@ -17504,11 +17669,11 @@ static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, ui
 
 // One draw operation, in strip DIPs. Colors are ARGB.
 struct SettingsPreviewOp {
-    enum class Kind : uint8_t { Rect, Arc, Dot, Polygon, Text, Logo };
+    enum class Kind : uint8_t { Rect, Shape, Polygon, Text, Logo };
     Kind kind = Kind::Rect;
     int hover = -1;                     // Drawn only while this column is hovered; -1: always
-    D2D1_RECT_F rect{};                 // Rect, Dot bounds, Text box (aligns in its width), Logo box
-    float radius = 0;                   // Rect corners; Arc centerline radius
+    D2D1_RECT_F rect{};                 // Rect, Text box (aligns in its width), Logo box
+    float radius = 0;                   // Rect corners
     // Rect corners one by one instead (top-left, top-right, bottom-right, bottom-left), scaled
     // down together where they don't fit
     std::optional<std::array<float, 4>> corners;
@@ -17516,12 +17681,12 @@ struct SettingsPreviewOp {
     // 0: flat
     uint32_t shade = 0;
     bool shadeLeft = false;
-    float stroke = 0;                   // Rect border (inside), Arc width, Dot outline
-    uint32_t color = 0;                 // Fill, arc or text color
-    uint32_t outline = 0;               // Rect border and Dot outline
+    float stroke = 0;                   // Rect border (inside)
+    uint32_t color = 0;                 // Fill or text color
+    uint32_t outline = 0;               // Rect border
     float opacity = 1;
-    D2D1_POINT_2F center{};             // Arc
-    float start = 0, sweep = 0;         // Arc: degrees clockwise from the right
+    TileOutline shape;                  // Shape: a ring tile shape, filled, moved to `origin`
+    D2D1_POINT_2F origin{};
     std::vector<D2D1_POINT_2F> points;  // Polygon
     std::wstring text;
     UiTextStyle style;
@@ -17564,9 +17729,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     strip.height = H;
     strip.rightMargin = float(std::clamp(settings.rightMargin, 0, 500));
     const TilePalette palette = TilePaletteFor(light);
-    const uint32_t pace = 0xFF000000 | uint32_t(GetRValue(display.paceTickColor)) << 16 |
-                          uint32_t(GetGValue(display.paceTickColor)) << 8 | GetBValue(display.paceTickColor);
-    const PaceMarkColors barPace = PaceMarkColorsFor(display.paceTickColor, light);
+    const PaceMarkColors pace = PaceMarkColorsFor(display.paceTickColor, light);
 
     // Text as XAML lays it out: natural line height, width rounded up to device pixels.
     struct Measured {
@@ -17741,7 +17904,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         for (int layer = 0; layer < 2; layer++) {
                             Op op;
                             op.kind = Op::Kind::Polygon;
-                            op.color = layer ? barPace.core : barPace.halo;
+                            op.color = layer ? pace.core : pace.halo;
                             for (auto [a, c] : geometry.caret[layer]) {
                                 op.points.push_back(vertical ? D2D1_POINT_2F{at.x + float(c), at.y + float(a)} :
                                                                D2D1_POINT_2F{at.x + float(a), at.y + float(c)});
@@ -17751,14 +17914,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     } else {
                         float boxWidth = vertical ? cross : along, boxHeight = vertical ? along : cross;
                         rect(ops, {at.x, at.y, at.x + boxWidth, at.y + boxHeight}, geometry.paceRadius,
-                             barPace.halo);
+                             pace.halo);
                         // The core centred along the tick, at its offset across it.
                         float coreWidth = vertical ? geometry.coreCrossSize : geometry.coreLength;
                         float coreHeight = vertical ? geometry.coreLength : geometry.coreCrossSize;
                         float offset = float(geometry.coreCrossOffset);
                         float cx = vertical ? at.x + offset : at.x + (boxWidth - coreWidth) / 2;
                         float cy = vertical ? at.y + (boxHeight - coreHeight) / 2 : at.y + offset;
-                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, barPace.core);
+                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, pace.core);
                     }
                 }
                 if (keys) {
@@ -17809,38 +17972,28 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 const TileRingGeometry& geometry = meters.ring;
                 const float S = float(geometry.size);
                 const float faceLeft = x0 + padLeft, faceTop = top + (T - S) / 2;
-                const D2D1_POINT_2F center{faceLeft + S / 2, faceTop + S / 2};
                 width = padLeft + S + padRight;
-                // Tracks, then fills, then pace dots on top.
+                // Tracks, then flat fills, then pace ticks (halo, then core) on top.
+                auto shape = [&](const TileOutline& outline, uint32_t color) {
+                    Op op;
+                    op.kind = Op::Kind::Shape;
+                    op.shape = outline;
+                    op.origin = {faceLeft, faceTop};
+                    op.color = color;
+                    add(ops, std::move(op));
+                };
                 for (int pass = 0; pass < 3; pass++) {
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         const QuotaMeter& q = meters.quotas[w];
                         if (!(meters.barMask & (1 << w))) continue;
-                        if (pass == 2) {
-                            if (!display.showPaceTicks || !q.paceVisible) continue;
-                            double radians = q.paceAngle * std::numbers::pi / 180;
-                            float px = center.x + float(q.radius * std::cos(radians));
-                            float py = center.y + float(q.radius * std::sin(radians));
-                            float dot = float(geometry.dot);
-                            Op op;
-                            op.kind = Op::Kind::Dot;
-                            op.rect = {px - dot, py - dot, px + dot, py + dot};
-                            op.color = pace;
-                            op.outline = 0x8C000000;
-                            op.stroke = 0.8f;
-                            add(ops, std::move(op));
-                            continue;
+                        if (pass == 0) {
+                            shape(q.track, palette.track);
+                        } else if (pass == 1 && q.fillUnits) {
+                            shape(q.fill, q.color);
+                        } else if (pass == 2 && display.showPaceTicks && q.paceVisible) {
+                            shape(q.paceHalo, pace.halo);
+                            shape(q.paceCore, pace.core);
                         }
-                        if (pass == 1 && !q.fillUnits) continue;
-                        Op op;
-                        op.kind = Op::Kind::Arc;
-                        op.center = center;
-                        op.radius = float(q.radius);
-                        op.stroke = float(geometry.stroke);
-                        op.start = float(q.arc.start);
-                        op.sweep = float(pass ? q.fillSweep : q.arc.sweep);
-                        op.color = pass ? q.color : palette.track;
-                        add(ops, std::move(op));
                     }
                 }
                 // Identity, sized to the hole; with a badge the logo shifts up-left by a DIP.
@@ -17898,23 +18051,39 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
                 float metersLeft = idLeft + idWidth + 6;
                 float content = 0;
+                // A mini bar or headline segment: corners a quarter of its thickness, its fill cut
+                // flat toward the end and shaded like the bars'.
+                auto meterBar = [&](const QuotaMeter& q, float left, float y, float length, float thick) {
+                    rect(ops, {left, y, left + length, y + thick}, thick / 4, palette.track);
+                    if (!q.fillUnits) return;
+                    Op fill;
+                    fill.rect = {left, y, left + float(q.fillLength), y + thick};
+                    float start = thick / 4, end = float(q.fillEndRadius);
+                    fill.corners = std::array<float, 4>{start, end, end, start};
+                    fill.color = q.color;
+                    fill.shade = UsageHighlight(q.color);
+                    add(ops, std::move(fill));
+                };
                 if (miniBars) {
-                    // Bars 38 x 4 DIP, 3 DIP apart; pace: a line tick with a dark outline,
-                    // overhanging the bar by 2 DIPs.
+                    // Bars 38 x 4 DIP, 3 DIP apart; pace: the bars' line tick, past the bar by its
+                    // overhang, the core a pixel short of the halo at either end.
+                    const BarGeometry tick = MiniBarGeometryFor(display);
                     float barsHeight = count ? count * kMiniBarThickness + (count - 1) * kMiniBarGap : 0;
                     float y = top + (T - float(barsHeight)) / 2;
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         const QuotaMeter& q = meters.quotas[w];
                         if (!(meters.barMask & (1 << w))) continue;
                         float left = metersLeft, thick = float(kMiniBarThickness);
-                        rect(ops, {left, y, left + float(kMiniBarLength), y + thick}, thick / 2, palette.track);
-                        if (q.fillUnits) {
-                            rect(ops, {left, y, left + float(q.fillLength), y + thick}, thick / 2, q.color);
-                        }
+                        meterBar(q, left, y, float(kMiniBarLength), thick);
                         if (display.showPaceTicks && q.paceVisible) {
-                            float tick = left + float(q.paceOffset);
-                            rect(ops, {tick, y - 2, tick + 3.5f, y + thick + 2}, 1.5f, 0x8C000000);
-                            rect(ops, {tick + 0.75f, y - 1.25f, tick + 2.75f, y + thick + 1.25f}, 1, pace);
+                            float tickLeft = left + float(q.paceOffset);
+                            float tickTop = y + (thick - float(tick.paceCrossSize)) / 2;
+                            rect(ops, {tickLeft, tickTop, tickLeft + float(tick.paceLength),
+                                       tickTop + float(tick.paceCrossSize)}, 0, pace.halo);
+                            float coreLeft = tickLeft + float(tick.paceLength - tick.coreLength) / 2;
+                            float coreTop = tickTop + float(tick.coreCrossOffset);
+                            rect(ops, {coreLeft, coreTop, coreLeft + float(tick.coreLength),
+                                       coreTop + float(tick.coreCrossSize)}, 0, pace.core);
                         }
                         y += thick + float(kMiniBarGap);
                     }
@@ -17939,15 +18108,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                               0.6f, true);
                     }
                     float left = metersLeft, y = panelTop + rowHeight + 3;
-                    float thick = float(kHeadlineSegmentThickness);
                     for (int w = 0; w < kQuotaBarCount; w++) {
-                        const QuotaMeter& q = meters.quotas[w];
                         if (!(meters.barMask & (1 << w))) continue;
-                        rect(ops, {left, y, left + float(kHeadlineSegmentLength), y + thick}, thick / 2,
-                             palette.track);
-                        if (q.fillUnits) {
-                            rect(ops, {left, y, left + float(q.fillLength), y + thick}, thick / 2, q.color);
-                        }
+                        meterBar(meters.quotas[w], left, y, float(kHeadlineSegmentLength),
+                                 float(kHeadlineSegmentThickness));
                         left += float(kHeadlineSegmentLength) + 2;
                     }
                     content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
@@ -18091,29 +18255,34 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     }
                     break;
                 }
-                case Op::Kind::Arc:
+                case Op::Kind::Shape:
                 case Op::Kind::Polygon: {
-                    // Arcs in two halves, so a full circle draws too.
                     winrt::com_ptr<ID2D1PathGeometry> path;
                     winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
                     winrt::com_ptr<ID2D1GeometrySink> sink;
                     winrt::check_hresult(path->Open(sink.put()));
-                    auto point = [&](float degrees) {
-                        double radians = degrees * std::numbers::pi / 180;
-                        return D2D1::Point2F(op.center.x + float(op.radius * std::cos(radians)),
-                                             op.center.y + float(op.radius * std::sin(radians)));
-                    };
-                    if (op.kind == Op::Kind::Arc) {
-                        sink->BeginFigure(point(op.start), D2D1_FIGURE_BEGIN_HOLLOW);
-                        for (int half = 1; half <= 2; half++) {
-                            D2D1_ARC_SEGMENT arc{point(op.start + op.sweep * float(half) / 2),
-                                                 {op.radius, op.radius}, 0,
-                                                 op.sweep >= 0 ? D2D1_SWEEP_DIRECTION_CLOCKWISE :
-                                                                 D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
-                                                 D2D1_ARC_SIZE_SMALL};
-                            sink->AddArc(&arc);
+                    if (op.kind == Op::Kind::Shape) {
+                        // As XAML's PathGeometry draws it: filled even-odd (the sink's default),
+                        // not snapped.
+                        auto point = [&](double x, double y) {
+                            return D2D1::Point2F(op.origin.x + float(x), op.origin.y + float(y));
+                        };
+                        for (const TileOutlineFigure& figure : op.shape) {
+                            sink->BeginFigure(point(figure.x, figure.y), D2D1_FIGURE_BEGIN_FILLED);
+                            for (const TileOutlineSegment& segment : figure.segments) {
+                                if (segment.radius <= 0) {
+                                    sink->AddLine(point(segment.x, segment.y));
+                                    continue;
+                                }
+                                D2D1_ARC_SEGMENT arc{point(segment.x, segment.y),
+                                                     {float(segment.radius), float(segment.radius)}, 0,
+                                                     segment.clockwise ? D2D1_SWEEP_DIRECTION_CLOCKWISE :
+                                                                         D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+                                                     D2D1_ARC_SIZE_SMALL};
+                                sink->AddArc(&arc);
+                            }
+                            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                         }
-                        sink->EndFigure(D2D1_FIGURE_END_OPEN);
                     } else if (!op.points.empty()) {
                         // On device pixels, like XAML's layout rounding of the tick and its
                         // pixel-sized parts.
@@ -18125,16 +18294,7 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                     }
                     winrt::check_hresult(sink->Close());
-                    ID2D1SolidColorBrush* brush = UiBrush(target, cache, color(op.color, op.opacity));
-                    if (op.kind == Op::Kind::Arc) target->DrawGeometry(path.get(), brush, op.stroke, g.roundCaps.get());
-                    else target->FillGeometry(path.get(), brush, nullptr);
-                    break;
-                }
-                case Op::Kind::Dot: {
-                    D2D1_ELLIPSE dot{{(r.left + r.right) / 2, (r.top + r.bottom) / 2}, (r.right - r.left) / 2,
-                                     (r.bottom - r.top) / 2};
-                    target->FillEllipse(&dot, UiBrush(target, cache, color(op.color, op.opacity)));
-                    target->DrawEllipse(&dot, UiBrush(target, cache, color(op.outline, op.opacity)), op.stroke);
+                    target->FillGeometry(path.get(), UiBrush(target, cache, color(op.color, op.opacity)), nullptr);
                     break;
                 }
                 case Op::Kind::Text: {
@@ -18841,8 +19001,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Pace markers";
-            spec.description = {{std::wstring(ring ? L"Dots" : L"Ticks") +
-                                 L" mark how much of each quota window has elapsed, to compare with its usage."}};
+            spec.description = {{L"Ticks mark how much of each quota window has elapsed, to compare with its usage."}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
         if (bars) {
@@ -18870,8 +19029,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
             UiCardSpec spec;
             spec.title = L"Marker color";
-            spec.description = {{bars ? L"Light grey by default, dark on a light taskbar. Custom... opens the color picker." :
-                                        L"Light grey by default. Custom... opens the color picker."}};
+            spec.description = {{L"Light grey by default, dark on a light taskbar. Custom... opens the color picker."}};
             spec.trailing = {swatches + 16 + buttonWidth, 32};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";

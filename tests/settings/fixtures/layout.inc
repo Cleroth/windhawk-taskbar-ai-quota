@@ -27,9 +27,15 @@ static bool Finite(const SettingsPreviewStrip& strip) {
     };
     for (const auto* ops : {&strip.ops, &strip.tray}) {
         for (const SettingsPreviewOp& op : *ops) {
-            if (!finite(op.rect) || !std::isfinite(op.radius) || !std::isfinite(op.sweep)) return false;
+            if (!finite(op.rect) || !std::isfinite(op.radius)) return false;
             for (D2D1_POINT_2F p : op.points) {
                 if (!std::isfinite(p.x) || !std::isfinite(p.y)) return false;
+            }
+            for (const TileOutlineFigure& figure : op.shape) {
+                if (!std::isfinite(figure.x) || !std::isfinite(figure.y)) return false;
+                for (const TileOutlineSegment& s : figure.segments) {
+                    if (!std::isfinite(s.x) || !std::isfinite(s.y) || !std::isfinite(s.radius)) return false;
+                }
             }
         }
     }
@@ -293,20 +299,26 @@ static void RunLayoutTests() {
         SettingsPreviewStrip strip = Strip(s);
         CHECK(OpsOfColor(strip, pace).empty());
         CHECK(std::none_of(strip.ops.begin(), strip.ops.end(), [](const SettingsPreviewOp& op) {
-            return op.kind == SettingsPreviewOp::Kind::Dot || op.kind == SettingsPreviewOp::Kind::Polygon;
+            return op.kind == SettingsPreviewOp::Kind::Shape || op.kind == SettingsPreviewOp::Kind::Polygon;
         }));
+        CHECK(OpsOfColor(strip, 0xC0000000).empty());
         s.barLayout = BarLayout::Stacked;
         s.showPaceTicks = false;
         CHECK(OpsOfColor(Strip(s), pace).empty());
-        // Carets are two polygons per mark; dots on rings carry a dark outline.
+        // Carets are two polygons per mark; ring ticks a core shape after each halo shape.
         s.showPaceTicks = true;
         strip = Strip(s);
         CHECK(std::count_if(strip.ops.begin(), strip.ops.end(), [](const SettingsPreviewOp& op) {
                   return op.kind == SettingsPreviewOp::Kind::Polygon;
               }) == 2 * int(OpsOfColor(strip, pace).size()));
-        s.barLayout = BarLayout::SegmentedRing;
-        for (const SettingsPreviewOp& dot : OpsOfColor(Strip(s), pace)) {
-            CHECK(dot.kind == SettingsPreviewOp::Kind::Dot && dot.outline == 0x8C000000);
+        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
+            s.barLayout = layout;
+            strip = Strip(s);
+            for (size_t i = 0; i < strip.ops.size(); i++) {
+                if (strip.ops[i].color != pace) continue;
+                CHECK(strip.ops[i].kind == SettingsPreviewOp::Kind::Shape && i > 0);
+                CHECK(strip.ops[i - 1].kind == SettingsPreviewOp::Kind::Shape && strip.ops[i - 1].color == 0xC0000000);
+            }
         }
     });
 
@@ -455,6 +467,93 @@ static void RunLayoutTests() {
         CHECK_NEAR(rails[0].rect.left, fills(strip)[0].rect.left + 3);
     });
 
+    Run("preview: ring tiles fill the model's shapes; mini bars and segments cut flat and shaded", [] {
+        auto roughly = [](double actual, double expected) { return std::abs(actual - expected) < 1e-4; };  // Floats
+        auto shaded = [](const SettingsPreviewStrip& strip) {
+            std::vector<SettingsPreviewOp> ops;
+            for (const SettingsPreviewOp& op : strip.ops) {
+                if (op.corners) ops.push_back(op);
+            }
+            return ops;
+        };
+        using Corners = std::array<float, 4>;
+        const uint32_t track = TilePaletteFor(false).track;
+        Settings s;
+        s.barLayout = BarLayout::SegmentedRing;
+        SettingsPreviewStrip strip = Strip(s);
+        // Ten quotas on four tiles: a track shape each, then a flat fill shape per quota in use.
+        std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, track);
+        CHECK(tracks.size() == 10 && shaded(strip).empty());
+        CHECK(std::all_of(tracks.begin(), tracks.end(), [](const SettingsPreviewOp& op) {
+            return op.kind == SettingsPreviewOp::Kind::Shape;
+        }));
+        // OAI's ring area: 4 DIPs into its column, centred on the 40 DIP tile; the model's shapes.
+        std::vector<AccountConfig> accounts;
+        std::vector<AccountData> data;
+        BuildVisualTestSnapshot(Display(s), &accounts, &data);
+        AccountMeters oai = AccountMeterState(Display(s), BarLayout::SegmentedRing, accounts[0], data[0], 0, 0);
+        CHECK(roughly(tracks[0].origin.x, strip.columns[0].left + 4) && roughly(tracks[0].origin.y, 8));
+        CHECK(tracks[0].shape.size() == 1 && tracks[0].shape[0].segments.size() == 9);
+        CHECK_NEAR(tracks[0].shape[0].x, oai.quotas[0].track[0].x);
+        CHECK_NEAR(tracks[0].shape[0].segments[4].y, oai.quotas[0].track[0].segments[4].y);
+        auto green = std::find_if(strip.ops.begin(), strip.ops.end(), [](const SettingsPreviewOp& op) {
+            return op.color == 0xFF43A047;
+        });
+        CHECK(green != strip.ops.end() && green->kind == SettingsPreviewOp::Kind::Shape && green->shade == 0);
+        CHECK_NEAR(green->shape[0].x, oai.quotas[0].fill[0].x);
+
+        // Logo + bars: 38 x 4 tracks with 1 DIP corners.
+        s.barLayout = BarLayout::LogoBars;
+        strip = Strip(s);
+        tracks = OpsOfColor(strip, track);
+        CHECK(tracks.size() == 10 && tracks[0].kind == SettingsPreviewOp::Kind::Rect);
+        CHECK_NEAR(tracks[0].radius, 1);
+        CHECK_NEAR(tracks[0].rect.right - tracks[0].rect.left, 38); CHECK_NEAR(tracks[0].rect.bottom - tracks[0].rect.top, 4);
+        // OAI's 25% 5-hour fill: 9.5 DIPs, the track's corners at its start, cut flat, shaded.
+        std::vector<SettingsPreviewOp> fills = shaded(strip);
+        CHECK(fills.size() == 10);
+        CHECK(roughly(fills[0].rect.right - fills[0].rect.left, 9.5) && roughly(fills[0].rect.left, tracks[0].rect.left));
+        CHECK((*fills[0].corners == Corners{1, 0, 0, 1}));
+        CHECK(fills[0].color == 0xFF43A047 && fills[0].shade == UsageHighlight(0xFF43A047) && !fills[0].shadeLeft);
+        // CC 2's weekly quota, past 100%: full, rounded at both ends.
+        auto full = std::find_if(fills.begin(), fills.end(), [&](const SettingsPreviewOp& op) {
+            return roughly(op.rect.right - op.rect.left, 38);
+        });
+        CHECK(full != fills.end() && full->color == 0xFFE53935 && (*full->corners == Corners{1, 1, 1, 1}));
+        // OAI's 5-hour pace at 65% of its window: the 4 DIP halo centred 24.7 DIPs along, from a DIP
+        // above the bar to a DIP below; the 2 x 4 core a DIP inside it.
+        std::vector<SettingsPreviewOp> halos = OpsOfColor(strip, 0xC0000000), cores = OpsOfColor(strip, 0xFFDEDEDE);
+        // Eight ticks: the fresh accounts' quotas but OAI's credits, which have no window.
+        CHECK(halos.size() == 8 && cores.size() == 8);
+        CHECK(roughly(halos[0].rect.left, tracks[0].rect.left + 24.7 - 2) && roughly(halos[0].rect.top, tracks[0].rect.top - 1));
+        CHECK_NEAR(halos[0].rect.right - halos[0].rect.left, 4); CHECK_NEAR(halos[0].rect.bottom - halos[0].rect.top, 6);
+        CHECK_NEAR(halos[0].radius, 0);
+        CHECK(roughly(cores[0].rect.left, halos[0].rect.left + 1) && roughly(cores[0].rect.top, halos[0].rect.top + 1));
+        CHECK_NEAR(cores[0].rect.right - cores[0].rect.left, 2); CHECK_NEAR(cores[0].rect.bottom - cores[0].rect.top, 4);
+        CHECK_NEAR(cores[0].radius, 0);
+        // 150%: 4 and 2 px wide, two pixels past each side (the 3 DIP gap is 4.5 px).
+        strip = Strip(s, 48, false, 1.5f);
+        halos = OpsOfColor(strip, 0xC0000000);
+        cores = OpsOfColor(strip, 0xFFDEDEDE);
+        CHECK(roughly(halos[0].rect.right - halos[0].rect.left, 4 / 1.5) && roughly(halos[0].rect.bottom - halos[0].rect.top, 4 + 4 / 1.5));
+        CHECK(roughly(cores[0].rect.right - cores[0].rect.left, 2 / 1.5) && roughly(cores[0].rect.bottom - cores[0].rect.top, 4 + 2 / 1.5));
+
+        // Headline segments: 9 x 3 tracks with 0.75 DIP corners, fills shaded and cut flat, no ticks.
+        s.barLayout = BarLayout::LogoHeadline;
+        strip = Strip(s);
+        tracks = OpsOfColor(strip, track);
+        fills = shaded(strip);
+        CHECK(tracks.size() == 10 && fills.size() == 10);
+        CHECK_NEAR(tracks[0].radius, 0.75); CHECK_NEAR(tracks[0].rect.right - tracks[0].rect.left, 9);
+        // OAI's 5-hour quota: 25% of 9 DIPs, cut flat; CC 2's weekly one fills the segment.
+        CHECK(roughly(fills[0].rect.right - fills[0].rect.left, 2.25) && (*fills[0].corners == Corners{0.75f, 0, 0, 0.75f}));
+        CHECK(fills[0].shade == UsageHighlight(fills[0].color));
+        full = std::find_if(fills.begin(), fills.end(), [&](const SettingsPreviewOp& op) { return op.color == 0xFFE53935; });
+        CHECK(full != fills.end() && roughly(full->rect.right - full->rect.left, 9) &&
+              (*full->corners == Corners{0.75f, 0.75f, 0.75f, 0.75f}));
+        CHECK(OpsOfColor(strip, 0xC0000000).empty() && OpsOfColor(strip, 0xFFDEDEDE).empty());
+    });
+
     Run("preview: the default pace color turns dark with a light halo on a light taskbar", [] {
         auto strip = [](const Settings& settings, bool light) {
             return SettingsPreviewLayout(TestGraphics(), settings, 48, 1, kNow, false, light,
@@ -472,10 +571,16 @@ static void RunLayoutTests() {
         s.paceTickColor = RGB(0xFF, 0x6E, 0xC7);
         lightStrip = strip(s, true);
         CHECK(OpsOfColor(lightStrip, 0xFFFF6EC7).size() == marks && OpsOfColor(lightStrip, 0xC0000000).size() == marks);
-        // Ring dots keep the configured color.
+        // Tile ticks follow the taskbar the same way.
         s = {};
-        s.barLayout = BarLayout::SegmentedRing;
-        CHECK(!OpsOfColor(strip(s, true), 0xFFDEDEDE).empty() && OpsOfColor(strip(s, true), 0xFF1A1A1A).empty());
+        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings, BarLayout::LogoBars}) {
+            s.barLayout = layout;
+            size_t ticks = OpsOfColor(strip(s, false), 0xFFDEDEDE).size();
+            lightStrip = strip(s, true);
+            CHECK(ticks == 8 && OpsOfColor(lightStrip, 0xFFDEDEDE).empty());
+            CHECK(OpsOfColor(lightStrip, 0xFF1A1A1A).size() == ticks && OpsOfColor(lightStrip, 0x80FFFFFF).size() == ticks);
+            CHECK(OpsOfColor(strip(s, false), 0xC0000000).size() == ticks);
+        }
     });
 
     Run("controller: the bar style commits as chosen and the preview follows", [] {
@@ -609,7 +714,7 @@ static void RunLayoutTests() {
         CHECK(identity.kind == UiItemKind::Card && identity.action.kind == UiActionKind::Navigate &&
               identity.action.value == int(SettingsUiPage::Accounts));
         CHECK(HasText(frame, L"Account identity is set per account in Accounts"));
-        CHECK(HasText(frame, L"Dots mark how much"));
+        CHECK(HasText(frame, L"Ticks mark how much") && HasText(frame, L"dark on a light taskbar"));
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::BarStyle)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickStyle)));

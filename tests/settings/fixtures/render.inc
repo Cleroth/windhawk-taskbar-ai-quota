@@ -98,8 +98,8 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 
 // Preview strips at 1:1, one row per variant with its caption. Layout sheet: every layout,
 // percent text modes and alignments, quota keys, bar modes, amounts, colorblind colors, pace
-// styles and colors, label positions, extreme sizes, overflow (scrolled and not), hover, and a
-// 32 DIP taskbar. Display sheet: percentage text never/hover/always, each alignment, bar modes
+// styles and colors, label positions, extreme sizes, overflow (scrolled and not), hover, a 32 DIP
+// taskbar, and tile fills near their ends and at their minimums. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -220,11 +220,55 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Concentric rings", [](Settings& s) { s.barLayout = BarLayout::ConcentricRings; }},
         {L"Concentric, remaining",
          [](Settings& s) { s.barLayout = BarLayout::ConcentricRings; s.barMode = BarMode::Remaining; }},
+        // Fills near their ends and minimum fills: yellow at 6 puts the green samples at 3% used
+        // (97% remaining), at 8 at 4%, at 2 at 1%.
+        {L"Ring 4, near full (97%)", [&](Settings& s) {
+             s.barLayout = BarLayout::SegmentedRing;
+             s.ringThickness = 4;
+             s.barMode = BarMode::Remaining;
+             thresholds(s, 6, 75, 90);
+         }},
+        {L"Ring 4, small fills (4%)", [&](Settings& s) {
+             s.barLayout = BarLayout::SegmentedRing;
+             s.ringThickness = 4;
+             thresholds(s, 8, 75, 90);
+         }},
+        {L"Ring 24 / 6, 5\u00B0 fills", [&](Settings& s) {
+             s.barLayout = BarLayout::SegmentedRing;
+             s.ringSize = 24;
+             s.ringThickness = 6;
+             thresholds(s, 2, 75, 90);
+         }},
+        {L"Concentric 4, near full", [&](Settings& s) {
+             s.barLayout = BarLayout::ConcentricRings;
+             s.ringThickness = 4;
+             s.barMode = BarMode::Remaining;
+             thresholds(s, 6, 75, 90);
+         }},
+        {L"Concentric 40 / 6", [](Settings& s) {
+             s.barLayout = BarLayout::ConcentricRings;
+             s.ringSize = 40;
+             s.ringThickness = 6;
+         }},
         {L"Logo + bars", [](Settings& s) { s.barLayout = BarLayout::LogoBars; }},
         {L"Logo + bars, hover CC 1", [](Settings& s) { s.barLayout = BarLayout::LogoBars; }, 1},
+        {L"Logo + bars, near full", [&](Settings& s) {
+             s.barLayout = BarLayout::LogoBars;
+             s.barMode = BarMode::Remaining;
+             thresholds(s, 6, 75, 90);
+         }},
+        {L"Logo + bars, pink pace", [](Settings& s) {
+             s.barLayout = BarLayout::LogoBars;
+             s.paceTickColor = RGB(0xFF, 0x6E, 0xC7);
+         }},
         {L"Headline %", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; }},
         {L"Headline, remaining",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.barMode = BarMode::Remaining; }},
+        {L"Headline, near full", [&](Settings& s) {
+             s.barLayout = BarLayout::LogoHeadline;
+             s.barMode = BarMode::Remaining;
+             thresholds(s, 6, 75, 90);
+         }},
     };
     // The Layout sheet's strips are the window's 680 DIPs; the Display sheet's fit four columns of
     // stacked bars, so every value shows.
