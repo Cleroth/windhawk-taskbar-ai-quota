@@ -237,9 +237,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             if (tileLayout) {
                 col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
             } else {
-                // The tiles' box: at least the tile height, 7 DIPs inside each side, holding the
-                // content centred across it: the identity beside, above or below the bars at the
-                // identity position, centred on them, or the bars alone while it is Hidden.
+                // The tiles' box: at least the tile height, up to 7 DIPs inside each side, holding
+                // the content centred across it: the identity beside, above or below the bars at
+                // the identity position, centred on them, or the bars alone while it is Hidden.
                 // UpdateQuotaUi sets the identity's margins.
                 bool identityAcross = labelPosition == LabelPosition::Top ||
                                       labelPosition == LabelPosition::Bottom;
@@ -456,7 +456,13 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Children().Append(content);
             }
 
-            col.Margin({(double)accountMargin, 0, (double)accountMargin, 0});
+            // The box's side padding comes out of the account margin, so accounts' contents sit
+            // twice the margin apart; at small margins the padding shrinks with it.
+            Thickness padding = col.Padding();
+            padding.Left = std::min(padding.Left, (double)accountMargin);
+            padding.Right = std::min(padding.Right, (double)accountMargin);
+            col.Padding(padding);
+            col.Margin({accountMargin - padding.Left, 0, accountMargin - padding.Right, 0});
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);

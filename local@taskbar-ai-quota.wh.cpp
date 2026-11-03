@@ -8659,9 +8659,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             if (tileLayout) {
                 col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
             } else {
-                // The tiles' box: at least the tile height, 7 DIPs inside each side, holding the
-                // content centred across it: the identity beside, above or below the bars at the
-                // identity position, centred on them, or the bars alone while it is Hidden.
+                // The tiles' box: at least the tile height, up to 7 DIPs inside each side, holding
+                // the content centred across it: the identity beside, above or below the bars at
+                // the identity position, centred on them, or the bars alone while it is Hidden.
                 // UpdateQuotaUi sets the identity's margins.
                 bool identityAcross = labelPosition == LabelPosition::Top ||
                                       labelPosition == LabelPosition::Bottom;
@@ -8878,7 +8878,13 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Children().Append(content);
             }
 
-            col.Margin({(double)accountMargin, 0, (double)accountMargin, 0});
+            // The box's side padding comes out of the account margin, so accounts' contents sit
+            // twice the margin apart; at small margins the padding shrinks with it.
+            Thickness padding = col.Padding();
+            padding.Left = std::min(padding.Left, (double)accountMargin);
+            padding.Right = std::min(padding.Right, (double)accountMargin);
+            col.Padding(padding);
+            col.Margin({accountMargin - padding.Left, 0, accountMargin - padding.Right, 0});
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);
@@ -17905,16 +17911,21 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         const AccountConfig& account = accounts[i];
         const int column = int(i);
         const float T = float(display.tileHeight);
-        float x0 = x + margin, width = 0, top = 0, height = 0;
+        // The box's side padding (rings 4 DIPs, headline tiles 7 and 8, bars 7) comes out of the
+        // account margin, shrinking with it.
+        const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+        const float padLeft = std::min(ring ? 4.0f : 7.0f, margin);
+        const float padRight = std::min(ring ? 4.0f : IsTileLayout(layout) ? 8.0f : 7.0f, margin);
+        float x0 = x + margin - padLeft, width = 0, top = 0, height = 0;
         std::vector<Op>& ops = strip.ops;
         size_t hoverAt = ops.size();
 
         if (!IsTileLayout(layout)) {
-            // Bars (quota-grid.h, quota-update.h): the tiles' box, at least the tile height, 7 DIPs
-            // inside each side, holding the content centered across it: the identity beside, above
-            // or below a stack of bars at the identity position, centered on them, the identity gap
-            // between them while a bar shows; or the bars alone. Each bar a track or thin rail, its
-            // fill and pace tick, an optional quota key and the percentage text.
+            // Bars (quota-grid.h, quota-update.h): the tiles' box, at least the tile height, its
+            // padding inside each side, holding the content centered across it: the identity
+            // beside, above or below a stack of bars at the identity position, centered on them,
+            // the identity gap between them while a bar shows; or the bars alone. Each bar a track
+            // or thin rail, its fill and pace tick, an optional quota key and the percentage text.
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -17966,8 +17977,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             }
             height = std::max(T, contentHeight);
             top = (H - height) / 2;
-            width = 7 + contentWidth + 7;
-            const float contentLeft = x0 + 7, contentTop = top + (height - contentHeight) / 2;
+            width = padLeft + contentWidth + padRight;
+            const float contentLeft = x0 + padLeft, contentTop = top + (height - contentHeight) / 2;
 
             if (shown) {
                 float boxLeft = position == LabelPosition::Right ? contentLeft + barsWidth :
@@ -18074,7 +18085,6 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         } else {
             // Tiles (tiles.h): the identity (logo, badge, or text) and the meters in the 4 DIP
             // rounded box.
-            const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
             TileIdentityText identity = TileIdentityFor(accounts, i);
             const bool hasLogo = account.tileIdentity != TileIdentity::Text;
             const bool hasBadge = hasLogo && identity.badge;
@@ -18083,7 +18093,6 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             AccountMeters meters = AccountMeterState(display, layout, account, data[i],
                                                      hasBadge ? int(identity.badgeText.size()) : 0, perPt);
             const float opacity = float(meters.identityOpacity);
-            const float padLeft = ring ? 4 : 7, padRight = ring ? 4 : 8;
             top = (H - T) / 2;
             height = T;
             int count = std::popcount(unsigned(meters.barMask));
@@ -18191,7 +18200,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         hover.hover = column;
         ops.insert(ops.begin() + std::ptrdiff_t(hoverAt), std::move(hover));
         strip.columns.push_back({x0, top, x0 + width, top + height});
-        x = x0 + width + margin;
+        x = x0 + width + margin - padRight;
     }
     strip.width = x;
 

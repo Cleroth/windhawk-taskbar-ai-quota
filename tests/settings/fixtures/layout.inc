@@ -253,13 +253,32 @@ static void RunLayoutTests() {
         Settings s;
         s.barLayout = BarLayout::SegmentedRing;
         SettingsPreviewStrip strip = Strip(s);
-        // Four 4 + 32 + 4 DIP tiles with 3 DIP margins; tiles 40 tall on a 48 DIP taskbar.
+        // Four 3 + 32 + 3 DIP tiles: the box's 4 DIP padding takes all of the 3 DIP account margin,
+        // so the boxes touch; tiles 40 tall on a 48 DIP taskbar.
         CHECK(strip.columns.size() == 4 && strip.height == 48);
-        CHECK_NEAR(strip.width, 4 * (40 + 6));
-        CHECK_NEAR(strip.columns[0].left, 3);
-        CHECK_NEAR(strip.columns[1].left, 49);
+        CHECK_NEAR(strip.width, 4 * 38);
+        CHECK_NEAR(strip.columns[0].left, 0);
+        CHECK_NEAR(strip.columns[1].left, 38);
         CHECK_NEAR(strip.columns[0].top, 4);
         CHECK_NEAR(strip.columns[0].bottom, 44);
+        // A 10 DIP margin: the full 4 DIP padding, 6 DIPs outside the box.
+        s.accountMargin = 10;
+        strip = Strip(s);
+        CHECK_NEAR(strip.width, 4 * (6 + 40 + 6));
+        CHECK_NEAR(strip.columns[0].left, 6);
+        CHECK_NEAR(strip.columns[1].left, 6 + 40 + 6 + 6);
+        // Headline tiles pad 7 DIPs before and 8 after: 3 and 2 DIPs outside at 10, none at 3.
+        s.barLayout = BarLayout::LogoHeadline;
+        strip = Strip(s);
+        CHECK_NEAR(strip.columns[0].left, 3);
+        CHECK_NEAR(strip.columns[1].left - strip.columns[0].right, 2 + 3);
+        CHECK_NEAR(strip.width, strip.columns[3].right + 2);
+        s.accountMargin = 3;
+        strip = Strip(s);
+        CHECK_NEAR(strip.columns[0].left, 0);
+        CHECK_NEAR(strip.columns[1].left, strip.columns[0].right);
+        CHECK_NEAR(strip.width, strip.columns[3].right);
+        s.barLayout = BarLayout::SegmentedRing;
         std::vector<int> hovers;
         for (const SettingsPreviewOp& op : strip.ops) {
             if (op.hover >= 0) hovers.push_back(op.hover);
@@ -269,13 +288,13 @@ static void RunLayoutTests() {
         // A 32 DIP taskbar: 24 DIP tiles, rings capped to them.
         strip = Strip(s, 32);
         CHECK(strip.height == 32);
-        CHECK_NEAR(strip.width, 4 * (32 + 6));
+        CHECK_NEAR(strip.width, 4 * (24 + 6));
         CHECK_NEAR(strip.columns[0].top, 4);
         CHECK(Strip(s, 0).height == 48);
         // Gallery thumbnails: the two Anthropic accounts, no tray.
         strip = Strip(s, 48, true);
         CHECK(strip.columns.size() == 2 && strip.tray.empty() && strip.trayWidth == 0);
-        CHECK_NEAR(strip.width, 2 * 46);
+        CHECK_NEAR(strip.width, 2 * 38);
         CHECK(!Strip(s).tray.empty() && Strip(s).trayWidth > 100);
     });
 
@@ -307,15 +326,15 @@ static void RunLayoutTests() {
         CHECK(always.size() == 10 && always[0].hover == -1);
         s.percentTextVisibility = PercentTextVisibility::Never;
         CHECK(percents(Strip(s)).empty());
-        // Left labels: 7 DIPs into the box, the label, the label gap, then the 100 DIP bars, 7 DIPs
-        // before its end.
+        // Left labels: the box's padding (the 3 DIP account margin) into it, the label, the label
+        // gap, then the 100 DIP bars, the padding before its end.
         s = {};
         strip = Strip(s);
         const SettingsPreviewOp label = FirstText(strip);
         CHECK(label.text == L"OAI");
-        CHECK_NEAR(label.rect.left, strip.columns[0].left + 7);
+        CHECK_NEAR(label.rect.left, strip.columns[0].left + 3);
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, label.rect.right + 3);
-        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + label.rect.right - label.rect.left + 3 + 100 + 7);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 3 + label.rect.right - label.rect.left + 3 + 100 + 3);
         // Quota keys add a ceil(9 * 1.4) + 3 DIP column before each track.
         s.showBarLabels = true;
         strip = Strip(s);
@@ -324,7 +343,7 @@ static void RunLayoutTests() {
         s = {};
         s.labelPosition = LabelPosition::Hidden;
         strip = Strip(s);
-        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 7 + 100 + 7);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 3 + 100 + 3);
         // Vertical bars stand 100 DIPs tall.
         s.barLayout = BarLayout::Vertical;
         strip = Strip(s);
@@ -336,24 +355,37 @@ static void RunLayoutTests() {
         const uint32_t hover = TilePaletteFor(false).hover;
         // Every sample column (OAI's label, the Anthropic pair's badged logos, Go's logo), Stacked
         // and Vertical: the hover fill first, the box's 4 DIP rounded rectangle, only while
-        // hovered; the 3 DIP account margins outside it.
+        // hovered. Its 7 DIP side padding comes out of the account margin, so contents sit twice
+        // the margin apart: at 0 none, at 3 (the default) all of the margin with the boxes
+        // touching, at 10 the full padding with 3 DIPs outside the box.
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
-            Settings s;
-            s.barLayout = layout;
-            SettingsPreviewStrip strip = Strip(s);
-            std::vector<SettingsPreviewOp> fills = OpsOfColor(strip, hover);
-            CHECK(fills.size() == 4 && strip.columns.size() == 4);
-            CHECK(strip.ops[0].color == hover && strip.ops[0].hover == 0);
-            for (size_t i = 0; i < fills.size(); i++) {
-                const D2D1_RECT_F& box = strip.columns[i];
-                CHECK(fills[i].hover == int(i) && fills[i].kind == SettingsPreviewOp::Kind::Rect);
-                CHECK_NEAR(fills[i].radius, 4);
-                CHECK_NEAR(fills[i].rect.left, box.left); CHECK_NEAR(fills[i].rect.right, box.right);
-                CHECK_NEAR(fills[i].rect.top, box.top); CHECK_NEAR(fills[i].rect.bottom, box.bottom);
+            for (int margin : {0, 3, 10}) {
+                Settings s;
+                s.barLayout = layout;
+                s.accountMargin = margin;
+                SettingsPreviewStrip strip = Strip(s);
+                std::vector<SettingsPreviewOp> fills = OpsOfColor(strip, hover);
+                CHECK(fills.size() == 4 && strip.columns.size() == 4);
+                CHECK(strip.ops[0].color == hover && strip.ops[0].hover == 0);
+                for (size_t i = 0; i < fills.size(); i++) {
+                    const D2D1_RECT_F& box = strip.columns[i];
+                    CHECK(fills[i].hover == int(i) && fills[i].kind == SettingsPreviewOp::Kind::Rect);
+                    CHECK_NEAR(fills[i].radius, 4);
+                    CHECK_NEAR(fills[i].rect.left, box.left); CHECK_NEAR(fills[i].rect.right, box.right);
+                    CHECK_NEAR(fills[i].rect.top, box.top); CHECK_NEAR(fills[i].rect.bottom, box.bottom);
+                }
+                const float padding = float(std::min(margin, 7)), outside = float(margin) - padding;
+                CHECK_NEAR(strip.columns[0].left, outside);
+                for (size_t i = 1; i < 4; i++) CHECK_NEAR(strip.columns[i].left - strip.columns[i - 1].right, 2 * outside);
+                CHECK_NEAR(strip.width, strip.columns[3].right + outside);
+                // The bars alone: the padding around them; the first track that far into its box.
+                s.labelPosition = LabelPosition::Hidden;
+                strip = Strip(s);
+                CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, strip.columns[0].left + padding);
+                if (layout == BarLayout::Stacked) {
+                    for (const D2D1_RECT_F& box : strip.columns) CHECK_NEAR(box.right - box.left, padding + 100 + padding);
+                }
             }
-            CHECK_NEAR(strip.columns[0].left, 3);
-            for (size_t i = 1; i < 4; i++) CHECK_NEAR(strip.columns[i].left - strip.columns[i - 1].right, 6);
-            CHECK_NEAR(strip.width, strip.columns[3].right + 3);
         }
 
         // Stacked: the tile height, 40 DIPs on a 48 DIP taskbar (CC 2's four bars just fill it:
@@ -390,8 +422,8 @@ static void RunLayoutTests() {
         CHECK(logos.size() == 2 && OpsOfColor(strip, TilePaletteFor(false).badge).size() == 2 &&
               OpsOfColor(strip, hover).size() == 2);
         CHECK(TextOps(strip, L"1").size() == 1 && TextOps(strip, L"2").size() == 1 && TextOps(strip, L"CC 1").empty());
-        CHECK_NEAR(logos[0].rect.left, strip.columns[0].left + 7);
-        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, strip.columns[0].left + 7 + 19 + 3);
+        CHECK_NEAR(logos[0].rect.left, strip.columns[0].left + 3);
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, strip.columns[0].left + 3 + 19 + 3);
     });
 
     Run("preview: each identity form at every identity position in Stacked; the badge counts in its box", [] {
@@ -408,7 +440,9 @@ static void RunLayoutTests() {
         const uint32_t badgeColor = TilePaletteFor(false).badge;
         for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
                                        LabelPosition::Bottom, LabelPosition::Hidden}) {
+            // The box's full 7 DIP padding, 3 DIPs outside it.
             Settings s;
+            s.accountMargin = 10;
             s.labelPosition = position;
             SettingsPreviewStrip strip = StripOf(s, accounts, data);
             CHECK(strip.columns.size() == 3);
@@ -552,6 +586,7 @@ static void RunLayoutTests() {
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
         const uint32_t badgeColor = TilePaletteFor(false).badge;
         Settings s;
+        s.accountMargin = 10;  // The box's full 7 DIP padding, 3 DIPs outside it.
         s.barLayout = BarLayout::Vertical;
         s.barLength = 32;
         auto center = [](const SettingsPreviewOp& a, const SettingsPreviewOp& b) {
@@ -682,6 +717,7 @@ static void RunLayoutTests() {
             for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
                                            LabelPosition::Bottom}) {
                 s = {};
+                s.accountMargin = 10;  // The box's full 7 DIP padding, 3 DIPs outside it.
                 s.barLayout = layout;
                 s.labelPosition = position;
                 strip = StripOf(s, accounts, data);
@@ -970,12 +1006,13 @@ static void RunLayoutTests() {
         CHECK(std::all_of(tracks.begin(), tracks.end(), [](const SettingsPreviewOp& op) {
             return op.kind == SettingsPreviewOp::Kind::Shape;
         }));
-        // OAI's ring area: 4 DIPs into its column, centred on the 40 DIP tile; the model's shapes.
+        // OAI's ring area: the box's padding (the 3 DIP account margin) into its column, centred on
+        // the 40 DIP tile; the model's shapes.
         std::vector<AccountConfig> accounts;
         std::vector<AccountData> data;
         BuildVisualTestSnapshot(Display(s), &accounts, &data);
         AccountMeters oai = AccountMeterState(Display(s), BarLayout::SegmentedRing, accounts[0], data[0], 0, 0);
-        CHECK(roughly(tracks[0].origin.x, strip.columns[0].left + 4) && roughly(tracks[0].origin.y, 8));
+        CHECK(roughly(tracks[0].origin.x, strip.columns[0].left + 3) && roughly(tracks[0].origin.y, 8));
         CHECK(tracks[0].shape.size() == 1 && tracks[0].shape[0].segments.size() == 9);
         CHECK_NEAR(tracks[0].shape[0].x, oai.quotas[0].track[0].x);
         CHECK_NEAR(tracks[0].shape[0].segments[4].y, oai.quotas[0].track[0].segments[4].y);
