@@ -16,7 +16,7 @@ Each visible account gets one compact taskbar column. Choose among the provider'
 
 Hover a column to highlight it and open its details flyout: percentages, reset times, pace, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Click a column to refresh it. Right-click a column for Settings, Usage history, Refresh all, provider actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several accounts. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
 
-Each column shows the account's identity beside its bars: the provider logo (with a number badge when several accounts share a provider) or the account's label. Bars can show compact quota keys and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark the identity with `!` and the details flyout with a warning icon.
+Each column shows the account's identity beside its bars: the provider logo (with a number badge when several visible accounts share a provider) or the account's label. Bars can show compact quota keys and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark the identity with `!` and the details flyout with a warning icon.
 
 It can also fire a Windows notification when an account first crosses the red threshold on a selected bar. The notification re-arms once usage drops back below the threshold.
 
@@ -46,7 +46,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - label: unique per provider; renaming keeps the sign-in and history
   - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and monthly extra usage, OpenAI credits; unavailable quotas auto-hide
   - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
-  - identity, shown beside the account's stacked or vertical bars and on ring and headline tiles: provider logo with a number badge when several accounts share a provider (default), logo only, or label (the full label on bars; on tiles up to 4 characters of short text, else the label without spaces)
+  - identity, shown beside the account's stacked or vertical bars and on ring and headline tiles: provider logo with a number badge when several visible accounts share a provider (default), logo only, or label (the full label on bars; on tiles up to 4 characters of short text, else the label without spaces)
   - record history for this account
   - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
 - **Layout**, with a live preview of the taskbar:

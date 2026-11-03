@@ -35,6 +35,7 @@ struct AppliedState {
     // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
     int tileWarn = -1;
+    int badge = -1;       // Number badge shown (1) or collapsed (0).
     int badgeLight = -1;  // Badge halo color for a light (1) or dark (0) taskbar.
     // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
     int highlight = -1;

@@ -117,7 +117,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                     L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient.",
                     SettingsField::GeminiLogoBrand, L"Gemini gradient");
         top = slider(top + 3, L"Badge size",
-                     L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+                     L"Text size of the number on a logo when several visible accounts share a provider, in pixels.",
                      SettingsField::BadgeSize);
         {
             UiCardSpec spec;

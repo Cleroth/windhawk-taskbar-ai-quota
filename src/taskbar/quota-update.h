@@ -78,6 +78,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
+            // A built badge shows while another visible account shares the provider, so hiding or
+            // showing an account updates it in place. Rings place it whether it shows or not.
+            bool badgeShown = ui.tile.badge && TileIdentityFor(accounts, i).badge;
+            if (ui.tile.badge && (badgeShown ? 1 : 0) != ap.badge) {
+                ui.tile.badge.Visibility(badgeShown ? Visibility::Visible : Visibility::Collapsed);
+                ap.badge = badgeShown ? 1 : 0;
+            }
             AccountMeters meters = AccountMeterState(
                 display, state.buildBarLayout, accounts[i], d,
                 ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt);
@@ -100,7 +107,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
                 if (identity) {
                     double side = kBarLogoSide * display.logoScale;
-                    BadgeBox badge = ui.tile.badge ?
+                    BadgeBox badge = badgeShown ?
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
                         settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,

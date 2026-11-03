@@ -100,8 +100,8 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 }
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
-// chosen), with a number badge when several configured accounts share the provider, or text, and
-// the stale-warning mark. Rings
+// chosen), with a number badge when another configured account shares the provider (UpdateQuotaUi
+// shows it while a visible one does), or text, and the stale-warning mark. Rings
 // resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
@@ -131,7 +131,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         }
     }
     TileIdentityText identityText = TileIdentityFor(accounts, index);
-    if (tile.logo && identityText.badge) {
+    if (tile.logo && !identityText.badgeText.empty()) {
         // The text, in the badge color unless it inherits the taskbar's, over eight copies in the
         // halo brush, kBadgeOutline DIPs around it, centred in a box that never clips them. The
         // Canvas places the box from the identity's top-left without sizing the identity.

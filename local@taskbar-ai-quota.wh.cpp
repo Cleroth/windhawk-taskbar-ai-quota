@@ -188,7 +188,7 @@ enum QuotaBarIndex {
 // What marks an account on the taskbar: beside Stacked and Vertical bars at the identity position
 // (Settings::labelPosition), and on ring and headline tiles.
 enum class TileIdentity {
-    LogoBadge,  // Provider logo, plus a number badge when several accounts share the provider.
+    LogoBadge,  // Provider logo, plus a number badge when several visible accounts share the provider.
     Logo,
     Text,  // "Label": the label on bars; tileText on tiles, or the label when tileText is empty.
 };
@@ -514,6 +514,7 @@ struct AppliedState {
     // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
     int tileWarn = -1;
+    int badge = -1;       // Number badge shown (1) or collapsed (0).
     int badgeLight = -1;  // Badge halo color for a light (1) or dark (0) taskbar.
     // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
     int highlight = -1;
@@ -6332,12 +6333,12 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     return g;
 }
 
-// The identity text of a tile, or of a bar column's logo identity. Logo identities show a number
-// badge when several configured accounts share the provider; text identities on tiles, and logos
-// that fail to load, show `text`.
+// The identity text of a tile, or of a bar column's logo identity. A logo identity has a number
+// badge (`badgeText`) when another configured account shares the provider, shown (`badge`) while
+// another visible one does; text identities on tiles, and logos that fail to load, show `text`.
 struct TileIdentityText {
     bool badge = false;
-    std::wstring badgeText;
+    std::wstring badgeText;  // Empty without a badge.
     std::wstring text;
 };
 
@@ -6345,11 +6346,15 @@ static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accoun
                                         size_t index) {
     const AccountConfig& account = accounts[index];
     TileIdentityText identity;
-    identity.badge = account.tileIdentity == TileIdentity::LogoBadge &&
-        std::count_if(accounts.begin(), accounts.end(), [&](const AccountConfig& other) {
-            return other.provider == account.provider;
-        }) > 1;
-    if (identity.badge) {
+    int others = 0, visibleOthers = 0;
+    for (size_t k = 0; k < accounts.size(); k++) {
+        if (k == index || accounts[k].provider != account.provider) continue;
+        others++;
+        if (!accounts[k].hidden) visibleOthers++;
+    }
+    const bool logoBadge = account.tileIdentity == TileIdentity::LogoBadge;
+    identity.badge = logoBadge && visibleOthers > 0;
+    if (logoBadge && others > 0) {
         // The label's trailing digits (at most two), else its first letter, else its first
         // non-space character.
         const std::wstring& label = account.label;
@@ -6875,8 +6880,8 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 }
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
-// chosen), with a number badge when several configured accounts share the provider, or text, and
-// the stale-warning mark. Rings
+// chosen), with a number badge when another configured account shares the provider (UpdateQuotaUi
+// shows it while a visible one does), or text, and the stale-warning mark. Rings
 // resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
@@ -6906,7 +6911,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         }
     }
     TileIdentityText identityText = TileIdentityFor(accounts, index);
-    if (tile.logo && identityText.badge) {
+    if (tile.logo && !identityText.badgeText.empty()) {
         // The text, in the badge color unless it inherits the taskbar's, over eight copies in the
         // halo brush, kBadgeOutline DIPs around it, centred in a box that never clips them. The
         // Canvas places the box from the identity's top-left without sizing the identity.
@@ -9486,6 +9491,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
+            // A built badge shows while another visible account shares the provider, so hiding or
+            // showing an account updates it in place. Rings place it whether it shows or not.
+            bool badgeShown = ui.tile.badge && TileIdentityFor(accounts, i).badge;
+            if (ui.tile.badge && (badgeShown ? 1 : 0) != ap.badge) {
+                ui.tile.badge.Visibility(badgeShown ? Visibility::Visible : Visibility::Collapsed);
+                ap.badge = badgeShown ? 1 : 0;
+            }
             AccountMeters meters = AccountMeterState(
                 display, state.buildBarLayout, accounts[i], d,
                 ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt);
@@ -9508,7 +9520,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
                 if (identity) {
                     double side = kBarLogoSide * display.logoScale;
-                    BadgeBox badge = ui.tile.badge ?
+                    BadgeBox badge = badgeShown ?
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
                         settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,
@@ -19356,7 +19368,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                     L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient.",
                     SettingsField::GeminiLogoBrand, L"Gemini gradient");
         top = slider(top + 3, L"Badge size",
-                     L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+                     L"Text size of the number on a logo when several visible accounts share a provider, in pixels.",
                      SettingsField::BadgeSize);
         {
             UiCardSpec spec;
@@ -20026,7 +20038,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.title = L"Identity";
                 spec.description = {{L"Marks this account beside its bars and on ring and headline tiles. Label "
                                      L"shows the label on bars and its short text on tiles. The number badge "
-                                     L"appears only when several accounts share a provider."}};
+                                     L"appears only when several visible accounts share a provider."}};
                 spec.trailing = {220, 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
                 UiCardLayout layout = row(spec);

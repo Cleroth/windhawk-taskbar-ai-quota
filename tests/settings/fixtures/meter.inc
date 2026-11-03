@@ -1040,6 +1040,16 @@ static void RunIdentityTests() {
         plain[0].tileIdentity = TileIdentity::Logo;
         plain[1].tileIdentity = TileIdentity::Text;
         CHECK(!TileIdentityFor(plain, 0).badge); CHECK(!TileIdentityFor(plain, 1).badge);
+        // Hidden accounts don't count: the badge text stays, shown only while another visible
+        // account shares the provider. A hidden account's own state is what it shows once shown.
+        std::vector<AccountConfig> shared = {Account(L"anthropic", L"CC 1"), Account(L"anthropic", L"CC 2"),
+                                             Account(L"anthropic", L"CC 3"), Account(L"openai", L"OAI")};
+        shared[2].hidden = true;
+        CHECK(TileIdentityFor(shared, 0).badge && TileIdentityFor(shared, 1).badge && TileIdentityFor(shared, 2).badge);
+        shared[1].hidden = true;
+        CHECK(!TileIdentityFor(shared, 0).badge); CHECK(TileIdentityFor(shared, 0).badgeText == L"1");
+        CHECK(TileIdentityFor(shared, 1).badge && TileIdentityFor(shared, 1).badgeText == L"2");
+        CHECK(!TileIdentityFor(shared, 3).badge && TileIdentityFor(shared, 3).badgeText.empty());
     });
 
     Run("tile identity: text", [] {
