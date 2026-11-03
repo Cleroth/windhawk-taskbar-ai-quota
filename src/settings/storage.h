@@ -359,9 +359,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?
                               (COLORREF)paceTickColor : kDefaultPaceTickColor;
-        double badgeColor = GetNum(root, L"badgeColor", kDefaultBadgeColor);
+        double badgeColor = GetNum(root, L"badgeColor", kBadgeTaskbarTextColor);
         s.badgeColor = std::isfinite(badgeColor) && badgeColor >= 0 && badgeColor <= 0x00FFFFFF ?
-                           (COLORREF)badgeColor : kDefaultBadgeColor;
+                           (COLORREF)badgeColor : kBadgeTaskbarTextColor;
         std::wstring labelPosition = GetStr(root, L"labelPosition");
         if (labelPosition == L"hidden") s.labelPosition = LabelPosition::Hidden;
         else if (labelPosition == L"top") s.labelPosition = LabelPosition::Top;

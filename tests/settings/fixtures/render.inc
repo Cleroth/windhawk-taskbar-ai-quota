@@ -370,15 +370,15 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
          }},
         {L"Headline, logo 150%, badge 11",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.logoScale = 150; s.badgeSize = 11; }},
-        // Badge colors: each swatch past the default (light blue), on bars and rings.
-        {L"Bars 60, badge taskbar text",
-         [](Settings& s) { s.barLength = 60; s.badgeColor = RGB(0xFF, 0xFF, 0xFF); }},
+        // Badge colors: each swatch past the default (the taskbar's text color), on bars and rings.
+        {L"Bars 60, badge light blue",
+         [](Settings& s) { s.barLength = 60; s.badgeColor = RGB(0x4C, 0xC2, 0xFF); }},
         {L"Bars 60, badge dark", [](Settings& s) { s.barLength = 60; s.badgeColor = RGB(0x1C, 0x1C, 0x1C); }},
         {L"Bars 60, badge pink", [](Settings& s) { s.barLength = 60; s.badgeColor = RGB(0xFF, 0x6E, 0xC7); }},
-        {L"Ring, badge 12, taskbar text", [](Settings& s) {
+        {L"Ring, badge 12, light blue", [](Settings& s) {
              s.barLayout = BarLayout::SegmentedRing;
              s.badgeSize = 12;
-             s.badgeColor = RGB(0xFF, 0xFF, 0xFF);
+             s.badgeColor = RGB(0x4C, 0xC2, 0xFF);
          }},
         // Logo brand colors (high contrast: the text color): Claude's orange and the Gemini
         // gradient on bars, rings and headline tiles; each alone.

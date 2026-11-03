@@ -861,7 +861,7 @@ static void RunTileTests() {
         // outline around both: at 9 DIPs, 7.4 x 8.3 DIPs for one character, 12.8 wide for two.
         MeterDisplay d = Display();
         CHECK(d.badgeSize == 13 && d.badgeOffsetX == 0 && d.badgeOffsetY == 0); CHECK_NEAR(d.logoScale, 1);
-        CHECK(d.badgeColor == RGB(0x4C, 0xC2, 0xFF));
+        CHECK(d.badgeColor == RGB(0xFF, 0xFF, 0xFF));
         CHECK(Display(With([](Settings& s) { s.badgeColor = 0xAB123456; })).badgeColor == 0x123456);
         // Logos in the text color by default; the brand choices pass through.
         CHECK(d.logoBrands == LogoBrands{});

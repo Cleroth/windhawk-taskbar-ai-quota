@@ -7,7 +7,7 @@ static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bar
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
-static constexpr COLORREF kSettingsBadgeColors[] = {kDefaultBadgeColor, kBadgeTaskbarTextColor,
+static constexpr COLORREF kSettingsBadgeColors[] = {kBadgeTaskbarTextColor, RGB(0x4C, 0xC2, 0xFF),
                                                     RGB(0x1C, 0x1C, 0x1C), RGB(0xFF, 0x6E, 0xC7)};
 
 // Lays out the page from content y; returns the bottom of the last card.
@@ -122,8 +122,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Badge color";
-            spec.description = {{L"Light blue by default; white follows the taskbar\u2019s text color. Custom... "
-                                  L"opens the color picker."}};
+            spec.description = {{L"White, the default, follows the taskbar\u2019s text color. Custom... opens "
+                                  L"the color picker."}};
             spec.enabled = placed;
             if (!placed) spec.reason = L"Choose an identity position to change this.";
             top = colorCard(top + 3, spec, SettingsField::BadgeColor, SettingsField::BadgeColorCustom,

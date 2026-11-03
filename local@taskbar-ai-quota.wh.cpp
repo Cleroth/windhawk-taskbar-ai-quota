@@ -291,8 +291,7 @@ struct LogoBrands {
 };
 
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
-// The number badge's colors: white stands for the taskbar's text color, whatever the theme.
-static constexpr COLORREF kDefaultBadgeColor = RGB(0x4C, 0xC2, 0xFF);
+// The number badge's default color: white stands for the taskbar's text color, whatever the theme.
 static constexpr COLORREF kBadgeTaskbarTextColor = RGB(0xFF, 0xFF, 0xFF);
 
 // Usage history window ranges: 24 hours, 7, 30 and 90 days, and every retained day.
@@ -329,7 +328,7 @@ struct Settings {
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
     int badgeSize = 13;
-    COLORREF badgeColor = kDefaultBadgeColor;
+    COLORREF badgeColor = kBadgeTaskbarTextColor;
     int badgeOffsetX = 0;
     int badgeOffsetY = 0;
     int labelFontSize = 11;  // The Label identity on bars.
@@ -15817,9 +15816,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?
                               (COLORREF)paceTickColor : kDefaultPaceTickColor;
-        double badgeColor = GetNum(root, L"badgeColor", kDefaultBadgeColor);
+        double badgeColor = GetNum(root, L"badgeColor", kBadgeTaskbarTextColor);
         s.badgeColor = std::isfinite(badgeColor) && badgeColor >= 0 && badgeColor <= 0x00FFFFFF ?
-                           (COLORREF)badgeColor : kDefaultBadgeColor;
+                           (COLORREF)badgeColor : kBadgeTaskbarTextColor;
         std::wstring labelPosition = GetStr(root, L"labelPosition");
         if (labelPosition == L"hidden") s.labelPosition = LabelPosition::Hidden;
         else if (labelPosition == L"top") s.labelPosition = LabelPosition::Top;
@@ -19258,7 +19257,7 @@ static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bar
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
-static constexpr COLORREF kSettingsBadgeColors[] = {kDefaultBadgeColor, kBadgeTaskbarTextColor,
+static constexpr COLORREF kSettingsBadgeColors[] = {kBadgeTaskbarTextColor, RGB(0x4C, 0xC2, 0xFF),
                                                     RGB(0x1C, 0x1C, 0x1C), RGB(0xFF, 0x6E, 0xC7)};
 
 // Lays out the page from content y; returns the bottom of the last card.
@@ -19373,8 +19372,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Badge color";
-            spec.description = {{L"Light blue by default; white follows the taskbar\u2019s text color. Custom... "
-                                  L"opens the color picker."}};
+            spec.description = {{L"White, the default, follows the taskbar\u2019s text color. Custom... opens "
+                                  L"the color picker."}};
             spec.enabled = placed;
             if (!placed) spec.reason = L"Choose an identity position to change this.";
             top = colorCard(top + 3, spec, SettingsField::BadgeColor, SettingsField::BadgeColorCustom,
@@ -20558,9 +20557,9 @@ struct SettingsUiClient final : UiHostClient {
                                 L"hidden accounts, threshold notifications on." :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
-                                L"on the left, 32 px rings, logos in the taskbar\u2019s text color, light "
-                                L"blue number badges, light grey caret pace markers and the default "
-                                L"spacing. Accounts are not changed." :
+                                L"on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
+                                L"text color, light grey caret pace markers and the default spacing. "
+                                L"Accounts are not changed." :
                             field == SettingsField::ResetDisplay ?
                                 L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
                                 L"hover with adaptive alignment, no amounts, the standard palette with "

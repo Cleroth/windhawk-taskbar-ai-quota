@@ -503,12 +503,12 @@ static void RunLayoutTests() {
             CHECK_NEAR(logos[0].rect.right - logos[0].rect.left, 15);
             CHECK_NEAR(logos[1].rect.bottom - logos[1].rect.top, 15);
             CHECK_NEAR(logos[0].opacity, 1);
-            // The badge: "1" in bold at 13 DIPs in light blue, its cap height centred on the logo's
+            // The badge: "1" in bold at 13 DIPs in the taskbar's text color, its cap height centred on the logo's
             // lower-right corner, over eight copies in the halo color a DIP around it (Segoe UI
             // Variable's cap height over its line, as for the label).
             CHECK(badges.size() == 9);
             const SettingsPreviewOp& number = badges[8];
-            CHECK(number.color == 0xFF4CC2FF && number.style.size == 13 && number.style.family == UiFamily::Small &&
+            CHECK(number.color == 0xFFFFFFFF && number.style.size == 13 && number.style.family == UiFamily::Small &&
                   number.style.weight == DWRITE_FONT_WEIGHT_BOLD && number.align == DWRITE_TEXT_ALIGNMENT_CENTER);
             CHECK(NearDip((number.rect.left + number.rect.right) / 2, logos[0].rect.right));
             CHECK(NearDip(number.rect.top + AboveCap(13) + CapHeight(13) / 2, logos[0].rect.bottom));
@@ -901,18 +901,18 @@ static void RunLayoutTests() {
         CHECK(NearDip(numberX(number), logo[0].rect.right));
         CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.left, logo[0].rect.right + 5.2 + 3));
 
-        // The badge color: light blue by default on either taskbar, outlined dark; white is the
-        // taskbar's text (dark on a light taskbar) outlined in the taskbar's color; a dark color
+        // The badge color: white by default, the taskbar's text (dark on a light taskbar) outlined
+        // in the taskbar's color; light blue stays on either taskbar, outlined dark; a dark color
         // is outlined light. The logo keeps the taskbar's text color.
         struct Case {
             std::optional<COLORREF> color;
             bool light;
             uint32_t text, number, halo;
         };
-        for (const Case& c : {Case{std::nullopt, false, 0xFFFFFFFF, 0xFF4CC2FF, 0xFF1C1C1C},
-                              Case{std::nullopt, true, 0xFF1A1A1A, 0xFF4CC2FF, 0xFF1C1C1C},
-                              Case{RGB(0xFF, 0xFF, 0xFF), false, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF1C1C1C},
-                              Case{RGB(0xFF, 0xFF, 0xFF), true, 0xFF1A1A1A, 0xFF1A1A1A, 0xFFF3F3F3},
+        for (const Case& c : {Case{std::nullopt, false, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF1C1C1C},
+                              Case{std::nullopt, true, 0xFF1A1A1A, 0xFF1A1A1A, 0xFFF3F3F3},
+                              Case{RGB(0x4C, 0xC2, 0xFF), false, 0xFFFFFFFF, 0xFF4CC2FF, 0xFF1C1C1C},
+                              Case{RGB(0x4C, 0xC2, 0xFF), true, 0xFF1A1A1A, 0xFF4CC2FF, 0xFF1C1C1C},
                               Case{RGB(0x1C, 0x1C, 0x1C), false, 0xFFFFFFFF, 0xFF1C1C1C, 0xFFF3F3F3}}) {
             s = {};
             if (c.color) s.badgeColor = *c.color;
@@ -1462,8 +1462,8 @@ static void RunLayoutTests() {
         CHECK(badgeSize.minimum == 6 && badgeSize.maximum == 20 && badgeSize.action.value == 13);
         CHECK(badgeX.minimum == -20 && badgeX.maximum == 20 && badgeX.action.value == 0 && badgeY.minimum == -20 &&
               badgeY.maximum == 20 && Control(frame, SettingsField::BadgeOffsetY).text == L"0");
-        // The badge color between its size and offsets: four swatches, the first (light blue)
-        // chosen, then white (the taskbar's text color), then Custom...
+        // The badge color between its size and offsets: four swatches, the first (white, the
+        // taskbar's text color) chosen, then light blue, then Custom...
         const UiItem& badgeDefault = Control(frame, SettingsField::BadgeColor, 1);
         const UiItem& badgeCustom = Control(frame, SettingsField::BadgeColorCustom);
         for (uint32_t i = 1; i <= 4; i++) {
@@ -1471,8 +1471,8 @@ static void RunLayoutTests() {
             CHECK(swatch.kind == UiItemKind::Swatch && swatch.selected == (i == 1) && swatch.enabled);
         }
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BadgeColor, 5)));
-        CHECK(badgeDefault.action.value == int(RGB(0x4C, 0xC2, 0xFF)) &&
-              Control(frame, SettingsField::BadgeColor, 2).action.value == int(RGB(0xFF, 0xFF, 0xFF)) &&
+        CHECK(badgeDefault.action.value == int(RGB(0xFF, 0xFF, 0xFF)) &&
+              Control(frame, SettingsField::BadgeColor, 2).action.value == int(RGB(0x4C, 0xC2, 0xFF)) &&
               Control(frame, SettingsField::BadgeColor, 3).action.value == int(RGB(0x1C, 0x1C, 0x1C)));
         CHECK(badgeCustom.text == L"Custom..." && badgeCustom.enabled &&
               badgeCustom.action.target == uint32_t(SettingsField::BadgeColorCustom));
@@ -1494,7 +1494,7 @@ static void RunLayoutTests() {
               badgeX.rect.bottom < badgeY.rect.top && badgeY.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top);
         CHECK(HasText(frame, L"Logo size") && HasText(frame, L"Badge size") && HasText(frame, L"Badge horizontal offset") &&
               HasText(frame, L"Badge vertical offset") && HasText(frame, L"Percent of the standard size; rings keep it inside the hole.") &&
-              HasText(frame, L"Badge color") && HasText(frame, L"white follows the taskbar\u2019s text color"));
+              HasText(frame, L"Badge color") && HasText(frame, L"White, the default, follows the taskbar\u2019s text color"));
         CHECK(!Control(frame, SettingsField::ShowBarLabels).selected);
         CHECK(Control(frame, SettingsField::PercentFontSize, 1).action.value == 9);
         CHECK(Control(frame, SettingsField::ShowPaceTicks).selected);
