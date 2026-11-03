@@ -126,7 +126,8 @@ access+refresh tokens, and refreshes/rotates them itself.
 - Usage history belongs in per-user LocalAppData, not Windhawk's machine-shared writable storage.
   Recording consent is a separate HKCU setting, never a field in machine-shared `settings_v1`.
 - Keep the journal size/read bounds, checksum validation, atomic compaction and exclusive writer
-  handle. Only the shell process records; save pending history IDs before recording. History IDs
+  handle. A load that stops part-way (out of memory, unload) leaves the journal unwritable until
+  Clear. Only the shell process records; save pending history IDs before recording. History IDs
   are separate from auth identities and follow configured entries, not verified logins.
 - User-facing recording/storage/export behavior and its manual verification:
   [README > Usage history](../README.md#usage-history).

@@ -176,10 +176,19 @@ static void LoadHistoryLocked(bool create = false) {
                 SetHistoryStatus(L"Damaged history record. Export readable samples or clear history.");
                 return;
             }
-            g_historySamples.push_back(sample);
+            try {
+                g_historySamples.push_back(sample);
+            } catch (...) {
+                // Out of memory: a partial journal must never be saved over the whole one.
+                g_historyWritable = false;
+                g_historySamples.clear();
+                SetHistoryStatus(L"History is too large to load. Clear history to start again.");
+                return;
+            }
         }
         count -= n;
     }
+    if (count) g_historyWritable = false;  // Unload stopped it part-way: never save that part.
 }
 
 // Atomically replaces the journal with `samples`, except those of `skippedAccount` (0: none).
