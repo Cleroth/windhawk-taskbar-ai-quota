@@ -233,6 +233,13 @@ static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
 static constexpr int kRingThicknessMax = 6;
+// Headline tiles: the number's text size and each quota bar's length and thickness, in DIPs.
+static constexpr int kHeadlineFontSizeMin = 10;
+static constexpr int kHeadlineFontSizeMax = 24;
+static constexpr int kHeadlineBarLengthMin = 4;
+static constexpr int kHeadlineBarLengthMax = 60;
+static constexpr int kHeadlineBarThicknessMin = 2;
+static constexpr int kHeadlineBarThicknessMax = 10;
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -313,6 +320,11 @@ struct Settings {
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
+    // Headline tiles: the most-used quota's number size, and the size of each quota's bar under
+    // it (the bar gap is the bars').
+    int headlineFontSize = 14;
+    int headlineBarLength = 16;
+    int headlineBarThickness = 4;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
@@ -5782,11 +5794,11 @@ static FlyoutTheme LoadFlyoutTheme() {
 // Tile sizes, in DIPs.
 // Nominal; shorter taskbars get shorter tiles. Bar columns are at least as tall.
 static constexpr double kTileHeight = 40;
-static constexpr double kHeadlineSegmentLength = 9;
-static constexpr double kHeadlineSegmentThickness = 3;
 // Logo sides at 100% logo size beside bars and on headline tiles; rings size theirs to the hole.
 static constexpr double kBarLogoSide = 15;
 static constexpr double kHeadlineLogoSide = 16;
+// A headline tile's window key text, in proportion to its number's (9 DIPs beside 14).
+static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
@@ -6063,6 +6075,9 @@ struct MeterDisplay {
     BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
+    int headlineFontSize;     // kHeadlineFontSizeMin-kHeadlineFontSizeMax DIPs.
+    int headlineBarLength;    // kHeadlineBarLengthMin-kHeadlineBarLengthMax DIPs.
+    int headlineBarThickness; // kHeadlineBarThicknessMin-kHeadlineBarThicknessMax DIPs.
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -6101,6 +6116,10 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
+        .headlineFontSize = std::clamp(settings.headlineFontSize, kHeadlineFontSizeMin, kHeadlineFontSizeMax),
+        .headlineBarLength = std::clamp(settings.headlineBarLength, kHeadlineBarLengthMin, kHeadlineBarLengthMax),
+        .headlineBarThickness =
+            std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -6696,9 +6715,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         } else {
             // Headline segments: corners a quarter of the thickness; the fill cut flat until the
             // track's end. Any usage fills at least 2 DIPs, as on the bars.
-            double length = kHeadlineSegmentLength;
+            double length = display.headlineBarLength;
             m.fillLength = m.fillUnits ? std::clamp(length * fill, 2.0, length) : 0;
-            m.fillEndRadius = std::max(0.0, kHeadlineSegmentThickness / 4 - (length - m.fillLength));
+            m.fillEndRadius = std::max(0.0, display.headlineBarThickness / 4.0 - (length - m.fillLength));
         }
     }
 
@@ -6991,7 +7010,8 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         return column;
     }
 
-    // Headline: the most-used quota's number and window key over per-quota segments.
+    // Headline: the most-used quota's number and window key over per-quota segments, at the
+    // headline sizes and the bar gap.
     column.Children().Append(identity);
     StackPanel meters;
     meters.IsHitTestVisible(false);
@@ -7003,19 +7023,20 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     headline.Spacing(3);
     StackPanel numberRow;
     numberRow.Orientation(Orientation::Horizontal);
+    double fontSize = display.headlineFontSize;
     tile.headline = TextBlock{};
     tile.headline.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
     tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-    tile.headline.FontSize(14);
+    tile.headline.FontSize(fontSize);
     tile.headline.TextLineBounds(TextLineBounds::Tight);
     tile.headline.VerticalAlignment(VerticalAlignment::Bottom);
     // Reserves "100%" so the tile keeps its width as values change.
     tile.headline.Text(L"100%");
-    tile.headline.MinWidth(std::ceil(TileTextWidthPerPt(tile.headline) * 14));
+    tile.headline.MinWidth(std::ceil(TileTextWidthPerPt(tile.headline) * fontSize));
     tile.headline.Text(L"");
     numberRow.Children().Append(tile.headline);
     tile.headlineKey = TextBlock{};
-    tile.headlineKey.FontSize(9);
+    tile.headlineKey.FontSize(fontSize * kHeadlineKeyScale);
     tile.headlineKey.Opacity(0.6);
     tile.headlineKey.TextLineBounds(TextLineBounds::Tight);
     tile.headlineKey.VerticalAlignment(VerticalAlignment::Bottom);
@@ -7024,7 +7045,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     headline.Children().Append(numberRow);
     meters.Orientation(Orientation::Horizontal);
     meters.HorizontalAlignment(HorizontalAlignment::Left);
-    meters.Spacing(2);
+    meters.Spacing(display.barGap);
     headline.Children().Append(meters);
     column.Children().Append(headline);
     return column;
@@ -7060,7 +7081,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     bool ring = layout == BarLayout::ConcentricRings || layout == BarLayout::SegmentedRing;
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
-    double thickness = kHeadlineSegmentThickness;
+    double thickness = display.headlineBarThickness;
 
     // Meter shapes: regenerated, and the identity resized, whenever an input changes.
     TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
@@ -7138,7 +7159,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 Grid bar;
-                bar.Width(kHeadlineSegmentLength);
+                bar.Width(display.headlineBarLength);
                 bar.Height(thickness);
                 Border trackBar;
                 trackBar.CornerRadius({radius, radius, radius, radius});
@@ -15503,6 +15524,12 @@ static bool NormalizeSettings(Settings* s) {
     s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
     s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
                                   kRingThicknessMin, kRingThicknessMax);
+    s->headlineFontSize = std::clamp(s->headlineFontSize > 0 ? s->headlineFontSize : 14,
+                                     kHeadlineFontSizeMin, kHeadlineFontSizeMax);
+    s->headlineBarLength = std::clamp(s->headlineBarLength > 0 ? s->headlineBarLength : 16,
+                                      kHeadlineBarLengthMin, kHeadlineBarLengthMax);
+    s->headlineBarThickness = std::clamp(s->headlineBarThickness > 0 ? s->headlineBarThickness : 4,
+                                         kHeadlineBarThicknessMin, kHeadlineBarThicknessMax);
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 9, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -15599,6 +15626,9 @@ static std::wstring SerializeSettings(const Settings& s) {
         setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
+        setNumber(L"headlineFontSize", s.headlineFontSize);
+        setNumber(L"headlineBarLength", s.headlineBarLength);
+        setNumber(L"headlineBarThickness", s.headlineBarThickness);
         setNumber(L"logoScale", s.logoScale);
         setBool(L"brandClaudeLogo", s.logoBrands.claude);
         setBool(L"brandGeminiLogo", s.logoBrands.gemini);
@@ -15726,6 +15756,16 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                          (int)std::clamp(ringSize, 0.0, (double)kRingSizeMax) : 0;
         s.ringThickness = std::isfinite(ringThickness) ?
                               (int)std::clamp(ringThickness, 0.0, (double)kRingThicknessMax) : 0;
+        double headlineFontSize = GetNum(root, L"headlineFontSize", 14);
+        double headlineBarLength = GetNum(root, L"headlineBarLength", 16);
+        double headlineBarThickness = GetNum(root, L"headlineBarThickness", 4);
+        s.headlineFontSize = std::isfinite(headlineFontSize) ?
+                                 (int)std::clamp(headlineFontSize, 0.0, (double)kHeadlineFontSizeMax) : 0;
+        s.headlineBarLength = std::isfinite(headlineBarLength) ?
+                                  (int)std::clamp(headlineBarLength, 0.0, (double)kHeadlineBarLengthMax) : 0;
+        s.headlineBarThickness =
+            std::isfinite(headlineBarThickness) ?
+                (int)std::clamp(headlineBarThickness, 0.0, (double)kHeadlineBarThicknessMax) : 0;
         double logoScale = GetNum(root, L"logoScale", 100);
         double badgeSize = GetNum(root, L"badgeSize", 9);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
@@ -16677,6 +16717,9 @@ enum class SettingsField : uint8_t {
     BarGap,
     RingSize,
     RingThickness,
+    HeadlineFontSize,
+    HeadlineBarLength,
+    HeadlineBarThickness,
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -16752,6 +16795,10 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
         case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
         case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
+        case SettingsField::HeadlineFontSize: return SettingsNumberRange{kHeadlineFontSizeMin, kHeadlineFontSizeMax};
+        case SettingsField::HeadlineBarLength: return SettingsNumberRange{kHeadlineBarLengthMin, kHeadlineBarLengthMax};
+        case SettingsField::HeadlineBarThickness:
+            return SettingsNumberRange{kHeadlineBarThicknessMin, kHeadlineBarThicknessMax};
         case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
         case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
         case SettingsField::BadgeOffsetX:
@@ -16783,7 +16830,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::BarLayout,       SettingsField::BarStyle,
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
-                    SettingsField::RingThickness,   SettingsField::LogoScale,
+                    SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
+                    SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
+                    SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
@@ -16824,6 +16873,9 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::BarGap: return s.barGap;
         case SettingsField::RingSize: return s.ringSize;
         case SettingsField::RingThickness: return s.ringThickness;
+        case SettingsField::HeadlineFontSize: return s.headlineFontSize;
+        case SettingsField::HeadlineBarLength: return s.headlineBarLength;
+        case SettingsField::HeadlineBarThickness: return s.headlineBarThickness;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -16893,6 +16945,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::BarGap: s.barGap = value; break;
         case SettingsField::RingSize: s.ringSize = value; break;
         case SettingsField::RingThickness: s.ringThickness = value; break;
+        case SettingsField::HeadlineFontSize: s.headlineFontSize = value; break;
+        case SettingsField::HeadlineBarLength: s.headlineBarLength = value; break;
+        case SettingsField::HeadlineBarThickness: s.headlineBarThickness = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -16954,6 +17009,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barGap = defaults.barGap;
             s.ringSize = defaults.ringSize;
             s.ringThickness = defaults.ringThickness;
+            s.headlineFontSize = defaults.headlineFontSize;
+            s.headlineBarLength = defaults.headlineBarLength;
+            s.headlineBarThickness = defaults.headlineBarThickness;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;
@@ -18396,20 +18454,22 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
             } else {
                 // Headline: the identity, then 6 DIP after it the most-used quota's number and
-                // window key (bottom-aligned on the baseline) over per-quota segments: corners a
-                // quarter of their thickness, fills cut flat toward the end and shaded like the
-                // bars'.
+                // window key (bottom-aligned on the baseline) over per-quota segments the bar gap
+                // apart: corners a quarter of their thickness, fills cut flat toward the end and
+                // shaded like the bars'.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float metersLeft = x0 + padLeft + idWidth + 6;
-                UiTextStyle numberStyle{UiFamily::Display, 14, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
-                UiTextStyle keyStyle{UiFamily::Taskbar, 9, 0, DWRITE_FONT_WEIGHT_NORMAL};
+                const float fontSize = float(display.headlineFontSize), gap = float(display.barGap);
+                UiTextStyle numberStyle{UiFamily::Display, fontSize, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                UiTextStyle keyStyle{UiFamily::Taskbar, fontSize * float(kHeadlineKeyScale), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 Measured number = measure(meters.headline, numberStyle);
                 float numberWidth = std::max(number.width, std::ceil(measure(L"100%", numberStyle).width));
                 Measured key = measure(meters.headlineKey, keyStyle);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
-                float segments = count ? count * float(kHeadlineSegmentLength) + (count - 1) * 2.0f : 0;
-                float panelHeight = rowHeight + (count ? 3 + float(kHeadlineSegmentThickness) : 0);
+                const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
+                float segments = count ? count * length + (count - 1) * gap : 0;
+                float panelHeight = rowHeight + (count ? 3 + thick : 0);
                 float panelTop = top + (T - panelHeight) / 2;
                 label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
                       numberWidth, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
@@ -18418,7 +18478,6 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                           panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
                           0.6f, true);
                 }
-                const float length = float(kHeadlineSegmentLength), thick = float(kHeadlineSegmentThickness);
                 float left = metersLeft, y = panelTop + rowHeight + 3;
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (!(meters.barMask & (1 << w))) continue;
@@ -18433,7 +18492,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         fill.shade = UsageHighlight(q.color);
                         add(ops, std::move(fill));
                     }
-                    left += length + 2;
+                    left += length + gap;
                 }
                 float content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
                 width = padLeft + idWidth + 6 + content + padRight;
@@ -19402,12 +19461,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     } else {
-        // Headline tiles have no meter size settings.
-        y = UiAddSection(items, id, x, y + 20, width, L"Tile");
-        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
-                         {{std::wstring(kSettingsTileStyles[int(layout)]) +
-                           L" tiles have a fixed size that follows the taskbar\u2019s height. Bar sizes and "
-                           L"the identity position apply to Stacked and Vertical bars."}});
+        // Headline tiles: the number's size, then its bars' sizes and the bars' gap.
+        y = UiAddSection(items, id, x, y + 20, width, L"Headline");
+        {
+            UiCardSpec spec;
+            spec.title = L"Number size";
+            spec.description = {{L"Text size of the most-used quota\u2019s percentage, in pixels; its quota key "
+                                 L"scales with it."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar length";
+            spec.description = {{L"Pixels along each quota\u2019s bar under the number."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar thickness";
+            spec.description = {{L"Pixels across each bar."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar gap";
+            spec.description = {{L"Space between an account\u2019s bars."}};
+            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
+        }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     }

@@ -86,6 +86,12 @@ static bool NormalizeSettings(Settings* s) {
     s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
     s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
                                   kRingThicknessMin, kRingThicknessMax);
+    s->headlineFontSize = std::clamp(s->headlineFontSize > 0 ? s->headlineFontSize : 14,
+                                     kHeadlineFontSizeMin, kHeadlineFontSizeMax);
+    s->headlineBarLength = std::clamp(s->headlineBarLength > 0 ? s->headlineBarLength : 16,
+                                      kHeadlineBarLengthMin, kHeadlineBarLengthMax);
+    s->headlineBarThickness = std::clamp(s->headlineBarThickness > 0 ? s->headlineBarThickness : 4,
+                                         kHeadlineBarThicknessMin, kHeadlineBarThicknessMax);
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 9, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -182,6 +188,9 @@ static std::wstring SerializeSettings(const Settings& s) {
         setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
+        setNumber(L"headlineFontSize", s.headlineFontSize);
+        setNumber(L"headlineBarLength", s.headlineBarLength);
+        setNumber(L"headlineBarThickness", s.headlineBarThickness);
         setNumber(L"logoScale", s.logoScale);
         setBool(L"brandClaudeLogo", s.logoBrands.claude);
         setBool(L"brandGeminiLogo", s.logoBrands.gemini);
@@ -309,6 +318,16 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                          (int)std::clamp(ringSize, 0.0, (double)kRingSizeMax) : 0;
         s.ringThickness = std::isfinite(ringThickness) ?
                               (int)std::clamp(ringThickness, 0.0, (double)kRingThicknessMax) : 0;
+        double headlineFontSize = GetNum(root, L"headlineFontSize", 14);
+        double headlineBarLength = GetNum(root, L"headlineBarLength", 16);
+        double headlineBarThickness = GetNum(root, L"headlineBarThickness", 4);
+        s.headlineFontSize = std::isfinite(headlineFontSize) ?
+                                 (int)std::clamp(headlineFontSize, 0.0, (double)kHeadlineFontSizeMax) : 0;
+        s.headlineBarLength = std::isfinite(headlineBarLength) ?
+                                  (int)std::clamp(headlineBarLength, 0.0, (double)kHeadlineBarLengthMax) : 0;
+        s.headlineBarThickness =
+            std::isfinite(headlineBarThickness) ?
+                (int)std::clamp(headlineBarThickness, 0.0, (double)kHeadlineBarThicknessMax) : 0;
         double logoScale = GetNum(root, L"logoScale", 100);
         double badgeSize = GetNum(root, L"badgeSize", 9);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);

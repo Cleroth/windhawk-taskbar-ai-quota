@@ -10,12 +10,14 @@ static void RunDisplayTests() {
             s.colorblindMode = true; s.showPaceTicks = false; s.paceTickStyle = PaceTickStyle::Dot;
             s.paceTickColor = RGB(1, 2, 3); s.percentTextAlignment = PercentTextAlignment::Center;
             s.showExtraBarAmounts = true; s.showStaleWarning = false; s.barGap = 7; s.barStyle = BarStyle::Rail;
+            s.headlineFontSize = 18; s.headlineBarLength = 24; s.headlineBarThickness = 6;
         });
         MeterDisplay d = MeterDisplayFor(settings, kNow, 1.25, 44);
         CHECK(d.now == kNow); CHECK(d.barMode == BarMode::Remaining);
         CHECK(d.barLength == 120); CHECK(d.barThickness == 6);
         CHECK(d.barGap == 7); CHECK(d.barStyle == BarStyle::Rail);
         CHECK(d.ringSize == 28); CHECK(d.ringThickness == 4);
+        CHECK(d.headlineFontSize == 18); CHECK(d.headlineBarLength == 24); CHECK(d.headlineBarThickness == 6);
         CHECK(d.yellowThreshold == 40); CHECK(d.orangeThreshold == 60); CHECK(d.redThreshold == 80);
         CHECK(d.pollMinutes == 15); CHECK(d.colorblindMode); CHECK(!d.showPaceTicks);
         CHECK(d.paceTickStyle == PaceTickStyle::Dot); CHECK(d.paceTickColor == RGB(1, 2, 3));
@@ -29,19 +31,23 @@ static void RunDisplayTests() {
             s.barLength = -5; s.barThickness = 0; s.ringSize = 0; s.ringThickness = -1;
             s.pollMinutes = 0; s.yellowThreshold = -10; s.orangeThreshold = -20; s.redThreshold = -30;
             s.barGap = -5; s.barStyle = BarStyle(-1);
+            s.headlineFontSize = 0; s.headlineBarLength = -1; s.headlineBarThickness = 1;
         }));
         CHECK(low.barLength == 10); CHECK(low.barThickness == 2);
         CHECK(low.barGap == 0); CHECK(low.barStyle == BarStyle::Track);
         CHECK(low.ringSize == 24); CHECK(low.ringThickness == 1); CHECK(low.pollMinutes == 2);
+        CHECK(low.headlineFontSize == 10); CHECK(low.headlineBarLength == 4); CHECK(low.headlineBarThickness == 2);
         CHECK(low.yellowThreshold == 0); CHECK(low.orangeThreshold == 0); CHECK(low.redThreshold == 0);
         MeterDisplay high = Display(With([](Settings& s) {
             s.barLength = 9999; s.barThickness = 51; s.ringSize = 41; s.ringThickness = 7;
             s.pollMinutes = 100000; s.yellowThreshold = 150; s.orangeThreshold = 120;
             s.redThreshold = 101; s.paceTickColor = 0xAB123456; s.barGap = 9999; s.barStyle = BarStyle(9);
+            s.headlineFontSize = 25; s.headlineBarLength = 61; s.headlineBarThickness = 11;
         }));
         CHECK(high.barLength == 500); CHECK(high.barThickness == 50);
         CHECK(high.barGap == 500); CHECK(high.barStyle == BarStyle::Track);
         CHECK(high.ringSize == 40); CHECK(high.ringThickness == 6); CHECK(high.pollMinutes == 1440);
+        CHECK(high.headlineFontSize == 24); CHECK(high.headlineBarLength == 60); CHECK(high.headlineBarThickness == 10);
         CHECK(high.yellowThreshold == 100); CHECK(high.orangeThreshold == 100);
         CHECK(high.redThreshold == 100); CHECK(high.paceTickColor == 0x123456);
     });
@@ -455,24 +461,32 @@ static void RunTileTests() {
         auto segment = [](double pct, const MeterDisplay& d = Display()) {
             return First({pct, 0, 0}, d, BarLayout::LogoHeadline).quotas[0];
         };
-        // Any usage fills at least 2 DIPs, as on the bars.
-        CHECK(segment(50).fillUnits == 500); CHECK_NEAR(segment(50).fillLength, 4.5);
+        // 16 DIP segments by default. Any usage fills at least 2 DIPs, as on the bars.
+        CHECK(segment(50).fillUnits == 500); CHECK_NEAR(segment(50).fillLength, 8);
         CHECK(segment(10).fillUnits == 100); CHECK_NEAR(segment(10).fillLength, 2);
-        CHECK_NEAR(segment(25).fillLength, 2.25);
-        CHECK(segment(120).fillUnits == 1000); CHECK_NEAR(segment(120).fillLength, 9);
+        CHECK_NEAR(segment(25).fillLength, 4);
+        CHECK(segment(120).fillUnits == 1000); CHECK_NEAR(segment(120).fillLength, 16);
         CHECK(segment(0).fillUnits == 0); CHECK_NEAR(segment(0).fillLength, 0);
         CHECK(segment(0.04).fillUnits == 1); CHECK_NEAR(segment(0.04).fillLength, 2);
         MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
-        CHECK(segment(30, remaining).fillUnits == 700); CHECK_NEAR(segment(30, remaining).fillLength, 6.3);
+        CHECK(segment(30, remaining).fillUnits == 700); CHECK_NEAR(segment(30, remaining).fillLength, 11.2);
+        // The headline bar length scales them; the shortest keeps the 2 DIP minimum.
+        MeterDisplay longer = Display(With([](Settings& s) { s.headlineBarLength = 40; }));
+        CHECK_NEAR(segment(25, longer).fillLength, 10); CHECK_NEAR(segment(100, longer).fillLength, 40);
+        MeterDisplay shortest = Display(With([](Settings& s) { s.headlineBarLength = 4; }));
+        CHECK_NEAR(segment(25, shortest).fillLength, 2); CHECK_NEAR(segment(75, shortest).fillLength, 3);
     });
 
     Run("headline fills: cut flat until a quarter-thickness corner from the end", [] {
-        auto segment = [](double pct) {
-            return First({pct, 0, 0}, Display(), BarLayout::LogoHeadline).quotas[0];
+        auto segment = [](double pct, const MeterDisplay& d = Display()) {
+            return First({pct, 0, 0}, d, BarLayout::LogoHeadline).quotas[0];
         };
-        // 9 x 3 headline segments: 0.75 DIP corners; 95% leaves 0.45 DIPs.
-        CHECK_NEAR(segment(100).fillEndRadius, 0.75); CHECK_NEAR(segment(95).fillEndRadius, 0.3);
+        // 16 x 4 headline segments: 1 DIP corners; 95% leaves 0.8 DIPs.
+        CHECK_NEAR(segment(100).fillEndRadius, 1); CHECK_NEAR(segment(95).fillEndRadius, 0.2);
         CHECK_NEAR(segment(50).fillEndRadius, 0); CHECK_NEAR(segment(10).fillEndRadius, 0);
+        // 10 DIPs thick: 2.5 DIP corners; 90% of 16 leaves 1.6 DIPs.
+        MeterDisplay thick = Display(With([](Settings& s) { s.headlineBarThickness = 10; }));
+        CHECK_NEAR(segment(100, thick).fillEndRadius, 2.5); CHECK_NEAR(segment(90, thick).fillEndRadius, 0.9);
     });
 
     Run("ring fills keep a 5-degree minimum per arc sweep", [] {

@@ -9,11 +9,11 @@
 // Tile sizes, in DIPs.
 // Nominal; shorter taskbars get shorter tiles. Bar columns are at least as tall.
 static constexpr double kTileHeight = 40;
-static constexpr double kHeadlineSegmentLength = 9;
-static constexpr double kHeadlineSegmentThickness = 3;
 // Logo sides at 100% logo size beside bars and on headline tiles; rings size theirs to the hole.
 static constexpr double kBarLogoSide = 15;
 static constexpr double kHeadlineLogoSide = 16;
+// A headline tile's window key text, in proportion to its number's (9 DIPs beside 14).
+static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
@@ -290,6 +290,9 @@ struct MeterDisplay {
     BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
+    int headlineFontSize;     // kHeadlineFontSizeMin-kHeadlineFontSizeMax DIPs.
+    int headlineBarLength;    // kHeadlineBarLengthMin-kHeadlineBarLengthMax DIPs.
+    int headlineBarThickness; // kHeadlineBarThicknessMin-kHeadlineBarThicknessMax DIPs.
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -328,6 +331,10 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
+        .headlineFontSize = std::clamp(settings.headlineFontSize, kHeadlineFontSizeMin, kHeadlineFontSizeMax),
+        .headlineBarLength = std::clamp(settings.headlineBarLength, kHeadlineBarLengthMin, kHeadlineBarLengthMax),
+        .headlineBarThickness =
+            std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -923,9 +930,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         } else {
             // Headline segments: corners a quarter of the thickness; the fill cut flat until the
             // track's end. Any usage fills at least 2 DIPs, as on the bars.
-            double length = kHeadlineSegmentLength;
+            double length = display.headlineBarLength;
             m.fillLength = m.fillUnits ? std::clamp(length * fill, 2.0, length) : 0;
-            m.fillEndRadius = std::max(0.0, kHeadlineSegmentThickness / 4 - (length - m.fillLength));
+            m.fillEndRadius = std::max(0.0, display.headlineBarThickness / 4.0 - (length - m.fillLength));
         }
     }
 

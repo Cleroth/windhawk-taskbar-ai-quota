@@ -56,6 +56,13 @@ static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
 static constexpr int kRingThicknessMax = 6;
+// Headline tiles: the number's text size and each quota bar's length and thickness, in DIPs.
+static constexpr int kHeadlineFontSizeMin = 10;
+static constexpr int kHeadlineFontSizeMax = 24;
+static constexpr int kHeadlineBarLengthMin = 4;
+static constexpr int kHeadlineBarLengthMax = 60;
+static constexpr int kHeadlineBarThicknessMin = 2;
+static constexpr int kHeadlineBarThicknessMax = 10;
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -136,6 +143,11 @@ struct Settings {
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
+    // Headline tiles: the most-used quota's number size, and the size of each quota's bar under
+    // it (the bar gap is the bars').
+    int headlineFontSize = 14;
+    int headlineBarLength = 16;
+    int headlineBarThickness = 4;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.

@@ -428,20 +428,22 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
             } else {
                 // Headline: the identity, then 6 DIP after it the most-used quota's number and
-                // window key (bottom-aligned on the baseline) over per-quota segments: corners a
-                // quarter of their thickness, fills cut flat toward the end and shaded like the
-                // bars'.
+                // window key (bottom-aligned on the baseline) over per-quota segments the bar gap
+                // apart: corners a quarter of their thickness, fills cut flat toward the end and
+                // shaded like the bars'.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float metersLeft = x0 + padLeft + idWidth + 6;
-                UiTextStyle numberStyle{UiFamily::Display, 14, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
-                UiTextStyle keyStyle{UiFamily::Taskbar, 9, 0, DWRITE_FONT_WEIGHT_NORMAL};
+                const float fontSize = float(display.headlineFontSize), gap = float(display.barGap);
+                UiTextStyle numberStyle{UiFamily::Display, fontSize, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                UiTextStyle keyStyle{UiFamily::Taskbar, fontSize * float(kHeadlineKeyScale), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 Measured number = measure(meters.headline, numberStyle);
                 float numberWidth = std::max(number.width, std::ceil(measure(L"100%", numberStyle).width));
                 Measured key = measure(meters.headlineKey, keyStyle);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
-                float segments = count ? count * float(kHeadlineSegmentLength) + (count - 1) * 2.0f : 0;
-                float panelHeight = rowHeight + (count ? 3 + float(kHeadlineSegmentThickness) : 0);
+                const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
+                float segments = count ? count * length + (count - 1) * gap : 0;
+                float panelHeight = rowHeight + (count ? 3 + thick : 0);
                 float panelTop = top + (T - panelHeight) / 2;
                 label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
                       numberWidth, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
@@ -450,7 +452,6 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                           panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
                           0.6f, true);
                 }
-                const float length = float(kHeadlineSegmentLength), thick = float(kHeadlineSegmentThickness);
                 float left = metersLeft, y = panelTop + rowHeight + 3;
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (!(meters.barMask & (1 << w))) continue;
@@ -465,7 +466,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         fill.shade = UsageHighlight(q.color);
                         add(ops, std::move(fill));
                     }
-                    left += length + 2;
+                    left += length + gap;
                 }
                 float content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
                 width = padLeft + idWidth + 6 + content + padRight;

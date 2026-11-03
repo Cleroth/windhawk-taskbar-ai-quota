@@ -320,6 +320,28 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.barMode = BarMode::Remaining;
              thresholds(s, 6, 75, 90);
          }},
+        // Headline sizes: the number and its bars at their extremes and with the bar gap.
+        {L"Headline, number 20, bars 24 x 6", [](Settings& s) {
+             s.barLayout = BarLayout::LogoHeadline;
+             s.headlineFontSize = 20;
+             s.headlineBarLength = 24;
+             s.headlineBarThickness = 6;
+         }},
+        {L"Headline, number 10, bars 4 x 2, gap 0", [](Settings& s) {
+             s.barLayout = BarLayout::LogoHeadline;
+             s.headlineFontSize = 10;
+             s.headlineBarLength = 4;
+             s.headlineBarThickness = 2;
+             s.barGap = 0;
+         }},
+        {L"Headline, number 24, bars 60 x 10, gap 4", [](Settings& s) {
+             s.barLayout = BarLayout::LogoHeadline;
+             s.headlineFontSize = 24;
+             s.headlineBarLength = 60;
+             s.headlineBarThickness = 10;
+             s.barGap = 4;
+         }},
+        {L"Headline, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; }, -1, 32},
         // Logo sizes and the number badge's size and offsets per style.
         {L"Bars 60, logo 50%", [](Settings& s) { s.barLength = 60; s.logoScale = 50; }},
         {L"Bars 60, logo 150%, badge 12", [](Settings& s) { s.barLength = 60; s.logoScale = 150; s.badgeSize = 12; }},

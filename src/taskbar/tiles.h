@@ -235,7 +235,8 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         return column;
     }
 
-    // Headline: the most-used quota's number and window key over per-quota segments.
+    // Headline: the most-used quota's number and window key over per-quota segments, at the
+    // headline sizes and the bar gap.
     column.Children().Append(identity);
     StackPanel meters;
     meters.IsHitTestVisible(false);
@@ -247,19 +248,20 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     headline.Spacing(3);
     StackPanel numberRow;
     numberRow.Orientation(Orientation::Horizontal);
+    double fontSize = display.headlineFontSize;
     tile.headline = TextBlock{};
     tile.headline.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
     tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-    tile.headline.FontSize(14);
+    tile.headline.FontSize(fontSize);
     tile.headline.TextLineBounds(TextLineBounds::Tight);
     tile.headline.VerticalAlignment(VerticalAlignment::Bottom);
     // Reserves "100%" so the tile keeps its width as values change.
     tile.headline.Text(L"100%");
-    tile.headline.MinWidth(std::ceil(TileTextWidthPerPt(tile.headline) * 14));
+    tile.headline.MinWidth(std::ceil(TileTextWidthPerPt(tile.headline) * fontSize));
     tile.headline.Text(L"");
     numberRow.Children().Append(tile.headline);
     tile.headlineKey = TextBlock{};
-    tile.headlineKey.FontSize(9);
+    tile.headlineKey.FontSize(fontSize * kHeadlineKeyScale);
     tile.headlineKey.Opacity(0.6);
     tile.headlineKey.TextLineBounds(TextLineBounds::Tight);
     tile.headlineKey.VerticalAlignment(VerticalAlignment::Bottom);
@@ -268,7 +270,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     headline.Children().Append(numberRow);
     meters.Orientation(Orientation::Horizontal);
     meters.HorizontalAlignment(HorizontalAlignment::Left);
-    meters.Spacing(2);
+    meters.Spacing(display.barGap);
     headline.Children().Append(meters);
     column.Children().Append(headline);
     return column;
@@ -304,7 +306,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     bool ring = layout == BarLayout::ConcentricRings || layout == BarLayout::SegmentedRing;
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
-    double thickness = kHeadlineSegmentThickness;
+    double thickness = display.headlineBarThickness;
 
     // Meter shapes: regenerated, and the identity resized, whenever an input changes.
     TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
@@ -382,7 +384,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 Grid bar;
-                bar.Width(kHeadlineSegmentLength);
+                bar.Width(display.headlineBarLength);
                 bar.Height(thickness);
                 Border trackBar;
                 trackBar.CornerRadius({radius, radius, radius, radius});

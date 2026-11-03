@@ -33,6 +33,9 @@ enum class SettingsField : uint8_t {
     BarGap,
     RingSize,
     RingThickness,
+    HeadlineFontSize,
+    HeadlineBarLength,
+    HeadlineBarThickness,
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -108,6 +111,10 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
         case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
         case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
+        case SettingsField::HeadlineFontSize: return SettingsNumberRange{kHeadlineFontSizeMin, kHeadlineFontSizeMax};
+        case SettingsField::HeadlineBarLength: return SettingsNumberRange{kHeadlineBarLengthMin, kHeadlineBarLengthMax};
+        case SettingsField::HeadlineBarThickness:
+            return SettingsNumberRange{kHeadlineBarThicknessMin, kHeadlineBarThicknessMax};
         case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
         case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
         case SettingsField::BadgeOffsetX:
@@ -139,7 +146,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::BarLayout,       SettingsField::BarStyle,
                     SettingsField::BarLength,       SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
-                    SettingsField::RingThickness,   SettingsField::LogoScale,
+                    SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
+                    SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
+                    SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
@@ -180,6 +189,9 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::BarGap: return s.barGap;
         case SettingsField::RingSize: return s.ringSize;
         case SettingsField::RingThickness: return s.ringThickness;
+        case SettingsField::HeadlineFontSize: return s.headlineFontSize;
+        case SettingsField::HeadlineBarLength: return s.headlineBarLength;
+        case SettingsField::HeadlineBarThickness: return s.headlineBarThickness;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -249,6 +261,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::BarGap: s.barGap = value; break;
         case SettingsField::RingSize: s.ringSize = value; break;
         case SettingsField::RingThickness: s.ringThickness = value; break;
+        case SettingsField::HeadlineFontSize: s.headlineFontSize = value; break;
+        case SettingsField::HeadlineBarLength: s.headlineBarLength = value; break;
+        case SettingsField::HeadlineBarThickness: s.headlineBarThickness = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -310,6 +325,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barGap = defaults.barGap;
             s.ringSize = defaults.ringSize;
             s.ringThickness = defaults.ringThickness;
+            s.headlineFontSize = defaults.headlineFontSize;
+            s.headlineBarLength = defaults.headlineBarLength;
+            s.headlineBarThickness = defaults.headlineBarThickness;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;

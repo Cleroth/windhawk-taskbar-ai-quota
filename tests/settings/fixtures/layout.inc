@@ -124,6 +124,8 @@ static void RunLayoutTests() {
             {SettingsField::BarLayout, 3},     {SettingsField::BarStyle, 1},
             {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
+            {SettingsField::HeadlineFontSize, 18}, {SettingsField::HeadlineBarLength, 24},
+            {SettingsField::HeadlineBarThickness, 6},
             {SettingsField::LogoScale, 150},   {SettingsField::ClaudeLogoBrand, 1}, {SettingsField::GeminiLogoBrand, 1},
             {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
@@ -142,6 +144,9 @@ static void RunLayoutTests() {
         const std::tuple<SettingsField, int, int> clamps[] = {
             {SettingsField::BarLength, 99999, 500},   {SettingsField::BarThickness, 0, 2},
             {SettingsField::RingSize, 100, 40},       {SettingsField::RingThickness, -3, 1},
+            {SettingsField::HeadlineFontSize, 9, 10}, {SettingsField::HeadlineFontSize, 99, 24},
+            {SettingsField::HeadlineBarLength, 0, 4}, {SettingsField::HeadlineBarLength, 999, 60},
+            {SettingsField::HeadlineBarThickness, 1, 2}, {SettingsField::HeadlineBarThickness, 11, 10},
             {SettingsField::LabelFontSize, 100, 24},  {SettingsField::PercentFontSize, 1, 6},
             {SettingsField::BarGap, -1, 0},           {SettingsField::AccountMargin, 501, 500},
             {SettingsField::BarLayout, 9, 4},         {SettingsField::BarLayout, -1, 0},
@@ -158,7 +163,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the twenty-four Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the twenty-seven Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -167,6 +172,9 @@ static void RunLayoutTests() {
         changed.barGap = 6;
         changed.ringSize = 38;
         changed.ringThickness = 5;
+        changed.headlineFontSize = 20;
+        changed.headlineBarLength = 30;
+        changed.headlineBarThickness = 7;
         changed.logoScale = 150;
         changed.logoBrands = {true, true};
         changed.badgeSize = 12;
@@ -202,6 +210,9 @@ static void RunLayoutTests() {
         expected.barGap = defaults.barGap;
         expected.ringSize = defaults.ringSize;
         expected.ringThickness = defaults.ringThickness;
+        expected.headlineFontSize = defaults.headlineFontSize;
+        expected.headlineBarLength = defaults.headlineBarLength;
+        expected.headlineBarThickness = defaults.headlineBarThickness;
         expected.logoScale = defaults.logoScale;
         expected.logoBrands = defaults.logoBrands;
         expected.badgeSize = defaults.badgeSize;
@@ -221,7 +232,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 24);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 27);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -1226,20 +1237,44 @@ static void RunLayoutTests() {
         CHECK(green != strip.ops.end() && green->kind == SettingsPreviewOp::Kind::Shape && green->shade == 0);
         CHECK_NEAR(green->shape[0].x, oai.quotas[0].fill[0].x);
 
-        // Headline segments: 9 x 3 tracks with 0.75 DIP corners, fills shaded and cut flat, no ticks.
+        // Headline segments: 16 x 4 tracks with 1 DIP corners, 2 DIPs apart, fills shaded and cut
+        // flat, no ticks.
         s.barLayout = BarLayout::LogoHeadline;
         strip = Strip(s);
         tracks = OpsOfColor(strip, track);
         std::vector<SettingsPreviewOp> fills = shaded(strip);
         CHECK(tracks.size() == 10 && fills.size() == 10);
-        CHECK_NEAR(tracks[0].radius, 0.75); CHECK_NEAR(tracks[0].rect.right - tracks[0].rect.left, 9);
-        // OAI's 5-hour quota: 25% of 9 DIPs, cut flat; CC 2's weekly one fills the segment.
-        CHECK(roughly(fills[0].rect.right - fills[0].rect.left, 2.25) && (*fills[0].corners == Corners{0.75f, 0, 0, 0.75f}));
+        CHECK_NEAR(tracks[0].radius, 1); CHECK_NEAR(tracks[0].rect.right - tracks[0].rect.left, 16);
+        CHECK_NEAR(tracks[0].rect.bottom - tracks[0].rect.top, 4);
+        CHECK(roughly(tracks[1].rect.left - tracks[0].rect.right, 2));
+        // OAI's 5-hour quota: 25% of 16 DIPs, cut flat; CC 2's weekly one fills the segment.
+        CHECK(roughly(fills[0].rect.right - fills[0].rect.left, 4) && (*fills[0].corners == Corners{1, 0, 0, 1}));
         CHECK(fills[0].shade == UsageHighlight(fills[0].color));
         auto full = std::find_if(fills.begin(), fills.end(), [&](const SettingsPreviewOp& op) { return op.color == 0xFFE53935; });
-        CHECK(full != fills.end() && roughly(full->rect.right - full->rect.left, 9) &&
-              (*full->corners == Corners{0.75f, 0.75f, 0.75f, 0.75f}));
+        CHECK(full != fills.end() && roughly(full->rect.right - full->rect.left, 16) &&
+              (*full->corners == Corners{1, 1, 1, 1}));
         CHECK(OpsOfColor(strip, 0xC0000000).empty() && OpsOfColor(strip, 0xFFDEDEDE).empty());
+
+        // The headline sizes and the bar gap: 24 x 6 tracks (1.5 DIP corners) 5 DIPs apart in a row,
+        // and on each tile a 20 DIP number with its key at 9/14 of it.
+        s.headlineFontSize = 20;
+        s.headlineBarLength = 24;
+        s.headlineBarThickness = 6;
+        s.barGap = 5;
+        strip = Strip(s);
+        tracks = OpsOfColor(strip, track);
+        fills = shaded(strip);
+        CHECK(tracks.size() == 10 && fills.size() == 10);
+        CHECK_NEAR(tracks[0].radius, 1.5); CHECK_NEAR(tracks[0].rect.right - tracks[0].rect.left, 24);
+        CHECK_NEAR(tracks[0].rect.bottom - tracks[0].rect.top, 6);
+        CHECK(roughly(tracks[1].rect.left - tracks[0].rect.right, 5) && roughly(tracks[2].rect.top, tracks[0].rect.top));
+        CHECK(roughly(fills[0].rect.right - fills[0].rect.left, 6) && (*fills[0].corners == Corners{1.5f, 0, 0, 1.5f}));
+        auto sized = [&](float size) {
+            return std::count_if(strip.ops.begin(), strip.ops.end(), [&](const SettingsPreviewOp& op) {
+                return op.kind == SettingsPreviewOp::Kind::Text && roughly(op.style.size, size);
+            });
+        };
+        CHECK(sized(20) == 4 && sized(20 * 9 / 14.0f) == 4);
     });
 
     Run("preview: the default pace color turns dark with a light halo on a light taskbar", [] {
@@ -1296,7 +1331,13 @@ static void RunLayoutTests() {
         large.barGap = large.labelGap = large.accountMargin = large.rightMargin = 500;
         large.showBarLabels = true;
         large.percentTextVisibility = PercentTextVisibility::Always;
+        large.headlineFontSize = 24;
+        large.headlineBarLength = 60;
+        large.headlineBarThickness = 10;
         Settings wild = large;
+        wild.headlineFontSize = -5;
+        wild.headlineBarLength = 100000;
+        wild.headlineBarThickness = -1;
         wild.barLength = 100000;
         wild.barThickness = -5;
         wild.labelFontSize = wild.percentFontSize = 0;
@@ -1444,7 +1485,8 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::AccountMargin).text == L"3" &&
               Control(frame, SettingsField::RightMargin).text == L"4");
         CHECK(Control(frame, SettingsField::ResetLayout).text == L"Reset");
-        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::RingSize, 1)));
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::RingSize, 1)) &&
+              !UiFindItem(frame, SettingsControlId(SettingsField::HeadlineBarLength, 1)));
         for (PCWSTR text : {L"Tile style", L"Bars", L"Identity and text", L"Pace markers", L"Spacing",
                             L"Ticks mark how much", L"Reset Layout to defaults", L"sizes, identity and text, pace"}) {
             CHECK(HasText(frame, text));
@@ -1504,8 +1546,25 @@ static void RunLayoutTests() {
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::BarLayout, 4).selected);
-        CHECK(HasText(frame, L"Headline % tiles have a fixed size") &&
-              HasText(frame, L"Bar sizes and the identity position apply to Stacked and Vertical bars."));
+        // The Headline section: the number size, its bars' length and thickness, then the bars'
+        // gap, before the Identity section.
+        const UiItem& number = Control(frame, SettingsField::HeadlineFontSize, 1);
+        const UiItem& barLength = Control(frame, SettingsField::HeadlineBarLength, 1);
+        const UiItem& barThickness = Control(frame, SettingsField::HeadlineBarThickness, 1);
+        const UiItem& gap = Control(frame, SettingsField::BarGap);
+        CHECK(number.kind == UiItemKind::Slider && number.minimum == 10 && number.maximum == 24 &&
+              number.action.value == 14 && Control(frame, SettingsField::HeadlineFontSize).text == L"14");
+        CHECK(barLength.minimum == 4 && barLength.maximum == 60 && barLength.action.value == 16);
+        CHECK(barThickness.minimum == 2 && barThickness.maximum == 10 && barThickness.action.value == 4);
+        CHECK(gap.kind == UiItemKind::NumberBox && gap.text == L"2");
+        CHECK(number.rect.bottom < barLength.rect.top && barLength.rect.bottom < barThickness.rect.top &&
+              barThickness.rect.bottom < gap.rect.top &&
+              gap.rect.bottom < Control(frame, SettingsField::BarLayout, 8).rect.top);
+        CHECK(HasText(frame, L"Headline") && HasText(frame, L"Number size") &&
+              HasText(frame, L"its quota key scales with it") && !HasText(frame, L"fixed size"));
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
+              !UiFindItem(frame, SettingsControlId(SettingsField::BarThickness, 1)) &&
+              !UiFindItem(frame, SettingsControlId(SettingsField::RingSize, 1)));
         CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate);
         CHECK(Control(frame, SettingsField::BarLayout, 8).rect.bottom < Control(frame, SettingsField::LogoScale, 1).rect.top &&
               Control(frame, SettingsField::BadgeSize, 1).enabled);

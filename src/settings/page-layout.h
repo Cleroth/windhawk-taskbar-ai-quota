@@ -235,12 +235,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     } else {
-        // Headline tiles have no meter size settings.
-        y = UiAddSection(items, id, x, y + 20, width, L"Tile");
-        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
-                         {{std::wstring(kSettingsTileStyles[int(layout)]) +
-                           L" tiles have a fixed size that follows the taskbar\u2019s height. Bar sizes and "
-                           L"the identity position apply to Stacked and Vertical bars."}});
+        // Headline tiles: the number's size, then its bars' sizes and the bars' gap.
+        y = UiAddSection(items, id, x, y + 20, width, L"Headline");
+        {
+            UiCardSpec spec;
+            spec.title = L"Number size";
+            spec.description = {{L"Text size of the most-used quota\u2019s percentage, in pixels; its quota key "
+                                 L"scales with it."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar length";
+            spec.description = {{L"Pixels along each quota\u2019s bar under the number."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar thickness";
+            spec.description = {{L"Pixels across each bar."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Bar gap";
+            spec.description = {{L"Space between an account\u2019s bars."}};
+            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
+        }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     }
