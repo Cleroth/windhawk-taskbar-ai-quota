@@ -134,7 +134,6 @@ static std::wstring SerializeSettings(const Settings& s) {
                 a.tileIdentity == TileIdentity::Logo ? L"logo" :
                 a.tileIdentity == TileIdentity::Text ? L"text" : L"logoBadge"));
             account.SetNamedValue(L"tileText", JsonValue::CreateStringValue(winrt::hstring(a.tileText)));
-            account.SetNamedValue(L"barLogo", JsonValue::CreateBooleanValue(a.barLogo));
             account.SetNamedValue(L"fiveHour", JsonValue::CreateBooleanValue(a.showBars[kFiveHourBar]));
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
@@ -252,7 +251,6 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
                 a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
-                a.barLogo = getBoolDefault(L"barLogo", false);
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
                 a.recordHistory = getBoolDefault(L"recordHistory", true);

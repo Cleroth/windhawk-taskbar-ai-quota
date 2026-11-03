@@ -41,10 +41,11 @@ local app or CLI session, which must remain running.
 ## Settings
 
 - **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
-  quotas, identity (optionally shown on its bars), history recording, and sign-in. Removing an
-  account deletes its sign-in and, if you choose, its history.
+  quotas, identity (logo, logo with a number badge, or label, on its bars and tiles), history
+  recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
+  history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
-  labels, pace markers, and spacing.
+  identity position, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the

@@ -44,10 +44,11 @@ local app or CLI session, which must remain running.
 ## Settings
 
 - **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
-  quotas, identity (optionally shown on its bars), history recording, and sign-in. Removing an
-  account deletes its sign-in and, if you choose, its history.
+  quotas, identity (logo, logo with a number badge, or label, on its bars and tiles), history
+  recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
+  history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
-  labels, pace markers, and spacing.
+  identity position, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
@@ -183,20 +184,19 @@ enum QuotaBarIndex {
     kQuotaBarCount,
 };
 
-// How a tile layout (ring, concentric, headline), and stacked and vertical bars with barLogo,
-// mark which account they show.
+// What marks an account on the taskbar: beside Stacked and Vertical bars at the identity position
+// (Settings::labelPosition), and on ring and headline tiles.
 enum class TileIdentity {
     LogoBadge,  // Provider logo, plus a number badge when several accounts share the provider.
     Logo,
-    Text,  // tileText, or the label when tileText is empty.
+    Text,  // "Label": the label on bars; tileText on tiles, or the label when tileText is empty.
 };
 
 struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
     TileIdentity tileIdentity = TileIdentity::LogoBadge;
-    std::wstring tileText;  // Optional short text for TileIdentity::Text.
-    bool barLogo = false;   // Stacked and vertical bars lead with the identity.
+    std::wstring tileText;  // Optional short text for TileIdentity::Text on tiles.
     std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
     // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
     // used-percent bar in the extra-usage slot. 0 disables the bar.
@@ -251,6 +251,7 @@ enum class PercentTextVisibility {
     Always,
 };
 
+// Where Stacked and Vertical bars place each account's identity ("Identity position").
 enum class LabelPosition {
     Hidden,
     Left,
@@ -293,10 +294,10 @@ struct Settings {
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
-    int labelFontSize = 11;
+    int labelFontSize = 11;  // The Label identity on bars.
     int percentFontSize = 9;
     int accountMargin = 3;
-    int labelGap = 3;
+    int labelGap = 3;  // "Identity gap": between the identity's box and the bars.
     int barGap = 2;
     int rightMargin = 4;
     int yellowThreshold = 50;
@@ -464,6 +465,7 @@ struct AppliedState {
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
     double labelOpacity = -1;
+    Thickness identityMargin{-1, -1, -1, -1};  // Bar columns' identity, label or logo.
     double columnOpacity = -1;
     int barMask = -1;
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
@@ -471,7 +473,7 @@ struct AppliedState {
     // Tile layouts. Per slot, fillPx and pacePx hold the fill and pace position in thousandths of
     // the meter.
     TileShapeKey tileShape;
-    // Identity (tiles, bars with barLogo).
+    // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
     int tileWarn = -1;
     int badgeLight = -1;  // Badge colors for a light (1) or dark (0) taskbar.
@@ -501,8 +503,8 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
-// A tile layout's elements (rings, logo + headline); bar columns with barLogo hold only the
-// identity. Headline segment fills use AccountUiRefs::fills.
+// A tile layout's elements (rings, logo + headline); bar columns with a logo identity hold only
+// the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
     // Rings: the ring area, holding the meters with the identity on top.
@@ -532,7 +534,7 @@ struct TileUiRefs {
 struct AccountUiRefs {
     // Tile root in every layout: hit target, flyout anchor and hover background.
     StackPanel column{nullptr};
-    // Bar layouts: the label and bars beside the identity, and the bars alone.
+    // Bar layouts: the identity and the bars, and the bars alone.
     FrameworkElement content{nullptr};
     FrameworkElement barArea{nullptr};
     // Captured at build time so the flyout matches the tile, including visual-test accounts.
@@ -557,7 +559,7 @@ struct AccountUiRefs {
     SolidColorBrush paceHalo{nullptr};
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
-    TextBlock label{nullptr};
+    TextBlock label{nullptr};  // Bar layouts: the Label identity.
     TileUiRefs tile;
 };
 
@@ -6049,20 +6051,20 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     const ULONGLONG now = display.now;
     // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
     // share a provider so tiles show number badges. A negative value is a quota not reported.
-    // Antigravity is stale, with an error. CC 1 (badged) and Go (marked) lead their bars with
-    // their identity.
+    // Antigravity is stale, with an error. Identities mix: OAI shows its label, the Anthropic pair
+    // their logo and number badge, Go its logo alone, with the stale mark.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
         std::array<double, kQuotaBarCount> pct;
         std::array<bool, kQuotaBarCount> showBars;
-        bool barLogo;
+        TileIdentity identity;
     };
     const std::array<Sample, 4> samples = {{
-        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, false},
-        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, true},
-        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, false},
-        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}, true},
+        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, TileIdentity::Text},
+        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},
+        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},
+        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}, TileIdentity::Logo},
     }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
@@ -6087,7 +6089,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         account.provider = sample.provider;
         account.label = sample.label;
         account.showBars = sample.showBars;
-        account.barLogo = sample.barLogo;
+        account.tileIdentity = sample.identity;
         bool openAi = account.provider == L"openai";
         if (openAi) account.creditsMax = (int)kCreditsMax;
         accounts->push_back(account);
@@ -6224,8 +6226,9 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     return g;
 }
 
-// The identity text of a tile, or of a bar column with barLogo. Logo identities show a number badge when several configured accounts
-// share the provider; text identities, and logos that fail to load, show `text`.
+// The identity text of a tile, or of a bar column's logo identity. Logo identities show a number
+// badge when several configured accounts share the provider; text identities on tiles, and logos
+// that fail to load, show `text`.
 struct TileIdentityText {
     bool badge = false;
     std::wstring badgeText;
@@ -6312,9 +6315,9 @@ struct AccountMeters {
     bool warn = false;         // Stale with an error: the label's "!" or the identity's mark.
     int barMask = 0;           // Quota slots shown.
     std::array<QuotaMeter, kQuotaBarCount> quotas;
-    std::wstring labelText;    // Bars' label.
+    std::wstring labelText;    // Bars' Label identity.
     double labelOpacity = 0;
-    double identityOpacity = 0;  // Tiles' identity, and bars' with barLogo.
+    double identityOpacity = 0;  // Tiles' identity, and bars' logo identity.
     // Ring tiles: the identity text's fitted font size and width, and the warning mark's top
     // margin, into the tile's padding.
     TileRingGeometry ring;
@@ -6347,8 +6350,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
                    display.now - data.lastSuccessMs > staleAfterMs;
     meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
-    // With barLogo the identity carries the mark instead.
-    meters.labelText = meters.warn && !account.barLogo ? account.label + L"!" : account.label;
+    meters.labelText = meters.warn ? account.label + L"!" : account.label;
     meters.labelOpacity = meters.stale ? 0.45 : 0.8;
     meters.identityOpacity = meters.stale ? 0.45 : 1.0;
     // Every selected quota until the first success, then the reported ones.
@@ -6590,7 +6592,7 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 // identity (provider logo, optionally with a number badge, or short text) and its tile quotas: the
 // meters the bar layouts show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
-// columns with barLogo lead with the same identity (BuildTileIdentity, UpdateTileIdentity), and
+// columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
 // geometry come from the meter model (meter-model.h).
 
@@ -8439,7 +8441,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         PaceTickStyle paceTickStyle = display.paceTickStyle;
         COLORREF paceTickColor = display.paceTickColor;
         int labelFontSize = settings.labelFontSize, percentFontSize = settings.percentFontSize;
-        int accountMargin = settings.accountMargin, labelGap = settings.labelGap;
+        int accountMargin = settings.accountMargin;
         int rightMargin = settings.rightMargin;
         bool showBarLabels = settings.showBarLabels;
         bool showDetailsOnHover = settings.showDetailsOnHover;
@@ -8516,7 +8518,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
-        // Tiles, or a bar column with barLogo.
+        // Tiles, or a bar column with a logo identity.
         bool identities = tileLayout;
 
         // Drops a show/hide toggle's keep-open request on the next dispatcher pass if no close
@@ -8597,13 +8599,14 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             if (tileLayout) {
                 col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
             } else {
-                // The tiles' box: at least the tile height, 7 DIPs inside each side, with the
-                // identity (barLogo) 6 DIPs before the content, both centred across it. The
-                // content is the label beside, above or below the bars.
-                bool labelOnSide = labelPosition == LabelPosition::Left ||
-                                   labelPosition == LabelPosition::Right;
-                bool labelBeforeBars = labelPosition == LabelPosition::Left ||
-                                       labelPosition == LabelPosition::Top;
+                // The tiles' box: at least the tile height, 7 DIPs inside each side, holding the
+                // content centred across it: the identity beside, above or below the bars at the
+                // identity position, centred on them, or the bars alone while it is Hidden.
+                // UpdateQuotaUi sets the identity's margins.
+                bool identityAcross = labelPosition == LabelPosition::Top ||
+                                      labelPosition == LabelPosition::Bottom;
+                bool identityBeforeBars = labelPosition == LabelPosition::Left ||
+                                          labelPosition == LabelPosition::Top;
                 col = StackPanel{};
                 col.Orientation(Orientation::Horizontal);
                 col.VerticalAlignment(VerticalAlignment::Center);
@@ -8611,43 +8614,36 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Padding({7, 0, 7, 0});
                 col.CornerRadius({4, 4, 4, 4});
                 StackPanel content;
-                content.Orientation(labelOnSide ? Orientation::Horizontal : Orientation::Vertical);
+                content.Orientation(identityAcross ? Orientation::Vertical : Orientation::Horizontal);
                 content.VerticalAlignment(VerticalAlignment::Center);
                 refs.content = content;
-                if (accounts[i].barLogo) {
-                    // A margin, not panel spacing: a collapsed content takes the gap with it.
-                    col.Children().Append(BuildTileIdentity(accounts, i, barLayout, refs.tile));
-                    content.Margin({6, 0, 0, 0});
-                    identities = true;
-                }
 
-                TextBlock label{nullptr};
+                // The identity: the account label, or the logo with its badge and stale mark.
+                FrameworkElement identity{nullptr};
                 if (labelPosition != LabelPosition::Hidden) {
-                    label = TextBlock{};
-                    label.Text(accounts[i].label);
-                    label.FontSize(labelFontSize);
-                    label.VerticalAlignment(VerticalAlignment::Center);
-                    label.HorizontalAlignment(labelOnSide ? HorizontalAlignment::Left :
-                                                             HorizontalAlignment::Center);
-                    if (labelPosition == LabelPosition::Left) {
-                        label.Margin({0, -2, (double)labelGap, 0});
-                    } else if (labelPosition == LabelPosition::Right) {
-                        label.Margin({(double)labelGap, -2, 0, 0});
-                    } else if (labelPosition == LabelPosition::Top) {
-                        label.Margin({0, 0, 0, (double)labelGap});
+                    if (accounts[i].tileIdentity == TileIdentity::Text) {
+                        TextBlock label;
+                        label.Text(accounts[i].label);
+                        label.FontSize(labelFontSize);
+                        label.Opacity(0.8);
+                        swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
+                        label.Name(name);
+                        refs.label = label;
+                        identity = label;
                     } else {
-                        label.Margin({0, (double)labelGap, 0, 0});
+                        identity = BuildTileIdentity(accounts, i, barLayout, refs.tile);
+                        identities = true;
                     }
-                    label.Opacity(0.8);
-                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
-                    label.Name(name);
-                    refs.label = label;
-                    if (labelBeforeBars) content.Children().Append(label);
+                    identity.VerticalAlignment(VerticalAlignment::Center);
+                    identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
+                                                                  HorizontalAlignment::Left);
+                    if (identityBeforeBars) content.Children().Append(identity);
                 }
 
                 StackPanel bars;
                 bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
                 bars.VerticalAlignment(VerticalAlignment::Center);
+                bars.HorizontalAlignment(HorizontalAlignment::Center);
 
                 // Each bar's cell holds its track (or thin rail), fill and pace tick, centred across
                 // it. Ticks reach past the bar through negative margins, which keep them unclipped.
@@ -8818,7 +8814,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 refs.barArea = bars.as<FrameworkElement>();
                 content.Children().Append(bars);
-                if (label && !labelBeforeBars) content.Children().Append(label);
+                if (identity && !identityBeforeBars) content.Children().Append(identity);
                 col.Children().Append(content);
             }
 
@@ -9261,6 +9257,43 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 UpdateAccountTile(state, i, meters, display, light);
             } else {
                 UpdateTileIdentity(ui.tile, ap, meters, light);
+                // The identity's margins. Its box: a logo's badge and stale mark overhang it
+                // (4 DIPs right; the badge 4 below, the mark 3 above) and count while they show;
+                // a side label sits 2 DIPs high. Then the identity gap toward the bars while any
+                // shows.
+                FrameworkElement identity{nullptr};
+                if (ui.label) {
+                    identity = ui.label;
+                } else if (ui.tile.identity) {
+                    identity = ui.tile.identity;
+                }
+                if (identity) {
+                    LabelPosition position = settings.labelPosition;
+                    double gap = barMask ? settings.labelGap : 0;
+                    Thickness margin{};
+                    if (ui.label) {
+                        bool side = position == LabelPosition::Left ||
+                                    position == LabelPosition::Right;
+                        margin.Top = side ? -2 : 0;
+                    } else {
+                        bool badge = ui.tile.badge != nullptr;
+                        margin = {0, meters.warn ? 3.0 : 0.0, badge || meters.warn ? 4.0 : 0.0,
+                                  badge ? 4.0 : 0.0};
+                    }
+                    if (position == LabelPosition::Left) {
+                        margin.Right += gap;
+                    } else if (position == LabelPosition::Right) {
+                        margin.Left += gap;
+                    } else if (position == LabelPosition::Top) {
+                        margin.Bottom += gap;
+                    } else if (position == LabelPosition::Bottom) {
+                        margin.Top += gap;
+                    }
+                    if (margin != ap.identityMargin) {
+                        identity.Margin(margin);
+                        ap.identityMargin = margin;
+                    }
+                }
                 int paceLight = light ? 1 : 0;
                 if (paceLight != ap.paceLight) {
                     if (ui.paceCore && ui.paceHalo) {
@@ -9301,16 +9334,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                              Visibility::Collapsed);
                     }
                     if (ui.content) {
-                        // Without a quota shown the content keeps a small target, unless the
-                        // identity leads it; then a content without a label collapses, so
-                        // the identity alone stays.
-                        bool identity = ui.tile.identity != nullptr;
+                        // Without a quota or an identity shown, a small context-menu target stays.
                         double minimumHitSize =
                             visibleCount || identity ? 0.0 : std::max(display.barThickness, 8);
                         ui.content.MinWidth(minimumHitSize);
                         ui.content.MinHeight(minimumHitSize);
-                        ui.content.Visibility(visibleCount || ui.label || !identity ?
-                                                  Visibility::Visible : Visibility::Collapsed);
                     }
                     ap.barMask = barMask;
                 }
@@ -15294,7 +15322,6 @@ static std::wstring SerializeSettings(const Settings& s) {
                 a.tileIdentity == TileIdentity::Logo ? L"logo" :
                 a.tileIdentity == TileIdentity::Text ? L"text" : L"logoBadge"));
             account.SetNamedValue(L"tileText", JsonValue::CreateStringValue(winrt::hstring(a.tileText)));
-            account.SetNamedValue(L"barLogo", JsonValue::CreateBooleanValue(a.barLogo));
             account.SetNamedValue(L"fiveHour", JsonValue::CreateBooleanValue(a.showBars[kFiveHourBar]));
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
             account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
@@ -15412,7 +15439,6 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
                 a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
-                a.barLogo = getBoolDefault(L"barLogo", false);
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
                 a.recordHistory = getBoolDefault(L"recordHistory", true);
@@ -16141,13 +16167,11 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         result.icon = MB_ICONWARNING;
         return result;
     }
-    // The identity and Logo on bars are read only while building columns, so their edits take
-    // the rebuild path.
+    // The identity is read only while building columns, so its edits take the rebuild path.
     bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
                                    oldAccount.label == newAccount.label &&
                                    oldAccount.tileIdentity == newAccount.tileIdentity &&
                                    oldAccount.tileText == newAccount.tileText &&
-                                   oldAccount.barLogo == newAccount.barLogo &&
                                    oldAccount.creditsMax == newAccount.creditsMax &&
                                    oldAccount.recordHistory == newAccount.recordHistory &&
                                    oldAccount.historyId == newAccount.historyId &&
@@ -16420,7 +16444,6 @@ enum class SettingsField : uint8_t {
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
     AccountTileText,      // Text, up to 4 characters
-    AccountBarLogo,       // Logo on bars: Stacked and Vertical bars lead with the identity
     AccountBars,          // The quotas shown: bit i = QuotaBarIndex i
     AccountCreditsMax,    // OpenAI credits that count as 100%; 0 hides the credits bar
     AccountRecordHistory,
@@ -16733,7 +16756,6 @@ static std::wstring SettingsRangeError(SettingsNumberRange range) {
 static int SettingsAccountValue(const AccountConfig& a, SettingsField field) {
     switch (field) {
         case SettingsField::AccountTileIdentity: return int(a.tileIdentity);
-        case SettingsField::AccountBarLogo: return a.barLogo;
         case SettingsField::AccountBars: {
             int mask = 0;
             for (int i = 0; i < kQuotaBarCount; i++) mask |= a.showBars[size_t(i)] ? 1 << i : 0;
@@ -16755,7 +16777,6 @@ static void SettingsAccountAssign(AccountConfig& a, SettingsField field, int val
         case SettingsField::AccountTileIdentity:
             a.tileIdentity = TileIdentity(std::clamp(value, int(TileIdentity::LogoBadge), int(TileIdentity::Text)));
             break;
-        case SettingsField::AccountBarLogo: a.barLogo = value != 0; break;
         case SettingsField::AccountBars:
             for (int i = 0; i < kQuotaBarCount; i++) a.showBars[size_t(i)] = (value >> i) & 1;
             break;
@@ -17847,10 +17868,11 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         size_t hoverAt = ops.size();
 
         if (!IsTileLayout(layout)) {
-            // Bars (quota-grid.h): the tiles' box, at least the tile height, 7 DIPs inside each
-            // side, with the identity (barLogo) 6 DIPs before the content, both centered across it.
-            // The content: a label beside, above or below a stack of bars; each bar a track or thin
-            // rail, its fill and pace tick, an optional quota key and the percentage text.
+            // Bars (quota-grid.h, quota-update.h): the tiles' box, at least the tile height, 7 DIPs
+            // inside each side, holding the content centered across it: the identity beside, above
+            // or below a stack of bars at the identity position, centered on them, the identity gap
+            // between them while a bar shows; or the bars alone. Each bar a track or thin rail, its
+            // fill and pace tick, an optional quota key and the percentage text.
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -17874,56 +17896,63 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
                 barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
             }
-            bool labelled = position != LabelPosition::Hidden;
-            bool side = position == LabelPosition::Left || position == LabelPosition::Right;
-            Measured labelText = measure(meters.labelText, labelStyle);
-            float labelWidth = labelled ? labelText.width : 0;
-            // Side labels have a -2 DIP top margin; stacked ones the label gap toward the bars.
-            float contentWidth, contentHeight;
+            // The identity's box. Label: the account label in the label font, its "!" while
+            // warned, a side label 2 DIPs high (a -2 DIP top margin). Logo: 15 DIPs, with the
+            // overhangs of its badge (4 DIPs right and below) and of its stale mark while shown
+            // (4 right, 3 above).
+            const bool shown = position != LabelPosition::Hidden;
+            const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
+            const bool labelForm = account.tileIdentity == TileIdentity::Text;
+            const bool badge = !labelForm && TileIdentityFor(accounts, i).badge;
+            const Measured labelText = measure(meters.labelText, labelStyle);
+            float idWidth = 0, idHeight = 0;
+            const float markTop = meters.warn ? 3 : 0;
+            if (shown && labelForm) {
+                idWidth = labelText.width;
+                idHeight = side ? labelText.height - 2 : labelText.height;
+            } else if (shown) {
+                idWidth = 15 + (badge || meters.warn ? 4 : 0);
+                idHeight = markTop + 15 + (badge ? 4 : 0);
+            }
+            const float idGap = shown && count ? labelGap : 0;
+            float contentWidth = barsWidth, contentHeight = barsHeight;
             if (side) {
-                contentWidth = labelWidth + labelGap + barsWidth;
-                contentHeight = std::max(labelText.height - 2, barsHeight);
-            } else {
-                contentWidth = std::max(labelWidth, barsWidth);
-                contentHeight = (labelled ? labelText.height + labelGap : 0) + barsHeight;
+                contentWidth = idWidth + idGap + barsWidth;
+                contentHeight = std::max(idHeight, barsHeight);
+            } else if (shown) {
+                contentWidth = std::max(idWidth, barsWidth);
+                contentHeight = idHeight + idGap + barsHeight;
+            } else if (!count) {
+                // Without a quota or an identity shown, a small context-menu target stays.
+                contentWidth = contentHeight = float(std::max(th, 8));
             }
-            // Without a quota shown the content keeps a small context-menu target, unless the
-            // identity leads it; then a content without a label collapses.
-            const bool identity = account.barLogo;
-            const bool shown = count || labelled || !identity;
-            if (!count && !identity) {
-                contentWidth = std::max(contentWidth, float(std::max(th, 8)));
-                contentHeight = std::max(contentHeight, float(std::max(th, 8)));
-            }
-            if (!shown) contentWidth = contentHeight = 0;
             height = std::max(T, contentHeight);
             top = (H - height) / 2;
-            float contentLeft = x0 + 7;
-            if (identity) {
-                contentLeft += identityOps(ops, i, meters, 15, x0 + 7, top + height / 2) + (shown ? 6 : 0);
-            }
-            width = contentLeft - x0 + contentWidth + 7;
-            const float contentTop = top + (height - contentHeight) / 2;
+            width = 7 + contentWidth + 7;
+            const float contentLeft = x0 + 7, contentTop = top + (height - contentHeight) / 2;
 
-            if (labelled) {
-                float left = position == LabelPosition::Right ? barsWidth + labelGap :
-                             side ? 0 : (contentWidth - labelWidth) / 2;
-                float labelTop = side ? contentTop + (contentHeight - labelText.height) / 2 - 1 :
-                                 position == LabelPosition::Top ? contentTop : contentTop + barsHeight + labelGap;
-                label(ops, meters.labelText, labelStyle, contentLeft + left, labelTop, labelWidth,
-                      DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
+            if (shown) {
+                float idLeft = position == LabelPosition::Right ? contentLeft + barsWidth + idGap :
+                               side ? contentLeft : contentLeft + (contentWidth - idWidth) / 2;
+                float idTop = side ? contentTop + (contentHeight - idHeight) / 2 :
+                              position == LabelPosition::Top ? contentTop : contentTop + barsHeight + idGap;
+                if (labelForm) {
+                    label(ops, meters.labelText, labelStyle, idLeft, idTop - (side ? 2 : 0), labelText.width,
+                          DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
+                } else {
+                    identityOps(ops, i, meters, 15, idLeft, idTop + markTop + 7.5f);
+                }
             }
-            float barsLeft = contentLeft + (position == LabelPosition::Left ? labelWidth + labelGap : 0);
+            float barsLeft = position == LabelPosition::Left ? contentLeft + idWidth + idGap :
+                             side ? contentLeft : contentLeft + (contentWidth - barsWidth) / 2;
             float barsTop = side ? contentTop + (contentHeight - barsHeight) / 2 :
-                            position == LabelPosition::Top ? contentTop + labelText.height + labelGap : contentTop;
-            float panelWidth = side ? barsWidth : contentWidth;
+                            position == LabelPosition::Top ? contentTop + idHeight + idGap : contentTop;
             int k = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(meters.barMask & (1 << w))) continue;
                 const QuotaMeter& q = meters.quotas[w];
-                // Stacked items center in the panel; vertical ones line up from its left.
-                float itemLeft = vertical ? barsLeft + k * (itemWidth + gap) :
-                                            barsLeft + (panelWidth - itemWidth) / 2;
+                // Stacked items share the panel's left; vertical ones line up from it.
+                float itemLeft = barsLeft + (vertical ? k * (itemWidth + gap) : 0);
                 float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + gap);
                 float tx = itemLeft + (keys ? keyColumn : 0), ty = itemTop;
                 float trackHeight = itemHeight;
@@ -18837,8 +18866,8 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 }
 
 // src/settings/page-layout.h
-// Settings > Layout: the tile style gallery, then the chosen style's sizes, labels, pace markers
-// and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
+// Settings > Layout: the tile style gallery, then the chosen style's sizes, identity and text, pace
+// markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
 static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bars", L"Segmented ring",
@@ -18874,15 +18903,13 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y += 2 * kCardHeight + kGap;
     }
 
-    // Account identity, and on bars Logo on bars, is per account: a card that goes to Accounts.
-    // Fixed ids, so focus stays on it when cards above it change.
+    // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays on
+    // it when cards above it change.
     auto identityCard = [&](float top) {
         UiCardSpec spec;
         spec.glyph = L"\uE716";
-        spec.title = bars ? L"Logo on bars and identity are set per account in Accounts" :
-                            L"Account identity is set per account in Accounts";
-        spec.description = {{bars ? L"An account can lead its bars with its logo, a number badge, or label text." :
-                                    L"Logo + number badge, logo only, or label text."}};
+        spec.title = L"Account identity is set per account in Accounts";
+        spec.description = {{L"Logo + number badge, logo only, or label."}};
         spec.trailingGlyph = L"\uE76C";
         spec.action = {UiActionKind::Navigate, int(SettingsUiPage::Accounts)};
         spec.minHeight = 62;
@@ -18918,17 +18945,18 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.description = {{L"Space between an account\u2019s bars."}};
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
         }
-        y = identityCard(y + 3);
 
-        // Labels: their size and gap need a position; the bar text size, quota keys or
+        // Identity and text: the link to each account's identity, where it sits; the Label form's
+        // size and the gap need a position. Then quota keys, and the bar text size for them or
         // percentage text.
-        y = UiAddSection(items, id, x, y + 20, width, L"Labels");
-        bool labelled = s.labelPosition != LabelPosition::Hidden;
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity and text");
+        bool placed = s.labelPosition != LabelPosition::Hidden;
+        y = identityCard(y);
         {
             UiCardSpec spec;
-            spec.title = L"Label position";
-            spec.description = {{L"Where the account label sits next to its bars."}};
-            y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::LabelPosition, 200,
+            spec.title = L"Identity position";
+            spec.description = {{L"Where each account\u2019s identity sits next to its bars."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelPosition, 200,
                                         {{L"Left", int(LabelPosition::Left)},
                                          {L"Right", int(LabelPosition::Right)},
                                          {L"Top", int(LabelPosition::Top)},
@@ -18939,17 +18967,17 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Label font size";
-            spec.description = {{L"Account label text, in pixels."}};
-            spec.enabled = labelled;
-            if (!labelled) spec.reason = L"Choose a label position to change this.";
+            spec.description = {{L"Text of accounts whose identity is Label, in pixels."}};
+            spec.enabled = placed;
+            if (!placed) spec.reason = L"Choose an identity position to change this.";
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelFontSize);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Label gap";
-            spec.description = {{L"Space between the label and the bars."}};
-            spec.enabled = labelled;
-            if (!labelled) spec.reason = L"Choose a label position to change this.";
+            spec.title = L"Identity gap";
+            spec.description = {{L"Space between the identity and the bars."}};
+            spec.enabled = placed;
+            if (!placed) spec.reason = L"Choose an identity position to change this.";
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, L"px");
         }
         {
@@ -18989,7 +19017,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
                          {{std::wstring(kSettingsTileStyles[int(layout)]) +
                            L" tiles have a fixed size that follows the taskbar\u2019s height. Bar sizes and "
-                           L"labels apply to Stacked and Vertical bars."}});
+                           L"the identity position apply to Stacked and Vertical bars."}});
         y = identityCard(y + 3);
     }
 
@@ -19078,7 +19106,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
     UiCardSpec reset;
     reset.title = L"Reset Layout to defaults";
-    reset.description = {{L"Tile style, bar style, sizes, labels, pace markers and spacing. Accounts are not changed."}};
+    reset.description = {{L"Tile style, bar style, sizes, identity and text, pace markers and spacing. Accounts are "
+                           L"not changed."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
 }
 
@@ -19469,8 +19498,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 const SettingsDraft* draft = draftOf(SettingsField::AccountLabel);
                 UiCardSpec spec;
                 spec.title = L"Label";
-                spec.description = {{L"Shown next to bars and in details. Unique per provider; renaming keeps "
-                                     L"the sign-in and history."}};
+                spec.description = {{L"Shown in details, and next to bars when Identity is Label. Unique per "
+                                     L"provider; renaming keeps the sign-in and history."}};
                 spec.trailing = {200, 32};
                 if (draft) spec.error = draft->error;
                 UiCardLayout layout = row(spec);
@@ -19540,7 +19569,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             {
                 UiCardSpec spec;
                 spec.title = L"Identity";
-                spec.description = {{L"Ring and headline tiles, and bars with Logo on bars. The number badge "
+                spec.description = {{L"Marks this account beside its bars and on ring and headline tiles. Label "
+                                     L"shows the label on bars and its short text on tiles. The number badge "
                                      L"appears only when several accounts share a provider."}};
                 spec.trailing = {220, 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
@@ -19548,7 +19578,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 UiAddDropdown(cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
                               {{L"Logo + number badge", int(TileIdentity::LogoBadge)},
                                {L"Logo only", int(TileIdentity::Logo)},
-                               {L"Label text", int(TileIdentity::Text)}},
+                               {L"Label", int(TileIdentity::Text)}},
                               true, command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
             {
@@ -19557,10 +19587,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
                 UiCardSpec spec;
                 spec.title = L"Short text";
-                spec.description = {{L"Up to 4 characters. Empty uses the label without spaces."}};
+                spec.description = {{L"The Label identity on ring and headline tiles, up to 4 characters. Empty "
+                                     L"uses the label without spaces."}};
                 spec.trailing = {96, 32};
                 spec.enabled = used;
-                if (!used) spec.reason = L"Used when Identity is Label text.";
+                if (!used) spec.reason = L"Used on tiles when Identity is Label.";
                 if (draft) spec.error = draft->error;
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -19576,15 +19607,6 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 box.enabled = used;
                 box.action = command(SettingsField::AccountTileText);
                 push(box);
-            }
-            {
-                UiCardSpec spec;
-                spec.title = L"Logo on bars";
-                spec.description = {{L"Show the identity before this account\u2019s Stacked and Vertical bars."}};
-                spec.trailing = UiToggleSize(g);
-                UiCardLayout layout = row(spec);
-                UiAddToggle(cardItems, control(SettingsField::AccountBarLogo), layout.trailing, account.barLogo,
-                            true, command(SettingsField::AccountBarLogo, !account.barLogo));
             }
             {
                 // Whether it records: this entry's choice, this Windows user's consent, then the

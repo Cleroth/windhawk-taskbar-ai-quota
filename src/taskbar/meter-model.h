@@ -349,20 +349,20 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     const ULONGLONG now = display.now;
     // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
     // share a provider so tiles show number badges. A negative value is a quota not reported.
-    // Antigravity is stale, with an error. CC 1 (badged) and Go (marked) lead their bars with
-    // their identity.
+    // Antigravity is stale, with an error. Identities mix: OAI shows its label, the Anthropic pair
+    // their logo and number badge, Go its logo alone, with the stale mark.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
         std::array<double, kQuotaBarCount> pct;
         std::array<bool, kQuotaBarCount> showBars;
-        bool barLogo;
+        TileIdentity identity;
     };
     const std::array<Sample, 4> samples = {{
-        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, false},
-        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, true},
-        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, false},
-        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}, true},
+        {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, TileIdentity::Text},
+        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},
+        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},
+        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}, TileIdentity::Logo},
     }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
@@ -387,7 +387,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         account.provider = sample.provider;
         account.label = sample.label;
         account.showBars = sample.showBars;
-        account.barLogo = sample.barLogo;
+        account.tileIdentity = sample.identity;
         bool openAi = account.provider == L"openai";
         if (openAi) account.creditsMax = (int)kCreditsMax;
         accounts->push_back(account);
@@ -524,8 +524,9 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     return g;
 }
 
-// The identity text of a tile, or of a bar column with barLogo. Logo identities show a number badge when several configured accounts
-// share the provider; text identities, and logos that fail to load, show `text`.
+// The identity text of a tile, or of a bar column's logo identity. Logo identities show a number
+// badge when several configured accounts share the provider; text identities on tiles, and logos
+// that fail to load, show `text`.
 struct TileIdentityText {
     bool badge = false;
     std::wstring badgeText;
@@ -612,9 +613,9 @@ struct AccountMeters {
     bool warn = false;         // Stale with an error: the label's "!" or the identity's mark.
     int barMask = 0;           // Quota slots shown.
     std::array<QuotaMeter, kQuotaBarCount> quotas;
-    std::wstring labelText;    // Bars' label.
+    std::wstring labelText;    // Bars' Label identity.
     double labelOpacity = 0;
-    double identityOpacity = 0;  // Tiles' identity, and bars' with barLogo.
+    double identityOpacity = 0;  // Tiles' identity, and bars' logo identity.
     // Ring tiles: the identity text's fitted font size and width, and the warning mark's top
     // margin, into the tile's padding.
     TileRingGeometry ring;
@@ -647,8 +648,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
                    display.now - data.lastSuccessMs > staleAfterMs;
     meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
-    // With barLogo the identity carries the mark instead.
-    meters.labelText = meters.warn && !account.barLogo ? account.label + L"!" : account.label;
+    meters.labelText = meters.warn ? account.label + L"!" : account.label;
     meters.labelOpacity = meters.stale ? 0.45 : 0.8;
     meters.identityOpacity = meters.stale ? 0.45 : 1.0;
     // Every selected quota until the first success, then the reported ones.

@@ -16,13 +16,13 @@ Each visible account gets one compact taskbar column. Choose among the provider'
 
 Hover a column to highlight it and open its details flyout: percentages, reset times, pace, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Click a column to refresh it. Right-click a column for Settings, Usage history, Refresh all, provider actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several accounts. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
 
-Bars can show compact quota labels and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark labels (or the account's logo) with `!` and the details flyout with a warning icon.
+Each column shows the account's identity beside its bars: the provider logo (with a number badge when several accounts share a provider) or the account's label. Bars can show compact quota keys and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark the identity with `!` and the details flyout with a warning icon.
 
 It can also fire a Windows notification when an account first crosses the red threshold on a selected bar. The notification re-arms once usage drops back below the threshold.
 
 ## Setup
 
-Install **Taskbar AI Quota Bars** from the Windhawk catalog. On a fresh install, click the **AI +** taskbar tile to open the settings window, then choose **Add account** and a provider. Existing Windhawk settings are imported once when upgrading. Settings autosave; most appearance and behavior edits do not immediately re-query providers, while new or identity-changed accounts and stale accounts made visible can fetch.
+Install **Taskbar AI Quota Bars** from the Windhawk catalog. On a fresh install, click the **AI +** taskbar tile to open the settings window, then choose **Add account** and a provider. Existing Windhawk settings are imported once when upgrading. Updating from a version without per-account identities shows each account's logo beside its bars instead of its label; choose **Label** as the account's identity in **Settings > Accounts** to bring the label back. Settings autosave; most appearance and behavior edits do not immediately re-query providers, while new or identity-changed accounts and stale accounts made visible can fetch.
 
 Adding an account creates it at once, with a default label (`A`, `O` or `G`, then `A2`, `A3`, ...; labels that still have a stored sign-in are skipped, so a new account never reuses an old one), and polls it right away: Anthropic and OpenAI accounts show **Sign-in needed** until you sign in, while Antigravity accounts query the local app and record history immediately. Expand the account's card to rename it and choose its taskbar quotas (at least one stays selected). Each provider-and-label pair must be unique. The provider can't be changed later: remove the account and add a new one.
 
@@ -46,14 +46,13 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - label: unique per provider; renaming keeps the sign-in and history
   - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and monthly extra usage, OpenAI credits; unavailable quotas auto-hide
   - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
-  - identity for the ring and headline styles, and for bars with logo on bars: provider logo with a number badge when several accounts share a provider, logo only, or label text (up to 4 characters of short text, else the label without spaces)
-  - logo on bars: shows the identity before the account's stacked or vertical bars, where it also carries the stale-data `!` (off by default)
+  - identity, shown beside the account's stacked or vertical bars and on ring and headline tiles: provider logo with a number badge when several accounts share a provider (default), logo only, or label (the full label on bars; on tiles up to 4 characters of short text, else the label without spaces)
   - record history for this account
   - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
 - **Layout**, with a live preview of the taskbar:
   - tile style: stacked bars, vertical bars, segmented ring, concentric rings, or headline %; settings the chosen style ignores are hidden or disabled with the reason
   - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); ring size and thickness (ring styles)
-  - label position (left, right, top, bottom, or hidden), label font size, and label gap
+  - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label font size for label identities, and the identity gap
   - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size
   - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on a light taskbar)
   - account margin and tray gap

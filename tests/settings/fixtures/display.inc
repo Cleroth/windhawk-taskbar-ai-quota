@@ -429,8 +429,8 @@ static void RunDisplayPageTests() {
         values = Values(Strip(s));
         CHECK(values[0].text == L"40%" && values[6].text == L"110%" && Finite(Strip(s)));
 
-        // Mark stale data: Go, the stale account, leads its bars with its logo, which takes the
-        // mark; its label has none. Tiles add the mark.
+        // Mark stale data: Go, the stale account, shows its logo, which takes the mark (a Label
+        // identity's "!": layout.inc). Tiles add the mark.
         auto marks = [](const SettingsPreviewStrip& strip, std::wstring_view text) {
             return std::count_if(strip.ops.begin(), strip.ops.end(), [&](const SettingsPreviewOp& op) {
                 return op.kind == SettingsPreviewOp::Kind::Text && op.text == text;
@@ -441,10 +441,10 @@ static void RunDisplayPageTests() {
             s.barLayout = layout;
             s.showStaleWarning = true;
             SettingsPreviewStrip marked = Strip(s);
-            CHECK(marks(marked, L"Go!") == 0 && marks(marked, L"Go") == 1 && marks(marked, L"!") == 1);
+            CHECK(marks(marked, L"Go!") == 0 && marks(marked, L"Go") == 0 && marks(marked, L"!") == 1);
             s.showStaleWarning = false;
             SettingsPreviewStrip unmarked = Strip(s);
-            CHECK(marks(unmarked, L"Go!") == 0 && marks(unmarked, L"Go") == 1 && marks(unmarked, L"!") == 0);
+            CHECK(marks(unmarked, L"Go!") == 0 && marks(unmarked, L"Go") == 0 && marks(unmarked, L"!") == 0);
         }
         for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::LogoHeadline}) {
             s.barLayout = layout;

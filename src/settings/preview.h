@@ -194,10 +194,11 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         size_t hoverAt = ops.size();
 
         if (!IsTileLayout(layout)) {
-            // Bars (quota-grid.h): the tiles' box, at least the tile height, 7 DIPs inside each
-            // side, with the identity (barLogo) 6 DIPs before the content, both centered across it.
-            // The content: a label beside, above or below a stack of bars; each bar a track or thin
-            // rail, its fill and pace tick, an optional quota key and the percentage text.
+            // Bars (quota-grid.h, quota-update.h): the tiles' box, at least the tile height, 7 DIPs
+            // inside each side, holding the content centered across it: the identity beside, above
+            // or below a stack of bars at the identity position, centered on them, the identity gap
+            // between them while a bar shows; or the bars alone. Each bar a track or thin rail, its
+            // fill and pace tick, an optional quota key and the percentage text.
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -221,56 +222,63 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
                 barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
             }
-            bool labelled = position != LabelPosition::Hidden;
-            bool side = position == LabelPosition::Left || position == LabelPosition::Right;
-            Measured labelText = measure(meters.labelText, labelStyle);
-            float labelWidth = labelled ? labelText.width : 0;
-            // Side labels have a -2 DIP top margin; stacked ones the label gap toward the bars.
-            float contentWidth, contentHeight;
+            // The identity's box. Label: the account label in the label font, its "!" while
+            // warned, a side label 2 DIPs high (a -2 DIP top margin). Logo: 15 DIPs, with the
+            // overhangs of its badge (4 DIPs right and below) and of its stale mark while shown
+            // (4 right, 3 above).
+            const bool shown = position != LabelPosition::Hidden;
+            const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
+            const bool labelForm = account.tileIdentity == TileIdentity::Text;
+            const bool badge = !labelForm && TileIdentityFor(accounts, i).badge;
+            const Measured labelText = measure(meters.labelText, labelStyle);
+            float idWidth = 0, idHeight = 0;
+            const float markTop = meters.warn ? 3 : 0;
+            if (shown && labelForm) {
+                idWidth = labelText.width;
+                idHeight = side ? labelText.height - 2 : labelText.height;
+            } else if (shown) {
+                idWidth = 15 + (badge || meters.warn ? 4 : 0);
+                idHeight = markTop + 15 + (badge ? 4 : 0);
+            }
+            const float idGap = shown && count ? labelGap : 0;
+            float contentWidth = barsWidth, contentHeight = barsHeight;
             if (side) {
-                contentWidth = labelWidth + labelGap + barsWidth;
-                contentHeight = std::max(labelText.height - 2, barsHeight);
-            } else {
-                contentWidth = std::max(labelWidth, barsWidth);
-                contentHeight = (labelled ? labelText.height + labelGap : 0) + barsHeight;
+                contentWidth = idWidth + idGap + barsWidth;
+                contentHeight = std::max(idHeight, barsHeight);
+            } else if (shown) {
+                contentWidth = std::max(idWidth, barsWidth);
+                contentHeight = idHeight + idGap + barsHeight;
+            } else if (!count) {
+                // Without a quota or an identity shown, a small context-menu target stays.
+                contentWidth = contentHeight = float(std::max(th, 8));
             }
-            // Without a quota shown the content keeps a small context-menu target, unless the
-            // identity leads it; then a content without a label collapses.
-            const bool identity = account.barLogo;
-            const bool shown = count || labelled || !identity;
-            if (!count && !identity) {
-                contentWidth = std::max(contentWidth, float(std::max(th, 8)));
-                contentHeight = std::max(contentHeight, float(std::max(th, 8)));
-            }
-            if (!shown) contentWidth = contentHeight = 0;
             height = std::max(T, contentHeight);
             top = (H - height) / 2;
-            float contentLeft = x0 + 7;
-            if (identity) {
-                contentLeft += identityOps(ops, i, meters, 15, x0 + 7, top + height / 2) + (shown ? 6 : 0);
-            }
-            width = contentLeft - x0 + contentWidth + 7;
-            const float contentTop = top + (height - contentHeight) / 2;
+            width = 7 + contentWidth + 7;
+            const float contentLeft = x0 + 7, contentTop = top + (height - contentHeight) / 2;
 
-            if (labelled) {
-                float left = position == LabelPosition::Right ? barsWidth + labelGap :
-                             side ? 0 : (contentWidth - labelWidth) / 2;
-                float labelTop = side ? contentTop + (contentHeight - labelText.height) / 2 - 1 :
-                                 position == LabelPosition::Top ? contentTop : contentTop + barsHeight + labelGap;
-                label(ops, meters.labelText, labelStyle, contentLeft + left, labelTop, labelWidth,
-                      DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
+            if (shown) {
+                float idLeft = position == LabelPosition::Right ? contentLeft + barsWidth + idGap :
+                               side ? contentLeft : contentLeft + (contentWidth - idWidth) / 2;
+                float idTop = side ? contentTop + (contentHeight - idHeight) / 2 :
+                              position == LabelPosition::Top ? contentTop : contentTop + barsHeight + idGap;
+                if (labelForm) {
+                    label(ops, meters.labelText, labelStyle, idLeft, idTop - (side ? 2 : 0), labelText.width,
+                          DWRITE_TEXT_ALIGNMENT_LEADING, text, meters.labelOpacity);
+                } else {
+                    identityOps(ops, i, meters, 15, idLeft, idTop + markTop + 7.5f);
+                }
             }
-            float barsLeft = contentLeft + (position == LabelPosition::Left ? labelWidth + labelGap : 0);
+            float barsLeft = position == LabelPosition::Left ? contentLeft + idWidth + idGap :
+                             side ? contentLeft : contentLeft + (contentWidth - barsWidth) / 2;
             float barsTop = side ? contentTop + (contentHeight - barsHeight) / 2 :
-                            position == LabelPosition::Top ? contentTop + labelText.height + labelGap : contentTop;
-            float panelWidth = side ? barsWidth : contentWidth;
+                            position == LabelPosition::Top ? contentTop + idHeight + idGap : contentTop;
             int k = 0;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(meters.barMask & (1 << w))) continue;
                 const QuotaMeter& q = meters.quotas[w];
-                // Stacked items center in the panel; vertical ones line up from its left.
-                float itemLeft = vertical ? barsLeft + k * (itemWidth + gap) :
-                                            barsLeft + (panelWidth - itemWidth) / 2;
+                // Stacked items share the panel's left; vertical ones line up from it.
+                float itemLeft = barsLeft + (vertical ? k * (itemWidth + gap) : 0);
                 float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + gap);
                 float tx = itemLeft + (keys ? keyColumn : 0), ty = itemTop;
                 float trackHeight = itemHeight;

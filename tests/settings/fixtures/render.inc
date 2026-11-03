@@ -98,10 +98,10 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 
 // Preview strips at 1:1, one row per variant with its caption. Layout sheet: every layout,
 // percent text modes and alignments, quota keys, bar modes, amounts, colorblind colors, pace
-// styles and colors, label positions, extreme sizes, overflow (scrolled and not), hover, a 32 DIP
-// taskbar, logos on stacked and vertical bars at every label position, the hover box with and
-// without a logo (grown by tall vertical bars), and tile fills near their ends and at their
-// minimums. Display sheet: percentage text never/hover/always, each alignment, bar modes
+// styles and colors, extreme sizes, overflow (scrolled and not), hover, a 32 DIP taskbar, the
+// sample identities (label, badged logos, a stale logo) on stacked and vertical bars at every
+// identity position and two identity gaps, the hover box around each form (grown by tall vertical
+// bars), and tile fills near their ends and at their minimums. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -156,7 +156,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Ring, remaining", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.barMode = BarMode::Remaining; }},
         {L"Concentric, 20 / 40 / 60",
          [&](Settings& s) { s.barLayout = BarLayout::ConcentricRings; thresholds(s, 20, 40, 60); }},
-        {L"Vertical 32, label top, colorblind", [](Settings& s) {
+        {L"Vertical 32, identity top, colorblind", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
              s.barLength = 32;
              s.labelPosition = LabelPosition::Top;
@@ -204,10 +204,6 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.barLayout = BarLayout::Vertical;
              s.barLength = 32;
          }},
-        {L"Label top", [](Settings& s) { s.labelPosition = LabelPosition::Top; }},
-        {L"Label right", [](Settings& s) { s.labelPosition = LabelPosition::Right; }},
-        {L"Label bottom", [](Settings& s) { s.labelPosition = LabelPosition::Bottom; }},
-        {L"Label hidden", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }},
         {L"Labels 24, text 14", [&](Settings& s) { always(s); s.labelFontSize = 24; s.percentFontSize = 14; }},
         {L"Bars 10 x 2", [](Settings& s) { s.barLength = 10; s.barThickness = 2; }},
         {L"Bars 60 x 14", [&](Settings& s) { always(s); s.barLength = 60; s.barThickness = 14; }},
@@ -257,39 +253,47 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.ringSize = 40;
              s.ringThickness = 6;
          }},
-        // Logos on bars (CC 1 badged, Go stale) at each label position, and the hover box with
-        // and without a logo.
-        {L"Logos, label left", [](Settings&) {}},
-        {L"Logos, label right", [](Settings& s) { s.labelPosition = LabelPosition::Right; }},
-        {L"Logos, label top", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, -1, 64},
-        {L"Logos, label bottom", [](Settings& s) { s.labelPosition = LabelPosition::Bottom; }, -1, 64},
-        {L"Logos, label hidden", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }},
-        {L"Vertical 32, logos, left", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }},
-        {L"Vertical 32, logos, right", [](Settings& s) {
+        // The sample identities (OAI's label, the Anthropic pair's badged logos, Go's logo with
+        // its stale mark) at each identity position, Stacked (60 DIP bars, so every column fits)
+        // and Vertical; the identity gap; the hover box around each form.
+        {L"Bars 60, identity left", [](Settings& s) { s.barLength = 60; }},
+        {L"Bars 60, identity right", [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Right; }},
+        {L"Bars 60, identity top",
+         [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Top; }, -1, 64},
+        {L"Bars 60, identity bottom",
+         [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Bottom; }, -1, 64},
+        {L"Bars 60, identity hidden", [](Settings& s) { s.barLength = 60; s.labelPosition = LabelPosition::Hidden; }},
+        {L"Bars 60, identity gap 0", [](Settings& s) { s.barLength = 60; s.labelGap = 0; }},
+        {L"Bars 60, gap 8, top", [](Settings& s) {
+             s.barLength = 60;
+             s.labelGap = 8;
+             s.labelPosition = LabelPosition::Top;
+         }, -1, 72},
+        {L"Vertical 32, identity left", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }},
+        {L"Vertical 32, identity right", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
              s.barLength = 32;
              s.labelPosition = LabelPosition::Right;
          }},
-        {L"Vertical 32, logos, top", [](Settings& s) {
+        {L"Vertical 32, identity top", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
              s.barLength = 32;
              s.labelPosition = LabelPosition::Top;
          }, -1, 72},
-        {L"Vertical 32, logos, bottom", [](Settings& s) {
+        {L"Vertical 32, identity bottom", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
              s.barLength = 32;
              s.labelPosition = LabelPosition::Bottom;
          }, -1, 72},
-        {L"Vertical 32, logos, hidden", [](Settings& s) {
+        {L"Vertical 32, identity hidden", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
              s.barLength = 32;
              s.labelPosition = LabelPosition::Hidden;
          }},
-        {L"Hover CC 1 (logo)", [](Settings&) {}, 1},
-        {L"Vertical 32, hover OAI (no logo)",
-         [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }, 0},
-        {L"Label top, hover Go (logo, stale)", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, 3, 64},
-        {L"Label hidden, hover CC 2", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }, 2},
+        {L"Hover CC 1 (badged logo)", [](Settings&) {}, 1},
+        {L"Bars 60, hover OAI (label)", [](Settings& s) { s.barLength = 60; }, 0},
+        {L"Identity top, hover Go (stale)", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, 3, 64},
+        {L"Identity hidden, hover CC 2", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }, 2},
         {L"Vertical 32, hover CC 1", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }, 1},
         {L"Vertical 80, hover Go (box grows)", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
@@ -561,14 +565,14 @@ static void RunRenders(const std::wstring& directory) {
                 RenderFrame(g, wic.get(), path(barStates), frame, view, client, 144, theme.input, state, end, true,
                             false);
 
-                // Scrolled to the Bars section's link to Accounts (Logo on bars), hovered.
-                const UiItem& logos = *UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 8));
+                // Scrolled to the Identity and text section, its link to Accounts hovered.
+                const UiItem& identity = *UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 8));
                 state = {};
-                state.hot = {logos.id};
-                std::string barLogos = std::string("render-layout-bar-logos-") + theme.name + "-144.png";
-                RenderFrame(g, wic.get(), path(barLogos), frame, view, client, 144, theme.input, state,
-                            std::max(logos.rect.top - 300, 0.0f), false);
-                CHECK(logos.action.kind == UiActionKind::Navigate);
+                state.hot = {identity.id};
+                std::string identityName = std::string("render-layout-identity-") + theme.name + "-144.png";
+                RenderFrame(g, wic.get(), path(identityName), frame, view, client, 144, theme.input, state,
+                            std::max(identity.rect.top - 300, 0.0f), false);
+                CHECK(identity.action.kind == UiActionKind::Navigate);
             });
 
             // Overflow: bars too wide for the strip (left fade), then scrolled (both fades); a

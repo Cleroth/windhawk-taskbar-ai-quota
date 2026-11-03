@@ -2,7 +2,7 @@
 // identity (provider logo, optionally with a number badge, or short text) and its tile quotas: the
 // meters the bar layouts show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
-// columns with barLogo lead with the same identity (BuildTileIdentity, UpdateTileIdentity), and
+// columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
 // geometry come from the meter model (meter-model.h).
 

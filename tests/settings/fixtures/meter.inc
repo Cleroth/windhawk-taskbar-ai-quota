@@ -865,20 +865,20 @@ static void RunAccountTests() {
         AccountMeters fresh = meters(false, L"timeout");
         CHECK(!fresh.warn); CHECK(fresh.labelText == L"A");
         CHECK_NEAR(fresh.labelOpacity, 0.8); CHECK_NEAR(fresh.identityOpacity, 1);
-        // Logo on bars: the identity carries the mark, so the label drops its "!" in both bar
-        // layouts; the account stays warned and dimmed.
+        // Every identity form, in both bar layouts: the Label form shows the label with its "!",
+        // a logo carries the mark; either way warned and dimmed.
         AccountData failed = Fresh({10, -1, -1, -1});
         failed.stale = true;
         failed.error = L"timeout";
-        AccountConfig logo = Account();
-        logo.barLogo = true;
-        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
-            AccountMeters marked = AccountMeterState(Display(), layout, logo, failed, 0, 0);
-            CHECK(marked.warn && marked.labelText == L"A");
-            CHECK_NEAR(marked.labelOpacity, 0.45); CHECK_NEAR(marked.identityOpacity, 0.45);
+        for (TileIdentity identity : {TileIdentity::LogoBadge, TileIdentity::Logo, TileIdentity::Text}) {
+            AccountConfig account = Account();
+            account.tileIdentity = identity;
+            for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+                AccountMeters marked = AccountMeterState(Display(), layout, account, failed, 0, 0);
+                CHECK(marked.warn && marked.labelText == L"A!");
+                CHECK_NEAR(marked.labelOpacity, 0.45); CHECK_NEAR(marked.identityOpacity, 0.45);
+            }
         }
-        AccountMeters plain = AccountMeterState(Display(), BarLayout::Vertical, Account(), failed, 0, 0);
-        CHECK(plain.warn && plain.labelText == L"A!");
     });
 
     Run("quota mask before and after the first success", [] {
@@ -972,9 +972,13 @@ static void RunSnapshotTests() {
         CHECK(accounts[0].provider == L"openai"); CHECK(accounts[0].label == L"OAI");
         CHECK(accounts[1].label == L"CC 1"); CHECK(accounts[2].label == L"CC 2");
         CHECK(accounts[3].provider == L"antigravity");
-        // Logo on bars: CC 1 (badged) and Go (stale); every identity the default logo and badge.
-        CHECK(!accounts[0].barLogo && accounts[1].barLogo && !accounts[2].barLogo && accounts[3].barLogo);
-        for (const AccountConfig& account : accounts) CHECK(account.tileIdentity == TileIdentity::LogoBadge);
+        // Mixed identities: OAI's label, the Anthropic pair's logos (badged "1" and "2"), Go's logo
+        // alone.
+        CHECK(accounts[0].tileIdentity == TileIdentity::Text && accounts[1].tileIdentity == TileIdentity::LogoBadge &&
+              accounts[2].tileIdentity == TileIdentity::LogoBadge && accounts[3].tileIdentity == TileIdentity::Logo);
+        CHECK(TileIdentityFor(accounts, 1).badgeText == L"1" && TileIdentityFor(accounts, 2).badgeText == L"2");
+        CHECK(!TileIdentityFor(accounts, 0).badge && !TileIdentityFor(accounts, 3).badge);
+        for (const AccountConfig& account : accounts) CHECK(account.tileText.empty());
         CHECK((accounts[0].showBars == std::array<bool, kQuotaBarCount>{true, true, false, true}));
         CHECK(accounts[0].creditsMax == 1000);
         CHECK_NEAR(data[0].win5h.pct, 25); CHECK_NEAR(data[0].winWeek.pct, 62.5);
@@ -1021,11 +1025,10 @@ static void RunSnapshotTests() {
         std::vector<AccountConfig> accounts;
         std::vector<AccountData> data;
         BuildVisualTestSnapshot(display, &accounts, &data);
-        // Go leads its bars with its logo, which carries the mark: its label has no "!".
+        // Go is marked: its logo shows the mark, a Label identity its "!".
         AccountMeters go = AccountMeterState(display, BarLayout::Stacked, accounts[3], data[3], 0, 0);
-        CHECK(go.warn && go.labelText == L"Go" && go.quotas[0].color == 0xFF9E9E9E && !go.quotas[0].paceVisible);
-        accounts[3].barLogo = false;
-        CHECK(AccountMeterState(display, BarLayout::Stacked, accounts[3], data[3], 0, 0).labelText == L"Go!");
+        CHECK(go.warn && go.labelText == L"Go!" && go.quotas[0].color == 0xFF9E9E9E && !go.quotas[0].paceVisible);
+        CHECK_NEAR(go.identityOpacity, 0.45);
         MeterDisplay unmarked = Display(With([](Settings& s) { s.showStaleWarning = false; }));
         go = AccountMeterState(unmarked, BarLayout::Stacked, accounts[3], data[3], 0, 0);
         CHECK(go.stale && !go.warn && go.labelText == L"Go");

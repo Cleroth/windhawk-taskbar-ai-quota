@@ -90,6 +90,43 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 UpdateAccountTile(state, i, meters, display, light);
             } else {
                 UpdateTileIdentity(ui.tile, ap, meters, light);
+                // The identity's margins. Its box: a logo's badge and stale mark overhang it
+                // (4 DIPs right; the badge 4 below, the mark 3 above) and count while they show;
+                // a side label sits 2 DIPs high. Then the identity gap toward the bars while any
+                // shows.
+                FrameworkElement identity{nullptr};
+                if (ui.label) {
+                    identity = ui.label;
+                } else if (ui.tile.identity) {
+                    identity = ui.tile.identity;
+                }
+                if (identity) {
+                    LabelPosition position = settings.labelPosition;
+                    double gap = barMask ? settings.labelGap : 0;
+                    Thickness margin{};
+                    if (ui.label) {
+                        bool side = position == LabelPosition::Left ||
+                                    position == LabelPosition::Right;
+                        margin.Top = side ? -2 : 0;
+                    } else {
+                        bool badge = ui.tile.badge != nullptr;
+                        margin = {0, meters.warn ? 3.0 : 0.0, badge || meters.warn ? 4.0 : 0.0,
+                                  badge ? 4.0 : 0.0};
+                    }
+                    if (position == LabelPosition::Left) {
+                        margin.Right += gap;
+                    } else if (position == LabelPosition::Right) {
+                        margin.Left += gap;
+                    } else if (position == LabelPosition::Top) {
+                        margin.Bottom += gap;
+                    } else if (position == LabelPosition::Bottom) {
+                        margin.Top += gap;
+                    }
+                    if (margin != ap.identityMargin) {
+                        identity.Margin(margin);
+                        ap.identityMargin = margin;
+                    }
+                }
                 int paceLight = light ? 1 : 0;
                 if (paceLight != ap.paceLight) {
                     if (ui.paceCore && ui.paceHalo) {
@@ -130,16 +167,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                              Visibility::Collapsed);
                     }
                     if (ui.content) {
-                        // Without a quota shown the content keeps a small target, unless the
-                        // identity leads it; then a content without a label collapses, so
-                        // the identity alone stays.
-                        bool identity = ui.tile.identity != nullptr;
+                        // Without a quota or an identity shown, a small context-menu target stays.
                         double minimumHitSize =
                             visibleCount || identity ? 0.0 : std::max(display.barThickness, 8);
                         ui.content.MinWidth(minimumHitSize);
                         ui.content.MinHeight(minimumHitSize);
-                        ui.content.Visibility(visibleCount || ui.label || !identity ?
-                                                  Visibility::Visible : Visibility::Collapsed);
                     }
                     ap.barMask = barMask;
                 }

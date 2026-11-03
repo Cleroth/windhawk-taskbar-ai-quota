@@ -24,6 +24,7 @@ struct AppliedState {
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
     double labelOpacity = -1;
+    Thickness identityMargin{-1, -1, -1, -1};  // Bar columns' identity, label or logo.
     double columnOpacity = -1;
     int barMask = -1;
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
@@ -31,7 +32,7 @@ struct AppliedState {
     // Tile layouts. Per slot, fillPx and pacePx hold the fill and pace position in thousandths of
     // the meter.
     TileShapeKey tileShape;
-    // Identity (tiles, bars with barLogo).
+    // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
     int tileWarn = -1;
     int badgeLight = -1;  // Badge colors for a light (1) or dark (0) taskbar.
@@ -61,8 +62,8 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
-// A tile layout's elements (rings, logo + headline); bar columns with barLogo hold only the
-// identity. Headline segment fills use AccountUiRefs::fills.
+// A tile layout's elements (rings, logo + headline); bar columns with a logo identity hold only
+// the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
     // Rings: the ring area, holding the meters with the identity on top.
@@ -92,7 +93,7 @@ struct TileUiRefs {
 struct AccountUiRefs {
     // Tile root in every layout: hit target, flyout anchor and hover background.
     StackPanel column{nullptr};
-    // Bar layouts: the label and bars beside the identity, and the bars alone.
+    // Bar layouts: the identity and the bars, and the bars alone.
     FrameworkElement content{nullptr};
     FrameworkElement barArea{nullptr};
     // Captured at build time so the flyout matches the tile, including visual-test accounts.
@@ -117,7 +118,7 @@ struct AccountUiRefs {
     SolidColorBrush paceHalo{nullptr};
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
-    TextBlock label{nullptr};
+    TextBlock label{nullptr};  // Bar layouts: the Label identity.
     TileUiRefs tile;
 };
 

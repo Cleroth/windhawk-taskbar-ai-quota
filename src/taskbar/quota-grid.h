@@ -56,7 +56,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         PaceTickStyle paceTickStyle = display.paceTickStyle;
         COLORREF paceTickColor = display.paceTickColor;
         int labelFontSize = settings.labelFontSize, percentFontSize = settings.percentFontSize;
-        int accountMargin = settings.accountMargin, labelGap = settings.labelGap;
+        int accountMargin = settings.accountMargin;
         int rightMargin = settings.rightMargin;
         bool showBarLabels = settings.showBarLabels;
         bool showDetailsOnHover = settings.showDetailsOnHover;
@@ -133,7 +133,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
         state.accountRefs.reserve(accounts.size());
         bool verticalBars = barLayout == BarLayout::Vertical;
-        // Tiles, or a bar column with barLogo.
+        // Tiles, or a bar column with a logo identity.
         bool identities = tileLayout;
 
         // Drops a show/hide toggle's keep-open request on the next dispatcher pass if no close
@@ -214,13 +214,14 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             if (tileLayout) {
                 col = BuildAccountTile(accounts, i, barLayout, display.tileHeight, refs);
             } else {
-                // The tiles' box: at least the tile height, 7 DIPs inside each side, with the
-                // identity (barLogo) 6 DIPs before the content, both centred across it. The
-                // content is the label beside, above or below the bars.
-                bool labelOnSide = labelPosition == LabelPosition::Left ||
-                                   labelPosition == LabelPosition::Right;
-                bool labelBeforeBars = labelPosition == LabelPosition::Left ||
-                                       labelPosition == LabelPosition::Top;
+                // The tiles' box: at least the tile height, 7 DIPs inside each side, holding the
+                // content centred across it: the identity beside, above or below the bars at the
+                // identity position, centred on them, or the bars alone while it is Hidden.
+                // UpdateQuotaUi sets the identity's margins.
+                bool identityAcross = labelPosition == LabelPosition::Top ||
+                                      labelPosition == LabelPosition::Bottom;
+                bool identityBeforeBars = labelPosition == LabelPosition::Left ||
+                                          labelPosition == LabelPosition::Top;
                 col = StackPanel{};
                 col.Orientation(Orientation::Horizontal);
                 col.VerticalAlignment(VerticalAlignment::Center);
@@ -228,43 +229,36 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Padding({7, 0, 7, 0});
                 col.CornerRadius({4, 4, 4, 4});
                 StackPanel content;
-                content.Orientation(labelOnSide ? Orientation::Horizontal : Orientation::Vertical);
+                content.Orientation(identityAcross ? Orientation::Vertical : Orientation::Horizontal);
                 content.VerticalAlignment(VerticalAlignment::Center);
                 refs.content = content;
-                if (accounts[i].barLogo) {
-                    // A margin, not panel spacing: a collapsed content takes the gap with it.
-                    col.Children().Append(BuildTileIdentity(accounts, i, barLayout, refs.tile));
-                    content.Margin({6, 0, 0, 0});
-                    identities = true;
-                }
 
-                TextBlock label{nullptr};
+                // The identity: the account label, or the logo with its badge and stale mark.
+                FrameworkElement identity{nullptr};
                 if (labelPosition != LabelPosition::Hidden) {
-                    label = TextBlock{};
-                    label.Text(accounts[i].label);
-                    label.FontSize(labelFontSize);
-                    label.VerticalAlignment(VerticalAlignment::Center);
-                    label.HorizontalAlignment(labelOnSide ? HorizontalAlignment::Left :
-                                                             HorizontalAlignment::Center);
-                    if (labelPosition == LabelPosition::Left) {
-                        label.Margin({0, -2, (double)labelGap, 0});
-                    } else if (labelPosition == LabelPosition::Right) {
-                        label.Margin({(double)labelGap, -2, 0, 0});
-                    } else if (labelPosition == LabelPosition::Top) {
-                        label.Margin({0, 0, 0, (double)labelGap});
+                    if (accounts[i].tileIdentity == TileIdentity::Text) {
+                        TextBlock label;
+                        label.Text(accounts[i].label);
+                        label.FontSize(labelFontSize);
+                        label.Opacity(0.8);
+                        swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
+                        label.Name(name);
+                        refs.label = label;
+                        identity = label;
                     } else {
-                        label.Margin({0, (double)labelGap, 0, 0});
+                        identity = BuildTileIdentity(accounts, i, barLayout, refs.tile);
+                        identities = true;
                     }
-                    label.Opacity(0.8);
-                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
-                    label.Name(name);
-                    refs.label = label;
-                    if (labelBeforeBars) content.Children().Append(label);
+                    identity.VerticalAlignment(VerticalAlignment::Center);
+                    identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
+                                                                  HorizontalAlignment::Left);
+                    if (identityBeforeBars) content.Children().Append(identity);
                 }
 
                 StackPanel bars;
                 bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
                 bars.VerticalAlignment(VerticalAlignment::Center);
+                bars.HorizontalAlignment(HorizontalAlignment::Center);
 
                 // Each bar's cell holds its track (or thin rail), fill and pace tick, centred across
                 // it. Ticks reach past the bar through negative margins, which keep them unclipped.
@@ -435,7 +429,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 refs.barArea = bars.as<FrameworkElement>();
                 content.Children().Append(bars);
-                if (label && !labelBeforeBars) content.Children().Append(label);
+                if (identity && !identityBeforeBars) content.Children().Append(identity);
                 col.Children().Append(content);
             }
 

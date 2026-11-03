@@ -8,20 +8,19 @@ enum QuotaBarIndex {
     kQuotaBarCount,
 };
 
-// How a tile layout (ring, concentric, headline), and stacked and vertical bars with barLogo,
-// mark which account they show.
+// What marks an account on the taskbar: beside Stacked and Vertical bars at the identity position
+// (Settings::labelPosition), and on ring and headline tiles.
 enum class TileIdentity {
     LogoBadge,  // Provider logo, plus a number badge when several accounts share the provider.
     Logo,
-    Text,  // tileText, or the label when tileText is empty.
+    Text,  // "Label": the label on bars; tileText on tiles, or the label when tileText is empty.
 };
 
 struct AccountConfig {
     std::wstring provider;  // "anthropic", "openai", or "antigravity".
     std::wstring label;
     TileIdentity tileIdentity = TileIdentity::LogoBadge;
-    std::wstring tileText;  // Optional short text for TileIdentity::Text.
-    bool barLogo = false;   // Stacked and vertical bars lead with the identity.
+    std::wstring tileText;  // Optional short text for TileIdentity::Text on tiles.
     std::array<bool, kQuotaBarCount> showBars{true, true, false, false};
     // OpenAI only: user-chosen credits ceiling that turns the prepaid balance into a
     // used-percent bar in the extra-usage slot. 0 disables the bar.
@@ -76,6 +75,7 @@ enum class PercentTextVisibility {
     Always,
 };
 
+// Where Stacked and Vertical bars place each account's identity ("Identity position").
 enum class LabelPosition {
     Hidden,
     Left,
@@ -118,10 +118,10 @@ struct Settings {
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
-    int labelFontSize = 11;
+    int labelFontSize = 11;  // The Label identity on bars.
     int percentFontSize = 9;
     int accountMargin = 3;
-    int labelGap = 3;
+    int labelGap = 3;  // "Identity gap": between the identity's box and the bars.
     int barGap = 2;
     int rightMargin = 4;
     int yellowThreshold = 50;

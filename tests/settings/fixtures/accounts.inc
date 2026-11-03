@@ -317,15 +317,11 @@ static void RunAccountEditTests() {
         CHECK(edits.Commit(13, SettingsField::AccountTileIdentity, int(TileIdentity::Text)) == 0);
         CHECK(edits.Commit(13, SettingsField::AccountRecordHistory, 0) == 0);
         CHECK(store.settings.accounts[1].tileIdentity == TileIdentity::Text && !store.settings.accounts[1].recordHistory);
-        // Logo on bars: the desired state saves on the account alone, without touching its identity.
-        CHECK(!store.settings.accounts[1].barLogo && SettingsAccountValue(store.settings.accounts[1],
-                                                                          SettingsField::AccountBarLogo) == 0);
-        CHECK(edits.Commit(13, SettingsField::AccountBarLogo, 1) == 0);
-        CHECK(store.settings.accounts[1].barLogo && store.settings.accounts[1].tileIdentity == TileIdentity::Text);
-        CHECK(!store.settings.accounts[0].barLogo && !store.settings.accounts[2].barLogo);
-        CHECK(AccountOps(store).back() == AccountOp(SettingsField::AccountBarLogo, L"CC 2", L"1"));
-        CHECK(edits.Commit(13, SettingsField::AccountBarLogo, 1) == 0 && store.settings.accounts[1].barLogo);
-        CHECK(edits.Commit(13, SettingsField::AccountBarLogo, 0) == 0 && !store.settings.accounts[1].barLogo);
+        // The identity saves on the account alone: the others keep the default logo and badge.
+        CHECK(store.settings.accounts[0].tileIdentity == TileIdentity::LogoBadge &&
+              store.settings.accounts[2].tileIdentity == TileIdentity::LogoBadge);
+        CHECK(SettingsAccountValue(store.settings.accounts[1], SettingsField::AccountTileIdentity) ==
+              int(TileIdentity::Text));
         CHECK(edits.drafts.empty());
         uint64_t stepped = edits.Step(11, SettingsField::AccountCreditsMax, 1);
         CHECK(DraftOf(edits, 11, SettingsField::AccountCreditsMax)->raw == L"2,501");
@@ -434,7 +430,7 @@ static void RunAccountEditTests() {
         CHECK(HasText(frame, L"Hidden, not polled"));
     });
 
-    Run("accounts page: an expanded card's rows per provider; Short text needs Label text; chips keep one", [] {
+    Run("accounts page: an expanded card's rows per provider; Short text needs Label; chips keep one", [] {
         UiGraphics& g = TestGraphics();
         SettingsView view = AccountsView({0, 3});
         UiFrame frame;
@@ -444,31 +440,29 @@ static void RunAccountEditTests() {
         CHECK_NEAR(label->rect.right - label->rect.left, 200);
         const UiItem* credits = UiFindItem(frame, AccountId(1, SettingsField::AccountCreditsMax));
         CHECK(credits && credits->kind == UiItemKind::NumberBox && credits->text == L"2,500");
+        // The identity rows: Identity (logo + number badge by default; Label), then Short text for
+        // tiles, disabled until Identity is Label. No Logo on bars switch.
         const UiItem* identity = UiFindItem(frame, AccountId(1, SettingsField::AccountTileIdentity));
-        CHECK(identity && identity->text == L"Logo + number badge");
+        CHECK(identity && identity->kind == UiItemKind::Dropdown && identity->text == L"Logo + number badge");
+        CHECK(identity->options.size() == 3 && identity->options[0].text == L"Logo + number badge" &&
+              identity->options[1].text == L"Logo only" && identity->options[2].text == L"Label" &&
+              identity->options[2].value == int(TileIdentity::Text));
         const UiItem* shortText = UiFindItem(frame, AccountId(1, SettingsField::AccountTileText));
         CHECK(shortText && !shortText->enabled && shortText->maximum == 4 && UiRunsText(shortText->runs) == L"OAI");
-        // The identity rows: Identity, Short text, then the Logo on bars switch, off by default,
-        // its action the desired state.
-        CHECK(HasText(frame, L"Used when Identity is Label text.") && !HasText(frame, L"Tile identity"));
-        CHECK(HasText(frame, L"Ring and headline tiles, and bars with Logo on bars."));
-        const UiItem* barLogo = UiFindItem(frame, AccountId(1, SettingsField::AccountBarLogo));
-        CHECK(barLogo && barLogo->kind == UiItemKind::Toggle && barLogo->enabled && !barLogo->selected);
-        CHECK(barLogo->action.kind == UiActionKind::Command && barLogo->action.value == 1 &&
-              barLogo->action.target == uint32_t(SettingsField::AccountBarLogo) && barLogo->action.key == 11);
-        CHECK(HasText(frame, L"Logo on bars") &&
-              HasText(frame, L"Show the identity before this account\u2019s Stacked and Vertical bars."));
-        CHECK(barLogo->rect.top > shortText->rect.bottom && barLogo->rect.top > identity->rect.bottom);
-        CHECK(UiFindItem(frame, AccountId(4, SettingsField::AccountBarLogo)));
-        CHECK(!UiFindItem(frame, AccountId(2, SettingsField::AccountBarLogo)));
-        // Its order: after Short text, before Record history.
+        CHECK(shortText->rect.top > identity->rect.bottom);
+        CHECK(HasText(frame, L"Marks this account beside its bars and on ring and headline tiles.") &&
+              HasText(frame, L"Label shows the label on bars and its short text on tiles."));
+        CHECK(HasText(frame, L"The Label identity on ring and headline tiles, up to 4 characters.") &&
+              HasText(frame, L"Used on tiles when Identity is Label."));
+        CHECK(!HasText(frame, L"Logo on bars") && !HasText(frame, L"Tile identity") && !HasText(frame, L"Label text"));
+        CHECK(HasText(frame, L"Shown in details, and next to bars when Identity is Label."));
+        // Its order: Identity, then (Short text disabled) Record history; no switch between.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         auto stop = [&](uint32_t id) {
             return std::find_if(stops.begin(), stops.end(), [&](const UiFocusStop& s) { return s.ref.id == id; }) -
                    stops.begin();
         };
-        CHECK(stop(AccountId(1, SettingsField::AccountTileIdentity)) < stop(AccountId(1, SettingsField::AccountBarLogo)));
-        CHECK(stop(AccountId(1, SettingsField::AccountBarLogo)) + 1 ==
+        CHECK(stop(AccountId(1, SettingsField::AccountTileIdentity)) + 1 ==
               stop(AccountId(1, SettingsField::AccountRecordHistory)));
         CHECK(HasText(frame, L"\u25CF Recording"));
         // OpenAI chips: 5-hour, Weekly, Credits, each the desired mask with itself flipped.
@@ -503,7 +497,7 @@ static void RunAccountEditTests() {
         CHECK(std::adjacent_find(ids.begin(), ids.end()) == ids.end());
         view.accounts[0].status.needsSignIn = false;
 
-        // Label text enables Short text; the last chip can't clear; no credits max disables Credits.
+        // Label enables Short text; the last chip can't clear; no credits max disables Credits.
         view.settings.accounts[0].tileIdentity = TileIdentity::Text;
         view.settings.accounts[0].showBars = {false, true, false, false};
         view.settings.accounts[0].creditsMax = 0;
@@ -511,12 +505,7 @@ static void RunAccountEditTests() {
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountTileText))->enabled);
-        // Logo on bars on: the switch shows it and offers turning it off.
-        view.settings.accounts[0].barLogo = true;
-        frame = {};
-        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        const UiItem* logoOn = UiFindItem(frame, AccountId(1, SettingsField::AccountBarLogo));
-        CHECK(logoOn && logoOn->selected && logoOn->action.value == 0);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountTileIdentity))->text == L"Label");
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kWeeklyBar))->action.value == 0b0010);
         CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kExtraUsageBar))->enabled);
         CHECK(HasText(frame, L"Set Credits max to show the Credits bar."));

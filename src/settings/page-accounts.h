@@ -271,8 +271,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 const SettingsDraft* draft = draftOf(SettingsField::AccountLabel);
                 UiCardSpec spec;
                 spec.title = L"Label";
-                spec.description = {{L"Shown next to bars and in details. Unique per provider; renaming keeps "
-                                     L"the sign-in and history."}};
+                spec.description = {{L"Shown in details, and next to bars when Identity is Label. Unique per "
+                                     L"provider; renaming keeps the sign-in and history."}};
                 spec.trailing = {200, 32};
                 if (draft) spec.error = draft->error;
                 UiCardLayout layout = row(spec);
@@ -342,7 +342,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             {
                 UiCardSpec spec;
                 spec.title = L"Identity";
-                spec.description = {{L"Ring and headline tiles, and bars with Logo on bars. The number badge "
+                spec.description = {{L"Marks this account beside its bars and on ring and headline tiles. Label "
+                                     L"shows the label on bars and its short text on tiles. The number badge "
                                      L"appears only when several accounts share a provider."}};
                 spec.trailing = {220, 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
@@ -350,7 +351,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 UiAddDropdown(cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
                               {{L"Logo + number badge", int(TileIdentity::LogoBadge)},
                                {L"Logo only", int(TileIdentity::Logo)},
-                               {L"Label text", int(TileIdentity::Text)}},
+                               {L"Label", int(TileIdentity::Text)}},
                               true, command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
             {
@@ -359,10 +360,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
                 UiCardSpec spec;
                 spec.title = L"Short text";
-                spec.description = {{L"Up to 4 characters. Empty uses the label without spaces."}};
+                spec.description = {{L"The Label identity on ring and headline tiles, up to 4 characters. Empty "
+                                     L"uses the label without spaces."}};
                 spec.trailing = {96, 32};
                 spec.enabled = used;
-                if (!used) spec.reason = L"Used when Identity is Label text.";
+                if (!used) spec.reason = L"Used on tiles when Identity is Label.";
                 if (draft) spec.error = draft->error;
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -378,15 +380,6 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 box.enabled = used;
                 box.action = command(SettingsField::AccountTileText);
                 push(box);
-            }
-            {
-                UiCardSpec spec;
-                spec.title = L"Logo on bars";
-                spec.description = {{L"Show the identity before this account\u2019s Stacked and Vertical bars."}};
-                spec.trailing = UiToggleSize(g);
-                UiCardLayout layout = row(spec);
-                UiAddToggle(cardItems, control(SettingsField::AccountBarLogo), layout.trailing, account.barLogo,
-                            true, command(SettingsField::AccountBarLogo, !account.barLogo));
             }
             {
                 // Whether it records: this entry's choice, this Windows user's consent, then the

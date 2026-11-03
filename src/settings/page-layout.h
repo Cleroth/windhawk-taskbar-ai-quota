@@ -1,5 +1,5 @@
-// Settings > Layout: the tile style gallery, then the chosen style's sizes, labels, pace markers
-// and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
+// Settings > Layout: the tile style gallery, then the chosen style's sizes, identity and text, pace
+// markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
 static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bars", L"Segmented ring",
@@ -35,15 +35,13 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y += 2 * kCardHeight + kGap;
     }
 
-    // Account identity, and on bars Logo on bars, is per account: a card that goes to Accounts.
-    // Fixed ids, so focus stays on it when cards above it change.
+    // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays on
+    // it when cards above it change.
     auto identityCard = [&](float top) {
         UiCardSpec spec;
         spec.glyph = L"\uE716";
-        spec.title = bars ? L"Logo on bars and identity are set per account in Accounts" :
-                            L"Account identity is set per account in Accounts";
-        spec.description = {{bars ? L"An account can lead its bars with its logo, a number badge, or label text." :
-                                    L"Logo + number badge, logo only, or label text."}};
+        spec.title = L"Account identity is set per account in Accounts";
+        spec.description = {{L"Logo + number badge, logo only, or label."}};
         spec.trailingGlyph = L"\uE76C";
         spec.action = {UiActionKind::Navigate, int(SettingsUiPage::Accounts)};
         spec.minHeight = 62;
@@ -79,17 +77,18 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.description = {{L"Space between an account\u2019s bars."}};
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
         }
-        y = identityCard(y + 3);
 
-        // Labels: their size and gap need a position; the bar text size, quota keys or
+        // Identity and text: the link to each account's identity, where it sits; the Label form's
+        // size and the gap need a position. Then quota keys, and the bar text size for them or
         // percentage text.
-        y = UiAddSection(items, id, x, y + 20, width, L"Labels");
-        bool labelled = s.labelPosition != LabelPosition::Hidden;
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity and text");
+        bool placed = s.labelPosition != LabelPosition::Hidden;
+        y = identityCard(y);
         {
             UiCardSpec spec;
-            spec.title = L"Label position";
-            spec.description = {{L"Where the account label sits next to its bars."}};
-            y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::LabelPosition, 200,
+            spec.title = L"Identity position";
+            spec.description = {{L"Where each account\u2019s identity sits next to its bars."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelPosition, 200,
                                         {{L"Left", int(LabelPosition::Left)},
                                          {L"Right", int(LabelPosition::Right)},
                                          {L"Top", int(LabelPosition::Top)},
@@ -100,17 +99,17 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Label font size";
-            spec.description = {{L"Account label text, in pixels."}};
-            spec.enabled = labelled;
-            if (!labelled) spec.reason = L"Choose a label position to change this.";
+            spec.description = {{L"Text of accounts whose identity is Label, in pixels."}};
+            spec.enabled = placed;
+            if (!placed) spec.reason = L"Choose an identity position to change this.";
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelFontSize);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Label gap";
-            spec.description = {{L"Space between the label and the bars."}};
-            spec.enabled = labelled;
-            if (!labelled) spec.reason = L"Choose a label position to change this.";
+            spec.title = L"Identity gap";
+            spec.description = {{L"Space between the identity and the bars."}};
+            spec.enabled = placed;
+            if (!placed) spec.reason = L"Choose an identity position to change this.";
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, L"px");
         }
         {
@@ -150,7 +149,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::BarLayout, 14), x, y, width,
                          {{std::wstring(kSettingsTileStyles[int(layout)]) +
                            L" tiles have a fixed size that follows the taskbar\u2019s height. Bar sizes and "
-                           L"labels apply to Stacked and Vertical bars."}});
+                           L"the identity position apply to Stacked and Vertical bars."}});
         y = identityCard(y + 3);
     }
 
@@ -239,6 +238,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
     UiCardSpec reset;
     reset.title = L"Reset Layout to defaults";
-    reset.description = {{L"Tile style, bar style, sizes, labels, pace markers and spacing. Accounts are not changed."}};
+    reset.description = {{L"Tile style, bar style, sizes, identity and text, pace markers and spacing. Accounts are "
+                           L"not changed."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
 }

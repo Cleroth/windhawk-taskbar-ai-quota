@@ -67,8 +67,9 @@ regenerates.
   state, a lifted dragged card, the reorder target, a drag's in-place card moves matching a rebuild
   of nine accounts). `fixtures/layout.inc`: slider input, the
   Layout fields and reset group, the projection the preview reads, the preview strip model
-  (`settings/preview.h`: column geometry, the bar columns' tile box and hover fill, logos on bars
-  at every label position and in Vertical (badge, short text, stale mark, no quotas), pace marks,
+  (`settings/preview.h`: column geometry, the bar columns' tile box and hover fill, each identity
+  form (label, badged logo, logo) at every identity position in Stacked and Vertical with its box
+  and gap (the badge's overhang, the stale mark per form, no quotas), pace marks,
   bar styles with their shaded fills and tick overhang, ring tiles' model shapes, headline fills,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
@@ -80,8 +81,8 @@ regenerates.
   cards), Behavior, History, Layout (every tile style; stacked and ring at every DPI) and Display
   (segmented ring, as its mockup) at 96/144/192 DPI in light, dark and high contrast (Aquatic
   colors), plus interaction-state sheets (`render-states-*`, `render-controls-*`,
-  `render-history-off-*`, `render-layout-states-*`, `render-layout-bar-logos-*` (the Bars section's
-  link to Accounts), `render-display-states-*`,
+  `render-history-off-*`, `render-layout-states-*`, `render-layout-identity-*` (the Identity and
+  text section with its link to Accounts), `render-display-states-*`,
   `render-accounts-states-*`, `render-accounts-drag-*`), Accounts as its mockups
   (`render-accounts-expanded-*`, `render-accounts-add-*` with the menu painted where the host
   opens it, `render-accounts-empty-*`), Display at the mockup's full height
