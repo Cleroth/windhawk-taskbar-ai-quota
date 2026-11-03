@@ -331,6 +331,8 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Bars 60, badge 16, offset -4 / -4",
          [](Settings& s) { s.barLength = 60; s.badgeSize = 16; s.badgeOffsetX = -4; s.badgeOffsetY = -4; }},
         {L"Bars 60, badge offset -20 / 0", [](Settings& s) { s.barLength = 60; s.badgeOffsetX = -20; }},
+        {L"Bars 60, badge offset 0 / 10", [](Settings& s) { s.barLength = 60; s.badgeOffsetY = 10; }},
+        {L"Bars 60, badge offset 0 / -10", [](Settings& s) { s.barLength = 60; s.badgeOffsetY = -10; }},
         {L"Ring, logo 150%", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.logoScale = 150; }},
         {L"Ring, badge 12", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.badgeSize = 12; }},
         {L"Ring, badge offset 4 / 4", [](Settings& s) {

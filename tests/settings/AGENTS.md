@@ -71,7 +71,8 @@ regenerates.
   form (label, badged logo, logo) at every identity position in Stacked and Vertical with its box
   and gap (the badge's overhang, the stale mark per form, no quotas, a logo above or below the
   bars keeping a label's distance at two label sizes), the logo size per style and the outlined
-  badge's size, offsets and color with its contrasting outline, pace marks,
+  badge's size, offsets (the logo staying centred across its bars) and color with its contrasting
+  outline, pace marks,
   bar styles with their shaded fills and tick overhang, ring tiles' model shapes, headline fills,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the

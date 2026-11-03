@@ -618,7 +618,9 @@ static BadgeBox LogoBadgeBox(const MeterDisplay& display, double side, int chars
 // `side` DIP logo's box takes the overhangs of its badge (`badge`, from the logo's top-left) and
 // its stale mark (4 DIPs right, 3 above) while they show, and above or below the bars the label
 // line's space beyond its text at the label font size (`aboveCap`, over its cap height;
-// `belowBaseline`), so the logo keeps a label's distance from them.
+// `belowBaseline`), so the logo keeps a label's distance from them. Across the bars (vertically
+// beside them, horizontally above or below them) an overhang counts on both sides, so the logo
+// stays centred on the bars wherever its badge sits.
 struct BarIdentityMargin {
     double left = 0, top = 0, right = 0, bottom = 0;
 };
@@ -632,9 +634,16 @@ static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label
     } else {
         bool shown = badge.width > 0;
         m.left = shown ? std::max(-badge.left, 0.0) : 0;
-        m.top = std::max({warn ? 3.0 : 0.0, shown ? -badge.top : 0.0}) + (across ? aboveCap : 0);
+        m.top = std::max({warn ? 3.0 : 0.0, shown ? -badge.top : 0.0});
         m.right = std::max({warn ? 4.0 : 0.0, shown ? badge.left + badge.width - side : 0.0});
-        m.bottom = (shown ? std::max(badge.top + badge.height - side, 0.0) : 0) + (across ? belowBaseline : 0);
+        m.bottom = shown ? std::max(badge.top + badge.height - side, 0.0) : 0;
+        if (across) {
+            m.left = m.right = std::max(m.left, m.right);
+            m.top += aboveCap;
+            m.bottom += belowBaseline;
+        } else {
+            m.top = m.bottom = std::max(m.top, m.bottom);
+        }
     }
     if (position == LabelPosition::Left) {
         m.right += gap;
