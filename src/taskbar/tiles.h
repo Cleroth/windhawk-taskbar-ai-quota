@@ -248,25 +248,33 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     headline.Spacing(3);
     StackPanel numberRow;
     numberRow.Orientation(Orientation::Horizontal);
-    double fontSize = display.headlineFontSize;
+    double fontSize = display.headlineFontSize, keySize = fontSize * kHeadlineKeyScale;
     tile.headline = TextBlock{};
     tile.headline.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
     tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     tile.headline.FontSize(fontSize);
     tile.headline.TextLineBounds(TextLineBounds::Tight);
     tile.headline.VerticalAlignment(VerticalAlignment::Bottom);
-    // Reserves "100%" so the tile keeps its width as values change.
-    tile.headline.Text(L"100%");
-    tile.headline.MinWidth(std::ceil(TileTextWidthPerPt(tile.headline) * fontSize));
-    tile.headline.Text(L"");
     numberRow.Children().Append(tile.headline);
     tile.headlineKey = TextBlock{};
-    tile.headlineKey.FontSize(fontSize * kHeadlineKeyScale);
+    tile.headlineKey.FontSize(keySize);
     tile.headlineKey.Opacity(0.6);
     tile.headlineKey.TextLineBounds(TextLineBounds::Tight);
     tile.headlineKey.VerticalAlignment(VerticalAlignment::Bottom);
     tile.headlineKey.Margin({3, 0, 0, 0});
     numberRow.Children().Append(tile.headlineKey);
+    // The key follows the number; the row reserves "100%" and the widest key so the tile keeps
+    // its width as values change.
+    tile.headline.Text(L"100%");
+    double reserve = std::ceil(TileTextWidthPerPt(tile.headline) * fontSize) + 3;
+    tile.headline.Text(L"");
+    double keyWidth = 0;
+    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+        tile.headlineKey.Text(key);
+        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey) * keySize);
+    }
+    tile.headlineKey.Text(L"");
+    numberRow.MinWidth(reserve + std::ceil(keyWidth));
     headline.Children().Append(numberRow);
     meters.Orientation(Orientation::Horizontal);
     meters.HorizontalAlignment(HorizontalAlignment::Left);

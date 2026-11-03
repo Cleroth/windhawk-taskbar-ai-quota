@@ -1277,6 +1277,28 @@ static void RunLayoutTests() {
         CHECK(sized(20) == 4 && sized(20 * 9 / 14.0f) == 4);
     });
 
+    Run("preview: the headline key follows its number; the tile keeps its width as values change", [] {
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC", {true, true, false, false})};
+        Settings s;
+        s.barLayout = BarLayout::LogoHeadline;
+        auto at = [&](std::array<double, kQuotaBarCount> pct) {
+            std::vector<AccountData> data = {Fresh(pct)};
+            return StripOf(s, accounts, data);
+        };
+        auto width = [](const SettingsPreviewStrip& strip) { return strip.columns[0].right - strip.columns[0].left; };
+        // The key 3 DIPs after the number, whatever its width.
+        SettingsPreviewStrip low = at({5, 2, -1, -1}), full = at({30, 100, -1, -1}), none = at({-1, -1, -1, -1});
+        CHECK(NearDip(TextOps(low, L"5h")[0].rect.left, TextOps(low, L"5%")[0].rect.right + 3));
+        CHECK(NearDip(TextOps(full, L"7d")[0].rect.left, TextOps(full, L"100%")[0].rect.right + 3));
+        // The row reserves "100%" and the widest key: the same width with a short number, another
+        // key, or no reading.
+        CHECK(NearDip(width(low), width(full)) && NearDip(width(none), width(full)));
+        CHECK(TextOps(none, L"\u2013").size() == 1 && TextOps(none, L"5h").empty());
+        // A larger number widens the row with it.
+        s.headlineFontSize = 20;
+        CHECK(width(at({5, 2, -1, -1})) > width(low) + 5);
+    });
+
     Run("preview: the default pace color turns dark with a light halo on a light taskbar", [] {
         auto strip = [](const Settings& settings, bool light) {
             return SettingsPreviewLayout(TestGraphics(), settings, 48, 1, kNow, false, light,

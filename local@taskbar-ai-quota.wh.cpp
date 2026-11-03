@@ -7023,25 +7023,33 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     headline.Spacing(3);
     StackPanel numberRow;
     numberRow.Orientation(Orientation::Horizontal);
-    double fontSize = display.headlineFontSize;
+    double fontSize = display.headlineFontSize, keySize = fontSize * kHeadlineKeyScale;
     tile.headline = TextBlock{};
     tile.headline.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
     tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     tile.headline.FontSize(fontSize);
     tile.headline.TextLineBounds(TextLineBounds::Tight);
     tile.headline.VerticalAlignment(VerticalAlignment::Bottom);
-    // Reserves "100%" so the tile keeps its width as values change.
-    tile.headline.Text(L"100%");
-    tile.headline.MinWidth(std::ceil(TileTextWidthPerPt(tile.headline) * fontSize));
-    tile.headline.Text(L"");
     numberRow.Children().Append(tile.headline);
     tile.headlineKey = TextBlock{};
-    tile.headlineKey.FontSize(fontSize * kHeadlineKeyScale);
+    tile.headlineKey.FontSize(keySize);
     tile.headlineKey.Opacity(0.6);
     tile.headlineKey.TextLineBounds(TextLineBounds::Tight);
     tile.headlineKey.VerticalAlignment(VerticalAlignment::Bottom);
     tile.headlineKey.Margin({3, 0, 0, 0});
     numberRow.Children().Append(tile.headlineKey);
+    // The key follows the number; the row reserves "100%" and the widest key so the tile keeps
+    // its width as values change.
+    tile.headline.Text(L"100%");
+    double reserve = std::ceil(TileTextWidthPerPt(tile.headline) * fontSize) + 3;
+    tile.headline.Text(L"");
+    double keyWidth = 0;
+    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+        tile.headlineKey.Text(key);
+        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey) * keySize);
+    }
+    tile.headlineKey.Text(L"");
+    numberRow.MinWidth(reserve + std::ceil(keyWidth));
     headline.Children().Append(numberRow);
     meters.Orientation(Orientation::Horizontal);
     meters.HorizontalAlignment(HorizontalAlignment::Left);
@@ -18453,8 +18461,9 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                           m.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
                 }
             } else {
-                // Headline: the identity, then 6 DIP after it the most-used quota's number and
-                // window key (bottom-aligned on the baseline) over per-quota segments the bar gap
+                // Headline: the identity, then 6 DIP after it the most-used quota's number and,
+                // 3 DIP after it, its window key (bottom-aligned on the baseline), in a row that
+                // reserves "100%" and the widest key; under them per-quota segments the bar gap
                 // apart: corners a quarter of their thickness, fills cut flat toward the end and
                 // shaded like the bars'.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
@@ -18464,17 +18473,22 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 UiTextStyle numberStyle{UiFamily::Display, fontSize, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, fontSize * float(kHeadlineKeyScale), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 Measured number = measure(meters.headline, numberStyle);
-                float numberWidth = std::max(number.width, std::ceil(measure(L"100%", numberStyle).width));
                 Measured key = measure(meters.headlineKey, keyStyle);
+                float keyReserve = 0;
+                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+                    keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
+                }
+                float rowWidth = std::max(std::ceil(measure(L"100%", numberStyle).width) + 3 + std::ceil(keyReserve),
+                                          number.width + 3 + key.width);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
                 const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
                 float segments = count ? count * length + (count - 1) * gap : 0;
                 float panelHeight = rowHeight + (count ? 3 + thick : 0);
                 float panelTop = top + (T - panelHeight) / 2;
                 label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
-                      numberWidth, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
+                      number.width, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
                 if (!meters.headlineKey.empty()) {
-                    label(ops, meters.headlineKey, keyStyle, metersLeft + numberWidth + 3,
+                    label(ops, meters.headlineKey, keyStyle, metersLeft + number.width + 3,
                           panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
                           0.6f, true);
                 }
@@ -18494,8 +18508,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     }
                     left += length + gap;
                 }
-                float content = std::max(numberWidth + 3 + (meters.headlineKey.empty() ? 0 : key.width), segments);
-                width = padLeft + idWidth + 6 + content + padRight;
+                width = padLeft + idWidth + 6 + std::max(rowWidth, segments) + padRight;
             }
         }
         // Hovered, the box takes the tile hover fill.
