@@ -45,6 +45,9 @@ struct UiShapePart {
     UiInk ink = UiInk::Inherit;
     float alpha = 1;   // Applied to the ink.
     float stroke = 0;  // View-box units; 0 fills.
+    // Shape fills: the color at the part's top edge, blending into its own color 60% down;
+    // transparent: flat.
+    D2D1_COLOR_F shade{};
 };
 
 // A dropdown or menu choice. Menus give each a detail line and an icon (two-line rows), or a glyph

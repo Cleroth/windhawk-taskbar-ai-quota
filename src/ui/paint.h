@@ -210,6 +210,14 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                     if (part.stroke > 0) {
                         target->DrawGeometry(geometry, UiBrush(target, cache, color), part.stroke,
                                              g.roundCaps.get());
+                    } else if (part.shade.a > 0) {
+                        D2D1_RECT_F bounds{};
+                        winrt::check_hresult(geometry->GetBounds(nullptr, &bounds));
+                        ID2D1LinearGradientBrush* brush =
+                            UiGradientBrush(target, cache, UiFade(part.shade, item.opacity), color);
+                        brush->SetStartPoint({bounds.left, bounds.top});
+                        brush->SetEndPoint({bounds.left, bounds.top + 0.6f * (bounds.bottom - bounds.top)});
+                        target->FillGeometry(geometry, brush, nullptr);
                     } else {
                         target->FillGeometry(geometry, UiBrush(target, cache, color), nullptr);
                     }

@@ -1,11 +1,22 @@
 // Settings > About: app card, links, credits and license (approved mockup about.png). Pure
 // builder.
 
-// App icon (16 DIP view box): green, yellow and red quota bars on tracks, as stacked bars. The
-// 4-unit round-capped bars and 2-unit gaps land on whole pixels at 16, 24, 32 and 48 px.
-static constexpr PCWSTR kSettingsAppIconTracks[3] = {L"M3,2H13", L"M3,8H13", L"M3,14H13"};
-static constexpr PCWSTR kSettingsAppIconFills[3] = {L"M3,2H4", L"M3,8H8", L"M3,14H12"};
+// App icon (16 DIP view box): green, yellow and red quota bars on tracks, drawn like the
+// taskbar's stacked bars: corners a quarter of the 4-unit thickness, fills cut straight and shaded
+// from their usage highlight (UsageHighlight). Bars and 2-unit gaps land on whole pixels at 16,
+// 24, 32 and 48 px.
+static constexpr PCWSTR kSettingsAppIconTracks[3] = {
+    L"M2,0H14A1,1 0 0 1 15,1V3A1,1 0 0 1 14,4H2A1,1 0 0 1 1,3V1A1,1 0 0 1 2,0Z",
+    L"M2,6H14A1,1 0 0 1 15,7V9A1,1 0 0 1 14,10H2A1,1 0 0 1 1,9V7A1,1 0 0 1 2,6Z",
+    L"M2,12H14A1,1 0 0 1 15,13V15A1,1 0 0 1 14,16H2A1,1 0 0 1 1,15V13A1,1 0 0 1 2,12Z",
+};
+static constexpr PCWSTR kSettingsAppIconFills[3] = {
+    L"M2,0H6V4H2A1,1 0 0 1 1,3V1A1,1 0 0 1 2,0Z",
+    L"M2,6H10V10H2A1,1 0 0 1 1,9V7A1,1 0 0 1 2,6Z",
+    L"M2,12H13V16H2A1,1 0 0 1 1,15V13A1,1 0 0 1 2,12Z",
+};
 static constexpr uint32_t kSettingsAppIconColors[3] = {0x43A047, 0xFDD835, 0xE53935};
+static constexpr uint32_t kSettingsAppIconHighlights[3] = {0x57B359, 0xFFEEAE, 0xFB5048};
 
 // The app icon over `rect`: the About page's, and the settings and usage history windows'
 // (ui/window-icon.h).
@@ -15,8 +26,9 @@ static UiItem SettingsAppIcon(D2D1_RECT_F rect) {
     icon.viewBox = 16;
     icon.rect = rect;
     for (int i = 0; i < 3; i++) {
-        icon.parts.push_back({kSettingsAppIconTracks[i], {}, UiInk::Primary, 0.2f, 4});
-        icon.parts.push_back({kSettingsAppIconFills[i], UiRgb(kSettingsAppIconColors[i]), UiInk::Inherit, 1, 4});
+        icon.parts.push_back({kSettingsAppIconTracks[i], {}, UiInk::Primary, 0.2f});
+        icon.parts.push_back({kSettingsAppIconFills[i], UiRgb(kSettingsAppIconColors[i]), UiInk::Inherit, 1, 0,
+                              UiRgb(kSettingsAppIconHighlights[i])});
     }
     return icon;
 }

@@ -67,13 +67,29 @@ static void RunUiTests() {
                             ->GetBounds(nullptr, &bounds)));
         CHECK(std::abs(bounds.right - bounds.left - 3.4f) < 0.01f);
         CHECK(std::abs(bounds.bottom - bounds.top - 3.4f) < 0.01f);
-        // App icon bars: horizontal lines from x 3 to 13 at y 2, 8 and 14 (view box 16).
+        // App icon bars (view box 16): 4-unit tracks from x 1 to 15 at y 0, 6 and 12, with
+        // rounded corners (the corner point lies outside); fills from x 1 to 6, 10 and 13, square
+        // at their end; each fill's highlight is its taskbar one.
+        static constexpr float kFillEnds[3] = {6, 10, 13};
         for (int i = 0; i < 3; i++) {
-            CHECK(SUCCEEDED(UiPathGeometry(g, kSettingsAppIconTracks[i])->GetBounds(nullptr, &bounds)));
-            CHECK_NEAR(bounds.left, 3);
-            CHECK_NEAR(bounds.right, 13);
-            CHECK_NEAR(bounds.top, 2 + 6 * i);
-            CHECK_NEAR(bounds.bottom, 2 + 6 * i);
+            ID2D1PathGeometry* track = UiPathGeometry(g, kSettingsAppIconTracks[i]);
+            CHECK(SUCCEEDED(track->GetBounds(nullptr, &bounds)));
+            CHECK_NEAR(bounds.left, 1);
+            CHECK_NEAR(bounds.right, 15);
+            CHECK_NEAR(bounds.top, 6 * i);
+            CHECK_NEAR(bounds.bottom, 6 * i + 4);
+            BOOL corner = TRUE, inside = FALSE;
+            track->FillContainsPoint({1.1f, 6 * i + 0.1f}, nullptr, &corner);
+            track->FillContainsPoint({14.5f, 6 * i + 2.0f}, nullptr, &inside);
+            CHECK(!corner && inside);
+            ID2D1PathGeometry* fill = UiPathGeometry(g, kSettingsAppIconFills[i]);
+            CHECK(SUCCEEDED(fill->GetBounds(nullptr, &bounds)));
+            CHECK_NEAR(bounds.left, 1);
+            CHECK_NEAR(bounds.right, kFillEnds[i]);
+            BOOL endCorner = FALSE;
+            fill->FillContainsPoint({kFillEnds[i] - 0.1f, 6 * i + 0.1f}, nullptr, &endCorner);
+            CHECK(endCorner);
+            CHECK(kSettingsAppIconHighlights[i] == (UsageHighlight(0xFF000000 | kSettingsAppIconColors[i]) & 0xFFFFFF));
         }
         static constexpr PCWSTR kBroken = L"M0 0 L 3";
         bool threw = false;
