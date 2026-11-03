@@ -16,6 +16,13 @@ struct SettingsPreviewOp {
     int hover = -1;                     // Drawn only while this column is hovered; -1: always
     D2D1_RECT_F rect{};                 // Rect, Dot bounds, Text box (aligns in its width), Logo box
     float radius = 0;                   // Rect corners; Arc centerline radius
+    // Rect corners one by one instead (top-left, top-right, bottom-right, bottom-left), scaled
+    // down together where they don't fit
+    std::optional<std::array<float, 4>> corners;
+    // Rect: shaded from this color at the top edge (left with shadeLeft) to `color` 60% across;
+    // 0: flat
+    uint32_t shade = 0;
+    bool shadeLeft = false;
     float stroke = 0;                   // Rect border (inside), Arc width, Dot outline
     uint32_t color = 0;                 // Fill, arc or text color
     uint32_t outline = 0;               // Rect border and Dot outline
@@ -66,6 +73,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     const TilePalette palette = TilePaletteFor(light);
     const uint32_t pace = 0xFF000000 | uint32_t(GetRValue(display.paceTickColor)) << 16 |
                           uint32_t(GetGValue(display.paceTickColor)) << 8 | GetBValue(display.paceTickColor);
+    const PaceMarkColors barPace = PaceMarkColorsFor(display.paceTickColor, light);
 
     // Text as XAML lays it out: natural line height, width rounded up to device pixels.
     struct Measured {
@@ -141,7 +149,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
 
         if (!IsTileLayout(layout)) {
             // Bars (quota-grid.h): a label beside, above or below a stack of bars; each bar a
-            // track, its fill and pace tick, an optional quota key and the percentage text.
+            // track or thin rail, its fill and pace tick, an optional quota key and the percentage
+            // text.
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -205,26 +214,41 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                             barsLeft + (panelWidth - itemWidth) / 2;
                 float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + gap);
                 float tx = itemLeft + (keys ? keyColumn : 0), ty = itemTop;
-                float trackWidth = float(vertical ? th : len), trackHeight = itemHeight;
-                float radius = std::max(1.0f, th / 2.0f);
-                rect(ops, {tx, ty, tx + trackWidth, ty + trackHeight}, radius, 0x46808080);
+                float trackHeight = itemHeight;
+                float radius = float(geometry.radius);
+                // A full track, or a thin rail centred across the bar.
+                float rail = float(geometry.rail), inset = rail > 0 ? (th - rail) / 2 : 0;
+                rect(ops, vertical ? D2D1_RECT_F{tx + inset, ty, tx + th - inset, ty + len} :
+                                     D2D1_RECT_F{tx, ty + inset, tx + len, ty + th - inset},
+                     rail > 0 ? rail / 2 : radius, rail > 0 ? kBarRailColor : kBarTrackColor);
                 if (q.fillPx > 0) {
-                    rect(ops, vertical ? D2D1_RECT_F{tx, ty + len - q.fillPx, tx + th, ty + len} :
-                                         D2D1_RECT_F{tx, ty, tx + q.fillPx, ty + th},
-                         radius, q.color);
+                    // Shaded across the bar; start corners round with the track, vertical bars
+                    // fill upward.
+                    Op fill;
+                    fill.rect = vertical ? D2D1_RECT_F{tx, ty + len - q.fillPx, tx + th, ty + len} :
+                                           D2D1_RECT_F{tx, ty, tx + q.fillPx, ty + th};
+                    float end = float(q.fillEndRadius);
+                    fill.corners = vertical ? std::array<float, 4>{end, end, radius, radius} :
+                                              std::array<float, 4>{radius, end, end, radius};
+                    fill.color = q.color;
+                    fill.shade = UsageHighlight(q.color);
+                    fill.shadeLeft = vertical;
+                    add(ops, std::move(fill));
                 }
                 if (display.showPaceTicks && q.paceVisible) {
+                    // Past the bar's sides by its overhang; a notch only past the top (vertical:
+                    // left) one.
                     bool notch = display.paceTickStyle == PaceTickStyle::Notch;
                     float along = geometry.paceLength, cross = geometry.paceCrossSize;
-                    D2D1_POINT_2F at = vertical ?
-                        D2D1_POINT_2F{notch ? tx : tx + (th - cross) / 2, ty + len - q.pacePx - along} :
-                        D2D1_POINT_2F{tx + q.pacePx, notch ? ty : ty + (th - cross) / 2};
+                    float crossStart = notch ? -float(geometry.overhang) : (th - cross) / 2;
+                    D2D1_POINT_2F at = vertical ? D2D1_POINT_2F{tx + crossStart, ty + len - q.pacePx - along} :
+                                                  D2D1_POINT_2F{tx + q.pacePx, ty + crossStart};
                     if (display.paceTickStyle == PaceTickStyle::Caret) {
-                        // A dark halo polygon, then the core.
+                        // A halo polygon, then the core.
                         for (int layer = 0; layer < 2; layer++) {
                             Op op;
                             op.kind = Op::Kind::Polygon;
-                            op.color = layer ? pace : 0xC0000000;
+                            op.color = layer ? barPace.core : barPace.halo;
                             for (auto [a, c] : geometry.caret[layer]) {
                                 op.points.push_back(vertical ? D2D1_POINT_2F{at.x + float(c), at.y + float(a)} :
                                                                D2D1_POINT_2F{at.x + float(a), at.y + float(c)});
@@ -234,11 +258,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     } else {
                         float boxWidth = vertical ? cross : along, boxHeight = vertical ? along : cross;
                         rect(ops, {at.x, at.y, at.x + boxWidth, at.y + boxHeight}, geometry.paceRadius,
-                             0xC0000000);
+                             barPace.halo);
+                        // The core centred along the tick, at its offset across it.
                         float coreWidth = vertical ? geometry.coreCrossSize : geometry.coreLength;
                         float coreHeight = vertical ? geometry.coreLength : geometry.coreCrossSize;
-                        float cx = at.x + (boxWidth - coreWidth) / 2, cy = at.y + (boxHeight - coreHeight) / 2;
-                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, pace);
+                        float offset = float(geometry.coreCrossOffset);
+                        float cx = vertical ? at.x + offset : at.x + (boxWidth - coreWidth) / 2;
+                        float cy = vertical ? at.y + (boxHeight - coreHeight) / 2 : at.y + offset;
+                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, barPace.core);
                     }
                 }
                 if (keys) {
@@ -516,6 +543,50 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
             const D2D1_RECT_F& r = op.rect;
             switch (op.kind) {
                 case Op::Kind::Rect: {
+                    if (op.corners) {
+                        // Each corner its own radius, like a XAML Border's CornerRadius.
+                        D2D1_RECT_F s = UiSnapRect(r, scale * zoom);
+                        float width = s.right - s.left, height = s.bottom - s.top;
+                        if (width <= 0 || height <= 0) break;
+                        std::array<float, 4> c = *op.corners;
+                        float fit = std::min({1.0f, width / std::max(c[0] + c[1], 1e-3f),
+                                              width / std::max(c[3] + c[2], 1e-3f),
+                                              height / std::max(c[0] + c[3], 1e-3f),
+                                              height / std::max(c[1] + c[2], 1e-3f)});
+                        for (float& corner : c) corner *= fit;
+                        winrt::com_ptr<ID2D1PathGeometry> path;
+                        winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
+                        winrt::com_ptr<ID2D1GeometrySink> sink;
+                        winrt::check_hresult(path->Open(sink.put()));
+                        // A side up to the corner, then its arc.
+                        auto side = [&](D2D1_POINT_2F to, D2D1_POINT_2F arcTo, float radius) {
+                            sink->AddLine(to);
+                            if (radius <= 0) return;
+                            D2D1_ARC_SEGMENT arc{arcTo, {radius, radius}, 0, D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                                                 D2D1_ARC_SIZE_SMALL};
+                            sink->AddArc(&arc);
+                        };
+                        sink->BeginFigure({s.left + c[0], s.top}, D2D1_FIGURE_BEGIN_FILLED);
+                        side({s.right - c[1], s.top}, {s.right, s.top + c[1]}, c[1]);
+                        side({s.right, s.bottom - c[2]}, {s.right - c[2], s.bottom}, c[2]);
+                        side({s.left + c[3], s.bottom}, {s.left, s.bottom - c[3]}, c[3]);
+                        side({s.left, s.top + c[0]}, {s.left + c[0], s.top}, c[0]);
+                        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                        winrt::check_hresult(sink->Close());
+                        ID2D1Brush* brush = nullptr;
+                        if (op.shade) {
+                            ID2D1LinearGradientBrush* gradient = UiGradientBrush(
+                                target, cache, color(op.shade, op.opacity), color(op.color, op.opacity));
+                            gradient->SetStartPoint({s.left, s.top});
+                            gradient->SetEndPoint(op.shadeLeft ? D2D1_POINT_2F{s.left + 0.6f * width, s.top} :
+                                                                 D2D1_POINT_2F{s.left, s.top + 0.6f * height});
+                            brush = gradient;
+                        } else {
+                            brush = UiBrush(target, cache, color(op.color, op.opacity));
+                        }
+                        target->FillGeometry(path.get(), brush, nullptr);
+                        break;
+                    }
                     float radius = std::min({op.radius, (r.right - r.left) / 2, (r.bottom - r.top) / 2});
                     UiFillRect(target, cache, r, radius, color(op.color, op.opacity), scale * zoom);
                     if (op.stroke > 0) {
@@ -551,8 +622,13 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                         }
                         sink->EndFigure(D2D1_FIGURE_END_OPEN);
                     } else if (!op.points.empty()) {
-                        sink->BeginFigure(op.points[0], D2D1_FIGURE_BEGIN_FILLED);
-                        for (size_t p = 1; p < op.points.size(); p++) sink->AddLine(op.points[p]);
+                        // On device pixels, like XAML's layout rounding of the tick and its
+                        // pixel-sized parts.
+                        auto snap = [&](D2D1_POINT_2F p) {
+                            return D2D1::Point2F(UiSnap(p.x, scale * zoom), UiSnap(p.y, scale * zoom));
+                        };
+                        sink->BeginFigure(snap(op.points[0]), D2D1_FIGURE_BEGIN_FILLED);
+                        for (size_t p = 1; p < op.points.size(); p++) sink->AddLine(snap(op.points[p]));
                         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                     }
                     winrt::check_hresult(sink->Close());

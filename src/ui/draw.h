@@ -240,9 +240,10 @@ static void UiFillRect(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_REC
     }
 }
 
-// A linear gradient across the rectangle, left to right or top to bottom.
-static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_RECT_F rect,
-                           float radius, D2D1_COLOR_F from, D2D1_COLOR_F to, bool vertical) {
+// A brush shading from `from` at its start point to `to` at its end point, clamped beyond them
+// (interpolated in sRGB, as XAML does). Callers set both points.
+static ID2D1LinearGradientBrush* UiGradientBrush(ID2D1RenderTarget* target, UiTargetCache& cache,
+                                                 D2D1_COLOR_F from, D2D1_COLOR_F to) {
     auto& brush = cache.gradients[uint64_t(UiColorKey(from)) << 32 | UiColorKey(to)];
     if (!brush) {
         const D2D1_GRADIENT_STOP stops[] = {{0, from}, {1, to}};
@@ -254,11 +255,18 @@ static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1
         winrt::check_hresult(target->CreateLinearGradientBrush(&line, &properties, collection.get(),
                                                                brush.put()));
     }
+    return brush.get();
+}
+
+// A linear gradient across the rectangle, left to right or top to bottom.
+static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_RECT_F rect,
+                           float radius, D2D1_COLOR_F from, D2D1_COLOR_F to, bool vertical) {
+    ID2D1LinearGradientBrush* brush = UiGradientBrush(target, cache, from, to);
     brush->SetStartPoint({rect.left, rect.top});
     brush->SetEndPoint(vertical ? D2D1_POINT_2F{rect.left, rect.bottom} :
                                   D2D1_POINT_2F{rect.right, rect.top});
     D2D1_ROUNDED_RECT rounded{rect, radius, radius};
-    target->FillRoundedRectangle(&rounded, brush.get());
+    target->FillRoundedRectangle(&rounded, brush);
 }
 
 // A border of `pixels` device pixels drawn inside the snapped rectangle.

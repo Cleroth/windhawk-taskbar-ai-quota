@@ -175,6 +175,28 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Pace dot", [](Settings& s) { s.paceTickStyle = PaceTickStyle::Dot; }},
         {L"Pace pink", [](Settings& s) { s.paceTickColor = RGB(0xFF, 0x6E, 0xC7); }},
         {L"Pace off", [](Settings& s) { s.showPaceTicks = false; }},
+        {L"Gap 0, no overhang", [](Settings& s) { s.barGap = 0; }},
+        {L"Gap 4, line", [](Settings& s) { s.barGap = 4; s.paceTickStyle = PaceTickStyle::Line; }},
+        {L"Thin rail", [](Settings& s) { s.barStyle = BarStyle::Rail; }},
+        {L"Thin rail, line", [](Settings& s) { s.barStyle = BarStyle::Rail; s.paceTickStyle = PaceTickStyle::Line; }},
+        {L"Thin rail, notch", [](Settings& s) { s.barStyle = BarStyle::Rail; s.paceTickStyle = PaceTickStyle::Notch; }},
+        {L"Thin rail 60 x 14", [&](Settings& s) {
+             always(s);
+             s.barStyle = BarStyle::Rail;
+             s.barLength = 60;
+             s.barThickness = 14;
+         }},
+        {L"Vertical, length 32", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }},
+        {L"Vertical 32, line", [](Settings& s) {
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+             s.paceTickStyle = PaceTickStyle::Line;
+         }},
+        {L"Thin rail, vertical 32", [](Settings& s) {
+             s.barStyle = BarStyle::Rail;
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+         }},
         {L"Label top", [](Settings& s) { s.labelPosition = LabelPosition::Top; }},
         {L"Label right", [](Settings& s) { s.labelPosition = LabelPosition::Right; }},
         {L"Label bottom", [](Settings& s) { s.labelPosition = LabelPosition::Bottom; }},

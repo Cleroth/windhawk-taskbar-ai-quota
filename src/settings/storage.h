@@ -95,6 +95,9 @@ static bool NormalizeSettings(Settings* s) {
     if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::LogoHeadline) {
         s->barLayout = BarLayout::Stacked;
     }
+    if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
+        s->barStyle = BarStyle::Track;
+    }
     if (s->labelPosition < LabelPosition::Hidden ||
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
@@ -171,6 +174,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
+        setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
@@ -285,6 +289,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
+        s.barStyle = GetStr(root, L"barStyle") == L"rail" ? BarStyle::Rail : BarStyle::Track;
         // Clamp before the int conversion; 0 (non-positive or non-finite) restores the default
         // during normalization.
         double ringSize = GetNum(root, L"ringSize", 32);

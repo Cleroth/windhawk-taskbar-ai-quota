@@ -9,11 +9,12 @@ static void RunDisplayTests() {
             s.orangeThreshold = 60; s.redThreshold = 80; s.pollMinutes = 15;
             s.colorblindMode = true; s.showPaceTicks = false; s.paceTickStyle = PaceTickStyle::Dot;
             s.paceTickColor = RGB(1, 2, 3); s.percentTextAlignment = PercentTextAlignment::Center;
-            s.showExtraBarAmounts = true; s.showStaleWarning = false;
+            s.showExtraBarAmounts = true; s.showStaleWarning = false; s.barGap = 7; s.barStyle = BarStyle::Rail;
         });
         MeterDisplay d = MeterDisplayFor(settings, kNow, 1.25, 44);
         CHECK(d.now == kNow); CHECK(d.barMode == BarMode::Remaining);
         CHECK(d.barLength == 120); CHECK(d.barThickness == 6);
+        CHECK(d.barGap == 7); CHECK(d.barStyle == BarStyle::Rail);
         CHECK(d.ringSize == 28); CHECK(d.ringThickness == 4);
         CHECK(d.yellowThreshold == 40); CHECK(d.orangeThreshold == 60); CHECK(d.redThreshold == 80);
         CHECK(d.pollMinutes == 15); CHECK(d.colorblindMode); CHECK(!d.showPaceTicks);
@@ -27,16 +28,19 @@ static void RunDisplayTests() {
         MeterDisplay low = Display(With([](Settings& s) {
             s.barLength = -5; s.barThickness = 0; s.ringSize = 0; s.ringThickness = -1;
             s.pollMinutes = 0; s.yellowThreshold = -10; s.orangeThreshold = -20; s.redThreshold = -30;
+            s.barGap = -5; s.barStyle = BarStyle(-1);
         }));
         CHECK(low.barLength == 10); CHECK(low.barThickness == 2);
+        CHECK(low.barGap == 0); CHECK(low.barStyle == BarStyle::Track);
         CHECK(low.ringSize == 24); CHECK(low.ringThickness == 1); CHECK(low.pollMinutes == 2);
         CHECK(low.yellowThreshold == 0); CHECK(low.orangeThreshold == 0); CHECK(low.redThreshold == 0);
         MeterDisplay high = Display(With([](Settings& s) {
             s.barLength = 9999; s.barThickness = 51; s.ringSize = 41; s.ringThickness = 7;
             s.pollMinutes = 100000; s.yellowThreshold = 150; s.orangeThreshold = 120;
-            s.redThreshold = 101; s.paceTickColor = 0xAB123456;
+            s.redThreshold = 101; s.paceTickColor = 0xAB123456; s.barGap = 9999; s.barStyle = BarStyle(9);
         }));
         CHECK(high.barLength == 500); CHECK(high.barThickness == 50);
+        CHECK(high.barGap == 500); CHECK(high.barStyle == BarStyle::Track);
         CHECK(high.ringSize == 40); CHECK(high.ringThickness == 6); CHECK(high.pollMinutes == 1440);
         CHECK(high.yellowThreshold == 100); CHECK(high.orangeThreshold == 100);
         CHECK(high.redThreshold == 100); CHECK(high.paceTickColor == 0x123456);
@@ -215,25 +219,33 @@ static void RunBarTests() {
             CHECK(m.paceVisible);
             return m.pacePx;
         };
-        // Caret 5 DIPs on a 100 DIP bar 8 thick: centre kept 4 DIPs from either end.
-        CHECK(pace(kFiveHours) == 2); CHECK(pace(kFiveHours, remaining) == 94);
-        CHECK(pace(0) == 94); CHECK(pace(0, remaining) == 2);
+        // Caret 5 DIPs on a 100 DIP bar 8 thick (corners 2 DIPs): centre kept 2.5 DIPs from
+        // either end.
+        CHECK(pace(kFiveHours) == 0); CHECK(pace(kFiveHours, remaining) == 95);
+        CHECK(pace(0) == 95); CHECK(pace(0, remaining) == 0);
         CHECK(pace(13500000) == 23); CHECK(pace(13500000, remaining) == 73);
-        CHECK(pace(-1000) == 94);
+        CHECK(pace(-1000) == 95);
     });
 
     Run("bar pace: clamped by tick half-size and bar radius", [] {
         auto pace = [](long long resetIn, const MeterDisplay& d) {
             return First(Window(10, resetIn), d).quotas[0].pacePx;
         };
+        // Corners are a quarter of the thickness; the centre keeps the larger of that and half
+        // the tick from either end.
         MeterDisplay thin = Display(With([](Settings& s) { s.barThickness = 2; }));
         CHECK(pace(kFiveHours, thin) == 0); CHECK(pace(0, thin) == 95);
+        // 20 thick: centre 5 from either end, 2.5 and 92.5 rounded away from zero.
         MeterDisplay thick = Display(With([](Settings& s) { s.barThickness = 20; }));
-        CHECK(pace(kFiveHours, thick) == 8); CHECK(pace(0, thick) == 88);
+        CHECK(pace(kFiveHours, thick) == 3); CHECK(pace(0, thick) == 93);
         MeterDisplay line = Display(With([](Settings& s) { s.paceTickStyle = PaceTickStyle::Line; }));
-        CHECK(pace(kFiveHours, line) == 2); CHECK(pace(0, line) == 94);
+        CHECK(pace(kFiveHours, line) == 0); CHECK(pace(0, line) == 96);
+        // 200%: a 2.5 DIP caret centred 2 DIPs from either end, 0.75 and 96.75 rounded.
         MeterDisplay hiDpi = Display({}, 2);
-        CHECK(pace(kFiveHours, hiDpi) == 3); CHECK(pace(0, hiDpi) == 95);
+        CHECK(pace(kFiveHours, hiDpi) == 1); CHECK(pace(0, hiDpi) == 97);
+        // The thin rail's fill has the same corners.
+        MeterDisplay rail = Display(With([](Settings& s) { s.barStyle = BarStyle::Rail; s.barThickness = 20; }));
+        CHECK(pace(kFiveHours, rail) == 3); CHECK(pace(0, rail) == 93);
     });
 
     Run("bar pace: hidden without a usable window", [] {
@@ -253,9 +265,10 @@ static void RunBarTests() {
 
     Run("bar geometry: caret polygon and tick sizes per style and scale", [] {
         using Point = BarGeometry::Point;
-        auto geometry = [](PaceTickStyle style, int thickness = 8, double scale = 1) {
+        auto geometry = [](PaceTickStyle style, int thickness = 8, double scale = 1,
+                           BarStyle bars = BarStyle::Track) {
             return BarGeometryFor(Display(With([&](Settings& s) {
-                s.paceTickStyle = style; s.barThickness = thickness;
+                s.paceTickStyle = style; s.barThickness = thickness; s.barStyle = bars;
             }), scale));
         };
         auto same = [](const std::array<Point, 12>& actual, const std::array<Point, 12>& expected) {
@@ -264,27 +277,159 @@ static void RunBarTests() {
                 CHECK_NEAR(actual[i].cross, expected[i].cross);
             }
         };
+        // Over a full track with the default 2 DIP gap the caret reaches a DIP past each side:
+        // 8 + 2 across, its caps in the overhang.
         BarGeometry caret = geometry(PaceTickStyle::Caret);
-        CHECK_NEAR(caret.paceLength, 5); CHECK_NEAR(caret.paceCrossSize, 8); CHECK_NEAR(caret.textInset, 4);
-        same(caret.caret[0], {{{0, 0}, {5, 0}, {5, 2}, {4, 2}, {4, 6}, {5, 6}, {5, 8}, {0, 8},
-                               {0, 6}, {1, 6}, {1, 2}, {0, 2}}});
-        same(caret.caret[1], {{{1, 0}, {4, 0}, {4, 1}, {3, 1}, {3, 7}, {4, 7}, {4, 8}, {1, 8},
-                               {1, 7}, {2, 7}, {2, 1}, {1, 1}}});
-        BarGeometry thinCaret = geometry(PaceTickStyle::Caret, 2);
+        CHECK_NEAR(caret.overhang, 1);
+        CHECK_NEAR(caret.paceLength, 5); CHECK_NEAR(caret.paceCrossSize, 10); CHECK_NEAR(caret.textInset, 4);
+        same(caret.caret[0], {{{0, 0}, {5, 0}, {5, 2}, {4, 2}, {4, 8}, {5, 8}, {5, 10}, {0, 10},
+                               {0, 8}, {1, 8}, {1, 2}, {0, 2}}});
+        same(caret.caret[1], {{{1, 0}, {4, 0}, {4, 1}, {3, 1}, {3, 9}, {4, 9}, {4, 10}, {1, 10},
+                               {1, 9}, {2, 9}, {2, 1}, {1, 1}}});
+        // Over a thin rail it spans the bar only.
+        BarGeometry railCaret = geometry(PaceTickStyle::Caret, 8, 1, BarStyle::Rail);
+        CHECK_NEAR(railCaret.overhang, 0); CHECK_NEAR(railCaret.paceCrossSize, 8);
+        same(railCaret.caret[0], {{{0, 0}, {5, 0}, {5, 2}, {4, 2}, {4, 6}, {5, 6}, {5, 8}, {0, 8},
+                                   {0, 6}, {1, 6}, {1, 2}, {0, 2}}});
+        // Caps no deeper than half the caret: 2 across on a 2 DIP rail bar, 4 on a track's.
+        BarGeometry thinCaret = geometry(PaceTickStyle::Caret, 2, 1, BarStyle::Rail);
         CHECK_NEAR(thinCaret.caret[0][2].cross, 1); CHECK_NEAR(thinCaret.caret[1][2].cross, 1);
+        BarGeometry thinTrackCaret = geometry(PaceTickStyle::Caret, 2);
+        CHECK_NEAR(thinTrackCaret.paceCrossSize, 4);
+        CHECK_NEAR(thinTrackCaret.caret[0][2].cross, 2); CHECK_NEAR(thinTrackCaret.caret[1][2].cross, 1);
+        CHECK_NEAR(caret.coreCrossOffset, 0);
+        // Line: a 4 px halo across the bar and its overhang (8 + 2), the 2 px core a pixel short
+        // of it at both ends; square over a full track.
         BarGeometry line = geometry(PaceTickStyle::Line);
-        CHECK_NEAR(line.paceLength, 4); CHECK_NEAR(line.paceCrossSize, 8);
-        CHECK_NEAR(line.coreLength, 2); CHECK_NEAR(line.coreCrossSize, 8);
+        CHECK_NEAR(line.paceLength, 4); CHECK_NEAR(line.paceCrossSize, 10);
+        CHECK_NEAR(line.coreLength, 2); CHECK_NEAR(line.coreCrossSize, 8); CHECK_NEAR(line.coreCrossOffset, 1);
         CHECK_NEAR(line.paceRadius, 0); CHECK_NEAR(line.coreRadius, 0);
+        // Over a thin rail: the bar's 8 across, 1 px halo corners and 0.5 px core corners.
+        BarGeometry railLine = geometry(PaceTickStyle::Line, 8, 1, BarStyle::Rail);
+        CHECK_NEAR(railLine.paceCrossSize, 8); CHECK_NEAR(railLine.coreCrossSize, 6);
+        CHECK_NEAR(railLine.coreCrossOffset, 1);
+        CHECK_NEAR(railLine.paceRadius, 1); CHECK_NEAR(railLine.coreRadius, 0.5);
+        // At 200% a pixel is half a DIP.
+        BarGeometry railLine2x = geometry(PaceTickStyle::Line, 8, 2, BarStyle::Rail);
+        CHECK_NEAR(railLine2x.coreCrossSize, 7); CHECK_NEAR(railLine2x.coreCrossOffset, 0.5);
+        CHECK_NEAR(railLine2x.paceRadius, 0.5); CHECK_NEAR(railLine2x.coreRadius, 0.25);
+        // A 2 DIP rail bar at 100% leaves no room for the core.
+        CHECK_NEAR(geometry(PaceTickStyle::Line, 2, 1, BarStyle::Rail).coreCrossSize, 0);
+        // A notch's core starts at the overhang's outer edge and keeps its depth into the bar,
+        // max(2, ceil(0.6 x thickness)); its halo reaches a pixel deeper.
         BarGeometry notch = geometry(PaceTickStyle::Notch);
-        CHECK_NEAR(notch.paceLength, 4); CHECK_NEAR(notch.paceCrossSize, 5);
-        CHECK_NEAR(notch.coreCrossSize, 5); CHECK_NEAR(notch.coreLength, 2);
-        CHECK_NEAR(geometry(PaceTickStyle::Notch, 2).paceCrossSize, 2);
-        CHECK_NEAR(geometry(PaceTickStyle::Notch, 50).paceCrossSize, 30);
+        CHECK_NEAR(notch.overhang, 1);
+        CHECK_NEAR(notch.paceLength, 4); CHECK_NEAR(notch.paceCrossSize, 1 + 5 + 1);
+        CHECK_NEAR(notch.coreCrossSize, 1 + 5); CHECK_NEAR(notch.coreLength, 2);
+        CHECK_NEAR(notch.coreCrossOffset, 0); CHECK_NEAR(notch.paceRadius, 0); CHECK_NEAR(notch.coreRadius, 0);
+        CHECK_NEAR(geometry(PaceTickStyle::Notch, 2).paceCrossSize, 1 + 2 + 1);
+        CHECK_NEAR(geometry(PaceTickStyle::Notch, 50).coreCrossSize, 1 + 30);
+        CHECK_NEAR(geometry(PaceTickStyle::Notch, 50).paceCrossSize, 1 + 30 + 1);
+        BarGeometry railNotch = geometry(PaceTickStyle::Notch, 8, 1, BarStyle::Rail);
+        CHECK_NEAR(railNotch.coreCrossSize, 5); CHECK_NEAR(railNotch.paceCrossSize, 6);
+        // 200% with the default gap: a one DIP (2 px) overhang, a half-DIP extra halo.
+        BarGeometry notch2x = geometry(PaceTickStyle::Notch, 8, 2);
+        CHECK_NEAR(notch2x.coreCrossSize, 1 + 5); CHECK_NEAR(notch2x.paceCrossSize, 1 + 5 + 0.5);
+        // Dots never overhang; the 3 px core sits half a pixel in.
         BarGeometry dot = geometry(PaceTickStyle::Dot, 8, 2);
+        CHECK_NEAR(dot.overhang, 0);
         CHECK_NEAR(dot.paceLength, 2); CHECK_NEAR(dot.paceCrossSize, 2); CHECK_NEAR(dot.paceRadius, 1);
-        CHECK_NEAR(dot.coreLength, 1.5); CHECK_NEAR(dot.coreCrossSize, 1.5);
+        CHECK_NEAR(dot.coreLength, 1.5); CHECK_NEAR(dot.coreCrossSize, 1.5); CHECK_NEAR(dot.coreCrossOffset, 0.25);
         CHECK_NEAR(dot.coreRadius, 0.75); CHECK_NEAR(dot.textInset, 2);
+        CHECK_NEAR(geometry(PaceTickStyle::Dot, 8, 2, BarStyle::Rail).paceRadius, 1);
+    });
+
+    Run("bar geometry: tick overhang in whole device pixels, at most half the gap", [] {
+        auto pixels = [](int gap, double scale, BarStyle bars = BarStyle::Track,
+                         PaceTickStyle style = PaceTickStyle::Line) {
+            BarGeometry g = BarGeometryFor(Display(With([&](Settings& s) {
+                s.barGap = gap; s.barStyle = bars; s.paceTickStyle = style;
+            }), scale));
+            return g.overhang * scale;
+        };
+        // min(round(scale), floor(round(gap x scale) / 2)) device pixels.
+        // 100%: one pixel from a 2 DIP gap; a 1 DIP gap has no half pixel to give.
+        CHECK_NEAR(pixels(0, 1), 0); CHECK_NEAR(pixels(1, 1), 0);
+        CHECK_NEAR(pixels(2, 1), 1); CHECK_NEAR(pixels(4, 1), 1);
+        // 125%: gaps of 1.25, 2.5 and 5 pixels round to 1, 3 and 5; a DIP rounds to one pixel.
+        CHECK_NEAR(pixels(0, 1.25), 0); CHECK_NEAR(pixels(1, 1.25), 0);
+        CHECK_NEAR(pixels(2, 1.25), 1); CHECK_NEAR(pixels(4, 1.25), 1);
+        // 150%: gaps of 1.5, 3 and 6 pixels round to 2, 3 and 6; a DIP rounds to two pixels.
+        CHECK_NEAR(pixels(0, 1.5), 0); CHECK_NEAR(pixels(1, 1.5), 1);
+        CHECK_NEAR(pixels(2, 1.5), 1); CHECK_NEAR(pixels(4, 1.5), 2);
+        // In DIPs at 150%: 2 / 1.5.
+        CHECK_NEAR(BarGeometryFor(Display(With([](Settings& s) { s.barGap = 4; }), 1.5)).overhang, 2 / 1.5);
+        // None over a thin rail, none for dots.
+        for (double scale : {1.0, 1.25, 1.5}) {
+            CHECK_NEAR(pixels(4, scale, BarStyle::Rail), 0);
+            CHECK_NEAR(pixels(4, scale, BarStyle::Track, PaceTickStyle::Dot), 0);
+            CHECK_NEAR(pixels(4, scale, BarStyle::Track, PaceTickStyle::Caret), pixels(4, scale));
+            CHECK_NEAR(pixels(4, scale, BarStyle::Track, PaceTickStyle::Notch), pixels(4, scale));
+        }
+    });
+
+    Run("bar geometry: corners a quarter of the thickness; the thin rail's thickness", [] {
+        auto geometry = [](int thickness, BarStyle bars) {
+            return BarGeometryFor(Display(With([&](Settings& s) { s.barThickness = thickness; s.barStyle = bars; })));
+        };
+        CHECK_NEAR(geometry(8, BarStyle::Track).radius, 2); CHECK_NEAR(geometry(2, BarStyle::Track).radius, 0.5);
+        CHECK_NEAR(geometry(50, BarStyle::Rail).radius, 12.5);
+        // max(1, round(thickness / 4)) DIPs; no rail over a full track.
+        CHECK_NEAR(geometry(2, BarStyle::Rail).rail, 1); CHECK_NEAR(geometry(4, BarStyle::Rail).rail, 1);
+        CHECK_NEAR(geometry(8, BarStyle::Rail).rail, 2); CHECK_NEAR(geometry(12, BarStyle::Rail).rail, 3);
+        CHECK_NEAR(geometry(8, BarStyle::Track).rail, 0);
+    });
+
+    Run("bar fill: end corners cut flat until the track's rounded end; round over a rail", [] {
+        // 100 DIP bar, 8 thick: 2 DIP corners. The end's radius is what's left of the track's
+        // corner past the fill.
+        CHECK_NEAR(Bar(100).fillEndRadius, 2); CHECK_NEAR(Bar(150).fillEndRadius, 2);
+        CHECK_NEAR(Bar(99).fillEndRadius, 1); CHECK_NEAR(Bar(98).fillEndRadius, 0);
+        CHECK_NEAR(Bar(50).fillEndRadius, 0); CHECK_NEAR(Bar(0.4).fillEndRadius, 0);
+        MeterDisplay thick = Display(With([](Settings& s) { s.barThickness = 20; s.barLength = 60; }));
+        CHECK_NEAR(Bar(95, thick).fillEndRadius, 5 - 3);  // 57 of 60 DIPs, 5 DIP corners
+        MeterDisplay rail = Display(With([](Settings& s) { s.barStyle = BarStyle::Rail; }));
+        CHECK_NEAR(Bar(50, rail).fillEndRadius, 2); CHECK_NEAR(Bar(100, rail).fillEndRadius, 2);
+        MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
+        CHECK_NEAR(Bar(1, remaining).fillEndRadius, 1);  // 99 DIPs left
+    });
+
+    Run("bar fill highlight: OKLCH lightness + 0.06 for every fill color, alpha kept", [] {
+        // Hand-picked expectations per usage color (normal, stale, colorblind), within one step
+        // per channel.
+        const std::pair<uint32_t, uint32_t> colors[] = {
+            {0xFF43A047, 0xFF57B359}, {0xFFFDD835, 0xFFFFEEAE}, {0xFFFB8C00, 0xFFFFA960},
+            {0xFFE53935, 0xFFFB5048}, {0xFF9E9E9E, 0xFFB1B1B1}, {0xFF0072B2, 0xFF2484C6},
+            {0xFF56B4E9, 0xFF6AC7FD}, {0xFFE69F00, 0xFFFAB22F}, {0xFFD55E00, 0xFFEA7126},
+        };
+        for (auto [color, expected] : colors) {
+            uint32_t actual = UsageHighlight(color);
+            CHECK(actual >> 24 == expected >> 24);
+            for (int shift : {16, 8, 0}) {
+                CHECK(std::abs(int(actual >> shift & 0xFF) - int(expected >> shift & 0xFF)) <= 1);
+            }
+        }
+        CHECK(UsageHighlight(0x80E53935) >> 24 == 0x80);
+        CHECK((UsageHighlight(0x80E53935) & 0xFFFFFF) == (UsageHighlight(0xFFE53935) & 0xFFFFFF));
+        // Grey stays grey: no chroma to keep.
+        uint32_t grey = UsageHighlight(0xFF9E9E9E);
+        CHECK((grey >> 16 & 0xFF) == (grey >> 8 & 0xFF) && (grey >> 8 & 0xFF) == (grey & 0xFF));
+        // White can't get lighter: still in range.
+        CHECK(UsageHighlight(0xFFFFFFFF) == 0xFFFFFFFF);
+    });
+
+    Run("bar pace colors: the default turns dark with a light halo on a light taskbar", [] {
+        PaceMarkColors dark = PaceMarkColorsFor(kDefaultPaceTickColor, false);
+        CHECK(dark.core == 0xFFDEDEDE && dark.halo == 0xC0000000);
+        PaceMarkColors light = PaceMarkColorsFor(kDefaultPaceTickColor, true);
+        CHECK(light.core == 0xFF1A1A1A && light.halo == 0x80FFFFFF);
+        // Stray high bits still name the default.
+        CHECK(PaceMarkColorsFor(0xAB000000 | kDefaultPaceTickColor, true).core == 0xFF1A1A1A);
+        // A chosen color stays, with the dark halo, on either taskbar.
+        for (bool theme : {false, true}) {
+            PaceMarkColors pink = PaceMarkColorsFor(RGB(0xFF, 0x6E, 0xC7), theme);
+            CHECK(pink.core == 0xFFFF6EC7 && pink.halo == 0xC0000000);
+        }
     });
 }
 

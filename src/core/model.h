@@ -47,6 +47,12 @@ enum class BarLayout {
     LogoHeadline,
 };
 
+// How Stacked and Vertical bars draw behind their fill.
+enum class BarStyle {
+    Track,  // A full-thickness track; the fill's end toward 100% is a straight cut.
+    Rail,   // A thin centred rail under a full-thickness fill.
+};
+
 static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
@@ -107,6 +113,7 @@ struct Settings {
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;
+    BarStyle barStyle = BarStyle::Track;
     // Segmented and concentric ring diameter and stroke, in DIPs; rendering shrinks the stroke
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;

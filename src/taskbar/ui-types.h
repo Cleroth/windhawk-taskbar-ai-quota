@@ -18,6 +18,7 @@ struct AppliedState {
     std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
     std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
+    int paceLight = -1;  // Bars' pace tick colors for a light (1) or dark (0) taskbar.
     std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1};
     std::array<std::wstring, kQuotaBarCount> percentTexts;
@@ -104,6 +105,9 @@ struct AccountUiRefs {
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<Border, kQuotaBarCount> paceTicks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
+    // Bars' pace tick core and halo, shared by the account's ticks; recolored with the theme.
+    SolidColorBrush paceCore{nullptr};
+    SolidColorBrush paceHalo{nullptr};
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
@@ -266,7 +270,8 @@ struct QuotaUiInstance {
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
     double taskbarHeight = 0;  // DIPs, measured at build for tile layouts; 0 if unknown.
-    bool tileLightTheme = false;  // Light taskbar at the last tile update; picks highlight colors.
+    // Light taskbar at the last update; picks tile chrome and the bars' default pace tick colors.
+    bool lightTheme = false;
     Grid quotaGrid{nullptr};
     Panel injectionParent{nullptr};
     ColumnDefinition quotaColumnDefinition{nullptr};

@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.0.1
+// @version         2.1.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -43,7 +43,8 @@ local app or CLI session, which must remain running.
 - **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
   quotas, tile identity, history recording, and sign-in. Removing an account deletes its
   sign-in and, if you choose, its history.
-- **Layout:** Tile style with a live taskbar preview, sizes, labels, pace markers, and spacing.
+- **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
+  labels, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the

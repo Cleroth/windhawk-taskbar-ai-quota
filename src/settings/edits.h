@@ -27,6 +27,7 @@ enum class SettingsField : uint8_t {
     HistoryRange,   // The range the usage history window opens on: a HistoryUiRange
     // Layout
     BarLayout,        // Tile style: a BarLayout
+    BarStyle,         // A BarStyle
     BarLength,
     BarThickness,
     BarGap,
@@ -123,14 +124,15 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
         case SettingsField::ResetLayout:
-            return {SettingsField::BarLayout,     SettingsField::BarLength,
-                    SettingsField::BarThickness,  SettingsField::BarGap,
-                    SettingsField::RingSize,      SettingsField::RingThickness,
-                    SettingsField::LabelPosition, SettingsField::LabelFontSize,
-                    SettingsField::LabelGap,      SettingsField::ShowBarLabels,
-                    SettingsField::PercentFontSize, SettingsField::ShowPaceTicks,
-                    SettingsField::PaceTickStyle, SettingsField::PaceTickColor,
-                    SettingsField::AccountMargin, SettingsField::RightMargin};
+            return {SettingsField::BarLayout,       SettingsField::BarStyle,
+                    SettingsField::BarLength,       SettingsField::BarThickness,
+                    SettingsField::BarGap,          SettingsField::RingSize,
+                    SettingsField::RingThickness,   SettingsField::LabelPosition,
+                    SettingsField::LabelFontSize,   SettingsField::LabelGap,
+                    SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
+                    SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
+                    SettingsField::PaceTickColor,   SettingsField::AccountMargin,
+                    SettingsField::RightMargin};
         case SettingsField::ResetDisplay:
             return {SettingsField::BarMode,          SettingsField::PercentTextVisibility,
                     SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts,
@@ -156,6 +158,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
         case SettingsField::HistoryRange: return int(s.historyDefaultRange);
         case SettingsField::BarLayout: return int(s.barLayout);
+        case SettingsField::BarStyle: return int(s.barStyle);
         case SettingsField::BarLength: return s.barLength;
         case SettingsField::BarThickness: return s.barThickness;
         case SettingsField::BarGap: return s.barGap;
@@ -215,6 +218,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::BarLayout:
             s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
             break;
+        case SettingsField::BarStyle:
+            s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
+            break;
         case SettingsField::BarLength: s.barLength = value; break;
         case SettingsField::BarThickness: s.barThickness = value; break;
         case SettingsField::BarGap: s.barGap = value; break;
@@ -268,6 +274,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
+            s.barStyle = defaults.barStyle;
             s.barLength = defaults.barLength;
             s.barThickness = defaults.barThickness;
             s.barGap = defaults.barGap;

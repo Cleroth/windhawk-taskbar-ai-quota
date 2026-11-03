@@ -1,5 +1,5 @@
 // Meter model: what every quota meter shows (fill, usage color, pace mark, text) and the tile,
-// ring and pace tick geometry, as plain values from explicit inputs. Pure: no XAML, WinRT,
+// ring, bar and pace tick geometry and colors, as plain values from explicit inputs. Pure: no XAML, WinRT,
 // window, registry or global state; colors are ARGB. Renderers own measuring, theme detection,
 // fonts and applied-state caching.
 //
@@ -35,6 +35,73 @@ static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int oran
     if (pct >= orangeThreshold) return 0xFFFB8C00;
     if (pct >= yellowThreshold) return 0xFFFDD835;
     return 0xFF43A047;
+}
+
+// A bar fill's highlight: the usage color 0.06 lighter in OKLCH lightness with the same hue and
+// chroma, the chroma reduced only as far as sRGB requires. Fills shade from it at their top edge
+// (vertical bars: left) to the usage color 60% across. Alpha is kept.
+static uint32_t UsageHighlight(uint32_t argb) {
+    auto linear = [](uint32_t channel) {
+        double c = channel / 255.0;
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    double r = linear(argb >> 16 & 0xFF), g = linear(argb >> 8 & 0xFF), b = linear(argb & 0xFF);
+    double l = std::cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    double m = std::cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    double s = std::cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    double lightness = std::min(0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s + 0.06, 0.999);
+    double okA = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+    double okB = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+    // Linear sRGB of the lifted color with its chroma scaled by `k`.
+    auto lifted = [&](double k) {
+        double l3 = lightness + 0.3963377774 * okA * k + 0.2158037573 * okB * k;
+        double m3 = lightness - 0.1055613458 * okA * k - 0.0638541728 * okB * k;
+        double s3 = lightness - 0.0894841775 * okA * k - 1.2914855480 * okB * k;
+        l3 = l3 * l3 * l3;
+        m3 = m3 * m3 * m3;
+        s3 = s3 * s3 * s3;
+        return std::array<double, 3>{4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+                                     -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+                                     -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3};
+    };
+    auto inside = [&](double k) {
+        auto rgb = lifted(k);
+        return std::all_of(rgb.begin(), rgb.end(), [](double c) { return c >= -1e-4 && c <= 1 + 1e-4; });
+    };
+    double k = 1;
+    if (!inside(1)) {
+        double outside = 1;
+        k = 0;
+        for (int i = 0; i < 30; i++) {
+            double mid = (k + outside) / 2;
+            (inside(mid) ? k : outside) = mid;
+        }
+    }
+    auto encode = [](double c) {
+        c = std::clamp(c, 0.0, 1.0);
+        c = c <= 0.0031308 ? 12.92 * c : 1.055 * std::pow(c, 1 / 2.4) - 0.055;
+        return (uint32_t)std::clamp(std::lround(c * 255), 0L, 255L);
+    };
+    auto rgb = lifted(k);
+    return (argb & 0xFF000000) | encode(rgb[0]) << 16 | encode(rgb[1]) << 8 | encode(rgb[2]);
+}
+
+// Bar layouts' unfilled track, or their thin rail.
+static constexpr uint32_t kBarTrackColor = 0x46808080;
+static constexpr uint32_t kBarRailColor = 0x66808080;
+
+// Bar layouts' pace tick: a core over a halo. The default color turns dark on a light taskbar; a
+// chosen color stays.
+struct PaceMarkColors {
+    uint32_t core, halo;
+};
+
+static PaceMarkColors PaceMarkColorsFor(COLORREF color, bool light) {
+    color &= 0x00FFFFFF;
+    if (light && color == kDefaultPaceTickColor) return {0xFF1A1A1A, 0x80FFFFFF};
+    return {0xFF000000 | uint32_t(GetRValue(color)) << 16 | uint32_t(GetGValue(color)) << 8 |
+                GetBValue(color),
+            0xC0000000};
 }
 
 // Ring geometry. The centre keeps at least kTileRingHoleMin of radius so the identity always
@@ -140,6 +207,8 @@ struct MeterDisplay {
     BarMode barMode;
     int barLength;            // 10-500 DIPs.
     int barThickness;         // 2-50 DIPs.
+    int barGap;               // 0-500 DIPs.
+    BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
     int yellowThreshold;      // 0-100, yellow <= orange <= red.
@@ -170,6 +239,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .barMode = settings.barMode,
         .barLength = std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
+        .barGap = std::clamp(settings.barGap, 0, 500),
+        .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
         .yellowThreshold = yellow,
@@ -283,34 +354,71 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     }
 }
 
-// Bar layouts' pace tick and percent text placement, in DIPs along and across the bar. Pixel
-// details scale with 1 / rasterizationScale.
+// Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
+// the bar. Pixel details scale with 1 / rasterizationScale.
 struct BarGeometry {
     struct Point {
         double along, cross;
     };
-    double paceLength;     // Pace tick outline.
-    double paceCrossSize;
-    double paceRadius;     // Corner radius; dots only.
-    double coreLength;     // Line, notch and dot core, centred in the outline.
+    double radius;         // Track and fill corners.
+    double rail;           // Thin rail thickness, centred across the bar; 0 with a full track.
+    // How far the pace tick reaches past the bar across it: on both sides, or a notch's near side.
+    double overhang;
+    double paceLength;     // Pace tick outline (the halo).
+    double paceCrossSize;  // Overhang included.
+    double paceRadius;     // Corner radius: dots, and lines over a thin rail.
+    // Line, notch and dot core: centred along the outline, `coreCrossOffset` from its top
+    // (vertical bars: left) edge. A notch's core is flush with its outer end.
+    double coreLength;
     double coreCrossSize;
-    double coreRadius;     // Dots only.
+    double coreCrossOffset;
+    double coreRadius;
     std::array<std::array<Point, 12>, 2> caret;  // Caret outline, then core polygon.
     double textInset;      // Percent text shift away from its aligned edge.
 };
 
 static BarGeometry BarGeometryFor(const MeterDisplay& display) {
-    double pixel = 1.0 / display.rasterizationScale;
+    double scale = display.rasterizationScale;
+    double pixel = 1.0 / scale;
     PaceTickStyle style = display.paceTickStyle;
+    bool track = display.barStyle == BarStyle::Track;
     BarGeometry g{};
+    g.radius = display.barThickness / 4.0;
+    g.rail = track ? 0 : std::max(1.0, (double)std::lround(display.barThickness / 4.0));
+    // Over a full track, ticks other than dots reach past the bar: a DIP's worth of whole device
+    // pixels, at most half the bar gap.
+    if (track && style != PaceTickStyle::Dot) {
+        g.overhang = std::min(std::lround(scale), std::lround(display.barGap * scale) / 2) * pixel;
+    }
     g.paceLength = (style == PaceTickStyle::Caret ? 5 : 4) * pixel;
-    g.paceCrossSize = style == PaceTickStyle::Notch ?
-                          std::max(2.0, std::ceil(display.barThickness * 0.6)) :
-                      style == PaceTickStyle::Dot ? 4 * pixel : display.barThickness;
-    g.paceRadius = style == PaceTickStyle::Dot ? 2 * pixel : 0;
     g.coreLength = (style == PaceTickStyle::Dot ? 3 : 2) * pixel;
-    g.coreCrossSize = style == PaceTickStyle::Dot ? 3 * pixel : g.paceCrossSize;
-    g.coreRadius = style == PaceTickStyle::Dot ? 1.5 * pixel : 0;
+    switch (style) {
+        case PaceTickStyle::Line:
+            // The halo wraps the core: a pixel beyond it at both ends.
+            g.paceCrossSize = display.barThickness + 2 * g.overhang;
+            g.coreCrossSize = std::max(g.paceCrossSize - 2 * pixel, 0.0);
+            g.coreCrossOffset = pixel;
+            g.paceRadius = track ? 0 : pixel;
+            g.coreRadius = track ? 0 : 0.5 * pixel;
+            break;
+        case PaceTickStyle::Notch:
+            // From the overhang's outer edge into the bar; the halo a pixel deeper than the core.
+            g.coreCrossSize = g.overhang + std::max(2.0, std::ceil(display.barThickness * 0.6));
+            g.paceCrossSize = g.coreCrossSize + pixel;
+            break;
+        case PaceTickStyle::Dot:
+            g.paceCrossSize = 4 * pixel;
+            g.coreCrossSize = 3 * pixel;
+            g.coreCrossOffset = 0.5 * pixel;
+            g.paceRadius = 2 * pixel;
+            g.coreRadius = 1.5 * pixel;
+            break;
+        case PaceTickStyle::Caret:
+        default:
+            g.paceCrossSize = display.barThickness + 2 * g.overhang;
+            g.coreCrossSize = g.paceCrossSize;
+            break;
+    }
     // Caret: a bracket of two caps joined by a stem, a dark halo around the core.
     double length = g.paceLength;
     double cross = g.paceCrossSize;
@@ -393,6 +501,9 @@ struct QuotaMeter {
 
     // Bars, in DIPs along the bar.
     int fillPx = 0;
+    // The fill's corner radius toward 100%; its start corners take BarGeometry::radius. Over a
+    // full track the fill ends in a straight cut until it reaches the track's rounded end.
+    double fillEndRadius = 0;
     int pacePx = 0;            // Pace tick's start.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
@@ -513,13 +624,14 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             m.fillPx = displayed > 0 ?
                 std::clamp((int)std::lround(display.barLength * displayed / 100.0), 2,
                            display.barLength) : 0;
+            m.fillEndRadius = display.barStyle == BarStyle::Rail ? bar.radius :
+                std::max(0.0, bar.radius - (display.barLength - m.fillPx));
             if (m.paceVisible) {
                 // Centred on the pace, kept inside the bar's rounded ends.
                 double pacePct = remainingMode ? remainingFraction * 100.0 :
                                                  (1.0 - remainingFraction) * 100.0;
                 pacePct = std::clamp(pacePct, 0.0, 100.0);
-                double radius = std::clamp(std::max(1.0, display.barThickness / 2.0),
-                                           bar.paceLength / 2.0,
+                double radius = std::clamp(bar.radius, bar.paceLength / 2.0,
                                            (display.barLength - bar.paceLength) / 2.0);
                 double center = std::clamp(display.barLength * pacePct / 100.0,
                                            radius, display.barLength - radius);

@@ -1,6 +1,6 @@
 // Layout page: slider input, the Layout fields and their reset group, the render projection the
-// preview reads, the preview strip model (settings/preview.h), the page builder and the pinned
-// preview header. Synthetic inputs, hand-derived expectations.
+// preview reads, the preview strip model (settings/preview.h, bar styles included), the page
+// builder and the pinned preview header. Synthetic inputs, hand-derived expectations.
 
 static bool HasTextIn(const std::vector<UiItem>& items, std::wstring_view text) {
     return std::any_of(items.begin(), items.end(), [&](const UiItem& item) {
@@ -70,7 +70,8 @@ static void RunLayoutTests() {
     Run("layout fields: desired values, ranges and choices clamp", [] {
         Settings s;
         const std::pair<SettingsField, int> values[] = {
-            {SettingsField::BarLayout, 3},     {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
+            {SettingsField::BarLayout, 3},     {SettingsField::BarStyle, 1},
+            {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
             {SettingsField::LabelPosition, 2}, {SettingsField::LabelFontSize, 14}, {SettingsField::LabelGap, 7},
             {SettingsField::ShowBarLabels, 1}, {SettingsField::PercentFontSize, 10}, {SettingsField::ShowPaceTicks, 0},
@@ -80,7 +81,8 @@ static void RunLayoutTests() {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == value);
         }
-        CHECK(s.barLayout == BarLayout::ConcentricRings && s.labelPosition == LabelPosition::Top &&
+        CHECK(s.barLayout == BarLayout::ConcentricRings && s.barStyle == BarStyle::Rail &&
+              s.labelPosition == LabelPosition::Top &&
               s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456);
         const std::tuple<SettingsField, int, int> clamps[] = {
             {SettingsField::BarLength, 99999, 500},   {SettingsField::BarThickness, 0, 2},
@@ -89,6 +91,7 @@ static void RunLayoutTests() {
             {SettingsField::BarGap, -1, 0},           {SettingsField::AccountMargin, 501, 500},
             {SettingsField::BarLayout, 9, 5},         {SettingsField::BarLayout, -1, 0},
             {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 3},
+            {SettingsField::BarStyle, 5, 1},          {SettingsField::BarStyle, -1, 0},
             {SettingsField::PaceTickColor, 0x12345678, 0x345678}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
@@ -96,9 +99,10 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the sixteen Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the seventeen Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoBars;
+        changed.barStyle = BarStyle::Rail;
         changed.barLength = 220;
         changed.barThickness = 14;
         changed.barGap = 6;
@@ -125,6 +129,7 @@ static void RunLayoutTests() {
         Settings expected = changed;
         const Settings defaults;
         expected.barLayout = defaults.barLayout;
+        expected.barStyle = defaults.barStyle;
         expected.barLength = defaults.barLength;
         expected.barThickness = defaults.barThickness;
         expected.barGap = defaults.barGap;
@@ -143,7 +148,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 16);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 17);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -305,6 +310,191 @@ static void RunLayoutTests() {
         }
     });
 
+    Run("preview: full track and thin rail bars, shaded fills cut flat, ticks past the track", [] {
+        auto fills = [](const SettingsPreviewStrip& strip) {
+            std::vector<SettingsPreviewOp> ops;
+            for (const SettingsPreviewOp& op : strip.ops) {
+                if (op.corners) ops.push_back(op);
+            }
+            return ops;
+        };
+        auto polygons = [](const SettingsPreviewStrip& strip) {
+            std::vector<SettingsPreviewOp> ops;
+            for (const SettingsPreviewOp& op : strip.ops) {
+                if (op.kind == SettingsPreviewOp::Kind::Polygon) ops.push_back(op);
+            }
+            return ops;
+        };
+        // The span of a polygon across a horizontal bar: its top and height.
+        auto span = [](const SettingsPreviewOp& op) {
+            float top = 1e9f, bottom = -1e9f;
+            for (D2D1_POINT_2F p : op.points) {
+                top = std::min(top, p.y);
+                bottom = std::max(bottom, p.y);
+            }
+            return std::pair{top, bottom - top};
+        };
+        using Corners = std::array<float, 4>;
+        Settings s;
+        SettingsPreviewStrip strip = Strip(s);
+        std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
+        std::vector<SettingsPreviewOp> shaded = fills(strip);
+        CHECK(tracks.size() == 10 && shaded.size() == 10 && OpsOfColor(strip, 0x66808080).empty());
+        // Track corners: a quarter of the 8 DIP thickness.
+        CHECK_NEAR(tracks[0].radius, 2);
+        // OAI's 5-hour quota: 25% green under its highlight, rounded at the start, cut flat at the end.
+        const SettingsPreviewOp& oai = shaded[0];
+        CHECK(oai.color == 0xFF43A047 && oai.shade == UsageHighlight(0xFF43A047) && !oai.shadeLeft);
+        CHECK_NEAR(oai.rect.left, tracks[0].rect.left);
+        CHECK_NEAR(oai.rect.right - oai.rect.left, 25);
+        CHECK_NEAR(oai.rect.bottom - oai.rect.top, 8);
+        CHECK((*oai.corners == Corners{2, 0, 0, 2}));
+        // CC 2's weekly quota, past 100%: red, reaching the track's rounded end.
+        auto full = std::find_if(shaded.begin(), shaded.end(), [](const SettingsPreviewOp& op) {
+            return op.rect.right - op.rect.left > 99;
+        });
+        CHECK(full != shaded.end() && full->color == 0xFFE53935 && (*full->corners == Corners{2, 2, 2, 2}));
+        // Antigravity is stale: grey, shaded too.
+        CHECK(shaded.back().color == 0xFF9E9E9E && shaded.back().shade == UsageHighlight(0xFF9E9E9E));
+        // OAI's caret: the 8 DIP bar and a DIP past each side (2 DIP gap), halo then core.
+        std::vector<SettingsPreviewOp> carets = polygons(strip);
+        CHECK(carets[0].color == 0xC0000000 && carets[1].color == 0xFFDEDEDE);
+        auto [caretTop, caretHeight] = span(carets[0]);
+        CHECK_NEAR(caretTop, tracks[0].rect.top - 1);
+        CHECK_NEAR(caretHeight, 10);
+        CHECK_NEAR(span(carets[1]).second, 10);
+
+        // No gap, no overhang; a 4 DIP gap at 150% leaves two device pixels.
+        s.barGap = 0;
+        CHECK_NEAR(span(polygons(Strip(s))[0]).second, 8);
+        s.barGap = 4;
+        CHECK(std::abs(span(polygons(Strip(s, 48, false, 1.5f))[0]).second - (8 + 2 * 2 / 1.5)) < 1e-4);  // Floats
+        // A notch hangs from the overhang's outer edge: its core 1 + 5 DIPs deep and flush with
+        // that edge, its halo a pixel deeper.
+        s = {};
+        s.paceTickStyle = PaceTickStyle::Notch;
+        strip = Strip(s);
+        std::vector<SettingsPreviewOp> notches = OpsOfColor(strip, 0xC0000000);
+        std::vector<SettingsPreviewOp> cores = OpsOfColor(strip, 0xFFDEDEDE);
+        tracks = OpsOfColor(strip, 0x46808080);
+        CHECK(!notches.empty() && cores.size() == notches.size());
+        CHECK_NEAR(notches[0].rect.top, tracks[0].rect.top - 1);
+        CHECK_NEAR(notches[0].rect.bottom - notches[0].rect.top, 7);
+        CHECK_NEAR(cores[0].rect.top, notches[0].rect.top);
+        CHECK_NEAR(cores[0].rect.bottom - cores[0].rect.top, 6);
+        CHECK_NEAR(cores[0].rect.left, notches[0].rect.left + 1);
+        CHECK_NEAR(cores[0].rect.right - cores[0].rect.left, 2);
+        // A line's halo spans the bar and a DIP past each side, square; the core a pixel short of
+        // it at both ends.
+        s.paceTickStyle = PaceTickStyle::Line;
+        strip = Strip(s);
+        std::vector<SettingsPreviewOp> halos = OpsOfColor(strip, 0xC0000000);
+        cores = OpsOfColor(strip, 0xFFDEDEDE);
+        tracks = OpsOfColor(strip, 0x46808080);
+        CHECK_NEAR(halos[0].rect.top, tracks[0].rect.top - 1);
+        CHECK_NEAR(halos[0].rect.bottom - halos[0].rect.top, 10);
+        CHECK_NEAR(halos[0].radius, 0);
+        CHECK_NEAR(cores[0].rect.top, halos[0].rect.top + 1);
+        CHECK_NEAR(cores[0].rect.bottom, halos[0].rect.bottom - 1);
+        CHECK_NEAR(cores[0].rect.left, halos[0].rect.left + 1);
+        CHECK_NEAR(cores[0].radius, 0);
+        // Vertical bars: a notch hangs from the left edge, its core flush with it.
+        s.paceTickStyle = PaceTickStyle::Notch;
+        s.barLayout = BarLayout::Vertical;
+        strip = Strip(s);
+        notches = OpsOfColor(strip, 0xC0000000);
+        cores = OpsOfColor(strip, 0xFFDEDEDE);
+        tracks = OpsOfColor(strip, 0x46808080);
+        CHECK_NEAR(notches[0].rect.left, tracks[0].rect.left - 1);
+        CHECK_NEAR(notches[0].rect.right - notches[0].rect.left, 7);
+        CHECK_NEAR(cores[0].rect.left, notches[0].rect.left);
+        CHECK_NEAR(cores[0].rect.right - cores[0].rect.left, 6);
+        CHECK_NEAR(cores[0].rect.top, notches[0].rect.top + 1);
+
+        // Vertical bars fill upward: start corners at the bottom, the highlight on the left.
+        s = {};
+        s.barLayout = BarLayout::Vertical;
+        strip = Strip(s);
+        shaded = fills(strip);
+        CHECK(shaded[0].shadeLeft && (*shaded[0].corners == Corners{0, 0, 2, 2}));
+        CHECK_NEAR(shaded[0].rect.bottom - shaded[0].rect.top, 25);
+        CHECK_NEAR(shaded[0].rect.bottom, OpsOfColor(strip, 0x46808080)[0].rect.bottom);
+
+        // Thin rail: a 2 DIP rail centred across the 8 DIP bar, fills rounded at both ends, ticks
+        // within the bar.
+        s = {};
+        s.barStyle = BarStyle::Rail;
+        strip = Strip(s);
+        std::vector<SettingsPreviewOp> rails = OpsOfColor(strip, 0x66808080);
+        shaded = fills(strip);
+        CHECK(rails.size() == 10 && OpsOfColor(strip, 0x46808080).empty() && shaded.size() == 10);
+        CHECK_NEAR(rails[0].rect.right - rails[0].rect.left, 100);
+        CHECK_NEAR(rails[0].rect.bottom - rails[0].rect.top, 2);
+        CHECK_NEAR(rails[0].rect.top, shaded[0].rect.top + 3);
+        CHECK_NEAR(rails[0].radius, 1);
+        CHECK((*shaded[0].corners == Corners{2, 2, 2, 2}));
+        auto [railTop, railHeight] = span(polygons(strip)[0]);
+        CHECK_NEAR(railTop, shaded[0].rect.top);
+        CHECK_NEAR(railHeight, 8);
+        // A line over the rail spans the bar: 1 px halo corners, 0.5 px core corners.
+        s.paceTickStyle = PaceTickStyle::Line;
+        strip = Strip(s);
+        halos = OpsOfColor(strip, 0xC0000000);
+        cores = OpsOfColor(strip, 0xFFDEDEDE);
+        CHECK_NEAR(halos[0].rect.top, fills(strip)[0].rect.top);
+        CHECK_NEAR(halos[0].rect.bottom - halos[0].rect.top, 8);
+        CHECK_NEAR(halos[0].radius, 1);
+        CHECK_NEAR(cores[0].rect.bottom - cores[0].rect.top, 6);
+        CHECK_NEAR(cores[0].radius, 0.5);
+        s.paceTickStyle = PaceTickStyle::Caret;
+        // Vertical rails stand centred across the bar.
+        s.barLayout = BarLayout::Vertical;
+        strip = Strip(s);
+        rails = OpsOfColor(strip, 0x66808080);
+        CHECK_NEAR(rails[0].rect.right - rails[0].rect.left, 2);
+        CHECK_NEAR(rails[0].rect.left, fills(strip)[0].rect.left + 3);
+    });
+
+    Run("preview: the default pace color turns dark with a light halo on a light taskbar", [] {
+        auto strip = [](const Settings& settings, bool light) {
+            return SettingsPreviewLayout(TestGraphics(), settings, 48, 1, kNow, false, light,
+                                         light ? 0xE4000000 : 0xFFFFFFFF);
+        };
+        Settings s;
+        SettingsPreviewStrip lightStrip = strip(s, true);
+        size_t marks = OpsOfColor(strip(s, false), 0xFFDEDEDE).size();
+        CHECK(marks > 0 && OpsOfColor(lightStrip, 0xFFDEDEDE).empty());
+        CHECK(OpsOfColor(lightStrip, 0xFF1A1A1A).size() == marks);
+        CHECK(OpsOfColor(lightStrip, 0x80FFFFFF).size() == marks && OpsOfColor(lightStrip, 0xC0000000).empty());
+        s.paceTickStyle = PaceTickStyle::Line;
+        CHECK(OpsOfColor(strip(s, true), 0xFF1A1A1A).size() == marks);
+        // A chosen color stays, with the dark halo.
+        s.paceTickColor = RGB(0xFF, 0x6E, 0xC7);
+        lightStrip = strip(s, true);
+        CHECK(OpsOfColor(lightStrip, 0xFFFF6EC7).size() == marks && OpsOfColor(lightStrip, 0xC0000000).size() == marks);
+        // Ring dots keep the configured color.
+        s = {};
+        s.barLayout = BarLayout::SegmentedRing;
+        CHECK(!OpsOfColor(strip(s, true), 0xFFDEDEDE).empty() && OpsOfColor(strip(s, true), 0xFF1A1A1A).empty());
+    });
+
+    Run("controller: the bar style commits as chosen and the preview follows", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Projection().barStyle == BarStyle::Track);
+        CHECK(edits.Commit(0, SettingsField::BarStyle, int(BarStyle::Rail)) == 0);
+        CHECK(store.settings.barStyle == BarStyle::Rail);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(SettingsField::BarStyle, 1)});
+        CHECK(OpsOfColor(Strip(edits.Projection()), 0x66808080).size() == 10);
+        // Out-of-range choices clamp to a style the preview draws.
+        CHECK(edits.Commit(0, SettingsField::BarStyle, 7) == 0 && store.settings.barStyle == BarStyle::Rail);
+        CHECK(edits.Commit(0, SettingsField::BarStyle, -3) == 0 && store.settings.barStyle == BarStyle::Track);
+        // The Layout reset brings back the full track.
+        CHECK(edits.Commit(0, SettingsField::BarStyle, int(BarStyle::Rail)) == 0);
+        CHECK(edits.Reset(SettingsField::ResetLayout) == 0 && store.settings.barStyle == BarStyle::Track);
+    });
+
     Run("preview: extreme and out-of-range settings stay drawable and bounded", [] {
         Settings large;
         large.barLength = 500;
@@ -359,6 +549,9 @@ static void RunLayoutTests() {
             CHECK(card.kind == UiItemKind::Gallery && card.selected == (i == 0) && card.action.value == i);
         }
         CHECK(Control(frame, SettingsField::BarLayout, 2).text == L"Segmented ring");
+        const UiItem& barStyle = Control(frame, SettingsField::BarStyle);
+        CHECK(barStyle.kind == UiItemKind::Dropdown && barStyle.text == L"Full track" && barStyle.options.size() == 2 &&
+              barStyle.options[1].text == L"Thin rail" && barStyle.options[1].value == int(BarStyle::Rail));
         const UiItem& length = Control(frame, SettingsField::BarLength, 1);
         CHECK(length.kind == UiItemKind::Slider && length.minimum == 10 && length.maximum == 500 &&
               length.action.value == 100);
@@ -418,6 +611,7 @@ static void RunLayoutTests() {
         CHECK(HasText(frame, L"Account identity is set per account in Accounts"));
         CHECK(HasText(frame, L"Dots mark how much"));
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
+              !UiFindItem(frame, SettingsControlId(SettingsField::BarStyle)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickStyle)));
         CHECK(Control(frame, SettingsField::BarLayout, 3).selected);
 

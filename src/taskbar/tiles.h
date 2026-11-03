@@ -54,7 +54,7 @@ static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
     }
     int* applied = index < (int)state.applied.size() ? &state.applied[index].highlight : nullptr;
     if (applied && *applied == level) return;
-    TilePalette palette = TilePaletteFor(state.tileLightTheme);
+    TilePalette palette = TilePaletteFor(state.lightTheme);
     try {
         ui.column.Background(SolidColorBrush(ArgbColor(level == 2 ? palette.open :
                                                        level == 1 ? palette.hover : 0)));

@@ -66,7 +66,8 @@ regenerates.
   state, a lifted dragged card, the reorder target, a drag's in-place card moves matching a rebuild
   of nine accounts). `fixtures/layout.inc`: slider input, the
   Layout fields and reset group, the projection the preview reads, the preview strip model
-  (`settings/preview.h`: column geometry, hover, pace marks, overflow, extreme settings), the
+  (`settings/preview.h`: column geometry, hover, pace marks, bar styles with their shaded fills and
+  tick overhang, the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), threshold
   ordering in the projection and after a save (the test store's `normalize` hook), the Display

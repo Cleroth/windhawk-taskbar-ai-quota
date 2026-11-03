@@ -36,26 +36,27 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool verticalBars = settings.barLayout == BarLayout::Vertical;
     // Tiles follow the layout the grid was built with.
     bool tileLayout = IsTileLayout(state.buildBarLayout);
-    bool lightTiles = state.tileLightTheme;
-    if (tileLayout) {
-        // Tile chrome matches the taskbar text color that the tiles' logo and text inherit, like
-        // the bars' labels: dark text means a light taskbar. Else the tree's theme.
-        try {
-            SolidColorBrush text{nullptr};
-            for (auto const& refs : state.accountRefs) {
-                if (!refs.tile.warn) continue;
-                text = refs.tile.warn.Foreground().try_as<SolidColorBrush>();
-                break;
-            }
-            if (text) {
-                auto c = text.Color();
-                lightTiles = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
-            } else {
-                lightTiles = state.quotaGrid.ActualTheme() == ElementTheme::Light;
-            }
-        } catch (...) {}
-        state.tileLightTheme = lightTiles;
-    }
+    // Tile chrome and the bars' default pace tick match the taskbar text color that the tiles'
+    // logo and text and the bars' labels inherit: dark text means a light taskbar. Else the
+    // tree's theme.
+    bool light = state.lightTheme;
+    try {
+        SolidColorBrush text{nullptr};
+        for (auto const& refs : state.accountRefs) {
+            TextBlock const& inherits = tileLayout ? refs.tile.warn : refs.label;
+            if (!inherits) continue;
+            text = inherits.Foreground().try_as<SolidColorBrush>();
+            break;
+        }
+        if (text) {
+            auto c = text.Color();
+            light = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
+        } else {
+            light = state.quotaGrid.ActualTheme() == ElementTheme::Light;
+        }
+    } catch (...) {}
+    state.lightTheme = light;
+    BarGeometry bar = BarGeometryFor(display);
     FlyoutPopup& flyout = state.flyout.popup;
     try {
         for (size_t i = 0; i < data.size(); i++) {
@@ -86,9 +87,19 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
             int barMask = meters.barMask;
             if (tileLayout) {
-                UpdateAccountTile(state, i, meters, display, lightTiles);
+                UpdateAccountTile(state, i, meters, display, light);
                 UpdateTileHighlight(state, (int)i);
             } else {
+                int paceLight = light ? 1 : 0;
+                if (paceLight != ap.paceLight) {
+                    if (ui.paceCore && ui.paceHalo) {
+                        PaceMarkColors colors = PaceMarkColorsFor(display.paceTickColor, light);
+                        ui.paceCore.Color(ArgbColor(colors.core));
+                        ui.paceHalo.Color(ArgbColor(colors.halo));
+                    }
+                    ap.paceLight = paceLight;
+                }
+
                 if (barMask != ap.barMask) {
                     int visibleCount = 0;
                     for (int w = 0; w < kQuotaBarCount; w++) {
@@ -130,13 +141,38 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     QuotaMeter& m = meters.quotas[w];
-                    if (m.fillPx != ap.fillPx[w] || m.color != ap.fillColor[w]) {
+                    if (m.fillPx != ap.fillPx[w]) {
                         if (ui.fills[w]) {
-                            if (verticalBars) ui.fills[w].Height(m.fillPx);
-                            else ui.fills[w].Width(m.fillPx);
-                            ui.fills[w].Background(SolidColorBrush(ArgbColor(m.color)));
+                            // Start corners round with the track; vertical bars fill upward.
+                            double start = bar.radius, end = m.fillEndRadius;
+                            if (verticalBars) {
+                                ui.fills[w].Height(m.fillPx);
+                                ui.fills[w].CornerRadius({end, end, start, start});
+                            } else {
+                                ui.fills[w].Width(m.fillPx);
+                                ui.fills[w].CornerRadius({start, end, end, start});
+                            }
                         }
                         ap.fillPx[w] = m.fillPx;
+                    }
+                    if (m.color != ap.fillColor[w]) {
+                        if (ui.fills[w]) {
+                            // Shaded across the bar: the highlight at its top (vertical: left)
+                            // edge, the usage color from 60% on.
+                            LinearGradientBrush shade;
+                            shade.StartPoint({0.f, 0.f});
+                            shade.EndPoint(verticalBars ? winrt::Windows::Foundation::Point{1.f, 0.f} :
+                                                          winrt::Windows::Foundation::Point{0.f, 1.f});
+                            GradientStop top;
+                            top.Color(ArgbColor(UsageHighlight(m.color)));
+                            top.Offset(0.0);
+                            GradientStop body;
+                            body.Color(ArgbColor(m.color));
+                            body.Offset(0.6);
+                            shade.GradientStops().Append(top);
+                            shade.GradientStops().Append(body);
+                            ui.fills[w].Background(shade);
+                        }
                         ap.fillColor[w] = m.color;
                     }
 
@@ -151,9 +187,15 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                     if (paceVisible && m.pacePx != ap.pacePx[w]) {
                         if (ui.paceTicks[w]) {
+                            // Centred ticks reach past both sides by the overhang. A notch hangs
+                            // from the top (vertical: left) one; its far margin keeps its layout
+                            // size within the bar, so layout never clips its halo.
+                            double top = -bar.overhang;
+                            double bottom = display.paceTickStyle == PaceTickStyle::Notch ?
+                                std::min(0.0, display.barThickness - bar.paceCrossSize - top) : top;
                             ui.paceTicks[w].Margin(verticalBars ?
-                                Thickness{0, 0, 0, (double)m.pacePx} :
-                                Thickness{(double)m.pacePx, 0, 0, 0});
+                                Thickness{top, 0, bottom, (double)m.pacePx} :
+                                Thickness{(double)m.pacePx, top, 0, bottom});
                         }
                         ap.pacePx[w] = m.pacePx;
                     }

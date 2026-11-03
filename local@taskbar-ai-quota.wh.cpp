@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.0.1
+// @version         2.1.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -46,7 +46,8 @@ local app or CLI session, which must remain running.
 - **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
   quotas, tile identity, history recording, and sign-in. Removing an account deletes its
   sign-in and, if you choose, its history.
-- **Layout:** Tile style with a live taskbar preview, sizes, labels, pace markers, and spacing.
+- **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
+  labels, pace markers, and spacing.
 - **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
@@ -221,6 +222,12 @@ enum class BarLayout {
     LogoHeadline,
 };
 
+// How Stacked and Vertical bars draw behind their fill.
+enum class BarStyle {
+    Track,  // A full-thickness track; the fill's end toward 100% is a straight cut.
+    Rail,   // A thin centred rail under a full-thickness fill.
+};
+
 static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
@@ -281,6 +288,7 @@ struct Settings {
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;
+    BarStyle barStyle = BarStyle::Track;
     // Segmented and concentric ring diameter and stroke, in DIPs; rendering shrinks the stroke
     // and gaps further when the meters wouldn't fit around the identity.
     int ringSize = 32;
@@ -450,6 +458,7 @@ struct AppliedState {
     std::array<uint32_t, kQuotaBarCount> fillColor{0, 0, 0, 0};
     std::array<int, kQuotaBarCount> pacePx{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> paceVisible{-1, -1, -1, -1};
+    int paceLight = -1;  // Bars' pace tick colors for a light (1) or dark (0) taskbar.
     std::array<int, kQuotaBarCount> percentAlignments{-1, -1, -1, -1};
     std::array<int, kQuotaBarCount> percentDark{-1, -1, -1, -1};
     std::array<std::wstring, kQuotaBarCount> percentTexts;
@@ -536,6 +545,9 @@ struct AccountUiRefs {
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
     std::array<Border, kQuotaBarCount> paceTicks{
         Border{nullptr}, Border{nullptr}, Border{nullptr}, Border{nullptr}};
+    // Bars' pace tick core and halo, shared by the account's ticks; recolored with the theme.
+    SolidColorBrush paceCore{nullptr};
+    SolidColorBrush paceHalo{nullptr};
     std::array<TextBlock, kQuotaBarCount> percents{
         TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     TextBlock label{nullptr};
@@ -698,7 +710,8 @@ struct QuotaUiInstance {
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
     double taskbarHeight = 0;  // DIPs, measured at build for tile layouts; 0 if unknown.
-    bool tileLightTheme = false;  // Light taskbar at the last tile update; picks highlight colors.
+    // Light taskbar at the last update; picks tile chrome and the bars' default pace tick colors.
+    bool lightTheme = false;
     Grid quotaGrid{nullptr};
     Panel injectionParent{nullptr};
     ColumnDefinition quotaColumnDefinition{nullptr};
@@ -5679,7 +5692,7 @@ static FlyoutTheme LoadFlyoutTheme() {
 
 // src/taskbar/meter-model.h
 // Meter model: what every quota meter shows (fill, usage color, pace mark, text) and the tile,
-// ring and pace tick geometry, as plain values from explicit inputs. Pure: no XAML, WinRT,
+// ring, bar and pace tick geometry and colors, as plain values from explicit inputs. Pure: no XAML, WinRT,
 // window, registry or global state; colors are ARGB. Renderers own measuring, theme detection,
 // fonts and applied-state caching.
 //
@@ -5715,6 +5728,73 @@ static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int oran
     if (pct >= orangeThreshold) return 0xFFFB8C00;
     if (pct >= yellowThreshold) return 0xFFFDD835;
     return 0xFF43A047;
+}
+
+// A bar fill's highlight: the usage color 0.06 lighter in OKLCH lightness with the same hue and
+// chroma, the chroma reduced only as far as sRGB requires. Fills shade from it at their top edge
+// (vertical bars: left) to the usage color 60% across. Alpha is kept.
+static uint32_t UsageHighlight(uint32_t argb) {
+    auto linear = [](uint32_t channel) {
+        double c = channel / 255.0;
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    double r = linear(argb >> 16 & 0xFF), g = linear(argb >> 8 & 0xFF), b = linear(argb & 0xFF);
+    double l = std::cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    double m = std::cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    double s = std::cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    double lightness = std::min(0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s + 0.06, 0.999);
+    double okA = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+    double okB = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+    // Linear sRGB of the lifted color with its chroma scaled by `k`.
+    auto lifted = [&](double k) {
+        double l3 = lightness + 0.3963377774 * okA * k + 0.2158037573 * okB * k;
+        double m3 = lightness - 0.1055613458 * okA * k - 0.0638541728 * okB * k;
+        double s3 = lightness - 0.0894841775 * okA * k - 1.2914855480 * okB * k;
+        l3 = l3 * l3 * l3;
+        m3 = m3 * m3 * m3;
+        s3 = s3 * s3 * s3;
+        return std::array<double, 3>{4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+                                     -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+                                     -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3};
+    };
+    auto inside = [&](double k) {
+        auto rgb = lifted(k);
+        return std::all_of(rgb.begin(), rgb.end(), [](double c) { return c >= -1e-4 && c <= 1 + 1e-4; });
+    };
+    double k = 1;
+    if (!inside(1)) {
+        double outside = 1;
+        k = 0;
+        for (int i = 0; i < 30; i++) {
+            double mid = (k + outside) / 2;
+            (inside(mid) ? k : outside) = mid;
+        }
+    }
+    auto encode = [](double c) {
+        c = std::clamp(c, 0.0, 1.0);
+        c = c <= 0.0031308 ? 12.92 * c : 1.055 * std::pow(c, 1 / 2.4) - 0.055;
+        return (uint32_t)std::clamp(std::lround(c * 255), 0L, 255L);
+    };
+    auto rgb = lifted(k);
+    return (argb & 0xFF000000) | encode(rgb[0]) << 16 | encode(rgb[1]) << 8 | encode(rgb[2]);
+}
+
+// Bar layouts' unfilled track, or their thin rail.
+static constexpr uint32_t kBarTrackColor = 0x46808080;
+static constexpr uint32_t kBarRailColor = 0x66808080;
+
+// Bar layouts' pace tick: a core over a halo. The default color turns dark on a light taskbar; a
+// chosen color stays.
+struct PaceMarkColors {
+    uint32_t core, halo;
+};
+
+static PaceMarkColors PaceMarkColorsFor(COLORREF color, bool light) {
+    color &= 0x00FFFFFF;
+    if (light && color == kDefaultPaceTickColor) return {0xFF1A1A1A, 0x80FFFFFF};
+    return {0xFF000000 | uint32_t(GetRValue(color)) << 16 | uint32_t(GetGValue(color)) << 8 |
+                GetBValue(color),
+            0xC0000000};
 }
 
 // Ring geometry. The centre keeps at least kTileRingHoleMin of radius so the identity always
@@ -5820,6 +5900,8 @@ struct MeterDisplay {
     BarMode barMode;
     int barLength;            // 10-500 DIPs.
     int barThickness;         // 2-50 DIPs.
+    int barGap;               // 0-500 DIPs.
+    BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
     int yellowThreshold;      // 0-100, yellow <= orange <= red.
@@ -5850,6 +5932,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .barMode = settings.barMode,
         .barLength = std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
+        .barGap = std::clamp(settings.barGap, 0, 500),
+        .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
         .yellowThreshold = yellow,
@@ -5963,34 +6047,71 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     }
 }
 
-// Bar layouts' pace tick and percent text placement, in DIPs along and across the bar. Pixel
-// details scale with 1 / rasterizationScale.
+// Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
+// the bar. Pixel details scale with 1 / rasterizationScale.
 struct BarGeometry {
     struct Point {
         double along, cross;
     };
-    double paceLength;     // Pace tick outline.
-    double paceCrossSize;
-    double paceRadius;     // Corner radius; dots only.
-    double coreLength;     // Line, notch and dot core, centred in the outline.
+    double radius;         // Track and fill corners.
+    double rail;           // Thin rail thickness, centred across the bar; 0 with a full track.
+    // How far the pace tick reaches past the bar across it: on both sides, or a notch's near side.
+    double overhang;
+    double paceLength;     // Pace tick outline (the halo).
+    double paceCrossSize;  // Overhang included.
+    double paceRadius;     // Corner radius: dots, and lines over a thin rail.
+    // Line, notch and dot core: centred along the outline, `coreCrossOffset` from its top
+    // (vertical bars: left) edge. A notch's core is flush with its outer end.
+    double coreLength;
     double coreCrossSize;
-    double coreRadius;     // Dots only.
+    double coreCrossOffset;
+    double coreRadius;
     std::array<std::array<Point, 12>, 2> caret;  // Caret outline, then core polygon.
     double textInset;      // Percent text shift away from its aligned edge.
 };
 
 static BarGeometry BarGeometryFor(const MeterDisplay& display) {
-    double pixel = 1.0 / display.rasterizationScale;
+    double scale = display.rasterizationScale;
+    double pixel = 1.0 / scale;
     PaceTickStyle style = display.paceTickStyle;
+    bool track = display.barStyle == BarStyle::Track;
     BarGeometry g{};
+    g.radius = display.barThickness / 4.0;
+    g.rail = track ? 0 : std::max(1.0, (double)std::lround(display.barThickness / 4.0));
+    // Over a full track, ticks other than dots reach past the bar: a DIP's worth of whole device
+    // pixels, at most half the bar gap.
+    if (track && style != PaceTickStyle::Dot) {
+        g.overhang = std::min(std::lround(scale), std::lround(display.barGap * scale) / 2) * pixel;
+    }
     g.paceLength = (style == PaceTickStyle::Caret ? 5 : 4) * pixel;
-    g.paceCrossSize = style == PaceTickStyle::Notch ?
-                          std::max(2.0, std::ceil(display.barThickness * 0.6)) :
-                      style == PaceTickStyle::Dot ? 4 * pixel : display.barThickness;
-    g.paceRadius = style == PaceTickStyle::Dot ? 2 * pixel : 0;
     g.coreLength = (style == PaceTickStyle::Dot ? 3 : 2) * pixel;
-    g.coreCrossSize = style == PaceTickStyle::Dot ? 3 * pixel : g.paceCrossSize;
-    g.coreRadius = style == PaceTickStyle::Dot ? 1.5 * pixel : 0;
+    switch (style) {
+        case PaceTickStyle::Line:
+            // The halo wraps the core: a pixel beyond it at both ends.
+            g.paceCrossSize = display.barThickness + 2 * g.overhang;
+            g.coreCrossSize = std::max(g.paceCrossSize - 2 * pixel, 0.0);
+            g.coreCrossOffset = pixel;
+            g.paceRadius = track ? 0 : pixel;
+            g.coreRadius = track ? 0 : 0.5 * pixel;
+            break;
+        case PaceTickStyle::Notch:
+            // From the overhang's outer edge into the bar; the halo a pixel deeper than the core.
+            g.coreCrossSize = g.overhang + std::max(2.0, std::ceil(display.barThickness * 0.6));
+            g.paceCrossSize = g.coreCrossSize + pixel;
+            break;
+        case PaceTickStyle::Dot:
+            g.paceCrossSize = 4 * pixel;
+            g.coreCrossSize = 3 * pixel;
+            g.coreCrossOffset = 0.5 * pixel;
+            g.paceRadius = 2 * pixel;
+            g.coreRadius = 1.5 * pixel;
+            break;
+        case PaceTickStyle::Caret:
+        default:
+            g.paceCrossSize = display.barThickness + 2 * g.overhang;
+            g.coreCrossSize = g.paceCrossSize;
+            break;
+    }
     // Caret: a bracket of two caps joined by a stem, a dark halo around the core.
     double length = g.paceLength;
     double cross = g.paceCrossSize;
@@ -6073,6 +6194,9 @@ struct QuotaMeter {
 
     // Bars, in DIPs along the bar.
     int fillPx = 0;
+    // The fill's corner radius toward 100%; its start corners take BarGeometry::radius. Over a
+    // full track the fill ends in a straight cut until it reaches the track's rounded end.
+    double fillEndRadius = 0;
     int pacePx = 0;            // Pace tick's start.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
@@ -6193,13 +6317,14 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             m.fillPx = displayed > 0 ?
                 std::clamp((int)std::lround(display.barLength * displayed / 100.0), 2,
                            display.barLength) : 0;
+            m.fillEndRadius = display.barStyle == BarStyle::Rail ? bar.radius :
+                std::max(0.0, bar.radius - (display.barLength - m.fillPx));
             if (m.paceVisible) {
                 // Centred on the pace, kept inside the bar's rounded ends.
                 double pacePct = remainingMode ? remainingFraction * 100.0 :
                                                  (1.0 - remainingFraction) * 100.0;
                 pacePct = std::clamp(pacePct, 0.0, 100.0);
-                double radius = std::clamp(std::max(1.0, display.barThickness / 2.0),
-                                           bar.paceLength / 2.0,
+                double radius = std::clamp(bar.radius, bar.paceLength / 2.0,
                                            (display.barLength - bar.paceLength) / 2.0);
                 double center = std::clamp(display.barLength * pacePct / 100.0,
                                            radius, display.barLength - radius);
@@ -6370,7 +6495,7 @@ static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
     }
     int* applied = index < (int)state.applied.size() ? &state.applied[index].highlight : nullptr;
     if (applied && *applied == level) return;
-    TilePalette palette = TilePaletteFor(state.tileLightTheme);
+    TilePalette palette = TilePaletteFor(state.lightTheme);
     try {
         ui.column.Background(SolidColorBrush(ArgbColor(level == 2 ? palette.open :
                                                        level == 1 ? palette.hover : 0)));
@@ -8362,98 +8487,21 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
                 bars.VerticalAlignment(VerticalAlignment::Center);
 
-                double radius = std::max(1.0, barThickness / 2.0);
+                // Each bar's cell holds its track (or thin rail), fill and pace tick, centred across
+                // it. Ticks reach past the bar through negative margins, which keep them unclipped.
+                double radius = barGeometry.radius;
+                double rail = barGeometry.rail;
+                if (showPaceTicks) {
+                    PaceMarkColors colors = PaceMarkColorsFor(paceTickColor, state.lightTheme);
+                    refs.paceCore = SolidColorBrush(ArgbColor(colors.core));
+                    refs.paceHalo = SolidColorBrush(ArgbColor(colors.halo));
+                }
                 for (int w = 0; w < kQuotaBarCount; w++) {
-                    Border track;
-                    track.Width(verticalBars ? barThickness : barLength);
-                    track.Height(verticalBars ? barLength : barThickness);
-                    track.CornerRadius({radius, radius, radius, radius});
-                    track.HorizontalAlignment(HorizontalAlignment::Center);
-                    track.Background(SolidColorBrush(winrt::Windows::UI::Color{0x46, 0x80, 0x80, 0x80}));
-                    refs.tracks[w] = track;
-
-                    Border fill;
-                    fill.Height(verticalBars ? 0 : barThickness);
-                    fill.Width(verticalBars ? barThickness : 0);
-                    fill.CornerRadius({radius, radius, radius, radius});
-                    fill.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center : HorizontalAlignment::Left);
-                    fill.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom : VerticalAlignment::Center);
-                    fill.Background(SolidColorBrush(winrt::Windows::UI::Color{255, 0x9E, 0x9E, 0x9E}));
-                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Fill_%d_%d", (int)i, w);
-                    fill.Name(name);
-                    refs.fills[w] = fill;
-
-                    Grid trackContent;
-                    trackContent.Children().Append(fill);
-
-                    if (showPaceTicks) {
-                        double paceCrossSize = barGeometry.paceCrossSize;
-                        double paceLength = barGeometry.paceLength;
-                        Border paceTick;
-                        paceTick.Width(verticalBars ? paceCrossSize : paceLength);
-                        paceTick.Height(verticalBars ? paceLength : paceCrossSize);
-                        paceTick.HorizontalAlignment(
-                            verticalBars ? (paceTickStyle == PaceTickStyle::Notch ?
-                                                HorizontalAlignment::Left : HorizontalAlignment::Center) :
-                                           HorizontalAlignment::Left);
-                        paceTick.VerticalAlignment(
-                            verticalBars ? VerticalAlignment::Bottom :
-                                           (paceTickStyle == PaceTickStyle::Notch ?
-                                                VerticalAlignment::Top : VerticalAlignment::Center));
-                        paceTick.Visibility(Visibility::Collapsed);
-                        paceTick.IsHitTestVisible(false);
-
-                        auto tickColor = winrt::Windows::UI::Color{
-                            0xFF, GetRValue(paceTickColor), GetGValue(paceTickColor),
-                            GetBValue(paceTickColor)};
-                        if (paceTickStyle == PaceTickStyle::Caret) {
-                            Grid caretShape;
-                            auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
-                            for (int layer = 0; layer < 2; layer++) {
-                                wuxs::Polygon part;
-                                for (auto [along, cross] : barGeometry.caret[layer]) {
-                                    part.Points().Append(verticalBars ?
-                                        winrt::Windows::Foundation::Point{
-                                            (float)cross, (float)along} :
-                                        winrt::Windows::Foundation::Point{
-                                            (float)along, (float)cross});
-                                }
-                                part.Fill(SolidColorBrush(layer == 1 ? tickColor : haloColor));
-                                caretShape.Children().Append(part);
-                            }
-                            paceTick.Child(caretShape);
-                        } else {
-                            paceTick.Background(
-                                SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
-                            if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = barGeometry.paceRadius;
-                                paceTick.CornerRadius({radius, radius, radius, radius});
-                            }
-
-                            Border paceCore;
-                            double paceCoreCrossSize = barGeometry.coreCrossSize;
-                            double paceCoreLength = barGeometry.coreLength;
-                            paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
-                            paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
-                            paceCore.HorizontalAlignment(HorizontalAlignment::Center);
-                            paceCore.VerticalAlignment(VerticalAlignment::Center);
-                            if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = barGeometry.coreRadius;
-                                paceCore.CornerRadius({radius, radius, radius, radius});
-                            }
-                            paceCore.Background(SolidColorBrush(tickColor));
-                            paceTick.Child(paceCore);
-                        }
-                        refs.paceTicks[w] = paceTick;
-                        trackContent.Children().Append(paceTick);
-                    }
-
-                    track.Child(trackContent);
-
                     Grid barItem;
                     double compactLabelFontSize = percentFontSize;
                     barItem.Height(verticalBars ? barLength : barThickness);
                     barItem.HorizontalAlignment(HorizontalAlignment::Center);
+                    int barColumn = 0;
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
@@ -8475,12 +8523,95 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         barLabel.VerticalAlignment(VerticalAlignment::Center);
                         barLabel.Margin({0, -1, 3, 0});
                         barItem.Children().Append(barLabel);
-                        Grid::SetColumn(track, 1);
+                        barColumn = 1;
                     } else {
                         barItem.Width(verticalBars ? barThickness : barLength);
                     }
 
+                    Border track;
+                    double trackThickness = rail > 0 ? rail : barThickness;
+                    double trackRadius = rail > 0 ? rail / 2 : radius;
+                    track.Width(verticalBars ? trackThickness : barLength);
+                    track.Height(verticalBars ? barLength : trackThickness);
+                    track.CornerRadius({trackRadius, trackRadius, trackRadius, trackRadius});
+                    track.HorizontalAlignment(HorizontalAlignment::Center);
+                    track.VerticalAlignment(VerticalAlignment::Center);
+                    track.Background(SolidColorBrush(ArgbColor(rail > 0 ? kBarRailColor : kBarTrackColor)));
+                    Grid::SetColumn(track, barColumn);
                     barItem.Children().Append(track);
+                    refs.tracks[w] = track;
+
+                    Border fill;
+                    fill.Height(verticalBars ? 0 : barThickness);
+                    fill.Width(verticalBars ? barThickness : 0);
+                    fill.CornerRadius({radius, radius, radius, radius});
+                    fill.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center : HorizontalAlignment::Left);
+                    fill.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom : VerticalAlignment::Center);
+                    fill.Background(SolidColorBrush(winrt::Windows::UI::Color{255, 0x9E, 0x9E, 0x9E}));
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Fill_%d_%d", (int)i, w);
+                    fill.Name(name);
+                    Grid::SetColumn(fill, barColumn);
+                    barItem.Children().Append(fill);
+                    refs.fills[w] = fill;
+
+                    if (showPaceTicks) {
+                        double paceCrossSize = barGeometry.paceCrossSize;
+                        double paceLength = barGeometry.paceLength;
+                        bool notch = paceTickStyle == PaceTickStyle::Notch;
+                        Border paceTick;
+                        paceTick.Width(verticalBars ? paceCrossSize : paceLength);
+                        paceTick.Height(verticalBars ? paceLength : paceCrossSize);
+                        paceTick.HorizontalAlignment(
+                            verticalBars && !notch ? HorizontalAlignment::Center : HorizontalAlignment::Left);
+                        paceTick.VerticalAlignment(
+                            verticalBars ? VerticalAlignment::Bottom :
+                                           (notch ? VerticalAlignment::Top : VerticalAlignment::Center));
+                        paceTick.Visibility(Visibility::Collapsed);
+                        paceTick.IsHitTestVisible(false);
+
+                        if (paceTickStyle == PaceTickStyle::Caret) {
+                            Grid caretShape;
+                            for (int layer = 0; layer < 2; layer++) {
+                                wuxs::Polygon part;
+                                for (auto [along, cross] : barGeometry.caret[layer]) {
+                                    part.Points().Append(verticalBars ?
+                                        winrt::Windows::Foundation::Point{
+                                            (float)cross, (float)along} :
+                                        winrt::Windows::Foundation::Point{
+                                            (float)along, (float)cross});
+                                }
+                                part.Fill(layer == 1 ? refs.paceCore : refs.paceHalo);
+                                caretShape.Children().Append(part);
+                            }
+                            paceTick.Child(caretShape);
+                        } else {
+                            paceTick.Background(refs.paceHalo);
+                            double paceRadius = barGeometry.paceRadius;
+                            paceTick.CornerRadius({paceRadius, paceRadius, paceRadius, paceRadius});
+
+                            // Centred along the tick, at its offset across it.
+                            Border paceCore;
+                            double paceCoreCrossSize = barGeometry.coreCrossSize;
+                            double paceCoreLength = barGeometry.coreLength;
+                            double paceCoreOffset = barGeometry.coreCrossOffset;
+                            paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
+                            paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
+                            paceCore.HorizontalAlignment(verticalBars ? HorizontalAlignment::Left :
+                                                                        HorizontalAlignment::Center);
+                            paceCore.VerticalAlignment(verticalBars ? VerticalAlignment::Center :
+                                                                      VerticalAlignment::Top);
+                            paceCore.Margin(verticalBars ? Thickness{paceCoreOffset, 0, 0, 0} :
+                                                           Thickness{0, paceCoreOffset, 0, 0});
+                            double coreRadius = barGeometry.coreRadius;
+                            paceCore.CornerRadius({coreRadius, coreRadius, coreRadius, coreRadius});
+                            paceCore.Background(refs.paceCore);
+                            paceTick.Child(paceCore);
+                        }
+                        Grid::SetColumn(paceTick, barColumn);
+                        barItem.Children().Append(paceTick);
+                        refs.paceTicks[w] = paceTick;
+                    }
+
                     refs.barItems[w] = barItem;
 
                     if (percentTextVisibility != PercentTextVisibility::Never) {
@@ -8913,26 +9044,27 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool verticalBars = settings.barLayout == BarLayout::Vertical;
     // Tiles follow the layout the grid was built with.
     bool tileLayout = IsTileLayout(state.buildBarLayout);
-    bool lightTiles = state.tileLightTheme;
-    if (tileLayout) {
-        // Tile chrome matches the taskbar text color that the tiles' logo and text inherit, like
-        // the bars' labels: dark text means a light taskbar. Else the tree's theme.
-        try {
-            SolidColorBrush text{nullptr};
-            for (auto const& refs : state.accountRefs) {
-                if (!refs.tile.warn) continue;
-                text = refs.tile.warn.Foreground().try_as<SolidColorBrush>();
-                break;
-            }
-            if (text) {
-                auto c = text.Color();
-                lightTiles = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
-            } else {
-                lightTiles = state.quotaGrid.ActualTheme() == ElementTheme::Light;
-            }
-        } catch (...) {}
-        state.tileLightTheme = lightTiles;
-    }
+    // Tile chrome and the bars' default pace tick match the taskbar text color that the tiles'
+    // logo and text and the bars' labels inherit: dark text means a light taskbar. Else the
+    // tree's theme.
+    bool light = state.lightTheme;
+    try {
+        SolidColorBrush text{nullptr};
+        for (auto const& refs : state.accountRefs) {
+            TextBlock const& inherits = tileLayout ? refs.tile.warn : refs.label;
+            if (!inherits) continue;
+            text = inherits.Foreground().try_as<SolidColorBrush>();
+            break;
+        }
+        if (text) {
+            auto c = text.Color();
+            light = c.R * 299 + c.G * 587 + c.B * 114 < 128 * 1000;
+        } else {
+            light = state.quotaGrid.ActualTheme() == ElementTheme::Light;
+        }
+    } catch (...) {}
+    state.lightTheme = light;
+    BarGeometry bar = BarGeometryFor(display);
     FlyoutPopup& flyout = state.flyout.popup;
     try {
         for (size_t i = 0; i < data.size(); i++) {
@@ -8963,9 +9095,19 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
             int barMask = meters.barMask;
             if (tileLayout) {
-                UpdateAccountTile(state, i, meters, display, lightTiles);
+                UpdateAccountTile(state, i, meters, display, light);
                 UpdateTileHighlight(state, (int)i);
             } else {
+                int paceLight = light ? 1 : 0;
+                if (paceLight != ap.paceLight) {
+                    if (ui.paceCore && ui.paceHalo) {
+                        PaceMarkColors colors = PaceMarkColorsFor(display.paceTickColor, light);
+                        ui.paceCore.Color(ArgbColor(colors.core));
+                        ui.paceHalo.Color(ArgbColor(colors.halo));
+                    }
+                    ap.paceLight = paceLight;
+                }
+
                 if (barMask != ap.barMask) {
                     int visibleCount = 0;
                     for (int w = 0; w < kQuotaBarCount; w++) {
@@ -9007,13 +9149,38 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     QuotaMeter& m = meters.quotas[w];
-                    if (m.fillPx != ap.fillPx[w] || m.color != ap.fillColor[w]) {
+                    if (m.fillPx != ap.fillPx[w]) {
                         if (ui.fills[w]) {
-                            if (verticalBars) ui.fills[w].Height(m.fillPx);
-                            else ui.fills[w].Width(m.fillPx);
-                            ui.fills[w].Background(SolidColorBrush(ArgbColor(m.color)));
+                            // Start corners round with the track; vertical bars fill upward.
+                            double start = bar.radius, end = m.fillEndRadius;
+                            if (verticalBars) {
+                                ui.fills[w].Height(m.fillPx);
+                                ui.fills[w].CornerRadius({end, end, start, start});
+                            } else {
+                                ui.fills[w].Width(m.fillPx);
+                                ui.fills[w].CornerRadius({start, end, end, start});
+                            }
                         }
                         ap.fillPx[w] = m.fillPx;
+                    }
+                    if (m.color != ap.fillColor[w]) {
+                        if (ui.fills[w]) {
+                            // Shaded across the bar: the highlight at its top (vertical: left)
+                            // edge, the usage color from 60% on.
+                            LinearGradientBrush shade;
+                            shade.StartPoint({0.f, 0.f});
+                            shade.EndPoint(verticalBars ? winrt::Windows::Foundation::Point{1.f, 0.f} :
+                                                          winrt::Windows::Foundation::Point{0.f, 1.f});
+                            GradientStop top;
+                            top.Color(ArgbColor(UsageHighlight(m.color)));
+                            top.Offset(0.0);
+                            GradientStop body;
+                            body.Color(ArgbColor(m.color));
+                            body.Offset(0.6);
+                            shade.GradientStops().Append(top);
+                            shade.GradientStops().Append(body);
+                            ui.fills[w].Background(shade);
+                        }
                         ap.fillColor[w] = m.color;
                     }
 
@@ -9028,9 +9195,15 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     }
                     if (paceVisible && m.pacePx != ap.pacePx[w]) {
                         if (ui.paceTicks[w]) {
+                            // Centred ticks reach past both sides by the overhang. A notch hangs
+                            // from the top (vertical: left) one; its far margin keeps its layout
+                            // size within the bar, so layout never clips its halo.
+                            double top = -bar.overhang;
+                            double bottom = display.paceTickStyle == PaceTickStyle::Notch ?
+                                std::min(0.0, display.barThickness - bar.paceCrossSize - top) : top;
                             ui.paceTicks[w].Margin(verticalBars ?
-                                Thickness{0, 0, 0, (double)m.pacePx} :
-                                Thickness{(double)m.pacePx, 0, 0, 0});
+                                Thickness{top, 0, bottom, (double)m.pacePx} :
+                                Thickness{(double)m.pacePx, top, 0, bottom});
                         }
                         ap.pacePx[w] = m.pacePx;
                     }
@@ -10150,9 +10323,10 @@ static void UiFillRect(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_REC
     }
 }
 
-// A linear gradient across the rectangle, left to right or top to bottom.
-static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_RECT_F rect,
-                           float radius, D2D1_COLOR_F from, D2D1_COLOR_F to, bool vertical) {
+// A brush shading from `from` at its start point to `to` at its end point, clamped beyond them
+// (interpolated in sRGB, as XAML does). Callers set both points.
+static ID2D1LinearGradientBrush* UiGradientBrush(ID2D1RenderTarget* target, UiTargetCache& cache,
+                                                 D2D1_COLOR_F from, D2D1_COLOR_F to) {
     auto& brush = cache.gradients[uint64_t(UiColorKey(from)) << 32 | UiColorKey(to)];
     if (!brush) {
         const D2D1_GRADIENT_STOP stops[] = {{0, from}, {1, to}};
@@ -10164,11 +10338,18 @@ static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1
         winrt::check_hresult(target->CreateLinearGradientBrush(&line, &properties, collection.get(),
                                                                brush.put()));
     }
+    return brush.get();
+}
+
+// A linear gradient across the rectangle, left to right or top to bottom.
+static void UiFillGradient(ID2D1RenderTarget* target, UiTargetCache& cache, D2D1_RECT_F rect,
+                           float radius, D2D1_COLOR_F from, D2D1_COLOR_F to, bool vertical) {
+    ID2D1LinearGradientBrush* brush = UiGradientBrush(target, cache, from, to);
     brush->SetStartPoint({rect.left, rect.top});
     brush->SetEndPoint(vertical ? D2D1_POINT_2F{rect.left, rect.bottom} :
                                   D2D1_POINT_2F{rect.right, rect.top});
     D2D1_ROUNDED_RECT rounded{rect, radius, radius};
-    target->FillRoundedRectangle(&rounded, brush.get());
+    target->FillRoundedRectangle(&rounded, brush);
 }
 
 // A border of `pixels` device pixels drawn inside the snapped rectangle.
@@ -14908,6 +15089,9 @@ static bool NormalizeSettings(Settings* s) {
     if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::LogoHeadline) {
         s->barLayout = BarLayout::Stacked;
     }
+    if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
+        s->barStyle = BarStyle::Track;
+    }
     if (s->labelPosition < LabelPosition::Hidden ||
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
@@ -14984,6 +15168,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
+        setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
         setNumber(L"ringThickness", s.ringThickness);
         setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" :
@@ -15098,6 +15283,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
+        s.barStyle = GetStr(root, L"barStyle") == L"rail" ? BarStyle::Rail : BarStyle::Track;
         // Clamp before the int conversion; 0 (non-positive or non-finite) restores the default
         // during normalization.
         double ringSize = GetNum(root, L"ringSize", 32);
@@ -16035,6 +16221,7 @@ enum class SettingsField : uint8_t {
     HistoryRange,   // The range the usage history window opens on: a HistoryUiRange
     // Layout
     BarLayout,        // Tile style: a BarLayout
+    BarStyle,         // A BarStyle
     BarLength,
     BarThickness,
     BarGap,
@@ -16131,14 +16318,15 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
         case SettingsField::ResetLayout:
-            return {SettingsField::BarLayout,     SettingsField::BarLength,
-                    SettingsField::BarThickness,  SettingsField::BarGap,
-                    SettingsField::RingSize,      SettingsField::RingThickness,
-                    SettingsField::LabelPosition, SettingsField::LabelFontSize,
-                    SettingsField::LabelGap,      SettingsField::ShowBarLabels,
-                    SettingsField::PercentFontSize, SettingsField::ShowPaceTicks,
-                    SettingsField::PaceTickStyle, SettingsField::PaceTickColor,
-                    SettingsField::AccountMargin, SettingsField::RightMargin};
+            return {SettingsField::BarLayout,       SettingsField::BarStyle,
+                    SettingsField::BarLength,       SettingsField::BarThickness,
+                    SettingsField::BarGap,          SettingsField::RingSize,
+                    SettingsField::RingThickness,   SettingsField::LabelPosition,
+                    SettingsField::LabelFontSize,   SettingsField::LabelGap,
+                    SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
+                    SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
+                    SettingsField::PaceTickColor,   SettingsField::AccountMargin,
+                    SettingsField::RightMargin};
         case SettingsField::ResetDisplay:
             return {SettingsField::BarMode,          SettingsField::PercentTextVisibility,
                     SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts,
@@ -16164,6 +16352,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
         case SettingsField::HistoryRange: return int(s.historyDefaultRange);
         case SettingsField::BarLayout: return int(s.barLayout);
+        case SettingsField::BarStyle: return int(s.barStyle);
         case SettingsField::BarLength: return s.barLength;
         case SettingsField::BarThickness: return s.barThickness;
         case SettingsField::BarGap: return s.barGap;
@@ -16223,6 +16412,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::BarLayout:
             s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
             break;
+        case SettingsField::BarStyle:
+            s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
+            break;
         case SettingsField::BarLength: s.barLength = value; break;
         case SettingsField::BarThickness: s.barThickness = value; break;
         case SettingsField::BarGap: s.barGap = value; break;
@@ -16276,6 +16468,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
+            s.barStyle = defaults.barStyle;
             s.barLength = defaults.barLength;
             s.barThickness = defaults.barThickness;
             s.barGap = defaults.barGap;
@@ -17305,6 +17498,13 @@ struct SettingsPreviewOp {
     int hover = -1;                     // Drawn only while this column is hovered; -1: always
     D2D1_RECT_F rect{};                 // Rect, Dot bounds, Text box (aligns in its width), Logo box
     float radius = 0;                   // Rect corners; Arc centerline radius
+    // Rect corners one by one instead (top-left, top-right, bottom-right, bottom-left), scaled
+    // down together where they don't fit
+    std::optional<std::array<float, 4>> corners;
+    // Rect: shaded from this color at the top edge (left with shadeLeft) to `color` 60% across;
+    // 0: flat
+    uint32_t shade = 0;
+    bool shadeLeft = false;
     float stroke = 0;                   // Rect border (inside), Arc width, Dot outline
     uint32_t color = 0;                 // Fill, arc or text color
     uint32_t outline = 0;               // Rect border and Dot outline
@@ -17355,6 +17555,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     const TilePalette palette = TilePaletteFor(light);
     const uint32_t pace = 0xFF000000 | uint32_t(GetRValue(display.paceTickColor)) << 16 |
                           uint32_t(GetGValue(display.paceTickColor)) << 8 | GetBValue(display.paceTickColor);
+    const PaceMarkColors barPace = PaceMarkColorsFor(display.paceTickColor, light);
 
     // Text as XAML lays it out: natural line height, width rounded up to device pixels.
     struct Measured {
@@ -17430,7 +17631,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
 
         if (!IsTileLayout(layout)) {
             // Bars (quota-grid.h): a label beside, above or below a stack of bars; each bar a
-            // track, its fill and pace tick, an optional quota key and the percentage text.
+            // track or thin rail, its fill and pace tick, an optional quota key and the percentage
+            // text.
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -17494,26 +17696,41 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                             barsLeft + (panelWidth - itemWidth) / 2;
                 float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + gap);
                 float tx = itemLeft + (keys ? keyColumn : 0), ty = itemTop;
-                float trackWidth = float(vertical ? th : len), trackHeight = itemHeight;
-                float radius = std::max(1.0f, th / 2.0f);
-                rect(ops, {tx, ty, tx + trackWidth, ty + trackHeight}, radius, 0x46808080);
+                float trackHeight = itemHeight;
+                float radius = float(geometry.radius);
+                // A full track, or a thin rail centred across the bar.
+                float rail = float(geometry.rail), inset = rail > 0 ? (th - rail) / 2 : 0;
+                rect(ops, vertical ? D2D1_RECT_F{tx + inset, ty, tx + th - inset, ty + len} :
+                                     D2D1_RECT_F{tx, ty + inset, tx + len, ty + th - inset},
+                     rail > 0 ? rail / 2 : radius, rail > 0 ? kBarRailColor : kBarTrackColor);
                 if (q.fillPx > 0) {
-                    rect(ops, vertical ? D2D1_RECT_F{tx, ty + len - q.fillPx, tx + th, ty + len} :
-                                         D2D1_RECT_F{tx, ty, tx + q.fillPx, ty + th},
-                         radius, q.color);
+                    // Shaded across the bar; start corners round with the track, vertical bars
+                    // fill upward.
+                    Op fill;
+                    fill.rect = vertical ? D2D1_RECT_F{tx, ty + len - q.fillPx, tx + th, ty + len} :
+                                           D2D1_RECT_F{tx, ty, tx + q.fillPx, ty + th};
+                    float end = float(q.fillEndRadius);
+                    fill.corners = vertical ? std::array<float, 4>{end, end, radius, radius} :
+                                              std::array<float, 4>{radius, end, end, radius};
+                    fill.color = q.color;
+                    fill.shade = UsageHighlight(q.color);
+                    fill.shadeLeft = vertical;
+                    add(ops, std::move(fill));
                 }
                 if (display.showPaceTicks && q.paceVisible) {
+                    // Past the bar's sides by its overhang; a notch only past the top (vertical:
+                    // left) one.
                     bool notch = display.paceTickStyle == PaceTickStyle::Notch;
                     float along = geometry.paceLength, cross = geometry.paceCrossSize;
-                    D2D1_POINT_2F at = vertical ?
-                        D2D1_POINT_2F{notch ? tx : tx + (th - cross) / 2, ty + len - q.pacePx - along} :
-                        D2D1_POINT_2F{tx + q.pacePx, notch ? ty : ty + (th - cross) / 2};
+                    float crossStart = notch ? -float(geometry.overhang) : (th - cross) / 2;
+                    D2D1_POINT_2F at = vertical ? D2D1_POINT_2F{tx + crossStart, ty + len - q.pacePx - along} :
+                                                  D2D1_POINT_2F{tx + q.pacePx, ty + crossStart};
                     if (display.paceTickStyle == PaceTickStyle::Caret) {
-                        // A dark halo polygon, then the core.
+                        // A halo polygon, then the core.
                         for (int layer = 0; layer < 2; layer++) {
                             Op op;
                             op.kind = Op::Kind::Polygon;
-                            op.color = layer ? pace : 0xC0000000;
+                            op.color = layer ? barPace.core : barPace.halo;
                             for (auto [a, c] : geometry.caret[layer]) {
                                 op.points.push_back(vertical ? D2D1_POINT_2F{at.x + float(c), at.y + float(a)} :
                                                                D2D1_POINT_2F{at.x + float(a), at.y + float(c)});
@@ -17523,11 +17740,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     } else {
                         float boxWidth = vertical ? cross : along, boxHeight = vertical ? along : cross;
                         rect(ops, {at.x, at.y, at.x + boxWidth, at.y + boxHeight}, geometry.paceRadius,
-                             0xC0000000);
+                             barPace.halo);
+                        // The core centred along the tick, at its offset across it.
                         float coreWidth = vertical ? geometry.coreCrossSize : geometry.coreLength;
                         float coreHeight = vertical ? geometry.coreLength : geometry.coreCrossSize;
-                        float cx = at.x + (boxWidth - coreWidth) / 2, cy = at.y + (boxHeight - coreHeight) / 2;
-                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, pace);
+                        float offset = float(geometry.coreCrossOffset);
+                        float cx = vertical ? at.x + offset : at.x + (boxWidth - coreWidth) / 2;
+                        float cy = vertical ? at.y + (boxHeight - coreHeight) / 2 : at.y + offset;
+                        rect(ops, {cx, cy, cx + coreWidth, cy + coreHeight}, geometry.coreRadius, barPace.core);
                     }
                 }
                 if (keys) {
@@ -17805,6 +18025,50 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
             const D2D1_RECT_F& r = op.rect;
             switch (op.kind) {
                 case Op::Kind::Rect: {
+                    if (op.corners) {
+                        // Each corner its own radius, like a XAML Border's CornerRadius.
+                        D2D1_RECT_F s = UiSnapRect(r, scale * zoom);
+                        float width = s.right - s.left, height = s.bottom - s.top;
+                        if (width <= 0 || height <= 0) break;
+                        std::array<float, 4> c = *op.corners;
+                        float fit = std::min({1.0f, width / std::max(c[0] + c[1], 1e-3f),
+                                              width / std::max(c[3] + c[2], 1e-3f),
+                                              height / std::max(c[0] + c[3], 1e-3f),
+                                              height / std::max(c[1] + c[2], 1e-3f)});
+                        for (float& corner : c) corner *= fit;
+                        winrt::com_ptr<ID2D1PathGeometry> path;
+                        winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
+                        winrt::com_ptr<ID2D1GeometrySink> sink;
+                        winrt::check_hresult(path->Open(sink.put()));
+                        // A side up to the corner, then its arc.
+                        auto side = [&](D2D1_POINT_2F to, D2D1_POINT_2F arcTo, float radius) {
+                            sink->AddLine(to);
+                            if (radius <= 0) return;
+                            D2D1_ARC_SEGMENT arc{arcTo, {radius, radius}, 0, D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                                                 D2D1_ARC_SIZE_SMALL};
+                            sink->AddArc(&arc);
+                        };
+                        sink->BeginFigure({s.left + c[0], s.top}, D2D1_FIGURE_BEGIN_FILLED);
+                        side({s.right - c[1], s.top}, {s.right, s.top + c[1]}, c[1]);
+                        side({s.right, s.bottom - c[2]}, {s.right - c[2], s.bottom}, c[2]);
+                        side({s.left + c[3], s.bottom}, {s.left, s.bottom - c[3]}, c[3]);
+                        side({s.left, s.top + c[0]}, {s.left + c[0], s.top}, c[0]);
+                        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                        winrt::check_hresult(sink->Close());
+                        ID2D1Brush* brush = nullptr;
+                        if (op.shade) {
+                            ID2D1LinearGradientBrush* gradient = UiGradientBrush(
+                                target, cache, color(op.shade, op.opacity), color(op.color, op.opacity));
+                            gradient->SetStartPoint({s.left, s.top});
+                            gradient->SetEndPoint(op.shadeLeft ? D2D1_POINT_2F{s.left + 0.6f * width, s.top} :
+                                                                 D2D1_POINT_2F{s.left, s.top + 0.6f * height});
+                            brush = gradient;
+                        } else {
+                            brush = UiBrush(target, cache, color(op.color, op.opacity));
+                        }
+                        target->FillGeometry(path.get(), brush, nullptr);
+                        break;
+                    }
                     float radius = std::min({op.radius, (r.right - r.left) / 2, (r.bottom - r.top) / 2});
                     UiFillRect(target, cache, r, radius, color(op.color, op.opacity), scale * zoom);
                     if (op.stroke > 0) {
@@ -17840,8 +18104,13 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                         }
                         sink->EndFigure(D2D1_FIGURE_END_OPEN);
                     } else if (!op.points.empty()) {
-                        sink->BeginFigure(op.points[0], D2D1_FIGURE_BEGIN_FILLED);
-                        for (size_t p = 1; p < op.points.size(); p++) sink->AddLine(op.points[p]);
+                        // On device pixels, like XAML's layout rounding of the tick and its
+                        // pixel-sized parts.
+                        auto snap = [&](D2D1_POINT_2F p) {
+                            return D2D1::Point2F(UiSnap(p.x, scale * zoom), UiSnap(p.y, scale * zoom));
+                        };
+                        sink->BeginFigure(snap(op.points[0]), D2D1_FIGURE_BEGIN_FILLED);
+                        for (size_t p = 1; p < op.points.size(); p++) sink->AddLine(snap(op.points[p]));
                         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                     }
                     winrt::check_hresult(sink->Close());
@@ -18443,9 +18712,17 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddSection(items, id, x, y + 20, width, L"Bars");
         {
             UiCardSpec spec;
+            spec.title = L"Bar style";
+            spec.description = {{L"A full track behind each fill, or a thin rail under it."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::BarStyle, 200,
+                                        {{L"Full track", int(BarStyle::Track)}, {L"Thin rail", int(BarStyle::Rail)}},
+                                        int(s.barStyle));
+        }
+        {
+            UiCardSpec spec;
             spec.title = L"Bar length";
             spec.description = {{L"Pixels along each bar."}};
-            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::BarLength);
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarLength);
         }
         {
             UiCardSpec spec;
@@ -18570,7 +18847,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
             UiCardSpec spec;
             spec.title = L"Marker color";
-            spec.description = {{L"Light grey by default. Custom... opens the color picker."}};
+            spec.description = {{bars ? L"Light grey by default, dark on a light taskbar. Custom... opens the color picker." :
+                                        L"Light grey by default. Custom... opens the color picker."}};
             spec.trailing = {swatches + 16 + buttonWidth, 32};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";
@@ -18619,7 +18897,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
     UiCardSpec reset;
     reset.title = L"Reset Layout to defaults";
-    reset.description = {{L"Tile style, sizes, labels, pace markers and spacing. Accounts are not changed."}};
+    reset.description = {{L"Tile style, bar style, sizes, labels, pace markers and spacing. Accounts are not changed."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
 }
 

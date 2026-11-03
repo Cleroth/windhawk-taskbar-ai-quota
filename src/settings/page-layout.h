@@ -53,9 +53,17 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddSection(items, id, x, y + 20, width, L"Bars");
         {
             UiCardSpec spec;
+            spec.title = L"Bar style";
+            spec.description = {{L"A full track behind each fill, or a thin rail under it."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::BarStyle, 200,
+                                        {{L"Full track", int(BarStyle::Track)}, {L"Thin rail", int(BarStyle::Rail)}},
+                                        int(s.barStyle));
+        }
+        {
+            UiCardSpec spec;
             spec.title = L"Bar length";
             spec.description = {{L"Pixels along each bar."}};
-            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::BarLength);
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarLength);
         }
         {
             UiCardSpec spec;
@@ -180,7 +188,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
             UiCardSpec spec;
             spec.title = L"Marker color";
-            spec.description = {{L"Light grey by default. Custom... opens the color picker."}};
+            spec.description = {{bars ? L"Light grey by default, dark on a light taskbar. Custom... opens the color picker." :
+                                        L"Light grey by default. Custom... opens the color picker."}};
             spec.trailing = {swatches + 16 + buttonWidth, 32};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";
@@ -229,6 +238,6 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
     UiCardSpec reset;
     reset.title = L"Reset Layout to defaults";
-    reset.description = {{L"Tile style, sizes, labels, pace markers and spacing. Accounts are not changed."}};
+    reset.description = {{L"Tile style, bar style, sizes, labels, pace markers and spacing. Accounts are not changed."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
 }

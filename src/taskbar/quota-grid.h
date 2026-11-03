@@ -248,98 +248,21 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
                 bars.VerticalAlignment(VerticalAlignment::Center);
 
-                double radius = std::max(1.0, barThickness / 2.0);
+                // Each bar's cell holds its track (or thin rail), fill and pace tick, centred across
+                // it. Ticks reach past the bar through negative margins, which keep them unclipped.
+                double radius = barGeometry.radius;
+                double rail = barGeometry.rail;
+                if (showPaceTicks) {
+                    PaceMarkColors colors = PaceMarkColorsFor(paceTickColor, state.lightTheme);
+                    refs.paceCore = SolidColorBrush(ArgbColor(colors.core));
+                    refs.paceHalo = SolidColorBrush(ArgbColor(colors.halo));
+                }
                 for (int w = 0; w < kQuotaBarCount; w++) {
-                    Border track;
-                    track.Width(verticalBars ? barThickness : barLength);
-                    track.Height(verticalBars ? barLength : barThickness);
-                    track.CornerRadius({radius, radius, radius, radius});
-                    track.HorizontalAlignment(HorizontalAlignment::Center);
-                    track.Background(SolidColorBrush(winrt::Windows::UI::Color{0x46, 0x80, 0x80, 0x80}));
-                    refs.tracks[w] = track;
-
-                    Border fill;
-                    fill.Height(verticalBars ? 0 : barThickness);
-                    fill.Width(verticalBars ? barThickness : 0);
-                    fill.CornerRadius({radius, radius, radius, radius});
-                    fill.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center : HorizontalAlignment::Left);
-                    fill.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom : VerticalAlignment::Center);
-                    fill.Background(SolidColorBrush(winrt::Windows::UI::Color{255, 0x9E, 0x9E, 0x9E}));
-                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Fill_%d_%d", (int)i, w);
-                    fill.Name(name);
-                    refs.fills[w] = fill;
-
-                    Grid trackContent;
-                    trackContent.Children().Append(fill);
-
-                    if (showPaceTicks) {
-                        double paceCrossSize = barGeometry.paceCrossSize;
-                        double paceLength = barGeometry.paceLength;
-                        Border paceTick;
-                        paceTick.Width(verticalBars ? paceCrossSize : paceLength);
-                        paceTick.Height(verticalBars ? paceLength : paceCrossSize);
-                        paceTick.HorizontalAlignment(
-                            verticalBars ? (paceTickStyle == PaceTickStyle::Notch ?
-                                                HorizontalAlignment::Left : HorizontalAlignment::Center) :
-                                           HorizontalAlignment::Left);
-                        paceTick.VerticalAlignment(
-                            verticalBars ? VerticalAlignment::Bottom :
-                                           (paceTickStyle == PaceTickStyle::Notch ?
-                                                VerticalAlignment::Top : VerticalAlignment::Center));
-                        paceTick.Visibility(Visibility::Collapsed);
-                        paceTick.IsHitTestVisible(false);
-
-                        auto tickColor = winrt::Windows::UI::Color{
-                            0xFF, GetRValue(paceTickColor), GetGValue(paceTickColor),
-                            GetBValue(paceTickColor)};
-                        if (paceTickStyle == PaceTickStyle::Caret) {
-                            Grid caretShape;
-                            auto haloColor = winrt::Windows::UI::Color{0xC0, 0, 0, 0};
-                            for (int layer = 0; layer < 2; layer++) {
-                                wuxs::Polygon part;
-                                for (auto [along, cross] : barGeometry.caret[layer]) {
-                                    part.Points().Append(verticalBars ?
-                                        winrt::Windows::Foundation::Point{
-                                            (float)cross, (float)along} :
-                                        winrt::Windows::Foundation::Point{
-                                            (float)along, (float)cross});
-                                }
-                                part.Fill(SolidColorBrush(layer == 1 ? tickColor : haloColor));
-                                caretShape.Children().Append(part);
-                            }
-                            paceTick.Child(caretShape);
-                        } else {
-                            paceTick.Background(
-                                SolidColorBrush(winrt::Windows::UI::Color{0xC0, 0, 0, 0}));
-                            if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = barGeometry.paceRadius;
-                                paceTick.CornerRadius({radius, radius, radius, radius});
-                            }
-
-                            Border paceCore;
-                            double paceCoreCrossSize = barGeometry.coreCrossSize;
-                            double paceCoreLength = barGeometry.coreLength;
-                            paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
-                            paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
-                            paceCore.HorizontalAlignment(HorizontalAlignment::Center);
-                            paceCore.VerticalAlignment(VerticalAlignment::Center);
-                            if (paceTickStyle == PaceTickStyle::Dot) {
-                                double radius = barGeometry.coreRadius;
-                                paceCore.CornerRadius({radius, radius, radius, radius});
-                            }
-                            paceCore.Background(SolidColorBrush(tickColor));
-                            paceTick.Child(paceCore);
-                        }
-                        refs.paceTicks[w] = paceTick;
-                        trackContent.Children().Append(paceTick);
-                    }
-
-                    track.Child(trackContent);
-
                     Grid barItem;
                     double compactLabelFontSize = percentFontSize;
                     barItem.Height(verticalBars ? barLength : barThickness);
                     barItem.HorizontalAlignment(HorizontalAlignment::Center);
+                    int barColumn = 0;
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
@@ -361,12 +284,95 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         barLabel.VerticalAlignment(VerticalAlignment::Center);
                         barLabel.Margin({0, -1, 3, 0});
                         barItem.Children().Append(barLabel);
-                        Grid::SetColumn(track, 1);
+                        barColumn = 1;
                     } else {
                         barItem.Width(verticalBars ? barThickness : barLength);
                     }
 
+                    Border track;
+                    double trackThickness = rail > 0 ? rail : barThickness;
+                    double trackRadius = rail > 0 ? rail / 2 : radius;
+                    track.Width(verticalBars ? trackThickness : barLength);
+                    track.Height(verticalBars ? barLength : trackThickness);
+                    track.CornerRadius({trackRadius, trackRadius, trackRadius, trackRadius});
+                    track.HorizontalAlignment(HorizontalAlignment::Center);
+                    track.VerticalAlignment(VerticalAlignment::Center);
+                    track.Background(SolidColorBrush(ArgbColor(rail > 0 ? kBarRailColor : kBarTrackColor)));
+                    Grid::SetColumn(track, barColumn);
                     barItem.Children().Append(track);
+                    refs.tracks[w] = track;
+
+                    Border fill;
+                    fill.Height(verticalBars ? 0 : barThickness);
+                    fill.Width(verticalBars ? barThickness : 0);
+                    fill.CornerRadius({radius, radius, radius, radius});
+                    fill.HorizontalAlignment(verticalBars ? HorizontalAlignment::Center : HorizontalAlignment::Left);
+                    fill.VerticalAlignment(verticalBars ? VerticalAlignment::Bottom : VerticalAlignment::Center);
+                    fill.Background(SolidColorBrush(winrt::Windows::UI::Color{255, 0x9E, 0x9E, 0x9E}));
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Fill_%d_%d", (int)i, w);
+                    fill.Name(name);
+                    Grid::SetColumn(fill, barColumn);
+                    barItem.Children().Append(fill);
+                    refs.fills[w] = fill;
+
+                    if (showPaceTicks) {
+                        double paceCrossSize = barGeometry.paceCrossSize;
+                        double paceLength = barGeometry.paceLength;
+                        bool notch = paceTickStyle == PaceTickStyle::Notch;
+                        Border paceTick;
+                        paceTick.Width(verticalBars ? paceCrossSize : paceLength);
+                        paceTick.Height(verticalBars ? paceLength : paceCrossSize);
+                        paceTick.HorizontalAlignment(
+                            verticalBars && !notch ? HorizontalAlignment::Center : HorizontalAlignment::Left);
+                        paceTick.VerticalAlignment(
+                            verticalBars ? VerticalAlignment::Bottom :
+                                           (notch ? VerticalAlignment::Top : VerticalAlignment::Center));
+                        paceTick.Visibility(Visibility::Collapsed);
+                        paceTick.IsHitTestVisible(false);
+
+                        if (paceTickStyle == PaceTickStyle::Caret) {
+                            Grid caretShape;
+                            for (int layer = 0; layer < 2; layer++) {
+                                wuxs::Polygon part;
+                                for (auto [along, cross] : barGeometry.caret[layer]) {
+                                    part.Points().Append(verticalBars ?
+                                        winrt::Windows::Foundation::Point{
+                                            (float)cross, (float)along} :
+                                        winrt::Windows::Foundation::Point{
+                                            (float)along, (float)cross});
+                                }
+                                part.Fill(layer == 1 ? refs.paceCore : refs.paceHalo);
+                                caretShape.Children().Append(part);
+                            }
+                            paceTick.Child(caretShape);
+                        } else {
+                            paceTick.Background(refs.paceHalo);
+                            double paceRadius = barGeometry.paceRadius;
+                            paceTick.CornerRadius({paceRadius, paceRadius, paceRadius, paceRadius});
+
+                            // Centred along the tick, at its offset across it.
+                            Border paceCore;
+                            double paceCoreCrossSize = barGeometry.coreCrossSize;
+                            double paceCoreLength = barGeometry.coreLength;
+                            double paceCoreOffset = barGeometry.coreCrossOffset;
+                            paceCore.Width(verticalBars ? paceCoreCrossSize : paceCoreLength);
+                            paceCore.Height(verticalBars ? paceCoreLength : paceCoreCrossSize);
+                            paceCore.HorizontalAlignment(verticalBars ? HorizontalAlignment::Left :
+                                                                        HorizontalAlignment::Center);
+                            paceCore.VerticalAlignment(verticalBars ? VerticalAlignment::Center :
+                                                                      VerticalAlignment::Top);
+                            paceCore.Margin(verticalBars ? Thickness{paceCoreOffset, 0, 0, 0} :
+                                                           Thickness{0, paceCoreOffset, 0, 0});
+                            double coreRadius = barGeometry.coreRadius;
+                            paceCore.CornerRadius({coreRadius, coreRadius, coreRadius, coreRadius});
+                            paceCore.Background(refs.paceCore);
+                            paceTick.Child(paceCore);
+                        }
+                        Grid::SetColumn(paceTick, barColumn);
+                        barItem.Children().Append(paceTick);
+                        refs.paceTicks[w] = paceTick;
+                    }
+
                     refs.barItems[w] = barItem;
 
                     if (percentTextVisibility != PercentTextVisibility::Never) {
