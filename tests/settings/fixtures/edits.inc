@@ -239,14 +239,23 @@ static void RunEditTests() {
         CHECK(s.historyRetentionDays == 30 && SettingsFieldValue(s, kKeep) == 30);
         SettingsAssign(s, kRetention, 99999);
         CHECK(s.historyRetentionDays == 3650);
+        // The history window's default range: 7 days, choices clamped to 24 hours and All retained.
+        CHECK(SettingsFieldValue(s, SettingsField::HistoryRange) == int(HistoryUiRange::Week));
+        SettingsAssign(s, SettingsField::HistoryRange, int(HistoryUiRange::Month));
+        CHECK(s.historyDefaultRange == HistoryUiRange::Month);
+        SettingsAssign(s, SettingsField::HistoryRange, 99);
+        CHECK(s.historyDefaultRange == HistoryUiRange::All);
+        SettingsAssign(s, SettingsField::HistoryRange, -1);
+        CHECK(s.historyDefaultRange == HistoryUiRange::Day);
         s.historyEnabled = false;
         s.enableNotifications = false;
         SettingsAssign(s, SettingsField::ResetBehavior, 0);
         CHECK(s.taskbarMonitorMode == TaskbarMonitorMode::Primary && s.taskbarMonitorNumber == 1);
         CHECK(s.showDetailsOnHover && s.pollMinutes == 10 && s.enableNotifications);
         CHECK(!s.historyEnabled && s.historyRetentionDays == 3650);  // Not Behavior's
+        CHECK(s.historyDefaultRange == HistoryUiRange::Day);
         SettingsAssign(s, SettingsField::ResetHistory, 0);
-        CHECK(s.historyEnabled && s.historyRetentionDays == 0);
+        CHECK(s.historyEnabled && s.historyRetentionDays == 0 && s.historyDefaultRange == HistoryUiRange::Week);
     });
 
     Run("projection: valid drafts show; invalid, empty and overflowing text keeps the last valid value", [] {
@@ -608,6 +617,13 @@ static void RunPageTests() {
         view.retentionCustom = false;
         CHECK(HasText(frame, view.status.historyFolder));
         CHECK(Control(frame, SettingsField::OpenHistory).text == L"Open usage history");
+        // The default time span: 7 days by default, every range of the window, also while recording is off.
+        const UiItem& span = Control(frame, SettingsField::HistoryRange);
+        CHECK(span.kind == UiItemKind::Dropdown && span.enabled && span.text == L"7 days");
+        CHECK(span.options.size() == 5 && span.options[0].text == L"24 hours" &&
+              span.options[0].value == int(HistoryUiRange::Day) && span.options[4].text == L"All retained" &&
+              span.options[4].value == int(HistoryUiRange::All));
+        CHECK(HasText(frame, L"open on 7 days"));
         CHECK(Control(frame, SettingsField::OpenHistoryFolder).icon == L"\uE838");
         const UiItem& info = Control(frame, kRetention, 8);
         CHECK(UiLinkRun(info.runs, 0)->action.value == int(SettingsUiPage::Accounts));
@@ -615,9 +631,12 @@ static void RunPageTests() {
 
         view.settings.historyEnabled = false;
         view.settings.historyRetentionDays = 1500;
+        view.settings.historyDefaultRange = HistoryUiRange::Quarter;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(HasText(frame, L"\u25CB Off"));
+        CHECK(Control(frame, SettingsField::HistoryRange).enabled &&
+              Control(frame, SettingsField::HistoryRange).text == L"90 days");
         CHECK(!Control(frame, kKeep).enabled && Control(frame, kKeep).text == L"Custom");
         CHECK(!Control(frame, kRetention).enabled && Control(frame, kRetention).text == L"1,500");
         CHECK(HasText(frame, L"Turn on Record usage history to change this."));

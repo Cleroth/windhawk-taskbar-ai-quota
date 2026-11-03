@@ -104,8 +104,8 @@ regenerates.
   (the controller against `TestHistoryOps`: in-memory request, journal with its stamp and peek
   contract, settings with polls, clock, unload, posted refresh messages, the deferral timer and
   the consent transaction, with an operation log; open requests before and after the window is
-  published, repeated and unlisted requests, removed accounts, per-mode views, the range under
-  week comparison, close and unload with a request pending, and the view it fills; orchestration
+  published, repeated and unlisted requests, removed accounts, per-mode views, the settings'
+  default range on open, the range under week comparison, close and unload with a request pending, and the view it fills; orchestration
   only, never the production ops or the opener-to-window bridge),
   `fixtures/history-refresh.inc` (live refresh: one post per batch of notifications, the live and
   sample parts by the journal's stamp, empty versus no replacement, status-only changes, failed

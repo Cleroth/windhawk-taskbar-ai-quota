@@ -76,6 +76,9 @@ static bool NormalizeSettings(Settings* s) {
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
     s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
+    if (s->historyDefaultRange < HistoryUiRange::Day || s->historyDefaultRange > HistoryUiRange::All) {
+        s->historyDefaultRange = HistoryUiRange::Week;
+    }
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
@@ -161,6 +164,10 @@ static std::wstring SerializeSettings(const Settings& s) {
         // Forever is its own key: builds without it read the longest day count instead.
         setNumber(L"historyRetentionDays", s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650);
         setBool(L"historyKeepForever", s.historyRetentionDays <= 0);
+        setString(L"historyDefaultRange", s.historyDefaultRange == HistoryUiRange::Day ? L"day" :
+                                          s.historyDefaultRange == HistoryUiRange::Month ? L"month" :
+                                          s.historyDefaultRange == HistoryUiRange::Quarter ? L"quarter" :
+                                          s.historyDefaultRange == HistoryUiRange::All ? L"all" : L"week");
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
@@ -270,6 +277,11 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.historyRetentionDays = getBoolDefault(L"historyKeepForever", false) ? 0 :
                                  std::isfinite(retentionDays) ?
                                      (int)std::clamp(retentionDays, 1.0, 3650.0) : 90;
+        std::wstring historyDefaultRange = GetStr(root, L"historyDefaultRange");
+        s.historyDefaultRange = historyDefaultRange == L"day" ? HistoryUiRange::Day :
+                                historyDefaultRange == L"month" ? HistoryUiRange::Month :
+                                historyDefaultRange == L"quarter" ? HistoryUiRange::Quarter :
+                                historyDefaultRange == L"all" ? HistoryUiRange::All : HistoryUiRange::Week;
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);

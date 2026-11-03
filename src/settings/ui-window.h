@@ -276,7 +276,8 @@ struct SettingsUiClient final : UiHostClient {
                                 L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
                                 L"additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
-                                L"Windows user and history is kept forever. Saved history stays.";
+                                L"Windows user, history is kept forever and the usage history window "
+                                L"opens on 7 days. Saved history stays.";
                         if (Ask(host, question.c_str(), L"Reset settings",
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {

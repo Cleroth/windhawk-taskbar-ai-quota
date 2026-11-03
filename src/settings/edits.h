@@ -24,6 +24,7 @@ enum class SettingsField : uint8_t {
     RecordHistory,  // This Windows user's recording consent
     KeepHistory,    // The retention: days, or 0 for forever
     RetentionDays,  // A day count's custom days; changes nothing while kept forever
+    HistoryRange,   // The range the usage history window opens on: a HistoryUiRange
     // Layout
     BarLayout,        // Tile style: a BarLayout
     BarLength,
@@ -119,7 +120,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
                     SettingsField::SkipHiddenPolling, SettingsField::Notifications};
         case SettingsField::ResetHistory:
-            return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays};
+            return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
+                    SettingsField::HistoryRange};
         case SettingsField::ResetLayout:
             return {SettingsField::BarLayout,     SettingsField::BarLength,
                     SettingsField::BarThickness,  SettingsField::BarGap,
@@ -152,6 +154,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RecordHistory: return s.historyEnabled;
         case SettingsField::KeepHistory: return s.historyRetentionDays;
         case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
+        case SettingsField::HistoryRange: return int(s.historyDefaultRange);
         case SettingsField::BarLayout: return int(s.barLayout);
         case SettingsField::BarLength: return s.barLength;
         case SettingsField::BarThickness: return s.barThickness;
@@ -205,6 +208,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::RetentionDays:
             // Only Keep history leaves forever: the window asks first.
             if (s.historyRetentionDays > 0) s.historyRetentionDays = value;
+            break;
+        case SettingsField::HistoryRange:
+            s.historyDefaultRange = HistoryUiRange(std::clamp(value, int(HistoryUiRange::Day), int(HistoryUiRange::All)));
             break;
         case SettingsField::BarLayout:
             s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
@@ -289,6 +295,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ResetHistory:
             s.historyEnabled = defaults.historyEnabled;
             s.historyRetentionDays = defaults.historyRetentionDays;
+            s.historyDefaultRange = defaults.historyDefaultRange;
             break;
         default: break;
     }

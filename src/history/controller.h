@@ -128,8 +128,8 @@ struct HistoryController {
     HistoryOps* ops;
     HistoryUiView view;
 
-    // Selection (0: All accounts), each mode's view, the range and the week comparison (it forces
-    // 7 days; the range stays for afterwards)
+    // Selection (0: All accounts), each mode's view, the range (from the settings' default when the
+    // window opens) and the week comparison (it forces 7 days; the range stays for afterwards)
     uint64_t selectedId = 0;
     HistoryView allView = HistoryView::Weekly, accountView = HistoryView::AllMeters;
     HistoryUiRange range = HistoryUiRange::Week;
@@ -192,11 +192,13 @@ struct HistoryController {
     // cancelled): nothing loads or acts any more, and an operation ends at its next step
     bool closeRequested = false;
 
-    // The window opened: until the first load, the pill and the configured accounts come from the
-    // settings alone. The open request waits for that load.
+    // The window opened, on the settings' default range: until the first load, the pill and the
+    // configured accounts come from the settings alone. The open request waits for that load.
     void Open() {
         if (closeRequested || ops->Unloading()) return;
-        if (Adopt(ops->ReadSettings(), nullptr, 0, 0, 0, 0, 0)) Compose();
+        HistorySettingsSnapshot read = ops->ReadSettings();
+        range = read.settings.historyDefaultRange;
+        if (Adopt(std::move(read), nullptr, 0, 0, 0, 0, 0)) Compose();
     }
 
     // An explicit load (the first one, activation, refresh, a range or comparison change, after
@@ -464,7 +466,8 @@ struct HistoryController {
             L"Reading the charts\r\n"
             L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or "
             L"All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, "
-            L"one account on All meters; each keeps its view until the window closes. Weekly follows each Anthropic "
+            L"one account on All meters; each keeps its view until the window closes. The window opens on the "
+            L"Default time span set in Settings > History. Weekly follows each Anthropic "
             L"account's taskbar weekly selections; removed accounts keep both weeklies, and All meters includes "
             L"weeklies hidden on the taskbar. Antigravity Gemini and Claude/GPT quotas share the matching short-term "
             L"and weekly views. Each quota keeps its own line and resets; overlapping limits are never added or "

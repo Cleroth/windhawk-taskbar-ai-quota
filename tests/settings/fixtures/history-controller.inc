@@ -250,6 +250,31 @@ static void RunHistoryControllerTests() {
         CHECK(c.view.pill == HistoryUiPill::Recording);
     });
 
+    Run("history controller: the window opens on the settings' default range; a later default leaves "
+        "the open window's range", [] {
+        TestHistoryOps ops = TestControllerOps();
+        ops.settings.settings.historyDefaultRange = HistoryUiRange::Month;
+        HistoryController c(ops);
+        c.Open();
+        CHECK(c.range == HistoryUiRange::Month && c.view.range == HistoryUiRange::Month);
+        c.Load();
+        CHECK(ops.log.back() == L"snapshot 30d" && c.from == kWeekTo - 30 * kHistoryDayMs);
+        // A new default arrives as a settings notification, then with a load: the range stays.
+        ops.settings.settings.historyDefaultRange = HistoryUiRange::Day;
+        c.Notify();
+        c.ProcessRefresh(false, false);
+        CHECK(c.settings.settings.historyDefaultRange == HistoryUiRange::Day && c.view.range == HistoryUiRange::Month);
+        c.Load();
+        CHECK(ops.log.back() == L"snapshot 30d" && c.view.range == HistoryUiRange::Month);
+        // The user's range wins until the window opens again.
+        c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Quarter));
+        CHECK(ops.log.back() == L"snapshot 90d" && c.view.range == HistoryUiRange::Quarter);
+        HistoryController reopened(ops);
+        reopened.Open();
+        reopened.Load();
+        CHECK(ops.log.back() == L"snapshot 1d" && reopened.view.range == HistoryUiRange::Day);
+    });
+
     Run("history controller: a request stored before the window is published is the first load's; one "
         "after it the activation's load; loads without one keep the selection", [] {
         TestHistoryOps ops = TestControllerOps();

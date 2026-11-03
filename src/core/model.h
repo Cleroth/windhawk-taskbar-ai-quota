@@ -87,6 +87,9 @@ enum class PaceTickStyle {
 
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 
+// Usage history window ranges: 24 hours, 7, 30 and 90 days, and every retained day.
+enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
+
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
@@ -99,6 +102,8 @@ struct Settings {
     bool historyEnabled = true;
     // Days of usage history kept; 0: forever, with neither the age limit nor the size cap.
     int historyRetentionDays = 0;
+    // The range the usage history window opens on.
+    HistoryUiRange historyDefaultRange = HistoryUiRange::Week;
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;

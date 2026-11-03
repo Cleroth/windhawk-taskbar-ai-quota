@@ -70,7 +70,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
   - do not poll hidden accounts (on by default; overrides per-account history recording)
   - threshold notifications (toast when an account crosses the red threshold)
-- **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, and the storage folder
+- **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, the time span the usage history window opens on (24 hours, **7 days** by default, 30 days, 90 days, or All retained), and the storage folder
 - **About**: version, project links, credits, and license
 
 Sizes and thresholds combine a slider with a number box; spacing, polling, retention, and credits use number boxes with step buttons. Changes save as you make them; a number or text box saves on Enter or when you leave it, and Esc reverts it. A value that can't be saved stays in its box with the error, and closing the window then asks before discarding it. Layout, Display, Behavior, and History each have a reset that restores that page's defaults without touching accounts or sign-ins.
@@ -91,8 +91,9 @@ state and storage errors stay visible in the main window.
 
 - **All accounts** overlays separately labeled quota lines on one graph; quotas are never
   summed or reduced to a maximum. The view selector offers **Short-term**, **Weekly**,
-  **Extra usage**, and **All meters**, defaulting to **Weekly** over **24 hours**. Ranges include
-  24 hours, 7 days, 30 days, 90 days, and **All retained**.
+  **Extra usage**, and **All meters**, defaulting to **Weekly**. Ranges include 24 hours, 7 days,
+  30 days, 90 days, and **All retained**; the window opens on **Settings > History > Default time
+  span** (7 days by default).
   - **Short-term** includes regular short-window quotas and Antigravity Gemini and Claude/GPT
     short pools. Labels distinguish reported durations (1h, 3h, or 5h), unknown durations, and
     windows that vary within the displayed range.
@@ -206,7 +207,9 @@ Forever); **Custom** then shows 3650 days.
 
 With multiple accounts and retained readings, check:
 
-- A newly opened viewer defaults to All accounts, Weekly, and 24 hours. Switch among Short-term,
+- A newly opened viewer defaults to All accounts, Weekly, and the Default time span (7 days after
+  an upgrade or a fresh install). Choose another span in Settings: the open viewer keeps its
+  range, a newly opened one starts on the new span; Reset History restores 7 days. Switch among Short-term,
   Weekly, Extra usage, and All meters; verify the listed quota groups and separate labels,
   including known and unknown short durations. All meters must keep percentages, USD, and
   credits on separate axes. Quotas must not be summed or collapsed to a maximum.

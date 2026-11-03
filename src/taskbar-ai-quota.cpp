@@ -57,7 +57,8 @@ Open **Usage history...** from the taskbar context menu or Settings > History. C
 quota timelines on one graph with color-coded account lines, overlay the preceding week,
 view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samples;
 history starts when recording starts, with no backfill.
-All accounts defaults to Weekly over the past 24 hours; choose Short-term for short quotas.
+All accounts defaults to Weekly over the past 7 days (set the time span in Settings > History);
+choose Short-term for short quotas.
 Weekly follows each Anthropic account's taskbar weekly selections. All meters is available
 for all accounts or a single account (its default), including weeklies hidden on the taskbar.
 Percentages, USD, and credits use separate axes. Connected samples use lines only; dots keep

@@ -1,5 +1,5 @@
-// Settings > History: this user's recording with its live status, retention, the viewer and the
-// storage folder (approved mockup history.png). Pure builder.
+// Settings > History: this user's recording with its live status, retention, the viewer with the
+// range it opens on, and the storage folder (approved mockup history.png). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
@@ -79,6 +79,18 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
         y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistory,
                                   L"Open usage history", L"\uE81C");
     }
+    {
+        UiCardSpec spec;
+        spec.title = L"Default time span";
+        spec.description = {{L"The range the usage history window opens on. Its range buttons still switch it."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HistoryRange, 200,
+                                    {{L"24 hours", int(HistoryUiRange::Day)},
+                                     {L"7 days", int(HistoryUiRange::Week)},
+                                     {L"30 days", int(HistoryUiRange::Month)},
+                                     {L"90 days", int(HistoryUiRange::Quarter)},
+                                     {L"All retained", int(HistoryUiRange::All)}},
+                                    int(s.historyDefaultRange));
+    }
 
     // Storage
     y = UiAddSection(items, id, x, y + 20, width, L"Storage");
@@ -94,7 +106,8 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 
     UiCardSpec reset;
     reset.title = L"Reset History to defaults";
-    reset.description = {{L"Recording on for this Windows user, keep history forever. Saved history stays."}};
+    reset.description = {{L"Recording on for this Windows user, keep history forever, open on 7 days. "
+                          L"Saved history stays."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
                                  SettingsField::ResetHistory, L"Reset");
 }

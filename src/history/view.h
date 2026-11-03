@@ -2,8 +2,7 @@
 // content.h), the ids and commands of its controls, the compact display formats and the summary
 // cards built from a series set (history/series.h). Pure.
 
-// Range segments: 24 hours, 7, 30 and 90 days, and every retained day.
-enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
+// Range segments, by HistoryUiRange (core/model.h).
 static constexpr PCWSTR kHistoryUiRangeNames[] = {L"24h", L"7d", L"30d", L"90d", L"All"};
 
 // The header's status pill: Recording (with the retention), Waiting (recording on while the

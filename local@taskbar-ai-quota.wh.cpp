@@ -60,7 +60,8 @@ Open **Usage history...** from the taskbar context menu or Settings > History. C
 quota timelines on one graph with color-coded account lines, overlay the preceding week,
 view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samples;
 history starts when recording starts, with no backfill.
-All accounts defaults to Weekly over the past 24 hours; choose Short-term for short quotas.
+All accounts defaults to Weekly over the past 7 days (set the time span in Settings > History);
+choose Short-term for short quotas.
 Weekly follows each Anthropic account's taskbar weekly selections. All meters is available
 for all accounts or a single account (its default), including weeklies hidden on the taskbar.
 Percentages, USD, and credits use separate axes. Connected samples use lines only; dots keep
@@ -260,6 +261,9 @@ enum class PaceTickStyle {
 
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 
+// Usage history window ranges: 24 hours, 7, 30 and 90 days, and every retained day.
+enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
+
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
@@ -272,6 +276,8 @@ struct Settings {
     bool historyEnabled = true;
     // Days of usage history kept; 0: forever, with neither the age limit nor the size cap.
     int historyRetentionDays = 0;
+    // The range the usage history window opens on.
+    HistoryUiRange historyDefaultRange = HistoryUiRange::Week;
     bool skipHiddenPolling = true;
     int barLength = 100;
     int barThickness = 8;
@@ -14883,6 +14889,9 @@ static bool NormalizeSettings(Settings* s) {
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
     s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
+    if (s->historyDefaultRange < HistoryUiRange::Day || s->historyDefaultRange > HistoryUiRange::All) {
+        s->historyDefaultRange = HistoryUiRange::Week;
+    }
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
@@ -14968,6 +14977,10 @@ static std::wstring SerializeSettings(const Settings& s) {
         // Forever is its own key: builds without it read the longest day count instead.
         setNumber(L"historyRetentionDays", s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650);
         setBool(L"historyKeepForever", s.historyRetentionDays <= 0);
+        setString(L"historyDefaultRange", s.historyDefaultRange == HistoryUiRange::Day ? L"day" :
+                                          s.historyDefaultRange == HistoryUiRange::Month ? L"month" :
+                                          s.historyDefaultRange == HistoryUiRange::Quarter ? L"quarter" :
+                                          s.historyDefaultRange == HistoryUiRange::All ? L"all" : L"week");
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
         setNumber(L"barThickness", s.barThickness);
@@ -15077,6 +15090,11 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.historyRetentionDays = getBoolDefault(L"historyKeepForever", false) ? 0 :
                                  std::isfinite(retentionDays) ?
                                      (int)std::clamp(retentionDays, 1.0, 3650.0) : 90;
+        std::wstring historyDefaultRange = GetStr(root, L"historyDefaultRange");
+        s.historyDefaultRange = historyDefaultRange == L"day" ? HistoryUiRange::Day :
+                                historyDefaultRange == L"month" ? HistoryUiRange::Month :
+                                historyDefaultRange == L"quarter" ? HistoryUiRange::Quarter :
+                                historyDefaultRange == L"all" ? HistoryUiRange::All : HistoryUiRange::Week;
         s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
@@ -16014,6 +16032,7 @@ enum class SettingsField : uint8_t {
     RecordHistory,  // This Windows user's recording consent
     KeepHistory,    // The retention: days, or 0 for forever
     RetentionDays,  // A day count's custom days; changes nothing while kept forever
+    HistoryRange,   // The range the usage history window opens on: a HistoryUiRange
     // Layout
     BarLayout,        // Tile style: a BarLayout
     BarLength,
@@ -16109,7 +16128,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
             return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
                     SettingsField::SkipHiddenPolling, SettingsField::Notifications};
         case SettingsField::ResetHistory:
-            return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays};
+            return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
+                    SettingsField::HistoryRange};
         case SettingsField::ResetLayout:
             return {SettingsField::BarLayout,     SettingsField::BarLength,
                     SettingsField::BarThickness,  SettingsField::BarGap,
@@ -16142,6 +16162,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::RecordHistory: return s.historyEnabled;
         case SettingsField::KeepHistory: return s.historyRetentionDays;
         case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
+        case SettingsField::HistoryRange: return int(s.historyDefaultRange);
         case SettingsField::BarLayout: return int(s.barLayout);
         case SettingsField::BarLength: return s.barLength;
         case SettingsField::BarThickness: return s.barThickness;
@@ -16195,6 +16216,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::RetentionDays:
             // Only Keep history leaves forever: the window asks first.
             if (s.historyRetentionDays > 0) s.historyRetentionDays = value;
+            break;
+        case SettingsField::HistoryRange:
+            s.historyDefaultRange = HistoryUiRange(std::clamp(value, int(HistoryUiRange::Day), int(HistoryUiRange::All)));
             break;
         case SettingsField::BarLayout:
             s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::LogoHeadline)));
@@ -16279,6 +16303,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ResetHistory:
             s.historyEnabled = defaults.historyEnabled;
             s.historyRetentionDays = defaults.historyRetentionDays;
+            s.historyDefaultRange = defaults.historyDefaultRange;
             break;
         default: break;
     }
@@ -18248,8 +18273,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
 }
 
 // src/settings/page-history.h
-// Settings > History: this user's recording with its live status, retention, the viewer and the
-// storage folder (approved mockup history.png). Pure builder.
+// Settings > History: this user's recording with its live status, retention, the viewer with the
+// range it opens on, and the storage folder (approved mockup history.png). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
@@ -18329,6 +18354,18 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
         y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistory,
                                   L"Open usage history", L"\uE81C");
     }
+    {
+        UiCardSpec spec;
+        spec.title = L"Default time span";
+        spec.description = {{L"The range the usage history window opens on. Its range buttons still switch it."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HistoryRange, 200,
+                                    {{L"24 hours", int(HistoryUiRange::Day)},
+                                     {L"7 days", int(HistoryUiRange::Week)},
+                                     {L"30 days", int(HistoryUiRange::Month)},
+                                     {L"90 days", int(HistoryUiRange::Quarter)},
+                                     {L"All retained", int(HistoryUiRange::All)}},
+                                    int(s.historyDefaultRange));
+    }
 
     // Storage
     y = UiAddSection(items, id, x, y + 20, width, L"Storage");
@@ -18344,7 +18381,8 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 
     UiCardSpec reset;
     reset.title = L"Reset History to defaults";
-    reset.description = {{L"Recording on for this Windows user, keep history forever. Saved history stays."}};
+    reset.description = {{L"Recording on for this Windows user, keep history forever, open on 7 days. "
+                          L"Saved history stays."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
                                  SettingsField::ResetHistory, L"Reset");
 }
@@ -19571,7 +19609,8 @@ struct SettingsUiClient final : UiHostClient {
                                 L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
                                 L"additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
-                                L"Windows user and history is kept forever. Saved history stays.";
+                                L"Windows user, history is kept forever and the usage history window "
+                                L"opens on 7 days. Saved history stays.";
                         if (Ask(host, question.c_str(), L"Reset settings",
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {
@@ -20463,8 +20502,7 @@ static constexpr UINT_PTR kHistoryDeferralTimer = 0x4E01;
 // content.h), the ids and commands of its controls, the compact display formats and the summary
 // cards built from a series set (history/series.h). Pure.
 
-// Range segments: 24 hours, 7, 30 and 90 days, and every retained day.
-enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
+// Range segments, by HistoryUiRange (core/model.h).
 static constexpr PCWSTR kHistoryUiRangeNames[] = {L"24h", L"7d", L"30d", L"90d", L"All"};
 
 // The header's status pill: Recording (with the retention), Waiting (recording on while the
@@ -21477,8 +21515,8 @@ struct HistoryController {
     HistoryOps* ops;
     HistoryUiView view;
 
-    // Selection (0: All accounts), each mode's view, the range and the week comparison (it forces
-    // 7 days; the range stays for afterwards)
+    // Selection (0: All accounts), each mode's view, the range (from the settings' default when the
+    // window opens) and the week comparison (it forces 7 days; the range stays for afterwards)
     uint64_t selectedId = 0;
     HistoryView allView = HistoryView::Weekly, accountView = HistoryView::AllMeters;
     HistoryUiRange range = HistoryUiRange::Week;
@@ -21541,11 +21579,13 @@ struct HistoryController {
     // cancelled): nothing loads or acts any more, and an operation ends at its next step
     bool closeRequested = false;
 
-    // The window opened: until the first load, the pill and the configured accounts come from the
-    // settings alone. The open request waits for that load.
+    // The window opened, on the settings' default range: until the first load, the pill and the
+    // configured accounts come from the settings alone. The open request waits for that load.
     void Open() {
         if (closeRequested || ops->Unloading()) return;
-        if (Adopt(ops->ReadSettings(), nullptr, 0, 0, 0, 0, 0)) Compose();
+        HistorySettingsSnapshot read = ops->ReadSettings();
+        range = read.settings.historyDefaultRange;
+        if (Adopt(std::move(read), nullptr, 0, 0, 0, 0, 0)) Compose();
     }
 
     // An explicit load (the first one, activation, refresh, a range or comparison change, after
@@ -21813,7 +21853,8 @@ struct HistoryController {
             L"Reading the charts\r\n"
             L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or "
             L"All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, "
-            L"one account on All meters; each keeps its view until the window closes. Weekly follows each Anthropic "
+            L"one account on All meters; each keeps its view until the window closes. The window opens on the "
+            L"Default time span set in Settings > History. Weekly follows each Anthropic "
             L"account's taskbar weekly selections; removed accounts keep both weeklies, and All meters includes "
             L"weeklies hidden on the taskbar. Antigravity Gemini and Claude/GPT quotas share the matching short-term "
             L"and weekly views. Each quota keeps its own line and resets; overlapping limits are never added or "
