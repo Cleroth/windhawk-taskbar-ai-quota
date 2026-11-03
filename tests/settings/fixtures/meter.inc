@@ -857,20 +857,21 @@ static void RunTileTests() {
     });
 
     Run("logo size and the number badge's box", [] {
-        // The box: per character 0.6 of the 9 DIP badge size, the cap height 0.7 of it, and the
-        // 1 DIP outline around both: 7.4 x 8.3 DIPs for one character, 12.8 wide for two.
+        // The box: per character 0.6 of the badge size, the cap height 0.7 of it, and the 1 DIP
+        // outline around both: at 9 DIPs, 7.4 x 8.3 DIPs for one character, 12.8 wide for two.
         MeterDisplay d = Display();
-        CHECK(d.badgeSize == 9 && d.badgeOffsetX == 0 && d.badgeOffsetY == 0); CHECK_NEAR(d.logoScale, 1);
+        CHECK(d.badgeSize == 13 && d.badgeOffsetX == 0 && d.badgeOffsetY == 0); CHECK_NEAR(d.logoScale, 1);
         CHECK(d.badgeColor == RGB(0x4C, 0xC2, 0xFF));
         CHECK(Display(With([](Settings& s) { s.badgeColor = 0xAB123456; })).badgeColor == 0x123456);
         // Logos in the text color by default; the brand choices pass through.
         CHECK(d.logoBrands == LogoBrands{});
         CHECK((Display(With([](Settings& s) { s.logoBrands.gemini = true; })).logoBrands == LogoBrands{false, true}));
-        BadgeBox one = LogoBadgeBox(d, 15, 1);
+        MeterDisplay nine = Display(With([](Settings& s) { s.badgeSize = 9; }));
+        BadgeBox one = LogoBadgeBox(nine, 15, 1);
         CHECK_NEAR(one.width, 7.4); CHECK_NEAR(one.height, 8.3);
         // Beside bars: centred on the 15 DIP logo's lower-right corner.
         CHECK_NEAR(one.left, 15 - 3.7); CHECK_NEAR(one.top, 15 - 4.15);
-        CHECK_NEAR(LogoBadgeBox(d, 15, 2).width, 12.8); CHECK_NEAR(LogoBadgeBox(d, 15, 2).left, 15 - 6.4);
+        CHECK_NEAR(LogoBadgeBox(nine, 15, 2).width, 12.8); CHECK_NEAR(LogoBadgeBox(nine, 15, 2).left, 15 - 6.4);
         // The offsets move it; the size grows it about the same centre.
         MeterDisplay moved = Display(With([](Settings& s) { s.badgeOffsetX = -6; s.badgeOffsetY = 4; s.badgeSize = 12; }));
         BadgeBox big = LogoBadgeBox(moved, 15, 1);
@@ -882,7 +883,7 @@ static void RunTileTests() {
         }));
         CHECK_NEAR(wild.logoScale, 2); CHECK(wild.badgeSize == 6 && wild.badgeOffsetX == -20 && wild.badgeOffsetY == 20);
         CHECK_NEAR(Display(With([](Settings& s) { s.logoScale = 10; s.badgeSize = 40; })).logoScale, 0.5);
-        CHECK(Display(With([](Settings& s) { s.badgeSize = 40; })).badgeSize == 16);
+        CHECK(Display(With([](Settings& s) { s.badgeSize = 40; })).badgeSize == 20);
 
         // Rings: the logo is 0.44 of the 32 DIP ring at 100%, scaled, capped 1.2 DIPs inside the
         // 12.5 DIP hole (22.6 DIPs).
@@ -890,14 +891,16 @@ static void RunTileTests() {
                        std::array<bool, kQuotaBarCount> bars = {true, false, false, false}) {
             return AccountMeterState(display, layout, Account(L"anthropic", L"A", bars), Fresh({10, 20, 30, 40}), badge, 0);
         };
-        auto scaled = [](int percent) { return Display(With([&](Settings& s) { s.logoScale = percent; })); };
+        auto scaled = [](int percent) {
+            return Display(With([&](Settings& s) { s.logoScale = percent; s.badgeSize = 9; }));
+        };
         CHECK_NEAR(ring(scaled(100), 0).ring.logo, 14.08);
         CHECK_NEAR(ring(scaled(150), 0).ring.logo, 21.12);
         CHECK_NEAR(ring(scaled(200), 0).ring.logo, 22.6);
         CHECK_NEAR(ring(scaled(50), 0).ring.logo, 7.04);
         // The ring's badge sits on the diagonal through the centre (16, 16), pulled in until its
         // far corner is half a DIP inside the hole.
-        BadgeBox inside = ring(d, 1).ringBadge;
+        BadgeBox inside = ring(nine, 1).ringBadge;
         CHECK_NEAR(inside.width, 7.4); CHECK_NEAR(inside.height, 8.3);
         CHECK_NEAR(inside.left + 3.7 - 16, inside.top + 4.15 - 16);
         CHECK_NEAR(std::hypot(inside.left + inside.width - 16, inside.top + inside.height - 16), 12);
@@ -905,7 +908,9 @@ static void RunTileTests() {
         // A small logo keeps it on the logo's corner; offsets move it from there.
         BadgeBox corner = ring(scaled(50), 1).ringBadge;
         CHECK_NEAR(corner.left + 3.7, 16 + 3.52); CHECK_NEAR(corner.top + 4.15, 16 + 3.52);
-        MeterDisplay nudged = Display(With([](Settings& s) { s.logoScale = 50; s.badgeOffsetX = 3; s.badgeOffsetY = -2; }));
+        MeterDisplay nudged = Display(With([](Settings& s) {
+            s.logoScale = 50; s.badgeSize = 9; s.badgeOffsetX = 3; s.badgeOffsetY = -2;
+        }));
         CHECK_NEAR(ring(nudged, 1).ringBadge.left, corner.left + 3);
         CHECK_NEAR(ring(nudged, 1).ringBadge.top, corner.top - 2);
         // A badge too large for the hole centres on the logo.

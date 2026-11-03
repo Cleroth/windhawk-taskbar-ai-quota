@@ -39,8 +39,8 @@ static double CapHeight(double size) { return size * 1434 / 2048.0; }
 static bool NearDip(double actual, double expected) { return std::abs(actual - expected) < 1e-3; }
 
 // The default number badge's overhang past a logo's lower-right corner, which it centres on: one
-// character at 9 DIPs makes a 0.6 * 9 + 2 = 7.4 by 0.7 * 9 + 2 = 8.3 DIP box, outline included.
-static constexpr double kBadgeRight = 3.7, kBadgeBelow = 4.15;
+// character at 13 DIPs makes a 0.6 * 13 + 2 = 9.8 by 0.7 * 13 + 2 = 11.1 DIP box, outline included.
+static constexpr double kBadgeRight = 4.9, kBadgeBelow = 5.55;
 
 static std::vector<SettingsPreviewOp> OpsOfKind(const SettingsPreviewStrip& strip, SettingsPreviewOp::Kind kind) {
     std::vector<SettingsPreviewOp> ops;
@@ -153,7 +153,7 @@ static void RunLayoutTests() {
             {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 3},
             {SettingsField::BarStyle, 5, 1},          {SettingsField::BarStyle, -1, 0},
             {SettingsField::LogoScale, 10, 50},       {SettingsField::LogoScale, 999, 200},
-            {SettingsField::BadgeSize, 1, 6},         {SettingsField::BadgeSize, 99, 16},
+            {SettingsField::BadgeSize, 1, 6},         {SettingsField::BadgeSize, 99, 20},
             {SettingsField::BadgeOffsetX, -50, -20},  {SettingsField::BadgeOffsetY, 50, 20},
             {SettingsField::PaceTickColor, 0x12345678, 0x345678}, {SettingsField::BadgeColor, 0x87654321, 0x654321},
             {SettingsField::ClaudeLogoBrand, 7, 1},  {SettingsField::GeminiLogoBrand, 0, 0}};
@@ -503,17 +503,17 @@ static void RunLayoutTests() {
             CHECK_NEAR(logos[0].rect.right - logos[0].rect.left, 15);
             CHECK_NEAR(logos[1].rect.bottom - logos[1].rect.top, 15);
             CHECK_NEAR(logos[0].opacity, 1);
-            // The badge: "1" in bold at 9 DIPs in light blue, its cap height centred on the logo's
+            // The badge: "1" in bold at 13 DIPs in light blue, its cap height centred on the logo's
             // lower-right corner, over eight copies in the halo color a DIP around it (Segoe UI
             // Variable's cap height over its line, as for the label).
             CHECK(badges.size() == 9);
             const SettingsPreviewOp& number = badges[8];
-            CHECK(number.color == 0xFF4CC2FF && number.style.size == 9 && number.style.family == UiFamily::Small &&
+            CHECK(number.color == 0xFF4CC2FF && number.style.size == 13 && number.style.family == UiFamily::Small &&
                   number.style.weight == DWRITE_FONT_WEIGHT_BOLD && number.align == DWRITE_TEXT_ALIGNMENT_CENTER);
             CHECK(NearDip((number.rect.left + number.rect.right) / 2, logos[0].rect.right));
-            CHECK(NearDip(number.rect.top + AboveCap(9) + CapHeight(9) / 2, logos[0].rect.bottom));
+            CHECK(NearDip(number.rect.top + AboveCap(13) + CapHeight(13) / 2, logos[0].rect.bottom));
             for (size_t k = 0; k < 8; k++) {
-                CHECK(badges[k].color == TilePaletteFor(false).badgeHalo && badges[k].style.size == 9);
+                CHECK(badges[k].color == TilePaletteFor(false).badgeHalo && badges[k].style.size == 13);
                 const double dx = badges[k].rect.left - number.rect.left, dy = badges[k].rect.top - number.rect.top;
                 CHECK(NearDip(std::hypot(dx, dy), 1));
             }
@@ -525,13 +525,13 @@ static void RunLayoutTests() {
             const float labelWidth = label.rect.right - label.rect.left;
             switch (position) {
                 case LabelPosition::Left:
-                    // CC 1: its box (logo and badge, 18.7 x 23.3 DIPs: the badge's 4.15 below
+                    // CC 1: its box (logo and badge, 19.9 x 26.1 DIPs: the badge's 5.55 below
                     // counted above too) 7 DIPs into the 40 DIP box, the logo centred across the
                     // 20 DIP bars (y 14 to 34) like OAI's, then the 3 DIP gap from the badge.
                     CHECK_NEAR(cc1.top, 4); CHECK_NEAR(cc1.bottom, 44);
                     CHECK_NEAR(logos[0].rect.left, 10); CHECK(NearDip(logos[0].rect.top, 16.5));
                     CHECK(NearDip(tracks[0].rect.left, logos[0].rect.right + kBadgeRight + 3));
-                    CHECK(NearDip(tracks[0].rect.left, 31.7));
+                    CHECK(NearDip(tracks[0].rect.left, 32.9));
                     CHECK_NEAR(tracks[0].rect.top, 15);
                     CHECK_NEAR(cc1.right, tracks[0].rect.right + 7);
                     // CC 2's label as ever: 7 DIPs in, the gap, the bars.
@@ -557,7 +557,7 @@ static void RunLayoutTests() {
                     // The logo centred over the bars (the badge's overhang counted on both sides), a
                     // logo's box padded like the label's line: its space over the cap height above,
                     // under the baseline below, then the gap to the bars' panel (a DIP above the
-                    // first track). CC 1: 19.15 + 4.17 + 2.76 + 3 + 20 DIPs grow its column, centred
+                    // first track). CC 1: 20.55 + 4.17 + 2.76 + 3 + 20 DIPs grow its column, centred
                     // on the strip.
                     const double a = AboveCap(11), b = BelowBaseline(11);
                     const double badgeBottom = logos[0].rect.bottom + kBadgeBelow;
@@ -645,7 +645,7 @@ static void RunLayoutTests() {
             return (a.rect.left + b.rect.right) / 2;
         };
 
-        // Left: CC 1's 18.7 x 23.3 DIP box, its logo centred on the bars, the gap, the bars, inside
+        // Left: CC 1's 19.9 x 26.1 DIP box, its logo centred on the bars, the gap, the bars, inside
         // the 40 DIP box (bars y 8 to 40).
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
         std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
@@ -661,8 +661,8 @@ static void RunLayoutTests() {
         CHECK_NEAR(tracks[4].rect.left, logos[1].rect.right + 3);
 
         // Top: centred over the bars and the bars under them, whichever is wider; a logo's box
-        // padded like the label's line. CC 1: 19.15 + 4.17 + 2.76 + 3 + 32 DIPs grow its column,
-        // centred on the strip; its 22.4 DIP wide box (the badge's 3.7 right counted left too) is
+        // padded like the label's line. CC 1: 20.55 + 4.17 + 2.76 + 3 + 32 DIPs grow its column,
+        // centred on the strip; its 24.8 DIP wide box (the badge's 4.9 right counted left too) is
         // wider than the bars, which centre under the logo.
         const double a = AboveCap(11), b = BelowBaseline(11);
         s.labelPosition = LabelPosition::Top;
@@ -721,8 +721,9 @@ static void RunLayoutTests() {
         }
 
         // Stale with an error: "!" on each logo's top-right corner, 4 DIPs past it, dimmed with it;
-        // the label ends in "!" instead.
+        // the label ends in "!" instead. A 9 DIP badge, whose overhang the mark's exceeds.
         Settings s;
+        s.badgeSize = 9;
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
         std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         std::vector<SettingsPreviewOp> marks = TextOps(strip, L"!");
@@ -921,18 +922,18 @@ static void RunLayoutTests() {
             for (size_t k = 0; k < 8; k++) CHECK(badge[k].color == c.halo);
         }
 
-        // 6 left and 5 up: the box (5.3 to 12.7 across, 5.85 to 14.15 down) stays within the logo,
+        // 6 left and 6 up: the box (4.1 to 13.9 across, 3.45 to 14.55 down) stays within the logo,
         // so the logo's box is a plain logo's.
         s = {};
         s.badgeOffsetX = -6;
-        s.badgeOffsetY = -5;
+        s.badgeOffsetY = -6;
         strip = StripOf(s, accounts, data);
         logo = logos(strip);
         number = TextOps(strip, L"1")[8];
-        CHECK(NearDip(numberX(number), logo[0].rect.right - 6) && NearDip(numberY(number), logo[0].rect.bottom - 5));
+        CHECK(NearDip(numberX(number), logo[0].rect.right - 6) && NearDip(numberY(number), logo[0].rect.bottom - 6));
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, logo[0].rect.right + 3);
         CHECK_NEAR(logo[0].rect.top, 16.5);
-        // 20 left: 8.7 DIPs past the logo's left edge, which the box takes.
+        // 20 left: 9.9 DIPs past the logo's left edge, which the box takes.
         s.badgeOffsetX = -20;
         strip = StripOf(s, accounts, data);
         CHECK(NearDip(logos(strip)[0].rect.left, strip.columns[0].left + 3 + 20 + kBadgeRight - 15));
@@ -1457,7 +1458,7 @@ static void RunLayoutTests() {
         const UiItem& badgeY = Control(frame, SettingsField::BadgeOffsetY, 1);
         CHECK(logoSize.kind == UiItemKind::Slider && logoSize.minimum == 50 && logoSize.maximum == 200 &&
               logoSize.action.value == 100 && logoSize.enabled && Control(frame, SettingsField::LogoScale).text == L"100");
-        CHECK(badgeSize.minimum == 6 && badgeSize.maximum == 16 && badgeSize.action.value == 9);
+        CHECK(badgeSize.minimum == 6 && badgeSize.maximum == 20 && badgeSize.action.value == 13);
         CHECK(badgeX.minimum == -20 && badgeX.maximum == 20 && badgeX.action.value == 0 && badgeY.minimum == -20 &&
               badgeY.maximum == 20 && Control(frame, SettingsField::BadgeOffsetY).text == L"0");
         // The badge color between its size and offsets: four swatches, the first (light blue)

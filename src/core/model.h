@@ -68,7 +68,7 @@ static constexpr int kHeadlineBarThicknessMax = 10;
 static constexpr int kLogoScaleMin = 50;
 static constexpr int kLogoScaleMax = 200;
 static constexpr int kBadgeSizeMin = 6;
-static constexpr int kBadgeSizeMax = 16;
+static constexpr int kBadgeSizeMax = 20;
 static constexpr int kBadgeOffsetMax = 20;
 
 enum class BarMode {
@@ -151,7 +151,7 @@ struct Settings {
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
-    int badgeSize = 9;
+    int badgeSize = 13;
     COLORREF badgeColor = kDefaultBadgeColor;
     int badgeOffsetX = 0;
     int badgeOffsetY = 0;

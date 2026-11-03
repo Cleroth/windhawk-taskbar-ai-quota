@@ -93,7 +93,7 @@ static bool NormalizeSettings(Settings* s) {
     s->headlineBarThickness = std::clamp(s->headlineBarThickness > 0 ? s->headlineBarThickness : 4,
                                          kHeadlineBarThicknessMin, kHeadlineBarThicknessMax);
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
-    s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 9, kBadgeSizeMin, kBadgeSizeMax);
+    s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
     s->badgeOffsetY = std::clamp(s->badgeOffsetY, -kBadgeOffsetMax, kBadgeOffsetMax);
     s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
@@ -329,7 +329,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
             std::isfinite(headlineBarThickness) ?
                 (int)std::clamp(headlineBarThickness, 0.0, (double)kHeadlineBarThicknessMax) : 0;
         double logoScale = GetNum(root, L"logoScale", 100);
-        double badgeSize = GetNum(root, L"badgeSize", 9);
+        double badgeSize = GetNum(root, L"badgeSize", 13);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
         double badgeOffsetY = GetNum(root, L"badgeOffsetY", 0);
         s.logoScale = std::isfinite(logoScale) ?
