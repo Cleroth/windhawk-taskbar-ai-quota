@@ -285,8 +285,12 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 // Each bar's cell holds its track (or thin rail), fill and pace tick, centred across
                 // it. Ticks reach past the bar through negative margins, which keep them unclipped.
+                // A time track's small bar takes a row under it (vertical bars: a column right of
+                // it).
                 double radius = barGeometry.radius;
                 double rail = barGeometry.rail;
+                double timeSize = barGeometry.timeGap + barGeometry.timeThickness;
+                bool timeTrack = timeSize > 0;
                 if (showPaceTicks) {
                     PaceMarkColors colors = PaceMarkColorsFor(paceTickColor, state.lightTheme);
                     refs.paceCore = SolidColorBrush(ArgbColor(colors.core));
@@ -295,9 +299,16 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     Grid barItem;
                     double compactLabelFontSize = percentFontSize;
-                    barItem.Height(verticalBars ? barLength : barThickness);
+                    barItem.Height(verticalBars ? barLength : barThickness + timeSize);
                     barItem.HorizontalAlignment(HorizontalAlignment::Center);
                     int barColumn = 0;
+                    if (timeTrack && !verticalBars) {
+                        for (double height : {(double)barThickness, timeSize}) {
+                            RowDefinition row;
+                            row.Height({height, GridUnitType::Pixel});
+                            barItem.RowDefinitions().Append(row);
+                        }
+                    }
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
@@ -320,8 +331,17 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         barLabel.Margin({0, -1, 3, 0});
                         barItem.Children().Append(barLabel);
                         barColumn = 1;
+                    } else if (timeTrack && verticalBars) {
+                        ColumnDefinition trackColumn;
+                        trackColumn.Width({(double)barThickness, GridUnitType::Pixel});
+                        barItem.ColumnDefinitions().Append(trackColumn);
                     } else {
                         barItem.Width(verticalBars ? barThickness : barLength);
+                    }
+                    if (timeTrack && verticalBars) {
+                        ColumnDefinition timeColumn;
+                        timeColumn.Width({timeSize, GridUnitType::Pixel});
+                        barItem.ColumnDefinitions().Append(timeColumn);
                     }
 
                     Border track;
@@ -365,7 +385,30 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         paceTick.Visibility(Visibility::Collapsed);
                         paceTick.IsHitTestVisible(false);
 
-                        if (paceTickStyle == PaceTickStyle::Caret) {
+                        if (timeTrack) {
+                            // The small bar at its cell's far edge: a track as long as the bar,
+                            // then the tick as its fill from the bar's start, in the pace color;
+                            // UpdateQuotaUi sizes the fill and rounds its far end.
+                            double thickness = barGeometry.timeThickness, end = thickness / 2;
+                            Border timeTrackBar;
+                            timeTrackBar.Width(verticalBars ? thickness : barLength);
+                            timeTrackBar.Height(verticalBars ? barLength : thickness);
+                            timeTrackBar.HorizontalAlignment(verticalBars ? HorizontalAlignment::Right :
+                                                                            HorizontalAlignment::Left);
+                            timeTrackBar.VerticalAlignment(VerticalAlignment::Bottom);
+                            timeTrackBar.CornerRadius({end, end, end, end});
+                            timeTrackBar.Background(SolidColorBrush(ArgbColor(kBarTrackColor)));
+                            timeTrackBar.IsHitTestVisible(false);
+                            Grid::SetColumn(timeTrackBar, verticalBars ? barColumn + 1 : barColumn);
+                            Grid::SetRow(timeTrackBar, verticalBars ? 0 : 1);
+                            barItem.Children().Append(timeTrackBar);
+                            paceTick.Width(verticalBars ? thickness : 0);
+                            paceTick.Height(verticalBars ? 0 : thickness);
+                            paceTick.HorizontalAlignment(verticalBars ? HorizontalAlignment::Right :
+                                                                        HorizontalAlignment::Left);
+                            paceTick.VerticalAlignment(VerticalAlignment::Bottom);
+                            paceTick.Background(refs.paceCore);
+                        } else if (paceTickStyle == PaceTickStyle::Caret) {
                             Grid caretShape;
                             for (int layer = 0; layer < 2; layer++) {
                                 wuxs::Polygon part;
@@ -403,7 +446,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                             paceCore.Background(refs.paceCore);
                             paceTick.Child(paceCore);
                         }
-                        Grid::SetColumn(paceTick, barColumn);
+                        Grid::SetColumn(paceTick, timeTrack && verticalBars ? barColumn + 1 : barColumn);
+                        Grid::SetRow(paceTick, timeTrack && !verticalBars ? 1 : 0);
                         barItem.Children().Append(paceTick);
                         refs.paceTicks[w] = paceTick;
                     }

@@ -63,11 +63,12 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
-// A tile layout's elements (rings, logo + headline); bar columns with a logo identity hold only
-// the identity. Headline segment fills use AccountUiRefs::fills.
+// A tile layout's elements (face tiles, logo + headline); bar columns with a logo identity hold
+// only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
-    // Rings: the ring area, holding the meters with the identity on top.
+    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
+    // gauge's number and key on top.
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
@@ -81,10 +82,12 @@ struct TileUiRefs {
     TextBlock badgeText{nullptr};
     SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
-    // Logo + headline: the most-used quota's number and window key.
+    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
+    // with the countdown show it instead of their segments.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
-    // Ring fills and pace ticks (halo and core) per quota slot.
+    TextBlock countdown{nullptr};
+    // Face tiles' fills and pace ticks (halo and core) per quota slot.
     std::array<wuxs::Path, kQuotaBarCount> arcs{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
     std::array<wuxs::Path, kQuotaBarCount> paceHalos{

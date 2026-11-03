@@ -46,17 +46,17 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - label: unique per provider; renaming keeps the sign-in and history
   - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and monthly extra usage, OpenAI credits; unavailable quotas auto-hide
   - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
-  - identity, shown beside the account's stacked or vertical bars and on ring and headline tiles: provider logo with a number badge when several visible accounts share a provider (default), logo only, or label (the full label on bars; on tiles up to 4 characters of short text, else the label without spaces)
+  - identity, shown beside the account's stacked or vertical bars and on tiles: provider logo with a number badge when several visible accounts share a provider (default), logo only, or label (the full label on bars; on tiles up to 4 characters of short text, else the label without spaces)
   - record history for this account
   - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
 - **Layout**, with a live preview of the taskbar:
-  - tile style: stacked bars, vertical bars, headline %, segmented ring, or concentric rings; settings the chosen style ignores are hidden or disabled with the reason
-  - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); ring size and thickness (ring styles); the number size, and the length and thickness of the bars under it, with the same bar gap (headline %)
+  - tile style: stacked bars, vertical bars, headline %, segmented ring, concentric rings, gauge % (the most-used quota's arc around its number), clock pies (a pie per quota with an elapsed-time hand), or rounded square (segmented-ring arcs along a rounded square around the identity); settings the chosen style ignores are hidden or disabled with the reason
+  - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); size and thickness (rings, gauge, and rounded square; pies take the size); the number size, a reset countdown (the time until the quota resets under the number, instead of its bars), and the length and thickness of the bars under it, with the same bar gap (headline %)
   - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label font size for label identities, and the identity gap
   - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number badge's size (6 to 20 px, default 13), color, and horizontal and vertical offsets; the badge is an outlined number centered on the logo's lower-right corner (on rings, pulled inside the hole), in the taskbar's text color by default (the white swatch), or another color from the swatches or **Custom...**, outlined dark or light to contrast with it
   - logo colors: the Claude logo in the taskbar's text color (default) or Claude's orange, and the Antigravity (Gemini sparkle) logo in the text color (default) or Gemini's purple-to-blue gradient; the details flyout, the Accounts page and the usage history window follow them, and high contrast always uses the text color
   - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size
-  - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, and dot styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on a light taskbar)
+  - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, dot, and time-track (a small bar under each bar, or beside each vertical bar, that fills with the elapsed time) styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on a light taskbar)
   - account margin and tray gap
   - **Show on taskbar**: replaces the taskbar accounts with sample accounts while it is on and the window is open
 - **Display**, with the same preview:

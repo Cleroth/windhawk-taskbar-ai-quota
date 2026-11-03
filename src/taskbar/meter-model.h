@@ -14,11 +14,28 @@ static constexpr double kBarLogoSide = 15;
 static constexpr double kHeadlineLogoSide = 16;
 // A headline tile's window key text, in proportion to its number's (9 DIPs beside 14).
 static constexpr double kHeadlineKeyScale = 9.0 / 14;
+// A headline countdown follows a reset arrow, at the key's size; tiles reserve the width of
+// kHeadlineCountdownReserve for it.
+static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
+static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
 // Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
 static bool IsTileLayout(BarLayout layout) {
     return layout != BarLayout::Stacked && layout != BarLayout::Vertical;
+}
+
+// Tiles whose identity sits inside their meters, sized to the hole: the rings and the rounded
+// square.
+static bool IsRingTile(BarLayout layout) {
+    return layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings ||
+           layout == BarLayout::RoundedSquare;
+}
+
+// Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauge and the
+// pies. Gauges and pies show the identity beside the face, as headline tiles do.
+static bool IsFaceTile(BarLayout layout) {
+    return IsRingTile(layout) || layout == BarLayout::Gauge || layout == BarLayout::ClockPies;
 }
 
 static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int orangeThreshold,
@@ -128,6 +145,13 @@ static constexpr TileArc kSegmentedArcs[kQuotaBarCount][kQuotaBarCount] = {
     {{190, 70}, {280, 70}, {10, 70}, {100, 70}},
 };
 static constexpr TileArc kConcentricArc{270, 360};
+// A gauge's arc: open at the bottom, filling clockwise from its lower left.
+static constexpr TileArc kGaugeArc{135, 270};
+// A rounded square's centreline corner radius, as a share of its size.
+static constexpr double kTileSquareCornerShare = 0.22;
+// Ring, square and pie pace ticks: a core over a halo, square ended, reaching past the meter.
+static constexpr double kTilePaceHalo = 3.5, kTilePaceCore = 2, kTilePaceOverhang = 1.5,
+                        kTilePaceCoreInset = 0.5;
 
 struct TileRingGeometry {
     double size = 0;         // Ring diameter.
@@ -252,6 +276,90 @@ static TileOutline TileSectorOutline(double center, double outer, double inner, 
     return outline;
 }
 
+// A rounded square tile's centreline: a square of half-side `half` with corners of radius
+// `corner` around (center, center), measured in DIPs clockwise from its top edge's middle; lengths
+// wrap. TileSquareAt is the point `offset` DIPs outward of it (inward when negative) at `along`,
+// with the outward normal there.
+struct TileSquarePoint {
+    double x = 0, y = 0;
+    double normalX = 0, normalY = 0;
+};
+
+static TileSquarePoint TileSquareAt(double center, double half, double corner, double along, double offset) {
+    // Four sides, each from an edge's middle around a corner to the next edge's middle; the first
+    // one's frame, turned a quarter clockwise per side.
+    double straight = half - corner, quarter = std::numbers::pi * corner / 2, side = 2 * straight + quarter;
+    along -= std::floor(along / (4 * side)) * 4 * side;
+    int turns = std::min(int(along / side), 3);
+    double u = along - turns * side;
+    double x, y, nx, ny;
+    if (u < straight) {
+        x = u, y = -half, nx = 0, ny = -1;
+    } else if (u < straight + quarter) {
+        double angle = (-90 + 90 * (u - straight) / quarter) * std::numbers::pi / 180;
+        nx = std::cos(angle), ny = std::sin(angle);
+        x = straight + corner * nx, y = -straight + corner * ny;
+    } else {
+        x = half, y = -straight + (u - straight - quarter), nx = 1, ny = 0;
+    }
+    x += offset * nx;
+    y += offset * ny;
+    for (int k = 0; k < turns; k++) {
+        std::tie(x, y) = std::pair{-y, x};
+        std::tie(nx, ny) = std::pair{-ny, nx};
+    }
+    return {center + x, center + y, nx, ny};
+}
+
+// The band `width` DIPs wide centred on a rounded square's centreline (TileSquareAt), clockwise
+// from `from` to `to` DIPs along it and cut square at both ends; the whole band, as two figures,
+// from a full perimeter on. `corner` is at least half the width.
+static TileOutline TileSquareBandOutline(double center, double half, double corner, double width,
+                                         double from, double to) {
+    double straight = half - corner, quarter = std::numbers::pi * corner / 2, side = 2 * straight + quarter;
+    // One edge `offset` from the centreline, from `start` to `end` (backward when lower): lines
+    // along the sides and quarter arcs around the corners.
+    auto edge = [&](std::vector<TileOutlineSegment>& segments, double offset, double start, double end) {
+        double low = std::min(start, end), high = std::max(start, end);
+        std::vector<double> stops;
+        for (double base = std::floor(low / side) * side; base < high; base += side) {
+            for (double stop : {base, base + straight, base + straight + quarter}) {
+                if (stop > low + 1e-9 && stop < high - 1e-9 && (stops.empty() || stop > stops.back() + 1e-9)) {
+                    stops.push_back(stop);
+                }
+            }
+        }
+        if (end < start) std::reverse(stops.begin(), stops.end());
+        stops.push_back(end);
+        double at = start;
+        for (double stop : stops) {
+            double middle = (at + stop) / 2;
+            middle -= std::floor(middle / side) * side;
+            bool arc = middle > straight && middle < straight + quarter && corner + offset > 1e-6;
+            TileSquarePoint p = TileSquareAt(center, half, corner, stop, offset);
+            segments.push_back({p.x, p.y, arc ? corner + offset : 0, end > start});
+            at = stop;
+        }
+    };
+    TileOutline outline;
+    if (to - from >= 4 * side) {
+        for (double offset : {width / 2, -width / 2}) {
+            TileSquarePoint start = TileSquareAt(center, half, corner, from, offset);
+            outline.push_back({start.x, start.y, {}});
+            edge(outline.back().segments, offset, from, from + 4 * side);
+        }
+        return outline;
+    }
+    TileSquarePoint start = TileSquareAt(center, half, corner, from, width / 2);
+    TileOutlineFigure figure{start.x, start.y, {}};
+    edge(figure.segments, width / 2, from, to);
+    TileSquarePoint cut = TileSquareAt(center, half, corner, to, -width / 2);
+    figure.segments.push_back({cut.x, cut.y});
+    edge(figure.segments, -width / 2, to, from);
+    outline.push_back(std::move(figure));
+    return outline;
+}
+
 // Tile chrome for the taskbar theme. Logo and text inherit the taskbar's text color instead.
 struct TilePalette {
     uint32_t track;
@@ -293,6 +401,7 @@ struct MeterDisplay {
     int headlineFontSize;     // kHeadlineFontSizeMin-kHeadlineFontSizeMax DIPs.
     int headlineBarLength;    // kHeadlineBarLengthMin-kHeadlineBarLengthMax DIPs.
     int headlineBarThickness; // kHeadlineBarThicknessMin-kHeadlineBarThicknessMax DIPs.
+    bool headlineCountdown;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -335,6 +444,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .headlineBarLength = std::clamp(settings.headlineBarLength, kHeadlineBarLengthMin, kHeadlineBarLengthMax),
         .headlineBarThickness =
             std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
+        .headlineCountdown = settings.headlineCountdown,
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -463,6 +573,12 @@ struct BarGeometry {
     };
     double radius;         // Track and fill corners.
     double rail;           // Thin rail thickness, centred across the bar; 0 with a full track.
+    // The time track's small bar, while pace markers show in that style (else 0): `timeGap` past
+    // the bar's bottom (vertical bars: right) edge, `timeThickness` across, as long as the bar.
+    // Its track and fill corners are half its thickness; the fill fills like the bars' and ends
+    // at the meter's pacePx. It adds both to the bar's cell.
+    double timeGap;
+    double timeThickness;
     // How far the pace tick reaches past the bar across it: on both sides, or a notch's near side.
     double overhang;
     double paceLength;     // Pace tick outline (the halo).
@@ -488,7 +604,7 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     g.rail = track ? 0 : std::max(1.0, (double)std::lround(display.barThickness / 4.0));
     // Over a full track, ticks other than dots reach past the bar: a DIP's worth of whole device
     // pixels, at most half the bar gap.
-    if (track && style != PaceTickStyle::Dot) {
+    if (track && style != PaceTickStyle::Dot && style != PaceTickStyle::TimeTrack) {
         g.overhang = std::min(std::lround(scale), std::lround(display.barGap * scale) / 2) * pixel;
     }
     g.paceLength = (style == PaceTickStyle::Caret ? 5 : 4) * pixel;
@@ -513,6 +629,14 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
             g.coreCrossOffset = 0.5 * pixel;
             g.paceRadius = 2 * pixel;
             g.coreRadius = 1.5 * pixel;
+            break;
+        case PaceTickStyle::TimeTrack:
+            // A DIP's worth of whole device pixels from the bar; a quarter of its thickness, at
+            // least a pixel.
+            if (display.showPaceTicks) {
+                g.timeGap = std::max(1L, std::lround(scale)) * pixel;
+                g.timeThickness = std::max(1L, std::lround(display.barThickness * scale / 4)) * pixel;
+            }
             break;
         case PaceTickStyle::Caret:
         default:
@@ -683,7 +807,8 @@ struct QuotaMeter {
 
     // Bars, in DIPs along the bar.
     int fillPx = 0;
-    int pacePx = 0;            // Pace tick's start.
+    int pacePx = 0;            // Pace tick's start; the time track's fill length.
+    double paceEndRadius = 0;  // The time track fill's corner radius toward 100%.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
     bool darkText = false;     // Black percent text over a yellow or orange fill.
@@ -721,10 +846,18 @@ struct AccountMeters {
     double ringTextFont = 0;
     double ringTextWidth = 0;
     double ringWarnTop = 0;
-    // Logo + headline tiles: the most-used quota's number, window key and color.
+    // Face tiles (IsFaceTile): the face's size, holding the meter shapes. Gauges also put their
+    // number and key in it: fonts, and cap height centres from the face's top.
+    double faceWidth = 0, faceHeight = 0;
+    double faceFont = 0, faceKeyFont = 0;
+    double faceNumberCenter = 0, faceKeyCenter = 0;
+    // Logo + headline tiles and gauges: the most-used quota's number (gauges: without "%"),
+    // window key and color.
     std::wstring headline;
     std::wstring headlineKey;
     uint32_t headlineColor = 0;
+    // Logo + headline tiles with the countdown: the time until that quota resets.
+    std::wstring headlineCountdown;
 };
 
 // `layout`: the layout the meters are drawn in. `badgeChars`: the tile badge's text length, 0
@@ -761,12 +894,56 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
 
     bool tiles = IsTileLayout(layout);
     bool concentric = layout == BarLayout::ConcentricRings;
-    bool ring = concentric || layout == BarLayout::SegmentedRing;
+    bool gauge = layout == BarLayout::Gauge, pies = layout == BarLayout::ClockPies;
+    bool square = layout == BarLayout::RoundedSquare;
+    // Arcs of circles: the rings and the gauge.
+    bool circular = concentric || layout == BarLayout::SegmentedRing || gauge;
+    bool ring = IsRingTile(layout);
     bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline;
+    // The most-used tile quota: the headline's, and the only one a gauge shows (until the first
+    // success, its first selected quota).
+    int top = -1;
+    for (int w = 0; w < kQuotaBarCount; w++) {
+        if ((meters.barMask & (1 << w)) && usage[w]->pct >= 0 && (top < 0 || usage[w]->pct > usage[top]->pct)) {
+            top = w;
+        }
+    }
+    if (gauge) {
+        meters.barMask = top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
+        count = meters.barMask ? 1 : 0;
+    }
+    // Pies: one per quota in slot order, in columns of two from the third on.
+    double pieDiameter = 0, pieGap = 0;
+    // The rounded square's centreline corner radius and perimeter.
+    double squareCorner = 0, squarePerimeter = 0;
+    if (IsFaceTile(layout)) {
+        double size = std::min<double>(display.ringSize, display.tileHeight);
+        if (pies) {
+            meters.ring.size = size;
+            pieGap = count > 2 ? 2 : 3;
+            pieDiameter = count == 1 ? size * 0.75 : count == 2 ? size * 0.5625 : (size - pieGap) / 2;
+            int columns = count > 2 ? 2 : count, rows = count > 2 ? 2 : 1;
+            meters.faceWidth = count ? columns * pieDiameter + (columns - 1) * pieGap : 0;
+            meters.faceHeight = count ? rows * pieDiameter + (rows - 1) * pieGap : 0;
+        } else {
+            meters.ring = TileRingLayout(concentric, size, display.ringThickness, count, display.logoScale);
+            meters.faceWidth = meters.faceHeight = size;
+        }
+    }
+    if (square) {
+        const TileRingGeometry& g = meters.ring;
+        squareCorner = std::clamp(g.size * kTileSquareCornerShare, g.stroke / 2, g.radius);
+        squarePerimeter = 8 * (g.radius - squareCorner) + 2 * std::numbers::pi * squareCorner;
+    }
+    if (gauge) {
+        // Three digits fit across the hole; the key sits in the opening, between the arc's ends.
+        const TileRingGeometry& g = meters.ring;
+        meters.faceFont = std::clamp(std::min(g.size * 0.375, (2 * g.hole - 2) / 1.75), 7.0, 16.0);
+        meters.faceKeyFont = std::max(6.0, meters.faceFont * kHeadlineKeyScale);
+        meters.faceNumberCenter = g.size / 2 - 0.5;
+        meters.faceKeyCenter = g.size / 2 + g.radius * 0.75;
+    }
     if (ring) {
-        meters.ring = TileRingLayout(concentric,
-                                     std::min<double>(display.ringSize, display.tileHeight),
-                                     display.ringThickness, count, display.logoScale);
         if (badgeChars) {
             // Kept half a DIP inside the hole by default.
             const TileRingGeometry& g = meters.ring;
@@ -794,6 +971,17 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         return std::clamp(remainingMode ? 100.0 - pct : pct, 0.0, 100.0);
     };
 
+    // A pace tick: from `from` to `to` DIPs along the unit direction (dx, dy) from (x, y),
+    // `width` across.
+    auto tick = [](double x, double y, double dx, double dy, double from, double to, double width) {
+        double acrossX = -dy * width / 2, acrossY = dx * width / 2;
+        auto point = [&](double distance, double side) {
+            return TileOutlineSegment{x + dx * distance + side * acrossX, y + dy * distance + side * acrossY};
+        };
+        TileOutlineSegment start = point(from, 1);
+        return TileOutline{{start.x, start.y, {point(to, 1), point(to, -1), point(from, -1)}}};
+    };
+
     BarGeometry bar = BarGeometryFor(display);
     int position = 0;
     for (int w = 0; w < kQuotaBarCount; w++) {
@@ -818,15 +1006,22 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             m.fillEndRadius = display.barStyle == BarStyle::Rail ? bar.radius :
                 std::max(0.0, bar.radius - (display.barLength - m.fillPx));
             if (m.paceVisible) {
-                // Centred on the pace, kept inside the bar's rounded ends.
                 double pacePct = remainingMode ? remainingFraction * 100.0 :
                                                  (1.0 - remainingFraction) * 100.0;
                 pacePct = std::clamp(pacePct, 0.0, 100.0);
-                double radius = std::clamp(bar.radius, bar.paceLength / 2.0,
-                                           (display.barLength - bar.paceLength) / 2.0);
-                double center = std::clamp(display.barLength * pacePct / 100.0,
-                                           radius, display.barLength - radius);
-                m.pacePx = (int)std::lround(center - bar.paceLength / 2.0);
+                if (display.paceTickStyle == PaceTickStyle::TimeTrack) {
+                    // From the bar's start to the pace; hidden until it reaches a DIP.
+                    m.pacePx = (int)std::lround(display.barLength * pacePct / 100.0);
+                    m.paceVisible = m.pacePx > 0;
+                    m.paceEndRadius = std::max(0.0, bar.timeThickness / 2 - (display.barLength - m.pacePx));
+                } else {
+                    // Centred on the pace, kept inside the bar's rounded ends.
+                    double radius = std::clamp(bar.radius, bar.paceLength / 2.0,
+                                               (display.barLength - bar.paceLength) / 2.0);
+                    double center = std::clamp(display.barLength * pacePct / 100.0,
+                                               radius, display.barLength - radius);
+                    m.pacePx = (int)std::lround(center - bar.paceLength / 2.0);
+                }
             }
             // Adaptive text sits over the fill from the yellow threshold on, else over the track.
             m.textAlignment = display.percentTextAlignment == PercentTextAlignment::Adaptive ?
@@ -861,20 +1056,23 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         double fill = shown / 100;
         const TileRingGeometry& geometry = meters.ring;
         bool fullRing = false;
-        if (ring) {
-            TileArc slot = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
+        if (circular || square) {
+            // The square's arcs are its segmented ring's, in degrees of its perimeter from the
+            // top edge's middle (270 degrees).
+            TileArc slot = gauge ? kGaugeArc : concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
             m.radius = geometry.radius -
                        (concentric ? position * (geometry.stroke + geometry.gap) : 0.0);
-            // Partial arcs reach half a stroke past their slot at both ends, along the
-            // centreline.
+            // Partial ring and square arcs reach half a stroke past their slot at both ends,
+            // along the centreline; a gauge's is drawn as it is.
             fullRing = std::abs(slot.sweep) >= 360;
-            double grow = fullRing ? 0.0 :
-                geometry.stroke / 2 / m.radius * 180 / std::numbers::pi;
+            double centreline = square ? squarePerimeter : 2 * std::numbers::pi * m.radius;
+            double grow = fullRing || gauge ? 0.0 : geometry.stroke / 2 / centreline * 360;
             double direction = slot.sweep < 0 ? -1 : 1;
             m.arc = {slot.start - direction * grow, slot.sweep + 2 * direction * grow};
-            // Any usage fills at least 5 degrees.
-            if (shown > 0) fill = std::max(fill, 5.0 / std::abs(m.arc.sweep));
         }
+        if (pies) m.arc = {270, 360};
+        // Any usage fills at least 5 degrees.
+        if (shown > 0 && m.arc.sweep) fill = std::max(fill, 5.0 / std::abs(m.arc.sweep));
         int slotPosition = position++;
         m.fillUnits = shown > 0 ? std::max(1, (int)std::lround(fill * 1000)) : 0;
         if (m.paceVisible) {
@@ -882,7 +1080,62 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             m.paceUnits = (int)std::lround(std::clamp(pace, 0.0, 1.0) * 1000);
         }
         double pace = m.paceUnits / 1000.0;
-        if (ring) {
+        if (square) {
+            // Bands along the centreline, cut square; a fill from its arc's start. The tick
+            // crosses the band along its normal, kept clear of a partial arc's ends.
+            double center = geometry.size / 2;
+            auto along = [&](double degrees) { return (degrees - 270) / 360 * squarePerimeter; };
+            double end = m.arc.start + m.arc.sweep;
+            double low = std::min(m.arc.start, end), high = std::max(m.arc.start, end);
+            m.track = TileSquareBandOutline(center, geometry.radius, squareCorner, geometry.stroke, along(low),
+                                            along(high));
+            m.fillSweep = m.arc.sweep * fill;
+            if (m.fillUnits) {
+                double fillEnd = m.arc.start + m.fillSweep;
+                m.fill = TileSquareBandOutline(center, geometry.radius, squareCorner, geometry.stroke,
+                                               along(std::min(m.arc.start, fillEnd)),
+                                               along(std::max(m.arc.start, fillEnd)));
+            }
+            m.paceAngle = m.arc.start + m.arc.sweep * pace;
+            if (m.paceVisible) {
+                if (!fullRing) {
+                    double pad = kTilePaceHalo / 2 / squarePerimeter * 360;
+                    m.paceAngle = std::max(low + pad, std::min(m.paceAngle, high - pad));
+                }
+                TileSquarePoint p = TileSquareAt(center, geometry.radius, squareCorner, along(m.paceAngle), 0);
+                double reach = geometry.stroke / 2 + kTilePaceOverhang;
+                m.paceHalo = tick(p.x, p.y, p.normalX, p.normalY, -reach, reach, kTilePaceHalo);
+                m.paceCore = tick(p.x, p.y, p.normalX, p.normalY, -reach + kTilePaceCoreInset,
+                                  reach - kTilePaceCoreInset, kTilePaceCore);
+            }
+        } else if (pies) {
+            // Clockwise from the top: a disc, the fill a wedge, the hand from the centre to just
+            // past the rim. Arcs in halves, so none turns more than 180 degrees.
+            bool columns = count > 2;
+            double r = pieDiameter / 2;
+            double cx = (columns ? slotPosition / 2 : slotPosition) * (pieDiameter + pieGap) + r;
+            double cy = (columns ? slotPosition % 2 : 0) * (pieDiameter + pieGap) + r;
+            auto at = [&](double degrees) {
+                double radians = degrees * std::numbers::pi / 180;
+                return TileOutlineSegment{cx + r * std::cos(radians), cy + r * std::sin(radians), r, true};
+            };
+            auto pie = [&](double sweep) {
+                TileOutlineSegment start = at(270);
+                if (sweep >= 360) return TileOutline{{start.x, start.y, {at(90), at(270)}}};
+                return TileOutline{{cx, cy, {{start.x, start.y}, at(270 + sweep / 2), at(270 + sweep)}}};
+            };
+            m.radius = r;
+            m.track = pie(360);
+            m.fillSweep = 360 * fill;
+            if (m.fillUnits) m.fill = pie(m.fillSweep);
+            m.paceAngle = 270 + 360 * pace;
+            if (m.paceVisible) {
+                double radians = m.paceAngle * std::numbers::pi / 180;
+                double dx = std::cos(radians), dy = std::sin(radians);
+                m.paceHalo = tick(cx, cy, dx, dy, 0, r + 1, 3);
+                m.paceCore = tick(cx, cy, dx, dy, 0, r + 0.5, 1.5);
+            }
+        } else if (circular) {
             // Annular sectors with stroke / 4 corners at a partial arc's ends; full rings have
             // none. Fills start with the track's corners and end in a radial cut at their value.
             double center = geometry.size / 2;
@@ -904,32 +1157,21 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
             m.paceAngle = m.arc.start + m.arc.sweep * pace;
             if (m.paceVisible) {
-                // A radial tick: a 2 DIP core over a 3.5 DIP halo, square ended, kept clear of a
-                // partial arc's corners. It reaches 1.5 DIPs past the ring, at most half the gap
-                // toward a neighbouring ring, and the core stops half a DIP short of the halo.
-                static constexpr double kHalo = 3.5, kCore = 2, kOverhang = 1.5, kCoreInset = 0.5;
+                // A radial tick, kept clear of a partial arc's corners. It reaches past the ring
+                // by the overhang, at most half the gap toward a neighbouring ring, and the core
+                // stops short of the halo by its inset.
                 if (!fullRing) {
-                    double pad = (corner + kHalo / 2) / m.radius * 180 / std::numbers::pi;
+                    double pad = (corner + kTilePaceHalo / 2) / m.radius * 180 / std::numbers::pi;
                     m.paceAngle = std::max(low + pad, std::min(m.paceAngle, high - pad));
                 }
-                double between = std::min(kOverhang, geometry.gap / 2);
-                double outside = concentric && slotPosition > 0 ? between : kOverhang;
-                double inside = concentric && slotPosition < count - 1 ? between : kOverhang;
+                double between = std::min(kTilePaceOverhang, geometry.gap / 2);
+                double outside = concentric && slotPosition > 0 ? between : kTilePaceOverhang;
+                double inside = concentric && slotPosition < count - 1 ? between : kTilePaceOverhang;
                 double radians = m.paceAngle * std::numbers::pi / 180;
-                double alongX = std::cos(radians), alongY = std::sin(radians);
-                // From `from` to `to` DIPs out from the centre, `width` across.
-                auto tick = [&](double from, double to, double width) {
-                    double acrossX = -alongY * width / 2, acrossY = alongX * width / 2;
-                    auto point = [&](double distance, double side) {
-                        return TileOutlineSegment{center + alongX * distance + side * acrossX,
-                                                  center + alongY * distance + side * acrossY};
-                    };
-                    TileOutlineSegment start = point(from, 1);
-                    return TileOutline{
-                        {start.x, start.y, {point(to, 1), point(to, -1), point(from, -1)}}};
-                };
-                m.paceHalo = tick(inner - inside, outer + outside, kHalo);
-                m.paceCore = tick(inner - inside + kCoreInset, outer + outside - kCoreInset, kCore);
+                double dx = std::cos(radians), dy = std::sin(radians);
+                m.paceHalo = tick(center, center, dx, dy, inner - inside, outer + outside, kTilePaceHalo);
+                m.paceCore = tick(center, center, dx, dy, inner - inside + kTilePaceCoreInset,
+                                  outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else {
             // Headline segments: corners a quarter of the thickness; the fill cut flat until the
@@ -940,22 +1182,40 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
     }
 
-    // Headline: the most-used tile quota, shown per the bar mode in its usage color.
-    if (layout == BarLayout::LogoHeadline) {
-        int top = -1;
-        for (int w = 0; w < kQuotaBarCount; w++) {
-            if ((meters.barMask & (1 << w)) && usage[w]->pct >= 0 &&
-                (top < 0 || usage[w]->pct > usage[top]->pct)) {
-                top = w;
-            }
-        }
+    // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
+    if (layout == BarLayout::LogoHeadline || gauge) {
+        bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
         meters.headline = L"\u2013";
+        if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";
         if (top >= 0) {
-            wchar_t text[16];
-            swprintf(text, ARRAYSIZE(text), L"%.0f%%", tileShown(usage[top]->pct));
+            wchar_t text[24];
+            swprintf(text, ARRAYSIZE(text), gauge ? L"%.0f" : L"%.0f%%", tileShown(usage[top]->pct));
             meters.headline = text;
             meters.headlineKey = top == kExtraUsageBar && account.provider == L"openai" ?
                                      L"Cr" : kQuotaKeys[top];
+        }
+        if (countdown && top >= 0) {
+            // Rounded up to the minute, like the details flyout's reset times.
+            ULONGLONG reset = usage[top]->resetUnixMs;
+            meters.headlineCountdown = kHeadlineCountdownArrow;
+            if (!reset) {
+                meters.headlineCountdown += L"no reset";
+            } else if (reset <= display.now) {
+                meters.headlineCountdown += L"now";
+            } else {
+                ULONGLONG minutes = (reset - display.now + 59999) / 60000;
+                ULONGLONG days = minutes / (24 * 60), hours = minutes / 60 % 24;
+                minutes %= 60;
+                wchar_t text[24];
+                if (days) {
+                    swprintf(text, ARRAYSIZE(text), hours ? L"%llud %lluh" : L"%llud", days, hours);
+                } else if (hours) {
+                    swprintf(text, ARRAYSIZE(text), minutes ? L"%lluh %llum" : L"%lluh", hours, minutes);
+                } else {
+                    swprintf(text, ARRAYSIZE(text), L"%llum", minutes);
+                }
+                meters.headlineCountdown += text;
+            }
         }
         meters.headlineColor = UsageColor(top >= 0 ? usage[top]->pct : -1, meters.stale, yellow,
                                           orange, red, display.colorblindMode);

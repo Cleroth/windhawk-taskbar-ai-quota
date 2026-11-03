@@ -1,6 +1,7 @@
-// Tile layouts: segmented ring, concentric rings and logo + headline %. A tile shows the account's
-// identity (provider logo, optionally with a number badge, or short text) and its tile quotas: the
-// meters the bar layouts show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
+// Tile layouts: logo + headline % and the face tiles (rings, rounded square, gauge, clock pies). A
+// tile shows the account's identity (provider logo, optionally with a number badge, or short text)
+// and its tile quotas: the meters the bar layouts show, in slot order (a gauge: the most-used
+// one). BuildAccountTile creates a tile; UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
 // columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
@@ -101,14 +102,14 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
 // chosen), with a number badge when another configured account shares the provider (UpdateQuotaUi
-// shows it while a visible one does), or text, and the stale-warning mark. Rings
-// resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
+// shows it while a visible one does), or text, and the stale-warning mark. Ring tiles
+// resize the logo to their hole and place the badge; other tiles take a 16 DIP logo, bar
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
                               BarLayout layout, MeterDisplay const& display, TileUiRefs& tile) {
     AccountConfig const& account = accounts[index];
-    bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
-    double side = (layout == BarLayout::LogoHeadline ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale;
+    bool ring = IsRingTile(layout);
+    double side = (IsTileLayout(layout) ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale;
     Grid identity;
     identity.IsHitTestVisible(false);
     if (!ring) identity.VerticalAlignment(VerticalAlignment::Center);
@@ -211,7 +212,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
                                    BarLayout layout, MeterDisplay const& display, AccountUiRefs& refs) {
     TileUiRefs& tile = refs.tile;
     tile.layout = layout;
-    bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+    bool ring = IsRingTile(layout);
 
     StackPanel column;
     column.Orientation(Orientation::Horizontal);
@@ -234,10 +235,42 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         column.Children().Append(face);
         return column;
     }
-
-    // Headline: the most-used quota's number and window key over per-quota segments, at the
-    // headline sizes and the bar gap.
     column.Children().Append(identity);
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
+
+    if (IsFaceTile(layout)) {
+        // Gauges and pies: the face beside the identity. A gauge's number and key are centred
+        // across it, moved down from its middle to their model centres (UpdateAccountTile).
+        Grid face;
+        face.IsHitTestVisible(false);
+        face.VerticalAlignment(VerticalAlignment::Center);
+        Grid meters;
+        face.Children().Append(meters);
+        if (layout == BarLayout::Gauge) {
+            auto centred = [&](TextBlock const& text) {
+                text.TextLineBounds(TextLineBounds::Tight);
+                text.HorizontalAlignment(HorizontalAlignment::Center);
+                text.VerticalAlignment(VerticalAlignment::Center);
+                text.RenderTransform(TranslateTransform{});
+                face.Children().Append(text);
+            };
+            tile.headline = TextBlock{};
+            tile.headline.FontFamily(displayFont);
+            tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            centred(tile.headline);
+            tile.headlineKey = TextBlock{};
+            tile.headlineKey.Opacity(0.6);
+            centred(tile.headlineKey);
+        }
+        tile.face = face;
+        tile.meters = meters;
+        column.Children().Append(face);
+        return column;
+    }
+
+    // Headline: the most-used quota's number and window key over per-quota segments at the
+    // headline sizes and the bar gap, or with the countdown, a clock glyph and the time until that
+    // quota resets at the key's size.
     StackPanel meters;
     meters.IsHitTestVisible(false);
     meters.VerticalAlignment(VerticalAlignment::Center);
@@ -250,7 +283,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     numberRow.Orientation(Orientation::Horizontal);
     double fontSize = display.headlineFontSize, keySize = fontSize * kHeadlineKeyScale;
     tile.headline = TextBlock{};
-    tile.headline.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+    tile.headline.FontFamily(displayFont);
     tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     tile.headline.FontSize(fontSize);
     tile.headline.TextLineBounds(TextLineBounds::Tight);
@@ -276,10 +309,23 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     tile.headlineKey.Text(L"");
     numberRow.MinWidth(reserve + std::ceil(keyWidth));
     headline.Children().Append(numberRow);
-    meters.Orientation(Orientation::Horizontal);
-    meters.HorizontalAlignment(HorizontalAlignment::Left);
-    meters.Spacing(display.barGap);
-    headline.Children().Append(meters);
+    if (display.headlineCountdown) {
+        // Behind a reset arrow; reserves "00h 00m", so minute ticks keep the tile's width.
+        tile.countdown = TextBlock{};
+        tile.countdown.FontSize(keySize);
+        tile.countdown.Opacity(0.7);
+        tile.countdown.TextLineBounds(TextLineBounds::Tight);
+        tile.countdown.HorizontalAlignment(HorizontalAlignment::Left);
+        tile.countdown.Text(kHeadlineCountdownReserve);
+        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown) * keySize));
+        tile.countdown.Text(L"");
+        headline.Children().Append(tile.countdown);
+    } else {
+        meters.Orientation(Orientation::Horizontal);
+        meters.HorizontalAlignment(HorizontalAlignment::Left);
+        meters.Spacing(display.barGap);
+        headline.Children().Append(meters);
+    }
     column.Children().Append(headline);
     return column;
 }
@@ -311,7 +357,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     TileUiRefs& tile = ui.tile;
     if (!tile.identity || !tile.meters) return;
     BarLayout layout = tile.layout;
-    bool ring = layout == BarLayout::ConcentricRings || layout == BarLayout::SegmentedRing;
+    bool face = IsFaceTile(layout);
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
     double thickness = display.headlineBarThickness;
@@ -333,16 +379,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         tile.paceCores.fill(nullptr);
         tile.meters.Visibility(barMask ? Visibility::Visible : Visibility::Collapsed);
 
-        if (ring) {
-            double size = geometry.size;
-            tile.face.Width(size);
-            tile.face.Height(size);
-            // Larger than the ring area by kTileRingOverflow on every side, pulled back by
-            // negative margins, so layout never clips the pace ticks.
+        if (face) {
+            tile.face.Width(meters.faceWidth);
+            tile.face.Height(meters.faceHeight);
+            // Larger than the face by kTileRingOverflow on every side, pulled back by negative
+            // margins, so layout never clips the pace ticks.
             auto ringShape = [&](Brush const& fill) {
                 wuxs::Path path;
-                path.Width(size + 2 * kTileRingOverflow);
-                path.Height(size + 2 * kTileRingOverflow);
+                path.Width(meters.faceWidth + 2 * kTileRingOverflow);
+                path.Height(meters.faceHeight + 2 * kTileRingOverflow);
                 path.Margin({-kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow,
                              -kTileRingOverflow});
                 path.Fill(fill);
@@ -371,22 +416,35 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 meterShapes.Append(tile.paceCores[w]);
             }
 
-            // Identity, sized to the hole; the badge's box centred on the model's.
-            if (tile.logo) {
-                tile.logo.Width(geometry.logo);
-                tile.logo.Height(geometry.logo);
+            if (IsRingTile(layout)) {
+                // Identity, sized to the hole; the badge's box centred on the model's.
+                if (tile.logo) {
+                    tile.logo.Width(geometry.logo);
+                    tile.logo.Height(geometry.logo);
+                }
+                if (tile.badge) {
+                    BadgeBox const& box = meters.ringBadge;
+                    Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
+                    Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
+                }
+                if (tile.text) {
+                    tile.text.FontSize(meters.ringTextFont);
+                    tile.text.MaxWidth(meters.ringTextWidth);
+                }
+                tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
+            } else if (tile.headline && tile.headlineKey) {
+                // A gauge's number and key at their fonts and centres.
+                tile.headline.FontSize(meters.faceFont);
+                tile.headlineKey.FontSize(meters.faceKeyFont);
+                double middle = meters.faceHeight / 2;
+                if (auto shift = tile.headline.RenderTransform().try_as<TranslateTransform>()) {
+                    shift.Y(meters.faceNumberCenter - middle);
+                }
+                if (auto shift = tile.headlineKey.RenderTransform().try_as<TranslateTransform>()) {
+                    shift.Y(meters.faceKeyCenter - middle);
+                }
             }
-            if (tile.badge) {
-                BadgeBox const& box = meters.ringBadge;
-                Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
-                Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
-            }
-            if (tile.text) {
-                tile.text.FontSize(meters.ringTextFont);
-                tile.text.MaxWidth(meters.ringTextWidth);
-            }
-            tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
-        } else {
+        } else if (!tile.countdown) {
             // Headline segments: corners a quarter of the thickness.
             double radius = thickness / 4;
             for (int w = 0; w < kQuotaBarCount; w++) {
@@ -419,12 +477,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
-            if (ring && tile.arcs[w]) {
-                // Ring fills are flat.
+            if (face && tile.arcs[w]) {
+                // Face fills are flat.
                 tile.arcs[w].Visibility(m.fillUnits ? Visibility::Visible : Visibility::Collapsed);
                 if (m.fillUnits) tile.arcs[w].Data(TileOutlineGeometry(m.fill, kTileRingOverflow));
                 tile.arcs[w].Fill(SolidColorBrush(ArgbColor(m.color)));
-            } else if (!ring && ui.fills[w]) {
+            } else if (!face && ui.fills[w]) {
                 // Start corners round with the track, shaded like the bars' fills.
                 double start = thickness / 4, end = m.fillEndRadius;
                 ui.fills[w].Width(m.fillLength);
@@ -435,7 +493,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             ap.fillColor[w] = m.color;
         }
 
-        // A ring's tick is a halo and a core shape; headline segments have none.
+        // A face tile's tick is a halo and a core shape; headline segments have none.
         bool paceVisible = tile.paceHalos[w] && tile.paceCores[w] && m.paceVisible;
         if ((paceVisible ? 1 : 0) != ap.paceVisible[w]) {
             Visibility visibility = paceVisible ? Visibility::Visible : Visibility::Collapsed;
@@ -451,11 +509,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     }
 
     if (tile.headline) {
-        std::wstring headline = meters.headline + L"\n" + meters.headlineKey;
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
             tile.headline.Text(meters.headline);
             tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
             tile.headlineKey.Text(meters.headlineKey);
+            if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);
             ap.headlineColor = meters.headlineColor;
         }

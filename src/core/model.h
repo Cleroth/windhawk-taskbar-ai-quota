@@ -9,7 +9,7 @@ enum QuotaBarIndex {
 };
 
 // What marks an account on the taskbar: beside Stacked and Vertical bars at the identity position
-// (Settings::labelPosition), and on ring and headline tiles.
+// (Settings::labelPosition), and on tiles.
 enum class TileIdentity {
     LogoBadge,  // Provider logo, plus a number badge when several visible accounts share the provider.
     Logo,
@@ -38,13 +38,18 @@ enum class TaskbarMonitorMode {
     Specific,
 };
 
+// Tile styles, in the gallery's order.
 enum class BarLayout {
     Stacked,
     Vertical,
     LogoHeadline,
     SegmentedRing,
     ConcentricRings,
+    Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
+    ClockPies,      // A pie per quota with an elapsed-time hand, the identity beside.
+    RoundedSquare,  // Segmented-ring arcs along a rounded square around the identity.
 };
+static constexpr BarLayout kLastBarLayout = BarLayout::RoundedSquare;
 
 // How Stacked and Vertical bars draw behind their fill.
 enum class BarStyle {
@@ -103,6 +108,7 @@ enum class PaceTickStyle {
     Line,
     Notch,
     Dot,
+    TimeTrack,  // A small bar under each bar (vertical bars: right of it) filling with the pace.
 };
 
 // Provider logos drawn in their brand colors instead of the taskbar's text color.
@@ -147,6 +153,8 @@ struct Settings {
     int headlineFontSize = 14;
     int headlineBarLength = 16;
     int headlineBarThickness = 4;
+    // Headline tiles show the time until the quota resets under the number instead of the bars.
+    bool headlineCountdown = false;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.

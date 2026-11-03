@@ -181,6 +181,23 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Pace line", [](Settings& s) { s.paceTickStyle = PaceTickStyle::Line; }},
         {L"Pace notch", [](Settings& s) { s.paceTickStyle = PaceTickStyle::Notch; }},
         {L"Pace dot", [](Settings& s) { s.paceTickStyle = PaceTickStyle::Dot; }},
+        {L"Pace time track", [](Settings& s) { s.paceTickStyle = PaceTickStyle::TimeTrack; }},
+        {L"Time track, remaining",
+         [](Settings& s) { s.paceTickStyle = PaceTickStyle::TimeTrack; s.barMode = BarMode::Remaining; }},
+        {L"Time track, thin rail",
+         [](Settings& s) { s.paceTickStyle = PaceTickStyle::TimeTrack; s.barStyle = BarStyle::Rail; }},
+        {L"Time track, bars 60 x 14", [](Settings& s) {
+             s.paceTickStyle = PaceTickStyle::TimeTrack;
+             s.barLength = 60;
+             s.barThickness = 14;
+         }},
+        {L"Time track, bars 10 x 2",
+         [](Settings& s) { s.paceTickStyle = PaceTickStyle::TimeTrack; s.barLength = 10; s.barThickness = 2; }},
+        {L"Time track, vertical 32", [](Settings& s) {
+             s.paceTickStyle = PaceTickStyle::TimeTrack;
+             s.barLayout = BarLayout::Vertical;
+             s.barLength = 32;
+         }},
         {L"Pace pink", [](Settings& s) { s.paceTickColor = RGB(0xFF, 0x6E, 0xC7); }},
         {L"Pace off", [](Settings& s) { s.showPaceTicks = false; }},
         {L"Gap 0, no overhang", [](Settings& s) { s.barGap = 0; }},
@@ -342,6 +359,39 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.barGap = 4;
          }},
         {L"Headline, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; }, -1, 32},
+        // The reset countdown in place of the headline's segments; gauges, clock pies and rounded
+        // squares at their defaults and extremes.
+        {L"Headline, countdown",
+         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.headlineCountdown = true; }},
+        {L"Headline, countdown, number 24", [](Settings& s) {
+             s.barLayout = BarLayout::LogoHeadline;
+             s.headlineCountdown = true;
+             s.headlineFontSize = 24;
+         }},
+        {L"Headline, countdown, 32 DIP taskbar",
+         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.headlineCountdown = true; }, -1, 32},
+        {L"Gauge %", [](Settings& s) { s.barLayout = BarLayout::Gauge; }},
+        {L"Gauge, remaining", [](Settings& s) { s.barLayout = BarLayout::Gauge; s.barMode = BarMode::Remaining; }},
+        {L"Gauge 24 / 6", [](Settings& s) { s.barLayout = BarLayout::Gauge; s.ringSize = 24; s.ringThickness = 6; }},
+        {L"Gauge 40 / 1", [](Settings& s) { s.barLayout = BarLayout::Gauge; s.ringSize = 40; s.ringThickness = 1; }},
+        {L"Gauge, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::Gauge; }, -1, 32},
+        {L"Clock pies", [](Settings& s) { s.barLayout = BarLayout::ClockPies; }},
+        {L"Pies, remaining", [](Settings& s) { s.barLayout = BarLayout::ClockPies; s.barMode = BarMode::Remaining; }},
+        {L"Pies 40", [](Settings& s) { s.barLayout = BarLayout::ClockPies; s.ringSize = 40; }},
+        {L"Pies, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::ClockPies; }, -1, 32},
+        {L"Rounded square", [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; }},
+        {L"Square, remaining",
+         [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; s.barMode = BarMode::Remaining; }},
+        {L"Square 24 / 6",
+         [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; s.ringSize = 24; s.ringThickness = 6; }},
+        {L"Square 40 / 1",
+         [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; s.ringSize = 40; s.ringThickness = 1; }},
+        {L"Square, near full", [&](Settings& s) {
+             s.barLayout = BarLayout::RoundedSquare;
+             s.barMode = BarMode::Remaining;
+             thresholds(s, 6, 75, 90);
+         }},
+        {L"Square, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; }, -1, 32},
         // Logo sizes and the number badge's size and offsets per style.
         {L"Bars 60, logo 50%", [](Settings& s) { s.barLength = 60; s.logoScale = 50; }},
         {L"Bars 60, logo 150%, badge 12", [](Settings& s) { s.barLength = 60; s.logoScale = 150; s.badgeSize = 12; }},
@@ -446,7 +496,8 @@ static void RunRenders(const std::wstring& directory) {
         auto path = [&](const std::string& name) {
             return directory + L"\\" + std::wstring(name.begin(), name.end());
         };
-        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "headline", "ring", "concentric"};
+        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "headline", "ring",
+                                                      "concentric", "gauge", "pies", "square"};
         for (const RenderTheme& theme : RenderThemes()) {
             for (UINT dpi : {96u, 144u, 192u}) {
                 const std::pair<SettingsUiPage, const char*> pages[] = {

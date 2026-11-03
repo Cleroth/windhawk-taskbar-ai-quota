@@ -73,7 +73,8 @@ regenerates.
   bars keeping a label's distance at two label sizes), the logo size per style and the outlined
   badge's size, offsets (the logo staying centred across its bars) and color with its contrasting
   outline, the logos' brand colors per provider, pace marks,
-  bar styles with their shaded fills and tick overhang, ring tiles' model shapes, headline fills,
+  bar styles with their shaded fills and tick overhang, the time track, ring tiles' model shapes,
+  gauge, clock pie and rounded square faces, headline fills and the reset countdown,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), threshold

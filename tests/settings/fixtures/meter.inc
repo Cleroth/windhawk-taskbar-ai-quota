@@ -1,4 +1,5 @@
-// Meter model: display entry clamps, bars, tiles, account state, identity and visual test data.
+// Meter model: display entry clamps, bars (time tracks included), tiles (gauges, pies and rounded
+// squares included), account state, the headline countdown, identity and visual test data.
 // Expected values are derived by hand from the documented behavior.
 
 static void RunDisplayTests() {
@@ -453,6 +454,97 @@ static void RunBarTests() {
         // The outline flips below mid luma (0.299 R + 0.587 G + 0.114 B < 128).
         CHECK(BadgeColorsFor(RGB(0x80, 0x80, 0x80), true).halo == 0xFF1C1C1C);
         CHECK(BadgeColorsFor(RGB(0x7F, 0x7F, 0x7F), false).halo == 0xFFF3F3F3);
+    });
+}
+
+static void RunTimeTrackTests() {
+    Run("time track: a small bar a DIP's pixels from the bar, a quarter of its thickness in whole pixels", [] {
+        auto geometry = [](int thickness, double scale = 1, BarStyle bars = BarStyle::Track, int gap = 2,
+                           PaceTickStyle style = PaceTickStyle::TimeTrack, bool on = true) {
+            return BarGeometryFor(Display(With([&](Settings& s) {
+                s.paceTickStyle = style; s.barThickness = thickness; s.barStyle = bars; s.barGap = gap;
+                s.showPaceTicks = on;
+            }), scale));
+        };
+        // 8 thick at 100%: 1 DIP from the bar, 2 px across; no tick overhang.
+        BarGeometry g = geometry(8);
+        CHECK_NEAR(g.overhang, 0); CHECK_NEAR(g.timeGap, 1); CHECK_NEAR(g.timeThickness, 2);
+        // A 4 DIP gap gives a line a pixel of overhang, the time track none; a thin rail the same sizes.
+        CHECK_NEAR(geometry(8, 1, BarStyle::Track, 4).overhang, 0);
+        BarGeometry rail = geometry(8, 1, BarStyle::Rail);
+        CHECK_NEAR(rail.overhang, 0); CHECK_NEAR(rail.timeGap, 1); CHECK_NEAR(rail.timeThickness, 2);
+        // 2, 9, 10 and 50 thick: 0.5, 2.25, 2.5 and 12.5 px round to 1, 2, 3 and 13.
+        CHECK_NEAR(geometry(2).timeThickness, 1); CHECK_NEAR(geometry(9).timeThickness, 2);
+        CHECK_NEAR(geometry(10).timeThickness, 3); CHECK_NEAR(geometry(50).timeThickness, 13);
+        CHECK_NEAR(geometry(50).timeGap, 1);
+        // 150%: 1.5 px of gap round to 2 (4/3 DIP), 3 px across are 2 DIPs. 125%: one pixel of gap
+        // (0.8 DIP), 2.5 px round to 3 (2.4 DIPs). 200%, 2 thick: two pixels of gap, one across.
+        BarGeometry wide = geometry(8, 1.5);
+        CHECK_NEAR(wide.timeGap, 2 / 1.5); CHECK_NEAR(wide.timeThickness, 2);
+        BarGeometry odd = geometry(8, 1.25);
+        CHECK_NEAR(odd.timeGap, 0.8); CHECK_NEAR(odd.timeThickness, 2.4);
+        BarGeometry fine = geometry(2, 2);
+        CHECK_NEAR(fine.timeGap, 1); CHECK_NEAR(fine.timeThickness, 0.5);
+        // No small bar with the markers off or another style.
+        BarGeometry off = geometry(8, 1, BarStyle::Track, 2, PaceTickStyle::TimeTrack, false);
+        CHECK_NEAR(off.timeGap, 0); CHECK_NEAR(off.timeThickness, 0);
+        BarGeometry line = geometry(8, 1, BarStyle::Track, 2, PaceTickStyle::Line);
+        CHECK_NEAR(line.timeGap, 0); CHECK_NEAR(line.timeThickness, 0);
+    });
+
+    Run("time track: the rail's length from the bar's start in both modes, hidden below a DIP", [] {
+        MeterDisplay used = Display(With([](Settings& s) { s.paceTickStyle = PaceTickStyle::TimeTrack; }));
+        MeterDisplay left = Display(With([](Settings& s) {
+            s.paceTickStyle = PaceTickStyle::TimeTrack; s.barMode = BarMode::Remaining;
+        }));
+        auto rail = [](long long resetIn, const MeterDisplay& d, BarLayout layout = BarLayout::Stacked) {
+            return First(Window(10, resetIn), d, layout).quotas[0];
+        };
+        // A quarter of the 5-hour window elapsed: 25 of 100 DIPs used, 75 left.
+        CHECK(rail(13500000, used).paceVisible && rail(13500000, used).pacePx == 25);
+        CHECK(rail(13500000, left).paceVisible && rail(13500000, left).pacePx == 75);
+        // Unlike ticks, not kept off the bar's rounded ends: the whole bar.
+        CHECK(rail(0, used).paceVisible && rail(0, used).pacePx == 100);
+        CHECK(rail(kFiveHours, left).paceVisible && rail(kFiveHours, left).pacePx == 100);
+        // Nothing elapsed (used) or nothing left (remaining): no rail.
+        CHECK(!rail(kFiveHours, used).paceVisible && rail(kFiveHours, used).pacePx == 0);
+        CHECK(!rail(0, left).paceVisible);
+        // 0.4% of the bar rounds to nothing, 0.6% to a DIP.
+        CHECK(!rail(17928000, used).paceVisible);
+        CHECK(rail(17892000, used).paceVisible && rail(17892000, used).pacePx == 1);
+        // Vertical bars and thin rails: the same length. A 10 DIP bar: 2.5 rounds to 3.
+        CHECK(rail(13500000, used, BarLayout::Vertical).pacePx == 25);
+        MeterDisplay thinRail = Display(With([](Settings& s) {
+            s.paceTickStyle = PaceTickStyle::TimeTrack; s.barStyle = BarStyle::Rail;
+        }));
+        CHECK(rail(13500000, thinRail).pacePx == 25);
+        MeterDisplay shortBar = Display(With([](Settings& s) { s.paceTickStyle = PaceTickStyle::TimeTrack; s.barLength = 10; }));
+        CHECK(rail(13500000, shortBar).pacePx == 3);
+        // Markers off: none.
+        MeterDisplay off = Display(With([](Settings& s) { s.paceTickStyle = PaceTickStyle::TimeTrack; s.showPaceTicks = false; }));
+        CHECK(!rail(13500000, off).paceVisible);
+        // Tiles keep their own ticks.
+        QuotaMeter ring = rail(13500000, used, BarLayout::SegmentedRing);
+        CHECK(ring.paceVisible && ring.paceUnits == 250 && !ring.paceHalo.empty());
+    });
+
+    Run("time track: the fill's far end cut flat until it comes within half the small bar of its end", [] {
+        auto rail = [](long long resetIn, int thickness = 8, BarMode mode = BarMode::Used) {
+            MeterDisplay d = Display(With([&](Settings& s) {
+                s.paceTickStyle = PaceTickStyle::TimeTrack; s.barThickness = thickness; s.barMode = mode;
+            }));
+            return First(Window(10, resetIn), d).quotas[0];
+        };
+        // 8 thick: a 2 DIP small bar, 1 DIP corners. Mid-bar (25%) and 99% square, 100% round.
+        CHECK(rail(13500000).pacePx == 25); CHECK_NEAR(rail(13500000).paceEndRadius, 0);
+        CHECK(rail(180000).pacePx == 99); CHECK_NEAR(rail(180000).paceEndRadius, 0);
+        CHECK(rail(0).pacePx == 100); CHECK_NEAR(rail(0).paceEndRadius, 1);
+        // Remaining mode at the window's start is a full bar too.
+        CHECK_NEAR(rail(kFiveHours, 8, BarMode::Remaining).paceEndRadius, 1);
+        // 50 thick: a 13 DIP small bar, 6.5 DIP corners: 99% leaves 5.5, 95% 1.5, 90% none.
+        CHECK_NEAR(rail(180000, 50).paceEndRadius, 5.5);
+        CHECK_NEAR(rail(900000, 50).paceEndRadius, 1.5);
+        CHECK_NEAR(rail(1800000, 50).paceEndRadius, 0);
     });
 }
 
@@ -920,6 +1012,565 @@ static void RunTileTests() {
     });
 }
 
+// Gauges, clock pies and rounded squares.
+static void RunFaceTileTests() {
+    static constexpr auto point = [](const auto& p, double x, double y) { CHECK_NEAR(p.x, x); CHECK_NEAR(p.y, y); };
+
+    Run("tile kinds: ring tiles hold the identity inside, face tiles draw meter shapes in a face", [] {
+        using enum BarLayout;
+        struct Kind {
+            BarLayout layout;
+            bool tile, ring, face;
+        };
+        for (Kind k : {Kind{Stacked, false, false, false}, Kind{Vertical, false, false, false},
+                       Kind{LogoHeadline, true, false, false}, Kind{SegmentedRing, true, true, true},
+                       Kind{ConcentricRings, true, true, true}, Kind{Gauge, true, false, true},
+                       Kind{ClockPies, true, false, true}, Kind{RoundedSquare, true, true, true}}) {
+            CHECK(IsTileLayout(k.layout) == k.tile && IsRingTile(k.layout) == k.ring && IsFaceTile(k.layout) == k.face);
+        }
+        CHECK(kLastBarLayout == RoundedSquare);
+    });
+
+    Run("gauge: only the most-used tile quota; until a reading, the first selected one", [] {
+        auto gauge = [](std::array<double, kQuotaBarCount> pct, std::array<bool, kQuotaBarCount> bars = {true, true, true, true}) {
+            return AccountMeterState(Display(), BarLayout::Gauge, Account(L"anthropic", L"A", bars), Fresh(pct), 0, 0);
+        };
+        CHECK(gauge({10, 80, 30, 40}).barMask == 0b0010);
+        CHECK(gauge({90, 80, -1, 95}).barMask == 0b1000);
+        // A tie goes to the earlier slot.
+        CHECK(gauge({40, 80, 80, 20}).barMask == 0b0010);
+        // Only selected quotas count: the 5-hour one though the weekly one is higher.
+        CHECK(gauge({10, 90, -1, -1}, {true, false, false, false}).barMask == 0b0001);
+        // The other slots get no shapes.
+        AccountMeters weekly = gauge({10, 80, 30, 40});
+        CHECK(!weekly.quotas[1].track.empty() && !weekly.quotas[1].fill.empty());
+        for (int w : {0, 2, 3}) CHECK(weekly.quotas[w].track.empty() && weekly.quotas[w].fill.empty());
+        // Before the first success: the first selected quota, empty.
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        AccountMeters first = AccountMeterState(Display(), BarLayout::Gauge,
+                                                Account(L"anthropic", L"A", {false, true, false, true}), before, 0, 0);
+        CHECK(first.barMask == 0b0010 && !first.quotas[1].track.empty() && first.quotas[1].fillUnits == 0);
+        CHECK(first.quotas[3].track.empty());
+        CHECK(first.headline == L"\u2013" && first.headlineKey.empty());
+        // Nothing reported after a success: no meter.
+        AccountMeters none = gauge({-1, -1, -1, -1});
+        CHECK(none.barMask == 0 && none.headline == L"\u2013" && none.headlineKey.empty());
+        for (const QuotaMeter& q : none.quotas) CHECK(q.track.empty());
+    });
+
+    Run("gauge: its number without %, the window key and color, per bar mode; no countdown", [] {
+        auto gauge = [](std::array<double, kQuotaBarCount> pct, std::wstring provider = L"anthropic",
+                        BarMode mode = BarMode::Used, bool countdown = false) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.barMode = mode; s.headlineCountdown = countdown; }));
+            AccountData data = Fresh(pct);
+            data.winWeek.resetUnixMs = kNow + 45 * kMinute;
+            return AccountMeterState(d, BarLayout::Gauge, Account(provider, L"A", {true, true, false, true}), data, 0, 0);
+        };
+        AccountMeters weekly = gauge({10, 80, -1, 40});
+        CHECK(weekly.headline == L"80" && weekly.headlineKey == L"7d");
+        CHECK(weekly.headlineColor == 0xFFFB8C00 && weekly.quotas[1].color == 0xFFFB8C00);
+        CHECK(weekly.quotas[1].fillUnits == 800); CHECK_NEAR(weekly.quotas[1].fillSweep, 216);
+        CHECK(gauge({10, 20, -1, 95}, L"openai").headlineKey == L"Cr");
+        CHECK(gauge({10, 20, -1, 95}).headlineKey == L"Ex");
+        CHECK(gauge({130, -1, -1, -1}).headline == L"100");
+        // Remaining: the most-used quota still, 20 left of it.
+        AccountMeters left = gauge({10, 80, -1, 40}, L"anthropic", BarMode::Remaining);
+        CHECK(left.barMask == 0b0010 && left.headline == L"20" && left.headlineColor == 0xFFFB8C00);
+        CHECK(left.quotas[1].fillUnits == 200); CHECK_NEAR(left.quotas[1].fillSweep, 54);
+        CHECK(gauge({130, -1, -1, -1}, L"anthropic", BarMode::Remaining).headline == L"0");
+        CHECK(gauge({130, -1, -1, -1}, L"anthropic", BarMode::Remaining).quotas[0].fill.empty());
+        // The countdown is the headline tiles'.
+        CHECK(gauge({10, 80, -1, 40}, L"anthropic", BarMode::Used, true).headlineCountdown.empty());
+    });
+
+    Run("gauge: a 270-degree arc open at the bottom, its ends rounded, the fill cut at its value", [] {
+        auto gauge = [](double pct, int size = 32, int thickness = 3) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.ringSize = size; s.ringThickness = thickness; }));
+            return First({pct, 0, 0}, d, BarLayout::Gauge);
+        };
+        // 32 DIP face, 3 DIP stroke: centreline 14, edges 15.5 and 12.5 from the centre (16, 16).
+        AccountMeters half = gauge(50);
+        const QuotaMeter& q = half.quotas[0];
+        CHECK_NEAR(half.faceWidth, 32); CHECK_NEAR(half.faceHeight, 32);
+        CHECK_NEAR(half.ring.stroke, 3); CHECK_NEAR(q.radius, 14);
+        // From the lower left clockwise to the lower right, not grown past the slot.
+        CHECK_NEAR(q.arc.start, 135); CHECK_NEAR(q.arc.sweep, 270);
+        // The track: 0.75 DIP (stroke / 4) corners at both ends. It starts where the start corner
+        // meets the radial edge, sqrt(14.75^2 - 0.75^2) = sqrt(217) out at 135 degrees; the outer
+        // edge's middle is at the top; the end's radial edge at 45 degrees runs in to the inner
+        // corner, sqrt(13.25^2 - 0.75^2) = sqrt(175) out; the inner edge's middle is at the top.
+        const TileOutline& track = q.track;
+        CHECK(track.size() == 1 && track[0].segments.size() == 9);
+        point(track[0], 16 - std::sqrt(217 / 2.0), 16 + std::sqrt(217 / 2.0));
+        CHECK_NEAR(track[0].segments[0].radius, 0.75);
+        point(track[0].segments[1], 16, 0.5); CHECK_NEAR(track[0].segments[1].radius, 15.5);
+        point(track[0].segments[3], 16 + std::sqrt(217 / 2.0), 16 + std::sqrt(217 / 2.0));
+        point(track[0].segments[4], 16 + std::sqrt(175 / 2.0), 16 + std::sqrt(175 / 2.0));
+        point(track[0].segments[6], 16, 3.5); CHECK_NEAR(track[0].segments[6].radius, 12.5);
+        CHECK(!track[0].segments[6].clockwise);
+        // Half full: the start's corners, then a square radial cut at the top.
+        CHECK(q.fillUnits == 500); CHECK_NEAR(q.fillSweep, 135); CHECK_NEAR(q.fillEndRadius, 0);
+        CHECK(q.fill.size() == 1 && q.fill[0].segments.size() == 7);
+        const std::vector<TileOutlineSegment>& cut = q.fill[0].segments;
+        CHECK_NEAR(cut[0].radius, 0.75);
+        point(cut[2], 16, 0.5); point(cut[3], 16, 3.5); CHECK_NEAR(cut[3].radius, 0);
+        CHECK_NEAR(cut[6].radius, 0.75);
+        // Full: the track's shape, rounded at both ends. Any usage: at least 5 of 270 degrees.
+        QuotaMeter full = gauge(100).quotas[0];
+        CHECK(full.fillUnits == 1000); CHECK_NEAR(full.fillSweep, 270); CHECK_NEAR(full.fillEndRadius, 0.75);
+        CHECK(full.fill.size() == 1 && full.fill[0].segments.size() == 9);
+        QuotaMeter tiny = gauge(0.5).quotas[0];
+        CHECK(tiny.fillUnits == 19); CHECK_NEAR(tiny.fillSweep, 5);
+        CHECK(gauge(0).quotas[0].fill.empty() && gauge(0).quotas[0].fillUnits == 0);
+        // Any size and thickness: the same arc. 40 DIPs, 6 thick: centreline 16.5.
+        QuotaMeter thick = gauge(50, 40, 6).quotas[0];
+        CHECK_NEAR(thick.arc.start, 135); CHECK_NEAR(thick.arc.sweep, 270); CHECK_NEAR(thick.radius, 16.5);
+    });
+
+    Run("gauge: number and key fonts and cap centres from the face", [] {
+        auto face = [](int size, int thickness, double taskbar = 48) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.ringSize = size; s.ringThickness = thickness; }), 1, taskbar);
+            return First({50, 0, 0}, d, BarLayout::Gauge);
+        };
+        // 32 DIPs, 3 thick (hole 12.5): 0.375 of the size, 12; the hole would allow (25 - 2) / 1.75.
+        // The key at 9/14 of it; the number half a DIP above the centre, the key 0.75 of the 14 DIP
+        // centreline below it.
+        AccountMeters m = face(32, 3);
+        CHECK_NEAR(m.faceFont, 12); CHECK_NEAR(m.faceKeyFont, 12 * 9 / 14.0);
+        CHECK_NEAR(m.faceNumberCenter, 15.5); CHECK_NEAR(m.faceKeyCenter, 16 + 10.5);
+        // 40 DIPs: 15; centreline 18.
+        m = face(40, 3);
+        CHECK_NEAR(m.faceFont, 15); CHECK_NEAR(m.faceKeyFont, 15 * 9 / 14.0);
+        CHECK_NEAR(m.faceNumberCenter, 19.5); CHECK_NEAR(m.faceKeyCenter, 20 + 13.5);
+        // 40 DIPs, 6 thick: the 13.5 DIP hole holds (27 - 2) / 1.75; centreline 16.5.
+        m = face(40, 6);
+        CHECK_NEAR(m.faceFont, 25 / 1.75); CHECK_NEAR(m.faceKeyFont, 25 / 1.75 * 9 / 14);
+        CHECK_NEAR(m.faceKeyCenter, 20 + 16.5 * 0.75);
+        // 24 DIPs: the 8.5 DIP hole holds (17 - 2) / 1.75; the key at its 6 DIP floor.
+        m = face(24, 3);
+        CHECK_NEAR(m.faceFont, 15 / 1.75); CHECK_NEAR(m.faceKeyFont, 6);
+        CHECK_NEAR(m.faceNumberCenter, 11.5); CHECK_NEAR(m.faceKeyCenter, 12 + 7.5);
+        // 24 DIPs, 6 thick: a 4.5 DIP stroke leaves a 7 DIP hole, (14 - 2) / 1.75 = 6.86: the 7 DIP floor.
+        m = face(24, 6);
+        CHECK_NEAR(m.ring.stroke, 4.5); CHECK_NEAR(m.faceFont, 7); CHECK_NEAR(m.faceKeyFont, 6);
+        CHECK_NEAR(m.faceKeyCenter, 12 + 9.25 * 0.75);
+        // Capped by the tile: 40 DIPs on a 40 DIP taskbar are 32.
+        m = face(40, 3, 40);
+        CHECK_NEAR(m.faceWidth, 32); CHECK_NEAR(m.faceFont, 12);
+    });
+
+    Run("gauge pace tick: radial across the arc, kept clear of its rounded ends", [] {
+        auto gauge = [](long long resetIn) { return First(Window(10, resetIn), Display(), BarLayout::Gauge).quotas[0]; };
+        // Half elapsed: straight up, from 11 to 17 DIPs out (1.5 past both edges), 3.5 wide; the
+        // core half a DIP shorter at each end, 2 wide.
+        QuotaMeter half = gauge(9000000);
+        CHECK(half.paceVisible && half.paceUnits == 500); CHECK_NEAR(half.paceAngle, 270);
+        CHECK(half.paceHalo.size() == 1 && half.paceHalo[0].segments.size() == 3);
+        point(half.paceHalo[0], 17.75, 5);
+        point(half.paceHalo[0].segments[0], 17.75, -1);
+        point(half.paceHalo[0].segments[1], 14.25, -1);
+        point(half.paceHalo[0].segments[2], 14.25, 5);
+        point(half.paceCore[0], 17, 4.5);
+        point(half.paceCore[0].segments[1], 15, -0.5);
+        // The ends: the tick's centre a 0.75 DIP corner plus half the halo inside, along the 14 DIP centreline.
+        const double pad = (0.75 + 1.75) / 14 * 180 / std::numbers::pi;
+        CHECK_NEAR(gauge(kFiveHours).paceAngle, 135 + pad);
+        CHECK_NEAR(gauge(0).paceAngle, 405 - pad);
+        CHECK(gauge(kFiveHours + 1000).paceHalo.empty());
+    });
+
+    Run("pies: face sizes and pie centres per quota count, down the first column from the third", [] {
+        auto pies = [](std::array<bool, kQuotaBarCount> bars, int size = 32, double taskbar = 48) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.ringSize = size; }), 1, taskbar);
+            return AccountMeterState(d, BarLayout::ClockPies, Account(L"anthropic", L"A", bars), Fresh({10, 20, 30, 40}), 0, 0);
+        };
+        // A pie's centre and radius, from its track's top point.
+        auto pie = [&](const QuotaMeter& m, double x, double y, double r) {
+            CHECK_NEAR(m.radius, r);
+            CHECK(m.track.size() == 1);
+            point(m.track[0], x, y - r);
+        };
+        // One: 0.75 of the 32 DIP face.
+        AccountMeters one = pies({true, false, false, false});
+        CHECK_NEAR(one.faceWidth, 24); CHECK_NEAR(one.faceHeight, 24);
+        pie(one.quotas[0], 12, 12, 12);
+        // Two, side by side: 0.5625 of it (18 DIPs), 3 apart.
+        AccountMeters two = pies({false, true, false, true});
+        CHECK_NEAR(two.faceWidth, 39); CHECK_NEAR(two.faceHeight, 18);
+        pie(two.quotas[1], 9, 9, 9); pie(two.quotas[3], 30, 9, 9);
+        // Three and four: a grid of (32 - 2) / 2 = 15 DIP pies 2 apart, by slot down each column.
+        AccountMeters three = pies({true, false, true, true});
+        CHECK_NEAR(three.faceWidth, 32); CHECK_NEAR(three.faceHeight, 32);
+        pie(three.quotas[0], 7.5, 7.5, 7.5); pie(three.quotas[2], 7.5, 24.5, 7.5); pie(three.quotas[3], 24.5, 7.5, 7.5);
+        AccountMeters four = pies({true, true, true, true});
+        CHECK_NEAR(four.faceWidth, 32); CHECK_NEAR(four.faceHeight, 32);
+        pie(four.quotas[0], 7.5, 7.5, 7.5); pie(four.quotas[1], 7.5, 24.5, 7.5);
+        pie(four.quotas[2], 24.5, 7.5, 7.5); pie(four.quotas[3], 24.5, 24.5, 7.5);
+        // The ring size sets the face, capped by the tile.
+        AccountMeters small = pies({true, true, false, false}, 24);
+        CHECK_NEAR(small.faceWidth, 2 * 13.5 + 3); CHECK_NEAR(small.faceHeight, 13.5);
+        CHECK_NEAR(pies({true, true, true, false}, 24).faceWidth, 2 * 11 + 2);
+        AccountMeters capped = pies({true, false, false, false}, 40, 32);
+        CHECK_NEAR(capped.faceWidth, 18); pie(capped.quotas[0], 9, 9, 9);
+        // Nothing reported: an empty face.
+        AccountMeters none = AccountMeterState(Display(), BarLayout::ClockPies, Account(), Fresh(), 0, 0);
+        CHECK(none.barMask == 0); CHECK_NEAR(none.faceWidth, 0); CHECK_NEAR(none.faceHeight, 0);
+    });
+
+    Run("pies: a disc track, the fill a wedge clockwise from the top, at least 5 degrees", [] {
+        auto pie = [](double pct, BarMode mode = BarMode::Used) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.barMode = mode; }));
+            return First({pct, 0, 0}, d, BarLayout::ClockPies).quotas[0];
+        };
+        auto arc = [](const TileOutlineSegment& s, double radius) { CHECK_NEAR(s.radius, radius); CHECK(s.clockwise); };
+        const double h = 12 / std::sqrt(2.0);
+        // One 24 DIP pie at (12, 12). The track: a disc from the top, in two clockwise halves.
+        QuotaMeter quarter = pie(25);
+        CHECK(quarter.track.size() == 1 && quarter.track[0].segments.size() == 2);
+        point(quarter.track[0], 12, 0);
+        point(quarter.track[0].segments[0], 12, 24); arc(quarter.track[0].segments[0], 12);
+        point(quarter.track[0].segments[1], 12, 0); arc(quarter.track[0].segments[1], 12);
+        // A quarter: from the centre up to the rim, then 45 and 90 degrees round.
+        CHECK(quarter.fillUnits == 250); CHECK_NEAR(quarter.fillSweep, 90);
+        CHECK(quarter.fill.size() == 1 && quarter.fill[0].segments.size() == 3);
+        point(quarter.fill[0], 12, 12);
+        point(quarter.fill[0].segments[0], 12, 0); CHECK_NEAR(quarter.fill[0].segments[0].radius, 0);
+        point(quarter.fill[0].segments[1], 12 + h, 12 - h); arc(quarter.fill[0].segments[1], 12);
+        point(quarter.fill[0].segments[2], 24, 12); arc(quarter.fill[0].segments[2], 12);
+        // Three quarters: halves of 135 degrees, ending at the left.
+        QuotaMeter most = pie(75);
+        CHECK_NEAR(most.fillSweep, 270);
+        point(most.fill[0].segments[1], 12 + h, 12 + h); point(most.fill[0].segments[2], 0, 12);
+        // Full: a disc like the track.
+        QuotaMeter full = pie(100);
+        CHECK(full.fillUnits == 1000 && full.fill.size() == 1 && full.fill[0].segments.size() == 2);
+        point(full.fill[0], 12, 0); point(full.fill[0].segments[0], 12, 24);
+        // Any usage: 5 degrees; none: no wedge, the disc stays. Remaining: 30 used shows 70%.
+        QuotaMeter tiny = pie(0.5);
+        CHECK(tiny.fillUnits == 14); CHECK_NEAR(tiny.fillSweep, 5);
+        CHECK(pie(0).fill.empty() && pie(0).fillUnits == 0 && pie(0).track.size() == 1);
+        CHECK_NEAR(pie(30, BarMode::Remaining).fillSweep, 252);
+    });
+
+    Run("pies: the pace hand from the centre past the rim, turning clockwise from the top", [] {
+        auto hand = [](long long resetIn, const MeterDisplay& d = Display()) {
+            return First(Window(10, resetIn), d, BarLayout::ClockPies).quotas[0];
+        };
+        // A quarter elapsed: pointing right from (12, 12); the halo 3 wide to a DIP past the 12 DIP
+        // rim, the core 1.5 wide to half a DIP past it.
+        QuotaMeter q = hand(13500000);
+        CHECK(q.paceVisible && q.paceUnits == 250); CHECK_NEAR(q.paceAngle, 360);
+        CHECK(q.paceHalo.size() == 1 && q.paceHalo[0].segments.size() == 3);
+        point(q.paceHalo[0], 12, 13.5);
+        point(q.paceHalo[0].segments[0], 25, 13.5);
+        point(q.paceHalo[0].segments[1], 25, 10.5);
+        point(q.paceHalo[0].segments[2], 12, 10.5);
+        point(q.paceCore[0], 12, 12.75);
+        point(q.paceCore[0].segments[0], 24.5, 12.75);
+        point(q.paceCore[0].segments[1], 24.5, 11.25);
+        // None elapsed: straight up; all elapsed: round to the top again. Never clamped.
+        QuotaMeter top = hand(kFiveHours);
+        CHECK_NEAR(top.paceAngle, 270);
+        point(top.paceHalo[0], 13.5, 12); point(top.paceHalo[0].segments[0], 13.5, -1);
+        point(top.paceHalo[0].segments[1], 10.5, -1);
+        CHECK_NEAR(hand(0).paceAngle, 630);
+        // Remaining mode: the time left, three quarters.
+        MeterDisplay left = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
+        CHECK(hand(13500000, left).paceUnits == 750); CHECK_NEAR(hand(13500000, left).paceAngle, 270 + 270);
+        // Markers off: no hand.
+        MeterDisplay off = Display(With([](Settings& s) { s.showPaceTicks = false; }));
+        CHECK(!hand(13500000, off).paceVisible && hand(13500000, off).paceHalo.empty());
+    });
+
+    Run("rounded square: points and outward normals along the centreline, wrapping both ways", [] {
+        // Centre (20, 20), half-side 10, 4 DIP corners: 6 + 2 pi + 6 DIPs from one edge's middle to
+        // the next one's, 48 + 8 pi round.
+        const double pi = std::numbers::pi, side = 12 + 2 * pi, r2 = std::sqrt(2.0) / 2;
+        auto check = [](double along, double offset, double x, double y, double nx, double ny) {
+            TileSquarePoint p = TileSquareAt(20, 10, 4, along, offset);
+            CHECK_NEAR(p.x, x); CHECK_NEAR(p.y, y); CHECK_NEAR(p.normalX, nx); CHECK_NEAR(p.normalY, ny);
+        };
+        check(0, 0, 20, 10, 0, -1);                                   // Top middle
+        check(3, 0, 23, 10, 0, -1);                                   // Clockwise: to the right
+        check(6, 0, 26, 10, 0, -1);                                   // The corner's start
+        check(6 + pi, 0, 26 + 4 * r2, 14 - 4 * r2, r2, -r2);           // Its middle, around (26, 14)
+        check(6 + 2 * pi, 0, 30, 14, 1, 0);                           // Its end
+        check(side, 0, 30, 20, 1, 0);                                 // Right middle
+        check(side + 3, 0, 30, 23, 1, 0);                             // Downward
+        check(2 * side, 0, 20, 30, 0, 1);                             // Bottom middle
+        check(2 * side + 6 + pi, 0, 14 - 4 * r2, 26 + 4 * r2, -r2, r2); // Bottom-left corner
+        check(3 * side, 0, 10, 20, -1, 0);                            // Left middle
+        check(3 * side + 6 + pi, 0, 14 - 4 * r2, 14 - 4 * r2, -r2, -r2); // Top-left corner
+        // Lengths wrap both ways.
+        check(4 * side, 0, 20, 10, 0, -1);
+        check(4 * side + 3, 0, 23, 10, 0, -1);
+        check(-3, 0, 17, 10, 0, -1);
+        check(-side, 0, 10, 20, -1, 0);
+        check(-9 * side - 3, 0, 10, 23, -1, 0);
+        // Offsets: outward along the normal, inward when negative.
+        check(0, 2, 20, 8, 0, -1);
+        check(0, -2, 20, 12, 0, -1);
+        check(6 + pi, 1.5, 26 + 5.5 * r2, 14 - 5.5 * r2, r2, -r2);
+        check(side, -1, 29, 20, 1, 0);
+    });
+
+    Run("rounded square band: a whole loop as two figures, a stretch cut square at both ends", [] {
+        const double pi = std::numbers::pi, side = 12 + 2 * pi, r2 = std::sqrt(2.0) / 2;
+        // Signed distance from the centreline (half-side 10, 4 DIP corners around (20, 20)), outward positive.
+        auto distance = [](double x, double y) {
+            double qx = std::abs(x - 20) - 6, qy = std::abs(y - 20) - 6;
+            return std::hypot(std::max(qx, 0.0), std::max(qy, 0.0)) + std::min(std::max(qx, qy), 0.0) - 4;
+        };
+        auto line = [&](const TileOutlineSegment& s, double x, double y) { point(s, x, y); CHECK_NEAR(s.radius, 0); };
+        auto arc = [&](const TileOutlineSegment& s, double x, double y, double radius, bool clockwise) {
+            point(s, x, y); CHECK_NEAR(s.radius, radius); CHECK(s.clockwise == clockwise);
+        };
+        // A 2 DIP band all round: its outer and inner edges a DIP out and in, each back at its
+        // start; lines along the sides, a quarter arc of radius 5 or 3 round each corner.
+        for (double from : {0.0, 5.0}) {
+            TileOutline whole = TileSquareBandOutline(20, 10, 4, 2, from, from + 4 * side + (from ? 1 : 0));
+            CHECK(whole.size() == 2);
+            for (int i = 0; i < 2; i++) {
+                const double offset = i ? -1 : 1;
+                const TileOutlineFigure& f = whole[i];
+                TileSquarePoint start = TileSquareAt(20, 10, 4, from, offset);
+                point(f, start.x, start.y);
+                point(f.segments.back(), start.x, start.y);
+                CHECK_NEAR(distance(f.x, f.y), offset);
+                int arcs = 0;
+                for (const TileOutlineSegment& s : f.segments) {
+                    CHECK_NEAR(distance(s.x, s.y), offset);
+                    CHECK(s.clockwise);
+                    if (s.radius > 0) {
+                        arcs++;
+                        CHECK_NEAR(s.radius, 4 + offset);
+                    }
+                }
+                CHECK(arcs == 4);
+            }
+        }
+        point(TileSquareBandOutline(20, 10, 4, 2, 0, 4 * side)[0], 20, 9);
+        point(TileSquareBandOutline(20, 10, 4, 2, 0, 4 * side)[1], 20, 11);
+        // A quarter, top middle to right middle: out along the top, round the corner, down; a square
+        // cut; back along the inner edge, counterclockwise round the corner.
+        TileOutline quarter = TileSquareBandOutline(20, 10, 4, 2, 0, side);
+        CHECK(quarter.size() == 1 && quarter[0].segments.size() == 7);
+        const std::vector<TileOutlineSegment>& q = quarter[0].segments;
+        point(quarter[0], 20, 9);
+        line(q[0], 26, 9);
+        arc(q[1], 31, 14, 5, true);
+        line(q[2], 31, 20);
+        line(q[3], 29, 20);
+        line(q[4], 29, 14);
+        arc(q[5], 26, 11, 3, false);
+        line(q[6], 20, 11);
+        // Across the top middle from a negative length: lines only, cut at both ends.
+        TileOutline top = TileSquareBandOutline(20, 10, 4, 2, -3, 3);
+        CHECK(top.size() == 1);
+        point(top[0], 17, 9);
+        point(top[0].segments.back(), 17, 11);
+        for (const TileOutlineSegment& s : top[0].segments) {
+            CHECK_NEAR(s.radius, 0);
+            CHECK_NEAR(std::abs(distance(s.x, s.y)), 1);
+        }
+        CHECK(std::any_of(top[0].segments.begin(), top[0].segments.end(), [](const TileOutlineSegment& s) {
+            return std::abs(s.x - 23) < 1e-9 && std::abs(s.y - 9) < 1e-9;
+        }));
+        // Ending inside a corner: cut across the band along the corner's normal there.
+        TileOutline corner = TileSquareBandOutline(20, 10, 4, 2, 0, 6 + pi);
+        CHECK(corner.size() == 1 && corner[0].segments.size() == 5);
+        const std::vector<TileOutlineSegment>& c = corner[0].segments;
+        line(c[0], 26, 9);
+        arc(c[1], 26 + 5 * r2, 14 - 5 * r2, 5, true);
+        line(c[2], 26 + 3 * r2, 14 - 3 * r2);
+        arc(c[3], 26, 11, 3, false);
+        line(c[4], 20, 11);
+    });
+
+    Run("rounded square tile: the segmented ring's slots along a rounded square, bands cut square", [] {
+        const double pi = std::numbers::pi;
+        // 32 DIP face, 3 DIP stroke: a centreline of half-side 14 around (16, 16) with 0.22 x 32 =
+        // 7.04 DIP corners, 8 x 6.96 + 2 pi x 7.04 DIPs round.
+        const double corner = 7.04, perimeter = 8 * (14 - corner) + 2 * pi * corner;
+        auto square = [](std::array<bool, kQuotaBarCount> bars, std::array<double, kQuotaBarCount> pct, int badge = 0,
+                         double textWidth = 0, BarLayout layout = BarLayout::RoundedSquare) {
+            return AccountMeterState(Display(), layout, Account(L"anthropic", L"A", bars), Fresh(pct), badge, textWidth);
+        };
+        auto distance = [&](double x, double y) {
+            double qx = std::abs(x - 16) - (14 - corner), qy = std::abs(y - 16) - (14 - corner);
+            return std::hypot(std::max(qx, 0.0), std::max(qy, 0.0)) + std::min(std::max(qx, qy), 0.0) - corner;
+        };
+        // Every point on the band's edges, 1.5 DIPs either side of the centreline; arcs round its corners.
+        auto onBand = [&](const TileOutline& outline) {
+            CHECK(!outline.empty());
+            for (const TileOutlineFigure& f : outline) {
+                CHECK_NEAR(std::abs(distance(f.x, f.y)), 1.5);
+                for (const TileOutlineSegment& s : f.segments) {
+                    CHECK_NEAR(std::abs(distance(s.x, s.y)), 1.5);
+                    if (s.radius > 0) CHECK(std::abs(s.radius - (corner + 1.5)) < 1e-6 || std::abs(s.radius - (corner - 1.5)) < 1e-6);
+                }
+            }
+        };
+        // One quota: the whole loop from the top middle, as two figures. Geometry and identity fit
+        // as a single segmented ring's.
+        AccountMeters one = square({true, false, false, false}, {50, -1, -1, -1}, 0, 1);
+        AccountMeters ring = square({true, false, false, false}, {50, -1, -1, -1}, 0, 1, BarLayout::SegmentedRing);
+        CHECK_NEAR(one.faceWidth, 32); CHECK_NEAR(one.faceHeight, 32);
+        CHECK_NEAR(one.ring.stroke, 3); CHECK_NEAR(one.ring.radius, 14); CHECK_NEAR(one.ring.hole, 12.5);
+        CHECK_NEAR(one.ring.logo, ring.ring.logo); CHECK_NEAR(one.ringTextFont, ring.ringTextFont);
+        CHECK_NEAR(one.ringTextWidth, ring.ringTextWidth); CHECK_NEAR(one.ringWarnTop, ring.ringWarnTop);
+        BadgeBox badge = square({true, false, false, false}, {50, -1, -1, -1}, 1).ringBadge;
+        BadgeBox ringBadge = square({true, false, false, false}, {50, -1, -1, -1}, 1, 0, BarLayout::SegmentedRing).ringBadge;
+        CHECK(badge.width > 0); CHECK_NEAR(badge.left, ringBadge.left); CHECK_NEAR(badge.top, ringBadge.top);
+        const QuotaMeter& q = one.quotas[0];
+        CHECK_NEAR(q.arc.start, 270); CHECK_NEAR(q.arc.sweep, 360);
+        CHECK(q.track.size() == 2);
+        point(q.track[0], 16, 0.5); point(q.track[1], 16, 3.5);
+        onBand(q.track);
+        // Half full: clockwise to the bottom middle, cut across there; round two corners each way.
+        CHECK(q.fillUnits == 500); CHECK_NEAR(q.fillSweep, 180);
+        CHECK(q.fill.size() == 1);
+        onBand(q.fill);
+        const std::vector<TileOutlineSegment>& f = q.fill[0].segments;
+        point(q.fill[0], 16, 0.5);
+        point(f.back(), 16, 3.5);
+        auto at = [](const TileOutlineSegment& s, double x, double y) {
+            return std::abs(s.x - x) < 1e-6 && std::abs(s.y - y) < 1e-6;
+        };
+        bool cut = false;
+        for (size_t i = 0; i + 1 < f.size(); i++) cut |= at(f[i], 16, 31.5) && at(f[i + 1], 16, 28.5) && f[i + 1].radius == 0;
+        CHECK(cut);
+        CHECK(std::count_if(f.begin(), f.end(), [](const TileOutlineSegment& s) { return s.radius > 0; }) == 4);
+        // Any usage: 5 degrees of perimeter.
+        QuotaMeter tiny = square({true, false, false, false}, {0.5, -1, -1, -1}).quotas[0];
+        CHECK(tiny.fillUnits == 14); CHECK_NEAR(tiny.fillSweep, 5);
+
+        // Two quotas: the segmented ring's 150 degree slots, each grown by half the stroke (1.5
+        // DIPs) along the perimeter at both ends.
+        AccountMeters two = square({true, true, false, false}, {10, 20, -1, -1});
+        const QuotaMeter &a = two.quotas[0], &b = two.quotas[1];
+        CHECK_NEAR((195 - a.arc.start) / 360 * perimeter, 1.5); CHECK_NEAR((a.arc.sweep - 150) / 360 * perimeter, 3);
+        CHECK_NEAR((b.arc.start - 165) / 360 * perimeter, 1.5); CHECK_NEAR((-150 - b.arc.sweep) / 360 * perimeter, 3);
+        for (const QuotaMeter* m : {&a, &b}) {
+            CHECK(m->track.size() == 1 && m->fill.size() == 1);
+            onBand(m->track);
+            onBand(m->fill);
+        }
+        // The first's track starts 75 degrees of perimeter and 1.5 DIPs before the top middle, on the
+        // outer edge; its fill there too, the second's where its own fill ends, counterclockwise.
+        TileSquarePoint start = TileSquareAt(16, 14, corner, -(75.0 / 360 * perimeter + 1.5), 1.5);
+        point(a.track[0], start.x, start.y);
+        point(a.fill[0], start.x, start.y);
+        CHECK_NEAR(b.fillSweep, -(150 + 3 / perimeter * 360) * 0.2);
+    });
+
+    Run("rounded square pace tick: across the band along its normal, clear of a partial arc's ends", [] {
+        const double pi = std::numbers::pi, r2 = std::sqrt(2.0) / 2;
+        const double corner = 7.04, perimeter = 8 * (14 - corner) + 2 * pi * corner;
+        auto loop = [](long long resetIn) { return First(Window(10, resetIn), Display(), BarLayout::RoundedSquare).quotas[0]; };
+        // A quarter elapsed on the whole loop: the right edge's middle (30, 16), pointing out. The
+        // halo from 3 DIPs in to 3 out (half the stroke plus 1.5), 3.5 wide; the core half a DIP
+        // shorter at each end, 2 wide.
+        QuotaMeter right = loop(13500000);
+        CHECK(right.paceVisible); CHECK_NEAR(right.paceAngle, 360);
+        CHECK(right.paceHalo.size() == 1 && right.paceHalo[0].segments.size() == 3);
+        point(right.paceHalo[0], 27, 17.75);
+        point(right.paceHalo[0].segments[0], 33, 17.75);
+        point(right.paceHalo[0].segments[1], 33, 14.25);
+        point(right.paceHalo[0].segments[2], 27, 14.25);
+        point(right.paceCore[0], 27.5, 17);
+        point(right.paceCore[0].segments[1], 32.5, 15);
+        // An eighth: the top-right corner's middle, along its diagonal.
+        QuotaMeter diagonal = loop(15750000);
+        CHECK_NEAR(diagonal.paceAngle, 315);
+        const TileOutlineFigure& halo = diagonal.paceHalo[0];
+        const double px = 16 + 6.96 + corner * r2, py = 16 - 6.96 - corner * r2;
+        CHECK_NEAR((halo.x + halo.segments[0].x + halo.segments[1].x + halo.segments[2].x) / 4, px);
+        CHECK_NEAR((halo.y + halo.segments[0].y + halo.segments[1].y + halo.segments[2].y) / 4, py);
+        CHECK_NEAR(halo.segments[0].x - halo.x, 6 * r2); CHECK_NEAR(halo.segments[0].y - halo.y, -6 * r2);
+        CHECK_NEAR(halo.segments[1].x - halo.segments[0].x, -3.5 * r2);
+        CHECK_NEAR(halo.segments[1].y - halo.segments[0].y, -3.5 * r2);
+        // A whole loop has no ends: none elapsed is straight up across the top middle (16, 2).
+        CHECK_NEAR(loop(kFiveHours).paceAngle, 270);
+        point(loop(kFiveHours).paceHalo[0], 16 + 1.75, 2 + 3);
+        // Two quotas: the tick's centre half the halo (1.75 DIPs) inside the grown arc's end, 0.25 DIPs
+        // inside the slot; no corner to keep clear of, the band is cut square.
+        auto two = [](long long resetIn) {
+            AccountData data = Fresh();
+            data.win5h = Window(10, resetIn);
+            data.winWeek = Window(10, resetIn);
+            return AccountMeterState(Display(), BarLayout::RoundedSquare,
+                                     Account(L"anthropic", L"A", {true, true, false, false}), data, 0, 0);
+        };
+        AccountMeters start = two(kFiveHours), end = two(0), middle = two(9000000);
+        CHECK_NEAR((start.quotas[0].paceAngle - 195) / 360 * perimeter, 0.25);
+        CHECK_NEAR((345 - end.quotas[0].paceAngle) / 360 * perimeter, 0.25);
+        CHECK_NEAR((165 - start.quotas[1].paceAngle) / 360 * perimeter, 0.25);
+        CHECK_NEAR((end.quotas[1].paceAngle - 15) / 360 * perimeter, 0.25);
+        // Mid-window: the top and bottom middles; the bottom's tick across (16, 30), pointing down.
+        CHECK_NEAR(middle.quotas[0].paceAngle, 270); CHECK_NEAR(middle.quotas[1].paceAngle, 90);
+        point(middle.quotas[1].paceHalo[0], 16 - 1.75, 30 - 3);
+    });
+}
+
+static void RunCountdownTests() {
+    Run("headline countdown: days and hours, hours and minutes, minutes, rounded up; now, no reset, no readings", [] {
+        const ULONGLONG hour = 60 * kMinute, day = 24 * hour;
+        auto countdown = [](WindowUsage first, bool on = true, BarLayout layout = BarLayout::LogoHeadline) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.headlineCountdown = on; }));
+            return First(first, d, layout).headlineCountdown;
+        };
+        auto in = [&](long long resetIn) { return countdown({50, ULONGLONG((long long)kNow + resetIn), kWeeklyWindowMs}); };
+        CHECK(std::wstring(kHeadlineCountdownArrow) == L"\u21BB ");
+        CHECK(in(3 * day + 12 * hour) == L"\u21BB 3d 12h");
+        CHECK(in(3 * day) == L"\u21BB 3d");
+        // Days show whole hours.
+        CHECK(in(2 * day + 5 * hour + 59 * kMinute) == L"\u21BB 2d 5h");
+        CHECK(in(hour + 30 * kMinute) == L"\u21BB 1h 30m");
+        CHECK(in(hour) == L"\u21BB 1h");
+        CHECK(in(45 * kMinute) == L"\u21BB 45m");
+        // Rounded up to the minute, carrying into hours and days.
+        CHECK(in(44 * kMinute + 1) == L"\u21BB 45m");
+        CHECK(in(1) == L"\u21BB 1m");
+        CHECK(in(59 * kMinute + 30000) == L"\u21BB 1h");
+        CHECK(in(day - kMinute + 1000) == L"\u21BB 1d");
+        // Due or past: now. No reset time: says so. No reading: the dash.
+        CHECK(in(0) == L"\u21BB now");
+        CHECK(in(-(long long)kMinute) == L"\u21BB now");
+        CHECK(countdown({50, 0, 0}) == L"\u21BB no reset");
+        CHECK(countdown({-1, kNow + hour, kWeeklyWindowMs}) == L"\u21BB \u2013");
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        MeterDisplay on = Display(With([](Settings& s) { s.headlineCountdown = true; }));
+        CHECK(AccountMeterState(on, BarLayout::LogoHeadline, Account(), before, 0, 0).headlineCountdown == L"\u21BB \u2013");
+        // Off, or another tile style: none.
+        CHECK(countdown({50, kNow + hour, kWeeklyWindowMs}, false).empty());
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical, BarLayout::SegmentedRing,
+                                 BarLayout::ConcentricRings, BarLayout::Gauge, BarLayout::ClockPies,
+                                 BarLayout::RoundedSquare}) {
+            CHECK(countdown({50, kNow + hour, kWeeklyWindowMs}, true, layout).empty());
+        }
+    });
+
+    Run("headline countdown: the most-used quota's reset, in either bar mode", [] {
+        auto meters = [](BarMode mode) {
+            AccountData data = Fresh();
+            data.win5h = {30, kNow + 45 * kMinute, kFiveHourWindowMs};
+            data.winWeek = {80, kNow + (3 * 24 + 12) * 60 * kMinute, kWeeklyWindowMs};
+            MeterDisplay d = Display(With([&](Settings& s) { s.headlineCountdown = true; s.barMode = mode; }));
+            return AccountMeterState(d, BarLayout::LogoHeadline, Account(L"anthropic", L"A", {true, true, false, false}),
+                                     data, 0, 0);
+        };
+        AccountMeters used = meters(BarMode::Used);
+        CHECK(used.headline == L"80%" && used.headlineKey == L"7d" && used.headlineCountdown == L"\u21BB 3d 12h");
+        AccountMeters left = meters(BarMode::Remaining);
+        CHECK(left.headline == L"20%" && left.headlineCountdown == L"\u21BB 3d 12h");
+        // The segments are still modeled; the tile draws the countdown instead.
+        CHECK(used.barMask == 0b0011 && used.quotas[0].fillUnits == 300);
+    });
+}
+
 static void RunAccountTests() {
     Run("stale rules, including Antigravity", [] {
         auto stale = [](std::wstring provider, ULONGLONG age, const MeterDisplay& d = Display()) {
@@ -1149,8 +1800,11 @@ static void RunMeterTests() {
     RunDisplayTests();
     RunColorTests();
     RunBarTests();
+    RunTimeTrackTests();
     RunTileTests();
+    RunFaceTileTests();
     RunAccountTests();
+    RunCountdownTests();
     RunIdentityTests();
     RunSnapshotTests();
 }

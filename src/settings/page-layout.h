@@ -2,8 +2,10 @@
 // markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bars", L"Headline %",
-                                                 L"Segmented ring", L"Concentric rings"};
+// By BarLayout.
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Headline %",
+                                                 L"Segmented ring", L"Concentric rings", L"Gauge %",
+                                                 L"Clock pies",     L"Rounded square"};
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
@@ -16,12 +18,12 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     const Settings& s = view.settings;
     const BarLayout layout = s.barLayout;
     const bool bars = !IsTileLayout(layout);
-    const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
 
     // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined.
     y = UiAddSection(items, id, x, y + 16, width, L"Tile style");
     {
         constexpr float kCardHeight = 1 + 8 + 72 + 8 + 17 + 2 + 8 + 1, kGap = 8;
+        constexpr int kRows = int(std::size(kSettingsTileStyles) + 2) / 3;
         float cardWidth = std::max((width - 2 * kGap) / 3, 1.0f);
         for (int i = 0; i < int(std::size(kSettingsTileStyles)); i++) {
             float left = x + float(i % 3) * (cardWidth + kGap), top = y + float(i / 3) * (kCardHeight + kGap);
@@ -34,7 +36,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             card.action = SettingsCommand(SettingsField::BarLayout, i);
             items.push_back(std::move(card));
         }
-        y += 2 * kCardHeight + kGap;
+        y += kRows * kCardHeight + (kRows - 1) * kGap;
     }
 
     // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays on
@@ -217,25 +219,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             if (!text) spec.reason = L"Turn on Quota keys, or percentage text in Display, to change this.";
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
         }
-    } else if (ring) {
-        y = UiAddSection(items, id, x, y + 20, width, L"Ring");
+    } else if (IsFaceTile(layout)) {
+        // Face tiles share the ring size and thickness; pies are solid.
+        const bool gauge = layout == BarLayout::Gauge, pies = layout == BarLayout::ClockPies;
+        const bool square = layout == BarLayout::RoundedSquare;
+        y = UiAddSection(items, id, x, y + 20, width, gauge ? L"Gauge" : pies ? L"Pies" : square ? L"Square" : L"Ring");
         {
             UiCardSpec spec;
-            spec.title = L"Ring size";
-            spec.description = {{L"Diameter in pixels."}};
+            spec.title = gauge ? L"Gauge size" : pies ? L"Pie area" : square ? L"Square size" : L"Ring size";
+            spec.description = {{pies   ? L"Height in pixels; one pie per quota, smaller from the second on." :
+                                 square ? L"Side in pixels." :
+                                          L"Diameter in pixels."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::RingSize);
         }
-        {
+        if (!pies) {
             UiCardSpec spec;
-            spec.title = L"Ring thickness";
-            spec.description = {{L"Stroke width in pixels. Narrows automatically when the meters don\u2019t fit "
-                                 L"around the logo or text."}};
+            spec.title = gauge ? L"Gauge thickness" : square ? L"Square thickness" : L"Ring thickness";
+            spec.description = {{gauge ? L"Stroke width in pixels. Narrows automatically when the arc doesn\u2019t fit "
+                                         L"around the number." :
+                                         L"Stroke width in pixels. Narrows automatically when the meters don\u2019t fit "
+                                         L"around the logo or text."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     } else {
-        // Headline tiles: the number's size, then its bars' sizes and the bars' gap.
+        // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
+        // gap, which the countdown replaces.
         y = UiAddSection(items, id, x, y + 20, width, L"Headline");
         {
             UiCardSpec spec;
@@ -246,20 +256,34 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
         {
             UiCardSpec spec;
+            spec.title = L"Reset countdown";
+            spec.description = {{L"Time until that quota resets under the number, instead of each quota\u2019s bar."}};
+            y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineCountdown);
+        }
+        const bool segments = !s.headlineCountdown;
+        PCWSTR countdownOn = L"Turn off Reset countdown to change this.";
+        {
+            UiCardSpec spec;
             spec.title = L"Bar length";
             spec.description = {{L"Pixels along each quota\u2019s bar under the number."}};
+            spec.enabled = segments;
+            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
         }
         {
             UiCardSpec spec;
             spec.title = L"Bar thickness";
             spec.description = {{L"Pixels across each bar."}};
+            spec.enabled = segments;
+            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
         }
         {
             UiCardSpec spec;
             spec.title = L"Bar gap";
             spec.description = {{L"Space between an account\u2019s bars."}};
+            spec.enabled = segments;
+            if (!segments) spec.reason = countdownOn;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
@@ -280,14 +304,16 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         if (bars) {
             UiCardSpec spec;
             spec.title = L"Marker style";
-            spec.description = {{L"Thin caret, full-width line, edge notch, or centered dot."}};
+            spec.description = {{L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small "
+                                 L"bar under each bar that fills with the elapsed time."}};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickStyle, 200,
                                         {{L"Caret", int(PaceTickStyle::Caret)},
                                          {L"Full line", int(PaceTickStyle::Line)},
                                          {L"Edge notch", int(PaceTickStyle::Notch)},
-                                         {L"Dot", int(PaceTickStyle::Dot)}},
+                                         {L"Dot", int(PaceTickStyle::Dot)},
+                                         {L"Time track", int(PaceTickStyle::TimeTrack)}},
                                         int(s.paceTickStyle));
         }
         {

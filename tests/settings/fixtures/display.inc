@@ -109,7 +109,7 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 46 scalar settings changed: the four page resets restore every one, and no field
+        // All 47 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -129,6 +129,7 @@ static void RunDisplayPageTests() {
         every.headlineFontSize = 20;
         every.headlineBarLength = 30;
         every.headlineBarThickness = 7;
+        every.headlineCountdown = true;
         every.logoScale = 150;
         every.logoBrands = {true, true};
         every.badgeSize = 12;
@@ -158,7 +159,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 46 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 47 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {

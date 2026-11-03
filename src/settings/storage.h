@@ -102,7 +102,7 @@ static bool NormalizeSettings(Settings* s) {
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
-    if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::ConcentricRings) {
+    if (s->barLayout < BarLayout::Stacked || s->barLayout > kLastBarLayout) {
         s->barLayout = BarLayout::Stacked;
     }
     if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
@@ -113,7 +113,7 @@ static bool NormalizeSettings(Settings* s) {
         s->labelPosition = LabelPosition::Left;
     }
     if (s->paceTickStyle < PaceTickStyle::Caret ||
-        s->paceTickStyle > PaceTickStyle::Dot) {
+        s->paceTickStyle > PaceTickStyle::TimeTrack) {
         s->paceTickStyle = PaceTickStyle::Caret;
     }
     if (s->percentTextAlignment < PercentTextAlignment::Adaptive ||
@@ -191,6 +191,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"headlineFontSize", s.headlineFontSize);
         setNumber(L"headlineBarLength", s.headlineBarLength);
         setNumber(L"headlineBarThickness", s.headlineBarThickness);
+        setBool(L"headlineCountdown", s.headlineCountdown);
         setNumber(L"logoScale", s.logoScale);
         setBool(L"brandClaudeLogo", s.logoBrands.claude);
         setBool(L"brandGeminiLogo", s.logoBrands.gemini);
@@ -202,12 +203,16 @@ static std::wstring SerializeSettings(const Settings& s) {
                                 s.barLayout == BarLayout::SegmentedRing ? L"segmentedRing" :
                                 s.barLayout == BarLayout::ConcentricRings ? L"concentricRings" :
                                 s.barLayout == BarLayout::LogoHeadline ? L"logoHeadline" :
-                                                                         L"stacked");
+                                s.barLayout == BarLayout::Gauge ? L"gauge" :
+                                s.barLayout == BarLayout::ClockPies ? L"clockPies" :
+                                s.barLayout == BarLayout::RoundedSquare ? L"roundedSquare" :
+                                                                          L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setBool(L"showPaceTicks", s.showPaceTicks);
         setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
                                     s.paceTickStyle == PaceTickStyle::Notch ? L"notch" :
-                                    s.paceTickStyle == PaceTickStyle::Dot ? L"dot" : L"caret");
+                                    s.paceTickStyle == PaceTickStyle::Dot ? L"dot" :
+                                    s.paceTickStyle == PaceTickStyle::TimeTrack ? L"timeTrack" : L"caret");
         setNumber(L"paceTickColor", (int)s.paceTickColor);
         setString(L"labelPosition",
                   s.labelPosition == LabelPosition::Hidden ? L"hidden" :
@@ -328,6 +333,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.headlineBarThickness =
             std::isfinite(headlineBarThickness) ?
                 (int)std::clamp(headlineBarThickness, 0.0, (double)kHeadlineBarThicknessMax) : 0;
+        s.headlineCountdown = getBoolDefault(L"headlineCountdown", false);
         double logoScale = GetNum(root, L"logoScale", 100);
         double badgeSize = GetNum(root, L"badgeSize", 13);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
@@ -347,14 +353,18 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                       barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :
                       barLayout == L"concentricRings" ? BarLayout::ConcentricRings :
                       barLayout == L"logoHeadline" ? BarLayout::LogoHeadline :
-                                                     BarLayout::Stacked;
+                      barLayout == L"gauge" ? BarLayout::Gauge :
+                      barLayout == L"clockPies" ? BarLayout::ClockPies :
+                      barLayout == L"roundedSquare" ? BarLayout::RoundedSquare :
+                                                      BarLayout::Stacked;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
         std::wstring paceTickStyle = GetStr(root, L"paceTickStyle");
         s.paceTickStyle = paceTickStyle == L"line" ? PaceTickStyle::Line :
                           paceTickStyle == L"notch" ? PaceTickStyle::Notch :
-                          paceTickStyle == L"dot" ? PaceTickStyle::Dot : PaceTickStyle::Caret;
+                          paceTickStyle == L"dot" ? PaceTickStyle::Dot :
+                          paceTickStyle == L"timeTrack" ? PaceTickStyle::TimeTrack : PaceTickStyle::Caret;
         double paceTickColor = GetNum(root, L"paceTickColor", kDefaultPaceTickColor);
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?

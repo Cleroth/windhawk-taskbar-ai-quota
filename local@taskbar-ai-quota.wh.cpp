@@ -186,7 +186,7 @@ enum QuotaBarIndex {
 };
 
 // What marks an account on the taskbar: beside Stacked and Vertical bars at the identity position
-// (Settings::labelPosition), and on ring and headline tiles.
+// (Settings::labelPosition), and on tiles.
 enum class TileIdentity {
     LogoBadge,  // Provider logo, plus a number badge when several visible accounts share the provider.
     Logo,
@@ -215,13 +215,18 @@ enum class TaskbarMonitorMode {
     Specific,
 };
 
+// Tile styles, in the gallery's order.
 enum class BarLayout {
     Stacked,
     Vertical,
     LogoHeadline,
     SegmentedRing,
     ConcentricRings,
+    Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
+    ClockPies,      // A pie per quota with an elapsed-time hand, the identity beside.
+    RoundedSquare,  // Segmented-ring arcs along a rounded square around the identity.
 };
+static constexpr BarLayout kLastBarLayout = BarLayout::RoundedSquare;
 
 // How Stacked and Vertical bars draw behind their fill.
 enum class BarStyle {
@@ -280,6 +285,7 @@ enum class PaceTickStyle {
     Line,
     Notch,
     Dot,
+    TimeTrack,  // A small bar under each bar (vertical bars: right of it) filling with the pace.
 };
 
 // Provider logos drawn in their brand colors instead of the taskbar's text color.
@@ -324,6 +330,8 @@ struct Settings {
     int headlineFontSize = 14;
     int headlineBarLength = 16;
     int headlineBarThickness = 4;
+    // Headline tiles show the time until the quota resets under the number instead of the bars.
+    bool headlineCountdown = false;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
@@ -541,11 +549,12 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
-// A tile layout's elements (rings, logo + headline); bar columns with a logo identity hold only
-// the identity. Headline segment fills use AccountUiRefs::fills.
+// A tile layout's elements (face tiles, logo + headline); bar columns with a logo identity hold
+// only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
-    // Rings: the ring area, holding the meters with the identity on top.
+    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
+    // gauge's number and key on top.
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
@@ -559,10 +568,12 @@ struct TileUiRefs {
     TextBlock badgeText{nullptr};
     SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
-    // Logo + headline: the most-used quota's number and window key.
+    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
+    // with the countdown show it instead of their segments.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
-    // Ring fills and pace ticks (halo and core) per quota slot.
+    TextBlock countdown{nullptr};
+    // Face tiles' fills and pace ticks (halo and core) per quota slot.
     std::array<wuxs::Path, kQuotaBarCount> arcs{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
     std::array<wuxs::Path, kQuotaBarCount> paceHalos{
@@ -5799,11 +5810,28 @@ static constexpr double kBarLogoSide = 15;
 static constexpr double kHeadlineLogoSide = 16;
 // A headline tile's window key text, in proportion to its number's (9 DIPs beside 14).
 static constexpr double kHeadlineKeyScale = 9.0 / 14;
+// A headline countdown follows a reset arrow, at the key's size; tiles reserve the width of
+// kHeadlineCountdownReserve for it.
+static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
+static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
 // Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
 static bool IsTileLayout(BarLayout layout) {
     return layout != BarLayout::Stacked && layout != BarLayout::Vertical;
+}
+
+// Tiles whose identity sits inside their meters, sized to the hole: the rings and the rounded
+// square.
+static bool IsRingTile(BarLayout layout) {
+    return layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings ||
+           layout == BarLayout::RoundedSquare;
+}
+
+// Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauge and the
+// pies. Gauges and pies show the identity beside the face, as headline tiles do.
+static bool IsFaceTile(BarLayout layout) {
+    return IsRingTile(layout) || layout == BarLayout::Gauge || layout == BarLayout::ClockPies;
 }
 
 static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int orangeThreshold,
@@ -5913,6 +5941,13 @@ static constexpr TileArc kSegmentedArcs[kQuotaBarCount][kQuotaBarCount] = {
     {{190, 70}, {280, 70}, {10, 70}, {100, 70}},
 };
 static constexpr TileArc kConcentricArc{270, 360};
+// A gauge's arc: open at the bottom, filling clockwise from its lower left.
+static constexpr TileArc kGaugeArc{135, 270};
+// A rounded square's centreline corner radius, as a share of its size.
+static constexpr double kTileSquareCornerShare = 0.22;
+// Ring, square and pie pace ticks: a core over a halo, square ended, reaching past the meter.
+static constexpr double kTilePaceHalo = 3.5, kTilePaceCore = 2, kTilePaceOverhang = 1.5,
+                        kTilePaceCoreInset = 0.5;
 
 struct TileRingGeometry {
     double size = 0;         // Ring diameter.
@@ -6037,6 +6072,90 @@ static TileOutline TileSectorOutline(double center, double outer, double inner, 
     return outline;
 }
 
+// A rounded square tile's centreline: a square of half-side `half` with corners of radius
+// `corner` around (center, center), measured in DIPs clockwise from its top edge's middle; lengths
+// wrap. TileSquareAt is the point `offset` DIPs outward of it (inward when negative) at `along`,
+// with the outward normal there.
+struct TileSquarePoint {
+    double x = 0, y = 0;
+    double normalX = 0, normalY = 0;
+};
+
+static TileSquarePoint TileSquareAt(double center, double half, double corner, double along, double offset) {
+    // Four sides, each from an edge's middle around a corner to the next edge's middle; the first
+    // one's frame, turned a quarter clockwise per side.
+    double straight = half - corner, quarter = std::numbers::pi * corner / 2, side = 2 * straight + quarter;
+    along -= std::floor(along / (4 * side)) * 4 * side;
+    int turns = std::min(int(along / side), 3);
+    double u = along - turns * side;
+    double x, y, nx, ny;
+    if (u < straight) {
+        x = u, y = -half, nx = 0, ny = -1;
+    } else if (u < straight + quarter) {
+        double angle = (-90 + 90 * (u - straight) / quarter) * std::numbers::pi / 180;
+        nx = std::cos(angle), ny = std::sin(angle);
+        x = straight + corner * nx, y = -straight + corner * ny;
+    } else {
+        x = half, y = -straight + (u - straight - quarter), nx = 1, ny = 0;
+    }
+    x += offset * nx;
+    y += offset * ny;
+    for (int k = 0; k < turns; k++) {
+        std::tie(x, y) = std::pair{-y, x};
+        std::tie(nx, ny) = std::pair{-ny, nx};
+    }
+    return {center + x, center + y, nx, ny};
+}
+
+// The band `width` DIPs wide centred on a rounded square's centreline (TileSquareAt), clockwise
+// from `from` to `to` DIPs along it and cut square at both ends; the whole band, as two figures,
+// from a full perimeter on. `corner` is at least half the width.
+static TileOutline TileSquareBandOutline(double center, double half, double corner, double width,
+                                         double from, double to) {
+    double straight = half - corner, quarter = std::numbers::pi * corner / 2, side = 2 * straight + quarter;
+    // One edge `offset` from the centreline, from `start` to `end` (backward when lower): lines
+    // along the sides and quarter arcs around the corners.
+    auto edge = [&](std::vector<TileOutlineSegment>& segments, double offset, double start, double end) {
+        double low = std::min(start, end), high = std::max(start, end);
+        std::vector<double> stops;
+        for (double base = std::floor(low / side) * side; base < high; base += side) {
+            for (double stop : {base, base + straight, base + straight + quarter}) {
+                if (stop > low + 1e-9 && stop < high - 1e-9 && (stops.empty() || stop > stops.back() + 1e-9)) {
+                    stops.push_back(stop);
+                }
+            }
+        }
+        if (end < start) std::reverse(stops.begin(), stops.end());
+        stops.push_back(end);
+        double at = start;
+        for (double stop : stops) {
+            double middle = (at + stop) / 2;
+            middle -= std::floor(middle / side) * side;
+            bool arc = middle > straight && middle < straight + quarter && corner + offset > 1e-6;
+            TileSquarePoint p = TileSquareAt(center, half, corner, stop, offset);
+            segments.push_back({p.x, p.y, arc ? corner + offset : 0, end > start});
+            at = stop;
+        }
+    };
+    TileOutline outline;
+    if (to - from >= 4 * side) {
+        for (double offset : {width / 2, -width / 2}) {
+            TileSquarePoint start = TileSquareAt(center, half, corner, from, offset);
+            outline.push_back({start.x, start.y, {}});
+            edge(outline.back().segments, offset, from, from + 4 * side);
+        }
+        return outline;
+    }
+    TileSquarePoint start = TileSquareAt(center, half, corner, from, width / 2);
+    TileOutlineFigure figure{start.x, start.y, {}};
+    edge(figure.segments, width / 2, from, to);
+    TileSquarePoint cut = TileSquareAt(center, half, corner, to, -width / 2);
+    figure.segments.push_back({cut.x, cut.y});
+    edge(figure.segments, -width / 2, to, from);
+    outline.push_back(std::move(figure));
+    return outline;
+}
+
 // Tile chrome for the taskbar theme. Logo and text inherit the taskbar's text color instead.
 struct TilePalette {
     uint32_t track;
@@ -6078,6 +6197,7 @@ struct MeterDisplay {
     int headlineFontSize;     // kHeadlineFontSizeMin-kHeadlineFontSizeMax DIPs.
     int headlineBarLength;    // kHeadlineBarLengthMin-kHeadlineBarLengthMax DIPs.
     int headlineBarThickness; // kHeadlineBarThicknessMin-kHeadlineBarThicknessMax DIPs.
+    bool headlineCountdown;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -6120,6 +6240,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .headlineBarLength = std::clamp(settings.headlineBarLength, kHeadlineBarLengthMin, kHeadlineBarLengthMax),
         .headlineBarThickness =
             std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
+        .headlineCountdown = settings.headlineCountdown,
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -6248,6 +6369,12 @@ struct BarGeometry {
     };
     double radius;         // Track and fill corners.
     double rail;           // Thin rail thickness, centred across the bar; 0 with a full track.
+    // The time track's small bar, while pace markers show in that style (else 0): `timeGap` past
+    // the bar's bottom (vertical bars: right) edge, `timeThickness` across, as long as the bar.
+    // Its track and fill corners are half its thickness; the fill fills like the bars' and ends
+    // at the meter's pacePx. It adds both to the bar's cell.
+    double timeGap;
+    double timeThickness;
     // How far the pace tick reaches past the bar across it: on both sides, or a notch's near side.
     double overhang;
     double paceLength;     // Pace tick outline (the halo).
@@ -6273,7 +6400,7 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
     g.rail = track ? 0 : std::max(1.0, (double)std::lround(display.barThickness / 4.0));
     // Over a full track, ticks other than dots reach past the bar: a DIP's worth of whole device
     // pixels, at most half the bar gap.
-    if (track && style != PaceTickStyle::Dot) {
+    if (track && style != PaceTickStyle::Dot && style != PaceTickStyle::TimeTrack) {
         g.overhang = std::min(std::lround(scale), std::lround(display.barGap * scale) / 2) * pixel;
     }
     g.paceLength = (style == PaceTickStyle::Caret ? 5 : 4) * pixel;
@@ -6298,6 +6425,14 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
             g.coreCrossOffset = 0.5 * pixel;
             g.paceRadius = 2 * pixel;
             g.coreRadius = 1.5 * pixel;
+            break;
+        case PaceTickStyle::TimeTrack:
+            // A DIP's worth of whole device pixels from the bar; a quarter of its thickness, at
+            // least a pixel.
+            if (display.showPaceTicks) {
+                g.timeGap = std::max(1L, std::lround(scale)) * pixel;
+                g.timeThickness = std::max(1L, std::lround(display.barThickness * scale / 4)) * pixel;
+            }
             break;
         case PaceTickStyle::Caret:
         default:
@@ -6468,7 +6603,8 @@ struct QuotaMeter {
 
     // Bars, in DIPs along the bar.
     int fillPx = 0;
-    int pacePx = 0;            // Pace tick's start.
+    int pacePx = 0;            // Pace tick's start; the time track's fill length.
+    double paceEndRadius = 0;  // The time track fill's corner radius toward 100%.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
     bool darkText = false;     // Black percent text over a yellow or orange fill.
@@ -6506,10 +6642,18 @@ struct AccountMeters {
     double ringTextFont = 0;
     double ringTextWidth = 0;
     double ringWarnTop = 0;
-    // Logo + headline tiles: the most-used quota's number, window key and color.
+    // Face tiles (IsFaceTile): the face's size, holding the meter shapes. Gauges also put their
+    // number and key in it: fonts, and cap height centres from the face's top.
+    double faceWidth = 0, faceHeight = 0;
+    double faceFont = 0, faceKeyFont = 0;
+    double faceNumberCenter = 0, faceKeyCenter = 0;
+    // Logo + headline tiles and gauges: the most-used quota's number (gauges: without "%"),
+    // window key and color.
     std::wstring headline;
     std::wstring headlineKey;
     uint32_t headlineColor = 0;
+    // Logo + headline tiles with the countdown: the time until that quota resets.
+    std::wstring headlineCountdown;
 };
 
 // `layout`: the layout the meters are drawn in. `badgeChars`: the tile badge's text length, 0
@@ -6546,12 +6690,56 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
 
     bool tiles = IsTileLayout(layout);
     bool concentric = layout == BarLayout::ConcentricRings;
-    bool ring = concentric || layout == BarLayout::SegmentedRing;
+    bool gauge = layout == BarLayout::Gauge, pies = layout == BarLayout::ClockPies;
+    bool square = layout == BarLayout::RoundedSquare;
+    // Arcs of circles: the rings and the gauge.
+    bool circular = concentric || layout == BarLayout::SegmentedRing || gauge;
+    bool ring = IsRingTile(layout);
     bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline;
+    // The most-used tile quota: the headline's, and the only one a gauge shows (until the first
+    // success, its first selected quota).
+    int top = -1;
+    for (int w = 0; w < kQuotaBarCount; w++) {
+        if ((meters.barMask & (1 << w)) && usage[w]->pct >= 0 && (top < 0 || usage[w]->pct > usage[top]->pct)) {
+            top = w;
+        }
+    }
+    if (gauge) {
+        meters.barMask = top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
+        count = meters.barMask ? 1 : 0;
+    }
+    // Pies: one per quota in slot order, in columns of two from the third on.
+    double pieDiameter = 0, pieGap = 0;
+    // The rounded square's centreline corner radius and perimeter.
+    double squareCorner = 0, squarePerimeter = 0;
+    if (IsFaceTile(layout)) {
+        double size = std::min<double>(display.ringSize, display.tileHeight);
+        if (pies) {
+            meters.ring.size = size;
+            pieGap = count > 2 ? 2 : 3;
+            pieDiameter = count == 1 ? size * 0.75 : count == 2 ? size * 0.5625 : (size - pieGap) / 2;
+            int columns = count > 2 ? 2 : count, rows = count > 2 ? 2 : 1;
+            meters.faceWidth = count ? columns * pieDiameter + (columns - 1) * pieGap : 0;
+            meters.faceHeight = count ? rows * pieDiameter + (rows - 1) * pieGap : 0;
+        } else {
+            meters.ring = TileRingLayout(concentric, size, display.ringThickness, count, display.logoScale);
+            meters.faceWidth = meters.faceHeight = size;
+        }
+    }
+    if (square) {
+        const TileRingGeometry& g = meters.ring;
+        squareCorner = std::clamp(g.size * kTileSquareCornerShare, g.stroke / 2, g.radius);
+        squarePerimeter = 8 * (g.radius - squareCorner) + 2 * std::numbers::pi * squareCorner;
+    }
+    if (gauge) {
+        // Three digits fit across the hole; the key sits in the opening, between the arc's ends.
+        const TileRingGeometry& g = meters.ring;
+        meters.faceFont = std::clamp(std::min(g.size * 0.375, (2 * g.hole - 2) / 1.75), 7.0, 16.0);
+        meters.faceKeyFont = std::max(6.0, meters.faceFont * kHeadlineKeyScale);
+        meters.faceNumberCenter = g.size / 2 - 0.5;
+        meters.faceKeyCenter = g.size / 2 + g.radius * 0.75;
+    }
     if (ring) {
-        meters.ring = TileRingLayout(concentric,
-                                     std::min<double>(display.ringSize, display.tileHeight),
-                                     display.ringThickness, count, display.logoScale);
         if (badgeChars) {
             // Kept half a DIP inside the hole by default.
             const TileRingGeometry& g = meters.ring;
@@ -6579,6 +6767,17 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         return std::clamp(remainingMode ? 100.0 - pct : pct, 0.0, 100.0);
     };
 
+    // A pace tick: from `from` to `to` DIPs along the unit direction (dx, dy) from (x, y),
+    // `width` across.
+    auto tick = [](double x, double y, double dx, double dy, double from, double to, double width) {
+        double acrossX = -dy * width / 2, acrossY = dx * width / 2;
+        auto point = [&](double distance, double side) {
+            return TileOutlineSegment{x + dx * distance + side * acrossX, y + dy * distance + side * acrossY};
+        };
+        TileOutlineSegment start = point(from, 1);
+        return TileOutline{{start.x, start.y, {point(to, 1), point(to, -1), point(from, -1)}}};
+    };
+
     BarGeometry bar = BarGeometryFor(display);
     int position = 0;
     for (int w = 0; w < kQuotaBarCount; w++) {
@@ -6603,15 +6802,22 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             m.fillEndRadius = display.barStyle == BarStyle::Rail ? bar.radius :
                 std::max(0.0, bar.radius - (display.barLength - m.fillPx));
             if (m.paceVisible) {
-                // Centred on the pace, kept inside the bar's rounded ends.
                 double pacePct = remainingMode ? remainingFraction * 100.0 :
                                                  (1.0 - remainingFraction) * 100.0;
                 pacePct = std::clamp(pacePct, 0.0, 100.0);
-                double radius = std::clamp(bar.radius, bar.paceLength / 2.0,
-                                           (display.barLength - bar.paceLength) / 2.0);
-                double center = std::clamp(display.barLength * pacePct / 100.0,
-                                           radius, display.barLength - radius);
-                m.pacePx = (int)std::lround(center - bar.paceLength / 2.0);
+                if (display.paceTickStyle == PaceTickStyle::TimeTrack) {
+                    // From the bar's start to the pace; hidden until it reaches a DIP.
+                    m.pacePx = (int)std::lround(display.barLength * pacePct / 100.0);
+                    m.paceVisible = m.pacePx > 0;
+                    m.paceEndRadius = std::max(0.0, bar.timeThickness / 2 - (display.barLength - m.pacePx));
+                } else {
+                    // Centred on the pace, kept inside the bar's rounded ends.
+                    double radius = std::clamp(bar.radius, bar.paceLength / 2.0,
+                                               (display.barLength - bar.paceLength) / 2.0);
+                    double center = std::clamp(display.barLength * pacePct / 100.0,
+                                               radius, display.barLength - radius);
+                    m.pacePx = (int)std::lround(center - bar.paceLength / 2.0);
+                }
             }
             // Adaptive text sits over the fill from the yellow threshold on, else over the track.
             m.textAlignment = display.percentTextAlignment == PercentTextAlignment::Adaptive ?
@@ -6646,20 +6852,23 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         double fill = shown / 100;
         const TileRingGeometry& geometry = meters.ring;
         bool fullRing = false;
-        if (ring) {
-            TileArc slot = concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
+        if (circular || square) {
+            // The square's arcs are its segmented ring's, in degrees of its perimeter from the
+            // top edge's middle (270 degrees).
+            TileArc slot = gauge ? kGaugeArc : concentric ? kConcentricArc : kSegmentedArcs[count - 1][position];
             m.radius = geometry.radius -
                        (concentric ? position * (geometry.stroke + geometry.gap) : 0.0);
-            // Partial arcs reach half a stroke past their slot at both ends, along the
-            // centreline.
+            // Partial ring and square arcs reach half a stroke past their slot at both ends,
+            // along the centreline; a gauge's is drawn as it is.
             fullRing = std::abs(slot.sweep) >= 360;
-            double grow = fullRing ? 0.0 :
-                geometry.stroke / 2 / m.radius * 180 / std::numbers::pi;
+            double centreline = square ? squarePerimeter : 2 * std::numbers::pi * m.radius;
+            double grow = fullRing || gauge ? 0.0 : geometry.stroke / 2 / centreline * 360;
             double direction = slot.sweep < 0 ? -1 : 1;
             m.arc = {slot.start - direction * grow, slot.sweep + 2 * direction * grow};
-            // Any usage fills at least 5 degrees.
-            if (shown > 0) fill = std::max(fill, 5.0 / std::abs(m.arc.sweep));
         }
+        if (pies) m.arc = {270, 360};
+        // Any usage fills at least 5 degrees.
+        if (shown > 0 && m.arc.sweep) fill = std::max(fill, 5.0 / std::abs(m.arc.sweep));
         int slotPosition = position++;
         m.fillUnits = shown > 0 ? std::max(1, (int)std::lround(fill * 1000)) : 0;
         if (m.paceVisible) {
@@ -6667,7 +6876,62 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             m.paceUnits = (int)std::lround(std::clamp(pace, 0.0, 1.0) * 1000);
         }
         double pace = m.paceUnits / 1000.0;
-        if (ring) {
+        if (square) {
+            // Bands along the centreline, cut square; a fill from its arc's start. The tick
+            // crosses the band along its normal, kept clear of a partial arc's ends.
+            double center = geometry.size / 2;
+            auto along = [&](double degrees) { return (degrees - 270) / 360 * squarePerimeter; };
+            double end = m.arc.start + m.arc.sweep;
+            double low = std::min(m.arc.start, end), high = std::max(m.arc.start, end);
+            m.track = TileSquareBandOutline(center, geometry.radius, squareCorner, geometry.stroke, along(low),
+                                            along(high));
+            m.fillSweep = m.arc.sweep * fill;
+            if (m.fillUnits) {
+                double fillEnd = m.arc.start + m.fillSweep;
+                m.fill = TileSquareBandOutline(center, geometry.radius, squareCorner, geometry.stroke,
+                                               along(std::min(m.arc.start, fillEnd)),
+                                               along(std::max(m.arc.start, fillEnd)));
+            }
+            m.paceAngle = m.arc.start + m.arc.sweep * pace;
+            if (m.paceVisible) {
+                if (!fullRing) {
+                    double pad = kTilePaceHalo / 2 / squarePerimeter * 360;
+                    m.paceAngle = std::max(low + pad, std::min(m.paceAngle, high - pad));
+                }
+                TileSquarePoint p = TileSquareAt(center, geometry.radius, squareCorner, along(m.paceAngle), 0);
+                double reach = geometry.stroke / 2 + kTilePaceOverhang;
+                m.paceHalo = tick(p.x, p.y, p.normalX, p.normalY, -reach, reach, kTilePaceHalo);
+                m.paceCore = tick(p.x, p.y, p.normalX, p.normalY, -reach + kTilePaceCoreInset,
+                                  reach - kTilePaceCoreInset, kTilePaceCore);
+            }
+        } else if (pies) {
+            // Clockwise from the top: a disc, the fill a wedge, the hand from the centre to just
+            // past the rim. Arcs in halves, so none turns more than 180 degrees.
+            bool columns = count > 2;
+            double r = pieDiameter / 2;
+            double cx = (columns ? slotPosition / 2 : slotPosition) * (pieDiameter + pieGap) + r;
+            double cy = (columns ? slotPosition % 2 : 0) * (pieDiameter + pieGap) + r;
+            auto at = [&](double degrees) {
+                double radians = degrees * std::numbers::pi / 180;
+                return TileOutlineSegment{cx + r * std::cos(radians), cy + r * std::sin(radians), r, true};
+            };
+            auto pie = [&](double sweep) {
+                TileOutlineSegment start = at(270);
+                if (sweep >= 360) return TileOutline{{start.x, start.y, {at(90), at(270)}}};
+                return TileOutline{{cx, cy, {{start.x, start.y}, at(270 + sweep / 2), at(270 + sweep)}}};
+            };
+            m.radius = r;
+            m.track = pie(360);
+            m.fillSweep = 360 * fill;
+            if (m.fillUnits) m.fill = pie(m.fillSweep);
+            m.paceAngle = 270 + 360 * pace;
+            if (m.paceVisible) {
+                double radians = m.paceAngle * std::numbers::pi / 180;
+                double dx = std::cos(radians), dy = std::sin(radians);
+                m.paceHalo = tick(cx, cy, dx, dy, 0, r + 1, 3);
+                m.paceCore = tick(cx, cy, dx, dy, 0, r + 0.5, 1.5);
+            }
+        } else if (circular) {
             // Annular sectors with stroke / 4 corners at a partial arc's ends; full rings have
             // none. Fills start with the track's corners and end in a radial cut at their value.
             double center = geometry.size / 2;
@@ -6689,32 +6953,21 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
             m.paceAngle = m.arc.start + m.arc.sweep * pace;
             if (m.paceVisible) {
-                // A radial tick: a 2 DIP core over a 3.5 DIP halo, square ended, kept clear of a
-                // partial arc's corners. It reaches 1.5 DIPs past the ring, at most half the gap
-                // toward a neighbouring ring, and the core stops half a DIP short of the halo.
-                static constexpr double kHalo = 3.5, kCore = 2, kOverhang = 1.5, kCoreInset = 0.5;
+                // A radial tick, kept clear of a partial arc's corners. It reaches past the ring
+                // by the overhang, at most half the gap toward a neighbouring ring, and the core
+                // stops short of the halo by its inset.
                 if (!fullRing) {
-                    double pad = (corner + kHalo / 2) / m.radius * 180 / std::numbers::pi;
+                    double pad = (corner + kTilePaceHalo / 2) / m.radius * 180 / std::numbers::pi;
                     m.paceAngle = std::max(low + pad, std::min(m.paceAngle, high - pad));
                 }
-                double between = std::min(kOverhang, geometry.gap / 2);
-                double outside = concentric && slotPosition > 0 ? between : kOverhang;
-                double inside = concentric && slotPosition < count - 1 ? between : kOverhang;
+                double between = std::min(kTilePaceOverhang, geometry.gap / 2);
+                double outside = concentric && slotPosition > 0 ? between : kTilePaceOverhang;
+                double inside = concentric && slotPosition < count - 1 ? between : kTilePaceOverhang;
                 double radians = m.paceAngle * std::numbers::pi / 180;
-                double alongX = std::cos(radians), alongY = std::sin(radians);
-                // From `from` to `to` DIPs out from the centre, `width` across.
-                auto tick = [&](double from, double to, double width) {
-                    double acrossX = -alongY * width / 2, acrossY = alongX * width / 2;
-                    auto point = [&](double distance, double side) {
-                        return TileOutlineSegment{center + alongX * distance + side * acrossX,
-                                                  center + alongY * distance + side * acrossY};
-                    };
-                    TileOutlineSegment start = point(from, 1);
-                    return TileOutline{
-                        {start.x, start.y, {point(to, 1), point(to, -1), point(from, -1)}}};
-                };
-                m.paceHalo = tick(inner - inside, outer + outside, kHalo);
-                m.paceCore = tick(inner - inside + kCoreInset, outer + outside - kCoreInset, kCore);
+                double dx = std::cos(radians), dy = std::sin(radians);
+                m.paceHalo = tick(center, center, dx, dy, inner - inside, outer + outside, kTilePaceHalo);
+                m.paceCore = tick(center, center, dx, dy, inner - inside + kTilePaceCoreInset,
+                                  outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else {
             // Headline segments: corners a quarter of the thickness; the fill cut flat until the
@@ -6725,22 +6978,40 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
     }
 
-    // Headline: the most-used tile quota, shown per the bar mode in its usage color.
-    if (layout == BarLayout::LogoHeadline) {
-        int top = -1;
-        for (int w = 0; w < kQuotaBarCount; w++) {
-            if ((meters.barMask & (1 << w)) && usage[w]->pct >= 0 &&
-                (top < 0 || usage[w]->pct > usage[top]->pct)) {
-                top = w;
-            }
-        }
+    // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
+    if (layout == BarLayout::LogoHeadline || gauge) {
+        bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
         meters.headline = L"\u2013";
+        if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";
         if (top >= 0) {
-            wchar_t text[16];
-            swprintf(text, ARRAYSIZE(text), L"%.0f%%", tileShown(usage[top]->pct));
+            wchar_t text[24];
+            swprintf(text, ARRAYSIZE(text), gauge ? L"%.0f" : L"%.0f%%", tileShown(usage[top]->pct));
             meters.headline = text;
             meters.headlineKey = top == kExtraUsageBar && account.provider == L"openai" ?
                                      L"Cr" : kQuotaKeys[top];
+        }
+        if (countdown && top >= 0) {
+            // Rounded up to the minute, like the details flyout's reset times.
+            ULONGLONG reset = usage[top]->resetUnixMs;
+            meters.headlineCountdown = kHeadlineCountdownArrow;
+            if (!reset) {
+                meters.headlineCountdown += L"no reset";
+            } else if (reset <= display.now) {
+                meters.headlineCountdown += L"now";
+            } else {
+                ULONGLONG minutes = (reset - display.now + 59999) / 60000;
+                ULONGLONG days = minutes / (24 * 60), hours = minutes / 60 % 24;
+                minutes %= 60;
+                wchar_t text[24];
+                if (days) {
+                    swprintf(text, ARRAYSIZE(text), hours ? L"%llud %lluh" : L"%llud", days, hours);
+                } else if (hours) {
+                    swprintf(text, ARRAYSIZE(text), minutes ? L"%lluh %llum" : L"%lluh", hours, minutes);
+                } else {
+                    swprintf(text, ARRAYSIZE(text), L"%llum", minutes);
+                }
+                meters.headlineCountdown += text;
+            }
         }
         meters.headlineColor = UsageColor(top >= 0 ? usage[top]->pct : -1, meters.stale, yellow,
                                           orange, red, display.colorblindMode);
@@ -6777,9 +7048,10 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 }
 
 // src/taskbar/tiles.h
-// Tile layouts: segmented ring, concentric rings and logo + headline %. A tile shows the account's
-// identity (provider logo, optionally with a number badge, or short text) and its tile quotas: the
-// meters the bar layouts show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
+// Tile layouts: logo + headline % and the face tiles (rings, rounded square, gauge, clock pies). A
+// tile shows the account's identity (provider logo, optionally with a number badge, or short text)
+// and its tile quotas: the meters the bar layouts show, in slot order (a gauge: the most-used
+// one). BuildAccountTile creates a tile; UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
 // columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
@@ -6880,14 +7152,14 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
 // chosen), with a number badge when another configured account shares the provider (UpdateQuotaUi
-// shows it while a visible one does), or text, and the stale-warning mark. Rings
-// resize the logo to their hole and place the badge; headline tiles take a 16 DIP logo, other
+// shows it while a visible one does), or text, and the stale-warning mark. Ring tiles
+// resize the logo to their hole and place the badge; other tiles take a 16 DIP logo, bar
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
                               BarLayout layout, MeterDisplay const& display, TileUiRefs& tile) {
     AccountConfig const& account = accounts[index];
-    bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
-    double side = (layout == BarLayout::LogoHeadline ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale;
+    bool ring = IsRingTile(layout);
+    double side = (IsTileLayout(layout) ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale;
     Grid identity;
     identity.IsHitTestVisible(false);
     if (!ring) identity.VerticalAlignment(VerticalAlignment::Center);
@@ -6990,7 +7262,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
                                    BarLayout layout, MeterDisplay const& display, AccountUiRefs& refs) {
     TileUiRefs& tile = refs.tile;
     tile.layout = layout;
-    bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+    bool ring = IsRingTile(layout);
 
     StackPanel column;
     column.Orientation(Orientation::Horizontal);
@@ -7013,10 +7285,42 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         column.Children().Append(face);
         return column;
     }
-
-    // Headline: the most-used quota's number and window key over per-quota segments, at the
-    // headline sizes and the bar gap.
     column.Children().Append(identity);
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
+
+    if (IsFaceTile(layout)) {
+        // Gauges and pies: the face beside the identity. A gauge's number and key are centred
+        // across it, moved down from its middle to their model centres (UpdateAccountTile).
+        Grid face;
+        face.IsHitTestVisible(false);
+        face.VerticalAlignment(VerticalAlignment::Center);
+        Grid meters;
+        face.Children().Append(meters);
+        if (layout == BarLayout::Gauge) {
+            auto centred = [&](TextBlock const& text) {
+                text.TextLineBounds(TextLineBounds::Tight);
+                text.HorizontalAlignment(HorizontalAlignment::Center);
+                text.VerticalAlignment(VerticalAlignment::Center);
+                text.RenderTransform(TranslateTransform{});
+                face.Children().Append(text);
+            };
+            tile.headline = TextBlock{};
+            tile.headline.FontFamily(displayFont);
+            tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            centred(tile.headline);
+            tile.headlineKey = TextBlock{};
+            tile.headlineKey.Opacity(0.6);
+            centred(tile.headlineKey);
+        }
+        tile.face = face;
+        tile.meters = meters;
+        column.Children().Append(face);
+        return column;
+    }
+
+    // Headline: the most-used quota's number and window key over per-quota segments at the
+    // headline sizes and the bar gap, or with the countdown, a clock glyph and the time until that
+    // quota resets at the key's size.
     StackPanel meters;
     meters.IsHitTestVisible(false);
     meters.VerticalAlignment(VerticalAlignment::Center);
@@ -7029,7 +7333,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     numberRow.Orientation(Orientation::Horizontal);
     double fontSize = display.headlineFontSize, keySize = fontSize * kHeadlineKeyScale;
     tile.headline = TextBlock{};
-    tile.headline.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+    tile.headline.FontFamily(displayFont);
     tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     tile.headline.FontSize(fontSize);
     tile.headline.TextLineBounds(TextLineBounds::Tight);
@@ -7055,10 +7359,23 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     tile.headlineKey.Text(L"");
     numberRow.MinWidth(reserve + std::ceil(keyWidth));
     headline.Children().Append(numberRow);
-    meters.Orientation(Orientation::Horizontal);
-    meters.HorizontalAlignment(HorizontalAlignment::Left);
-    meters.Spacing(display.barGap);
-    headline.Children().Append(meters);
+    if (display.headlineCountdown) {
+        // Behind a reset arrow; reserves "00h 00m", so minute ticks keep the tile's width.
+        tile.countdown = TextBlock{};
+        tile.countdown.FontSize(keySize);
+        tile.countdown.Opacity(0.7);
+        tile.countdown.TextLineBounds(TextLineBounds::Tight);
+        tile.countdown.HorizontalAlignment(HorizontalAlignment::Left);
+        tile.countdown.Text(kHeadlineCountdownReserve);
+        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown) * keySize));
+        tile.countdown.Text(L"");
+        headline.Children().Append(tile.countdown);
+    } else {
+        meters.Orientation(Orientation::Horizontal);
+        meters.HorizontalAlignment(HorizontalAlignment::Left);
+        meters.Spacing(display.barGap);
+        headline.Children().Append(meters);
+    }
     column.Children().Append(headline);
     return column;
 }
@@ -7090,7 +7407,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     TileUiRefs& tile = ui.tile;
     if (!tile.identity || !tile.meters) return;
     BarLayout layout = tile.layout;
-    bool ring = layout == BarLayout::ConcentricRings || layout == BarLayout::SegmentedRing;
+    bool face = IsFaceTile(layout);
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
     double thickness = display.headlineBarThickness;
@@ -7112,16 +7429,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         tile.paceCores.fill(nullptr);
         tile.meters.Visibility(barMask ? Visibility::Visible : Visibility::Collapsed);
 
-        if (ring) {
-            double size = geometry.size;
-            tile.face.Width(size);
-            tile.face.Height(size);
-            // Larger than the ring area by kTileRingOverflow on every side, pulled back by
-            // negative margins, so layout never clips the pace ticks.
+        if (face) {
+            tile.face.Width(meters.faceWidth);
+            tile.face.Height(meters.faceHeight);
+            // Larger than the face by kTileRingOverflow on every side, pulled back by negative
+            // margins, so layout never clips the pace ticks.
             auto ringShape = [&](Brush const& fill) {
                 wuxs::Path path;
-                path.Width(size + 2 * kTileRingOverflow);
-                path.Height(size + 2 * kTileRingOverflow);
+                path.Width(meters.faceWidth + 2 * kTileRingOverflow);
+                path.Height(meters.faceHeight + 2 * kTileRingOverflow);
                 path.Margin({-kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow,
                              -kTileRingOverflow});
                 path.Fill(fill);
@@ -7150,22 +7466,35 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 meterShapes.Append(tile.paceCores[w]);
             }
 
-            // Identity, sized to the hole; the badge's box centred on the model's.
-            if (tile.logo) {
-                tile.logo.Width(geometry.logo);
-                tile.logo.Height(geometry.logo);
+            if (IsRingTile(layout)) {
+                // Identity, sized to the hole; the badge's box centred on the model's.
+                if (tile.logo) {
+                    tile.logo.Width(geometry.logo);
+                    tile.logo.Height(geometry.logo);
+                }
+                if (tile.badge) {
+                    BadgeBox const& box = meters.ringBadge;
+                    Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
+                    Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
+                }
+                if (tile.text) {
+                    tile.text.FontSize(meters.ringTextFont);
+                    tile.text.MaxWidth(meters.ringTextWidth);
+                }
+                tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
+            } else if (tile.headline && tile.headlineKey) {
+                // A gauge's number and key at their fonts and centres.
+                tile.headline.FontSize(meters.faceFont);
+                tile.headlineKey.FontSize(meters.faceKeyFont);
+                double middle = meters.faceHeight / 2;
+                if (auto shift = tile.headline.RenderTransform().try_as<TranslateTransform>()) {
+                    shift.Y(meters.faceNumberCenter - middle);
+                }
+                if (auto shift = tile.headlineKey.RenderTransform().try_as<TranslateTransform>()) {
+                    shift.Y(meters.faceKeyCenter - middle);
+                }
             }
-            if (tile.badge) {
-                BadgeBox const& box = meters.ringBadge;
-                Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
-                Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
-            }
-            if (tile.text) {
-                tile.text.FontSize(meters.ringTextFont);
-                tile.text.MaxWidth(meters.ringTextWidth);
-            }
-            tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
-        } else {
+        } else if (!tile.countdown) {
             // Headline segments: corners a quarter of the thickness.
             double radius = thickness / 4;
             for (int w = 0; w < kQuotaBarCount; w++) {
@@ -7198,12 +7527,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
-            if (ring && tile.arcs[w]) {
-                // Ring fills are flat.
+            if (face && tile.arcs[w]) {
+                // Face fills are flat.
                 tile.arcs[w].Visibility(m.fillUnits ? Visibility::Visible : Visibility::Collapsed);
                 if (m.fillUnits) tile.arcs[w].Data(TileOutlineGeometry(m.fill, kTileRingOverflow));
                 tile.arcs[w].Fill(SolidColorBrush(ArgbColor(m.color)));
-            } else if (!ring && ui.fills[w]) {
+            } else if (!face && ui.fills[w]) {
                 // Start corners round with the track, shaded like the bars' fills.
                 double start = thickness / 4, end = m.fillEndRadius;
                 ui.fills[w].Width(m.fillLength);
@@ -7214,7 +7543,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             ap.fillColor[w] = m.color;
         }
 
-        // A ring's tick is a halo and a core shape; headline segments have none.
+        // A face tile's tick is a halo and a core shape; headline segments have none.
         bool paceVisible = tile.paceHalos[w] && tile.paceCores[w] && m.paceVisible;
         if ((paceVisible ? 1 : 0) != ap.paceVisible[w]) {
             Visibility visibility = paceVisible ? Visibility::Visible : Visibility::Collapsed;
@@ -7230,11 +7559,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     }
 
     if (tile.headline) {
-        std::wstring headline = meters.headline + L"\n" + meters.headlineKey;
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
             tile.headline.Text(meters.headline);
             tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
             tile.headlineKey.Text(meters.headlineKey);
+            if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);
             ap.headlineColor = meters.headlineColor;
         }
@@ -8886,8 +9216,12 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 // Each bar's cell holds its track (or thin rail), fill and pace tick, centred across
                 // it. Ticks reach past the bar through negative margins, which keep them unclipped.
+                // A time track's small bar takes a row under it (vertical bars: a column right of
+                // it).
                 double radius = barGeometry.radius;
                 double rail = barGeometry.rail;
+                double timeSize = barGeometry.timeGap + barGeometry.timeThickness;
+                bool timeTrack = timeSize > 0;
                 if (showPaceTicks) {
                     PaceMarkColors colors = PaceMarkColorsFor(paceTickColor, state.lightTheme);
                     refs.paceCore = SolidColorBrush(ArgbColor(colors.core));
@@ -8896,9 +9230,16 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     Grid barItem;
                     double compactLabelFontSize = percentFontSize;
-                    barItem.Height(verticalBars ? barLength : barThickness);
+                    barItem.Height(verticalBars ? barLength : barThickness + timeSize);
                     barItem.HorizontalAlignment(HorizontalAlignment::Center);
                     int barColumn = 0;
+                    if (timeTrack && !verticalBars) {
+                        for (double height : {(double)barThickness, timeSize}) {
+                            RowDefinition row;
+                            row.Height({height, GridUnitType::Pixel});
+                            barItem.RowDefinitions().Append(row);
+                        }
+                    }
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
@@ -8921,8 +9262,17 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         barLabel.Margin({0, -1, 3, 0});
                         barItem.Children().Append(barLabel);
                         barColumn = 1;
+                    } else if (timeTrack && verticalBars) {
+                        ColumnDefinition trackColumn;
+                        trackColumn.Width({(double)barThickness, GridUnitType::Pixel});
+                        barItem.ColumnDefinitions().Append(trackColumn);
                     } else {
                         barItem.Width(verticalBars ? barThickness : barLength);
+                    }
+                    if (timeTrack && verticalBars) {
+                        ColumnDefinition timeColumn;
+                        timeColumn.Width({timeSize, GridUnitType::Pixel});
+                        barItem.ColumnDefinitions().Append(timeColumn);
                     }
 
                     Border track;
@@ -8966,7 +9316,30 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         paceTick.Visibility(Visibility::Collapsed);
                         paceTick.IsHitTestVisible(false);
 
-                        if (paceTickStyle == PaceTickStyle::Caret) {
+                        if (timeTrack) {
+                            // The small bar at its cell's far edge: a track as long as the bar,
+                            // then the tick as its fill from the bar's start, in the pace color;
+                            // UpdateQuotaUi sizes the fill and rounds its far end.
+                            double thickness = barGeometry.timeThickness, end = thickness / 2;
+                            Border timeTrackBar;
+                            timeTrackBar.Width(verticalBars ? thickness : barLength);
+                            timeTrackBar.Height(verticalBars ? barLength : thickness);
+                            timeTrackBar.HorizontalAlignment(verticalBars ? HorizontalAlignment::Right :
+                                                                            HorizontalAlignment::Left);
+                            timeTrackBar.VerticalAlignment(VerticalAlignment::Bottom);
+                            timeTrackBar.CornerRadius({end, end, end, end});
+                            timeTrackBar.Background(SolidColorBrush(ArgbColor(kBarTrackColor)));
+                            timeTrackBar.IsHitTestVisible(false);
+                            Grid::SetColumn(timeTrackBar, verticalBars ? barColumn + 1 : barColumn);
+                            Grid::SetRow(timeTrackBar, verticalBars ? 0 : 1);
+                            barItem.Children().Append(timeTrackBar);
+                            paceTick.Width(verticalBars ? thickness : 0);
+                            paceTick.Height(verticalBars ? 0 : thickness);
+                            paceTick.HorizontalAlignment(verticalBars ? HorizontalAlignment::Right :
+                                                                        HorizontalAlignment::Left);
+                            paceTick.VerticalAlignment(VerticalAlignment::Bottom);
+                            paceTick.Background(refs.paceCore);
+                        } else if (paceTickStyle == PaceTickStyle::Caret) {
                             Grid caretShape;
                             for (int layer = 0; layer < 2; layer++) {
                                 wuxs::Polygon part;
@@ -9004,7 +9377,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                             paceCore.Background(refs.paceCore);
                             paceTick.Child(paceCore);
                         }
-                        Grid::SetColumn(paceTick, barColumn);
+                        Grid::SetColumn(paceTick, timeTrack && verticalBars ? barColumn + 1 : barColumn);
+                        Grid::SetRow(paceTick, timeTrack && !verticalBars ? 1 : 0);
                         barItem.Children().Append(paceTick);
                         refs.paceTicks[w] = paceTick;
                     }
@@ -9612,7 +9986,18 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         ap.paceVisible[w] = paceVisibleInt;
                     }
                     if (paceVisible && m.pacePx != ap.pacePx[w]) {
-                        if (ui.paceTicks[w]) {
+                        if (ui.paceTicks[w] && bar.timeThickness > 0) {
+                            // The time track's fill from the bar's start: start corners round
+                            // with its track, the far end as the meter's.
+                            double start = bar.timeThickness / 2, end = m.paceEndRadius;
+                            if (verticalBars) {
+                                ui.paceTicks[w].Height(m.pacePx);
+                                ui.paceTicks[w].CornerRadius({end, end, start, start});
+                            } else {
+                                ui.paceTicks[w].Width(m.pacePx);
+                                ui.paceTicks[w].CornerRadius({start, end, end, start});
+                            }
+                        } else if (ui.paceTicks[w]) {
                             // Centred ticks reach past both sides by the overhang. A notch hangs
                             // from the top (vertical: left) one; its far margin keeps its layout
                             // size within the bar, so layout never clips its halo.
@@ -15559,7 +15944,7 @@ static bool NormalizeSettings(Settings* s) {
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
-    if (s->barLayout < BarLayout::Stacked || s->barLayout > BarLayout::ConcentricRings) {
+    if (s->barLayout < BarLayout::Stacked || s->barLayout > kLastBarLayout) {
         s->barLayout = BarLayout::Stacked;
     }
     if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
@@ -15570,7 +15955,7 @@ static bool NormalizeSettings(Settings* s) {
         s->labelPosition = LabelPosition::Left;
     }
     if (s->paceTickStyle < PaceTickStyle::Caret ||
-        s->paceTickStyle > PaceTickStyle::Dot) {
+        s->paceTickStyle > PaceTickStyle::TimeTrack) {
         s->paceTickStyle = PaceTickStyle::Caret;
     }
     if (s->percentTextAlignment < PercentTextAlignment::Adaptive ||
@@ -15648,6 +16033,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"headlineFontSize", s.headlineFontSize);
         setNumber(L"headlineBarLength", s.headlineBarLength);
         setNumber(L"headlineBarThickness", s.headlineBarThickness);
+        setBool(L"headlineCountdown", s.headlineCountdown);
         setNumber(L"logoScale", s.logoScale);
         setBool(L"brandClaudeLogo", s.logoBrands.claude);
         setBool(L"brandGeminiLogo", s.logoBrands.gemini);
@@ -15659,12 +16045,16 @@ static std::wstring SerializeSettings(const Settings& s) {
                                 s.barLayout == BarLayout::SegmentedRing ? L"segmentedRing" :
                                 s.barLayout == BarLayout::ConcentricRings ? L"concentricRings" :
                                 s.barLayout == BarLayout::LogoHeadline ? L"logoHeadline" :
-                                                                         L"stacked");
+                                s.barLayout == BarLayout::Gauge ? L"gauge" :
+                                s.barLayout == BarLayout::ClockPies ? L"clockPies" :
+                                s.barLayout == BarLayout::RoundedSquare ? L"roundedSquare" :
+                                                                          L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setBool(L"showPaceTicks", s.showPaceTicks);
         setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
                                     s.paceTickStyle == PaceTickStyle::Notch ? L"notch" :
-                                    s.paceTickStyle == PaceTickStyle::Dot ? L"dot" : L"caret");
+                                    s.paceTickStyle == PaceTickStyle::Dot ? L"dot" :
+                                    s.paceTickStyle == PaceTickStyle::TimeTrack ? L"timeTrack" : L"caret");
         setNumber(L"paceTickColor", (int)s.paceTickColor);
         setString(L"labelPosition",
                   s.labelPosition == LabelPosition::Hidden ? L"hidden" :
@@ -15785,6 +16175,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.headlineBarThickness =
             std::isfinite(headlineBarThickness) ?
                 (int)std::clamp(headlineBarThickness, 0.0, (double)kHeadlineBarThicknessMax) : 0;
+        s.headlineCountdown = getBoolDefault(L"headlineCountdown", false);
         double logoScale = GetNum(root, L"logoScale", 100);
         double badgeSize = GetNum(root, L"badgeSize", 13);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
@@ -15804,14 +16195,18 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                       barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :
                       barLayout == L"concentricRings" ? BarLayout::ConcentricRings :
                       barLayout == L"logoHeadline" ? BarLayout::LogoHeadline :
-                                                     BarLayout::Stacked;
+                      barLayout == L"gauge" ? BarLayout::Gauge :
+                      barLayout == L"clockPies" ? BarLayout::ClockPies :
+                      barLayout == L"roundedSquare" ? BarLayout::RoundedSquare :
+                                                      BarLayout::Stacked;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
         std::wstring paceTickStyle = GetStr(root, L"paceTickStyle");
         s.paceTickStyle = paceTickStyle == L"line" ? PaceTickStyle::Line :
                           paceTickStyle == L"notch" ? PaceTickStyle::Notch :
-                          paceTickStyle == L"dot" ? PaceTickStyle::Dot : PaceTickStyle::Caret;
+                          paceTickStyle == L"dot" ? PaceTickStyle::Dot :
+                          paceTickStyle == L"timeTrack" ? PaceTickStyle::TimeTrack : PaceTickStyle::Caret;
         double paceTickColor = GetNum(root, L"paceTickColor", kDefaultPaceTickColor);
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?
@@ -16739,6 +17134,7 @@ enum class SettingsField : uint8_t {
     HeadlineFontSize,
     HeadlineBarLength,
     HeadlineBarThickness,
+    HeadlineCountdown,
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -16851,7 +17247,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
                     SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
-                    SettingsField::LogoScale,
+                    SettingsField::HeadlineCountdown, SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
@@ -16895,6 +17291,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::HeadlineFontSize: return s.headlineFontSize;
         case SettingsField::HeadlineBarLength: return s.headlineBarLength;
         case SettingsField::HeadlineBarThickness: return s.headlineBarThickness;
+        case SettingsField::HeadlineCountdown: return s.headlineCountdown;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -16954,7 +17351,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.historyDefaultRange = HistoryUiRange(std::clamp(value, int(HistoryUiRange::Day), int(HistoryUiRange::All)));
             break;
         case SettingsField::BarLayout:
-            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::ConcentricRings)));
+            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(kLastBarLayout)));
             break;
         case SettingsField::BarStyle:
             s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
@@ -16967,6 +17364,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::HeadlineFontSize: s.headlineFontSize = value; break;
         case SettingsField::HeadlineBarLength: s.headlineBarLength = value; break;
         case SettingsField::HeadlineBarThickness: s.headlineBarThickness = value; break;
+        case SettingsField::HeadlineCountdown: s.headlineCountdown = value != 0; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -16985,7 +17383,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowPaceTicks: s.showPaceTicks = value != 0; break;
         case SettingsField::PaceTickStyle:
             s.paceTickStyle = PaceTickStyle(std::clamp(value, int(PaceTickStyle::Caret),
-                                                       int(PaceTickStyle::Dot)));
+                                                       int(PaceTickStyle::TimeTrack)));
             break;
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
@@ -17031,6 +17429,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.headlineFontSize = defaults.headlineFontSize;
             s.headlineBarLength = defaults.headlineBarLength;
             s.headlineBarThickness = defaults.headlineBarThickness;
+            s.headlineCountdown = defaults.headlineCountdown;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;
@@ -18116,7 +18515,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         data = {data[1], data[2]};
     }
     const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Stacked),
-                                                  int(BarLayout::ConcentricRings)));
+                                                  int(kLastBarLayout)));
     const float H = gallery ? 48 : float(std::clamp(taskbarHeight > 0 ? taskbarHeight : 48.0, 24.0, 96.0));
     const float margin = float(std::clamp(settings.accountMargin, 0, 500));
     strip.height = H;
@@ -18235,9 +18634,9 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         const AccountConfig& account = accounts[i];
         const int column = int(i);
         const float T = float(display.tileHeight);
-        // The box's side padding (rings 4 DIPs, headline tiles 7 and 8, bars 7) comes out of the
-        // account margin, shrinking with it.
-        const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+        // The box's side padding (ring tiles 4 DIPs, other tiles 7 and 8, bars 7) comes out of
+        // the account margin, shrinking with it.
+        const bool ring = IsRingTile(layout);
         const float padLeft = std::min(ring ? 4.0f : 7.0f, margin);
         const float padRight = std::min(ring ? 4.0f : IsTileLayout(layout) ? 8.0f : 7.0f, margin);
         float x0 = x + margin - padLeft, width = 0, top = 0, height = 0;
@@ -18249,7 +18648,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // padding inside each side, holding the content centered across it: the identity
             // beside, above or below a stack of bars at the identity position, centered on them,
             // the identity gap between them while a bar shows; or the bars alone. Each bar a track
-            // or thin rail, its fill and pace tick, an optional quota key and the percentage text.
+            // or thin rail, its fill and pace tick, an optional quota key and the percentage text;
+            // a time track's small bar adds to its cell under it (vertical bars: right of it).
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -18262,16 +18662,17 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                          DWRITE_FONT_WEIGHT_NORMAL};
             const UiTextStyle textStyle{UiFamily::Taskbar, textSize, 0, DWRITE_FONT_WEIGHT_NORMAL};
             const float keyColumn = std::ceil(textSize * 1.4f) + 3;
-            const float itemWidth = float(vertical ? th : len) + (keys ? keyColumn : 0);
-            const float itemHeight = float(vertical ? len : th);
             const BarGeometry geometry = BarGeometryFor(display);
+            const float timeSize = float(geometry.timeGap + geometry.timeThickness);
+            const float itemWidth = (vertical ? float(th) + timeSize : float(len)) + (keys ? keyColumn : 0);
+            const float itemHeight = float(vertical ? len : th);
             AccountMeters meters = AccountMeterState(display, layout, account, data[i], 0, 0);
             int count = std::popcount(unsigned(meters.barMask));
 
             float barsWidth = 0, barsHeight = 0;
             if (count) {
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
-                barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
+                barsHeight = vertical ? float(len) : count * (float(th) + timeSize) + (count - 1) * gap + 2;
             }
             // The identity: the account label in the label font, its "!" while warned, or the
             // logo at its size; its margins (BarIdentityMarginFor) make its box, with the label
@@ -18331,7 +18732,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 const QuotaMeter& q = meters.quotas[w];
                 // Stacked items share the panel's left; vertical ones line up from it.
                 float itemLeft = barsLeft + (vertical ? k * (itemWidth + gap) : 0);
-                float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + gap);
+                float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + timeSize + gap);
                 float tx = itemLeft + (keys ? keyColumn : 0), ty = itemTop;
                 float trackHeight = itemHeight;
                 float radius = float(geometry.radius);
@@ -18354,7 +18755,29 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     fill.shadeLeft = vertical;
                     add(ops, std::move(fill));
                 }
-                if (display.showPaceTicks && q.paceVisible) {
+                if (timeSize > 0) {
+                    // The time track: its track as long as the bar, then its fill from the bar's
+                    // start in the pace color; corners half its thickness, the fill's far end the
+                    // meter's.
+                    float gapTo = float(geometry.timeGap), r = float(geometry.timeThickness) / 2;
+                    D2D1_RECT_F timeTrack = vertical ? D2D1_RECT_F{tx + th + gapTo, ty, tx + th + timeSize, ty + len} :
+                                                       D2D1_RECT_F{tx, ty + th + gapTo, tx + len, ty + th + timeSize};
+                    rect(ops, timeTrack, r, kBarTrackColor);
+                    if (q.paceVisible) {
+                        Op fill;
+                        float pacePx = float(q.pacePx), end = float(q.paceEndRadius);
+                        fill.rect = timeTrack;
+                        if (vertical) {
+                            fill.rect.top = ty + len - pacePx;
+                            fill.corners = std::array<float, 4>{end, end, r, r};
+                        } else {
+                            fill.rect.right = tx + pacePx;
+                            fill.corners = std::array<float, 4>{r, end, end, r};
+                        }
+                        fill.color = pace.core;
+                        add(ops, std::move(fill));
+                    }
+                } else if (display.showPaceTicks && q.paceVisible) {
                     // Past the bar's sides by its overhang; a notch only past the top (vertical:
                     // left) one.
                     bool notch = display.paceTickStyle == PaceTickStyle::Notch;
@@ -18425,12 +18848,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             height = T;
             int count = std::popcount(unsigned(meters.barMask));
 
-            if (ring) {
-                const TileRingGeometry& geometry = meters.ring;
-                const float S = float(geometry.size);
-                const float faceLeft = x0 + padLeft, faceTop = top + (T - S) / 2;
-                width = padLeft + S + padRight;
-                // Tracks, then flat fills, then pace ticks (halo, then core) on top.
+            // A face tile's meter shapes in its face from (faceLeft, faceTop): tracks, then flat
+            // fills, then pace ticks (halo, then core) on top.
+            const float faceWidth = float(meters.faceWidth), faceHeight = float(meters.faceHeight);
+            auto faceShapes = [&](float faceLeft, float faceTop) {
                 auto shape = [&](const TileOutline& outline, uint32_t color) {
                     Op op;
                     op.kind = Op::Kind::Shape;
@@ -18453,6 +18874,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         }
                     }
                 }
+            };
+
+            if (ring) {
+                const TileRingGeometry& geometry = meters.ring;
+                const float S = faceWidth;
+                const float faceLeft = x0 + padLeft, faceTop = top + (T - faceHeight) / 2;
+                width = padLeft + S + padRight;
+                faceShapes(faceLeft, faceTop);
                 // Identity, sized to the hole, with its badge in the model's box.
                 if (hasLogo) {
                     float side = float(geometry.logo);
@@ -18471,12 +18900,35 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, L"!", warnStyle, faceLeft + S + 3 - m.width, faceTop + float(meters.ringWarnTop),
                           m.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
                 }
+            } else if (IsFaceTile(layout)) {
+                // Gauges and pies: the identity, then 6 DIP after it the face; a gauge's number
+                // and key centred across it, their cap heights on the model's centres.
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
+                float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
+                faceShapes(faceLeft, faceTop);
+                if (layout == BarLayout::Gauge) {
+                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double center, uint32_t color,
+                                       float alpha) {
+                        Measured m = measure(s, style);
+                        label(ops, s, style, faceLeft + (faceWidth - m.width) / 2, faceTop + float(center) - m.cap / 2,
+                              m.width, DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
+                    };
+                    centred(meters.headline, {UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD},
+                            meters.faceNumberCenter, meters.headlineColor, 1);
+                    if (!meters.headlineKey.empty()) {
+                        centred(meters.headlineKey, {UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL},
+                                meters.faceKeyCenter, text, 0.6f);
+                    }
+                }
+                width = padLeft + idWidth + 6 + faceWidth + padRight;
             } else {
                 // Headline: the identity, then 6 DIP after it the most-used quota's number and,
                 // 3 DIP after it, its window key (bottom-aligned on the baseline), in a row that
                 // reserves "100%" and the widest key; under them per-quota segments the bar gap
                 // apart: corners a quarter of their thickness, fills cut flat toward the end and
-                // shaded like the bars'.
+                // shaded like the bars'. With the countdown, 3 DIP under the row the time until
+                // that quota resets at the key's size instead, reserving its widest form.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float metersLeft = x0 + padLeft + idWidth + 6;
@@ -18493,8 +18945,12 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                           number.width + 3 + key.width);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
                 const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
-                float segments = count ? count * length + (count - 1) * gap : 0;
-                float panelHeight = rowHeight + (count ? 3 + thick : 0);
+                const bool countdown = display.headlineCountdown;
+                Measured remaining = measure(meters.headlineCountdown, keyStyle);
+                float segments = countdown ? std::max(std::ceil(measure(kHeadlineCountdownReserve, keyStyle).width),
+                                                      remaining.width) :
+                                 count     ? count * length + (count - 1) * gap : 0;
+                float panelHeight = rowHeight + (countdown ? 3 + remaining.cap : count ? 3 + thick : 0);
                 float panelTop = top + (T - panelHeight) / 2;
                 label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
                       number.width, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
@@ -18503,8 +18959,12 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                           panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
                           0.6f, true);
                 }
+                if (countdown) {
+                    label(ops, meters.headlineCountdown, keyStyle, metersLeft, panelTop + rowHeight + 3,
+                          remaining.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, 0.7f, true);
+                }
                 float left = metersLeft, y = panelTop + rowHeight + 3;
-                for (int w = 0; w < kQuotaBarCount; w++) {
+                for (int w = 0; w < kQuotaBarCount && !countdown; w++) {
                     if (!(meters.barMask & (1 << w))) continue;
                     const QuotaMeter& q = meters.quotas[w];
                     rect(ops, {left, y, left + length, y + thick}, thick / 4, palette.track);
@@ -19252,8 +19712,10 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 // markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars", L"Vertical bars", L"Headline %",
-                                                 L"Segmented ring", L"Concentric rings"};
+// By BarLayout.
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Headline %",
+                                                 L"Segmented ring", L"Concentric rings", L"Gauge %",
+                                                 L"Clock pies",     L"Rounded square"};
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
@@ -19266,12 +19728,12 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     const Settings& s = view.settings;
     const BarLayout layout = s.barLayout;
     const bool bars = !IsTileLayout(layout);
-    const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
 
     // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined.
     y = UiAddSection(items, id, x, y + 16, width, L"Tile style");
     {
         constexpr float kCardHeight = 1 + 8 + 72 + 8 + 17 + 2 + 8 + 1, kGap = 8;
+        constexpr int kRows = int(std::size(kSettingsTileStyles) + 2) / 3;
         float cardWidth = std::max((width - 2 * kGap) / 3, 1.0f);
         for (int i = 0; i < int(std::size(kSettingsTileStyles)); i++) {
             float left = x + float(i % 3) * (cardWidth + kGap), top = y + float(i / 3) * (kCardHeight + kGap);
@@ -19284,7 +19746,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             card.action = SettingsCommand(SettingsField::BarLayout, i);
             items.push_back(std::move(card));
         }
-        y += 2 * kCardHeight + kGap;
+        y += kRows * kCardHeight + (kRows - 1) * kGap;
     }
 
     // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays on
@@ -19467,25 +19929,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             if (!text) spec.reason = L"Turn on Quota keys, or percentage text in Display, to change this.";
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
         }
-    } else if (ring) {
-        y = UiAddSection(items, id, x, y + 20, width, L"Ring");
+    } else if (IsFaceTile(layout)) {
+        // Face tiles share the ring size and thickness; pies are solid.
+        const bool gauge = layout == BarLayout::Gauge, pies = layout == BarLayout::ClockPies;
+        const bool square = layout == BarLayout::RoundedSquare;
+        y = UiAddSection(items, id, x, y + 20, width, gauge ? L"Gauge" : pies ? L"Pies" : square ? L"Square" : L"Ring");
         {
             UiCardSpec spec;
-            spec.title = L"Ring size";
-            spec.description = {{L"Diameter in pixels."}};
+            spec.title = gauge ? L"Gauge size" : pies ? L"Pie area" : square ? L"Square size" : L"Ring size";
+            spec.description = {{pies   ? L"Height in pixels; one pie per quota, smaller from the second on." :
+                                 square ? L"Side in pixels." :
+                                          L"Diameter in pixels."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::RingSize);
         }
-        {
+        if (!pies) {
             UiCardSpec spec;
-            spec.title = L"Ring thickness";
-            spec.description = {{L"Stroke width in pixels. Narrows automatically when the meters don\u2019t fit "
-                                 L"around the logo or text."}};
+            spec.title = gauge ? L"Gauge thickness" : square ? L"Square thickness" : L"Ring thickness";
+            spec.description = {{gauge ? L"Stroke width in pixels. Narrows automatically when the arc doesn\u2019t fit "
+                                         L"around the number." :
+                                         L"Stroke width in pixels. Narrows automatically when the meters don\u2019t fit "
+                                         L"around the logo or text."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     } else {
-        // Headline tiles: the number's size, then its bars' sizes and the bars' gap.
+        // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
+        // gap, which the countdown replaces.
         y = UiAddSection(items, id, x, y + 20, width, L"Headline");
         {
             UiCardSpec spec;
@@ -19496,20 +19966,34 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
         {
             UiCardSpec spec;
+            spec.title = L"Reset countdown";
+            spec.description = {{L"Time until that quota resets under the number, instead of each quota\u2019s bar."}};
+            y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineCountdown);
+        }
+        const bool segments = !s.headlineCountdown;
+        PCWSTR countdownOn = L"Turn off Reset countdown to change this.";
+        {
+            UiCardSpec spec;
             spec.title = L"Bar length";
             spec.description = {{L"Pixels along each quota\u2019s bar under the number."}};
+            spec.enabled = segments;
+            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
         }
         {
             UiCardSpec spec;
             spec.title = L"Bar thickness";
             spec.description = {{L"Pixels across each bar."}};
+            spec.enabled = segments;
+            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
         }
         {
             UiCardSpec spec;
             spec.title = L"Bar gap";
             spec.description = {{L"Space between an account\u2019s bars."}};
+            spec.enabled = segments;
+            if (!segments) spec.reason = countdownOn;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
@@ -19530,14 +20014,16 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         if (bars) {
             UiCardSpec spec;
             spec.title = L"Marker style";
-            spec.description = {{L"Thin caret, full-width line, edge notch, or centered dot."}};
+            spec.description = {{L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small "
+                                 L"bar under each bar that fills with the elapsed time."}};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickStyle, 200,
                                         {{L"Caret", int(PaceTickStyle::Caret)},
                                          {L"Full line", int(PaceTickStyle::Line)},
                                          {L"Edge notch", int(PaceTickStyle::Notch)},
-                                         {L"Dot", int(PaceTickStyle::Dot)}},
+                                         {L"Dot", int(PaceTickStyle::Dot)},
+                                         {L"Time track", int(PaceTickStyle::TimeTrack)}},
                                         int(s.paceTickStyle));
         }
         {
@@ -20035,7 +20521,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             {
                 UiCardSpec spec;
                 spec.title = L"Identity";
-                spec.description = {{L"Marks this account beside its bars and on ring and headline tiles. Label "
+                spec.description = {{L"Marks this account beside its bars and on tiles. Label "
                                      L"shows the label on bars and its short text on tiles. The number badge "
                                      L"appears only when several visible accounts share a provider."}};
                 spec.trailing = {220, 32};
@@ -20053,7 +20539,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
                 UiCardSpec spec;
                 spec.title = L"Short text";
-                spec.description = {{L"The Label identity on ring and headline tiles, up to 4 characters. Empty "
+                spec.description = {{L"The Label identity on tiles, up to 4 characters. Empty "
                                      L"uses the label without spaces."}};
                 spec.trailing = {96, 32};
                 spec.enabled = used;

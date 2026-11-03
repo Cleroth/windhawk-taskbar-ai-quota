@@ -474,9 +474,9 @@ static void RunAccountEditTests() {
         const UiItem* shortText = UiFindItem(frame, AccountId(1, SettingsField::AccountTileText));
         CHECK(shortText && !shortText->enabled && shortText->maximum == 4 && UiRunsText(shortText->runs) == L"OAI");
         CHECK(shortText->rect.top > identity->rect.bottom);
-        CHECK(HasText(frame, L"Marks this account beside its bars and on ring and headline tiles.") &&
+        CHECK(HasText(frame, L"Marks this account beside its bars and on tiles.") &&
               HasText(frame, L"Label shows the label on bars and its short text on tiles."));
-        CHECK(HasText(frame, L"The Label identity on ring and headline tiles, up to 4 characters.") &&
+        CHECK(HasText(frame, L"The Label identity on tiles, up to 4 characters.") &&
               HasText(frame, L"Used on tiles when Identity is Label."));
         CHECK(!HasText(frame, L"Logo on bars") && !HasText(frame, L"Tile identity") && !HasText(frame, L"Label text"));
         CHECK(HasText(frame, L"Shown in details, and next to bars when Identity is Label."));

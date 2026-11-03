@@ -346,7 +346,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             {
                 UiCardSpec spec;
                 spec.title = L"Identity";
-                spec.description = {{L"Marks this account beside its bars and on ring and headline tiles. Label "
+                spec.description = {{L"Marks this account beside its bars and on tiles. Label "
                                      L"shows the label on bars and its short text on tiles. The number badge "
                                      L"appears only when several visible accounts share a provider."}};
                 spec.trailing = {220, 32};
@@ -364,7 +364,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
                 UiCardSpec spec;
                 spec.title = L"Short text";
-                spec.description = {{L"The Label identity on ring and headline tiles, up to 4 characters. Empty "
+                spec.description = {{L"The Label identity on tiles, up to 4 characters. Empty "
                                      L"uses the label without spaces."}};
                 spec.trailing = {96, 32};
                 spec.enabled = used;

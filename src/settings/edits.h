@@ -36,6 +36,7 @@ enum class SettingsField : uint8_t {
     HeadlineFontSize,
     HeadlineBarLength,
     HeadlineBarThickness,
+    HeadlineCountdown,
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -148,7 +149,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
                     SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
-                    SettingsField::LogoScale,
+                    SettingsField::HeadlineCountdown, SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
@@ -192,6 +193,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::HeadlineFontSize: return s.headlineFontSize;
         case SettingsField::HeadlineBarLength: return s.headlineBarLength;
         case SettingsField::HeadlineBarThickness: return s.headlineBarThickness;
+        case SettingsField::HeadlineCountdown: return s.headlineCountdown;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -251,7 +253,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.historyDefaultRange = HistoryUiRange(std::clamp(value, int(HistoryUiRange::Day), int(HistoryUiRange::All)));
             break;
         case SettingsField::BarLayout:
-            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(BarLayout::ConcentricRings)));
+            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(kLastBarLayout)));
             break;
         case SettingsField::BarStyle:
             s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
@@ -264,6 +266,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::HeadlineFontSize: s.headlineFontSize = value; break;
         case SettingsField::HeadlineBarLength: s.headlineBarLength = value; break;
         case SettingsField::HeadlineBarThickness: s.headlineBarThickness = value; break;
+        case SettingsField::HeadlineCountdown: s.headlineCountdown = value != 0; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -282,7 +285,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowPaceTicks: s.showPaceTicks = value != 0; break;
         case SettingsField::PaceTickStyle:
             s.paceTickStyle = PaceTickStyle(std::clamp(value, int(PaceTickStyle::Caret),
-                                                       int(PaceTickStyle::Dot)));
+                                                       int(PaceTickStyle::TimeTrack)));
             break;
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
@@ -328,6 +331,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.headlineFontSize = defaults.headlineFontSize;
             s.headlineBarLength = defaults.headlineBarLength;
             s.headlineBarThickness = defaults.headlineBarThickness;
+            s.headlineCountdown = defaults.headlineCountdown;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;

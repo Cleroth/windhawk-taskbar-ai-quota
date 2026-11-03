@@ -71,7 +71,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         data = {data[1], data[2]};
     }
     const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Stacked),
-                                                  int(BarLayout::ConcentricRings)));
+                                                  int(kLastBarLayout)));
     const float H = gallery ? 48 : float(std::clamp(taskbarHeight > 0 ? taskbarHeight : 48.0, 24.0, 96.0));
     const float margin = float(std::clamp(settings.accountMargin, 0, 500));
     strip.height = H;
@@ -190,9 +190,9 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         const AccountConfig& account = accounts[i];
         const int column = int(i);
         const float T = float(display.tileHeight);
-        // The box's side padding (rings 4 DIPs, headline tiles 7 and 8, bars 7) comes out of the
-        // account margin, shrinking with it.
-        const bool ring = layout == BarLayout::SegmentedRing || layout == BarLayout::ConcentricRings;
+        // The box's side padding (ring tiles 4 DIPs, other tiles 7 and 8, bars 7) comes out of
+        // the account margin, shrinking with it.
+        const bool ring = IsRingTile(layout);
         const float padLeft = std::min(ring ? 4.0f : 7.0f, margin);
         const float padRight = std::min(ring ? 4.0f : IsTileLayout(layout) ? 8.0f : 7.0f, margin);
         float x0 = x + margin - padLeft, width = 0, top = 0, height = 0;
@@ -204,7 +204,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // padding inside each side, holding the content centered across it: the identity
             // beside, above or below a stack of bars at the identity position, centered on them,
             // the identity gap between them while a bar shows; or the bars alone. Each bar a track
-            // or thin rail, its fill and pace tick, an optional quota key and the percentage text.
+            // or thin rail, its fill and pace tick, an optional quota key and the percentage text;
+            // a time track's small bar adds to its cell under it (vertical bars: right of it).
             const bool vertical = layout == BarLayout::Vertical;
             const int len = display.barLength, th = display.barThickness;
             const float gap = float(std::clamp(settings.barGap, 0, 500));
@@ -217,16 +218,17 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                          DWRITE_FONT_WEIGHT_NORMAL};
             const UiTextStyle textStyle{UiFamily::Taskbar, textSize, 0, DWRITE_FONT_WEIGHT_NORMAL};
             const float keyColumn = std::ceil(textSize * 1.4f) + 3;
-            const float itemWidth = float(vertical ? th : len) + (keys ? keyColumn : 0);
-            const float itemHeight = float(vertical ? len : th);
             const BarGeometry geometry = BarGeometryFor(display);
+            const float timeSize = float(geometry.timeGap + geometry.timeThickness);
+            const float itemWidth = (vertical ? float(th) + timeSize : float(len)) + (keys ? keyColumn : 0);
+            const float itemHeight = float(vertical ? len : th);
             AccountMeters meters = AccountMeterState(display, layout, account, data[i], 0, 0);
             int count = std::popcount(unsigned(meters.barMask));
 
             float barsWidth = 0, barsHeight = 0;
             if (count) {
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
-                barsHeight = vertical ? float(len) : count * float(th) + (count - 1) * gap + 2;
+                barsHeight = vertical ? float(len) : count * (float(th) + timeSize) + (count - 1) * gap + 2;
             }
             // The identity: the account label in the label font, its "!" while warned, or the
             // logo at its size; its margins (BarIdentityMarginFor) make its box, with the label
@@ -286,7 +288,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 const QuotaMeter& q = meters.quotas[w];
                 // Stacked items share the panel's left; vertical ones line up from it.
                 float itemLeft = barsLeft + (vertical ? k * (itemWidth + gap) : 0);
-                float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + gap);
+                float itemTop = vertical ? barsTop : barsTop + 1 + k * (float(th) + timeSize + gap);
                 float tx = itemLeft + (keys ? keyColumn : 0), ty = itemTop;
                 float trackHeight = itemHeight;
                 float radius = float(geometry.radius);
@@ -309,7 +311,29 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     fill.shadeLeft = vertical;
                     add(ops, std::move(fill));
                 }
-                if (display.showPaceTicks && q.paceVisible) {
+                if (timeSize > 0) {
+                    // The time track: its track as long as the bar, then its fill from the bar's
+                    // start in the pace color; corners half its thickness, the fill's far end the
+                    // meter's.
+                    float gapTo = float(geometry.timeGap), r = float(geometry.timeThickness) / 2;
+                    D2D1_RECT_F timeTrack = vertical ? D2D1_RECT_F{tx + th + gapTo, ty, tx + th + timeSize, ty + len} :
+                                                       D2D1_RECT_F{tx, ty + th + gapTo, tx + len, ty + th + timeSize};
+                    rect(ops, timeTrack, r, kBarTrackColor);
+                    if (q.paceVisible) {
+                        Op fill;
+                        float pacePx = float(q.pacePx), end = float(q.paceEndRadius);
+                        fill.rect = timeTrack;
+                        if (vertical) {
+                            fill.rect.top = ty + len - pacePx;
+                            fill.corners = std::array<float, 4>{end, end, r, r};
+                        } else {
+                            fill.rect.right = tx + pacePx;
+                            fill.corners = std::array<float, 4>{r, end, end, r};
+                        }
+                        fill.color = pace.core;
+                        add(ops, std::move(fill));
+                    }
+                } else if (display.showPaceTicks && q.paceVisible) {
                     // Past the bar's sides by its overhang; a notch only past the top (vertical:
                     // left) one.
                     bool notch = display.paceTickStyle == PaceTickStyle::Notch;
@@ -380,12 +404,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             height = T;
             int count = std::popcount(unsigned(meters.barMask));
 
-            if (ring) {
-                const TileRingGeometry& geometry = meters.ring;
-                const float S = float(geometry.size);
-                const float faceLeft = x0 + padLeft, faceTop = top + (T - S) / 2;
-                width = padLeft + S + padRight;
-                // Tracks, then flat fills, then pace ticks (halo, then core) on top.
+            // A face tile's meter shapes in its face from (faceLeft, faceTop): tracks, then flat
+            // fills, then pace ticks (halo, then core) on top.
+            const float faceWidth = float(meters.faceWidth), faceHeight = float(meters.faceHeight);
+            auto faceShapes = [&](float faceLeft, float faceTop) {
                 auto shape = [&](const TileOutline& outline, uint32_t color) {
                     Op op;
                     op.kind = Op::Kind::Shape;
@@ -408,6 +430,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                         }
                     }
                 }
+            };
+
+            if (ring) {
+                const TileRingGeometry& geometry = meters.ring;
+                const float S = faceWidth;
+                const float faceLeft = x0 + padLeft, faceTop = top + (T - faceHeight) / 2;
+                width = padLeft + S + padRight;
+                faceShapes(faceLeft, faceTop);
                 // Identity, sized to the hole, with its badge in the model's box.
                 if (hasLogo) {
                     float side = float(geometry.logo);
@@ -426,12 +456,35 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, L"!", warnStyle, faceLeft + S + 3 - m.width, faceTop + float(meters.ringWarnTop),
                           m.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
                 }
+            } else if (IsFaceTile(layout)) {
+                // Gauges and pies: the identity, then 6 DIP after it the face; a gauge's number
+                // and key centred across it, their cap heights on the model's centres.
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
+                float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
+                faceShapes(faceLeft, faceTop);
+                if (layout == BarLayout::Gauge) {
+                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double center, uint32_t color,
+                                       float alpha) {
+                        Measured m = measure(s, style);
+                        label(ops, s, style, faceLeft + (faceWidth - m.width) / 2, faceTop + float(center) - m.cap / 2,
+                              m.width, DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
+                    };
+                    centred(meters.headline, {UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD},
+                            meters.faceNumberCenter, meters.headlineColor, 1);
+                    if (!meters.headlineKey.empty()) {
+                        centred(meters.headlineKey, {UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL},
+                                meters.faceKeyCenter, text, 0.6f);
+                    }
+                }
+                width = padLeft + idWidth + 6 + faceWidth + padRight;
             } else {
                 // Headline: the identity, then 6 DIP after it the most-used quota's number and,
                 // 3 DIP after it, its window key (bottom-aligned on the baseline), in a row that
                 // reserves "100%" and the widest key; under them per-quota segments the bar gap
                 // apart: corners a quarter of their thickness, fills cut flat toward the end and
-                // shaded like the bars'.
+                // shaded like the bars'. With the countdown, 3 DIP under the row the time until
+                // that quota resets at the key's size instead, reserving its widest form.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float metersLeft = x0 + padLeft + idWidth + 6;
@@ -448,8 +501,12 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                           number.width + 3 + key.width);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
                 const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
-                float segments = count ? count * length + (count - 1) * gap : 0;
-                float panelHeight = rowHeight + (count ? 3 + thick : 0);
+                const bool countdown = display.headlineCountdown;
+                Measured remaining = measure(meters.headlineCountdown, keyStyle);
+                float segments = countdown ? std::max(std::ceil(measure(kHeadlineCountdownReserve, keyStyle).width),
+                                                      remaining.width) :
+                                 count     ? count * length + (count - 1) * gap : 0;
+                float panelHeight = rowHeight + (countdown ? 3 + remaining.cap : count ? 3 + thick : 0);
                 float panelTop = top + (T - panelHeight) / 2;
                 label(ops, meters.headline, numberStyle, metersLeft, panelTop + rowHeight - number.cap,
                       number.width, DWRITE_TEXT_ALIGNMENT_LEADING, meters.headlineColor, 1, true);
@@ -458,8 +515,12 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                           panelTop + rowHeight - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
                           0.6f, true);
                 }
+                if (countdown) {
+                    label(ops, meters.headlineCountdown, keyStyle, metersLeft, panelTop + rowHeight + 3,
+                          remaining.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, 0.7f, true);
+                }
                 float left = metersLeft, y = panelTop + rowHeight + 3;
-                for (int w = 0; w < kQuotaBarCount; w++) {
+                for (int w = 0; w < kQuotaBarCount && !countdown; w++) {
                     if (!(meters.barMask & (1 << w))) continue;
                     const QuotaMeter& q = meters.quotas[w];
                     rect(ops, {left, y, left + length, y + thick}, thick / 4, palette.track);

@@ -1,6 +1,7 @@
 // Layout page: slider input, the Layout fields and their reset group, the render projection the
-// preview reads, the preview strip model (settings/preview.h, bar styles included), the page
-// builder and the pinned preview header. Synthetic inputs, hand-derived expectations.
+// preview reads, the preview strip model (settings/preview.h, bar styles, time tracks, face tiles
+// and the headline countdown included), the page builder and the pinned preview header. Synthetic
+// inputs, hand-derived expectations.
 
 static bool HasTextIn(const std::vector<UiItem>& items, std::wstring_view text) {
     return std::any_of(items.begin(), items.end(), [&](const UiItem& item) {
@@ -125,7 +126,7 @@ static void RunLayoutTests() {
             {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
             {SettingsField::HeadlineFontSize, 18}, {SettingsField::HeadlineBarLength, 24},
-            {SettingsField::HeadlineBarThickness, 6},
+            {SettingsField::HeadlineBarThickness, 6}, {SettingsField::HeadlineCountdown, 1},
             {SettingsField::LogoScale, 150},   {SettingsField::ClaudeLogoBrand, 1}, {SettingsField::GeminiLogoBrand, 1},
             {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
@@ -138,7 +139,7 @@ static void RunLayoutTests() {
             CHECK(SettingsFieldValue(s, field) == value);
         }
         CHECK(s.barLayout == BarLayout::ConcentricRings && s.barStyle == BarStyle::Rail &&
-              s.labelPosition == LabelPosition::Top &&
+              s.labelPosition == LabelPosition::Top && s.headlineCountdown &&
               s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456 && s.badgeColor == 0x654321 &&
               s.logoBrands.claude && s.logoBrands.gemini);
         const std::tuple<SettingsField, int, int> clamps[] = {
@@ -149,8 +150,10 @@ static void RunLayoutTests() {
             {SettingsField::HeadlineBarThickness, 1, 2}, {SettingsField::HeadlineBarThickness, 11, 10},
             {SettingsField::LabelFontSize, 100, 24},  {SettingsField::PercentFontSize, 1, 6},
             {SettingsField::BarGap, -1, 0},           {SettingsField::AccountMargin, 501, 500},
-            {SettingsField::BarLayout, 9, 4},         {SettingsField::BarLayout, -1, 0},
-            {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 3},
+            {SettingsField::BarLayout, 9, 7},         {SettingsField::BarLayout, -1, 0},
+            {SettingsField::BarLayout, 6, 6},         {SettingsField::PaceTickStyle, 4, 4},
+            {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 4},
+            {SettingsField::HeadlineCountdown, 5, 1}, {SettingsField::HeadlineCountdown, 0, 0},
             {SettingsField::BarStyle, 5, 1},          {SettingsField::BarStyle, -1, 0},
             {SettingsField::LogoScale, 10, 50},       {SettingsField::LogoScale, 999, 200},
             {SettingsField::BadgeSize, 1, 6},         {SettingsField::BadgeSize, 99, 20},
@@ -163,7 +166,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the twenty-seven Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the twenty-eight Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -175,6 +178,7 @@ static void RunLayoutTests() {
         changed.headlineFontSize = 20;
         changed.headlineBarLength = 30;
         changed.headlineBarThickness = 7;
+        changed.headlineCountdown = true;
         changed.logoScale = 150;
         changed.logoBrands = {true, true};
         changed.badgeSize = 12;
@@ -213,6 +217,7 @@ static void RunLayoutTests() {
         expected.headlineFontSize = defaults.headlineFontSize;
         expected.headlineBarLength = defaults.headlineBarLength;
         expected.headlineBarThickness = defaults.headlineBarThickness;
+        expected.headlineCountdown = defaults.headlineCountdown;
         expected.logoScale = defaults.logoScale;
         expected.logoBrands = defaults.logoBrands;
         expected.badgeSize = defaults.badgeSize;
@@ -232,7 +237,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 27);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 28);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -1329,6 +1334,224 @@ static void RunLayoutTests() {
         }
     });
 
+    Run("preview: a time track's small bar under each bar, its fill the elapsed time; vertical bars right of it", [] {
+        using Corners = std::array<float, 4>;
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, true, false, false})};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+        Settings s;
+        s.paceTickStyle = PaceTickStyle::TimeTrack;
+        auto at = [&](long long resetIn) {
+            AccountData data = Fresh();
+            data.win5h = Window(10, resetIn);
+            data.winWeek = Window(10, kFiveHours);
+            return StripOf(s, accounts, {data});
+        };
+        // A quarter elapsed: under the 100 x 8 bar, 1 DIP down, a 100 x 2 track with 1 DIP corners,
+        // then a 25 DIP fill in the pace color, its far end square. The weekly bar starts 2 DIPs
+        // (the bar gap) under the 5-hour bar's small bar, its fill empty.
+        SettingsPreviewStrip strip = at(13500000);
+        std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080), fills = OpsOfColor(strip, 0xFFDEDEDE);
+        CHECK(tracks.size() == 4 && fills.size() == 1 && OpsOfColor(strip, 0xC0000000).empty());
+        const SettingsPreviewOp &bar = tracks[0], &small = tracks[1], &weekly = tracks[2];
+        CHECK(NearDip(small.rect.left, bar.rect.left) && NearDip(small.rect.right - small.rect.left, 100) &&
+              NearDip(small.rect.top, bar.rect.bottom + 1) && NearDip(small.rect.bottom - small.rect.top, 2) &&
+              NearDip(small.radius, 1));
+        CHECK(NearDip(weekly.rect.top, small.rect.bottom + 2));
+        CHECK(NearDip(fills[0].rect.left, small.rect.left) && NearDip(fills[0].rect.right - fills[0].rect.left, 25) &&
+              NearDip(fills[0].rect.top, small.rect.top) && NearDip(fills[0].rect.bottom, small.rect.bottom));
+        CHECK((*fills[0].corners == Corners{1, 0, 0, 1}));
+        // All elapsed: the fill reaches the end and rounds there too.
+        strip = at(0);
+        fills = OpsOfColor(strip, 0xFFDEDEDE);
+        CHECK(NearDip(fills[0].rect.right - fills[0].rect.left, 100) && (*fills[0].corners == Corners{1, 1, 1, 1}));
+        // None elapsed: the small bars stay, without a fill.
+        strip = at(kFiveHours);
+        CHECK(OpsOfColor(strip, 0xFFDEDEDE).empty() && OpsOfColor(strip, 0x46808080).size() == 4);
+        // Markers off: no small bars.
+        s.showPaceTicks = false;
+        CHECK(OpsOfColor(at(13500000), 0x46808080).size() == 2);
+        s.showPaceTicks = true;
+        // Vertical bars: right of each bar, 1 DIP out, filling up from the bottom; the next bar the
+        // gap after it.
+        s.barLayout = BarLayout::Vertical;
+        strip = at(13500000);
+        tracks = OpsOfColor(strip, 0x46808080);
+        fills = OpsOfColor(strip, 0xFFDEDEDE);
+        CHECK(NearDip(tracks[1].rect.left, tracks[0].rect.right + 1) && NearDip(tracks[1].rect.right - tracks[1].rect.left, 2) &&
+              NearDip(tracks[1].rect.top, tracks[0].rect.top) && NearDip(tracks[1].rect.bottom, tracks[0].rect.bottom));
+        CHECK(NearDip(tracks[2].rect.left, tracks[1].rect.right + 2));
+        CHECK(NearDip(fills[0].rect.bottom, tracks[1].rect.bottom) && NearDip(fills[0].rect.bottom - fills[0].rect.top, 25) &&
+              (*fills[0].corners == Corners{0, 0, 1, 1}));
+    });
+
+    Run("preview: gauges and pies beside the identity, the rounded square around it; the face sets the column", [] {
+        // One account with its logo alone (16 DIPs on tiles), the weekly quota the most used. A 10
+        // DIP margin: tiles pad 7 before and 8 after, ring tiles 4 each.
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, true, false, false})};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+        std::vector<AccountData> data = {Fresh({30, 80, -1, -1})};
+        const uint32_t track = TilePaletteFor(false).track;
+        auto width = [](const SettingsPreviewStrip& strip) { return strip.columns[0].right - strip.columns[0].left; };
+        auto shapesAt = [](const SettingsPreviewStrip& strip, float x, float y) {
+            std::vector<SettingsPreviewOp> shapes = OpsOfKind(strip, SettingsPreviewOp::Kind::Shape);
+            for (const SettingsPreviewOp& op : shapes) CHECK(NearDip(op.origin.x, x) && NearDip(op.origin.y, y));
+            return shapes;
+        };
+        auto capCentre = [](const SettingsPreviewOp& op) { return op.rect.top + AboveCap(op.style.size) + CapHeight(op.style.size) / 2; };
+        Settings s;
+        s.accountMargin = 10;
+
+        // Gauge: 7 + 16 + 6 + 32 + 8 DIPs; the logo centred on the 40 DIP tile, the face 6 DIPs after it.
+        s.barLayout = BarLayout::Gauge;
+        SettingsPreviewStrip strip = StripOf(s, accounts, data);
+        CHECK(NearDip(strip.columns[0].left, 3) && NearDip(width(strip), 69) && NearDip(strip.width, 3 + 69 + 2));
+        std::vector<SettingsPreviewOp> logo = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
+        CHECK(logo.size() == 1 && NearDip(logo[0].rect.left, 10) && NearDip(logo[0].rect.top, 16) &&
+              NearDip(logo[0].rect.right, 26) && NearDip(logo[0].rect.bottom, 32));
+        // The weekly arc alone: its track, then its orange fill.
+        std::vector<SettingsPreviewOp> shapes = shapesAt(strip, 32, 8);
+        CHECK(shapes.size() == 2 && shapes[0].color == track && shapes[1].color == 0xFFFB8C00);
+        // Its number without %, the key under it, both centred across the face, their cap heights
+        // centred 15.5 and 10.5 + 16 DIPs from its top.
+        std::vector<SettingsPreviewOp> number = TextOps(strip, L"80"), key = TextOps(strip, L"7d");
+        CHECK(number.size() == 1 && key.size() == 1 && TextOps(strip, L"80%").empty() && TextOps(strip, L"30").empty());
+        CHECK(NearDip(number[0].style.size, 12) && number[0].color == 0xFFFB8C00 && number[0].opacity == 1);
+        CHECK(NearDip(key[0].style.size, 12 * 9 / 14.0) && key[0].color == 0xFFFFFFFF && NearDip(key[0].opacity, 0.6));
+        CHECK(NearDip((number[0].rect.left + number[0].rect.right) / 2, 32 + 16) &&
+              NearDip((key[0].rect.left + key[0].rect.right) / 2, 32 + 16));
+        CHECK(NearDip(capCentre(number[0]), 8 + 15.5) && NearDip(capCentre(key[0]), 8 + 26.5));
+
+        // Pies: two 18 DIP pies 3 apart, a 39 x 18 face centred on the tile; no text.
+        s.barLayout = BarLayout::ClockPies;
+        strip = StripOf(s, accounts, data);
+        CHECK(NearDip(strip.columns[0].left, 3) && NearDip(width(strip), 7 + 16 + 6 + 39 + 8));
+        shapes = shapesAt(strip, 32, 15);
+        CHECK(shapes.size() == 4 && shapes[0].color == track && shapes[1].color == track &&
+              shapes[2].color == 0xFF43A047 && shapes[3].color == 0xFFFB8C00);
+        CHECK(OpsOfKind(strip, SettingsPreviewOp::Kind::Text).empty());
+        // Four quotas: a 32 DIP square of pies.
+        std::vector<AccountConfig> four = accounts;
+        four[0].showBars = {true, true, true, true};
+        strip = StripOf(s, four, {Fresh({10, 20, 30, 40})});
+        CHECK(NearDip(width(strip), 7 + 16 + 6 + 32 + 8));
+        CHECK(shapesAt(strip, 32, 8).size() == 8);
+
+        // Rounded square: the face 4 DIPs in, the logo centred in it at the hole's 14.08 DIPs.
+        s.barLayout = BarLayout::RoundedSquare;
+        strip = StripOf(s, accounts, data);
+        CHECK(NearDip(strip.columns[0].left, 6) && NearDip(width(strip), 4 + 32 + 4) && NearDip(strip.width, 6 + 40 + 6));
+        CHECK(shapesAt(strip, 10, 8).size() == 4);
+        logo = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
+        CHECK(logo.size() == 1 && NearDip(logo[0].rect.right - logo[0].rect.left, 14.08) &&
+              NearDip((logo[0].rect.left + logo[0].rect.right) / 2, 10 + 16) &&
+              NearDip((logo[0].rect.top + logo[0].rect.bottom) / 2, 8 + 16));
+    });
+
+    Run("preview: pace ticks on gauges, pies and rounded squares, a core shape after each halo", [] {
+        const uint32_t pace = 0xFFDEDEDE;
+        auto ticks = [&](BarLayout layout) {
+            Settings s;
+            s.barLayout = layout;
+            SettingsPreviewStrip strip = Strip(s);
+            for (size_t i = 0; i < strip.ops.size(); i++) {
+                if (strip.ops[i].color != pace) continue;
+                CHECK(strip.ops[i].kind == SettingsPreviewOp::Kind::Shape && i > 0);
+                CHECK(strip.ops[i - 1].kind == SettingsPreviewOp::Kind::Shape && strip.ops[i - 1].color == 0xC0000000);
+            }
+            return OpsOfColor(strip, pace).size();
+        };
+        // Pies and squares: one per quota, as on rings. Gauges: one per fresh account (Go is stale).
+        size_t rings = ticks(BarLayout::SegmentedRing);
+        CHECK(rings > 0 && ticks(BarLayout::ClockPies) == rings && ticks(BarLayout::RoundedSquare) == rings);
+        CHECK(ticks(BarLayout::Gauge) == 3);
+        Settings off;
+        off.showPaceTicks = false;
+        for (BarLayout layout : {BarLayout::Gauge, BarLayout::ClockPies, BarLayout::RoundedSquare}) {
+            off.barLayout = layout;
+            CHECK(OpsOfColor(Strip(off), pace).empty() && OpsOfColor(Strip(off), 0xC0000000).empty());
+        }
+    });
+
+    Run("preview: the headline countdown replaces the quota segments under the number", [] {
+        const ULONGLONG hour = 60 * kMinute;
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC", {true, true, false, false})};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+        Settings s;
+        s.barLayout = BarLayout::LogoHeadline;
+        s.headlineCountdown = true;
+        auto at = [&](ULONGLONG weeklyResetIn, double weekly = 80) {
+            AccountData data = Fresh();
+            data.win5h = {30, kNow + 45 * kMinute, kFiveHourWindowMs};
+            data.winWeek = {weekly, kNow + weeklyResetIn, kWeeklyWindowMs};
+            return StripOf(s, accounts, {data});
+        };
+        auto width = [](const SettingsPreviewStrip& strip) { return strip.columns[0].right - strip.columns[0].left; };
+        const uint32_t track = TilePaletteFor(false).track;
+        // The weekly quota's: 3 days 12 hours, at the key's 9 DIPs, under the number's left edge, its
+        // cap height 3 DIPs below the number's baseline; the panel centred on the tile.
+        SettingsPreviewStrip strip = at((3 * 24 + 12) * hour);
+        std::vector<SettingsPreviewOp> countdown = TextOps(strip, L"\u21BB 3d 12h");
+        SettingsPreviewOp number = TextOps(strip, L"80%")[0];
+        CHECK(countdown.size() == 1 && NearDip(countdown[0].style.size, 9) && NearDip(countdown[0].opacity, 0.7) &&
+              countdown[0].color == 0xFFFFFFFF);
+        CHECK(NearDip(countdown[0].rect.left, number.rect.left));
+        const double numberCapTop = number.rect.top + AboveCap(14);
+        CHECK(NearDip(countdown[0].rect.top + AboveCap(9), numberCapTop + CapHeight(14) + 3));
+        CHECK(NearDip(numberCapTop, 24 - (CapHeight(14) + 3 + CapHeight(9)) / 2));
+        // No segments: no tracks or fills.
+        CHECK(OpsOfColor(strip, track).empty());
+        CHECK(std::none_of(strip.ops.begin(), strip.ops.end(), [](const SettingsPreviewOp& op) { return op.corners.has_value(); }));
+        // The tile reserves the widest form: a shorter countdown, the 5-hour quota's alone, or none
+        // without readings keep its width.
+        SettingsPreviewStrip soon = at(30 * kMinute), fiveHour = at(hour, -1);
+        SettingsPreviewStrip blank = StripOf(s, accounts, {Fresh()});
+        CHECK(TextOps(soon, L"\u21BB 30m").size() == 1 && NearDip(width(soon), width(strip)));
+        CHECK(TextOps(fiveHour, L"\u21BB 45m").size() == 1 && NearDip(width(fiveHour), width(strip)));
+        CHECK(TextOps(blank, L"\u21BB \u2013").size() == 1 && NearDip(width(blank), width(strip)));
+        // Off: the two segments are back, no countdown.
+        s.headlineCountdown = false;
+        strip = at((3 * 24 + 12) * hour);
+        CHECK(OpsOfColor(strip, track).size() == 2 && TextOps(strip, L"\u21BB 3d 12h").empty());
+    });
+
+    Run("preview: the new tile styles stay drawable and bounded at extreme settings; unknown styles fall back", [] {
+        Settings large;
+        large.ringSize = 40;
+        large.ringThickness = 6;
+        large.logoScale = 200;
+        large.accountMargin = large.rightMargin = 500;
+        large.headlineFontSize = 24;
+        large.headlineCountdown = true;
+        large.paceTickStyle = PaceTickStyle::TimeTrack;
+        Settings wild = large;
+        wild.ringSize = 900;
+        wild.ringThickness = -1;
+        wild.logoScale = -5;
+        wild.accountMargin = 99999;
+        for (const Settings& base : {large, wild}) {
+            for (BarLayout layout : {BarLayout::Gauge, BarLayout::ClockPies, BarLayout::RoundedSquare,
+                                     BarLayout::LogoHeadline, BarLayout::Stacked, BarLayout::Vertical}) {
+                Settings s = base;
+                s.barLayout = layout;
+                for (double taskbar : {0.0, 24.0, 48.0, 1e9}) {
+                    // Per column two 500 DIP margins, a 32 DIP logo, 6 DIPs and a face (pies: 48
+                    // DIPs across), or bars: well under 1000 + 600.
+                    SettingsPreviewStrip strip = Strip(s, taskbar, false, 2.5f);
+                    CHECK(Finite(strip));
+                    CHECK(strip.width < 4 * 1600 && strip.height <= 96);
+                }
+            }
+        }
+        // A style past the last one previews as the last one.
+        Settings last;
+        last.barLayout = kLastBarLayout;
+        Settings unknown;
+        unknown.barLayout = BarLayout(42);
+        SettingsPreviewStrip expected = Strip(last), actual = Strip(unknown);
+        CHECK(actual.columns.size() == expected.columns.size() && NearDip(actual.width, expected.width));
+        CHECK(OpsOfKind(actual, SettingsPreviewOp::Kind::Shape).size() == OpsOfKind(expected, SettingsPreviewOp::Kind::Shape).size());
+    });
+
     Run("controller: the bar style commits as chosen and the preview follows", [] {
         TestStore store;
         SettingsEdits edits(store);
@@ -1401,24 +1624,31 @@ static void RunLayoutTests() {
         SettingsView view = TestView(SettingsUiPage::Layout);
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        // Five gallery cards, three a row: the tile styles in BarLayout order.
+        // Eight gallery cards, three a row: the tile styles in BarLayout order.
         const PCWSTR styles[] = {L"Stacked bars", L"Vertical bars", L"Headline %", L"Segmented ring",
-                                 L"Concentric rings"};
-        for (int i = 0; i < 5; i++) {
+                                 L"Concentric rings", L"Gauge %", L"Clock pies", L"Rounded square"};
+        for (int i = 0; i < 8; i++) {
             const UiItem& card = Control(frame, SettingsField::BarLayout, uint32_t(i));
             CHECK(card.kind == UiItemKind::Gallery && card.selected == (i == 0) && card.action.value == i);
             CHECK(card.text == styles[i]);
         }
-        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 5)));
-        CHECK(std::size(kSettingsTileStyles) == 5 && int(BarLayout::LogoHeadline) == 2 &&
-              int(BarLayout::ConcentricRings) == 4);
+        CHECK(std::count_if(frame.content.begin(), frame.content.end(),
+                            [](const UiItem& item) { return item.kind == UiItemKind::Gallery; }) == 8);
+        CHECK(std::size(kSettingsTileStyles) == 8 && int(BarLayout::LogoHeadline) == 2 &&
+              int(BarLayout::ConcentricRings) == 4 && int(BarLayout::Gauge) == 5 && int(BarLayout::ClockPies) == 6 &&
+              int(kLastBarLayout) == 7);
         const UiItem& first = Control(frame, SettingsField::BarLayout, 0);
         const UiItem& fourth = Control(frame, SettingsField::BarLayout, 3);
         const UiItem& fifth = Control(frame, SettingsField::BarLayout, 4);
+        const UiItem& seventh = Control(frame, SettingsField::BarLayout, 6);
+        const UiItem& eighth = Control(frame, SettingsField::BarLayout, 7);
         CHECK_NEAR(fourth.rect.left, first.rect.left);
         CHECK_NEAR(fourth.rect.top - first.rect.top, (first.rect.bottom - first.rect.top) + 8);
         CHECK_NEAR(fifth.rect.top, fourth.rect.top);
         CHECK_NEAR(fifth.rect.left - fourth.rect.right, 8);
+        CHECK_NEAR(seventh.rect.left, first.rect.left);
+        CHECK_NEAR(seventh.rect.top - fourth.rect.top, (first.rect.bottom - first.rect.top) + 8);
+        CHECK_NEAR(eighth.rect.top, seventh.rect.top);
         const UiItem& barStyle = Control(frame, SettingsField::BarStyle);
         CHECK(barStyle.kind == UiItemKind::Dropdown && barStyle.text == L"Full track" && barStyle.options.size() == 2 &&
               barStyle.options[1].text == L"Thin rail" && barStyle.options[1].value == int(BarStyle::Rail));
@@ -1651,6 +1881,140 @@ static void RunLayoutTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::BarThickness).text == L"20");
         CHECK(HasText(frame, L"This change couldn't be saved."));
+    });
+
+    Run("layout page: gauge, pies and square sections with their size cards; no thickness for pies", [] {
+        UiGraphics& g = TestGraphics();
+        auto section = [](const UiFrame& frame, std::wstring_view text) {
+            return std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+                return item.kind == UiItemKind::Text && item.font == UiFont::BodyStrong && UiRunsText(item.runs) == text;
+            });
+        };
+        struct Case {
+            BarLayout layout;
+            PCWSTR section, size, sizeText, thickness, thicknessText;
+        };
+        const PCWSTR aroundNumber = L"Narrows automatically when the arc doesn\u2019t fit around the number.";
+        const PCWSTR aroundIdentity = L"Narrows automatically when the meters don\u2019t fit around the logo or text.";
+        for (const Case& c : {Case{BarLayout::Gauge, L"Gauge", L"Gauge size", L"Diameter in pixels.", L"Gauge thickness", aroundNumber},
+                              Case{BarLayout::ClockPies, L"Pies", L"Pie area",
+                                   L"Height in pixels; one pie per quota, smaller from the second on.", nullptr, nullptr},
+                              Case{BarLayout::RoundedSquare, L"Square", L"Square size", L"Side in pixels.",
+                                   L"Square thickness", aroundIdentity}}) {
+            SettingsView view = TestView(SettingsUiPage::Layout);
+            view.settings.barLayout = c.layout;
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            CHECK(Control(frame, SettingsField::BarLayout, uint32_t(c.layout)).selected &&
+                  !Control(frame, SettingsField::BarLayout, 3).selected);
+            CHECK(section(frame, c.section) && !section(frame, L"Ring") && !section(frame, L"Headline") &&
+                  !section(frame, L"Bars") && section(frame, L"Identity") && section(frame, L"Pace markers") &&
+                  section(frame, L"Spacing"));
+            // The ring size's range under the style's own title.
+            const UiItem& size = Control(frame, SettingsField::RingSize, 1);
+            CHECK(size.minimum == 24 && size.maximum == 40 && size.action.value == 32 && size.enabled);
+            CHECK(HasText(frame, c.size) && HasText(frame, c.sizeText) && !HasText(frame, L"Ring size") &&
+                  !HasText(frame, L"Ring thickness"));
+            if (c.thickness) {
+                const UiItem& thickness = Control(frame, SettingsField::RingThickness, 1);
+                CHECK(thickness.maximum == 6 && thickness.action.value == 3 && thickness.enabled);
+                CHECK(HasText(frame, c.thickness) && HasText(frame, c.thicknessText));
+                CHECK(size.rect.bottom < thickness.rect.top &&
+                      thickness.rect.bottom < Control(frame, SettingsField::BarLayout, 8).rect.top);
+            } else {
+                CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::RingThickness)) &&
+                      !UiFindItem(frame, SettingsControlId(SettingsField::RingThickness, 1)) && !HasText(frame, L"thickness"));
+                CHECK(size.rect.bottom < Control(frame, SettingsField::BarLayout, 8).rect.top);
+            }
+            // Then the identity's card and the logo cards; pace markers without the bars' style; no
+            // bar or headline cards.
+            CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate &&
+                  Control(frame, SettingsField::LogoScale, 1).enabled);
+            CHECK(Control(frame, SettingsField::ShowPaceTicks).kind == UiItemKind::Toggle &&
+                  Control(frame, SettingsField::PaceTickColor, 1).enabled &&
+                  !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickStyle)));
+            CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
+                  !UiFindItem(frame, SettingsControlId(SettingsField::BarStyle)) &&
+                  !UiFindItem(frame, SettingsControlId(SettingsField::HeadlineBarLength, 1)) &&
+                  !UiFindItem(frame, SettingsControlId(SettingsField::HeadlineCountdown)));
+        }
+    });
+
+    Run("layout page: Reset countdown on headline tiles disables the bar cards with its reason", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = TestView(SettingsUiPage::Layout);
+        view.settings.barLayout = BarLayout::LogoHeadline;
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        const PCWSTR reason = L"Turn off Reset countdown to change this.";
+        // Off: a toggle after the number size, before the bars' cards, all enabled.
+        const UiItem& toggle = Control(frame, SettingsField::HeadlineCountdown);
+        CHECK(toggle.kind == UiItemKind::Toggle && !toggle.selected && toggle.enabled && toggle.action.value == 1);
+        CHECK(HasText(frame, L"Reset countdown") &&
+              HasText(frame, L"Time until that quota resets under the number, instead of each quota\u2019s bar."));
+        CHECK(Control(frame, SettingsField::HeadlineFontSize, 1).rect.bottom < toggle.rect.top &&
+              toggle.rect.bottom < Control(frame, SettingsField::HeadlineBarLength, 1).rect.top);
+        for (auto [field, part] : {std::pair{SettingsField::HeadlineBarLength, 0u}, std::pair{SettingsField::HeadlineBarLength, 1u},
+                                   std::pair{SettingsField::HeadlineBarThickness, 0u},
+                                   std::pair{SettingsField::HeadlineBarThickness, 1u}, std::pair{SettingsField::BarGap, 0u}}) {
+            CHECK(Control(frame, field, part).enabled);
+        }
+        CHECK(!HasText(frame, reason));
+        // On: the bars' length, thickness and gap disabled with the reason; the number size, the
+        // toggle and the identity cards stay.
+        view.settings.headlineCountdown = true;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::HeadlineCountdown).selected && Control(frame, SettingsField::HeadlineCountdown).enabled &&
+              Control(frame, SettingsField::HeadlineCountdown).action.value == 0);
+        for (auto [field, part] : {std::pair{SettingsField::HeadlineBarLength, 0u}, std::pair{SettingsField::HeadlineBarLength, 1u},
+                                   std::pair{SettingsField::HeadlineBarThickness, 0u},
+                                   std::pair{SettingsField::HeadlineBarThickness, 1u}, std::pair{SettingsField::BarGap, 0u}}) {
+            CHECK(!Control(frame, field, part).enabled);
+        }
+        CHECK(HasText(frame, reason));
+        CHECK(Control(frame, SettingsField::HeadlineFontSize, 1).enabled && Control(frame, SettingsField::LogoScale, 1).enabled &&
+              Control(frame, SettingsField::AccountMargin).enabled);
+        // Other tile styles have no countdown card, whatever the setting.
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::SegmentedRing, BarLayout::Gauge}) {
+            view.settings.barLayout = layout;
+            frame = {};
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::HeadlineCountdown)) && !HasText(frame, reason));
+            if (layout == BarLayout::Stacked) CHECK(Control(frame, SettingsField::BarGap).enabled);
+        }
+    });
+
+    Run("layout page: Time track is the bars' fifth marker style", [] {
+        UiGraphics& g = TestGraphics();
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+            SettingsView view = TestView(SettingsUiPage::Layout);
+            view.settings.barLayout = layout;
+            view.settings.paceTickStyle = PaceTickStyle::TimeTrack;
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            const UiItem& style = Control(frame, SettingsField::PaceTickStyle);
+            CHECK(style.kind == UiItemKind::Dropdown && style.text == L"Time track" && style.enabled);
+            CHECK(style.options.size() == 5 && style.options[3].text == L"Dot" && style.options[4].text == L"Time track" &&
+                  style.options[4].value == int(PaceTickStyle::TimeTrack));
+            CHECK(HasText(frame, L"centered dot, or a time track: a small bar under each bar that fills with the "
+                                 L"elapsed time."));
+            // Off: disabled with the markers' reason.
+            view.settings.showPaceTicks = false;
+            frame = {};
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            CHECK(!Control(frame, SettingsField::PaceTickStyle).enabled && HasText(frame, L"Turn on Pace markers to change this."));
+        }
+        // Chosen through the controller: committed, and the preview draws rails instead of carets.
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Commit(0, SettingsField::PaceTickStyle, int(PaceTickStyle::TimeTrack)) == 0);
+        CHECK(store.settings.paceTickStyle == PaceTickStyle::TimeTrack);
+        SettingsPreviewStrip strip = Strip(edits.Projection());
+        CHECK(!OpsOfColor(strip, 0xFFDEDEDE).empty() && OpsOfKind(strip, SettingsPreviewOp::Kind::Polygon).empty());
+        // The Layout reset brings back the caret.
+        CHECK(edits.Reset(SettingsField::ResetLayout) == 0 && store.settings.paceTickStyle == PaceTickStyle::Caret);
     });
 
     Run("layout header: preview pinned under the title, unpinned when the viewport gets short", [] {

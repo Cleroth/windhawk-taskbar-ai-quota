@@ -200,7 +200,18 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         ap.paceVisible[w] = paceVisibleInt;
                     }
                     if (paceVisible && m.pacePx != ap.pacePx[w]) {
-                        if (ui.paceTicks[w]) {
+                        if (ui.paceTicks[w] && bar.timeThickness > 0) {
+                            // The time track's fill from the bar's start: start corners round
+                            // with its track, the far end as the meter's.
+                            double start = bar.timeThickness / 2, end = m.paceEndRadius;
+                            if (verticalBars) {
+                                ui.paceTicks[w].Height(m.pacePx);
+                                ui.paceTicks[w].CornerRadius({end, end, start, start});
+                            } else {
+                                ui.paceTicks[w].Width(m.pacePx);
+                                ui.paceTicks[w].CornerRadius({start, end, end, start});
+                            }
+                        } else if (ui.paceTicks[w]) {
                             // Centred ticks reach past both sides by the overhang. A notch hangs
                             // from the top (vertical: left) one; its far margin keeps its layout
                             // size within the bar, so layout never clips its halo.
