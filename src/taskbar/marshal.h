@@ -273,6 +273,7 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
     releaseTimer(flyout.dwellTimer, flyout.dwellTimerToken);
     releaseTimer(flyout.pollTimer, flyout.pollTimerToken);
     releaseTimer(flyout.countdownTimer, flyout.countdownTimerToken);
+    flyout.materialFactory = nullptr;
     releaseTimer(state.keepMenuOpenTimer, state.keepMenuOpenTimerToken);
     releaseTimer(state.submenuCloseTimer, state.submenuCloseTimerToken);
     flyout.hoverIndex = -1;

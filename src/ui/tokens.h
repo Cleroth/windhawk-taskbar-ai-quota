@@ -23,8 +23,13 @@ struct UiThemeInput {
     UiThemeKind kind = UiThemeKind::Dark;
     UiAccentColors accent;
     UiSystemColors system;
-    bool systemLight = false;  // Windows (taskbar) mode, which the taskbar preview follows
+    bool systemLight = false;   // Windows (taskbar) mode, which the taskbar preview follows
+    bool transparency = true;   // Windows' transparency effects, which backdrops need
 };
+
+// The Windows 11 backdrop a client asks for behind its window's surfaces; None keeps the window
+// opaque.
+enum class UiBackdrop : uint8_t { None, Mica, MicaAlt, Acrylic };
 
 static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
     return {float((rgb >> 16) & 0xFF) / 255.0f, float((rgb >> 8) & 0xFF) / 255.0f,

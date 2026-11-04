@@ -780,6 +780,7 @@ struct HistoryController {
         v.colorblind = s.colorblindMode;
         v.remaining = s.barMode == BarMode::Remaining;
         v.logoBrands = s.logoBrands;
+        v.material = s.material;
         v.notice = notice;
         v.canExport = snapshot != nullptr;
         v.exporting = operation == HistoryOperation::Writing;

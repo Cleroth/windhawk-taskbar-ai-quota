@@ -547,7 +547,20 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     if (!theme.highContrast) {
         card.RequestedTheme(theme.light ? ElementTheme::Light : ElementTheme::Dark);
     }
-    card.Child(content);
+    // Composition materials draw on a layer under the content, inside the border's 7 DIP inner
+    // corners, over the card's opaque fallback (SettleFlyoutMaterial).
+    if (theme.material == Material::Mica || theme.material == Material::MicaAlt ||
+        theme.material == Material::TintedWallpaper) {
+        Border material;
+        material.IsHitTestVisible(false);
+        Grid surface;
+        surface.Children().Append(material);
+        surface.Children().Append(content);
+        card.Child(surface);
+        AttachFlyoutMaterial(state.flyout, material, 7.f);
+    } else {
+        card.Child(content);
+    }
     return card;
 }
 

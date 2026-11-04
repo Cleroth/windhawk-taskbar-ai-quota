@@ -22,6 +22,7 @@ struct HistoryRenderPart {
     std::shared_ptr<TestChartWindow> chart{};
     bool chartView = false;
     std::function<D2D1_POINT_2F(const HistoryChart&)> hover{};
+    bool backdrop = false;  // Over a stand-in backdrop (render-support.inc), with grayscale text
 };
 
 static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
@@ -77,7 +78,12 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
         target->SetTransform(&at);
         D2D1_RECT_F bounds{0, 0, part.client.width, part.crop ? part.crop : part.client.height};
         target->PushAxisAlignedClip(&bounds, D2D1_ANTIALIAS_MODE_ALIASED);
-        UiFillRect(target.get(), cache, bounds, 0, palette.background, scale);
+        target->SetTextAntialiasMode(part.backdrop ? D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE : D2D1_TEXT_ANTIALIAS_MODE_DEFAULT);
+        if (part.backdrop) {
+            RenderBackdrop(target.get(), bounds, palette);
+        } else {
+            UiFillRect(target.get(), cache, bounds, 0, palette.background, scale);
+        }
         UiPaintState state = part.state;
         if (part.menu) state.open = kHistoryUiMore;
         const HistoryChart none;
@@ -501,5 +507,17 @@ static void RunHistoryRenders(const std::wstring& directory) {
                 });
             }
         }
+    }
+    // The default frame over a stand-in backdrop (light and dark; high contrast never gets one).
+    HistoryRenderPart backdrop = defaults;
+    backdrop.backdrop = true;
+    for (const RenderTheme& theme : RenderThemes()) {
+        if (theme.input.kind == UiThemeKind::HighContrast) continue;
+        std::string name = std::string("render-history-backdrop-") + theme.name + "-144.png";
+        Run(name, [&] {
+            RenderHistorySheet(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()), {backdrop},
+                               theme.input, 144);
+            CHECK(true);
+        });
     }
 }

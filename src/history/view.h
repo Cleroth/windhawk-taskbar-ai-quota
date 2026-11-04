@@ -82,13 +82,15 @@ struct HistoryUiView {
     bool compare = false;                    // Shows the range as 7 days, disabled
 
     // Settings: recording (and whether the banner's Enable recording can run; else it shows
-    // disabled), retention, the usage colors of navigation values and the logos' brand colors
+    // disabled), retention, the usage colors of navigation values, the logos' brand colors and
+    // the window's material
     bool recordingEnabled = true;
     bool canEnableRecording = false;
     int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
     bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
     LogoBrands logoBrands;
+    Material material = Settings{}.material;
 
     // Status: the pill, the header's status text ("Updated Sat 31 Oct 14:32"; empty before the
     // first load), the journal's state (its status without the cap note, the cap) and an

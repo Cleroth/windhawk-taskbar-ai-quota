@@ -60,6 +60,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - account margin and tray gap
   - **Show on taskbar**: replaces the taskbar accounts with sample accounts while it is on and the window is open
 - **Display**, with the same preview:
+  - material: the background of the details flyout and the settings and usage history windows, which all follow it: **Acrylic** (default; a tinted blur of what's behind), Mica or Mica Alt (the blurred desktop wallpaper, tinted as Windows does), Tinted wallpaper (the blurred wallpaper under the theme color; the windows use Mica for it), or Solid; all but Solid need Windows transparency effects, and show solid without them and in high contrast
   - bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"; usage graphs and the details flyout's charts plot quota left, falling from 100%); threshold colors always represent consumed quota
   - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
   - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI) instead of a percentage, following the bar mode; from 1,000 on, taskbar amounts are shortened to three digits with `k` or `M` (`62.5k`)

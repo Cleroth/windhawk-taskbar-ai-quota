@@ -45,34 +45,48 @@ static void RunDisplayPageTests() {
     Run("display fields: desired values, ranges and choices clamp", [] {
         Settings s;
         const std::pair<SettingsField, int> values[] = {
-            {SettingsField::BarMode, 1},          {SettingsField::PercentTextVisibility, 2},
-            {SettingsField::PercentTextAlignment, 3}, {SettingsField::ShowExtraBarAmounts, 1},
-            {SettingsField::ColorblindMode, 1},   {kYellow, 30}, {kOrange, 60}, {kRed, 80},
+            {SettingsField::Material, 3},         {SettingsField::BarMode, 1},
+            {SettingsField::PercentTextVisibility, 2}, {SettingsField::PercentTextAlignment, 3},
+            {SettingsField::ShowExtraBarAmounts, 1}, {SettingsField::ColorblindMode, 1},
+            {kYellow, 30}, {kOrange, 60}, {kRed, 80},
             {SettingsField::ShowStaleWarning, 0}, {SettingsField::ShowOpenAiExtraLimits, 1}};
         for (auto [field, value] : values) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == value);
         }
-        CHECK(s.barMode == BarMode::Remaining && s.percentTextVisibility == PercentTextVisibility::Always &&
+        CHECK(s.material == Material::TintedWallpaper && s.barMode == BarMode::Remaining &&
+              s.percentTextVisibility == PercentTextVisibility::Always &&
               s.percentTextAlignment == PercentTextAlignment::Right && s.showExtraBarAmounts && s.colorblindMode &&
               !s.showStaleWarning && s.showOpenAiExtraLimits);
         const std::tuple<SettingsField, int, int> clamps[] = {
             {kYellow, -5, 0}, {kRed, 101, 100}, {kOrange, 99999, 100},
             {SettingsField::BarMode, 7, 1}, {SettingsField::BarMode, -1, 0},
             {SettingsField::PercentTextVisibility, 9, 2}, {SettingsField::PercentTextVisibility, -3, 0},
-            {SettingsField::PercentTextAlignment, 9, 3}};
+            {SettingsField::PercentTextAlignment, 9, 3},
+            {SettingsField::Material, 5, 4}, {SettingsField::Material, INT_MAX, 4},
+            {SettingsField::Material, -1, 0}, {SettingsField::Material, INT_MIN, 0}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == expected);
         }
+        // Material values in the dropdown's order: Acrylic, Mica, Mica Alt, Tinted wallpaper, Solid.
+        const Material materials[] = {Material::Acrylic, Material::Mica, Material::MicaAlt,
+                                      Material::TintedWallpaper, Material::Solid};
+        for (int value = 0; value < 5; value++) {
+            SettingsAssign(s, SettingsField::Material, value);
+            CHECK(s.material == materials[value]);
+        }
         for (SettingsField field : {kYellow, kOrange, kRed}) {
             CHECK(SettingsFieldRange(field)->minimum == 0 && SettingsFieldRange(field)->maximum == 100);
         }
-        CHECK(!SettingsFieldRange(SettingsField::BarMode));
+        CHECK(!SettingsFieldRange(SettingsField::BarMode) && !SettingsFieldRange(SettingsField::Material));
     });
 
-    Run("display reset: the ten Display fields back to defaults; every scalar setting in one page reset", [] {
+    Run("display reset: the eleven Display fields back to defaults; every scalar setting in one page reset", [] {
+        const Settings defaults;
         Settings changed;
+        // Any material but the default.
+        changed.material = defaults.material == Material::Solid ? Material::Mica : Material::Solid;
         changed.barMode = BarMode::Remaining;
         changed.percentTextVisibility = PercentTextVisibility::Always;
         changed.percentTextAlignment = PercentTextAlignment::Center;
@@ -89,7 +103,7 @@ static void RunDisplayPageTests() {
         changed.historyRetentionDays = 900;
         changed.accounts.push_back(Account());
         Settings expected = changed;
-        const Settings defaults;
+        expected.material = defaults.material;
         expected.barMode = defaults.barMode;
         expected.percentTextVisibility = defaults.percentTextVisibility;
         expected.percentTextAlignment = defaults.percentTextAlignment;
@@ -103,13 +117,14 @@ static void RunDisplayPageTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetDisplay, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetDisplay).size() == 10);
-        for (SettingsField field : SettingsGroupFields(SettingsField::ResetDisplay)) {
+        std::vector<SettingsField> display = SettingsGroupFields(SettingsField::ResetDisplay);
+        CHECK(display.size() == 11 && display[0] == SettingsField::Material);
+        for (SettingsField field : display) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 56 scalar settings changed: the four page resets restore every one, and no field
+        // All 57 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -168,7 +183,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 56 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 57 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {
@@ -234,6 +249,25 @@ static void RunDisplayPageTests() {
               store.settings.redThreshold == 90);
     });
 
+    Run("controller: the material dropdown saves its choice at once; the Display reset restores it", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        const Settings defaults;
+        CHECK(edits.Commit(0, SettingsField::Material, 2) == 0);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(SettingsField::Material, 2)});
+        CHECK(store.settings.material == Material::MicaAlt && edits.Projection().material == Material::MicaAlt);
+        // The assignment clamps a value past the last choice: Solid.
+        CHECK(edits.Commit(0, SettingsField::Material, 9) == 0);
+        CHECK(store.Applied().back() == Op(SettingsField::Material, 9) && store.settings.material == Material::Solid);
+        // A failed save keeps the choice as a draft; the reset drops it and restores the default.
+        store.failNext = 1;
+        CHECK(edits.Commit(0, SettingsField::Material, 1) == 1);
+        CHECK(edits.Projection().material == Material::Mica && store.settings.material == Material::Solid);
+        CHECK(edits.Reset(SettingsField::ResetDisplay) == 0);
+        CHECK(edits.drafts.empty() && store.settings.material == defaults.material);
+    });
+
     Run("display page: controls follow the projection; dots follow the palette", [] {
         SettingsView view = TestView(SettingsUiPage::Display);
         UiFrame frame = DisplayFrame(view);
@@ -262,11 +296,13 @@ static void RunDisplayPageTests() {
         CHECK(Control(frame, SettingsField::ShowStaleWarning).selected);
         CHECK(!Control(frame, SettingsField::ShowOpenAiExtraLimits).selected);
         CHECK(Control(frame, SettingsField::ResetDisplay).text == L"Reset");
-        for (PCWSTR text : {L"Values", L"Usage colors", L"Status", L"Details flyout", L"Reset Display to defaults",
-                            L"Usage below this is green.", L"Thresholds stay in order: yellow, orange, red.",
+        for (PCWSTR text : {L"Appearance", L"Values", L"Usage colors", L"Status", L"Details flyout",
+                            L"Reset Display to defaults", L"Usage below this is green.",
+                            L"Thresholds stay in order: yellow, orange, red.",
                             L"Also the level for threshold notifications."}) {
             CHECK(HasText(frame, text));
         }
+        CHECK(TextCount(frame, L"Material, values, usage colors, stale marker and flyout details.") == 1);
         CHECK(!HasText(frame, L"Stacked and Vertical bars only") && !HasText(frame, L"Show percentage text"));
 
         // Threshold dots: the usage colors, 14 DIP after the card padding with the title 16 DIP
@@ -312,6 +348,68 @@ static void RunDisplayPageTests() {
         CHECK(dots.size() == 3 && COLORREF(dots[0]->action.value) == colorblind[0]);
     });
 
+    Run("display page: Appearance first with the Material dropdown; transparency and Tinted wallpaper notes", [] {
+        const std::wstring base = L"Background of the details flyout and the settings and usage history windows.";
+        const std::wstring solid = L"Windows transparency effects are off, so it shows as Solid.";
+        const std::wstring tinted = L"The settings and usage history windows use Mica for it.";
+        auto top = [](const UiFrame& frame, std::wstring_view text) {
+            for (const UiItem& item : frame.content) {
+                if (UiRunsText(item.runs) == text) return item.rect.top;
+            }
+            return -1.0f;
+        };
+        auto reasons = [](const UiFrame& frame) {
+            return std::count_if(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+                return item.kind == UiItemKind::Glyph && item.text == L"\uE946";
+            });
+        };
+        SettingsView view = TestView(SettingsUiPage::Display);
+        view.settings.material = Material::Mica;
+        UiFrame frame = DisplayFrame(view);
+        const UiItem& material = Control(frame, SettingsField::Material);
+        CHECK(TextCount(frame, L"Material") == 1 && top(frame, L"Appearance") >= 0 &&
+              top(frame, L"Appearance") < top(frame, L"Material") && top(frame, L"Appearance") < material.rect.top &&
+              material.rect.bottom < top(frame, L"Values"));
+        CHECK(material.kind == UiItemKind::Dropdown && material.enabled && material.text == L"Mica" &&
+              material.action.value == 1);
+        CHECK_NEAR(material.rect.right - material.rect.left, 200);
+        const std::pair<std::wstring, int> options[] = {
+            {L"Acrylic", 0}, {L"Mica", 1}, {L"Mica Alt", 2}, {L"Tinted wallpaper", 3}, {L"Solid", 4}};
+        CHECK(material.options.size() == 5);
+        for (size_t i = 0; i < std::min<size_t>(material.options.size(), 5); i++) {
+            CHECK(material.options[i].text == options[i].first && material.options[i].value == options[i].second);
+        }
+        CHECK(TextCount(frame, base) == 1 && !HasText(frame, solid) && !HasText(frame, tinted));
+        const float values = top(frame, L"Values");
+
+        // The selected choice follows the setting.
+        const std::pair<Material, std::wstring> chosen[] = {
+            {Material::Acrylic, L"Acrylic"}, {Material::MicaAlt, L"Mica Alt"}, {Material::Solid, L"Solid"}};
+        for (const auto& [choice, text] : chosen) {
+            view.settings.material = choice;
+            frame = DisplayFrame(view);
+            CHECK(Control(frame, SettingsField::Material).text == text &&
+                  Control(frame, SettingsField::Material).action.value == int(choice));
+        }
+
+        // Transparency effects off: the dropdown stays enabled, without a reason; its description
+        // gains a paragraph and the card grows.
+        view.transparencyEffects = false;
+        frame = DisplayFrame(view);
+        CHECK(Control(frame, SettingsField::Material).enabled && reasons(frame) == 0);
+        CHECK(TextCount(frame, base + L"\n" + solid) == 1 && !HasText(frame, tinted));
+        CHECK(top(frame, L"Values") > values);
+        // Tinted wallpaper: the windows' Mica, with effects off and on.
+        view.settings.material = Material::TintedWallpaper;
+        frame = DisplayFrame(view);
+        CHECK(Control(frame, SettingsField::Material).text == L"Tinted wallpaper");
+        CHECK(TextCount(frame, base + L"\n" + solid + L"\n" + tinted) == 1);
+        view.transparencyEffects = true;
+        frame = DisplayFrame(view);
+        CHECK(TextCount(frame, base + L"\n" + tinted) == 1 && !HasText(frame, solid) && reasons(frame) == 0);
+        CHECK(top(frame, L"Values") > values);
+    });
+
     Run("display page: bar-only rows disable for tile styles; hidden text disables alignment and amounts", [] {
         SettingsView view = TestView(SettingsUiPage::Display);
         for (int style = 2; style < 5; style++) {
@@ -355,7 +453,7 @@ static void RunDisplayPageTests() {
         CHECK(strip && strip->kind == UiItemKind::Preview && surface == UiSurfaceId::Main);
         CHECK_NEAR(strip->rect.top, 56 + 13 + 20 + 10);
         CHECK_NEAR(frame.viewport.top, 56 + 106 + 12);
-        CHECK(frame.content.front().runs[0].text == L"Values");
+        CHECK(frame.content.front().runs[0].text == L"Appearance");
         CHECK_NEAR(frame.content.front().rect.top, 16);
         CHECK(UiFindItem(frame, SettingsControlId(SettingsField::ShowOnTaskbar))->kind == UiItemKind::Toggle);
         CHECK(HasTextIn(frame.main, L"Example accounts, updates as you change settings"));

@@ -82,7 +82,8 @@ regenerates.
   countdown,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
-  Display fields and reset group (with every scalar setting in exactly one page reset), threshold
+  Display fields and reset group (with every scalar setting in exactly one page reset), the
+  Material dropdown's saves and its transparency and Tinted wallpaper notes, threshold
   ordering in the projection and after a save (the test store's `normalize` hook), the Display
   page per tile style and what its settings change in the preview strip.
 - `render`: the same executable with `--render-dir` paints the settings client area (1000 x 820
@@ -100,7 +101,10 @@ regenerates.
   unpinned (`render-layout-overflow-*`, `-unpinned-*`), preview strip sheets with one captioned
   row per layout and option (`render-preview-sheet-*`) or per Display option
   (`render-display-preview-sheet-*`; 1:1 at 100/125/150%) and the dropdown popup's rows
-  (`render-popup-*`). Client-drawn previews use the production painter. The history window's
+  (`render-popup-*`). `render-backdrop-*` (Accounts, Layout, Display) and
+  `render-history-backdrop-*` (light and dark, 144 DPI) draw the windows over a stand-in backdrop
+  with grayscale text, as the host does when DWM draws one. Client-drawn previews use the
+  production painter. The history window's
   controls sheet (`render-controls-history-*`, every theme at 96/144/192 DPI,
   `fixtures/render-controls.inc`): two scrolled navigation panes through the production pane
   painter (logos, some brand-colored, usage-colored values, a cut label, selected, disabled, the Removed group,

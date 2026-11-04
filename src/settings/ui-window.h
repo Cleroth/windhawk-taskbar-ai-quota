@@ -13,6 +13,18 @@ static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 // A notification's rebuild waits for an open dropdown or menu to close (a rebuild closes it).
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 
+// The settings and usage history windows' backdrop for a material: Windows has none for Tinted
+// wallpaper, so they use Mica.
+static UiBackdrop MaterialBackdrop(Material material) {
+    switch (material) {
+        case Material::Acrylic: return UiBackdrop::Acrylic;
+        case Material::Mica:
+        case Material::TintedWallpaper: return UiBackdrop::Mica;
+        case Material::MicaAlt: return UiBackdrop::MicaAlt;
+        default: return UiBackdrop::None;
+    }
+}
+
 struct SettingsUiClient final : UiHostClient {
     // Edits; the account key and draft revision each pending step timer may commit (by field)
     SettingsProductionStore store;
@@ -132,12 +144,15 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     // The preview's scroll stays within what the built strip can scroll. Account cards follow
-    // the projection's order, a dragged card its drag order.
+    // the projection's order, a dragged card its drag order. The window takes the projected
+    // material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
+        UiHostSetBackdrop(host, MaterialBackdrop(view.settings.material));
+        view.transparencyEffects = host.theme.transparency;
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
@@ -272,10 +287,10 @@ struct SettingsUiClient final : UiHostClient {
                                 L"text color, light grey caret pace markers and the default spacing. "
                                 L"Accounts are not changed." :
                             field == SettingsField::ResetDisplay ?
-                                L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
-                                L"hover with adaptive alignment, no amounts, the standard palette with "
-                                L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
-                                L"additional OpenAI rate limits hidden." :
+                                L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, "
+                                L"percentage text on hover with adaptive alignment, no amounts, the "
+                                L"standard palette with yellow from 50%, orange from 75% and red from "
+                                L"90%, stale data marked, additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user, history is kept forever and the usage history window "
                                 L"opens on 7 days. Saved history stays.";

@@ -1,8 +1,8 @@
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
 // and its scrolling viewport child, each with its own render target, the main window optionally
 // with a scrolling navigation pane; the dropdown popup, the tooltip and the number boxes' native
-// text boxes; theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths
-// and teardown. A client supplies the content and the window-specific behavior. Rules:
+// text boxes; theme, backdrop, window icons, DPI, pointer and keyboard input, focus, scrolling,
+// close paths and teardown. A client supplies the content and the window-specific behavior. Rules:
 // ui/AGENTS.md.
 
 struct UiHost;
@@ -67,13 +67,16 @@ struct UiHost {
     UiThemeReader* themes = nullptr;
 
     // Windows, targets, DPI and theme; the main window's icons (ICON_SMALL, ICON_BIG), redrawn
-    // for its DPI and palette and destroyed once it is gone
+    // for its DPI and palette and destroyed once it is gone. The backdrop the client asked for,
+    // and whether DWM draws it (UiHostApplyBackdrop).
     HWND main = nullptr, viewport = nullptr;
     UiSurface mainSurface, viewSurface;
     UINT dpi = 96;
     UiThemeInput theme;
     UiPalette palette;
     std::array<HICON, 2> icons{};
+    UiBackdrop backdrop = UiBackdrop::None;
+    bool backdropOn = false;
 
     // Frame and interaction. The pointer position (item coordinates of its surface) feeds
     // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
@@ -254,11 +257,35 @@ static void UiHostFault(UiHost& host) {
     if (host.main) PostMessageW(host.main, WM_CLOSE, 0, 0);
 }
 
+// Chrome and backdrop for the current palette. Where DWM draws the backdrop, the main window and
+// viewport turn transparent over it (new targets) and the text boxes get their own layer; the
+// popup and tooltip stay opaque.
+static void UiHostApplyBackdrop(UiHost& host) {
+    bool on = UiApplyChrome(host.main, host.palette, host.backdrop, host.theme.transparency);
+    if (on == host.backdropOn) return;
+    host.backdropOn = on;
+    for (UiSurface* surface : {&host.mainSurface, &host.viewSurface}) {
+        surface->transparent = on;
+        UiDiscardSurface(*surface);
+    }
+    for (const UiTextBox& box : host.boxes.boxes) {
+        if (box.window) UiLayerTextBox(box.window, on);
+    }
+    UiHostInvalidate(host);
+}
+
+// The client's backdrop (none: opaque). Safe inside Build: it repaints, never rebuilds.
+static void UiHostSetBackdrop(UiHost& host, UiBackdrop backdrop) {
+    if (backdrop == host.backdrop) return;
+    host.backdrop = backdrop;
+    if (host.main) UiHostApplyBackdrop(host);
+}
+
 static void UiHostApplyTheme(UiHost& host) {
     UiHostHideTooltip(host);
     host.theme = UiReadTheme(*host.themes);
     host.palette = UiPaletteFor(host.theme);
-    UiApplyChrome(host.main, host.palette);
+    UiHostApplyBackdrop(host);
     if (host.config->icon) {
         UiSetWindowIcons(host.main, *host.graphics, host.palette, *host.config->icon, host.dpi, host.icons);
     }
@@ -455,6 +482,7 @@ static void UiHostSyncTextBoxes(UiHost& host) {
             }
             boxes.boxes.push_back({item.id, window, item.text});
             box = &boxes.boxes.back();
+            if (host.backdropOn) UiLayerTextBox(window, true);
             SendMessageW(window, WM_SETFONT, WPARAM(font), FALSE);
             SendMessageW(window, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
             SendMessageW(window, EM_LIMITTEXT, item.kind == UiItemKind::TextBox ? std::max(item.maximum, 1) : 64, 0);
@@ -976,7 +1004,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     target->BeginDraw();
                     D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
                     target->SetTransform(&identity);
-                    target->Clear(host.palette.background);
+                    target->Clear(own.transparent ? D2D1_COLOR_F{} : host.palette.background);
                     if (isMain) {
                         UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
                                      state, {0, 0}, scale, -1e9f, 1e9f, &custom);

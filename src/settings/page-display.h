@@ -1,6 +1,7 @@
-// Settings > Display: what the meters show, their usage colors and thresholds, the stale marker
-// and the OpenAI details (approved mockup display.png). The preview card is in the shell's
-// pinned header (settings/preview.h). Pure builder.
+// Settings > Display: the material of the details flyout and the windows, what the meters show,
+// their usage colors and thresholds, the stale marker and the OpenAI details (approved mockup
+// display.png, Appearance aside). The preview card is in the shell's pinned header
+// (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -8,9 +9,31 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
     const Settings& s = view.settings;
     const int style = std::clamp(int(s.barLayout), 0, int(std::size(kSettingsTileStyles)) - 1);
 
+    // Appearance: the material stays choosable without transparency effects; its notes say how
+    // it shows then, and what the windows use for Tinted wallpaper.
+    y = UiAddSection(items, id, x, y + 16, width, L"Appearance");
+    {
+        UiCardSpec spec;
+        spec.title = L"Material";
+        spec.description = {{L"Background of the details flyout and the settings and usage history windows."}};
+        if (!view.transparencyEffects) {
+            spec.description[0].text += L"\nWindows transparency effects are off, so it shows as Solid.";
+        }
+        if (s.material == Material::TintedWallpaper) {
+            spec.description[0].text += L"\nThe settings and usage history windows use Mica for it.";
+        }
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Material, 200,
+                                    {{L"Acrylic", int(Material::Acrylic)},
+                                     {L"Mica", int(Material::Mica)},
+                                     {L"Mica Alt", int(Material::MicaAlt)},
+                                     {L"Tinted wallpaper", int(Material::TintedWallpaper)},
+                                     {L"Solid", int(Material::Solid)}},
+                                    int(s.material));
+    }
+
     // Values: the bar mode applies to every style. Percentage text is the bars' own; its
     // alignment and the amounts that replace it need it shown.
-    y = UiAddSection(items, id, x, y + 16, width, L"Values");
+    y = UiAddSection(items, id, x, y + 20, width, L"Values");
     {
         UiCardSpec spec;
         spec.title = L"Bar mode";
@@ -106,6 +129,6 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
 
     UiCardSpec reset;
     reset.title = L"Reset Display to defaults";
-    reset.description = {{L"Values, usage colors, stale marker and flyout details."}};
+    reset.description = {{L"Material, values, usage colors, stale marker and flyout details."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay, L"Reset");
 }

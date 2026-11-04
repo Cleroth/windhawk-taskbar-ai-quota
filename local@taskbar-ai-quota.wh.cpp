@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.1.0
+// @version         2.2.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -50,7 +50,9 @@ local app or CLI session, which must remain running.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
   position, identity position, pace markers, and spacing.
-- **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
+- **Display:** Material of the details flyout and the settings and history windows (Acrylic,
+  Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
+  remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -121,6 +123,8 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
@@ -131,6 +135,7 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
@@ -307,6 +312,17 @@ enum class PaceTickStyle {
     TimeTrack,  // A small bar under each bar (vertical bars: right of it) filling with the pace.
 };
 
+// Background of the details flyout and the settings and usage history windows. Every material
+// but Solid needs Windows' transparency effects; without them, or in high contrast, it is solid.
+// The windows have no Tinted wallpaper backdrop and use Mica for it.
+enum class Material {
+    Acrylic,          // Tinted blur of whatever is behind
+    Mica,             // Windows' Mica over the blurred desktop wallpaper
+    MicaAlt,          // Mica's tabbed-window variant
+    TintedWallpaper,  // The blurred wallpaper under the theme's surface color at 80%
+    Solid,
+};
+
 // Provider logos drawn in their brand colors instead of the taskbar's text color.
 struct LogoBrands {
     bool claude = false;  // Anthropic's orange
@@ -396,6 +412,7 @@ struct Settings {
     bool colorblindMode = false;
     bool showStaleWarning = true;
     bool enableNotifications = true;
+    Material material = Material::Acrylic;
 
     bool operator==(const Settings&) const = default;
 };
@@ -680,6 +697,14 @@ struct AccountUiRefs {
 struct FlyoutTheme {
     bool light = false;
     bool highContrast = false;
+    // The card's surface: `card` paints Acrylic and Solid. Mica, MicaAlt and TintedWallpaper are
+    // drawn behind the card's content from the material fields (flyout-material.h), over the
+    // blurred wallpaper; `card` holds their opaque fallback color. Solid without transparency
+    // effects or in high contrast.
+    Material material = Material::Solid;
+    winrt::Windows::UI::Color materialTint{};
+    float materialTintOpacity = 0;
+    float materialLuminosityOpacity = 0;  // Mica's luminosity step; unused by TintedWallpaper.
     Brush card{nullptr};
     Brush cardBorder{nullptr};
     Brush footer{nullptr};
@@ -779,6 +804,9 @@ struct FlyoutPopup {
     // not listed is the popup's own window.
     std::vector<HWND> windowsBeforeOpen;
     FlyoutTheme theme;
+    // The card's composition material, hidden until FlyoutUi::materialFactory has compiled
+    // (SettleFlyoutMaterial).
+    winrt::Windows::UI::Composition::Visual materialVisual{nullptr};
 
     TextBlock title{nullptr};
     FrameworkElement staleMarker{nullptr};
@@ -815,6 +843,12 @@ struct FlyoutUi {
     winrt::event_token pollTimerToken{};
     DispatcherTimer countdownTimer{nullptr};
     winrt::event_token countdownTimerToken{};
+
+    // The card material's effect, kept across opens while its material, light/dark mode (which
+    // set its tints) and compositor match; released by ClearQuotaEventState.
+    winrt::Windows::UI::Composition::CompositionEffectFactory materialFactory{nullptr};
+    Material materialFactoryMaterial = Material::Solid;
+    bool materialFactoryLight = false;
 
     // Hover tracking by account index; -1 when unset.
     int hoverIndex = -1;
@@ -5379,6 +5413,7 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
     releaseTimer(flyout.dwellTimer, flyout.dwellTimerToken);
     releaseTimer(flyout.pollTimer, flyout.pollTimerToken);
     releaseTimer(flyout.countdownTimer, flyout.countdownTimerToken);
+    flyout.materialFactory = nullptr;
     releaseTimer(state.keepMenuOpenTimer, state.keepMenuOpenTimerToken);
     releaseTimer(state.submenuCloseTimer, state.submenuCloseTimerToken);
     flyout.hoverIndex = -1;
@@ -5639,7 +5674,8 @@ static const LogoBrand* ProviderLogoBrand(LogoBrands brands, std::wstring_view p
 
 // src/taskbar/theme.h
 // XAML colors for the meter model's ARGB values, logo brand brushes, and the details flyout's
-// theme. Every flyout brush is created in this file.
+// theme. Every flyout XAML brush is created in this file; flyout-material.h builds the card's
+// composition materials from the theme.
 
 static winrt::Windows::UI::Color ArgbColor(uint32_t argb) {
     return {(uint8_t)(argb >> 24), (uint8_t)(argb >> 16), (uint8_t)(argb >> 8), (uint8_t)argb};
@@ -5717,10 +5753,15 @@ static Brush FlyoutFillBrush(winrt::Windows::UI::Color color) {
     }
 }
 
-// Follows the taskbar's Windows mode (not the app mode), transparency effects and high contrast.
+// Follows the taskbar's Windows mode (not the app mode), transparency effects, high contrast and
+// the material setting.
 static FlyoutTheme LoadFlyoutTheme() {
     using Color = winrt::Windows::UI::Color;
     FlyoutTheme theme;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        theme.material = g_settings.material;
+    }
     theme.highContrast = IsHighContrast();
     auto personalizeValue = [](PCWSTR name, DWORD fallback) {
         DWORD value = fallback;
@@ -5733,7 +5774,9 @@ static FlyoutTheme LoadFlyoutTheme() {
         return value;
     };
     theme.light = personalizeValue(L"SystemUsesLightTheme", 0) != 0;
-    bool acrylic = !theme.highContrast && personalizeValue(L"EnableTransparency", 1) != 0;
+    if (theme.highContrast || personalizeValue(L"EnableTransparency", 1) == 0) {
+        theme.material = Material::Solid;
+    }
 
     struct {
         Color text, secondaryText, mutedText, separator, chip, chipBorder, cardBorder;
@@ -5794,7 +5837,8 @@ static FlyoutTheme LoadFlyoutTheme() {
     theme.chartKey = FlyoutShapeBrush(p.text);
 
     theme.card = FlyoutBrush(p.cardSolid);
-    if (acrylic) {
+    switch (theme.material) {
+    case Material::Acrylic:
         try {
             AcrylicBrush brush;
             brush.BackgroundSource(AcrylicBackgroundSource::Backdrop);
@@ -5806,6 +5850,34 @@ static FlyoutTheme LoadFlyoutTheme() {
             } catch (...) {}
             theme.card = brush;
         } catch (...) {}
+        break;
+    case Material::Mica:
+    case Material::MicaAlt: {
+        // Windows App SDK MicaController's MicaKind::Base and BaseAlt recipes, by [alt][light].
+        struct MicaRecipe {
+            Color tint;
+            float tintOpacity, luminosityOpacity;
+            Color fallback;
+        };
+        static constexpr MicaRecipe kRecipes[2][2] = {
+            {{{0xFF, 0x20, 0x20, 0x20}, 0.8f, 1.f, {0xFF, 0x20, 0x20, 0x20}},
+             {{0xFF, 0xF3, 0xF3, 0xF3}, 0.5f, 1.f, {0xFF, 0xF3, 0xF3, 0xF3}}},
+            {{{0xFF, 0x0A, 0x0A, 0x0A}, 0.0f, 1.f, {0xFF, 0x20, 0x20, 0x20}},
+             {{0xFF, 0xDA, 0xDA, 0xDA}, 0.5f, 1.f, {0xFF, 0xE8, 0xE8, 0xE8}}},
+        };
+        MicaRecipe const& recipe = kRecipes[theme.material == Material::MicaAlt][theme.light];
+        theme.materialTint = recipe.tint;
+        theme.materialTintOpacity = recipe.tintOpacity;
+        theme.materialLuminosityOpacity = recipe.luminosityOpacity;
+        theme.card = FlyoutBrush(recipe.fallback);
+        break;
+    }
+    case Material::TintedWallpaper:
+        theme.materialTint = p.cardSolid;
+        theme.materialTintOpacity = 0.8f;
+        break;
+    case Material::Solid:
+        break;
     }
 
     // Unfilled track: 45-degree stripes repeating every 6 DIP.
@@ -8466,6 +8538,256 @@ static void SetAccountVisibility(uint64_t identityHash, bool wantVisible) {
     else PostUiUpdate();
 }
 
+// src/taskbar/flyout-material.h
+// Details flyout card materials drawn with composition (Mica, Mica Alt, Tinted wallpaper): one
+// effect brush over the system's blurred wallpaper, in a visual behind the card's content.
+
+// Direct2D description of an effect graph node, read by Compositor::CreateEffectFactory. From
+// windows.graphics.effects.interop.h, which the bundled headers lack.
+MIDL_INTERFACE("2FC57384-A068-44D7-A331-30982FCF7177")
+IGraphicsEffectD2D1Interop : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) = 0;
+    // `mapping` receives a GRAPHICS_EFFECT_PROPERTY_MAPPING.
+    virtual HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index,
+                                                              int* mapping) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) = 0;
+    // Receives an IPropertyValue.
+    virtual HRESULT STDMETHODCALLTYPE GetProperty(UINT index, void** value) = 0;
+    // Receives an IGraphicsEffectSource.
+    virtual HRESULT STDMETHODCALLTYPE GetSource(UINT index, void** source) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) = 0;
+};
+__CRT_UUID_DECL(IGraphicsEffectD2D1Interop, 0x2fc57384, 0xa068, 0x44d7, 0xa3, 0x31, 0x30, 0x98,
+                0x2f, 0xcf, 0x71, 0x77)
+
+// One node of an effect graph: a Direct2D effect, its properties in the effect's property index
+// order and its inputs, fixed at construction. `live` counts its graph's nodes alive.
+struct FlyoutEffectNode
+    : winrt::implements<FlyoutEffectNode, winrt::Windows::Graphics::Effects::IGraphicsEffect,
+                        winrt::Windows::Graphics::Effects::IGraphicsEffectSource,
+                        IGraphicsEffectD2D1Interop, winrt::no_weak_ref> {
+    std::shared_ptr<std::atomic<int>> live;
+    GUID id;
+    std::vector<winrt::Windows::Foundation::IPropertyValue> properties;
+    std::vector<winrt::Windows::Graphics::Effects::IGraphicsEffectSource> sources;
+    winrt::hstring name;
+
+    FlyoutEffectNode(
+        std::shared_ptr<std::atomic<int>> graphLive, GUID const& effect,
+        std::initializer_list<winrt::Windows::Foundation::IInspectable> values,
+        std::initializer_list<winrt::Windows::Graphics::Effects::IGraphicsEffectSource> inputs)
+        : live(std::move(graphLive)), id(effect), sources(inputs) {
+        for (auto const& value : values) {
+            properties.push_back(value.as<winrt::Windows::Foundation::IPropertyValue>());
+        }
+        // Last, so a throwing constructor leaves the count alone.
+        (*live)++;
+    }
+    ~FlyoutEffectNode() { (*live)--; }
+
+    // IGraphicsEffect
+    winrt::hstring Name() const { return name; }
+    void Name(winrt::hstring const& value) { name = value; }
+
+    // IGraphicsEffectD2D1Interop
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* out) noexcept override {
+        if (!out) return E_POINTER;
+        *out = id;
+        return S_OK;
+    }
+    // No property is animatable.
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, int*) noexcept override {
+        return E_INVALIDARG;
+    }
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
+        if (!count) return E_POINTER;
+        *count = (UINT)properties.size();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, void** value) noexcept override {
+        if (!value) return E_POINTER;
+        *value = nullptr;
+        if (index >= properties.size()) return E_INVALIDARG;
+        winrt::copy_to_abi(properties[index], *value);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index, void** source) noexcept override {
+        if (!source) return E_POINTER;
+        *source = nullptr;
+        if (index >= sources.size()) return E_INVALIDARG;
+        winrt::copy_to_abi(sources[index], *source);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
+        if (!count) return E_POINTER;
+        *count = (UINT)sources.size();
+        return S_OK;
+    }
+};
+
+// Logs the first failure only.
+static void LogFlyoutMaterialFailure(PCWSTR reason, int32_t error) {
+    static std::atomic<bool> logged{false};
+    if (!logged.exchange(true)) {
+        Wh_Log(L"Flyout material unavailable (%s, 0x%08X); using its opaque color", reason,
+               (unsigned)error);
+    }
+}
+
+// Adds the popup theme's Mica, MicaAlt or TintedWallpaper material to `host`, an empty element
+// spanning the card inside its border, clipped to `cornerRadius`; XAML positions, clips and
+// animates it with the card. It stays hidden over the card's opaque fallback until
+// SettleFlyoutMaterial shows it. Its effect factory is reused from `fo` when its key matches, else
+// built and kept there. Nothing is added without a blurred wallpaper brush or on a failure
+// building it.
+static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float cornerRadius) {
+    namespace wuc = winrt::Windows::UI::Composition;
+    using winrt::Windows::Foundation::IInspectable;
+    using winrt::Windows::Foundation::PropertyValue;
+    using winrt::Windows::Graphics::Effects::IGraphicsEffect;
+    using winrt::Windows::Graphics::Effects::IGraphicsEffectSource;
+    using winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview;
+    // Direct2D effects (d2d1effects.h, d2d1effects_2.h) and the property values used.
+    static constexpr GUID kFlood{0x61c23c20, 0xae69, 0x4d8e,
+                                 {0x94, 0xcf, 0x50, 0x07, 0x8d, 0xf6, 0x38, 0xf2}};
+    static constexpr GUID kBlend{0x81c5b77b, 0x13f8, 0x4cdd,
+                                 {0xad, 0x20, 0xc8, 0x90, 0x54, 0x7a, 0xc6, 0x5d}};
+    static constexpr GUID kComposite{0x48fc9f51, 0xf6ac, 0x48f1,
+                                     {0x8b, 0x58, 0x3b, 0x28, 0xac, 0x46, 0xf7, 0x6d}};
+    constexpr uint32_t kBlendColor = 22;       // D2D1_BLEND_MODE_COLOR
+    constexpr uint32_t kBlendLuminosity = 23;  // D2D1_BLEND_MODE_LUMINOSITY
+    constexpr uint32_t kSourceOver = 0;        // D2D1_COMPOSITE_MODE_SOURCE_OVER
+    FlyoutPopup& popup = fo.popup;
+    FlyoutTheme const& theme = popup.theme;
+    // CreateEffectFactory copies the graph. Once system code keeps a node, which it could release
+    // after the mod unloads, no more nodes are handed out.
+    static std::atomic<bool> nodesRetained{false};
+    if (g_unloading || nodesRetained) return;
+    std::shared_ptr<std::atomic<int>> live;
+    try {
+        live = std::make_shared<std::atomic<int>>(0);
+        wuc::Visual hostVisual = ElementCompositionPreview::GetElementVisual(host);
+        wuc::Compositor compositor = hostVisual.Compositor();
+        wuc::CompositionBrush wallpaper = compositor.TryCreateBlurredWallpaperBackdropBrush();
+        if (!wallpaper) {
+            LogFlyoutMaterialFailure(L"no blurred wallpaper brush", S_OK);
+            return;
+        }
+
+        if (fo.materialFactory && (fo.materialFactoryMaterial != theme.material ||
+                                   fo.materialFactoryLight != theme.light ||
+                                   fo.materialFactory.Compositor() != compositor)) {
+            fo.materialFactory = nullptr;
+        }
+        if (!fo.materialFactory) {
+            wuc::CompositionEffectFactory factory{nullptr};
+            {
+                auto node = [&](GUID const& effect, std::initializer_list<IInspectable> values,
+                                std::initializer_list<IGraphicsEffectSource> inputs) {
+                    return winrt::make<FlyoutEffectNode>(live, effect, values, inputs);
+                };
+                // The tint at an opacity, as its straight alpha.
+                auto tint = [&](float opacity) {
+                    winrt::Windows::UI::Color c = theme.materialTint;
+                    float rgba[] = {c.R / 255.f, c.G / 255.f, c.B / 255.f, opacity * c.A / 255.f};
+                    return node(kFlood, {PropertyValue::CreateSingleArray(rgba)}, {});
+                };
+                wuc::CompositionEffectSourceParameter backdrop(L"Wallpaper");
+                IGraphicsEffect graph{nullptr};
+                if (theme.material == Material::TintedWallpaper) {
+                    graph = node(kComposite, {PropertyValue::CreateUInt32(kSourceOver)},
+                                 {backdrop, tint(theme.materialTintOpacity)});
+                } else {
+                    // Mica: the luminosity flood blended over the wallpaper, then the tint over
+                    // that. Composition swaps the Color and Luminosity blend modes, so the
+                    // luminosity step passes Color and the tint step Luminosity, as
+                    // MicaController does.
+                    IGraphicsEffect luminosity =
+                        node(kBlend, {PropertyValue::CreateUInt32(kBlendColor)},
+                             {backdrop, tint(theme.materialLuminosityOpacity)});
+                    graph = node(kBlend, {PropertyValue::CreateUInt32(kBlendLuminosity)},
+                                 {luminosity, tint(theme.materialTintOpacity)});
+                }
+                factory = compositor.CreateEffectFactory(graph);
+            }
+            if (*live != 0) {
+                nodesRetained = true;
+                LogFlyoutMaterialFailure(L"effect graph retained", S_OK);
+                return;
+            }
+            fo.materialFactory = factory;
+            fo.materialFactoryMaterial = theme.material;
+            fo.materialFactoryLight = theme.light;
+        }
+        auto status = fo.materialFactory.LoadStatus();
+        if (status != wuc::CompositionEffectFactoryLoadStatus::Success &&
+            status != wuc::CompositionEffectFactoryLoadStatus::Pending) {
+            LogFlyoutMaterialFailure(L"effect failed to load",
+                                     fo.materialFactory.ExtendedError().value);
+            fo.materialFactory = nullptr;
+            return;
+        }
+
+        wuc::CompositionEffectBrush brush = fo.materialFactory.CreateBrush();
+        brush.SetSourceParameter(L"Wallpaper", wallpaper);
+        wuc::SpriteVisual sprite = compositor.CreateSpriteVisual();
+        sprite.Brush(brush);
+        sprite.IsVisible(false);
+        // The host's layout size, for the sprite and its rounded clip.
+        wuc::ExpressionAnimation size = compositor.CreateExpressionAnimation(L"host.Size");
+        size.SetReferenceParameter(L"host", hostVisual);
+        sprite.StartAnimation(L"Size", size);
+        wuc::CompositionRoundedRectangleGeometry outline =
+            compositor.CreateRoundedRectangleGeometry();
+        outline.CornerRadius({cornerRadius, cornerRadius});
+        outline.StartAnimation(L"Size", size);
+        sprite.Clip(compositor.CreateGeometricClip(outline));
+        ElementCompositionPreview::SetElementChildVisual(host, sprite);
+        popup.materialVisual = sprite;
+    } catch (winrt::hresult_error const& e) {
+        if (live && *live != 0) nodesRetained = true;
+        fo.materialFactory = nullptr;
+        LogFlyoutMaterialFailure(L"exception", e.code().value);
+    } catch (...) {
+        if (live && *live != 0) nodesRetained = true;
+        fo.materialFactory = nullptr;
+        LogFlyoutMaterialFailure(L"exception", E_FAIL);
+    }
+}
+
+// Once the material's effect has compiled (asynchronously, after its factory is built), shows the
+// material and drops the card's opaque fallback in the same update: a background fading under the
+// material would show through it mid-animation. With a compiled factory that is the open itself.
+// An effect that fails to compile stays hidden over the fallback, and its factory is dropped so a
+// later open rebuilds it. Polled while the popup is open; a no-op once settled.
+static void SettleFlyoutMaterial(FlyoutUi& fo) {
+    using winrt::Windows::UI::Composition::CompositionEffectFactoryLoadStatus;
+    FlyoutPopup& popup = fo.popup;
+    if (!popup.materialVisual) return;
+    try {
+        auto status = fo.materialFactory ? fo.materialFactory.LoadStatus() :
+                                           CompositionEffectFactoryLoadStatus::Other;
+        if (status == CompositionEffectFactoryLoadStatus::Pending) return;
+        if (status == CompositionEffectFactoryLoadStatus::Success) {
+            Border card = popup.card.try_as<Border>();
+            Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
+            popup.materialVisual.IsVisible(true);
+            if (card) card.Background(transparent);
+        } else if (fo.materialFactory) {
+            LogFlyoutMaterialFailure(L"effect failed to compile",
+                                     fo.materialFactory.ExtendedError().value);
+            fo.materialFactory = nullptr;
+        }
+    } catch (winrt::hresult_error const& e) {
+        fo.materialFactory = nullptr;
+        LogFlyoutMaterialFailure(L"exception", e.code().value);
+    } catch (...) {
+        fo.materialFactory = nullptr;
+        LogFlyoutMaterialFailure(L"exception", E_FAIL);
+    }
+    popup.materialVisual = nullptr;
+}
+
 // src/taskbar/flyout-content.h
 // Account details flyout card: builds the card, then applies account values to it in place.
 
@@ -9016,7 +9338,20 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     if (!theme.highContrast) {
         card.RequestedTheme(theme.light ? ElementTheme::Light : ElementTheme::Dark);
     }
-    card.Child(content);
+    // Composition materials draw on a layer under the content, inside the border's 7 DIP inner
+    // corners, over the card's opaque fallback (SettleFlyoutMaterial).
+    if (theme.material == Material::Mica || theme.material == Material::MicaAlt ||
+        theme.material == Material::TintedWallpaper) {
+        Border material;
+        material.IsHitTestVisible(false);
+        Grid surface;
+        surface.Children().Append(material);
+        surface.Children().Append(content);
+        card.Child(surface);
+        AttachFlyoutMaterial(state.flyout, material, 7.f);
+    } else {
+        card.Child(content);
+    }
     return card;
 }
 
@@ -9443,6 +9778,7 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                         if (fo.pollTimer && !IsTileHovered(*uiState)) fo.pollTimer.Stop();
                         return;
                     }
+                    SettleFlyoutMaterial(fo);
 
                     // Inside while over its tile (taskbar pointer events track that) or over a
                     // window this thread showed after the popup opened.
@@ -9547,6 +9883,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
         popup.card = card;
+        SettleFlyoutMaterial(fo);
 
         Flyout flyout;
         popup.flyout = flyout;
@@ -11434,8 +11771,13 @@ struct UiThemeInput {
     UiThemeKind kind = UiThemeKind::Dark;
     UiAccentColors accent;
     UiSystemColors system;
-    bool systemLight = false;  // Windows (taskbar) mode, which the taskbar preview follows
+    bool systemLight = false;   // Windows (taskbar) mode, which the taskbar preview follows
+    bool transparency = true;   // Windows' transparency effects, which backdrops need
 };
+
+// The Windows 11 backdrop a client asks for behind its window's surfaces; None keeps the window
+// opaque.
+enum class UiBackdrop : uint8_t { None, Mica, MicaAlt, Acrylic };
 
 static D2D1_COLOR_F UiRgb(uint32_t rgb, float alpha = 1.0f) {
     return {float((rgb >> 16) & 0xFF) / 255.0f, float((rgb >> 8) & 0xFF) / 255.0f,
@@ -14200,8 +14542,9 @@ static UiTooltipChange UiTooltipUpdate(UiGraphics& g, UiTooltipModel& model, UiT
 
 // src/ui/system-theme.h
 // System theme reads and window chrome of the custom-drawn windows (native): app and Windows
-// (taskbar) light/dark mode, high contrast with its system colors, the accent palette, and the
-// standard DWM caption recolored to the page background.
+// (taskbar) light/dark mode, high contrast with its system colors, the accent palette,
+// transparency effects, the standard DWM caption recolored to the page background, and the DWM
+// backdrop.
 
 // UISettings is created on first use and released with the window thread's graphics scope,
 // before the apartment. Accent changes are read on theme messages, never subscribed to.
@@ -14216,6 +14559,11 @@ static UiThemeInput UiReadTheme(UiThemeReader& reader) {
     RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                  L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &systemLight, &systemSize);
     theme.systemLight = systemLight != 0;
+    DWORD transparency = 1;
+    DWORD transparencySize = sizeof(transparency);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"EnableTransparency", RRF_RT_REG_DWORD, nullptr, &transparency, &transparencySize);
+    theme.transparency = transparency != 0;
     HIGHCONTRASTW contrast{sizeof(contrast)};
     if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
         (contrast.dwFlags & HCF_HIGHCONTRASTON)) {
@@ -14256,9 +14604,11 @@ static UiThemeInput UiReadTheme(UiThemeReader& reader) {
 }
 
 // Standard caption: dark mode follows the palette, caption and title colors are the page
-// background and text; high contrast keeps the system's caption. Attributes older Windows
-// versions lack are ignored.
-static void UiApplyChrome(HWND window, const UiPalette& palette) {
+// background and text; high contrast keeps the system's caption. With a backdrop (Windows 11
+// 22H2 and later, transparency effects on, not in high contrast) DWM draws it under the whole
+// window, the frame extended over the client area, and the caption keeps the system's colors over
+// it. Returns whether the backdrop is on. Attributes older Windows versions lack are ignored.
+static bool UiApplyChrome(HWND window, const UiPalette& palette, UiBackdrop backdrop, bool transparency) {
     auto opaque = [&](D2D1_COLOR_F color) {
         auto channel = [&](float value, float under) {
             return BYTE(std::lround(255 * (value * color.a + under * (1 - color.a))));
@@ -14268,23 +14618,38 @@ static void UiApplyChrome(HWND window, const UiPalette& palette) {
     };
     bool hc = palette.kind == UiThemeKind::HighContrast;
     BOOL dark = palette.kind == UiThemeKind::Dark;
-    COLORREF caption = hc ? DWMWA_COLOR_DEFAULT : opaque(palette.background);
-    COLORREF text = hc ? DWMWA_COLOR_DEFAULT : opaque(palette.text);
+    DWM_SYSTEMBACKDROP_TYPE type = backdrop == UiBackdrop::Mica    ? DWMSBT_MAINWINDOW :
+                                   backdrop == UiBackdrop::MicaAlt ? DWMSBT_TABBEDWINDOW :
+                                   backdrop == UiBackdrop::Acrylic ? DWMSBT_TRANSIENTWINDOW : DWMSBT_AUTO;
+    bool on = !hc && transparency && type != DWMSBT_AUTO &&
+              SUCCEEDED(DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type)));
+    if (!on) {
+        type = DWMSBT_AUTO;
+        DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type));
+    }
+    MARGINS frame{on ? -1 : 0, on ? -1 : 0, on ? -1 : 0, on ? -1 : 0};
+    DwmExtendFrameIntoClientArea(window, &frame);
+    COLORREF caption = hc || on ? DWMWA_COLOR_DEFAULT : opaque(palette.background);
+    COLORREF text = hc || on ? DWMWA_COLOR_DEFAULT : opaque(palette.text);
     DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
     DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
     DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
     DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &text, sizeof(text));
     DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    return on;
 }
 
 // src/ui/surface.h
-// One HWND render target with its per-target caches (native): opaque target at the window DPI,
-// resize, device-loss discard, software fallback.
+// One HWND render target with its per-target caches (native): opaque or transparent target at
+// the window DPI, resize, device-loss discard, software fallback.
 
 struct UiSurface {
     HWND window = nullptr;
     winrt::com_ptr<ID2D1HwndRenderTarget> target;
     UiTargetCache cache;
+    // Over the window's backdrop: premultiplied alpha, grayscale text (ClearType needs an opaque
+    // background). Changing it requires a new target.
+    bool transparent = false;
     bool software = false;  // Hardware creation failed; later targets are software too.
     int created = 0;        // Targets created so far.
     int failures = 0;       // Consecutive failed frames.
@@ -14307,12 +14672,14 @@ static ID2D1HwndRenderTarget* UiSurfaceTarget(UiSurface& surface, ID2D1Factory* 
     for (int attempt = surface.software ? 1 : 0; attempt < 2; attempt++) {
         D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
             attempt ? D2D1_RENDER_TARGET_TYPE_SOFTWARE : D2D1_RENDER_TARGET_TYPE_DEFAULT,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), float(dpi),
-            float(dpi));
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              surface.transparent ? D2D1_ALPHA_MODE_PREMULTIPLIED : D2D1_ALPHA_MODE_IGNORE),
+            float(dpi), float(dpi));
         HRESULT result = factory->CreateHwndRenderTarget(&properties, &window, surface.target.put());
         if (SUCCEEDED(result)) {
             surface.software = attempt == 1;
             surface.created++;
+            if (surface.transparent) surface.target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             return surface.target.get();
         }
         Wh_Log(L"Could not create a %s render target: 0x%08X", attempt ? L"software" : L"hardware",
@@ -14715,6 +15082,20 @@ static std::pair<COLORREF, COLORREF> UiTextBoxColors(const UiPalette& p, bool fo
     return {UiColorRef(UiOver(enabled ? p.text : p.textDisabled, fill)), UiColorRef(fill)};
 }
 
+// Over the window's backdrop a box draws on its own opaque layer: GDI leaves its pixels' alpha
+// empty, which DWM would blend into the backdrop (text vanishing on light themes). Its fill is
+// the box's color over the palette's opaque background, close to the backdrop's.
+static void UiLayerTextBox(HWND window, bool layered) {
+    LONG_PTR style = GetWindowLongPtrW(window, GWL_EXSTYLE);
+    if (((style & WS_EX_LAYERED) != 0) == layered) return;
+    SetWindowLongPtrW(window, GWL_EXSTYLE, layered ? style | WS_EX_LAYERED : style & ~LONG_PTR(WS_EX_LAYERED));
+    if (layered && !SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA)) {
+        Wh_Log(L"Could not layer a text box: %lu", GetLastError());
+        SetWindowLongPtrW(window, GWL_EXSTYLE, style);
+    }
+    RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME);
+}
+
 static HBRUSH UiTextBoxBrush(UiTextBoxes& boxes, COLORREF color) {
     for (const auto& [key, brush] : boxes.brushes) {
         if (key == color) return brush;
@@ -14738,8 +15119,8 @@ static void UiReleaseTextBoxes(UiTextBoxes& boxes) {
 // Window host of the custom-drawn windows (native): a main window (navigation, pinned header)
 // and its scrolling viewport child, each with its own render target, the main window optionally
 // with a scrolling navigation pane; the dropdown popup, the tooltip and the number boxes' native
-// text boxes; theme, window icons, DPI, pointer and keyboard input, focus, scrolling, close paths
-// and teardown. A client supplies the content and the window-specific behavior. Rules:
+// text boxes; theme, backdrop, window icons, DPI, pointer and keyboard input, focus, scrolling,
+// close paths and teardown. A client supplies the content and the window-specific behavior. Rules:
 // ui/AGENTS.md.
 
 struct UiHost;
@@ -14804,13 +15185,16 @@ struct UiHost {
     UiThemeReader* themes = nullptr;
 
     // Windows, targets, DPI and theme; the main window's icons (ICON_SMALL, ICON_BIG), redrawn
-    // for its DPI and palette and destroyed once it is gone
+    // for its DPI and palette and destroyed once it is gone. The backdrop the client asked for,
+    // and whether DWM draws it (UiHostApplyBackdrop).
     HWND main = nullptr, viewport = nullptr;
     UiSurface mainSurface, viewSurface;
     UINT dpi = 96;
     UiThemeInput theme;
     UiPalette palette;
     std::array<HICON, 2> icons{};
+    UiBackdrop backdrop = UiBackdrop::None;
+    bool backdropOn = false;
 
     // Frame and interaction. The pointer position (item coordinates of its surface) feeds
     // client-drawn hover; a slider, preview or handle drag keeps its item until release. A
@@ -14991,11 +15375,35 @@ static void UiHostFault(UiHost& host) {
     if (host.main) PostMessageW(host.main, WM_CLOSE, 0, 0);
 }
 
+// Chrome and backdrop for the current palette. Where DWM draws the backdrop, the main window and
+// viewport turn transparent over it (new targets) and the text boxes get their own layer; the
+// popup and tooltip stay opaque.
+static void UiHostApplyBackdrop(UiHost& host) {
+    bool on = UiApplyChrome(host.main, host.palette, host.backdrop, host.theme.transparency);
+    if (on == host.backdropOn) return;
+    host.backdropOn = on;
+    for (UiSurface* surface : {&host.mainSurface, &host.viewSurface}) {
+        surface->transparent = on;
+        UiDiscardSurface(*surface);
+    }
+    for (const UiTextBox& box : host.boxes.boxes) {
+        if (box.window) UiLayerTextBox(box.window, on);
+    }
+    UiHostInvalidate(host);
+}
+
+// The client's backdrop (none: opaque). Safe inside Build: it repaints, never rebuilds.
+static void UiHostSetBackdrop(UiHost& host, UiBackdrop backdrop) {
+    if (backdrop == host.backdrop) return;
+    host.backdrop = backdrop;
+    if (host.main) UiHostApplyBackdrop(host);
+}
+
 static void UiHostApplyTheme(UiHost& host) {
     UiHostHideTooltip(host);
     host.theme = UiReadTheme(*host.themes);
     host.palette = UiPaletteFor(host.theme);
-    UiApplyChrome(host.main, host.palette);
+    UiHostApplyBackdrop(host);
     if (host.config->icon) {
         UiSetWindowIcons(host.main, *host.graphics, host.palette, *host.config->icon, host.dpi, host.icons);
     }
@@ -15192,6 +15600,7 @@ static void UiHostSyncTextBoxes(UiHost& host) {
             }
             boxes.boxes.push_back({item.id, window, item.text});
             box = &boxes.boxes.back();
+            if (host.backdropOn) UiLayerTextBox(window, true);
             SendMessageW(window, WM_SETFONT, WPARAM(font), FALSE);
             SendMessageW(window, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
             SendMessageW(window, EM_LIMITTEXT, item.kind == UiItemKind::TextBox ? std::max(item.maximum, 1) : 64, 0);
@@ -15713,7 +16122,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     target->BeginDraw();
                     D2D1_MATRIX_3X2_F identity = D2D1::Matrix3x2F::Identity();
                     target->SetTransform(&identity);
-                    target->Clear(host.palette.background);
+                    target->Clear(own.transparent ? D2D1_COLOR_F{} : host.palette.background);
                     if (isMain) {
                         UiPaintItems(target, *host.graphics, own.cache, host.palette, host.frame.main,
                                      state, {0, 0}, scale, -1e9f, 1e9f, &custom);
@@ -16769,6 +17178,7 @@ static bool NormalizeSettings(Settings* s) {
         s->percentTextVisibility > PercentTextVisibility::Always) {
         s->percentTextVisibility = PercentTextVisibility::Hover;
     }
+    if (s->material < Material::Acrylic || s->material > Material::Solid) s->material = Settings().material;
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
@@ -16898,6 +17308,10 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"notifications", s.enableNotifications);
         setBool(L"colorblind", s.colorblindMode);
         setBool(L"staleWarning", s.showStaleWarning);
+        setString(L"material", s.material == Material::Mica ? L"mica" :
+                               s.material == Material::MicaAlt ? L"micaAlt" :
+                               s.material == Material::TintedWallpaper ? L"tintedWallpaper" :
+                               s.material == Material::Solid ? L"solid" : L"acrylic");
         return root.Stringify().c_str();
     } catch (...) {
         return {};
@@ -17099,6 +17513,13 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.enableNotifications = getBoolDefault(L"notifications", true);
         s.colorblindMode = getBoolDefault(L"colorblind", false);
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
+        // A missing or unknown material keeps the default.
+        std::wstring material = GetStr(root, L"material");
+        s.material = material == L"acrylic" ? Material::Acrylic :
+                     material == L"mica" ? Material::Mica :
+                     material == L"micaAlt" ? Material::MicaAlt :
+                     material == L"tintedWallpaper" ? Material::TintedWallpaper :
+                     material == L"solid" ? Material::Solid : s.material;
         *historyIdsChanged = NormalizeSettings(&s);
         *out = std::move(s);
         return true;
@@ -17998,6 +18419,7 @@ enum class SettingsField : uint8_t {
     AccountMargin,
     RightMargin,      // Tray gap
     // Display
+    Material,               // A Material
     BarMode,                // A BarMode
     PercentTextVisibility,  // A PercentTextVisibility
     PercentTextAlignment,   // A PercentTextAlignment
@@ -18113,11 +18535,12 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::PaceTickColor,   SettingsField::AccountMargin,
                     SettingsField::RightMargin};
         case SettingsField::ResetDisplay:
-            return {SettingsField::BarMode,          SettingsField::PercentTextVisibility,
-                    SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts,
-                    SettingsField::ColorblindMode,   SettingsField::YellowThreshold,
-                    SettingsField::OrangeThreshold,  SettingsField::RedThreshold,
-                    SettingsField::ShowStaleWarning, SettingsField::ShowOpenAiExtraLimits};
+            return {SettingsField::Material,            SettingsField::BarMode,
+                    SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
+                    SettingsField::ShowExtraBarAmounts, SettingsField::ColorblindMode,
+                    SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
+                    SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
+                    SettingsField::ShowOpenAiExtraLimits};
         default: return {};
     }
 }
@@ -18173,6 +18596,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
         case SettingsField::AccountMargin: return s.accountMargin;
         case SettingsField::RightMargin: return s.rightMargin;
+        case SettingsField::Material: return int(s.material);
         case SettingsField::BarMode: return int(s.barMode);
         case SettingsField::PercentTextVisibility: return int(s.percentTextVisibility);
         case SettingsField::PercentTextAlignment: return int(s.percentTextAlignment);
@@ -18263,6 +18687,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
         case SettingsField::RightMargin: s.rightMargin = value; break;
+        case SettingsField::Material:
+            s.material = Material(std::clamp(value, int(Material::Acrylic), int(Material::Solid)));
+            break;
         case SettingsField::BarMode:
             s.barMode = BarMode(std::clamp(value, int(BarMode::Used), int(BarMode::Remaining)));
             break;
@@ -18282,6 +18709,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
         case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
         case SettingsField::ResetDisplay:
+            s.material = defaults.material;
             s.barMode = defaults.barMode;
             s.percentTextVisibility = defaults.percentTextVisibility;
             s.percentTextAlignment = defaults.percentTextAlignment;
@@ -19206,6 +19634,7 @@ struct SettingsView {
     float dragTop = 0;                  // Content DIPs
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
     bool retentionCustom = false;       // Custom chosen in Keep history
+    bool transparencyEffects = true;    // Windows' transparency effects setting; the window fills it
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
     ULONGLONG now = 0;                  // The preview's sample time
@@ -21147,9 +21576,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 }
 
 // src/settings/page-display.h
-// Settings > Display: what the meters show, their usage colors and thresholds, the stale marker
-// and the OpenAI details (approved mockup display.png). The preview card is in the shell's
-// pinned header (settings/preview.h). Pure builder.
+// Settings > Display: the material of the details flyout and the windows, what the meters show,
+// their usage colors and thresholds, the stale marker and the OpenAI details (approved mockup
+// display.png, Appearance aside). The preview card is in the shell's pinned header
+// (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -21157,9 +21587,31 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
     const Settings& s = view.settings;
     const int style = std::clamp(int(s.barLayout), 0, int(std::size(kSettingsTileStyles)) - 1);
 
+    // Appearance: the material stays choosable without transparency effects; its notes say how
+    // it shows then, and what the windows use for Tinted wallpaper.
+    y = UiAddSection(items, id, x, y + 16, width, L"Appearance");
+    {
+        UiCardSpec spec;
+        spec.title = L"Material";
+        spec.description = {{L"Background of the details flyout and the settings and usage history windows."}};
+        if (!view.transparencyEffects) {
+            spec.description[0].text += L"\nWindows transparency effects are off, so it shows as Solid.";
+        }
+        if (s.material == Material::TintedWallpaper) {
+            spec.description[0].text += L"\nThe settings and usage history windows use Mica for it.";
+        }
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Material, 200,
+                                    {{L"Acrylic", int(Material::Acrylic)},
+                                     {L"Mica", int(Material::Mica)},
+                                     {L"Mica Alt", int(Material::MicaAlt)},
+                                     {L"Tinted wallpaper", int(Material::TintedWallpaper)},
+                                     {L"Solid", int(Material::Solid)}},
+                                    int(s.material));
+    }
+
     // Values: the bar mode applies to every style. Percentage text is the bars' own; its
     // alignment and the amounts that replace it need it shown.
-    y = UiAddSection(items, id, x, y + 16, width, L"Values");
+    y = UiAddSection(items, id, x, y + 20, width, L"Values");
     {
         UiCardSpec spec;
         spec.title = L"Bar mode";
@@ -21255,7 +21707,7 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
 
     UiCardSpec reset;
     reset.title = L"Reset Display to defaults";
-    reset.description = {{L"Values, usage colors, stale marker and flyout details."}};
+    reset.description = {{L"Material, values, usage colors, stale marker and flyout details."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay, L"Reset");
 }
 
@@ -21878,6 +22330,18 @@ static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 // A notification's rebuild waits for an open dropdown or menu to close (a rebuild closes it).
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 
+// The settings and usage history windows' backdrop for a material: Windows has none for Tinted
+// wallpaper, so they use Mica.
+static UiBackdrop MaterialBackdrop(Material material) {
+    switch (material) {
+        case Material::Acrylic: return UiBackdrop::Acrylic;
+        case Material::Mica:
+        case Material::TintedWallpaper: return UiBackdrop::Mica;
+        case Material::MicaAlt: return UiBackdrop::MicaAlt;
+        default: return UiBackdrop::None;
+    }
+}
+
 struct SettingsUiClient final : UiHostClient {
     // Edits; the account key and draft revision each pending step timer may commit (by field)
     SettingsProductionStore store;
@@ -21997,12 +22461,15 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     // The preview's scroll stays within what the built strip can scroll. Account cards follow
-    // the projection's order, a dragged card its drag order.
+    // the projection's order, a dragged card its drag order. The window takes the projected
+    // material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
+        UiHostSetBackdrop(host, MaterialBackdrop(view.settings.material));
+        view.transparencyEffects = host.theme.transparency;
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
@@ -22137,10 +22604,10 @@ struct SettingsUiClient final : UiHostClient {
                                 L"text color, light grey caret pace markers and the default spacing. "
                                 L"Accounts are not changed." :
                             field == SettingsField::ResetDisplay ?
-                                L"Reset Display to its defaults?\n\nUsed bar mode, percentage text on "
-                                L"hover with adaptive alignment, no amounts, the standard palette with "
-                                L"yellow from 50%, orange from 75% and red from 90%, stale data marked, "
-                                L"additional OpenAI rate limits hidden." :
+                                L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, "
+                                L"percentage text on hover with adaptive alignment, no amounts, the "
+                                L"standard palette with yellow from 50%, orange from 75% and red from "
+                                L"90%, stale data marked, additional OpenAI rate limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user, history is kept forever and the usage history window "
                                 L"opens on 7 days. Saved history stays.";
@@ -23131,13 +23598,15 @@ struct HistoryUiView {
     bool compare = false;                    // Shows the range as 7 days, disabled
 
     // Settings: recording (and whether the banner's Enable recording can run; else it shows
-    // disabled), retention, the usage colors of navigation values and the logos' brand colors
+    // disabled), retention, the usage colors of navigation values, the logos' brand colors and
+    // the window's material
     bool recordingEnabled = true;
     bool canEnableRecording = false;
     int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
     bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
     LogoBrands logoBrands;
+    Material material = Settings{}.material;
 
     // Status: the pill, the header's status text ("Updated Sat 31 Oct 14:32"; empty before the
     // first load), the journal's state (its status without the cap note, the cap) and an
@@ -24752,6 +25221,7 @@ struct HistoryController {
         v.colorblind = s.colorblindMode;
         v.remaining = s.barMode == BarMode::Remaining;
         v.logoBrands = s.logoBrands;
+        v.material = s.material;
         v.notice = notice;
         v.canExport = snapshot != nullptr;
         v.exporting = operation == HistoryOperation::Writing;
@@ -25863,9 +26333,11 @@ struct HistoryUiClient final : UiHostClient {
     HistoryProductionOps ops;
     HistoryController controller{ops};
 
-    // The chart is laid out (and reduced, when its key changed) for the item the frame placed.
+    // The chart is laid out (and reduced, when its key changed) for the item the frame placed;
+    // the window takes the settings' material.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         HistoryUiView view = controller.view;
+        UiHostSetBackdrop(host, MaterialBackdrop(view.material));
         view.theme = host.theme.kind;
         HistoryUiBuildFrame(*host.graphics, view, client, frame);
         if (const UiItem* chart = UiFindItem(frame, kHistoryUiChart)) {

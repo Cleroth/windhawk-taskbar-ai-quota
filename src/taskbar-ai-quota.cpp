@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.1.0
+// @version         2.2.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -47,7 +47,9 @@ local app or CLI session, which must remain running.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
   position, identity position, pace markers, and spacing.
-- **Display:** Used or remaining, percentage text, usage colors and thresholds, stale marker.
+- **Display:** Material of the details flyout and the settings and history windows (Acrylic,
+  Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
+  remaining, percentage text, usage colors and thresholds, stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -118,6 +120,8 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
@@ -128,6 +132,7 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
@@ -231,6 +236,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "taskbar/tiles.h"
 
 #include "taskbar/actions.h"
+
+#include "taskbar/flyout-material.h"
 
 #include "taskbar/flyout-content.h"
 

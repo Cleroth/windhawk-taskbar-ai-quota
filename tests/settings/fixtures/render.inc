@@ -35,10 +35,12 @@ static void AddButtonRow(std::vector<UiItem>& items, uint32_t& id, float x, floa
 
 // The host's composition; `view` paints the client-drawn preview items, as the settings client
 // does. The pointer (state.pointer) is in the coordinates of `pointerContent` ? content : main.
+// `backdrop`: over a stand-in backdrop, as the host draws with one.
 static void RenderFrame(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
                         const UiFrame& frame, const SettingsView& view, D2D1_SIZE_F client, UINT dpi,
                         const UiThemeInput& theme, UiPaintState state, float scroll,
-                        bool scrollbarExpanded, bool pointerContent = true, const RenderOverlay& overlay = {}) {
+                        bool scrollbarExpanded, bool pointerContent = true, const RenderOverlay& overlay = {},
+                        bool backdrop = false) {
     float scale = float(dpi) / 96;
     winrt::com_ptr<IWICBitmap> bitmap = RenderBitmap(wic, client, dpi);
     winrt::com_ptr<ID2D1RenderTarget> target = RenderTarget(g, bitmap.get(), dpi);
@@ -49,7 +51,12 @@ static void RenderFrame(UiGraphics& g, IWICImagingFactory* wic, const std::wstri
         SettingsPaintPreview(target.get(), cache, g, theme, view, item, state.pointer);
     };
     target->BeginDraw();
-    target->Clear(palette.background);
+    if (backdrop) {
+        RenderBackdrop(target.get(), {0, 0, client.width, client.height}, palette);
+        target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    } else {
+        target->Clear(palette.background);
+    }
     state.pointer = pointerContent ? D2D1_POINT_2F{-1e9f, -1e9f} : pointer;
     UiPaintItems(target.get(), g, cache, palette, frame.main, state, {0, 0}, scale, -1e9f, 1e9f, &custom);
     const D2D1_RECT_F& v = frame.viewport;
@@ -604,9 +611,10 @@ static void RunRenders(const std::wstring& directory) {
 
             // Display at the mockup's full height (1000 x 1298 window, 40 DIP caption): the
             // segmented ring as in the mockup; stacked bars with percentages always, remaining
-            // mode and the colorblind palette; then the states sheet: percentage text off (its
-            // dependent rows disabled), an unordered red threshold typed (box editing, slider and
-            // preview ordered), a hovered toggle.
+            // mode and the colorblind palette; then the states sheet: Tinted wallpaper with
+            // transparency effects off (both material notes), percentage text off (its dependent
+            // rows disabled), an unordered red threshold typed (box editing, slider and preview
+            // ordered), a hovered toggle.
             std::string full = std::string("render-display-full-") + theme.name + "-144.png";
             Run(full, [&] {
                 const D2D1_SIZE_F tall{1000, 1258};
@@ -629,7 +637,9 @@ static void RunRenders(const std::wstring& directory) {
                 RenderFrame(g, wic.get(), path(bars), frame, view, tall, 144, theme.input, state, 0, false);
 
                 TestStore store;
+                store.settings.barLayout = BarLayout::Stacked;
                 store.settings.percentTextVisibility = PercentTextVisibility::Never;
+                store.settings.material = Material::TintedWallpaper;
                 SettingsEdits edits(store);
                 edits.Reload();
                 edits.SetText(0, SettingsField::RedThreshold, L"60");
@@ -637,6 +647,7 @@ static void RunRenders(const std::wstring& directory) {
                 view.page = SettingsUiPage::Display;
                 view.settings = edits.Projection();
                 view.drafts = edits.drafts;
+                view.transparencyEffects = false;
                 frame = {};
                 SettingsUiBuildFrame(g, view, tall, frame);
                 state = {};
@@ -648,6 +659,41 @@ static void RunRenders(const std::wstring& directory) {
                 CHECK(Control(frame, SettingsField::RedThreshold).text == L"60" &&
                       Control(frame, SettingsField::RedThreshold, 1).action.value == 75);
             });
+
+            // Over a stand-in backdrop (light and dark; high contrast never gets one): Accounts with
+            // OpenAI expanded and its label box editing, Layout with the pinned preview, Display.
+            if (theme.input.kind != UiThemeKind::HighContrast) {
+                std::string accounts = std::string("render-backdrop-accounts-") + theme.name + "-144.png";
+                Run(accounts, [&] {
+                    SettingsView view = AccountsView({0});
+                    UiFrame frame;
+                    SettingsUiBuildFrame(g, view, client, frame);
+                    UiPaintState state;
+                    state.editing = AccountId(1, SettingsField::AccountLabel);
+                    state.hot = {SettingsControlId(SettingsField::AccountAdd)};
+                    RenderFrame(g, wic.get(), path(accounts), frame, view, client, 144, theme.input, state, 0,
+                                false, true, {}, true);
+
+                    view = LayoutView(BarLayout::Stacked, 144);
+                    frame = {};
+                    SettingsUiBuildFrame(g, view, client, frame);
+                    std::string layout = std::string("render-backdrop-layout-") + theme.name + "-144.png";
+                    RenderFrame(g, wic.get(), path(layout), frame, view, client, 144, theme.input, {}, 0, false, true,
+                                {}, true);
+
+                    view = LayoutView(BarLayout::Stacked, 144);
+                    view.page = SettingsUiPage::Display;
+                    view.settings.material = Material::Mica;
+                    frame = {};
+                    SettingsUiBuildFrame(g, view, client, frame);
+                    state = {};
+                    state.hot = {SettingsControlId(SettingsField::Material)};
+                    std::string display = std::string("render-backdrop-display-") + theme.name + "-144.png";
+                    RenderFrame(g, wic.get(), path(display), frame, view, client, 144, theme.input, state, 0, true,
+                                true, {}, true);
+                    CHECK(Control(frame, SettingsField::Material).action.value == int(Material::Mica));
+                });
+            }
 
             // Accounts at 144 DPI as the mockups: OpenAI expanded (the mockup's 1000 x 953 window);
             // the Add account menu open with OpenAI under the pointer, painted where the host opens

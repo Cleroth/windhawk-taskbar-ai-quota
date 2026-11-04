@@ -129,6 +129,17 @@ enum class PaceTickStyle {
     TimeTrack,  // A small bar under each bar (vertical bars: right of it) filling with the pace.
 };
 
+// Background of the details flyout and the settings and usage history windows. Every material
+// but Solid needs Windows' transparency effects; without them, or in high contrast, it is solid.
+// The windows have no Tinted wallpaper backdrop and use Mica for it.
+enum class Material {
+    Acrylic,          // Tinted blur of whatever is behind
+    Mica,             // Windows' Mica over the blurred desktop wallpaper
+    MicaAlt,          // Mica's tabbed-window variant
+    TintedWallpaper,  // The blurred wallpaper under the theme's surface color at 80%
+    Solid,
+};
+
 // Provider logos drawn in their brand colors instead of the taskbar's text color.
 struct LogoBrands {
     bool claude = false;  // Anthropic's orange
@@ -218,6 +229,7 @@ struct Settings {
     bool colorblindMode = false;
     bool showStaleWarning = true;
     bool enableNotifications = true;
+    Material material = Material::Acrylic;
 
     bool operator==(const Settings&) const = default;
 };

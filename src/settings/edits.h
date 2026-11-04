@@ -64,6 +64,7 @@ enum class SettingsField : uint8_t {
     AccountMargin,
     RightMargin,      // Tray gap
     // Display
+    Material,               // A Material
     BarMode,                // A BarMode
     PercentTextVisibility,  // A PercentTextVisibility
     PercentTextAlignment,   // A PercentTextAlignment
@@ -179,11 +180,12 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::PaceTickColor,   SettingsField::AccountMargin,
                     SettingsField::RightMargin};
         case SettingsField::ResetDisplay:
-            return {SettingsField::BarMode,          SettingsField::PercentTextVisibility,
-                    SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts,
-                    SettingsField::ColorblindMode,   SettingsField::YellowThreshold,
-                    SettingsField::OrangeThreshold,  SettingsField::RedThreshold,
-                    SettingsField::ShowStaleWarning, SettingsField::ShowOpenAiExtraLimits};
+            return {SettingsField::Material,            SettingsField::BarMode,
+                    SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
+                    SettingsField::ShowExtraBarAmounts, SettingsField::ColorblindMode,
+                    SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
+                    SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
+                    SettingsField::ShowOpenAiExtraLimits};
         default: return {};
     }
 }
@@ -239,6 +241,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
         case SettingsField::AccountMargin: return s.accountMargin;
         case SettingsField::RightMargin: return s.rightMargin;
+        case SettingsField::Material: return int(s.material);
         case SettingsField::BarMode: return int(s.barMode);
         case SettingsField::PercentTextVisibility: return int(s.percentTextVisibility);
         case SettingsField::PercentTextAlignment: return int(s.percentTextAlignment);
@@ -329,6 +332,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
         case SettingsField::RightMargin: s.rightMargin = value; break;
+        case SettingsField::Material:
+            s.material = Material(std::clamp(value, int(Material::Acrylic), int(Material::Solid)));
+            break;
         case SettingsField::BarMode:
             s.barMode = BarMode(std::clamp(value, int(BarMode::Used), int(BarMode::Remaining)));
             break;
@@ -348,6 +354,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
         case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
         case SettingsField::ResetDisplay:
+            s.material = defaults.material;
             s.barMode = defaults.barMode;
             s.percentTextVisibility = defaults.percentTextVisibility;
             s.percentTextAlignment = defaults.percentTextAlignment;

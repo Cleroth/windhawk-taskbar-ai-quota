@@ -103,6 +103,20 @@ static std::pair<COLORREF, COLORREF> UiTextBoxColors(const UiPalette& p, bool fo
     return {UiColorRef(UiOver(enabled ? p.text : p.textDisabled, fill)), UiColorRef(fill)};
 }
 
+// Over the window's backdrop a box draws on its own opaque layer: GDI leaves its pixels' alpha
+// empty, which DWM would blend into the backdrop (text vanishing on light themes). Its fill is
+// the box's color over the palette's opaque background, close to the backdrop's.
+static void UiLayerTextBox(HWND window, bool layered) {
+    LONG_PTR style = GetWindowLongPtrW(window, GWL_EXSTYLE);
+    if (((style & WS_EX_LAYERED) != 0) == layered) return;
+    SetWindowLongPtrW(window, GWL_EXSTYLE, layered ? style | WS_EX_LAYERED : style & ~LONG_PTR(WS_EX_LAYERED));
+    if (layered && !SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA)) {
+        Wh_Log(L"Could not layer a text box: %lu", GetLastError());
+        SetWindowLongPtrW(window, GWL_EXSTYLE, style);
+    }
+    RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME);
+}
+
 static HBRUSH UiTextBoxBrush(UiTextBoxes& boxes, COLORREF color) {
     for (const auto& [key, brush] : boxes.brushes) {
         if (key == color) return brush;

@@ -114,6 +114,7 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                         if (fo.pollTimer && !IsTileHovered(*uiState)) fo.pollTimer.Stop();
                         return;
                     }
+                    SettleFlyoutMaterial(fo);
 
                     // Inside while over its tile (taskbar pointer events track that) or over a
                     // window this thread showed after the popup opened.
@@ -218,6 +219,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
         popup.card = card;
+        SettleFlyoutMaterial(fo);
 
         Flyout flyout;
         popup.flyout = flyout;

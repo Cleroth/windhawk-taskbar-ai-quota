@@ -56,5 +56,21 @@ static winrt::com_ptr<ID2D1RenderTarget> RenderTarget(UiGraphics& g, IWICBitmap*
     return target;
 }
 
+// Stand-in for a DWM backdrop under a transparent window (render-backdrop-*, the host then draws
+// grayscale text): a blue-to-orange gradient a third of the way over the theme's base, as Mica
+// tints the wallpaper. Opaque fills drawn over it show as flat blocks.
+static void RenderBackdrop(ID2D1RenderTarget* target, D2D1_RECT_F r, const UiPalette& palette) {
+    winrt::com_ptr<ID2D1SolidColorBrush> base;
+    winrt::check_hresult(target->CreateSolidColorBrush(palette.background, base.put()));
+    target->FillRectangle(r, base.get());
+    D2D1_GRADIENT_STOP stops[] = {{0, UiRgb(0x2A7FD8, 0.35f)}, {1, UiRgb(0xE8782A, 0.35f)}};
+    winrt::com_ptr<ID2D1GradientStopCollection> collection;
+    winrt::check_hresult(target->CreateGradientStopCollection(stops, 2, collection.put()));
+    winrt::com_ptr<ID2D1LinearGradientBrush> brush;
+    winrt::check_hresult(target->CreateLinearGradientBrush({{r.left, r.top}, {r.right, r.bottom}}, collection.get(),
+                                                           brush.put()));
+    target->FillRectangle(r, brush.get());
+}
+
 // Drawn over a render in client DIPs: a popup where the host would open it.
 using RenderOverlay = std::function<void(ID2D1RenderTarget*, UiTargetCache&, const UiPalette&)>;

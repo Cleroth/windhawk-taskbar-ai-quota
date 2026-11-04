@@ -1,6 +1,7 @@
 // System theme reads and window chrome of the custom-drawn windows (native): app and Windows
-// (taskbar) light/dark mode, high contrast with its system colors, the accent palette, and the
-// standard DWM caption recolored to the page background.
+// (taskbar) light/dark mode, high contrast with its system colors, the accent palette,
+// transparency effects, the standard DWM caption recolored to the page background, and the DWM
+// backdrop.
 
 // UISettings is created on first use and released with the window thread's graphics scope,
 // before the apartment. Accent changes are read on theme messages, never subscribed to.
@@ -15,6 +16,11 @@ static UiThemeInput UiReadTheme(UiThemeReader& reader) {
     RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                  L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &systemLight, &systemSize);
     theme.systemLight = systemLight != 0;
+    DWORD transparency = 1;
+    DWORD transparencySize = sizeof(transparency);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"EnableTransparency", RRF_RT_REG_DWORD, nullptr, &transparency, &transparencySize);
+    theme.transparency = transparency != 0;
     HIGHCONTRASTW contrast{sizeof(contrast)};
     if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
         (contrast.dwFlags & HCF_HIGHCONTRASTON)) {
@@ -55,9 +61,11 @@ static UiThemeInput UiReadTheme(UiThemeReader& reader) {
 }
 
 // Standard caption: dark mode follows the palette, caption and title colors are the page
-// background and text; high contrast keeps the system's caption. Attributes older Windows
-// versions lack are ignored.
-static void UiApplyChrome(HWND window, const UiPalette& palette) {
+// background and text; high contrast keeps the system's caption. With a backdrop (Windows 11
+// 22H2 and later, transparency effects on, not in high contrast) DWM draws it under the whole
+// window, the frame extended over the client area, and the caption keeps the system's colors over
+// it. Returns whether the backdrop is on. Attributes older Windows versions lack are ignored.
+static bool UiApplyChrome(HWND window, const UiPalette& palette, UiBackdrop backdrop, bool transparency) {
     auto opaque = [&](D2D1_COLOR_F color) {
         auto channel = [&](float value, float under) {
             return BYTE(std::lround(255 * (value * color.a + under * (1 - color.a))));
@@ -67,11 +75,23 @@ static void UiApplyChrome(HWND window, const UiPalette& palette) {
     };
     bool hc = palette.kind == UiThemeKind::HighContrast;
     BOOL dark = palette.kind == UiThemeKind::Dark;
-    COLORREF caption = hc ? DWMWA_COLOR_DEFAULT : opaque(palette.background);
-    COLORREF text = hc ? DWMWA_COLOR_DEFAULT : opaque(palette.text);
+    DWM_SYSTEMBACKDROP_TYPE type = backdrop == UiBackdrop::Mica    ? DWMSBT_MAINWINDOW :
+                                   backdrop == UiBackdrop::MicaAlt ? DWMSBT_TABBEDWINDOW :
+                                   backdrop == UiBackdrop::Acrylic ? DWMSBT_TRANSIENTWINDOW : DWMSBT_AUTO;
+    bool on = !hc && transparency && type != DWMSBT_AUTO &&
+              SUCCEEDED(DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type)));
+    if (!on) {
+        type = DWMSBT_AUTO;
+        DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type));
+    }
+    MARGINS frame{on ? -1 : 0, on ? -1 : 0, on ? -1 : 0, on ? -1 : 0};
+    DwmExtendFrameIntoClientArea(window, &frame);
+    COLORREF caption = hc || on ? DWMWA_COLOR_DEFAULT : opaque(palette.background);
+    COLORREF text = hc || on ? DWMWA_COLOR_DEFAULT : opaque(palette.text);
     DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
     DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
     DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
     DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &text, sizeof(text));
     DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    return on;
 }

@@ -160,6 +160,14 @@ struct AccountUiRefs {
 struct FlyoutTheme {
     bool light = false;
     bool highContrast = false;
+    // The card's surface: `card` paints Acrylic and Solid. Mica, MicaAlt and TintedWallpaper are
+    // drawn behind the card's content from the material fields (flyout-material.h), over the
+    // blurred wallpaper; `card` holds their opaque fallback color. Solid without transparency
+    // effects or in high contrast.
+    Material material = Material::Solid;
+    winrt::Windows::UI::Color materialTint{};
+    float materialTintOpacity = 0;
+    float materialLuminosityOpacity = 0;  // Mica's luminosity step; unused by TintedWallpaper.
     Brush card{nullptr};
     Brush cardBorder{nullptr};
     Brush footer{nullptr};
@@ -259,6 +267,9 @@ struct FlyoutPopup {
     // not listed is the popup's own window.
     std::vector<HWND> windowsBeforeOpen;
     FlyoutTheme theme;
+    // The card's composition material, hidden until FlyoutUi::materialFactory has compiled
+    // (SettleFlyoutMaterial).
+    winrt::Windows::UI::Composition::Visual materialVisual{nullptr};
 
     TextBlock title{nullptr};
     FrameworkElement staleMarker{nullptr};
@@ -295,6 +306,12 @@ struct FlyoutUi {
     winrt::event_token pollTimerToken{};
     DispatcherTimer countdownTimer{nullptr};
     winrt::event_token countdownTimerToken{};
+
+    // The card material's effect, kept across opens while its material, light/dark mode (which
+    // set its tints) and compositor match; released by ClearQuotaEventState.
+    winrt::Windows::UI::Composition::CompositionEffectFactory materialFactory{nullptr};
+    Material materialFactoryMaterial = Material::Solid;
+    bool materialFactoryLight = false;
 
     // Hover tracking by account index; -1 when unset.
     int hoverIndex = -1;

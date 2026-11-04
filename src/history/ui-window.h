@@ -14,9 +14,11 @@ struct HistoryUiClient final : UiHostClient {
     HistoryProductionOps ops;
     HistoryController controller{ops};
 
-    // The chart is laid out (and reduced, when its key changed) for the item the frame placed.
+    // The chart is laid out (and reduced, when its key changed) for the item the frame placed;
+    // the window takes the settings' material.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         HistoryUiView view = controller.view;
+        UiHostSetBackdrop(host, MaterialBackdrop(view.material));
         view.theme = host.theme.kind;
         HistoryUiBuildFrame(*host.graphics, view, client, frame);
         if (const UiItem* chart = UiFindItem(frame, kHistoryUiChart)) {

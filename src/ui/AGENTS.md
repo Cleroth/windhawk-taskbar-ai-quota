@@ -45,6 +45,19 @@ a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - Window classes are host-specific (`AiQuotaSettingsUi*_<mod id>`, `AiQuotaHistoryUi*_<mod id>`);
   another host uses its own.
 
+## Backdrop
+
+- `UiHostSetBackdrop` (clients call it from `Build`): where DWM draws it (Windows 11 22H2+,
+  transparency effects on, not high contrast), the frame extends over the client area, the main
+  window and viewport targets become premultiplied, clear to transparent and draw grayscale
+  text, and number/text box EDITs become layered children (GDI leaves alpha empty, which DWM
+  would blend into the backdrop). The popup and tooltip stay opaque.
+- The palette doesn't change: `background` stays the opaque base for blends (EDIT fills,
+  caption, knobs). Main and viewport content must not rely on an opaque clear; their fills are
+  translucent layers over the backdrop.
+- A Windows.UI.Composition `DesktopWindowTarget` on these windows hides their redirected D2D
+  content (observed): no composition backdrops here.
+
 ## Reentrancy and close paths
 
 - Every window procedure runs inside the host's try/catch: an exception logs and fault-closes

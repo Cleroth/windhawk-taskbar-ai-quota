@@ -133,6 +133,7 @@ static bool NormalizeSettings(Settings* s) {
         s->percentTextVisibility > PercentTextVisibility::Always) {
         s->percentTextVisibility = PercentTextVisibility::Hover;
     }
+    if (s->material < Material::Acrylic || s->material > Material::Solid) s->material = Settings().material;
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
@@ -262,6 +263,10 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"notifications", s.enableNotifications);
         setBool(L"colorblind", s.colorblindMode);
         setBool(L"staleWarning", s.showStaleWarning);
+        setString(L"material", s.material == Material::Mica ? L"mica" :
+                               s.material == Material::MicaAlt ? L"micaAlt" :
+                               s.material == Material::TintedWallpaper ? L"tintedWallpaper" :
+                               s.material == Material::Solid ? L"solid" : L"acrylic");
         return root.Stringify().c_str();
     } catch (...) {
         return {};
@@ -463,6 +468,13 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.enableNotifications = getBoolDefault(L"notifications", true);
         s.colorblindMode = getBoolDefault(L"colorblind", false);
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
+        // A missing or unknown material keeps the default.
+        std::wstring material = GetStr(root, L"material");
+        s.material = material == L"acrylic" ? Material::Acrylic :
+                     material == L"mica" ? Material::Mica :
+                     material == L"micaAlt" ? Material::MicaAlt :
+                     material == L"tintedWallpaper" ? Material::TintedWallpaper :
+                     material == L"solid" ? Material::Solid : s.material;
         *historyIdsChanged = NormalizeSettings(&s);
         *out = std::move(s);
         return true;

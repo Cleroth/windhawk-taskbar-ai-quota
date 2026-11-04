@@ -1,10 +1,13 @@
-// One HWND render target with its per-target caches (native): opaque target at the window DPI,
-// resize, device-loss discard, software fallback.
+// One HWND render target with its per-target caches (native): opaque or transparent target at
+// the window DPI, resize, device-loss discard, software fallback.
 
 struct UiSurface {
     HWND window = nullptr;
     winrt::com_ptr<ID2D1HwndRenderTarget> target;
     UiTargetCache cache;
+    // Over the window's backdrop: premultiplied alpha, grayscale text (ClearType needs an opaque
+    // background). Changing it requires a new target.
+    bool transparent = false;
     bool software = false;  // Hardware creation failed; later targets are software too.
     int created = 0;        // Targets created so far.
     int failures = 0;       // Consecutive failed frames.
@@ -27,12 +30,14 @@ static ID2D1HwndRenderTarget* UiSurfaceTarget(UiSurface& surface, ID2D1Factory* 
     for (int attempt = surface.software ? 1 : 0; attempt < 2; attempt++) {
         D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
             attempt ? D2D1_RENDER_TARGET_TYPE_SOFTWARE : D2D1_RENDER_TARGET_TYPE_DEFAULT,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), float(dpi),
-            float(dpi));
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              surface.transparent ? D2D1_ALPHA_MODE_PREMULTIPLIED : D2D1_ALPHA_MODE_IGNORE),
+            float(dpi), float(dpi));
         HRESULT result = factory->CreateHwndRenderTarget(&properties, &window, surface.target.put());
         if (SUCCEEDED(result)) {
             surface.software = attempt == 1;
             surface.created++;
+            if (surface.transparent) surface.target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             return surface.target.get();
         }
         Wh_Log(L"Could not create a %s render target: 0x%08X", attempt ? L"software" : L"hardware",

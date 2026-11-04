@@ -1,5 +1,6 @@
 // XAML colors for the meter model's ARGB values, logo brand brushes, and the details flyout's
-// theme. Every flyout brush is created in this file.
+// theme. Every flyout XAML brush is created in this file; flyout-material.h builds the card's
+// composition materials from the theme.
 
 static winrt::Windows::UI::Color ArgbColor(uint32_t argb) {
     return {(uint8_t)(argb >> 24), (uint8_t)(argb >> 16), (uint8_t)(argb >> 8), (uint8_t)argb};
@@ -77,10 +78,15 @@ static Brush FlyoutFillBrush(winrt::Windows::UI::Color color) {
     }
 }
 
-// Follows the taskbar's Windows mode (not the app mode), transparency effects and high contrast.
+// Follows the taskbar's Windows mode (not the app mode), transparency effects, high contrast and
+// the material setting.
 static FlyoutTheme LoadFlyoutTheme() {
     using Color = winrt::Windows::UI::Color;
     FlyoutTheme theme;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        theme.material = g_settings.material;
+    }
     theme.highContrast = IsHighContrast();
     auto personalizeValue = [](PCWSTR name, DWORD fallback) {
         DWORD value = fallback;
@@ -93,7 +99,9 @@ static FlyoutTheme LoadFlyoutTheme() {
         return value;
     };
     theme.light = personalizeValue(L"SystemUsesLightTheme", 0) != 0;
-    bool acrylic = !theme.highContrast && personalizeValue(L"EnableTransparency", 1) != 0;
+    if (theme.highContrast || personalizeValue(L"EnableTransparency", 1) == 0) {
+        theme.material = Material::Solid;
+    }
 
     struct {
         Color text, secondaryText, mutedText, separator, chip, chipBorder, cardBorder;
@@ -154,7 +162,8 @@ static FlyoutTheme LoadFlyoutTheme() {
     theme.chartKey = FlyoutShapeBrush(p.text);
 
     theme.card = FlyoutBrush(p.cardSolid);
-    if (acrylic) {
+    switch (theme.material) {
+    case Material::Acrylic:
         try {
             AcrylicBrush brush;
             brush.BackgroundSource(AcrylicBackgroundSource::Backdrop);
@@ -166,6 +175,34 @@ static FlyoutTheme LoadFlyoutTheme() {
             } catch (...) {}
             theme.card = brush;
         } catch (...) {}
+        break;
+    case Material::Mica:
+    case Material::MicaAlt: {
+        // Windows App SDK MicaController's MicaKind::Base and BaseAlt recipes, by [alt][light].
+        struct MicaRecipe {
+            Color tint;
+            float tintOpacity, luminosityOpacity;
+            Color fallback;
+        };
+        static constexpr MicaRecipe kRecipes[2][2] = {
+            {{{0xFF, 0x20, 0x20, 0x20}, 0.8f, 1.f, {0xFF, 0x20, 0x20, 0x20}},
+             {{0xFF, 0xF3, 0xF3, 0xF3}, 0.5f, 1.f, {0xFF, 0xF3, 0xF3, 0xF3}}},
+            {{{0xFF, 0x0A, 0x0A, 0x0A}, 0.0f, 1.f, {0xFF, 0x20, 0x20, 0x20}},
+             {{0xFF, 0xDA, 0xDA, 0xDA}, 0.5f, 1.f, {0xFF, 0xE8, 0xE8, 0xE8}}},
+        };
+        MicaRecipe const& recipe = kRecipes[theme.material == Material::MicaAlt][theme.light];
+        theme.materialTint = recipe.tint;
+        theme.materialTintOpacity = recipe.tintOpacity;
+        theme.materialLuminosityOpacity = recipe.luminosityOpacity;
+        theme.card = FlyoutBrush(recipe.fallback);
+        break;
+    }
+    case Material::TintedWallpaper:
+        theme.materialTint = p.cardSolid;
+        theme.materialTintOpacity = 0.8f;
+        break;
+    case Material::Solid:
+        break;
     }
 
     // Unfilled track: 45-degree stripes repeating every 6 DIP.
