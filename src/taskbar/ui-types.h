@@ -336,8 +336,16 @@ struct QuotaUiInstance {
     // Light taskbar at the last update; picks tile chrome and the bars' default pace tick colors.
     bool lightTheme = false;
     Grid quotaGrid{nullptr};
-    Panel injectionParent{nullptr};
+    Panel injectionParent{nullptr};  // The tray, or beside Start the taskbar's root grid
     ColumnDefinition quotaColumnDefinition{nullptr};
+    // Where the bars went (taskbar/placement.h). Beside Start: the element whose margin holds their
+    // room (Start, or the repeater of the taskbar's buttons), kept placed after each layout pass.
+    TaskbarPlacement placement = TaskbarPlacement::BeforeIcons;
+    FrameworkElement startAreaElement{nullptr};
+    winrt::event_token layoutUpdatedToken{};
+    // Looks again for a missing anchor (the bars sit at the next boundary meanwhile).
+    DispatcherTimer anchorTimer{nullptr};
+    winrt::event_token anchorTimerToken{};
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<RoutedHandler> routedHandlers;

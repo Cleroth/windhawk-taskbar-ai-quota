@@ -117,6 +117,9 @@ static bool NormalizeSettings(Settings* s) {
     if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
         s->barStyle = BarStyle::Track;
     }
+    if (s->placement < TaskbarPlacement::BeforeIcons || s->placement > kLastTaskbarPlacement) {
+        s->placement = TaskbarPlacement::BeforeIcons;
+    }
     if (s->labelPosition < LabelPosition::Hidden ||
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
@@ -246,6 +249,12 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"accountMargin", s.accountMargin);
         setNumber(L"labelGap", s.labelGap);
         setNumber(L"barGap", s.barGap);
+        setString(L"placement", s.placement == TaskbarPlacement::BeforeNetwork ? L"beforeNetwork" :
+                                s.placement == TaskbarPlacement::BeforeClock ? L"beforeClock" :
+                                s.placement == TaskbarPlacement::AfterClock ? L"afterClock" :
+                                s.placement == TaskbarPlacement::AfterShowDesktop ? L"afterShowDesktop" :
+                                s.placement == TaskbarPlacement::LeftSide ? L"leftSide" :
+                                s.placement == TaskbarPlacement::RightOfStart ? L"rightOfStart" : L"beforeIcons");
         setNumber(L"rightMargin", s.rightMargin);
         setString(L"percentTextVisibility",
                   s.percentTextVisibility == PercentTextVisibility::Never ? L"never" :
@@ -438,6 +447,15 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.accountMargin = (int)GetNum(root, L"accountMargin", 3);
         s.labelGap = (int)GetNum(root, L"labelGap", 3);
         s.barGap = (int)GetNum(root, L"barGap", 2);
+        // Settings saved before positions keep the bars before the notification icons.
+        std::wstring placement = GetStr(root, L"placement");
+        s.placement = placement == L"beforeNetwork" ? TaskbarPlacement::BeforeNetwork :
+                      placement == L"beforeClock" ? TaskbarPlacement::BeforeClock :
+                      placement == L"afterClock" ? TaskbarPlacement::AfterClock :
+                      placement == L"afterShowDesktop" ? TaskbarPlacement::AfterShowDesktop :
+                      placement == L"leftSide" ? TaskbarPlacement::LeftSide :
+                      placement == L"rightOfStart" ? TaskbarPlacement::RightOfStart :
+                                                     TaskbarPlacement::BeforeIcons;
         s.rightMargin = (int)GetNum(root, L"rightMargin", 4);
         std::wstring percentTextVisibility = GetStr(root, L"percentTextVisibility");
         if (percentTextVisibility == L"never") {

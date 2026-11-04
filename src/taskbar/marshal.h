@@ -276,6 +276,21 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
     flyout.materialFactory = nullptr;
     releaseTimer(state.keepMenuOpenTimer, state.keepMenuOpenTimerToken);
     releaseTimer(state.submenuCloseTimer, state.submenuCloseTimerToken);
+    releaseTimer(state.anchorTimer, state.anchorTimerToken);
+    if (state.layoutUpdatedToken) {
+        // The projection's revoke drops a failure; this one is logged.
+        try {
+            if (state.quotaGrid) {
+                auto source = state.quotaGrid.as<winrt::Windows::UI::Xaml::IFrameworkElement>();
+                auto* abi = static_cast<winrt::impl::abi_t<winrt::Windows::UI::Xaml::IFrameworkElement>*>(
+                    winrt::get_abi(source));
+                if (FAILED(abi->remove_LayoutUpdated(state.layoutUpdatedToken))) {
+                    Wh_Log(L"LayoutUpdated revoke failed");
+                }
+            }
+        } catch (...) {}
+        state.layoutUpdatedToken = {};
+    }
     flyout.hoverIndex = -1;
     flyout.dwellIndex = -1;
     flyout.hoverSuppressedIndex = -1;

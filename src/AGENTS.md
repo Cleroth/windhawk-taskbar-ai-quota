@@ -69,6 +69,9 @@ first, then reads/updates XAML.
   threads or showing user-paced dialogs.
 - `g_authMutex` is a leaf used only by token-store operations, including raw rename copies; never
   acquire another lock while holding it.
+- `g_placementMutex` (`taskbar/placement.h`) is a leaf guarding the placement records. Only a
+  record's owner taskbar thread changes it or uses its weak reference; the settings thread reads
+  plain fields only.
 - Hold `g_authEpochMutex` only for short local auth/settings transactions, never across network
   I/O, dialogs, notifications, UI marshaling or `FinishSettingsApply`.
 - `g_historyMutex` is an independent leaf: never hold settings/auth/UI locks across journal
@@ -111,7 +114,13 @@ first, then reads/updates XAML.
   remove injected UI, delete the tray icon, `WSACleanup`.
 - Hooks on private `taskbar.dll` symbols and the byte-pattern scan for the
   `TaskbarHost::FrameHeight` offset can break on Windows updates. If bars stop showing, suspect
-  `HookTaskbarDllSymbols` and `TryGetTaskbarElementAbi` first.
+  `HookTaskbarDllSymbols` and `TryGetTaskbarElementAbi` first. Positions depend on taskbar element
+  names (tray anchors, `TaskbarFrame`/`RootGrid`/`TaskbarFrameRepeater`, Start's automation ID).
+- Beside Start the mod writes native margins (the repeater's left, Start's right). Go through the
+  placement records: add or give back only our own contribution, never touch a margin another mod
+  took, and write only from owner-thread code that teardown revokes (`LayoutUpdated`, injection,
+  removal), never from deferred dispatcher work that could run after unload. Revoke callbacks
+  before giving the margin back.
 
 ## Credentials and history storage
 

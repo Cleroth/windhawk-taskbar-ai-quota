@@ -1,5 +1,5 @@
 // Settings > Layout: the tile style gallery, then the chosen style's sizes, identity and text, pace
-// markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
+// markers, the position and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
@@ -408,6 +408,40 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
     }
 
+    // Placement: the position, then the taskbars that show the bars in the tray instead of beside
+    // Start (one line each).
+    y = UiAddSection(items, id, x, y + 20, width, L"Placement");
+    {
+        UiCardSpec spec;
+        spec.title = L"Position";
+        spec.description = {{L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: "
+                             L"the taskbar\u2019s buttons move over to make room."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Placement, 260,
+                                    {{L"Before notification icons", int(TaskbarPlacement::BeforeIcons)},
+                                     {L"Before network and volume", int(TaskbarPlacement::BeforeNetwork)},
+                                     {L"Before the clock", int(TaskbarPlacement::BeforeClock)},
+                                     {L"After the clock", int(TaskbarPlacement::AfterClock)},
+                                     {L"After Show desktop", int(TaskbarPlacement::AfterShowDesktop)},
+                                     {L"Left side", int(TaskbarPlacement::LeftSide)},
+                                     {L"Right of Start", int(TaskbarPlacement::RightOfStart)}},
+                                    int(s.placement));
+    }
+    if (IsStartAreaPlacement(s.placement) && !view.status.placementFallbacks.empty()) {
+        // Left side needs the taskbar's buttons; Right of Start also a shown Start.
+        PCWSTR unavailable = s.placement == TaskbarPlacement::RightOfStart ?
+                                 L"its Start button is hidden or wasn\u2019t found." :
+                                 L"its taskbar buttons weren\u2019t found.";
+        std::wstring text;
+        for (const SettingsPlacementFallback& fallback : view.status.placementFallbacks) {
+            if (!text.empty()) text += L"\n";
+            text += L"Display " + std::to_wstring(fallback.display) + L" shows the bars in the tray: " +
+                    (fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
+                                         unavailable);
+        }
+        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
+                         UiSeverity::Caution);
+    }
+
     y = UiAddSection(items, id, x, y + 20, width, L"Spacing");
     {
         UiCardSpec spec;
@@ -417,14 +451,14 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     }
     {
         UiCardSpec spec;
-        spec.title = L"Tray gap";
-        spec.description = {{L"Space between the last account and the system tray."}};
+        spec.title = L"Gap after accounts";
+        spec.description = {{L"Space after the last account, before whatever comes next on the taskbar."}};
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RightMargin, L"px");
     }
 
     UiCardSpec reset;
     reset.title = L"Reset Layout to defaults";
-    reset.description = {{L"Tile style, bar style, sizes, identity and text, pace markers and spacing. Accounts are "
-                           L"not changed."}};
+    reset.description = {{L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. "
+                           L"Accounts are not changed."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
 }

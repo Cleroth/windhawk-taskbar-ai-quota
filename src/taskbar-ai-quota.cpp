@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.2.0
+// @version         2.3.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -15,7 +15,8 @@
 /*
 # Taskbar AI Quota Bars
 
-A Windows 11 taskbar mod that shows subscription quota bars next to the system tray.
+A Windows 11 taskbar mod that shows subscription quota bars next to the system tray, or
+elsewhere in the tray or beside Start.
 
 Supported providers and quotas:
 
@@ -46,7 +47,8 @@ local app or CLI session, which must remain running.
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
-  position, identity position, pace markers, and spacing.
+  position, identity position, pace markers, position on the taskbar (tray slots, or Left side
+  and Right of Start, experimental), and spacing.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, percentage text, usage colors and thresholds, stale marker.
@@ -246,6 +248,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "taskbar/quota-grid.h"
 
 #include "taskbar/quota-update.h"
+
+#include "taskbar/placement.h"
 
 #include "taskbar/inject.h"
 

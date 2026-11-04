@@ -57,7 +57,8 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - logo colors: the Claude logo in the taskbar's text color (default) or Claude's orange, and the Antigravity (Gemini sparkle) logo in the text color (default) or Gemini's purple-to-blue gradient; the details flyout, the Accounts page and the usage history window follow them, and high contrast always uses the text color
   - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size
   - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, dot, and time-track (a small bar under each bar, or beside each vertical bar, that fills with the elapsed time) styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on a light taskbar)
-  - account margin and tray gap
+  - position on the taskbar: before the notification icons (default), before network and volume, before or after the clock, or after Show desktop (the far right); or, experimental, **Left side** (the taskbar's left edge, after any space another mod such as Taskbar System Info keeps there; Widgets, Start and the apps move right, on a centered taskbar by half the bars' width) and **Right of Start** (between Start and the buttons after it, which move over). A secondary taskbar without the chosen tray neighbour uses the next one to its right. For these two, a taskbar whose buttons aren't found, whose Start is hidden (Right of Start only), or where another mod controls the space the bars need shows them at the first tray slot instead, with a note under Position; after a conflict, restart Explorer to retry
+  - account margin and the gap after accounts
   - **Show on taskbar**: replaces the taskbar accounts with sample accounts while it is on and the window is open
 - **Display**, with the same preview:
   - material: the background of the details flyout and the settings and usage history windows, which all follow it: **Acrylic** (default; a tinted blur of what's behind), Mica or Mica Alt (the blurred desktop wallpaper, tinted as Windows does), Tinted wallpaper (the blurred wallpaper under the theme color; the windows use Mica for it), or Solid; all but Solid need Windows transparency effects, and show solid without them and in high contrast
@@ -273,6 +274,7 @@ Signing in uses the public OAuth clients of the official CLIs (Claude Code for A
 
 - Windows 11 taskbar only.
 - x86-64 only.
+- Left side and Right of Start are experimental. They share the taskbar's spacing only with mods that add to it the same way (such as Taskbar System Info); Start Button Position and Taskbar Styler rules on the app list's margin conflict with them. A conflicting mod the bars don't detect can leave the taskbar's spacing wrong after the bars move or the mod is disabled, until that mod rewrites it or Explorer restarts.
 - Specific displays use detected taskbar order: `Display 1` is primary and later entries are secondary taskbars.
 - Anthropic/OpenAI require one browser sign-in per configured account.
 - Antigravity requires a signed-in app or CLI session to remain running; older IDE builds may also require an open workspace.

@@ -124,7 +124,7 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 57 scalar settings changed: the four page resets restore every one, and no field
+        // All 58 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -168,6 +168,7 @@ static void RunDisplayPageTests() {
         every.showPaceTicks = false;
         every.paceTickStyle = PaceTickStyle::Dot;
         every.paceTickColor = 0x00FF00;
+        every.placement = TaskbarPlacement::RightOfStart;
         every.accountMargin = 12;
         every.rightMargin = 30;
         const SettingsField groups[] = {SettingsField::ResetBehavior, SettingsField::ResetHistory,
@@ -183,7 +184,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 57 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 58 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {

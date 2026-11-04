@@ -1,7 +1,8 @@
 // Settings preview: the taskbar strip under the Layout and Display titles and the tile style
 // gallery's thumbnails, drawn from the shared meter model (taskbar/meter-model.h) with the
-// visual test accounts at 1:1 DIPs. Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h,
-// quota-update.h) as draw operations; painting takes an explicit target and theme.
+// visual test accounts at 1:1 DIPs; the strip places them on a mock taskbar at the chosen position.
+// Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h, quota-update.h) as draw
+// operations; painting takes an explicit target and theme.
 //
 // Units: the strip is as tall as the primary taskbar in DIPs (converted with that taskbar's
 // DPI); the meter model's pixel details (pace ticks, text offsets) and snapping use the preview
@@ -39,16 +40,89 @@ struct SettingsPreviewOp {
     const LogoBrand* brand = nullptr;   // Logo: its brand colors outside high contrast, else `color`
 };
 
+// A piece of the mock taskbar around the tiles: its operations from its own left edge.
+struct SettingsPreviewPiece {
+    std::vector<SettingsPreviewOp> ops;
+    float width = 0;
+};
+
 // A strip: one column per sample account, laid out from x 0 (the first column's margin box) and
-// centered on the strip's height; the tray from its own left edge.
+// centered on the strip's height, and the mock taskbar's pieces in its order: Start, the apps,
+// then the tray's notification icons, network group, clock and Show desktop (none in the gallery).
 struct SettingsPreviewStrip {
-    std::vector<SettingsPreviewOp> ops, tray;
+    std::vector<SettingsPreviewOp> ops;
+    std::vector<SettingsPreviewPiece> pieces;
     std::vector<D2D1_RECT_F> columns;  // Hover targets: the XAML columns without their margins
     float width = 0;                   // Columns with their margins
-    float trayWidth = 0;
     float height = 0;
-    float rightMargin = 0;             // Tray gap
+    float rightMargin = 0;             // Gap after accounts
+    TaskbarPlacement placement = TaskbarPlacement::BeforeIcons;
 };
+
+// The mock taskbar's Start and app icons (24 DIP view box: the Windows logo, a folder, a globe, a
+// terminal; holes wound the other way) and their colors outside high contrast.
+static constexpr PCWSTR kPreviewStartPath =
+    L"M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z";
+static constexpr PCWSTR kPreviewAppPaths[] = {
+    L"M2 6.5A2.5 2.5 0 0 1 4.5 4H9.6l2.2 2.2h7.7A2.5 2.5 0 0 1 22 8.7v9.8a2.5 2.5 0 0 1-2.5 2.5h-15"
+    L"A2.5 2.5 0 0 1 2 18.5z",
+    L"M12 2.5a9.5 9.5 0 1 1 0 19a9.5 9.5 0 1 1 0-19zM12 4.4a7.6 7.6 0 1 0 0 15.2a7.6 7.6 0 1 0 0-15.2z"
+    L"M12 4.4a4.2 7.6 0 1 1 0 15.2a4.2 7.6 0 1 1 0-15.2zM12 4.4a2.4 7.6 0 1 0 0 15.2a2.4 7.6 0 1 0 0-15.2z"
+    L"M4.4 11.1h15.2v1.8H4.4z",
+    L"M4.5 4.5h15A2.5 2.5 0 0 1 22 7v10a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 17V7a2.5 2.5 0 0 1 2.5-2.5z"
+    L"M6 8.3V10.4L8.2 12L6 13.6V15.7L10.9 12zM11.5 14.3V15.9H17.5V14.3z",
+};
+static constexpr LogoBrand kPreviewStartBrand{0xFF4CC2FF, 0xFF0067C0, 3, 3, 21, 21};
+static constexpr LogoBrand kPreviewAppBrands[] = {
+    {0xFFFFD86B, 0xFFE9A21C, 0, 4, 0, 21},
+    {0xFF2FA8E8, 0xFF1764C0, 4, 4, 20, 20},
+    {0xFF7A8794, 0xFF3F4852, 0, 4, 0, 20},
+};
+
+// The taskbar's free space between the apps and the tray, at its narrowest.
+static constexpr float kPreviewFreeSpace = 16;
+
+// Where a strip's parts sit in a preview `width` DIPs wide: the pieces in order, the tiles at
+// their placement's slot with their panel's margins (the leading 4 DIPs and the gap after
+// accounts), and the free space growing to fill the preview. A taskbar wider than the preview
+// scrolls by `scroll` from its home, which shows the tiles' end of it: the right for the tray
+// placements, the left beside Start.
+struct SettingsPreviewRow {
+    float tiles = 0;                 // x 0 of the strip's operations and columns
+    std::vector<float> pieces;       // Each piece's left edge
+    float left = 0;                  // The taskbar's left edge: 0, or less once it overflows
+    float overflow = 0;              // How much wider than the preview the taskbar is
+    float minimum = 0, maximum = 0;  // The scroll's range
+};
+
+static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip, float width, float scroll) {
+    // The slot: before Start (0), the apps (1) or a tray piece (2 to 5), or after the last.
+    const size_t slot = strip.placement == TaskbarPlacement::LeftSide     ? 0 :
+                        strip.placement == TaskbarPlacement::RightOfStart ? 1 :
+                                                                            2 + size_t(strip.placement);
+    const float block = 4 + strip.width + strip.rightMargin;
+    float natural = block + kPreviewFreeSpace;
+    for (const SettingsPreviewPiece& piece : strip.pieces) natural += piece.width;
+    SettingsPreviewRow row;
+    const bool start = IsStartAreaPlacement(strip.placement);
+    row.overflow = std::max(natural - width, 0.0f);
+    row.minimum = start ? -row.overflow : 0;
+    row.maximum = start ? 0 : row.overflow;
+    row.left = std::clamp(scroll, row.minimum, row.maximum) - (start ? 0 : row.overflow);
+    float x = row.left;
+    for (size_t i = 0; i <= strip.pieces.size(); i++) {
+        if (i == 2) x += kPreviewFreeSpace + std::max(width - natural, 0.0f);
+        if (i == slot) {
+            row.tiles = x + 4;
+            x += block;
+        }
+        if (i < strip.pieces.size()) {
+            row.pieces.push_back(x);
+            x += strip.pieces[i].width;
+        }
+    }
+    return row;
+}
 
 // The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
 // accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
@@ -79,6 +153,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     const float margin = float(std::clamp(settings.accountMargin, 0, 500));
     strip.height = H;
     strip.rightMargin = float(std::clamp(settings.rightMargin, 0, 500));
+    strip.placement = TaskbarPlacement(std::clamp(int(settings.placement), int(TaskbarPlacement::BeforeIcons),
+                                                  int(kLastTaskbarPlacement)));
     const TilePalette palette = TilePaletteFor(light);
     const PaceMarkColors pace = PaceMarkColorsFor(display.paceTickColor, light);
 
@@ -655,32 +731,54 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     }
     strip.width = x;
 
-    // Tray (mockup .tray): overflow chevron, three status glyphs, then the two-line clock.
+    // The mock taskbar: Start and three apps on 40 DIP buttons (the first two running: a short
+    // pill under them), then the tray (mockup .tray): the notification icons' chevron, the
+    // network, volume and battery glyphs, the two-line clock with the notification bell, and Show
+    // desktop's sliver. Icons are 20 DIPs, less on the lowest taskbars.
     if (!gallery) {
-        auto glyph = [&](PCWSTR s, float size, float left, float width) {
-            label(strip.tray, s, UiIconStyle(size), left, H / 2 - size / 2, width,
-                  DWRITE_TEXT_ALIGNMENT_CENTER, text, 1);
+        auto glyph = [&](std::vector<Op>& ops, PCWSTR s, float size, float left, float width) {
+            label(ops, s, UiIconStyle(size), left, H / 2 - size / 2, width, DWRITE_TEXT_ALIGNMENT_CENTER, text, 1);
         };
-        glyph(L"\uE70E", 11, 0, 24);
-        float left = 24 + 4;
-        for (PCWSTR icon : {L"\uE701", L"\uE767", L"\uE83F"}) {
-            glyph(icon, 14, left, 26);
-            left += 26;
+        auto icon = [&](std::vector<Op>& ops, PCWSTR path, const LogoBrand* brand, float center, float side) {
+            Op op;
+            op.kind = Op::Kind::Logo;
+            op.rect = {center - side / 2, H / 2 - side / 2, center + side / 2, H / 2 + side / 2};
+            op.color = text;
+            op.path = path;
+            op.brand = brand;
+            add(ops, std::move(op));
+        };
+        auto mark = [&](std::vector<Op>& ops, D2D1_RECT_F r, float radius, float opacity) {
+            Op op;
+            op.rect = r;
+            op.radius = radius;
+            op.color = text;
+            op.opacity = opacity;
+            add(ops, std::move(op));
+        };
+        const float side = std::min(20.0f, H - 14);
+        SettingsPreviewPiece start{{}, 40}, apps{{}, 3 * 40}, icons{{}, 24 + 4}, network{{}, 3 * 26 + 6}, clock,
+            desktop{{}, 10};
+        icon(start.ops, kPreviewStartPath, &kPreviewStartBrand, 20, side - 2);
+        for (int k = 0; k < 3; k++) {
+            const float center = 40.0f * float(k) + 20, pill = (H / 2 + side / 2 + H) / 2;
+            icon(apps.ops, kPreviewAppPaths[k], &kPreviewAppBrands[k], center, side);
+            if (k < 2) mark(apps.ops, {center - 3, pill - 1.5f, center + 3, pill + 1.5f}, 1.5f, 0.5f);
         }
-        left += 4 + 8;
-        UiTextStyle clock{UiFamily::Taskbar, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
-        float clockWidth = std::max(measure(L"14:32", clock).width, measure(L"2026-10-31", clock).width);
-        label(strip.tray, L"14:32", clock, left, H / 2 - 16, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
-        label(strip.tray, L"2026-10-31", clock, left, H / 2, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
-        strip.trayWidth = left + clockWidth + 10 + 4;
+        glyph(icons.ops, L"\uE70E", 11, 0, 24);
+        const PCWSTR status[] = {L"\uE701", L"\uE767", L"\uE83F"};
+        for (int k = 0; k < 3; k++) glyph(network.ops, status[k], 14, 26.0f * float(k), 26);
+        UiTextStyle clockStyle{UiFamily::Taskbar, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        float clockWidth = std::max(measure(L"14:32", clockStyle).width, measure(L"2026-10-31", clockStyle).width);
+        label(clock.ops, L"14:32", clockStyle, 6, H / 2 - 16, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
+        label(clock.ops, L"2026-10-31", clockStyle, 6, H / 2, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
+        glyph(clock.ops, L"\uEA8F", 14, 6 + clockWidth + 6, 24);
+        clock.width = 6 + clockWidth + 6 + 24 + 4;
+        mark(desktop.ops, {4, H / 4, 5, H * 3 / 4}, 0, 0.4f);
+        strip.pieces = {std::move(start), std::move(apps), std::move(icons), std::move(network), std::move(clock),
+                        std::move(desktop)};
     }
     return strip;
-}
-
-// How far a strip `width` DIPs wide must scroll to show every column: the panel keeps a 4 DIP
-// margin at its left and the tray gap at its right.
-static float SettingsPreviewOverflow(const SettingsPreviewStrip& strip, float width) {
-    return std::max(4 + strip.width + strip.rightMargin + strip.trayWidth - width, 0.0f);
 }
 
 // Paints a preview item: the strip (Preview; hover follows `pointer`, scrolled by
@@ -891,40 +989,37 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
         // High contrast: the taskbar's edge in the text color.
         if (hc) UiStrokeRect(target, cache, bar, 0, color(text), 1, scale);
     } else {
-        // Columns right-anchored before the tray gap, scrolled right by the preview scroll;
+        // The taskbar's pieces and the tiles where the row puts them at the preview scroll;
         // content beyond the strip fades at that edge, with a thin position bar along the bottom.
         const D2D1_RECT_F& r = item.rect;
-        float trayLeft = std::max(r.right - r.left - strip.trayWidth, 0.0f);
-        float overflow = SettingsPreviewOverflow(strip, r.right - r.left);
-        float scroll = std::clamp(view.previewScroll, 0.0f, overflow);
-        float left = UiSnap(r.left + trayLeft - strip.rightMargin - strip.width + scroll, scale);
-        D2D1_RECT_F tiles{r.left, r.top, r.left + trayLeft, r.bottom};
+        const float width = r.right - r.left;
+        const SettingsPreviewRow row = SettingsPreviewRowAt(strip, width, view.previewScroll);
+        const float left = UiSnap(r.left + row.tiles, scale);
         int hovered = -1;
-        if (UiContains(tiles, pointer)) {
+        if (UiContains(r, pointer)) {
             for (size_t i = 0; i < strip.columns.size(); i++) {
                 if (UiContains(strip.columns[i], {pointer.x - left, pointer.y - r.top})) hovered = int(i);
             }
         }
         UiFillRect(target, cache, r, 4, color(background), scale);
         target->PushAxisAlignedClip(&r, D2D1_ANTIALIAS_MODE_ALIASED);
-        target->PushAxisAlignedClip(&tiles, D2D1_ANTIALIAS_MODE_ALIASED);
+        for (size_t i = 0; i < strip.pieces.size(); i++) {
+            paint(strip.pieces[i].ops, {UiSnap(r.left + row.pieces[i], scale), r.top}, 1, -1);
+        }
         paint(strip.ops, {left, r.top}, 1, hovered);
         target->SetTransform(&base);
-        target->PopAxisAlignedClip();
-        paint(strip.tray, {r.left + trayLeft, r.top}, 1, -1);
-        target->SetTransform(&base);
-        if (overflow > 0) {
+        if (row.overflow > 0) {
             D2D1_COLOR_F solid = color(background), clear = color(background, 0);
-            if (scroll < overflow) {
-                UiFillGradient(target, cache, {r.left, r.top, r.left + std::min(96.0f, trayLeft), r.bottom}, 4,
-                               solid, clear, false);
+            if (row.left < 0) {
+                UiFillGradient(target, cache, {r.left, r.top, r.left + std::min(96.0f, width), r.bottom}, 4, solid,
+                               clear, false);
             }
-            if (scroll > 0) {
-                UiFillGradient(target, cache, {r.left + std::max(trayLeft - 48, 0.0f), r.top, r.left + trayLeft, r.bottom},
-                               0, clear, solid, false);
+            if (row.left > -row.overflow) {
+                UiFillGradient(target, cache, {r.right - std::min(48.0f, width), r.top, r.right, r.bottom}, 4, clear,
+                               solid, false);
             }
-            float thumbWidth = trayLeft * trayLeft / (trayLeft + overflow);
-            float thumbLeft = r.left + (trayLeft - thumbWidth) * (1 - scroll / overflow);
+            float thumbWidth = width * width / (width + row.overflow);
+            float thumbLeft = r.left + (width - thumbWidth) * (-row.left / row.overflow);
             UiFillRect(target, cache, {thumbLeft, r.bottom - 4, thumbLeft + thumbWidth, r.bottom - 2}, 1,
                        color(text, 0.4f), scale);
         }
@@ -944,7 +1039,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.status.taskbarHeight, view.scale,
                                                        view.now, false, false, 0);
     float stripWidth = std::max(width - 2 * kPadX, 1.0f);
-    float overflow = SettingsPreviewOverflow(strip, stripWidth);
+    const SettingsPreviewRow home = SettingsPreviewRowAt(strip, stripWidth, 0);
+    const bool cut = home.tiles < 0 || home.tiles + strip.width > stripWidth;
     float bottom = y + kPadTop + kRow + kGap + strip.height + kPadBottom;
 
     UiItem card;
@@ -954,7 +1050,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     items.push_back(std::move(card));
 
     // Title and note, then the switch with its label at the right. The note says when the
-    // tiles don't fit; it and then the label are left out where they wouldn't fit on one line.
+    // tiles don't fit at the strip's home; it and then the label are left out where they wouldn't
+    // fit on one line.
     float row = y + kPadTop, center = row + kRow / 2;
     UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, L"Preview", body, 1000, false)).width);
@@ -976,8 +1073,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
         items.push_back(std::move(line));
     };
     text(L"Preview", UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
-    std::wstring note = overflow > 0 ? L"Example accounts, wider than shown: drag to scroll" :
-                                       L"Example accounts, updates as you change settings";
+    std::wstring note = cut ? L"Example accounts, wider than shown: drag to scroll" :
+                              L"Example accounts, updates as you change settings";
     float noteLeft = x + kPadX + titleWidth + 12;
     if (UiLayoutSize(UiLayout(g, note, caption, 10000, false)).width <= labelLeft - 12 - noteLeft) {
         text(std::move(note), UiFont::Caption, UiInk::Muted, {noteLeft, center - 8, labelLeft - 12, center + 8});
@@ -995,8 +1092,9 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     preview.kind = UiItemKind::Preview;
     float stripTop = row + kRow + kGap;
     preview.rect = {x + kPadX, stripTop, x + kPadX + stripWidth, stripTop + strip.height};
-    preview.maximum = int(std::ceil(overflow));
-    preview.action = {UiActionKind::Pan, int(std::min(view.previewScroll, overflow)), {},
+    preview.minimum = int(std::floor(home.minimum));
+    preview.maximum = int(std::ceil(home.maximum));
+    preview.action = {UiActionKind::Pan, int(std::clamp(view.previewScroll, home.minimum, home.maximum)), {},
                       uint32_t(SettingsField::PreviewScroll)};
     items.push_back(std::move(preview));
     return bottom;

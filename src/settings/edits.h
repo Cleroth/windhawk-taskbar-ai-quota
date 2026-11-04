@@ -61,8 +61,9 @@ enum class SettingsField : uint8_t {
     ShowPaceTicks,
     PaceTickStyle,    // A PaceTickStyle
     PaceTickColor,    // 0xBBGGRR
+    Placement,        // Position: a TaskbarPlacement
     AccountMargin,
-    RightMargin,      // Tray gap
+    RightMargin,      // Gap after accounts
     // Display
     Material,               // A Material
     BarMode,                // A BarMode
@@ -177,8 +178,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::LabelFontSize,   SettingsField::LabelGap,
                     SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
                     SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
-                    SettingsField::PaceTickColor,   SettingsField::AccountMargin,
-                    SettingsField::RightMargin};
+                    SettingsField::PaceTickColor,   SettingsField::Placement,
+                    SettingsField::AccountMargin,   SettingsField::RightMargin};
         case SettingsField::ResetDisplay:
             return {SettingsField::Material,            SettingsField::BarMode,
                     SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
@@ -239,6 +240,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowPaceTicks: return s.showPaceTicks;
         case SettingsField::PaceTickStyle: return int(s.paceTickStyle);
         case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
+        case SettingsField::Placement: return int(s.placement);
         case SettingsField::AccountMargin: return s.accountMargin;
         case SettingsField::RightMargin: return s.rightMargin;
         case SettingsField::Material: return int(s.material);
@@ -330,6 +332,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
                                                        int(PaceTickStyle::TimeTrack)));
             break;
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
+        case SettingsField::Placement:
+            s.placement = TaskbarPlacement(std::clamp(value, int(TaskbarPlacement::BeforeIcons),
+                                                      int(kLastTaskbarPlacement)));
+            break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
         case SettingsField::RightMargin: s.rightMargin = value; break;
         case SettingsField::Material:
@@ -401,6 +407,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showPaceTicks = defaults.showPaceTicks;
             s.paceTickStyle = defaults.paceTickStyle;
             s.paceTickColor = defaults.paceTickColor;
+            s.placement = defaults.placement;
             s.accountMargin = defaults.accountMargin;
             s.rightMargin = defaults.rightMargin;
             break;
@@ -528,6 +535,12 @@ struct SettingsDisplay {
     bool primary = false;
 };
 
+// A taskbar that shows the bars in the tray instead of at a position beside Start.
+struct SettingsPlacementFallback {
+    int display = 0;        // As SettingsDisplay::number
+    bool conflict = false;  // Another mod holds the space; else what the position needs isn't there
+};
+
 // Recording state while consent is on.
 enum class SettingsRecording : uint8_t { Recording, PendingSave, StorageError };
 
@@ -543,6 +556,7 @@ struct SettingsAccountStatus {
 
 struct SettingsStatus {
     std::vector<SettingsDisplay> displays;
+    std::vector<SettingsPlacementFallback> placementFallbacks;  // Display order
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
     wchar_t groupSeparator = L',';

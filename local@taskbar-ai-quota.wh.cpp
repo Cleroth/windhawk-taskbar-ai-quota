@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.2.0
+// @version         2.3.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -18,7 +18,8 @@
 /*
 # Taskbar AI Quota Bars
 
-A Windows 11 taskbar mod that shows subscription quota bars next to the system tray.
+A Windows 11 taskbar mod that shows subscription quota bars next to the system tray, or
+elsewhere in the tray or beside Start.
 
 Supported providers and quotas:
 
@@ -49,7 +50,8 @@ local app or CLI session, which must remain running.
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
-  position, identity position, pace markers, and spacing.
+  position, identity position, pace markers, position on the taskbar (tray slots, or Left side
+  and Right of Start, experimental), and spacing.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, percentage text, usage colors and thresholds, stale marker.
@@ -312,6 +314,23 @@ enum class PaceTickStyle {
     TimeTrack,  // A small bar under each bar (vertical bars: right of it) filling with the pace.
 };
 
+// Where the bars sit on the taskbar: a slot in the system tray, or (experimental) beside Start,
+// where the taskbar's own layout makes room for them.
+enum class TaskbarPlacement {
+    BeforeIcons,       // Before the notification icons and their chevron
+    BeforeNetwork,     // Before network, volume and battery
+    BeforeClock,
+    AfterClock,        // Before Show desktop
+    AfterShowDesktop,  // The taskbar's far end
+    LeftSide,          // The taskbar's leading edge; Widgets, Start and the apps move over
+    RightOfStart,      // Between Start and the buttons after it
+};
+static constexpr TaskbarPlacement kLastTaskbarPlacement = TaskbarPlacement::RightOfStart;
+
+static bool IsStartAreaPlacement(TaskbarPlacement placement) {
+    return placement == TaskbarPlacement::LeftSide || placement == TaskbarPlacement::RightOfStart;
+}
+
 // Background of the details flyout and the settings and usage history windows. Every material
 // but Solid needs Windows' transparency effects; without them, or in high contrast, it is solid.
 // The windows have no Tinted wallpaper backdrop and use Mica for it.
@@ -394,7 +413,8 @@ struct Settings {
     int accountMargin = 3;
     int labelGap = 3;  // "Identity gap": between the identity's box and the bars.
     int barGap = 2;
-    int rightMargin = 4;
+    TaskbarPlacement placement = TaskbarPlacement::BeforeIcons;
+    int rightMargin = 4;  // "Gap after accounts": after the last account, wherever the bars sit.
     int yellowThreshold = 50;
     int orangeThreshold = 75;
     int redThreshold = 90;
@@ -873,8 +893,16 @@ struct QuotaUiInstance {
     // Light taskbar at the last update; picks tile chrome and the bars' default pace tick colors.
     bool lightTheme = false;
     Grid quotaGrid{nullptr};
-    Panel injectionParent{nullptr};
+    Panel injectionParent{nullptr};  // The tray, or beside Start the taskbar's root grid
     ColumnDefinition quotaColumnDefinition{nullptr};
+    // Where the bars went (taskbar/placement.h). Beside Start: the element whose margin holds their
+    // room (Start, or the repeater of the taskbar's buttons), kept placed after each layout pass.
+    TaskbarPlacement placement = TaskbarPlacement::BeforeIcons;
+    FrameworkElement startAreaElement{nullptr};
+    winrt::event_token layoutUpdatedToken{};
+    // Looks again for a missing anchor (the bars sit at the next boundary meanwhile).
+    DispatcherTimer anchorTimer{nullptr};
+    winrt::event_token anchorTimerToken{};
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<RoutedHandler> routedHandlers;
@@ -5418,6 +5446,21 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
     flyout.materialFactory = nullptr;
     releaseTimer(state.keepMenuOpenTimer, state.keepMenuOpenTimerToken);
     releaseTimer(state.submenuCloseTimer, state.submenuCloseTimerToken);
+    releaseTimer(state.anchorTimer, state.anchorTimerToken);
+    if (state.layoutUpdatedToken) {
+        // The projection's revoke drops a failure; this one is logged.
+        try {
+            if (state.quotaGrid) {
+                auto source = state.quotaGrid.as<winrt::Windows::UI::Xaml::IFrameworkElement>();
+                auto* abi = static_cast<winrt::impl::abi_t<winrt::Windows::UI::Xaml::IFrameworkElement>*>(
+                    winrt::get_abi(source));
+                if (FAILED(abi->remove_LayoutUpdated(state.layoutUpdatedToken))) {
+                    Wh_Log(L"LayoutUpdated revoke failed");
+                }
+            }
+        } catch (...) {}
+        state.layoutUpdatedToken = {};
+    }
     flyout.hoverIndex = -1;
     flyout.dwellIndex = -1;
     flyout.hoverSuppressedIndex = -1;
@@ -11320,6 +11363,215 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
 }
 
+// src/taskbar/placement.h
+// Where the bars go on a taskbar: tray slots found by their neighbours' names, and the positions
+// beside Start, where the bars lie over the taskbar's buttons and a margin in the taskbar's own
+// layout makes room for them.
+
+// Tray children the tray placements go before, left to right (After Show desktop goes past the
+// last). A missing one passes the bars on to the next; none left puts them at the tray's end.
+static constexpr PCWSTR kTrayAnchors[] = {L"ControlCenterButton", L"NotificationCenterButton",
+                                          L"ShowDesktopStack"};
+
+// The taskbar's buttons beside Start: the root grid the bars lie over, the repeater holding
+// Widgets, Start and the apps, and Start.
+struct StartArea {
+    Grid rootGrid{nullptr};
+    FrameworkElement repeater{nullptr};
+    FrameworkElement start{nullptr};
+};
+
+static StartArea FindStartArea(FrameworkElement const& root) {
+    StartArea area;
+    FrameworkElement frame = FindChildByName(root, L"TaskbarFrame", 4);
+    FrameworkElement rootGrid = frame ? FindChildByName(frame, L"RootGrid", 1) : nullptr;
+    area.rootGrid = rootGrid ? rootGrid.try_as<Grid>() : nullptr;
+    if (!area.rootGrid) return area;
+    area.repeater = FindChildByName(rootGrid, L"TaskbarFrameRepeater", 1);
+    if (!area.repeater) return area;
+    int count = VisualTreeHelper::GetChildrenCount(area.repeater);
+    for (int i = 0; i < count && !area.start; i++) {
+        auto child = VisualTreeHelper::GetChild(area.repeater, i).try_as<FrameworkElement>();
+        if (child && winrt::get_class_name(child) == L"Taskbar.ExperienceToggleButton" &&
+            winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetAutomationId(child) ==
+                L"StartButton") {
+            area.start = child;
+        }
+    }
+    return area;
+}
+
+// The room a taskbar's bars take beside Start, per taskbar and margin: Start's right margin (Right
+// of Start) or the repeater's left one (Left side). Other mods share a margin only additively
+// (their old contribution out, their new one in), which keeps ours in it; a change that leaves
+// less than our contribution means another mod took the margin: it is never touched again while
+// that element lives, and the bars show in the tray. Each record also says why its taskbar shows
+// the bars in the tray instead (the settings window's note).
+//
+// Records belong to the taskbar window's thread, which alone adds, changes and removes them and
+// uses their weak references; the settings thread reads only the plain fields. The window's
+// destruction removes them. g_placementMutex is a leaf. Never destroyed: weak references still
+// held at unload are leaked.
+enum class PlacementFallback : uint8_t { None, Unavailable, Conflict };
+
+struct PlacementRecord {
+    HWND hWnd = nullptr;
+    DWORD ownerThreadId = 0;
+    bool start = false;  // Start's right margin, else the repeater's left
+    winrt::weak_ref<FrameworkElement> element;
+    double applied = 0;  // Our contribution to the margin
+    double written = 0;  // The margin as we last wrote or accepted it
+    bool lost = false;   // Another mod took the margin
+    PlacementFallback fallback = PlacementFallback::None;
+};
+
+static std::mutex g_placementMutex;
+[[clang::no_destroy]] static std::vector<PlacementRecord> g_placementRecords;
+
+// This thread's record of a taskbar's margin (`add`: created if missing). A record another thread
+// left on a reused HWND starts over; its weak reference is that thread's, so it is leaked.
+static PlacementRecord* FindPlacementRecordLocked(HWND hWnd, bool start, bool add = false) {
+    for (PlacementRecord& record : g_placementRecords) {
+        if (record.hWnd != hWnd || record.start != start) continue;
+        if (record.ownerThreadId != GetCurrentThreadId()) {
+            (void)new winrt::weak_ref<FrameworkElement>(std::move(record.element));
+            record = PlacementRecord{};
+            record.hWnd = hWnd;
+            record.start = start;
+            record.ownerThreadId = GetCurrentThreadId();
+        }
+        return &record;
+    }
+    if (!add) return nullptr;
+    PlacementRecord& record = g_placementRecords.emplace_back();
+    record.hWnd = hWnd;
+    record.ownerThreadId = GetCurrentThreadId();
+    record.start = start;
+    return &record;
+}
+
+// Records why a taskbar shows the bars in the tray (None: it doesn't) and tells an open settings
+// window when that changes.
+static void SetPlacementFallback(HWND hWnd, bool start, PlacementFallback fallback) {
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_placementMutex);
+        PlacementRecord* record = FindPlacementRecordLocked(hWnd, start, fallback != PlacementFallback::None);
+        if (record && record->fallback != fallback) {
+            record->fallback = fallback;
+            changed = true;
+        }
+    }
+    if (changed) NotifySettingsWindowChanged();
+}
+
+// Gives a margin back: without our contribution, unless another mod took it (the record then stays,
+// quarantined). A failed write keeps the record, so a later injection retries or resumes it.
+static void GiveBackReservation(HWND hWnd, bool start, FrameworkElement const& element) {
+    try {
+        Thickness margin = element.Margin();
+        double& value = start ? margin.Right : margin.Left;
+        double base = 0, applied = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_placementMutex);
+            PlacementRecord* record = FindPlacementRecordLocked(hWnd, start);
+            if (!record || record->lost) return;
+            applied = record->applied;
+            base = (std::fabs(value - record->written) <= 0.5 ? record->written : value) - applied;
+            if (base < -0.5) {
+                record->lost = true;
+                Wh_Log(L"Placement: another mod took the margin beside Start (%.1f, ours %.1f)", value, applied);
+                return;
+            }
+        }
+        if (std::fabs(applied) > 0.5) {
+            value = base;
+            element.Margin(margin);
+        }
+        std::lock_guard<std::mutex> lock(g_placementMutex);
+        std::erase_if(g_placementRecords, [&](const PlacementRecord& record) {
+            return record.hWnd == hWnd && record.start == start && !record.lost &&
+                   record.ownerThreadId == GetCurrentThreadId();
+        });
+    } catch (...) {
+        Wh_Log(L"Placement: giving back the room beside Start failed");
+    }
+}
+
+static void ReleaseStartAreaReservation(QuotaUiInstance& state) {
+    FrameworkElement element = std::exchange(state.startAreaElement, nullptr);
+    if (element) GiveBackReservation(state.hWnd, state.placement == TaskbarPlacement::RightOfStart, element);
+}
+
+// Keeps the bars beside Start: their room in the margin follows their width, then they move next
+// to it, before the repeater (Left side) or after Start. Runs on the owner thread after each layout
+// pass and writes only what changed, so the layout settles. Another mod taking the margin, or Start
+// hiding, moves the bars to the tray through a rebuild; until then they are hidden, so they never
+// lie over buttons without their room.
+static void UpdateStartAreaPlacement(QuotaUiInstance& state) {
+    FrameworkElement element = state.startAreaElement;
+    FrameworkElement rootGrid = state.injectionParent;
+    if (!element || !rootGrid || !state.quotaGrid || !state.quotaGrid.Children().Size()) return;
+    const bool start = state.placement == TaskbarPlacement::RightOfStart;
+    // Start hidden, or the element out of the taskbar's root grid (its margin no longer makes room).
+    DependencyObject ancestor = VisualTreeHelper::GetParent(element);
+    for (int depth = 0; ancestor && ancestor != rootGrid && depth < 16; depth++) {
+        ancestor = VisualTreeHelper::GetParent(ancestor);
+    }
+    if (ancestor != rootGrid || (start && element.Visibility() == Visibility::Collapsed)) {
+        Wh_Log(L"Placement: %s; the bars move to the tray",
+               start ? L"Start was hidden or replaced" : L"the taskbar's buttons were replaced");
+        state.quotaGrid.Visibility(Visibility::Collapsed);
+        ReleaseStartAreaReservation(state);
+        SetPlacementFallback(state.hWnd, start, PlacementFallback::Unavailable);
+        StartRetryInject(true);
+        return;
+    }
+
+    // The bars' width with their panel's margins (the leading 4 DIPs and the gap after accounts).
+    double width = state.quotaGrid.Children().GetAt(0).DesiredSize().Width;
+    Thickness margin = element.Margin();
+    double& value = start ? margin.Right : margin.Left;
+    double desired = 0;
+    bool lost = false;
+    {
+        std::lock_guard<std::mutex> lock(g_placementMutex);
+        PlacementRecord* record = FindPlacementRecordLocked(state.hWnd, start);
+        if (!record || record->lost) return;
+        if (std::fabs(value - record->written) > 0.5) {
+            if (value - record->applied < -0.5) {
+                record->lost = lost = true;
+                Wh_Log(L"Placement: another mod took the margin beside Start (%.1f, ours %.1f)", value,
+                       record->applied);
+            } else {
+                record->written = value;  // An additive change: ours is still in it.
+            }
+        }
+        desired = record->written - record->applied + width;
+    }
+    if (lost) {
+        // The margin is another mod's now: left as it is.
+        state.quotaGrid.Visibility(Visibility::Collapsed);
+        state.startAreaElement = nullptr;
+        SetPlacementFallback(state.hWnd, start, PlacementFallback::Conflict);
+        StartRetryInject(true);
+        return;
+    }
+    if (std::fabs(desired - value) > 0.5) {
+        value = desired;
+        element.Margin(margin);
+        std::lock_guard<std::mutex> lock(g_placementMutex);
+        if (PlacementRecord* record = FindPlacementRecordLocked(state.hWnd, start)) {
+            record->written = desired;
+            record->applied = width;
+        }
+    }
+
+    auto origin = element.TransformToVisual(rootGrid).TransformPoint({0, 0});
+    double left = std::max(0.0, start ? origin.X + element.ActualWidth() : origin.X - width);
+    if (std::fabs(state.quotaGrid.Margin().Left - left) > 0.5) state.quotaGrid.Margin({left, 0, 0, 0});
+}
+
 // src/taskbar/inject.h
 // Injects and removes quota grids, retries injection, and hooks taskbar startup.
 
@@ -11357,10 +11609,14 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
         ClearQuotaEventState(state);
         state.quotaGrid = nullptr;
         state.quotaColumnDefinition = nullptr;
+        state.startAreaElement = nullptr;
         state.applied.clear();
         return;
     }
 
+    // Callbacks go first, so nothing reserves the room beside Start again once it is given back.
+    ClearQuotaEventState(state);
+    ReleaseStartAreaReservation(state);
     try {
         RemoveQuotaChildren(state.injectionParent, state);
         auto targetGrid = state.injectionParent.try_as<Grid>();
@@ -11412,13 +11668,17 @@ static bool InjectQuotaGrid(HWND hWnd) {
             Wh_Log(L"Taskbar HWND was reused by a different UI thread");
             return false;
         }
+        // The position is read apart from the build's settings, so it must match too.
         ULONGLONG settingsGeneration;
+        TaskbarPlacement settingsPlacement;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             settingsGeneration = g_settingsGeneration;
+            settingsPlacement = g_settings.placement;
         }
         if (existingState->quotaGrid &&
             existingState->buildSettingsGeneration == settingsGeneration &&
+            existingState->placement == settingsPlacement &&
             existingState->buildVisualTestMode ==
                 g_visualTestMode.load(std::memory_order_acquire)) {
             return true;
@@ -11444,23 +11704,112 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!xamlRoot) return fail(L"no XamlRoot");
         auto root = xamlRoot.Content().try_as<FrameworkElement>();
         if (!root) return fail(L"no XamlRoot content");
-        auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
-        // On a cold start the XamlRoot is ready before the system tray contents are realized
-        // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
-        // Bail and let the retry loop poll until it appears; never inject elsewhere, which
-        // would render the bars on top of the clock/tray.
-        if (!trayFrame) return fail(L"no SystemTrayFrameGrid");
-        auto trayPanel = trayFrame.try_as<Panel>();
-        auto trayGrid = trayFrame.try_as<Grid>();
-        // Newer Windows taskbars keep the name but use a StackPanel. Don't assume other
-        // panel types share its child-order layout semantics.
-        if (!trayPanel || (!trayGrid && !trayFrame.try_as<StackPanel>())) {
-            std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";
-            reason += winrt::get_class_name(trayFrame);
-            return fail(reason.c_str());
+
+        // An earlier build gives its place back first: its tray column, or its room beside Start.
+        state = FindUiState(hWnd);
+        if (state) RemoveQuotaGridFromState(*state);
+        TaskbarPlacement placement;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            placement = g_settings.placement;
         }
 
-        state = FindUiState(hWnd);
+        // Room an earlier removal failed to give back, on a margin this build doesn't use, goes
+        // back now. Records whose element is gone go too, ending any quarantine with it.
+        for (bool start : {false, true}) {
+            if (IsStartAreaPlacement(placement) && start == (placement == TaskbarPlacement::RightOfStart)) continue;
+            FrameworkElement element{nullptr};
+            {
+                std::lock_guard<std::mutex> lock(g_placementMutex);
+                PlacementRecord* record = FindPlacementRecordLocked(hWnd, start);
+                if (!record) continue;
+                element = record->element.get();
+                if (!element) {
+                    g_placementRecords.erase(g_placementRecords.begin() + (record - g_placementRecords.data()));
+                    continue;
+                }
+                if (record->lost || std::fabs(record->applied) <= 0.5) continue;
+            }
+            GiveBackReservation(hWnd, start, element);
+        }
+
+        // Beside Start: the element whose margin makes room for the bars. Start hidden or missing
+        // (Unavailable), or its margin taken by another mod (Conflict), puts them in the tray's
+        // first slot. A record keeps a taken margin while its element lives, and resumes a
+        // reservation an earlier removal failed to give back.
+        StartArea area;
+        FrameworkElement reserved{nullptr};
+        bool anchorMissing = false;
+        if (IsStartAreaPlacement(placement)) {
+            const bool start = placement == TaskbarPlacement::RightOfStart;
+            area = FindStartArea(root);
+            reserved = start ? area.start : area.repeater;
+            PlacementFallback fallback = PlacementFallback::None;
+            if (!area.rootGrid || !reserved || reserved.Visibility() == Visibility::Collapsed) {
+                fallback = PlacementFallback::Unavailable;
+                anchorMissing = true;
+            } else {
+                Thickness margin = reserved.Margin();
+                double value = start ? margin.Right : margin.Left;
+                std::lock_guard<std::mutex> lock(g_placementMutex);
+                // A new element starts over; the published fallback stays for SetPlacementFallback.
+                PlacementRecord* record = FindPlacementRecordLocked(hWnd, start, true);
+                if (winrt::get_abi(record->element.get()) != winrt::get_abi(reserved)) {
+                    record->element = winrt::make_weak(reserved);
+                    record->applied = 0;
+                    record->written = value;
+                    // Start Button Position takes Start out of the layout with a negative one.
+                    record->lost = value < -0.5;
+                }
+                if (record->lost) fallback = PlacementFallback::Conflict;
+            }
+            SetPlacementFallback(hWnd, start, fallback);
+            if (fallback != PlacementFallback::None) {
+                Wh_Log(L"Placement: %s on hwnd=%p; the bars go to the tray",
+                       fallback == PlacementFallback::Conflict ? L"another mod holds the margin beside Start" :
+                                                                L"Start or the taskbar's buttons not found",
+                       hWnd);
+                reserved = nullptr;
+            }
+        }
+
+        Panel parent = reserved ? Panel(area.rootGrid) : Panel{nullptr};
+        Grid trayGrid{nullptr};
+        FrameworkElement anchor{nullptr};
+        size_t installedAnchor = std::size(kTrayAnchors);  // kTrayAnchors index of `anchor`
+        bool after = false;
+        if (!reserved) {
+            auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
+            // On a cold start the XamlRoot is ready before the system tray contents are realized
+            // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
+            // Bail and let the retry loop poll until it appears; never inject elsewhere, which
+            // would render the bars on top of the clock/tray.
+            if (!trayFrame) return fail(L"no SystemTrayFrameGrid");
+            parent = trayFrame.try_as<Panel>();
+            trayGrid = trayFrame.try_as<Grid>();
+            // Newer Windows taskbars keep the name but use a StackPanel. Don't assume other
+            // panel types share its child-order layout semantics.
+            if (!parent || (!trayGrid && !trayFrame.try_as<StackPanel>())) {
+                std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";
+                reason += winrt::get_class_name(trayFrame);
+                return fail(reason.c_str());
+            }
+            // The tray slot's neighbour (kTrayAnchors from the placement's own: Before network 0
+            // through After Show desktop, past the last), or the next one present.
+            if (placement != TaskbarPlacement::BeforeIcons && !IsStartAreaPlacement(placement)) {
+                after = placement == TaskbarPlacement::AfterShowDesktop;
+                size_t first = std::min<size_t>(size_t(placement) - 1, std::size(kTrayAnchors) - 1);
+                for (installedAnchor = first; installedAnchor < std::size(kTrayAnchors); installedAnchor++) {
+                    for (auto child : parent.Children()) {
+                        auto element = child.try_as<FrameworkElement>();
+                        if (element && element.Name() == kTrayAnchors[installedAnchor]) anchor = element;
+                    }
+                    if (anchor) break;
+                }
+                anchorMissing = installedAnchor != first;
+            }
+        }
+
         if (!state) {
             auto newState = std::make_unique<QuotaUiInstance>();
             newState->hWnd = hWnd;
@@ -11482,11 +11831,10 @@ static bool InjectQuotaGrid(HWND hWnd) {
             state->windowSubclassed = true;
             // Remove a visual left by an earlier failed teardown, but don't guess which column
             // definition it owned.
-            RemoveQuotaChildren(trayPanel, *state);
-        } else {
-            RemoveQuotaGridFromState(*state);
+            RemoveQuotaChildren(parent, *state);
         }
-        state->injectionParent = trayPanel;
+        state->injectionParent = parent;
+        state->placement = placement;
         double rasterizationScale = xamlRoot.RasterizationScale();
         state->rasterizationScale = rasterizationScale > 0 ? rasterizationScale : 1.0;
         Grid quota = BuildQuotaGrid(*state);
@@ -11496,28 +11844,135 @@ static bool InjectQuotaGrid(HWND hWnd) {
             return fail(L"BuildQuotaGrid failed");
         }
 
-        if (trayGrid) {
+        // A tray slot without a neighbour is the tray's start for Before notification icons (and
+        // beside Start's fallback), else its end.
+        const bool trayStart = placement == TaskbarPlacement::BeforeIcons || IsStartAreaPlacement(placement);
+        if (reserved) {
+            // Over the taskbar's buttons; UpdateStartAreaPlacement places it after each layout pass.
+            quota.HorizontalAlignment(HorizontalAlignment::Left);
+            Grid::SetColumnSpan(quota, std::max(1, (int)area.rootGrid.ColumnDefinitions().Size()));
+            Grid::SetRowSpan(quota, std::max(1, (int)area.rootGrid.RowDefinitions().Size()));
+            Canvas::SetZIndex(quota, 1000);
+            area.rootGrid.Children().Append(quota);
+            state->startAreaElement = reserved;
+        } else if (trayGrid) {
+            int column = anchor ? Grid::GetColumn(anchor) + (after ? Grid::GetColumnSpan(anchor) : 0) :
+                         trayStart ? 0 : (int)trayGrid.ColumnDefinitions().Size();
+            column = std::clamp(column, 0, (int)trayGrid.ColumnDefinitions().Size());
+            // Children from the new column on move over; one spanning across it grows. A failure
+            // undoes exactly the changes made, then the column. The record is sized first, so
+            // keeping it never fails after a change.
+            std::vector<std::pair<FrameworkElement, bool>> shifted;  // Child, and whether it grew
+            shifted.reserve(trayGrid.Children().Size());
             ColumnDefinition newCol;
             newCol.Width({1.0, GridUnitType::Auto});
             state->quotaColumnDefinition = newCol;
-            trayGrid.ColumnDefinitions().InsertAt(0, newCol);
-            // Inserting at the left edge means no existing child can span across the new column.
-            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+            trayGrid.ColumnDefinitions().InsertAt(column, newCol);
+            try {
+                for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                    auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (!child) continue;
+                    int childCol = Grid::GetColumn(child);
+                    int childSpan = Grid::GetColumnSpan(child);
+                    if (childCol >= column) {
+                        Grid::SetColumn(child, childCol + 1);
+                        shifted.push_back({child, false});
+                    } else if (childCol + childSpan > column) {
+                        Grid::SetColumnSpan(child, childSpan + 1);
+                        shifted.push_back({child, true});
+                    }
+                }
+            } catch (...) {
+                for (auto& [child, grew] : shifted) {
+                    try {
+                        if (grew) Grid::SetColumnSpan(child, Grid::GetColumnSpan(child) - 1);
+                        else Grid::SetColumn(child, Grid::GetColumn(child) - 1);
+                    } catch (...) {}
+                }
+                try {
+                    uint32_t index = 0;
+                    if (trayGrid.ColumnDefinitions().IndexOf(newCol, index)) {
+                        trayGrid.ColumnDefinitions().RemoveAt(index);
+                    }
+                } catch (...) {}
+                state->quotaColumnDefinition = nullptr;
+                throw;
             }
-            Grid::SetColumn(quota, 0);
+            Grid::SetColumn(quota, column);
             trayGrid.Children().Append(quota);
         } else {
             // StackPanel layout follows child order; no column is created or owned.
-            trayPanel.Children().InsertAt(0, quota);
+            uint32_t index = 0;
+            if (anchor && parent.Children().IndexOf(anchor, index)) {
+                index += after ? 1 : 0;
+            } else {
+                index = trayStart ? 0 : parent.Children().Size();
+            }
+            parent.Children().InsertAt(index, quota);
         }
 
         state->quotaGrid = quota;
         g_uiInjected.store(true, std::memory_order_release);
         state->applied.clear();
         UpdateQuotaUi(*state);
-        Wh_Log(L"Injected quota bars into %s", winrt::get_class_name(trayPanel).c_str());
+        if (reserved) {
+            // Every layout pass anywhere in the taskbar raises it; on the bars' own root, the
+            // delegate goes with them.
+            state->layoutUpdatedToken = quota.LayoutUpdated(
+                [hWnd](winrt::Windows::Foundation::IInspectable const&,
+                       winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (uiState && uiState->quotaGrid && uiState->ownerThreadId == GetCurrentThreadId()) {
+                            UpdateStartAreaPlacement(*uiState);
+                        }
+                    } catch (...) {}
+                });
+            UpdateStartAreaPlacement(*state);
+        }
+
+        // A missing anchor may not be realized yet: look again every few seconds, and rebuild once
+        // it, or a nearer neighbour than the one the bars went to, is there. A margin another mod
+        // took keeps the bars in the tray until its element goes.
+        if (anchorMissing) {
+            DispatcherTimer anchorTimer;
+            anchorTimer.Interval(std::chrono::seconds(5));
+            state->anchorTimerToken = anchorTimer.Tick(
+                [hWnd, placement, installedAnchor](winrt::Windows::Foundation::IInspectable const&,
+                                                   winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        auto anchorRoot = GetTaskbarXamlRoot(hWnd);
+                        auto content = anchorRoot ? anchorRoot.Content().try_as<FrameworkElement>() : nullptr;
+                        if (!content) return;
+                        bool present = false;
+                        if (IsStartAreaPlacement(placement)) {
+                            StartArea startArea = FindStartArea(content);
+                            FrameworkElement element = placement == TaskbarPlacement::RightOfStart ?
+                                                           startArea.start : startArea.repeater;
+                            present = startArea.rootGrid && element &&
+                                      element.Visibility() == Visibility::Visible;
+                        } else if (auto tray = FindChildByName(content, L"SystemTrayFrameGrid").try_as<Panel>()) {
+                            size_t first = std::min<size_t>(size_t(placement) - 1, std::size(kTrayAnchors) - 1);
+                            for (auto child : tray.Children()) {
+                                auto element = child.try_as<FrameworkElement>();
+                                for (size_t k = first; element && k < installedAnchor; k++) {
+                                    if (element.Name() == kTrayAnchors[k]) present = true;
+                                }
+                            }
+                        }
+                        if (!present) return;
+                        if (auto* uiState = FindUiState(hWnd); uiState && uiState->anchorTimer) {
+                            uiState->anchorTimer.Stop();
+                        }
+                        StartRetryInject(true);
+                    } catch (...) {}
+                });
+            state->anchorTimer = anchorTimer;
+            anchorTimer.Start();
+        }
+        Wh_Log(L"Injected quota bars into %s", winrt::get_class_name(parent).c_str());
         return true;
     } catch (...) {
         if (state) {
@@ -11553,8 +12008,14 @@ static void ReleaseQuotaUiState(HWND hWnd) {
     state->quotaGrid = nullptr;
     state->injectionParent = nullptr;
     state->quotaColumnDefinition = nullptr;
+    state->startAreaElement = nullptr;
     state->applied.clear();
     EraseUiState(hWnd);
+    // The window's elements go with it, and so do its placement records.
+    std::lock_guard<std::mutex> lock(g_placementMutex);
+    std::erase_if(g_placementRecords, [&](const PlacementRecord& record) {
+        return record.hWnd == hWnd && record.ownerThreadId == GetCurrentThreadId();
+    });
 }
 
 static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
@@ -17237,6 +17698,9 @@ static bool NormalizeSettings(Settings* s) {
     if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
         s->barStyle = BarStyle::Track;
     }
+    if (s->placement < TaskbarPlacement::BeforeIcons || s->placement > kLastTaskbarPlacement) {
+        s->placement = TaskbarPlacement::BeforeIcons;
+    }
     if (s->labelPosition < LabelPosition::Hidden ||
         s->labelPosition > LabelPosition::Bottom) {
         s->labelPosition = LabelPosition::Left;
@@ -17366,6 +17830,12 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"accountMargin", s.accountMargin);
         setNumber(L"labelGap", s.labelGap);
         setNumber(L"barGap", s.barGap);
+        setString(L"placement", s.placement == TaskbarPlacement::BeforeNetwork ? L"beforeNetwork" :
+                                s.placement == TaskbarPlacement::BeforeClock ? L"beforeClock" :
+                                s.placement == TaskbarPlacement::AfterClock ? L"afterClock" :
+                                s.placement == TaskbarPlacement::AfterShowDesktop ? L"afterShowDesktop" :
+                                s.placement == TaskbarPlacement::LeftSide ? L"leftSide" :
+                                s.placement == TaskbarPlacement::RightOfStart ? L"rightOfStart" : L"beforeIcons");
         setNumber(L"rightMargin", s.rightMargin);
         setString(L"percentTextVisibility",
                   s.percentTextVisibility == PercentTextVisibility::Never ? L"never" :
@@ -17558,6 +18028,15 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.accountMargin = (int)GetNum(root, L"accountMargin", 3);
         s.labelGap = (int)GetNum(root, L"labelGap", 3);
         s.barGap = (int)GetNum(root, L"barGap", 2);
+        // Settings saved before positions keep the bars before the notification icons.
+        std::wstring placement = GetStr(root, L"placement");
+        s.placement = placement == L"beforeNetwork" ? TaskbarPlacement::BeforeNetwork :
+                      placement == L"beforeClock" ? TaskbarPlacement::BeforeClock :
+                      placement == L"afterClock" ? TaskbarPlacement::AfterClock :
+                      placement == L"afterShowDesktop" ? TaskbarPlacement::AfterShowDesktop :
+                      placement == L"leftSide" ? TaskbarPlacement::LeftSide :
+                      placement == L"rightOfStart" ? TaskbarPlacement::RightOfStart :
+                                                     TaskbarPlacement::BeforeIcons;
         s.rightMargin = (int)GetNum(root, L"rightMargin", 4);
         std::wstring percentTextVisibility = GetStr(root, L"percentTextVisibility");
         if (percentTextVisibility == L"never") {
@@ -18491,8 +18970,9 @@ enum class SettingsField : uint8_t {
     ShowPaceTicks,
     PaceTickStyle,    // A PaceTickStyle
     PaceTickColor,    // 0xBBGGRR
+    Placement,        // Position: a TaskbarPlacement
     AccountMargin,
-    RightMargin,      // Tray gap
+    RightMargin,      // Gap after accounts
     // Display
     Material,               // A Material
     BarMode,                // A BarMode
@@ -18607,8 +19087,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::LabelFontSize,   SettingsField::LabelGap,
                     SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
                     SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
-                    SettingsField::PaceTickColor,   SettingsField::AccountMargin,
-                    SettingsField::RightMargin};
+                    SettingsField::PaceTickColor,   SettingsField::Placement,
+                    SettingsField::AccountMargin,   SettingsField::RightMargin};
         case SettingsField::ResetDisplay:
             return {SettingsField::Material,            SettingsField::BarMode,
                     SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
@@ -18669,6 +19149,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowPaceTicks: return s.showPaceTicks;
         case SettingsField::PaceTickStyle: return int(s.paceTickStyle);
         case SettingsField::PaceTickColor: return int(s.paceTickColor & 0x00FFFFFF);
+        case SettingsField::Placement: return int(s.placement);
         case SettingsField::AccountMargin: return s.accountMargin;
         case SettingsField::RightMargin: return s.rightMargin;
         case SettingsField::Material: return int(s.material);
@@ -18760,6 +19241,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
                                                        int(PaceTickStyle::TimeTrack)));
             break;
         case SettingsField::PaceTickColor: s.paceTickColor = COLORREF(value) & 0x00FFFFFF; break;
+        case SettingsField::Placement:
+            s.placement = TaskbarPlacement(std::clamp(value, int(TaskbarPlacement::BeforeIcons),
+                                                      int(kLastTaskbarPlacement)));
+            break;
         case SettingsField::AccountMargin: s.accountMargin = value; break;
         case SettingsField::RightMargin: s.rightMargin = value; break;
         case SettingsField::Material:
@@ -18831,6 +19316,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showPaceTicks = defaults.showPaceTicks;
             s.paceTickStyle = defaults.paceTickStyle;
             s.paceTickColor = defaults.paceTickColor;
+            s.placement = defaults.placement;
             s.accountMargin = defaults.accountMargin;
             s.rightMargin = defaults.rightMargin;
             break;
@@ -18958,6 +19444,12 @@ struct SettingsDisplay {
     bool primary = false;
 };
 
+// A taskbar that shows the bars in the tray instead of at a position beside Start.
+struct SettingsPlacementFallback {
+    int display = 0;        // As SettingsDisplay::number
+    bool conflict = false;  // Another mod holds the space; else what the position needs isn't there
+};
+
 // Recording state while consent is on.
 enum class SettingsRecording : uint8_t { Recording, PendingSave, StorageError };
 
@@ -18973,6 +19465,7 @@ struct SettingsAccountStatus {
 
 struct SettingsStatus {
     std::vector<SettingsDisplay> displays;
+    std::vector<SettingsPlacementFallback> placementFallbacks;  // Display order
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
     wchar_t groupSeparator = L',';
@@ -19586,6 +20079,21 @@ struct SettingsProductionStore final : SettingsStore {
                 status.taskbarHeight = double(window.bottom - window.top) * 96 / WindowDpi(taskbars[i].hWnd);
             }
         }
+        // Taskbars that show the bars, in the tray instead of beside Start.
+        if (IsStartAreaPlacement(baseline.settings.placement)) {
+            const bool start = baseline.settings.placement == TaskbarPlacement::RightOfStart;
+            std::vector<HWND> shown = FindCurrentProcessTaskbarWnds();
+            std::lock_guard<std::mutex> lock(g_placementMutex);
+            for (size_t i = 0; i < taskbars.size(); i++) {
+                if (std::find(shown.begin(), shown.end(), taskbars[i].hWnd) == shown.end()) continue;
+                for (const PlacementRecord& record : g_placementRecords) {
+                    if (record.hWnd == taskbars[i].hWnd && record.start == start &&
+                        record.fallback != PlacementFallback::None) {
+                        status.placementFallbacks.push_back({int(i) + 1, record.fallback == PlacementFallback::Conflict});
+                    }
+                }
+            }
+        }
         status.visualTest = g_visualTestMode.load(std::memory_order_acquire);
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
         PWSTR localAppData = nullptr;
@@ -19711,7 +20219,8 @@ struct SettingsView {
     bool retentionCustom = false;       // Custom chosen in Keep history
     bool transparencyEffects = true;    // Windows' transparency effects setting; the window fills it
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
-    float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
+    float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
+                                        // (settings/preview.h)
     ULONGLONG now = 0;                  // The preview's sample time
 };
 
@@ -19832,8 +20341,9 @@ static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, ui
 // src/settings/preview.h
 // Settings preview: the taskbar strip under the Layout and Display titles and the tile style
 // gallery's thumbnails, drawn from the shared meter model (taskbar/meter-model.h) with the
-// visual test accounts at 1:1 DIPs. Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h,
-// quota-update.h) as draw operations; painting takes an explicit target and theme.
+// visual test accounts at 1:1 DIPs; the strip places them on a mock taskbar at the chosen position.
+// Pure: the layout mirrors the taskbar's XAML (quota-grid.h, tiles.h, quota-update.h) as draw
+// operations; painting takes an explicit target and theme.
 //
 // Units: the strip is as tall as the primary taskbar in DIPs (converted with that taskbar's
 // DPI); the meter model's pixel details (pace ticks, text offsets) and snapping use the preview
@@ -19871,16 +20381,89 @@ struct SettingsPreviewOp {
     const LogoBrand* brand = nullptr;   // Logo: its brand colors outside high contrast, else `color`
 };
 
+// A piece of the mock taskbar around the tiles: its operations from its own left edge.
+struct SettingsPreviewPiece {
+    std::vector<SettingsPreviewOp> ops;
+    float width = 0;
+};
+
 // A strip: one column per sample account, laid out from x 0 (the first column's margin box) and
-// centered on the strip's height; the tray from its own left edge.
+// centered on the strip's height, and the mock taskbar's pieces in its order: Start, the apps,
+// then the tray's notification icons, network group, clock and Show desktop (none in the gallery).
 struct SettingsPreviewStrip {
-    std::vector<SettingsPreviewOp> ops, tray;
+    std::vector<SettingsPreviewOp> ops;
+    std::vector<SettingsPreviewPiece> pieces;
     std::vector<D2D1_RECT_F> columns;  // Hover targets: the XAML columns without their margins
     float width = 0;                   // Columns with their margins
-    float trayWidth = 0;
     float height = 0;
-    float rightMargin = 0;             // Tray gap
+    float rightMargin = 0;             // Gap after accounts
+    TaskbarPlacement placement = TaskbarPlacement::BeforeIcons;
 };
+
+// The mock taskbar's Start and app icons (24 DIP view box: the Windows logo, a folder, a globe, a
+// terminal; holes wound the other way) and their colors outside high contrast.
+static constexpr PCWSTR kPreviewStartPath =
+    L"M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z";
+static constexpr PCWSTR kPreviewAppPaths[] = {
+    L"M2 6.5A2.5 2.5 0 0 1 4.5 4H9.6l2.2 2.2h7.7A2.5 2.5 0 0 1 22 8.7v9.8a2.5 2.5 0 0 1-2.5 2.5h-15"
+    L"A2.5 2.5 0 0 1 2 18.5z",
+    L"M12 2.5a9.5 9.5 0 1 1 0 19a9.5 9.5 0 1 1 0-19zM12 4.4a7.6 7.6 0 1 0 0 15.2a7.6 7.6 0 1 0 0-15.2z"
+    L"M12 4.4a4.2 7.6 0 1 1 0 15.2a4.2 7.6 0 1 1 0-15.2zM12 4.4a2.4 7.6 0 1 0 0 15.2a2.4 7.6 0 1 0 0-15.2z"
+    L"M4.4 11.1h15.2v1.8H4.4z",
+    L"M4.5 4.5h15A2.5 2.5 0 0 1 22 7v10a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 17V7a2.5 2.5 0 0 1 2.5-2.5z"
+    L"M6 8.3V10.4L8.2 12L6 13.6V15.7L10.9 12zM11.5 14.3V15.9H17.5V14.3z",
+};
+static constexpr LogoBrand kPreviewStartBrand{0xFF4CC2FF, 0xFF0067C0, 3, 3, 21, 21};
+static constexpr LogoBrand kPreviewAppBrands[] = {
+    {0xFFFFD86B, 0xFFE9A21C, 0, 4, 0, 21},
+    {0xFF2FA8E8, 0xFF1764C0, 4, 4, 20, 20},
+    {0xFF7A8794, 0xFF3F4852, 0, 4, 0, 20},
+};
+
+// The taskbar's free space between the apps and the tray, at its narrowest.
+static constexpr float kPreviewFreeSpace = 16;
+
+// Where a strip's parts sit in a preview `width` DIPs wide: the pieces in order, the tiles at
+// their placement's slot with their panel's margins (the leading 4 DIPs and the gap after
+// accounts), and the free space growing to fill the preview. A taskbar wider than the preview
+// scrolls by `scroll` from its home, which shows the tiles' end of it: the right for the tray
+// placements, the left beside Start.
+struct SettingsPreviewRow {
+    float tiles = 0;                 // x 0 of the strip's operations and columns
+    std::vector<float> pieces;       // Each piece's left edge
+    float left = 0;                  // The taskbar's left edge: 0, or less once it overflows
+    float overflow = 0;              // How much wider than the preview the taskbar is
+    float minimum = 0, maximum = 0;  // The scroll's range
+};
+
+static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip, float width, float scroll) {
+    // The slot: before Start (0), the apps (1) or a tray piece (2 to 5), or after the last.
+    const size_t slot = strip.placement == TaskbarPlacement::LeftSide     ? 0 :
+                        strip.placement == TaskbarPlacement::RightOfStart ? 1 :
+                                                                            2 + size_t(strip.placement);
+    const float block = 4 + strip.width + strip.rightMargin;
+    float natural = block + kPreviewFreeSpace;
+    for (const SettingsPreviewPiece& piece : strip.pieces) natural += piece.width;
+    SettingsPreviewRow row;
+    const bool start = IsStartAreaPlacement(strip.placement);
+    row.overflow = std::max(natural - width, 0.0f);
+    row.minimum = start ? -row.overflow : 0;
+    row.maximum = start ? 0 : row.overflow;
+    row.left = std::clamp(scroll, row.minimum, row.maximum) - (start ? 0 : row.overflow);
+    float x = row.left;
+    for (size_t i = 0; i <= strip.pieces.size(); i++) {
+        if (i == 2) x += kPreviewFreeSpace + std::max(width - natural, 0.0f);
+        if (i == slot) {
+            row.tiles = x + 4;
+            x += block;
+        }
+        if (i < strip.pieces.size()) {
+            row.pieces.push_back(x);
+            x += strip.pieces[i].width;
+        }
+    }
+    return row;
+}
 
 // The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
 // accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
@@ -19911,6 +20494,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     const float margin = float(std::clamp(settings.accountMargin, 0, 500));
     strip.height = H;
     strip.rightMargin = float(std::clamp(settings.rightMargin, 0, 500));
+    strip.placement = TaskbarPlacement(std::clamp(int(settings.placement), int(TaskbarPlacement::BeforeIcons),
+                                                  int(kLastTaskbarPlacement)));
     const TilePalette palette = TilePaletteFor(light);
     const PaceMarkColors pace = PaceMarkColorsFor(display.paceTickColor, light);
 
@@ -20487,32 +21072,54 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     }
     strip.width = x;
 
-    // Tray (mockup .tray): overflow chevron, three status glyphs, then the two-line clock.
+    // The mock taskbar: Start and three apps on 40 DIP buttons (the first two running: a short
+    // pill under them), then the tray (mockup .tray): the notification icons' chevron, the
+    // network, volume and battery glyphs, the two-line clock with the notification bell, and Show
+    // desktop's sliver. Icons are 20 DIPs, less on the lowest taskbars.
     if (!gallery) {
-        auto glyph = [&](PCWSTR s, float size, float left, float width) {
-            label(strip.tray, s, UiIconStyle(size), left, H / 2 - size / 2, width,
-                  DWRITE_TEXT_ALIGNMENT_CENTER, text, 1);
+        auto glyph = [&](std::vector<Op>& ops, PCWSTR s, float size, float left, float width) {
+            label(ops, s, UiIconStyle(size), left, H / 2 - size / 2, width, DWRITE_TEXT_ALIGNMENT_CENTER, text, 1);
         };
-        glyph(L"\uE70E", 11, 0, 24);
-        float left = 24 + 4;
-        for (PCWSTR icon : {L"\uE701", L"\uE767", L"\uE83F"}) {
-            glyph(icon, 14, left, 26);
-            left += 26;
+        auto icon = [&](std::vector<Op>& ops, PCWSTR path, const LogoBrand* brand, float center, float side) {
+            Op op;
+            op.kind = Op::Kind::Logo;
+            op.rect = {center - side / 2, H / 2 - side / 2, center + side / 2, H / 2 + side / 2};
+            op.color = text;
+            op.path = path;
+            op.brand = brand;
+            add(ops, std::move(op));
+        };
+        auto mark = [&](std::vector<Op>& ops, D2D1_RECT_F r, float radius, float opacity) {
+            Op op;
+            op.rect = r;
+            op.radius = radius;
+            op.color = text;
+            op.opacity = opacity;
+            add(ops, std::move(op));
+        };
+        const float side = std::min(20.0f, H - 14);
+        SettingsPreviewPiece start{{}, 40}, apps{{}, 3 * 40}, icons{{}, 24 + 4}, network{{}, 3 * 26 + 6}, clock,
+            desktop{{}, 10};
+        icon(start.ops, kPreviewStartPath, &kPreviewStartBrand, 20, side - 2);
+        for (int k = 0; k < 3; k++) {
+            const float center = 40.0f * float(k) + 20, pill = (H / 2 + side / 2 + H) / 2;
+            icon(apps.ops, kPreviewAppPaths[k], &kPreviewAppBrands[k], center, side);
+            if (k < 2) mark(apps.ops, {center - 3, pill - 1.5f, center + 3, pill + 1.5f}, 1.5f, 0.5f);
         }
-        left += 4 + 8;
-        UiTextStyle clock{UiFamily::Taskbar, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
-        float clockWidth = std::max(measure(L"14:32", clock).width, measure(L"2026-10-31", clock).width);
-        label(strip.tray, L"14:32", clock, left, H / 2 - 16, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
-        label(strip.tray, L"2026-10-31", clock, left, H / 2, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
-        strip.trayWidth = left + clockWidth + 10 + 4;
+        glyph(icons.ops, L"\uE70E", 11, 0, 24);
+        const PCWSTR status[] = {L"\uE701", L"\uE767", L"\uE83F"};
+        for (int k = 0; k < 3; k++) glyph(network.ops, status[k], 14, 26.0f * float(k), 26);
+        UiTextStyle clockStyle{UiFamily::Taskbar, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
+        float clockWidth = std::max(measure(L"14:32", clockStyle).width, measure(L"2026-10-31", clockStyle).width);
+        label(clock.ops, L"14:32", clockStyle, 6, H / 2 - 16, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
+        label(clock.ops, L"2026-10-31", clockStyle, 6, H / 2, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
+        glyph(clock.ops, L"\uEA8F", 14, 6 + clockWidth + 6, 24);
+        clock.width = 6 + clockWidth + 6 + 24 + 4;
+        mark(desktop.ops, {4, H / 4, 5, H * 3 / 4}, 0, 0.4f);
+        strip.pieces = {std::move(start), std::move(apps), std::move(icons), std::move(network), std::move(clock),
+                        std::move(desktop)};
     }
     return strip;
-}
-
-// How far a strip `width` DIPs wide must scroll to show every column: the panel keeps a 4 DIP
-// margin at its left and the tray gap at its right.
-static float SettingsPreviewOverflow(const SettingsPreviewStrip& strip, float width) {
-    return std::max(4 + strip.width + strip.rightMargin + strip.trayWidth - width, 0.0f);
 }
 
 // Paints a preview item: the strip (Preview; hover follows `pointer`, scrolled by
@@ -20723,40 +21330,37 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
         // High contrast: the taskbar's edge in the text color.
         if (hc) UiStrokeRect(target, cache, bar, 0, color(text), 1, scale);
     } else {
-        // Columns right-anchored before the tray gap, scrolled right by the preview scroll;
+        // The taskbar's pieces and the tiles where the row puts them at the preview scroll;
         // content beyond the strip fades at that edge, with a thin position bar along the bottom.
         const D2D1_RECT_F& r = item.rect;
-        float trayLeft = std::max(r.right - r.left - strip.trayWidth, 0.0f);
-        float overflow = SettingsPreviewOverflow(strip, r.right - r.left);
-        float scroll = std::clamp(view.previewScroll, 0.0f, overflow);
-        float left = UiSnap(r.left + trayLeft - strip.rightMargin - strip.width + scroll, scale);
-        D2D1_RECT_F tiles{r.left, r.top, r.left + trayLeft, r.bottom};
+        const float width = r.right - r.left;
+        const SettingsPreviewRow row = SettingsPreviewRowAt(strip, width, view.previewScroll);
+        const float left = UiSnap(r.left + row.tiles, scale);
         int hovered = -1;
-        if (UiContains(tiles, pointer)) {
+        if (UiContains(r, pointer)) {
             for (size_t i = 0; i < strip.columns.size(); i++) {
                 if (UiContains(strip.columns[i], {pointer.x - left, pointer.y - r.top})) hovered = int(i);
             }
         }
         UiFillRect(target, cache, r, 4, color(background), scale);
         target->PushAxisAlignedClip(&r, D2D1_ANTIALIAS_MODE_ALIASED);
-        target->PushAxisAlignedClip(&tiles, D2D1_ANTIALIAS_MODE_ALIASED);
+        for (size_t i = 0; i < strip.pieces.size(); i++) {
+            paint(strip.pieces[i].ops, {UiSnap(r.left + row.pieces[i], scale), r.top}, 1, -1);
+        }
         paint(strip.ops, {left, r.top}, 1, hovered);
         target->SetTransform(&base);
-        target->PopAxisAlignedClip();
-        paint(strip.tray, {r.left + trayLeft, r.top}, 1, -1);
-        target->SetTransform(&base);
-        if (overflow > 0) {
+        if (row.overflow > 0) {
             D2D1_COLOR_F solid = color(background), clear = color(background, 0);
-            if (scroll < overflow) {
-                UiFillGradient(target, cache, {r.left, r.top, r.left + std::min(96.0f, trayLeft), r.bottom}, 4,
-                               solid, clear, false);
+            if (row.left < 0) {
+                UiFillGradient(target, cache, {r.left, r.top, r.left + std::min(96.0f, width), r.bottom}, 4, solid,
+                               clear, false);
             }
-            if (scroll > 0) {
-                UiFillGradient(target, cache, {r.left + std::max(trayLeft - 48, 0.0f), r.top, r.left + trayLeft, r.bottom},
-                               0, clear, solid, false);
+            if (row.left > -row.overflow) {
+                UiFillGradient(target, cache, {r.right - std::min(48.0f, width), r.top, r.right, r.bottom}, 4, clear,
+                               solid, false);
             }
-            float thumbWidth = trayLeft * trayLeft / (trayLeft + overflow);
-            float thumbLeft = r.left + (trayLeft - thumbWidth) * (1 - scroll / overflow);
+            float thumbWidth = width * width / (width + row.overflow);
+            float thumbLeft = r.left + (width - thumbWidth) * (-row.left / row.overflow);
             UiFillRect(target, cache, {thumbLeft, r.bottom - 4, thumbLeft + thumbWidth, r.bottom - 2}, 1,
                        color(text, 0.4f), scale);
         }
@@ -20776,7 +21380,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.status.taskbarHeight, view.scale,
                                                        view.now, false, false, 0);
     float stripWidth = std::max(width - 2 * kPadX, 1.0f);
-    float overflow = SettingsPreviewOverflow(strip, stripWidth);
+    const SettingsPreviewRow home = SettingsPreviewRowAt(strip, stripWidth, 0);
+    const bool cut = home.tiles < 0 || home.tiles + strip.width > stripWidth;
     float bottom = y + kPadTop + kRow + kGap + strip.height + kPadBottom;
 
     UiItem card;
@@ -20786,7 +21391,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     items.push_back(std::move(card));
 
     // Title and note, then the switch with its label at the right. The note says when the
-    // tiles don't fit; it and then the label are left out where they wouldn't fit on one line.
+    // tiles don't fit at the strip's home; it and then the label are left out where they wouldn't
+    // fit on one line.
     float row = y + kPadTop, center = row + kRow / 2;
     UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, L"Preview", body, 1000, false)).width);
@@ -20808,8 +21414,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
         items.push_back(std::move(line));
     };
     text(L"Preview", UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
-    std::wstring note = overflow > 0 ? L"Example accounts, wider than shown: drag to scroll" :
-                                       L"Example accounts, updates as you change settings";
+    std::wstring note = cut ? L"Example accounts, wider than shown: drag to scroll" :
+                              L"Example accounts, updates as you change settings";
     float noteLeft = x + kPadX + titleWidth + 12;
     if (UiLayoutSize(UiLayout(g, note, caption, 10000, false)).width <= labelLeft - 12 - noteLeft) {
         text(std::move(note), UiFont::Caption, UiInk::Muted, {noteLeft, center - 8, labelLeft - 12, center + 8});
@@ -20827,8 +21433,9 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     preview.kind = UiItemKind::Preview;
     float stripTop = row + kRow + kGap;
     preview.rect = {x + kPadX, stripTop, x + kPadX + stripWidth, stripTop + strip.height};
-    preview.maximum = int(std::ceil(overflow));
-    preview.action = {UiActionKind::Pan, int(std::min(view.previewScroll, overflow)), {},
+    preview.minimum = int(std::floor(home.minimum));
+    preview.maximum = int(std::ceil(home.maximum));
+    preview.action = {UiActionKind::Pan, int(std::clamp(view.previewScroll, home.minimum, home.maximum)), {},
                       uint32_t(SettingsField::PreviewScroll)};
     items.push_back(std::move(preview));
     return bottom;
@@ -21220,7 +21827,7 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 
 // src/settings/page-layout.h
 // Settings > Layout: the tile style gallery, then the chosen style's sizes, identity and text, pace
-// markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
+// markers, the position and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
@@ -21629,6 +22236,40 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
     }
 
+    // Placement: the position, then the taskbars that show the bars in the tray instead of beside
+    // Start (one line each).
+    y = UiAddSection(items, id, x, y + 20, width, L"Placement");
+    {
+        UiCardSpec spec;
+        spec.title = L"Position";
+        spec.description = {{L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: "
+                             L"the taskbar\u2019s buttons move over to make room."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Placement, 260,
+                                    {{L"Before notification icons", int(TaskbarPlacement::BeforeIcons)},
+                                     {L"Before network and volume", int(TaskbarPlacement::BeforeNetwork)},
+                                     {L"Before the clock", int(TaskbarPlacement::BeforeClock)},
+                                     {L"After the clock", int(TaskbarPlacement::AfterClock)},
+                                     {L"After Show desktop", int(TaskbarPlacement::AfterShowDesktop)},
+                                     {L"Left side", int(TaskbarPlacement::LeftSide)},
+                                     {L"Right of Start", int(TaskbarPlacement::RightOfStart)}},
+                                    int(s.placement));
+    }
+    if (IsStartAreaPlacement(s.placement) && !view.status.placementFallbacks.empty()) {
+        // Left side needs the taskbar's buttons; Right of Start also a shown Start.
+        PCWSTR unavailable = s.placement == TaskbarPlacement::RightOfStart ?
+                                 L"its Start button is hidden or wasn\u2019t found." :
+                                 L"its taskbar buttons weren\u2019t found.";
+        std::wstring text;
+        for (const SettingsPlacementFallback& fallback : view.status.placementFallbacks) {
+            if (!text.empty()) text += L"\n";
+            text += L"Display " + std::to_wstring(fallback.display) + L" shows the bars in the tray: " +
+                    (fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
+                                         unavailable);
+        }
+        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
+                         UiSeverity::Caution);
+    }
+
     y = UiAddSection(items, id, x, y + 20, width, L"Spacing");
     {
         UiCardSpec spec;
@@ -21638,15 +22279,15 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     }
     {
         UiCardSpec spec;
-        spec.title = L"Tray gap";
-        spec.description = {{L"Space between the last account and the system tray."}};
+        spec.title = L"Gap after accounts";
+        spec.description = {{L"Space after the last account, before whatever comes next on the taskbar."}};
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RightMargin, L"px");
     }
 
     UiCardSpec reset;
     reset.title = L"Reset Layout to defaults";
-    reset.description = {{L"Tile style, bar style, sizes, identity and text, pace markers and spacing. Accounts are "
-                           L"not changed."}};
+    reset.description = {{L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. "
+                           L"Accounts are not changed."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
 }
 
@@ -22424,11 +23065,13 @@ struct SettingsUiClient final : UiHostClient {
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
     // Window state. Custom poll and retention modes stick once chosen or typed into, so their
-    // boxes don't disable themselves when a partial number happens to match a preset. The last
-    // built view paints the preview; the color dialog's custom colors last for the window.
+    // boxes don't disable themselves when a partial number happens to match a preset. The
+    // preview's scroll belongs to the position it was built for. The last built view paints the
+    // preview; the color dialog's custom colors last for the window.
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
+    TaskbarPlacement previewPlacement = TaskbarPlacement::BeforeIcons;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
 
@@ -22535,9 +23178,9 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // The preview's scroll stays within what the built strip can scroll. Account cards follow
-    // the projection's order, a dragged card its drag order. The window takes the projected
-    // material at once.
+    // The preview's scroll stays within what the built strip can scroll, and a new position
+    // starts it from its home. Account cards follow the projection's order, a dragged card its
+    // drag order. The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.page = page;
@@ -22550,6 +23193,7 @@ struct SettingsUiClient final : UiHostClient {
         view.pollCustom = pollCustom;
         view.retentionCustom = retentionCustom;
         view.scale = UiHostScale(host);
+        if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
         for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
@@ -22584,7 +23228,8 @@ struct SettingsUiClient final : UiHostClient {
         for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
             for (const UiItem& item : *items) {
                 if (item.kind != UiItemKind::Preview) continue;
-                previewScroll = view.previewScroll = std::min(previewScroll, float(item.maximum));
+                previewScroll = view.previewScroll =
+                    std::clamp(previewScroll, float(item.minimum), float(item.maximum));
             }
         }
     }
@@ -22889,9 +23534,9 @@ struct SettingsUiClient final : UiHostClient {
                 UiSurfaceId surface = UiSurfaceId::Main;
                 const UiItem* strip =
                     UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll), &surface);
-                float maximum = strip ? float(strip->maximum) : 0;
+                float minimum = strip ? float(strip->minimum) : 0, maximum = strip ? float(strip->maximum) : 0;
                 previewScroll = view.previewScroll =
-                    std::clamp(previewScroll + float(action.value), 0.0f, maximum);
+                    std::clamp(previewScroll + float(action.value), minimum, maximum);
                 InvalidateRect(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr, FALSE);
                 break;
             }

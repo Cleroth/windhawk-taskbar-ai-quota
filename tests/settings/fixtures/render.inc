@@ -87,9 +87,7 @@ static void RenderFrame(UiGraphics& g, IWICImagingFactory* wic, const std::wstri
 static D2D1_POINT_2F PreviewPointer(UiGraphics& g, const SettingsView& view, const D2D1_RECT_F& r, int column) {
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.status.taskbarHeight, view.scale,
                                                        view.now, false, false, 0);
-    float trayLeft = r.right - r.left - strip.trayWidth;
-    float overflow = SettingsPreviewOverflow(strip, r.right - r.left);
-    float left = r.left + trayLeft - strip.rightMargin - strip.width + std::clamp(view.previewScroll, 0.0f, overflow);
+    float left = r.left + SettingsPreviewRowAt(strip, r.right - r.left, view.previewScroll).tiles;
     const D2D1_RECT_F& c = strip.columns[size_t(column)];
     return {left + (c.left + c.right) / 2, r.top + (c.top + c.bottom) / 2};
 }
@@ -112,11 +110,16 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 // current position cues and extra usage corners, logo sizes with the badge's size
 // and offsets on bars, rings and headline tiles, badge colors and logo brand colors. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
-// unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
+// unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Placement sheet: ring
+// tiles at each position, stacked bars at each (wider than the strip, at home), stacked bars
+// scrolled to the other end, hover beside Start and in the tray, 32 and 72 DIP taskbars. Each strip
+// is a Preview item painted by the production painter.
+enum class PreviewSheet : uint8_t { Layout, Display, Placement };
+
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
-                               const UiThemeInput& theme, UINT dpi, bool display = false) {
+                               const UiThemeInput& theme, UINT dpi, PreviewSheet sheet) {
     struct Row {
-        const wchar_t* caption;
+        std::wstring caption;
         std::function<void(Settings&)> edit;
         int hover = -1;
         double taskbar = 48;
@@ -507,9 +510,41 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Bars 60, orange Claude only", [](Settings& s) { s.barLength = 60; s.logoBrands.claude = true; }},
         {L"Bars 60, Gemini gradient only", [](Settings& s) { s.barLength = 60; s.logoBrands.gemini = true; }},
     };
-    // The Layout sheet's strips are the window's 680 DIPs; the Display sheet's fit four columns of
-    // stacked bars, so every value shows.
-    const std::vector<Row>& rows = display ? displayRows : layoutRows;
+    std::vector<Row> placementRows;
+    const std::pair<PCWSTR, TaskbarPlacement> positions[] = {
+        {L"before icons", TaskbarPlacement::BeforeIcons},     {L"before network", TaskbarPlacement::BeforeNetwork},
+        {L"before clock", TaskbarPlacement::BeforeClock},     {L"after clock", TaskbarPlacement::AfterClock},
+        {L"after Show desktop", TaskbarPlacement::AfterShowDesktop}, {L"left side", TaskbarPlacement::LeftSide},
+        {L"right of Start", TaskbarPlacement::RightOfStart}};
+    auto place = [](BarLayout layout, TaskbarPlacement placement) {
+        return [layout, placement](Settings& s) {
+            s.barLayout = layout;
+            s.placement = placement;
+        };
+    };
+    for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::Stacked}) {
+        for (auto [name, placement] : positions) {
+            placementRows.push_back(
+                {std::wstring(layout == BarLayout::Stacked ? L"Bars, " : L"Ring, ") + name, place(layout, placement)});
+        }
+    }
+    placementRows.push_back({L"Bars, before icons, left end", place(BarLayout::Stacked, TaskbarPlacement::BeforeIcons),
+                             -1, 48, 1e4f});
+    placementRows.push_back({L"Bars, left side, right end", place(BarLayout::Stacked, TaskbarPlacement::LeftSide), -1, 48,
+                             -1e4f});
+    placementRows.push_back({L"Ring, right of Start, hover", place(BarLayout::SegmentedRing, TaskbarPlacement::RightOfStart),
+                             1});
+    placementRows.push_back({L"Ring, after clock, hover", place(BarLayout::SegmentedRing, TaskbarPlacement::AfterClock), 3});
+    placementRows.push_back({L"Ring, left side, 32 DIP", place(BarLayout::SegmentedRing, TaskbarPlacement::LeftSide), -1,
+                             32});
+    placementRows.push_back({L"Ring, after desktop, 32 DIP",
+                             place(BarLayout::SegmentedRing, TaskbarPlacement::AfterShowDesktop), -1, 32});
+    placementRows.push_back({L"Ring, before clock, 72 DIP", place(BarLayout::SegmentedRing, TaskbarPlacement::BeforeClock),
+                             -1, 72});
+    // The Layout and Placement sheets' strips are the window's 680 DIPs; the Display sheet's fit
+    // four columns of stacked bars, so every value shows.
+    const bool display = sheet == PreviewSheet::Display;
+    const std::vector<Row>& rows = display ? displayRows : sheet == PreviewSheet::Layout ? layoutRows : placementRows;
     constexpr float kCaption = 170, kRowGap = 12;
     const float kStrip = display ? 800 : 680;
     float height = kRowGap;
@@ -861,10 +896,37 @@ static void RunRenders(const std::wstring& directory) {
                     std::string sheet = std::string(display ? "render-display-preview-sheet-" : "render-preview-sheet-") +
                                         theme.name + "-" + std::to_string(dpi) + ".png";
                     Run(sheet, [&] {
-                        RenderPreviewSheet(g, wic.get(), path(sheet), theme.input, dpi, display);
+                        RenderPreviewSheet(g, wic.get(), path(sheet), theme.input, dpi,
+                                           display ? PreviewSheet::Display : PreviewSheet::Layout);
                         CHECK(true);
                     });
                 }
+            }
+
+            // The positions: the placement sheet, and Layout scrolled to the Placement section with
+            // Left side chosen and two taskbars showing the bars in the tray (its note), the Position
+            // field hovered; at 100% and 150%.
+            for (UINT dpi : {96u, 144u}) {
+                std::string sheet = std::string("render-placement-sheet-") + theme.name + "-" + std::to_string(dpi) + ".png";
+                Run(sheet, [&] {
+                    RenderPreviewSheet(g, wic.get(), path(sheet), theme.input, dpi, PreviewSheet::Placement);
+                    CHECK(true);
+                });
+                std::string page = std::string("render-layout-placement-") + theme.name + "-" + std::to_string(dpi) + ".png";
+                Run(page, [&] {
+                    SettingsView view = LayoutView(BarLayout::Stacked, dpi);
+                    view.settings.placement = TaskbarPlacement::LeftSide;
+                    view.status.placementFallbacks = {{1, false}, {2, true}};
+                    UiFrame frame;
+                    SettingsUiBuildFrame(g, view, client, frame);
+                    const UiItem& position = Control(frame, SettingsField::Placement);
+                    UiPaintState state;
+                    state.hot = {position.id};
+                    float end = frame.contentHeight - (frame.viewport.bottom - frame.viewport.top);
+                    RenderFrame(g, wic.get(), path(page), frame, view, client, dpi, theme.input, state,
+                                std::clamp(position.rect.top - 160, 0.0f, std::max(end, 0.0f)), false);
+                    CHECK(UiFindItem(frame, SettingsControlId(SettingsField::Placement, 8)));
+                });
             }
 
             // Controls in their states at 144 DPI: the Behavior page with Custom chosen, an

@@ -32,11 +32,13 @@ struct SettingsUiClient final : UiHostClient {
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
     // Window state. Custom poll and retention modes stick once chosen or typed into, so their
-    // boxes don't disable themselves when a partial number happens to match a preset. The last
-    // built view paints the preview; the color dialog's custom colors last for the window.
+    // boxes don't disable themselves when a partial number happens to match a preset. The
+    // preview's scroll belongs to the position it was built for. The last built view paints the
+    // preview; the color dialog's custom colors last for the window.
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
+    TaskbarPlacement previewPlacement = TaskbarPlacement::BeforeIcons;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
 
@@ -143,9 +145,9 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // The preview's scroll stays within what the built strip can scroll. Account cards follow
-    // the projection's order, a dragged card its drag order. The window takes the projected
-    // material at once.
+    // The preview's scroll stays within what the built strip can scroll, and a new position
+    // starts it from its home. Account cards follow the projection's order, a dragged card its
+    // drag order. The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.page = page;
@@ -158,6 +160,7 @@ struct SettingsUiClient final : UiHostClient {
         view.pollCustom = pollCustom;
         view.retentionCustom = retentionCustom;
         view.scale = UiHostScale(host);
+        if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
         for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
@@ -192,7 +195,8 @@ struct SettingsUiClient final : UiHostClient {
         for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
             for (const UiItem& item : *items) {
                 if (item.kind != UiItemKind::Preview) continue;
-                previewScroll = view.previewScroll = std::min(previewScroll, float(item.maximum));
+                previewScroll = view.previewScroll =
+                    std::clamp(previewScroll, float(item.minimum), float(item.maximum));
             }
         }
     }
@@ -497,9 +501,9 @@ struct SettingsUiClient final : UiHostClient {
                 UiSurfaceId surface = UiSurfaceId::Main;
                 const UiItem* strip =
                     UiFindItem(host.frame, SettingsControlId(SettingsField::PreviewScroll), &surface);
-                float maximum = strip ? float(strip->maximum) : 0;
+                float minimum = strip ? float(strip->minimum) : 0, maximum = strip ? float(strip->maximum) : 0;
                 previewScroll = view.previewScroll =
-                    std::clamp(previewScroll + float(action.value), 0.0f, maximum);
+                    std::clamp(previewScroll + float(action.value), minimum, maximum);
                 InvalidateRect(surface == UiSurfaceId::Main ? host.main : host.viewport, nullptr, FALSE);
                 break;
             }

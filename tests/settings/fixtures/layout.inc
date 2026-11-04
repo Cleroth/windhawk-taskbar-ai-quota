@@ -71,7 +71,9 @@ static bool Finite(const SettingsPreviewStrip& strip) {
     auto finite = [](D2D1_RECT_F r) {
         return std::isfinite(r.left) && std::isfinite(r.top) && std::isfinite(r.right) && std::isfinite(r.bottom);
     };
-    for (const auto* ops : {&strip.ops, &strip.tray}) {
+    std::vector<const std::vector<SettingsPreviewOp>*> lists{&strip.ops};
+    for (const SettingsPreviewPiece& piece : strip.pieces) lists.push_back(&piece.ops);
+    for (const auto* ops : lists) {
         for (const SettingsPreviewOp& op : *ops) {
             if (!finite(op.rect) || !std::isfinite(op.radius)) return false;
             for (D2D1_POINT_2F p : op.points) {
@@ -137,6 +139,7 @@ static void RunLayoutTests() {
             {SettingsField::LabelPosition, 2}, {SettingsField::LabelFontSize, 14}, {SettingsField::LabelGap, 7},
             {SettingsField::ShowBarLabels, 1}, {SettingsField::PercentFontSize, 10}, {SettingsField::ShowPaceTicks, 0},
             {SettingsField::PaceTickStyle, 2}, {SettingsField::PaceTickColor, 0x123456},
+            {SettingsField::Placement, 5},
             {SettingsField::AccountMargin, 9}, {SettingsField::RightMargin, 11}};
         for (auto [field, value] : values) {
             SettingsAssign(s, field, value);
@@ -145,6 +148,7 @@ static void RunLayoutTests() {
         CHECK(s.barLayout == BarLayout::ConcentricRings && s.barStyle == BarStyle::Rail &&
               s.labelPosition == LabelPosition::Top && s.headlineCountdown &&
               s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456 && s.badgeColor == 0x654321 &&
+              s.placement == TaskbarPlacement::LeftSide &&
               s.logoBrands.claude && s.logoBrands.gemini && s.sparklineHeight == 65 &&
               s.sparklineExtra == SparklineExtra::Percent && s.sparklineTextSize == 12 && !s.sparklineElapsed &&
               !s.sparklineNowLine && s.sparklineNowCaret && s.sparklineRing && !s.sparklineOutline);
@@ -181,14 +185,15 @@ static void RunLayoutTests() {
             {SettingsField::BadgeSize, 1, 6},         {SettingsField::BadgeSize, 99, 20},
             {SettingsField::BadgeOffsetX, -50, -20},  {SettingsField::BadgeOffsetY, 50, 20},
             {SettingsField::PaceTickColor, 0x12345678, 0x345678}, {SettingsField::BadgeColor, 0x87654321, 0x654321},
-            {SettingsField::ClaudeLogoBrand, 7, 1},  {SettingsField::GeminiLogoBrand, 0, 0}};
+            {SettingsField::ClaudeLogoBrand, 7, 1},  {SettingsField::GeminiLogoBrand, 0, 0},
+            {SettingsField::Placement, 9, 6},         {SettingsField::Placement, -1, 0}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == expected);
         }
     });
 
-    Run("layout reset: the thirty-seven Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the thirty-eight Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -224,6 +229,7 @@ static void RunLayoutTests() {
         changed.showPaceTicks = false;
         changed.paceTickStyle = PaceTickStyle::Dot;
         changed.paceTickColor = 0x00FF00;
+        changed.placement = TaskbarPlacement::AfterClock;
         changed.accountMargin = 12;
         changed.rightMargin = 30;
         // Other pages' fields stay.
@@ -272,16 +278,17 @@ static void RunLayoutTests() {
         expected.showPaceTicks = defaults.showPaceTicks;
         expected.paceTickStyle = defaults.paceTickStyle;
         expected.paceTickColor = defaults.paceTickColor;
+        expected.placement = defaults.placement;
         expected.accountMargin = defaults.accountMargin;
         expected.rightMargin = defaults.rightMargin;
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(reset.barLayout == BarLayout::Sparkline);
+        CHECK(reset.barLayout == BarLayout::Sparkline && reset.placement == TaskbarPlacement::BeforeIcons);
         CHECK(reset.sparklineHeight == 80 && reset.sparklineExtra == SparklineExtra::Amount && reset.sparklineTextSize == 8 &&
               reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && !reset.sparklineRing &&
               reset.sparklineOutline);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 37);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 38);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -375,11 +382,11 @@ static void RunLayoutTests() {
         CHECK_NEAR(strip.width, 4 * (24 + 6));
         CHECK_NEAR(strip.columns[0].top, 4);
         CHECK(Strip(s, 0).height == 48);
-        // Gallery thumbnails: the two Anthropic accounts, no tray.
+        // Gallery thumbnails: the two Anthropic accounts, no mock taskbar.
         strip = Strip(s, 48, true);
-        CHECK(strip.columns.size() == 2 && strip.tray.empty() && strip.trayWidth == 0);
+        CHECK(strip.columns.size() == 2 && strip.pieces.empty());
         CHECK_NEAR(strip.width, 2 * 38);
-        CHECK(!Strip(s).tray.empty() && Strip(s).trayWidth > 100);
+        CHECK(Strip(s).pieces.size() == 6);
     });
 
     Run("preview: bars mirror the XAML columns; percent text follows its visibility", [] {
@@ -2187,14 +2194,299 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("preview: overflow beyond the strip and its scroll range", [] {
+    Run("preview: the mock taskbar's pieces", [] {
+        auto ofKind = [](const SettingsPreviewPiece& piece, SettingsPreviewOp::Kind kind) {
+            std::vector<SettingsPreviewOp> ops;
+            for (const SettingsPreviewOp& op : piece.ops) {
+                if (op.kind == kind) ops.push_back(op);
+            }
+            return ops;
+        };
+        auto box = [](const SettingsPreviewOp& op, float left, float top, float right, float bottom) {
+            return NearDip(op.rect.left, left) && NearDip(op.rect.top, top) && NearDip(op.rect.right, right) &&
+                   NearDip(op.rect.bottom, bottom);
+        };
+        using Kind = SettingsPreviewOp::Kind;
+        SettingsPreviewStrip strip = Strip(StackedSettings());
+        CHECK(strip.pieces.size() == 6 && strip.placement == TaskbarPlacement::BeforeIcons);
+        const SettingsPreviewPiece &start = strip.pieces[0], &apps = strip.pieces[1], &icons = strip.pieces[2],
+                                   &network = strip.pieces[3], &clock = strip.pieces[4], &desktop = strip.pieces[5];
+        // Start and three apps on 40 DIP buttons; the chevron's 24 DIPs and 4 after it; three 26 DIP
+        // status glyphs and 6 after them; Show desktop's 10.
+        CHECK_NEAR(start.width, 40);
+        CHECK_NEAR(apps.width, 120);
+        CHECK_NEAR(icons.width, 28);
+        CHECK_NEAR(network.width, 84);
+        CHECK_NEAR(desktop.width, 10);
+        // Start: the Windows logo, 18 DIPs, centered on its button and the 48 DIP strip.
+        std::vector<SettingsPreviewOp> logo = ofKind(start, Kind::Logo);
+        CHECK(start.ops.size() == 1 && logo.size() == 1 && logo[0].path == kPreviewStartPath &&
+              logo[0].brand == &kPreviewStartBrand && logo[0].color == 0xFFFFFFFF && box(logo[0], 11, 15, 29, 33));
+        // The apps: 20 DIP icons centered on their buttons in their brand colors (the text color in
+        // high contrast); the first two running: a 6 x 3 DIP pill midway between the icon's bottom
+        // (34) and the strip's (48).
+        std::vector<SettingsPreviewOp> icon = ofKind(apps, Kind::Logo), pills = ofKind(apps, Kind::Rect);
+        CHECK(icon.size() == 3 && pills.size() == 2 && apps.ops.size() == 5);
+        for (size_t k = 0; k < std::min<size_t>(icon.size(), 3); k++) {
+            const float center = 40.0f * float(k) + 20;
+            CHECK(icon[k].path == kPreviewAppPaths[k] && icon[k].brand == &kPreviewAppBrands[k] &&
+                  icon[k].color == 0xFFFFFFFF && box(icon[k], center - 10, 14, center + 10, 34));
+        }
+        for (size_t k = 0; k < std::min<size_t>(pills.size(), 2); k++) {
+            const float center = 40.0f * float(k) + 20;
+            CHECK(box(pills[k], center - 3, 39.5f, center + 3, 42.5f) && pills[k].color == 0xFFFFFFFF &&
+                  pills[k].opacity == 0.5f && NearDip(pills[k].radius, 1.5));
+        }
+        // The tray: the chevron; Wi-Fi, volume and battery 26 DIPs apart; the clock's two lines 6
+        // DIPs in, the bell 6 DIPs after them in a 24 DIP box, 4 more to the piece's end; Show
+        // desktop's 1 DIP line over the strip's middle half.
+        CHECK(icons.ops.size() == 1 && icons.ops[0].text == L"\uE70E" && box(icons.ops[0], 0, icons.ops[0].rect.top, 24,
+                                                                                icons.ops[0].rect.bottom));
+        CHECK(network.ops.size() == 3);
+        const PCWSTR status[] = {L"\uE701", L"\uE767", L"\uE83F"};
+        for (size_t k = 0; k < std::min<size_t>(network.ops.size(), 3); k++) {
+            CHECK(network.ops[k].text == status[k] && NearDip(network.ops[k].rect.left, 26.0 * double(k)) &&
+                  NearDip(network.ops[k].rect.right, 26.0 * double(k) + 26));
+        }
+        CHECK(clock.ops.size() == 3 && clock.ops[0].text == L"14:32" && clock.ops[1].text == L"2026-10-31" &&
+              clock.ops[2].text == L"\uEA8F");
+        const float clockRight = clock.ops[0].rect.right;
+        CHECK(NearDip(clock.ops[0].rect.left, 6) && NearDip(clock.ops[1].rect.right, clockRight) &&
+              clock.ops[0].align == DWRITE_TEXT_ALIGNMENT_TRAILING && clockRight > 40);
+        CHECK(NearDip(clock.ops[2].rect.left, clockRight + 6) && NearDip(clock.ops[2].rect.right, clockRight + 30) &&
+              NearDip(clock.width, clockRight + 34));
+        CHECK(desktop.ops.size() == 1 && desktop.ops[0].kind == Kind::Rect && box(desktop.ops[0], 4, 12, 5, 36) &&
+              desktop.ops[0].opacity == 0.4f && desktop.ops[0].color == 0xFFFFFFFF);
+        // Lower taskbars shrink the icons: 18 DIPs at 32 DIPs (the logo 16), 10 at 24 (the logo 8),
+        // every piece inside the strip.
+        for (auto [taskbar, side] : {std::pair{32.0, 18.0f}, std::pair{24.0, 10.0f}}) {
+            SettingsPreviewStrip low = Strip(StackedSettings(), taskbar);
+            const float H = float(taskbar);
+            CHECK(box(ofKind(low.pieces[0], Kind::Logo)[0], 20 - (side - 2) / 2, H / 2 - (side - 2) / 2,
+                      20 + (side - 2) / 2, H / 2 + (side - 2) / 2));
+            CHECK(box(ofKind(low.pieces[1], Kind::Logo)[1], 60 - side / 2, H / 2 - side / 2, 60 + side / 2, H / 2 + side / 2));
+            for (const SettingsPreviewPiece& piece : low.pieces) {
+                for (const SettingsPreviewOp& op : piece.ops) {
+                    if (op.kind != Kind::Text) CHECK(op.rect.top >= 0 && op.rect.bottom <= H);
+                }
+            }
+        }
+    });
+
+    Run("preview: each position puts the tiles' panel in its slot among the pieces", [] {
+        // Ring tiles with a 10 DIP gap after accounts in a strip wide enough for everything: the
+        // pieces touch in order with the panel (its 4 DIPs, the tiles, the gap) in its slot, the
+        // free space after the apps takes the rest, Start's end at the strip's left, Show desktop's
+        // or the panel's at its right.
         Settings s = StackedSettings();
         s.barLayout = BarLayout::SegmentedRing;
-        SettingsPreviewStrip strip = Strip(s);
-        float fits = 4 + strip.width + strip.rightMargin + strip.trayWidth;
-        CHECK_NEAR(SettingsPreviewOverflow(strip, fits), 0);
-        CHECK_NEAR(SettingsPreviewOverflow(strip, fits + 100), 0);
-        CHECK_NEAR(SettingsPreviewOverflow(strip, fits - 50), 50);
+        s.rightMargin = 10;
+        constexpr float kWide = 2000;
+        const std::pair<TaskbarPlacement, size_t> slots[] = {
+            {TaskbarPlacement::LeftSide, 0},      {TaskbarPlacement::RightOfStart, 1},
+            {TaskbarPlacement::BeforeIcons, 2},   {TaskbarPlacement::BeforeNetwork, 3},
+            {TaskbarPlacement::BeforeClock, 4},   {TaskbarPlacement::AfterClock, 5},
+            {TaskbarPlacement::AfterShowDesktop, 6}};
+        std::vector<float> tiles;
+        for (auto [placement, slot] : slots) {
+            s.placement = placement;
+            SettingsPreviewStrip strip = Strip(s);
+            SettingsPreviewRow row = SettingsPreviewRowAt(strip, kWide, 0);
+            CHECK(strip.placement == placement && row.pieces.size() == 6 && strip.pieces.size() == 6);
+            CHECK(row.overflow == 0 && row.minimum == 0 && row.maximum == 0 && row.left == 0);
+            std::vector<std::pair<float, float>> spans;
+            float used = 4 + strip.width + 10;
+            for (size_t i = 0; i < std::min<size_t>(row.pieces.size(), strip.pieces.size()); i++) {
+                spans.push_back({row.pieces[i], row.pieces[i] + strip.pieces[i].width});
+                used += strip.pieces[i].width;
+            }
+            spans.insert(spans.begin() + std::ptrdiff_t(slot), std::pair{row.tiles - 4, row.tiles + strip.width + 10});
+            const size_t apps = slot <= 1 ? 2 : 1;
+            CHECK(NearDip(spans.front().first, 0) && NearDip(spans.back().second, kWide));
+            for (size_t i = 0; i + 1 < spans.size(); i++) {
+                CHECK(NearDip(spans[i + 1].first - spans[i].second, i == apps ? kWide - used : 0));
+            }
+            tiles.push_back(row.tiles);
+        }
+        // Every position draws the tiles somewhere else, at least Show desktop's 10 DIPs apart.
+        std::sort(tiles.begin(), tiles.end());
+        CHECK(std::adjacent_find(tiles.begin(), tiles.end(), [](float a, float b) { return b - a < 10 - 1e-3f; }) ==
+              tiles.end());
+        // A position past the last previews as the last one.
+        s.placement = TaskbarPlacement(42);
+        CHECK(Strip(s).placement == kLastTaskbarPlacement);
+    });
+
+    Run("preview: a taskbar wider than the strip scrolls from the tiles' end", [] {
+        // Ring tiles in a strip 100 DIPs narrower than the taskbar with the free space at its
+        // narrowest, 16 DIPs. Home (scroll 0) shows the tray positions' right end and the Start
+        // positions' left end; the scroll's range reaches the other end, every part moving with it.
+        Settings s = StackedSettings();
+        s.barLayout = BarLayout::SegmentedRing;
+        for (int p = 0; p <= int(kLastTaskbarPlacement); p++) {
+            s.placement = TaskbarPlacement(p);
+            const bool start = IsStartAreaPlacement(s.placement);
+            SettingsPreviewStrip strip = Strip(s);
+            float natural = 4 + strip.width + strip.rightMargin + 16;
+            for (const SettingsPreviewPiece& piece : strip.pieces) natural += piece.width;
+            const float narrow = natural - 100;
+            SettingsPreviewRow home = SettingsPreviewRowAt(strip, narrow, 0);
+            CHECK(NearDip(home.overflow, 100) && NearDip(home.minimum, start ? -100 : 0) &&
+                  NearDip(home.maximum, start ? 0 : 100) && NearDip(home.left, start ? 0 : -100));
+            const float end = s.placement == TaskbarPlacement::AfterShowDesktop ? home.tiles + strip.width + strip.rightMargin :
+                                                                                  home.pieces[5] + strip.pieces[5].width;
+            const float first = s.placement == TaskbarPlacement::LeftSide ? home.tiles - 4 : home.pieces[0];
+            CHECK(NearDip(start ? first : end, start ? 0 : narrow));
+            // The free space at its narrowest after the apps.
+            const float afterApps = s.placement == TaskbarPlacement::BeforeIcons ? home.tiles - 4 : home.pieces[2];
+            CHECK(NearDip(afterApps - (home.pieces[1] + strip.pieces[1].width), 16));
+            // The tiles show whole at home.
+            CHECK(home.tiles >= 0 && home.tiles + strip.width <= narrow);
+            // Scrolled past the other end: there, everything 100 DIPs over; past home: home.
+            SettingsPreviewRow other = SettingsPreviewRowAt(strip, narrow, start ? -1000 : 1000);
+            CHECK(NearDip(other.left, start ? -100 : 0) && NearDip(other.tiles - home.tiles, start ? -100 : 100));
+            for (size_t i = 0; i < 6; i++) CHECK(NearDip(other.pieces[i] - home.pieces[i], start ? -100 : 100));
+            SettingsPreviewRow back = SettingsPreviewRowAt(strip, narrow, start ? 1000 : -1000);
+            CHECK(NearDip(back.left, home.left) && NearDip(back.tiles, home.tiles));
+            SettingsPreviewRow half = SettingsPreviewRowAt(strip, narrow, start ? -30 : 30);
+            CHECK(NearDip(half.tiles - home.tiles, start ? -30 : 30));
+            // Wide enough, nothing scrolls whatever the scroll.
+            CHECK(NearDip(SettingsPreviewRowAt(strip, natural, 50).left, 0) &&
+                  NearDip(SettingsPreviewRowAt(strip, natural + 100, -50).overflow, 0));
+        }
+    });
+
+    Run("preview card: the scroll range and the note per position", [] {
+        UiGraphics& g = TestGraphics();
+        auto preview = [](const UiFrame& frame) { return UiFindItem(frame, SettingsControlId(SettingsField::PreviewScroll)); };
+        // Wide stacked bars overflow the window's strip: the tray positions scroll right from home
+        // (0), the Start positions left; the item's value is the scroll, kept in range.
+        for (int p = 0; p <= int(kLastTaskbarPlacement); p++) {
+            const bool start = IsStartAreaPlacement(TaskbarPlacement(p));
+            SettingsView view = TestView(SettingsUiPage::Layout);
+            view.settings.barLength = 200;
+            view.settings.placement = TaskbarPlacement(p);
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            const UiItem* strip = preview(frame);
+            CHECK(strip && (start ? strip->minimum < -100 && strip->maximum == 0 : strip->minimum == 0 && strip->maximum > 100));
+            CHECK(strip->action.value == 0 && HasTextIn(frame.main, L"Example accounts, wider than shown: drag to scroll"));
+            for (float scroll : {1e6f, -1e6f}) {
+                view.previewScroll = scroll;
+                frame = {};
+                SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+                strip = preview(frame);
+                const int expected = scroll > 0 ? strip->maximum : strip->minimum;
+                CHECK(std::abs(strip->action.value - expected) <= 1);
+            }
+        }
+        // Ring tiles 40 DIPs apart in a strip 50.5 DIPs narrower than the taskbar: the strip
+        // scrolls, but the tiles show whole at home, so the note doesn't call them wider; at each
+        // position.
+        for (TaskbarPlacement placement : {TaskbarPlacement::BeforeIcons, TaskbarPlacement::LeftSide}) {
+            SettingsView view = TestView(SettingsUiPage::Layout);
+            view.settings.barLayout = BarLayout::SegmentedRing;
+            view.settings.accountMargin = 40;
+            view.settings.placement = placement;
+            view.status.taskbarHeight = 48;
+            view.now = kNow;
+            SettingsPreviewStrip strip = Strip(view.settings);
+            float natural = 4 + strip.width + strip.rightMargin + 16;
+            for (const SettingsPreviewPiece& piece : strip.pieces) natural += piece.width;
+            std::vector<UiItem> items;
+            uint32_t id = 1;
+            SettingsAddPreviewCard(g, view, items, id, 0, 0, natural - 50.5f + 2 * 15);
+            auto item = std::find_if(items.begin(), items.end(), [](const UiItem& i) { return i.kind == UiItemKind::Preview; });
+            CHECK(item != items.end() && NearDip(item->rect.right - item->rect.left, natural - 50.5f));
+            CHECK(placement == TaskbarPlacement::LeftSide ? item->minimum == -51 && item->maximum == 0 :
+                                                            item->minimum == 0 && item->maximum == 51);
+            CHECK(HasTextIn(items, L"Example accounts, updates as you change settings") &&
+                  !HasTextIn(items, L"wider than shown"));
+        }
+    });
+
+    Run("preview paint: the hover box where the row puts each column, at every position", [] {
+        // Painted by the production painter at 96 DPI with the pointer on a column's center as the
+        // row places it, and without: the pixels that differ (its hover fill) cover that column's
+        // box. Ring tiles that fit, then 40 DIPs apart and scrolled; a pointer on Start hovers nothing.
+        UiGraphics& g = TestGraphics();
+        const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        CHECK(SUCCEEDED(com) || com == RPC_E_CHANGED_MODE);
+        constexpr UINT kWidth = 700, kHeight = 48;
+        {
+            winrt::com_ptr<IWICImagingFactory> wic;
+            winrt::check_hresult(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                                  __uuidof(IWICImagingFactory), wic.put_void()));
+            auto paint = [&](const SettingsView& view, D2D1_POINT_2F pointer) {
+                UiItem item;
+                item.kind = UiItemKind::Preview;
+                item.rect = {0, 0, float(kWidth), float(kHeight)};
+                winrt::com_ptr<IWICBitmap> bitmap;
+                winrt::check_hresult(wic->CreateBitmap(kWidth, kHeight, GUID_WICPixelFormat32bppPBGRA,
+                                                       WICBitmapCacheOnLoad, bitmap.put()));
+                D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
+                winrt::com_ptr<ID2D1RenderTarget> target;
+                winrt::check_hresult(g.d2d->CreateWicBitmapRenderTarget(bitmap.get(), &properties, target.put()));
+                UiTargetCache cache;
+                target->BeginDraw();
+                target->Clear(D2D1::ColorF(0, 0, 0, 1));
+                SettingsPaintPreview(target.get(), cache, g, UiThemeInput{}, view, item, pointer);
+                winrt::check_hresult(target->EndDraw());
+                cache.Clear();
+                std::vector<BYTE> pixels(size_t(kWidth) * kHeight * 4);
+                WICRect all{0, 0, INT(kWidth), INT(kHeight)};
+                winrt::check_hresult(bitmap->CopyPixels(&all, kWidth * 4, UINT(pixels.size()), pixels.data()));
+                return pixels;
+            };
+            // The bounds of the pixels that differ: left, top, right, bottom (exclusive); none: left > right.
+            auto differ = [&](const std::vector<BYTE>& a, const std::vector<BYTE>& b) {
+                std::array<int, 4> bounds{INT_MAX, INT_MAX, -1, -1};
+                for (UINT y = 0; y < kHeight; y++) {
+                    for (UINT x = 0; x < kWidth; x++) {
+                        const size_t at = (size_t(y) * kWidth + x) * 4;
+                        if (std::equal(a.begin() + at, a.begin() + at + 4, b.begin() + at)) continue;
+                        bounds = {std::min(bounds[0], int(x)), std::min(bounds[1], int(y)), std::max(bounds[2], int(x) + 1),
+                                  std::max(bounds[3], int(y) + 1)};
+                    }
+                }
+                return bounds;
+            };
+            for (int margin : {3, 40}) {
+                for (int p = 0; p <= int(kLastTaskbarPlacement); p++) {
+                    SettingsView view = TestView(SettingsUiPage::Layout);
+                    view.settings.barLayout = BarLayout::SegmentedRing;
+                    view.settings.accountMargin = margin;
+                    view.settings.placement = TaskbarPlacement(p);
+                    view.status.taskbarHeight = 48;
+                    view.now = kNow;
+                    const bool start = IsStartAreaPlacement(view.settings.placement);
+                    SettingsPreviewStrip strip = Strip(view.settings);
+                    view.previewScroll = margin == 3 ? 0 : start ? -60.0f : 60.0f;
+                    SettingsPreviewRow row = SettingsPreviewRowAt(strip, float(kWidth), view.previewScroll);
+                    CHECK((margin == 3) == (row.overflow == 0));
+                    const std::vector<BYTE> plain = paint(view, {-1e9f, -1e9f});
+                    // Every column that stays clear of the fades.
+                    int checked = 0;
+                    for (const D2D1_RECT_F& column : strip.columns) {
+                        const D2D1_RECT_F at{row.tiles + column.left, column.top, row.tiles + column.right, column.bottom};
+                        if (row.overflow > 0 && (at.left < 100 || at.right > float(kWidth) - 50)) continue;
+                        std::array<int, 4> bounds =
+                            differ(plain, paint(view, {(at.left + at.right) / 2, (at.top + at.bottom) / 2}));
+                        CHECK(std::abs(bounds[0] - at.left) <= 1 && std::abs(bounds[2] - at.right) <= 1 &&
+                              std::abs(bounds[1] - at.top) <= 1 && std::abs(bounds[3] - at.bottom) <= 1);
+                        checked++;
+                    }
+                    CHECK(checked >= 1);
+                    const float startCenter = row.pieces[0] + strip.pieces[0].width / 2;
+                    if (startCenter > 0 && startCenter < float(kWidth)) {
+                        CHECK(differ(plain, paint(view, {startCenter, 24}))[2] < 0);
+                    }
+                }
+            }
+        }
+        if (SUCCEEDED(com)) CoUninitialize();
     });
 
     Run("layout page: bars sections, controls from the projection", [] {
@@ -2323,8 +2615,9 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::ResetLayout).text == L"Reset");
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::RingSize, 1)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::HeadlineBarLength, 1)));
-        for (PCWSTR text : {L"Tile style", L"Bars", L"Identity and text", L"Pace markers", L"Spacing",
-                            L"Ticks mark how much", L"Reset Layout to defaults", L"sizes, identity and text, pace"}) {
+        for (PCWSTR text : {L"Tile style", L"Bars", L"Identity and text", L"Pace markers", L"Placement", L"Spacing",
+                            L"Ticks mark how much", L"Reset Layout to defaults",
+                            L"sizes, identity and text, pace markers, position and spacing"}) {
             CHECK(HasText(frame, text));
         }
         // Gallery cards, sliders, swatches are tab stops; the preview strip isn't.
@@ -2749,6 +3042,104 @@ static void RunLayoutTests() {
         CHECK(!OpsOfColor(strip, 0xFFDEDEDE).empty() && OpsOfKind(strip, SettingsPreviewOp::Kind::Polygon).empty());
         // The Layout reset brings back the caret.
         CHECK(edits.Reset(SettingsField::ResetLayout) == 0 && store.settings.paceTickStyle == PaceTickStyle::Caret);
+    });
+
+    Run("layout page: the Position dropdown, then a note for taskbars showing the bars in the tray", [] {
+        UiGraphics& g = TestGraphics();
+        auto build = [&](const SettingsView& view) {
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            return frame;
+        };
+        auto note = [](const UiFrame& frame) { return UiFindItem(frame, SettingsControlId(SettingsField::Placement, 8)); };
+        const std::pair<PCWSTR, TaskbarPlacement> options[] = {
+            {L"Before notification icons", TaskbarPlacement::BeforeIcons},
+            {L"Before network and volume", TaskbarPlacement::BeforeNetwork},
+            {L"Before the clock", TaskbarPlacement::BeforeClock},
+            {L"After the clock", TaskbarPlacement::AfterClock},
+            {L"After Show desktop", TaskbarPlacement::AfterShowDesktop},
+            {L"Left side", TaskbarPlacement::LeftSide},
+            {L"Right of Start", TaskbarPlacement::RightOfStart}};
+        SettingsView view = TestView(SettingsUiPage::Layout);
+        UiFrame frame = build(view);
+        const UiItem& position = Control(frame, SettingsField::Placement);
+        CHECK(position.kind == UiItemKind::Dropdown && position.enabled && position.text == L"Before notification icons" &&
+              position.action.value == 0 && position.options.size() == 7);
+        for (size_t i = 0; i < std::min<size_t>(position.options.size(), 7); i++) {
+            CHECK(position.options[i].text == options[i].first && position.options[i].value == int(options[i].second));
+        }
+        // In the Placement section, after the pace markers and before Spacing, whose tray gap is now
+        // the gap after the accounts wherever they sit.
+        CHECK(HasText(frame, L"Position") &&
+              HasText(frame, L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the "
+                             L"taskbar\u2019s buttons move over to make room."));
+        CHECK(Control(frame, SettingsField::PaceTickColor, 1).rect.bottom < position.rect.top &&
+              position.rect.bottom < Control(frame, SettingsField::AccountMargin).rect.top);
+        CHECK(HasText(frame, L"Gap after accounts") &&
+              HasText(frame, L"Space after the last account, before whatever comes next on the taskbar.") &&
+              !HasText(frame, L"Tray gap") && !HasText(frame, L"system tray"));
+        CHECK(!note(frame));
+        // The field shows each position; without fallbacks, no note.
+        for (auto [text, placement] : options) {
+            view.settings.placement = placement;
+            frame = build(view);
+            CHECK(Control(frame, SettingsField::Placement).text == text &&
+                  Control(frame, SettingsField::Placement).action.value == int(placement) && !note(frame));
+        }
+        // Taskbars showing the bars in the tray instead of beside Start: a caution note under the
+        // Position card, a line per display: what the position needs missing (Right of Start: Start
+        // hidden or missing; Left side: the taskbar's buttons), or the room taken by another mod.
+        const std::wstring missingStart = L"Display 1 shows the bars in the tray: its Start button is hidden or wasn\u2019t found.";
+        const std::wstring missingButtons = L"Display 1 shows the bars in the tray: its taskbar buttons weren\u2019t found.";
+        const std::wstring conflict = L"Display 2 shows the bars in the tray: another mod controls the space they need. "
+                                      L"Restart Explorer to retry.";
+        auto caution = [](const UiFrame& frame, const UiItem& text) {
+            return std::find_if(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+                return item.kind == UiItemKind::Card && item.ink == UiInk::Caution && item.rect.left <= text.rect.left &&
+                       item.rect.right >= text.rect.right && item.rect.top <= text.rect.top && item.rect.bottom >= text.rect.bottom;
+            });
+        };
+        view.status.placementFallbacks = {{1, false}, {2, true}};
+        for (TaskbarPlacement placement : {TaskbarPlacement::LeftSide, TaskbarPlacement::RightOfStart}) {
+            view.settings.placement = placement;
+            frame = build(view);
+            const UiItem* text = note(frame);
+            const std::wstring& unavailable =
+                placement == TaskbarPlacement::RightOfStart ? missingStart : missingButtons;
+            CHECK(text && UiRunsText(text->runs) == unavailable + L"\n" + conflict);
+            auto card = caution(frame, *text);
+            CHECK(card != frame.content.end() && card->rect.top > Control(frame, SettingsField::Placement).rect.bottom &&
+                  card->rect.bottom < Control(frame, SettingsField::AccountMargin).rect.top);
+        }
+        view.status.placementFallbacks = {{2, true}};
+        frame = build(view);
+        CHECK(note(frame) && UiRunsText(note(frame)->runs) == conflict);
+        view.status.placementFallbacks = {{1, false}};
+        frame = build(view);
+        CHECK(note(frame) && UiRunsText(note(frame)->runs) == missingStart);
+        // Tray positions never fall back: no note, whatever the status says.
+        view.status.placementFallbacks = {{1, false}, {2, true}};
+        for (auto [text, placement] : options) {
+            if (IsStartAreaPlacement(placement)) continue;
+            view.settings.placement = placement;
+            CHECK(!note(build(view)));
+        }
+    });
+
+    Run("controller: the position commits as chosen, the preview follows and the Layout reset restores it", [] {
+        TestStore store;
+        store.settings = StackedSettings();
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Commit(0, SettingsField::Placement, int(TaskbarPlacement::RightOfStart)) == 0);
+        CHECK(store.settings.placement == TaskbarPlacement::RightOfStart &&
+              store.Applied() == std::vector<std::wstring>{Op(SettingsField::Placement, 6)});
+        CHECK(Strip(edits.Projection()).placement == TaskbarPlacement::RightOfStart);
+        // Out-of-range choices clamp to a position the preview draws.
+        CHECK(edits.Commit(0, SettingsField::Placement, 11) == 0 && store.settings.placement == kLastTaskbarPlacement);
+        CHECK(edits.Commit(0, SettingsField::Placement, -2) == 0 && store.settings.placement == TaskbarPlacement::BeforeIcons);
+        CHECK(edits.Commit(0, SettingsField::Placement, int(TaskbarPlacement::AfterShowDesktop)) == 0);
+        CHECK(edits.Reset(SettingsField::ResetLayout) == 0 && store.settings.placement == TaskbarPlacement::BeforeIcons);
     });
 
     Run("layout header: preview pinned under the title, unpinned when the viewport gets short", [] {

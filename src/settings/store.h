@@ -53,6 +53,21 @@ struct SettingsProductionStore final : SettingsStore {
                 status.taskbarHeight = double(window.bottom - window.top) * 96 / WindowDpi(taskbars[i].hWnd);
             }
         }
+        // Taskbars that show the bars, in the tray instead of beside Start.
+        if (IsStartAreaPlacement(baseline.settings.placement)) {
+            const bool start = baseline.settings.placement == TaskbarPlacement::RightOfStart;
+            std::vector<HWND> shown = FindCurrentProcessTaskbarWnds();
+            std::lock_guard<std::mutex> lock(g_placementMutex);
+            for (size_t i = 0; i < taskbars.size(); i++) {
+                if (std::find(shown.begin(), shown.end(), taskbars[i].hWnd) == shown.end()) continue;
+                for (const PlacementRecord& record : g_placementRecords) {
+                    if (record.hWnd == taskbars[i].hWnd && record.start == start &&
+                        record.fallback != PlacementFallback::None) {
+                        status.placementFallbacks.push_back({int(i) + 1, record.fallback == PlacementFallback::Conflict});
+                    }
+                }
+            }
+        }
         status.visualTest = g_visualTestMode.load(std::memory_order_acquire);
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
         PWSTR localAppData = nullptr;

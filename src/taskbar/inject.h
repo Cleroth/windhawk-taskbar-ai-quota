@@ -34,10 +34,14 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
         ClearQuotaEventState(state);
         state.quotaGrid = nullptr;
         state.quotaColumnDefinition = nullptr;
+        state.startAreaElement = nullptr;
         state.applied.clear();
         return;
     }
 
+    // Callbacks go first, so nothing reserves the room beside Start again once it is given back.
+    ClearQuotaEventState(state);
+    ReleaseStartAreaReservation(state);
     try {
         RemoveQuotaChildren(state.injectionParent, state);
         auto targetGrid = state.injectionParent.try_as<Grid>();
@@ -89,13 +93,17 @@ static bool InjectQuotaGrid(HWND hWnd) {
             Wh_Log(L"Taskbar HWND was reused by a different UI thread");
             return false;
         }
+        // The position is read apart from the build's settings, so it must match too.
         ULONGLONG settingsGeneration;
+        TaskbarPlacement settingsPlacement;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             settingsGeneration = g_settingsGeneration;
+            settingsPlacement = g_settings.placement;
         }
         if (existingState->quotaGrid &&
             existingState->buildSettingsGeneration == settingsGeneration &&
+            existingState->placement == settingsPlacement &&
             existingState->buildVisualTestMode ==
                 g_visualTestMode.load(std::memory_order_acquire)) {
             return true;
@@ -121,23 +129,112 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!xamlRoot) return fail(L"no XamlRoot");
         auto root = xamlRoot.Content().try_as<FrameworkElement>();
         if (!root) return fail(L"no XamlRoot content");
-        auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
-        // On a cold start the XamlRoot is ready before the system tray contents are realized
-        // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
-        // Bail and let the retry loop poll until it appears; never inject elsewhere, which
-        // would render the bars on top of the clock/tray.
-        if (!trayFrame) return fail(L"no SystemTrayFrameGrid");
-        auto trayPanel = trayFrame.try_as<Panel>();
-        auto trayGrid = trayFrame.try_as<Grid>();
-        // Newer Windows taskbars keep the name but use a StackPanel. Don't assume other
-        // panel types share its child-order layout semantics.
-        if (!trayPanel || (!trayGrid && !trayFrame.try_as<StackPanel>())) {
-            std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";
-            reason += winrt::get_class_name(trayFrame);
-            return fail(reason.c_str());
+
+        // An earlier build gives its place back first: its tray column, or its room beside Start.
+        state = FindUiState(hWnd);
+        if (state) RemoveQuotaGridFromState(*state);
+        TaskbarPlacement placement;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            placement = g_settings.placement;
         }
 
-        state = FindUiState(hWnd);
+        // Room an earlier removal failed to give back, on a margin this build doesn't use, goes
+        // back now. Records whose element is gone go too, ending any quarantine with it.
+        for (bool start : {false, true}) {
+            if (IsStartAreaPlacement(placement) && start == (placement == TaskbarPlacement::RightOfStart)) continue;
+            FrameworkElement element{nullptr};
+            {
+                std::lock_guard<std::mutex> lock(g_placementMutex);
+                PlacementRecord* record = FindPlacementRecordLocked(hWnd, start);
+                if (!record) continue;
+                element = record->element.get();
+                if (!element) {
+                    g_placementRecords.erase(g_placementRecords.begin() + (record - g_placementRecords.data()));
+                    continue;
+                }
+                if (record->lost || std::fabs(record->applied) <= 0.5) continue;
+            }
+            GiveBackReservation(hWnd, start, element);
+        }
+
+        // Beside Start: the element whose margin makes room for the bars. Start hidden or missing
+        // (Unavailable), or its margin taken by another mod (Conflict), puts them in the tray's
+        // first slot. A record keeps a taken margin while its element lives, and resumes a
+        // reservation an earlier removal failed to give back.
+        StartArea area;
+        FrameworkElement reserved{nullptr};
+        bool anchorMissing = false;
+        if (IsStartAreaPlacement(placement)) {
+            const bool start = placement == TaskbarPlacement::RightOfStart;
+            area = FindStartArea(root);
+            reserved = start ? area.start : area.repeater;
+            PlacementFallback fallback = PlacementFallback::None;
+            if (!area.rootGrid || !reserved || reserved.Visibility() == Visibility::Collapsed) {
+                fallback = PlacementFallback::Unavailable;
+                anchorMissing = true;
+            } else {
+                Thickness margin = reserved.Margin();
+                double value = start ? margin.Right : margin.Left;
+                std::lock_guard<std::mutex> lock(g_placementMutex);
+                // A new element starts over; the published fallback stays for SetPlacementFallback.
+                PlacementRecord* record = FindPlacementRecordLocked(hWnd, start, true);
+                if (winrt::get_abi(record->element.get()) != winrt::get_abi(reserved)) {
+                    record->element = winrt::make_weak(reserved);
+                    record->applied = 0;
+                    record->written = value;
+                    // Start Button Position takes Start out of the layout with a negative one.
+                    record->lost = value < -0.5;
+                }
+                if (record->lost) fallback = PlacementFallback::Conflict;
+            }
+            SetPlacementFallback(hWnd, start, fallback);
+            if (fallback != PlacementFallback::None) {
+                Wh_Log(L"Placement: %s on hwnd=%p; the bars go to the tray",
+                       fallback == PlacementFallback::Conflict ? L"another mod holds the margin beside Start" :
+                                                                L"Start or the taskbar's buttons not found",
+                       hWnd);
+                reserved = nullptr;
+            }
+        }
+
+        Panel parent = reserved ? Panel(area.rootGrid) : Panel{nullptr};
+        Grid trayGrid{nullptr};
+        FrameworkElement anchor{nullptr};
+        size_t installedAnchor = std::size(kTrayAnchors);  // kTrayAnchors index of `anchor`
+        bool after = false;
+        if (!reserved) {
+            auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
+            // On a cold start the XamlRoot is ready before the system tray contents are realized
+            // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
+            // Bail and let the retry loop poll until it appears; never inject elsewhere, which
+            // would render the bars on top of the clock/tray.
+            if (!trayFrame) return fail(L"no SystemTrayFrameGrid");
+            parent = trayFrame.try_as<Panel>();
+            trayGrid = trayFrame.try_as<Grid>();
+            // Newer Windows taskbars keep the name but use a StackPanel. Don't assume other
+            // panel types share its child-order layout semantics.
+            if (!parent || (!trayGrid && !trayFrame.try_as<StackPanel>())) {
+                std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";
+                reason += winrt::get_class_name(trayFrame);
+                return fail(reason.c_str());
+            }
+            // The tray slot's neighbour (kTrayAnchors from the placement's own: Before network 0
+            // through After Show desktop, past the last), or the next one present.
+            if (placement != TaskbarPlacement::BeforeIcons && !IsStartAreaPlacement(placement)) {
+                after = placement == TaskbarPlacement::AfterShowDesktop;
+                size_t first = std::min<size_t>(size_t(placement) - 1, std::size(kTrayAnchors) - 1);
+                for (installedAnchor = first; installedAnchor < std::size(kTrayAnchors); installedAnchor++) {
+                    for (auto child : parent.Children()) {
+                        auto element = child.try_as<FrameworkElement>();
+                        if (element && element.Name() == kTrayAnchors[installedAnchor]) anchor = element;
+                    }
+                    if (anchor) break;
+                }
+                anchorMissing = installedAnchor != first;
+            }
+        }
+
         if (!state) {
             auto newState = std::make_unique<QuotaUiInstance>();
             newState->hWnd = hWnd;
@@ -159,11 +256,10 @@ static bool InjectQuotaGrid(HWND hWnd) {
             state->windowSubclassed = true;
             // Remove a visual left by an earlier failed teardown, but don't guess which column
             // definition it owned.
-            RemoveQuotaChildren(trayPanel, *state);
-        } else {
-            RemoveQuotaGridFromState(*state);
+            RemoveQuotaChildren(parent, *state);
         }
-        state->injectionParent = trayPanel;
+        state->injectionParent = parent;
+        state->placement = placement;
         double rasterizationScale = xamlRoot.RasterizationScale();
         state->rasterizationScale = rasterizationScale > 0 ? rasterizationScale : 1.0;
         Grid quota = BuildQuotaGrid(*state);
@@ -173,28 +269,135 @@ static bool InjectQuotaGrid(HWND hWnd) {
             return fail(L"BuildQuotaGrid failed");
         }
 
-        if (trayGrid) {
+        // A tray slot without a neighbour is the tray's start for Before notification icons (and
+        // beside Start's fallback), else its end.
+        const bool trayStart = placement == TaskbarPlacement::BeforeIcons || IsStartAreaPlacement(placement);
+        if (reserved) {
+            // Over the taskbar's buttons; UpdateStartAreaPlacement places it after each layout pass.
+            quota.HorizontalAlignment(HorizontalAlignment::Left);
+            Grid::SetColumnSpan(quota, std::max(1, (int)area.rootGrid.ColumnDefinitions().Size()));
+            Grid::SetRowSpan(quota, std::max(1, (int)area.rootGrid.RowDefinitions().Size()));
+            Canvas::SetZIndex(quota, 1000);
+            area.rootGrid.Children().Append(quota);
+            state->startAreaElement = reserved;
+        } else if (trayGrid) {
+            int column = anchor ? Grid::GetColumn(anchor) + (after ? Grid::GetColumnSpan(anchor) : 0) :
+                         trayStart ? 0 : (int)trayGrid.ColumnDefinitions().Size();
+            column = std::clamp(column, 0, (int)trayGrid.ColumnDefinitions().Size());
+            // Children from the new column on move over; one spanning across it grows. A failure
+            // undoes exactly the changes made, then the column. The record is sized first, so
+            // keeping it never fails after a change.
+            std::vector<std::pair<FrameworkElement, bool>> shifted;  // Child, and whether it grew
+            shifted.reserve(trayGrid.Children().Size());
             ColumnDefinition newCol;
             newCol.Width({1.0, GridUnitType::Auto});
             state->quotaColumnDefinition = newCol;
-            trayGrid.ColumnDefinitions().InsertAt(0, newCol);
-            // Inserting at the left edge means no existing child can span across the new column.
-            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+            trayGrid.ColumnDefinitions().InsertAt(column, newCol);
+            try {
+                for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                    auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (!child) continue;
+                    int childCol = Grid::GetColumn(child);
+                    int childSpan = Grid::GetColumnSpan(child);
+                    if (childCol >= column) {
+                        Grid::SetColumn(child, childCol + 1);
+                        shifted.push_back({child, false});
+                    } else if (childCol + childSpan > column) {
+                        Grid::SetColumnSpan(child, childSpan + 1);
+                        shifted.push_back({child, true});
+                    }
+                }
+            } catch (...) {
+                for (auto& [child, grew] : shifted) {
+                    try {
+                        if (grew) Grid::SetColumnSpan(child, Grid::GetColumnSpan(child) - 1);
+                        else Grid::SetColumn(child, Grid::GetColumn(child) - 1);
+                    } catch (...) {}
+                }
+                try {
+                    uint32_t index = 0;
+                    if (trayGrid.ColumnDefinitions().IndexOf(newCol, index)) {
+                        trayGrid.ColumnDefinitions().RemoveAt(index);
+                    }
+                } catch (...) {}
+                state->quotaColumnDefinition = nullptr;
+                throw;
             }
-            Grid::SetColumn(quota, 0);
+            Grid::SetColumn(quota, column);
             trayGrid.Children().Append(quota);
         } else {
             // StackPanel layout follows child order; no column is created or owned.
-            trayPanel.Children().InsertAt(0, quota);
+            uint32_t index = 0;
+            if (anchor && parent.Children().IndexOf(anchor, index)) {
+                index += after ? 1 : 0;
+            } else {
+                index = trayStart ? 0 : parent.Children().Size();
+            }
+            parent.Children().InsertAt(index, quota);
         }
 
         state->quotaGrid = quota;
         g_uiInjected.store(true, std::memory_order_release);
         state->applied.clear();
         UpdateQuotaUi(*state);
-        Wh_Log(L"Injected quota bars into %s", winrt::get_class_name(trayPanel).c_str());
+        if (reserved) {
+            // Every layout pass anywhere in the taskbar raises it; on the bars' own root, the
+            // delegate goes with them.
+            state->layoutUpdatedToken = quota.LayoutUpdated(
+                [hWnd](winrt::Windows::Foundation::IInspectable const&,
+                       winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (uiState && uiState->quotaGrid && uiState->ownerThreadId == GetCurrentThreadId()) {
+                            UpdateStartAreaPlacement(*uiState);
+                        }
+                    } catch (...) {}
+                });
+            UpdateStartAreaPlacement(*state);
+        }
+
+        // A missing anchor may not be realized yet: look again every few seconds, and rebuild once
+        // it, or a nearer neighbour than the one the bars went to, is there. A margin another mod
+        // took keeps the bars in the tray until its element goes.
+        if (anchorMissing) {
+            DispatcherTimer anchorTimer;
+            anchorTimer.Interval(std::chrono::seconds(5));
+            state->anchorTimerToken = anchorTimer.Tick(
+                [hWnd, placement, installedAnchor](winrt::Windows::Foundation::IInspectable const&,
+                                                   winrt::Windows::Foundation::IInspectable const&) {
+                    if (g_unloading) return;
+                    try {
+                        auto anchorRoot = GetTaskbarXamlRoot(hWnd);
+                        auto content = anchorRoot ? anchorRoot.Content().try_as<FrameworkElement>() : nullptr;
+                        if (!content) return;
+                        bool present = false;
+                        if (IsStartAreaPlacement(placement)) {
+                            StartArea startArea = FindStartArea(content);
+                            FrameworkElement element = placement == TaskbarPlacement::RightOfStart ?
+                                                           startArea.start : startArea.repeater;
+                            present = startArea.rootGrid && element &&
+                                      element.Visibility() == Visibility::Visible;
+                        } else if (auto tray = FindChildByName(content, L"SystemTrayFrameGrid").try_as<Panel>()) {
+                            size_t first = std::min<size_t>(size_t(placement) - 1, std::size(kTrayAnchors) - 1);
+                            for (auto child : tray.Children()) {
+                                auto element = child.try_as<FrameworkElement>();
+                                for (size_t k = first; element && k < installedAnchor; k++) {
+                                    if (element.Name() == kTrayAnchors[k]) present = true;
+                                }
+                            }
+                        }
+                        if (!present) return;
+                        if (auto* uiState = FindUiState(hWnd); uiState && uiState->anchorTimer) {
+                            uiState->anchorTimer.Stop();
+                        }
+                        StartRetryInject(true);
+                    } catch (...) {}
+                });
+            state->anchorTimer = anchorTimer;
+            anchorTimer.Start();
+        }
+        Wh_Log(L"Injected quota bars into %s", winrt::get_class_name(parent).c_str());
         return true;
     } catch (...) {
         if (state) {
@@ -230,8 +433,14 @@ static void ReleaseQuotaUiState(HWND hWnd) {
     state->quotaGrid = nullptr;
     state->injectionParent = nullptr;
     state->quotaColumnDefinition = nullptr;
+    state->startAreaElement = nullptr;
     state->applied.clear();
     EraseUiState(hWnd);
+    // The window's elements go with it, and so do its placement records.
+    std::lock_guard<std::mutex> lock(g_placementMutex);
+    std::erase_if(g_placementRecords, [&](const PlacementRecord& record) {
+        return record.hWnd == hWnd && record.ownerThreadId == GetCurrentThreadId();
+    });
 }
 
 static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,

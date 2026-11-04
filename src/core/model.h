@@ -129,6 +129,23 @@ enum class PaceTickStyle {
     TimeTrack,  // A small bar under each bar (vertical bars: right of it) filling with the pace.
 };
 
+// Where the bars sit on the taskbar: a slot in the system tray, or (experimental) beside Start,
+// where the taskbar's own layout makes room for them.
+enum class TaskbarPlacement {
+    BeforeIcons,       // Before the notification icons and their chevron
+    BeforeNetwork,     // Before network, volume and battery
+    BeforeClock,
+    AfterClock,        // Before Show desktop
+    AfterShowDesktop,  // The taskbar's far end
+    LeftSide,          // The taskbar's leading edge; Widgets, Start and the apps move over
+    RightOfStart,      // Between Start and the buttons after it
+};
+static constexpr TaskbarPlacement kLastTaskbarPlacement = TaskbarPlacement::RightOfStart;
+
+static bool IsStartAreaPlacement(TaskbarPlacement placement) {
+    return placement == TaskbarPlacement::LeftSide || placement == TaskbarPlacement::RightOfStart;
+}
+
 // Background of the details flyout and the settings and usage history windows. Every material
 // but Solid needs Windows' transparency effects; without them, or in high contrast, it is solid.
 // The windows have no Tinted wallpaper backdrop and use Mica for it.
@@ -211,7 +228,8 @@ struct Settings {
     int accountMargin = 3;
     int labelGap = 3;  // "Identity gap": between the identity's box and the bars.
     int barGap = 2;
-    int rightMargin = 4;
+    TaskbarPlacement placement = TaskbarPlacement::BeforeIcons;
+    int rightMargin = 4;  // "Gap after accounts": after the last account, wherever the bars sit.
     int yellowThreshold = 50;
     int orangeThreshold = 75;
     int redThreshold = 90;

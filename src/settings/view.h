@@ -26,7 +26,8 @@ struct SettingsView {
     bool retentionCustom = false;       // Custom chosen in Keep history
     bool transparencyEffects = true;    // Windows' transparency effects setting; the window fills it
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
-    float previewScroll = 0;            // How far the preview strip is scrolled left, DIPs
+    float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
+                                        // (settings/preview.h)
     ULONGLONG now = 0;                  // The preview's sample time
 };
 

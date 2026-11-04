@@ -80,8 +80,11 @@ regenerates.
   reading, the corner clipped, the now line and caret yielding to text, each current position cue
   and the outline on and off, the text size; painted strokes), quota matrix cells, headline fills and the reset
   countdown,
-  the theme-aware pace color, overflow, extreme settings), the
-  Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
+  the theme-aware pace color, overflow, extreme settings; the mock taskbar's pieces (Start, apps,
+  chevron, network, clock and bell, Show desktop) and every Position's slot order, overflow,
+  scroll range and home, with hover matching paint), the
+  Layout page per tile style, its Position dropdown and fallback note, and the pinned/unpinned
+  preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), the
   Material dropdown's saves and its transparency and Tinted wallpaper notes, threshold
   ordering in the projection and after a save (the test store's `normalize` hook), the Display
@@ -98,7 +101,9 @@ regenerates.
   (`render-accounts-expanded-*`, `render-accounts-add-*` with the menu painted where the host
   opens it, `render-accounts-empty-*`), Display at the mockup's full height
   (`render-display-full-*`, `render-display-bars-*`), the preview's overflow, scrolled and
-  unpinned (`render-layout-overflow-*`, `-unpinned-*`), preview strip sheets with one captioned
+  unpinned (`render-layout-overflow-*`, `-unpinned-*`), every Position on the preview strip
+  (`render-placement-sheet-*`), the Layout page's Position with its fallback note
+  (`render-layout-placement-*`), preview strip sheets with one captioned
   row per layout and option (`render-preview-sheet-*`) or per Display option
   (`render-display-preview-sheet-*`; 1:1 at 100/125/150%) and the dropdown popup's rows
   (`render-popup-*`). `render-backdrop-*` (Accounts, Layout, Display) and
