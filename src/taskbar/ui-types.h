@@ -208,7 +208,7 @@ struct FlyoutChartShape {
     std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
     std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
-    winrt::Windows::Foundation::Point limit{-1.f, -1.f};  // Projection end; X < 0 without one.
+    winrt::Windows::Foundation::Point projectionEnd{-1.f, -1.f};  // X < 0 without a projection.
     uint32_t color = 0;
     bool remaining = false;  // Plots % left; the even-pace diagonal falls.
 

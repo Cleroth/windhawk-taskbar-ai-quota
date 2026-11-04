@@ -697,8 +697,9 @@ static void UpdateAccountFlyout(
             show(row.projection, !projection.empty());
 
             // Usage chart in place of the bar: used %, or % left in remaining mode, over the
-            // displayed reading's window, with the projection of the text above. Shapes are
-            // regenerated only when the drawn geometry changes.
+            // displayed reading's window, with the projection at the same average rate to the
+            // reset or, over pace, to the limit. Shapes are regenerated only when the drawn
+            // geometry changes.
             const std::optional<BurnUpCurve>& curve = curves[r];
             bool charted = row.chart && curve && !curve->points.empty() &&
                            wu.windowDurationMs > 0 && wu.resetUnixMs > wu.windowDurationMs;
@@ -731,7 +732,11 @@ static void UpdateAccountFlyout(
                 // A rolled-back clock can put now before the newest reading.
                 ULONGLONG now = std::max(display.now, points.back().timeMs);
                 shape.now = {xAt(now), yAt(wu.pct)};
-                if (msToLimit >= 0) shape.limit = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
+                if (msToLimit >= 0) {
+                    shape.projectionEnd = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
+                } else if (projected && wu.pct < 100) {
+                    shape.projectionEnd = {xAt(wu.resetUnixMs), yAt(wu.pct / elapsed)};
+                }
                 shape.color = colorValue;
                 shape.remaining = remainingMode;
 
@@ -775,18 +780,18 @@ static void UpdateAccountFlyout(
                     row.chartLines.Data(lines);
                     row.chartDots.Data(dots);
                 }
-                if (shape.now != drawn.now || shape.limit != drawn.limit) {
+                if (shape.now != drawn.now || shape.projectionEnd != drawn.projectionEnd) {
                     row.chartNow.X1(shape.now.X);
                     row.chartNow.X2(shape.now.X);
                     Canvas::SetLeft(row.chartMarker, shape.now.X - 3.0);
                     Canvas::SetTop(row.chartMarker, shape.now.Y - 3.0);
-                    bool projectionShown = shape.limit.X >= 0;
+                    bool projectionShown = shape.projectionEnd.X >= 0;
                     show(row.chartProjection, projectionShown);
                     if (projectionShown) {
                         row.chartProjection.X1(shape.now.X);
                         row.chartProjection.Y1(shape.now.Y);
-                        row.chartProjection.X2(shape.limit.X);
-                        row.chartProjection.Y2(shape.limit.Y);
+                        row.chartProjection.X2(shape.projectionEnd.X);
+                        row.chartProjection.Y2(shape.projectionEnd.Y);
                     }
                 }
                 if (shape.color != drawn.color) {
