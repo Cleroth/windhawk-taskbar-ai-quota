@@ -133,7 +133,13 @@ static void RunColorTests() {
         CHECK(light.open == 0xB3FFFFFF); CHECK(light.badgeHalo == 0xFFF3F3F3);
         CHECK(dark.track == 0x2BFFFFFF); CHECK(dark.hover == 0x0FFFFFFF);
         CHECK(dark.open == 0x1AFFFFFF); CHECK(dark.badgeHalo == 0xFF1C1C1C);
-        CHECK(light.plot == 0x0F000000); CHECK(dark.plot == 0x14FFFFFF);
+        // Sparklines: the plot (darker than the taskbar), its lit part and outline, the now line, and
+        // the caret and ring.
+        CHECK(light.plot == 0x14000000); CHECK(dark.plot == 0x59000000);
+        CHECK(light.lit == 0x12000000); CHECK(dark.lit == 0x1FFFFFFF);
+        CHECK(light.outline == 0x24000000); CHECK(dark.outline == 0x2EFFFFFF);
+        CHECK(light.nowLine == 0x80000000); CHECK(dark.nowLine == 0x80FFFFFF);
+        CHECK(light.nowMark == 0xF0000000); CHECK(dark.nowMark == 0xF0FFFFFF);
     });
 }
 
@@ -1801,23 +1807,74 @@ static void RunSnapshotTests() {
 
 static void RunSparklineTests() {
     static constexpr auto point = [](const auto& p, double x, double y) { CHECK_NEAR(p.x, x); CHECK_NEAR(p.y, y); };
-    // A filled mark: a circle from its top, clockwise through its bottom and back.
-    static constexpr auto circle = [](const TileOutline& outline, double x, double y, double r) {
-        CHECK(outline.size() == 1 && outline[0].segments.size() == 2);
-        point(outline[0], x, y - r);
-        point(outline[0].segments[0], x, y + r);
-        point(outline[0].segments[1], x, y - r);
-        for (const TileOutlineSegment& s : outline[0].segments) {
+    // A disc: from its top through its bottom and back, clockwise; counterclockwise it cuts a hole
+    // in a nonzero fill.
+    static constexpr auto disc = [](const TileOutlineFigure& figure, double x, double y, double r, bool clockwise = true) {
+        CHECK(figure.segments.size() == 2);
+        point(figure, x, y - r);
+        point(figure.segments[0], x, y + r);
+        point(figure.segments[1], x, y - r);
+        for (const TileOutlineSegment& s : figure.segments) {
             CHECK_NEAR(s.radius, r);
-            CHECK(s.clockwise);
+            CHECK(s.clockwise == clockwise);
         }
     };
-    // A 100 x 24 DIP plot: x is the window's share in hundredths, y = 22 - used / 5 (2 DIPs free
-    // at the top and bottom).
+    static constexpr auto circle = [](const TileOutline& outline, double x, double y, double r) {
+        CHECK(outline.size() == 1);
+        disc(outline[0], x, y, r);
+    };
+    // One figure from (x, y) through each segment's end point; arcs (a radius) clockwise.
+    struct Seg {
+        double x, y, radius = 0;
+    };
+    static constexpr auto path = [](const TileOutline& outline, double x, double y, const std::vector<Seg>& segments) {
+        CHECK(outline.size() == 1 && outline[0].segments.size() == segments.size());
+        point(outline[0], x, y);
+        for (size_t k = 0; k < segments.size(); k++) {
+            point(outline[0].segments[k], segments[k].x, segments[k].y);
+            CHECK_NEAR(outline[0].segments[k].radius, segments[k].radius);
+            CHECK(outline[0].segments[k].clockwise);
+        }
+    };
+    static constexpr auto line = [](const TileOutline& outline, double x0, double y0, double x1, double y1) {
+        path(outline, x0, y0, {{x1, y1}});
+    };
+    // The current reading at (x, y): the 4.1 DIP cut-out, the ring from 3 to 4.1 DIPs (its inner
+    // circle counterclockwise: the hole) and the 2.2 DIP dot.
+    static constexpr auto reading = [](const QuotaMeter& q, double x, double y) {
+        circle(q.spark[kSparkNowCut], x, y, 4.1);
+        CHECK(q.spark[kSparkNowRing].size() == 2);
+        disc(q.spark[kSparkNowRing][0], x, y, 4.1);
+        disc(q.spark[kSparkNowRing][1], x, y, 3, false);
+        circle(q.spark[kSparkNow], x, y, 2.2);
+    };
+    // The plain current reading (the ring off, its default): a 2 DIP dot, no cut-out or ring.
+    static constexpr auto dot = [](const QuotaMeter& q, double x, double y) {
+        CHECK(q.spark[kSparkNowCut].empty() && q.spark[kSparkNowRing].empty());
+        circle(q.spark[kSparkNow], x, y, 2);
+    };
+    // The ringed reading and the caret on, both off by default.
+    static constexpr auto cues = [](Settings& s) {
+        s.sparklineRing = true;
+        s.sparklineNowCaret = true;
+    };
+    static constexpr auto unmarked = [](const QuotaMeter& q) {
+        return q.spark[kSparkNowCut].empty() && q.spark[kSparkNowRing].empty() && q.spark[kSparkNow].empty();
+    };
+    static constexpr auto bare = [](const QuotaMeter& q) {
+        return std::all_of(q.spark.begin(), q.spark.end(), [](const TileOutline& shape) { return shape.empty(); });
+    };
+    // Channels within one step of hand-picked expectations (OKLCH lifts).
+    static constexpr auto nearColor = [](uint32_t actual, uint32_t expected) {
+        CHECK(actual >> 24 == expected >> 24);
+        for (int shift : {16, 8, 0}) CHECK(std::abs(int(actual >> shift & 0xFF) - int(expected >> shift & 0xFF)) <= 1);
+    };
+    // A 100 x 24 DIP plot (60% of the 40 DIP tile): x is the window's share in hundredths,
+    // y = 22 - used / 5 (2 DIPs free at the top and bottom).
     static constexpr auto plot = [](const std::function<void(Settings&)>& edit = {}) {
         return Display(With([&](Settings& s) {
             s.sparklineWidth = 100;
-            s.ringSize = 24;
+            s.sparklineHeight = 60;
             if (edit) edit(s);
         }));
     };
@@ -1836,85 +1893,208 @@ static void RunSparklineTests() {
                                  data, 0, 0, [trace](int, const WindowUsage&) { return trace; });
     };
 
-    Run("sparkline: the most-used quota with a window; else the most-used one; else the first selected", [] {
-        auto chart = [](const AccountData& data, std::array<bool, kQuotaBarCount> bars = {true, true, true, true},
-                        std::wstring provider = L"anthropic") {
-            return AccountMeterState(Display(), BarLayout::Sparkline, Account(provider, L"A", bars), data, 0, 0);
+    Run("sparkline: a chart per shown quota with a window, side by side in slot order; else the most-used one's", [] {
+        // The extra usage corner off here: extra usage is a quota like the others.
+        const MeterDisplay off = Display(With([](Settings& s) { s.sparklineExtra = SparklineExtra::Off; }));
+        auto charts = [&](const AccountData& data, std::array<bool, kQuotaBarCount> bars = {true, true, true, true},
+                          const MeterDisplay* d = nullptr) {
+            return AccountMeterState(d ? *d : off, BarLayout::Sparkline, Account(L"anthropic", L"A", bars), data, 0, 0);
         };
-        // Windows on the weekly and Fable quotas: the 5-hour quota's 90% has none to chart.
-        AccountData data = Fresh({90, 40, 60, -1});
+        auto lefts = [](const AccountMeters& m, std::initializer_list<std::pair<int, double>> expected) {
+            for (auto [slot, left] : expected) CHECK_NEAR(m.quotas[slot].sparkLeft, left);
+        };
+        // Windows on the 5-hour and weekly quotas; Fable's 60% and extra usage's 20% have none: two
+        // 48 x 32 DIP charts 4 DIPs apart, 100 DIPs across, the weekly one 52 DIPs in.
+        AccountData data = Fresh({90, 40, 60, 20});
+        data.win5h = Window(90, 9000000);
         data.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
-        data.fableWeek = {60, kNow + kMinute, kWeeklyWindowMs};
-        AccountMeters fable = chart(data);
-        CHECK(fable.barMask == 0b0100 && fable.headlineKey == L"Fa" && fable.headlineColor == 0xFFFDD835);
-        CHECK(fable.sparkNow.size() == 1);
-        // A tie goes to the earlier slot; only selected quotas count.
-        data.winWeek.pct = 60;
-        CHECK(chart(data).barMask == 0b0010);
-        CHECK(chart(data, {true, false, true, false}).barMask == 0b0100);
-        CHECK(chart(data, {true, false, false, true}).barMask == 0b0001);
-        // Without a window to chart: the most-used quota.
-        AccountMeters plain = chart(Fresh({30, 70, -1, 50}));
-        CHECK(plain.barMask == 0b0010 && plain.headlineKey == L"7d" && plain.headlineColor == 0xFFFDD835);
-        CHECK(chart(Fresh({10, 20, -1, 95}), {true, true, false, true}, L"openai").headlineKey == L"Cr");
-        // A reset not past its duration, or no duration, isn't a window: the weekly quota still wins.
+        AccountMeters two = charts(data);
+        CHECK(two.barMask == 0b0011);
+        CHECK_NEAR(two.faceWidth, 100); CHECK_NEAR(two.faceHeight, 32);
+        lefts(two, {{0, 0}, {1, 52}});
+        CHECK(!bare(two.quotas[0]) && !bare(two.quotas[1]) && bare(two.quotas[2]) && bare(two.quotas[3]));
+        // Each its own reading at its own window's place: the 5-hour quota half way at 90%, the
+        // weekly one at its end (a minute left) at 40%.
+        dot(two.quotas[0], 24, 4.75);
+        dot(two.quotas[1], 48, 18.75);
+        // Windows on the 5-hour, Fable and extra usage quotas, not the weekly one: three charts,
+        // Fable's second, extra usage's third.
+        data.winWeek = {40, 0, 0};
+        data.fableWeek = {60, kNow + 2 * kMinute, kWeeklyWindowMs};
+        data.extraUsage = {20, kNow + 3 * kMinute, kFiveHours};
+        AccountMeters three = charts(data);
+        CHECK(three.barMask == 0b1101 && bare(three.quotas[1]));
+        CHECK_NEAR(three.faceWidth, 3 * 48 + 2 * 4);
+        lefts(three, {{0, 0}, {2, 52}, {3, 104}});
+        // Shown quotas only: the 5-hour one hidden, Fable's chart first.
+        AccountMeters hidden = charts(data, {false, true, true, true});
+        CHECK(hidden.barMask == 0b1100 && bare(hidden.quotas[0]));
+        CHECK_NEAR(hidden.faceWidth, 100);
+        lefts(hidden, {{2, 0}, {3, 52}});
+        // The chart width sets each chart: 24 DIPs, 28 apart; 120, 124 apart.
+        MeterDisplay narrow = Display(With([](Settings& s) { s.sparklineExtra = SparklineExtra::Off; s.sparklineWidth = 24; }));
+        AccountMeters small = charts(data, {true, true, true, true}, &narrow);
+        CHECK_NEAR(small.faceWidth, 80);
+        lefts(small, {{0, 0}, {2, 28}, {3, 56}});
+        MeterDisplay wide = Display(With([](Settings& s) { s.sparklineExtra = SparklineExtra::Off; s.sparklineWidth = 120; }));
+        AccountMeters large = charts(data, {true, true, true, true}, &wide);
+        CHECK_NEAR(large.faceWidth, 368);
+        lefts(large, {{0, 0}, {2, 124}, {3, 248}});
+
+        // Before the first success: a chart per shown quota not read yet (the plot lit whole, no
+        // reading); the 5-hour quota's reading without a window has none.
+        AccountData before = Fresh({42, -1, -1, -1});
+        before.lastSuccessMs = 0;
+        AccountMeters waiting = charts(before);
+        CHECK(waiting.barMask == 0b1110 && bare(waiting.quotas[0]));
+        CHECK_NEAR(waiting.faceWidth, 152);
+        lefts(waiting, {{1, 0}, {2, 52}, {3, 104}});
+        CHECK(!waiting.quotas[1].spark[kSparkLit].empty() && unmarked(waiting.quotas[1]));
+        before.win5h.pct = -1;
+        AccountMeters first = charts(before, {false, true, false, true});
+        CHECK(first.barMask == 0b1010);
+        CHECK_NEAR(first.faceWidth, 100);
+        lefts(first, {{1, 0}, {3, 52}});
+
+        // Without a window: the most-used quota's chart alone; a tie to the earlier slot; shown
+        // quotas only.
+        AccountMeters top = charts(Fresh({30, 70, -1, 50}));
+        CHECK(top.barMask == 0b0010);
+        CHECK_NEAR(top.faceWidth, 48); CHECK_NEAR(top.quotas[1].sparkLeft, 0);
+        CHECK(charts(Fresh({70, 70, -1, -1})).barMask == 0b0001);
+        CHECK(charts(Fresh({30, 70, -1, 50}), {true, false, true, true}).barMask == 0b1000);
+        // A reset not past its duration, or no duration, isn't a window.
         AccountData odd = Fresh({95, 70, -1, 99});
         odd.win5h = {95, kFiveHours, kFiveHours};
-        odd.winWeek = {70, kNow + kMinute, kWeeklyWindowMs};
         odd.extraUsage = {99, kNow + kMinute, 0};
-        CHECK(chart(odd).barMask == 0b0010);
-        // Before the first success: the first selected quota, without a key or a point.
-        AccountData before = Fresh();
-        before.lastSuccessMs = 0;
-        before.extraUsage = {-1, kNow + kMinute, kFiveHours};
-        AccountMeters first = chart(before, {false, true, false, true});
-        CHECK(first.barMask == 0b0010 && first.headlineKey.empty() && first.sparkNow.empty());
-        // Nothing reported after a success: nothing charted.
-        AccountMeters none = chart(Fresh());
-        CHECK(none.barMask == 0 && none.headlineKey.empty() && none.sparkNow.empty() && none.sparkPace.empty());
+        CHECK(charts(odd).barMask == 0b1000);
+        odd.winWeek = {70, kNow + kMinute, kWeeklyWindowMs};
+        CHECK(charts(odd).barMask == 0b0010);
+        // Nothing reported after a success: no chart, no width.
+        AccountMeters none = charts(Fresh());
+        CHECK(none.barMask == 0);
+        CHECK_NEAR(none.faceWidth, 0);
+        for (const QuotaMeter& q : none.quotas) CHECK(bare(q));
     });
 
-    Run("sparkline: the plot from the chart width and the ring size, capped by the tile; the key a quarter of its height", [] {
-        auto chart = [](int width, int height, double taskbar = 48) {
-            MeterDisplay d = Display(With([&](Settings& s) { s.sparklineWidth = width; s.ringSize = height; }), 1, taskbar);
+    Run("sparkline: the charts' height a percentage of the tile, 50 to 100", [] {
+        auto chart = [](int percent, double taskbar = 48) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.sparklineHeight = percent; }), 1, taskbar);
             return First(Window(50, 9000000), d, BarLayout::Sparkline);
         };
-        AccountMeters m = chart(48, 32);
-        CHECK_NEAR(m.faceWidth, 48); CHECK_NEAR(m.faceHeight, 32); CHECK_NEAR(m.sparkKeyFont, 8);
-        m = chart(64, 30);
-        CHECK_NEAR(m.faceWidth, 64); CHECK_NEAR(m.faceHeight, 30); CHECK_NEAR(m.sparkKeyFont, 7.5);
-        // The key between 7 and 9 DIPs.
-        m = chart(120, 40);
-        CHECK_NEAR(m.faceWidth, 120); CHECK_NEAR(m.faceHeight, 40); CHECK_NEAR(m.sparkKeyFont, 9);
-        m = chart(24, 24);
-        CHECK_NEAR(m.faceWidth, 24); CHECK_NEAR(m.faceHeight, 24); CHECK_NEAR(m.sparkKeyFont, 7);
-        // 40 DIPs on a 40 DIP taskbar's 32 DIP tile; 32 on a 32 DIP taskbar's 24.
-        m = chart(64, 40, 40);
-        CHECK_NEAR(m.faceHeight, 32); CHECK_NEAR(m.sparkKeyFont, 8);
-        CHECK_NEAR(chart(64, 32, 32).faceHeight, 24);
-        // The chart width clamps at the display entry: 48 by default, 24 to 120.
+        auto check = [](const AccountMeters& m, double height) {
+            CHECK_NEAR(m.faceWidth, 48); CHECK_NEAR(m.faceHeight, height);
+            // The text keeps its size whatever the height.
+            CHECK_NEAR(m.sparkKeyFont, 8);
+        };
+        // A 48 DIP taskbar's 40 DIP tile: 32 DIPs at 80% (the default), 30 at 75%, 40 at 100%, 20
+        // at 50%.
+        check(First(Window(50, 9000000), Display(), BarLayout::Sparkline), 32);
+        check(chart(80), 32);
+        check(chart(75), 30);
+        check(chart(100), 40);
+        check(chart(50), 20);
+        // A 32 DIP taskbar's 24 DIP tile: 80% is 19.2, 19 DIPs; 90% 21.6, 22; 24 and 12 at the
+        // ends. A 40 DIP taskbar's 32 DIP tile: 25.6, 26.
+        check(chart(80, 32), 19);
+        check(chart(90, 32), 22);
+        check(chart(100, 32), 24);
+        check(chart(50, 32), 12);
+        check(chart(80, 40), 26);
+        // The shapes follow: on the 19 DIP chart the diagonal from (0, 17) to (48, 2), 50% half way
+        // at (24, 9.5).
+        AccountMeters low = chart(80, 32);
+        line(low.quotas[0].spark[kSparkPace], 0, 17, 48, 2);
+        dot(low.quotas[0], 24, 9.5);
+        // The height clamps at the display entry: 80 by default, 50 to 100.
+        CHECK(Display().sparklineHeight == 80);
+        CHECK(Display(With([](Settings& s) { s.sparklineHeight = 65; })).sparklineHeight == 65);
+        CHECK(Display(With([](Settings& s) { s.sparklineHeight = 10; })).sparklineHeight == 50);
+        CHECK(Display(With([](Settings& s) { s.sparklineHeight = 999; })).sparklineHeight == 100);
+        check(chart(-5), 20);
+        check(chart(1 << 30), 40);
+        // The chart width likewise: 48 by default, 24 to 120.
         CHECK(Display().sparklineWidth == 48);
         CHECK(Display(With([](Settings& s) { s.sparklineWidth = 64; })).sparklineWidth == 64);
         CHECK(Display(With([](Settings& s) { s.sparklineWidth = 10; })).sparklineWidth == 24);
         CHECK(Display(With([](Settings& s) { s.sparklineWidth = 999; })).sparklineWidth == 120);
-        CHECK_NEAR(chart(-5, 32).faceWidth, 24);
+        MeterDisplay narrow = Display(With([](Settings& s) { s.sparklineWidth = -5; }));
+        CHECK_NEAR(First(Window(50, 9000000), narrow, BarLayout::Sparkline).faceWidth, 24);
     });
 
-    Run("sparkline: the even-use diagonal across a window, with pace markers on", [] {
+    Run("sparkline: the text size sets the keys' and the extra usage's font and their placement boxes", [] {
+        auto sized = [](int size, const std::function<void(Settings&)>& edit = {}) {
+            return Display(With([&](Settings& s) {
+                s.sparklineTextSize = size;
+                if (edit) edit(s);
+            }));
+        };
+        // 8 DIPs by default, 6 to 16; the font whatever the chart's height.
+        CHECK(Display().sparklineTextSize == 8);
+        CHECK(sized(12).sparklineTextSize == 12);
+        CHECK(sized(2).sparklineTextSize == 6 && sized(99).sparklineTextSize == 16);
+        CHECK_NEAR(First(Window(50, 9000000), sized(12), BarLayout::Sparkline).sparkKeyFont, 12);
+        MeterDisplay shortChart = Display(With([](Settings& s) {
+            s.sparklineHeight = 50;
+            s.sparklineTextSize = 14;
+        }), 1, 32);
+        AccountMeters tiny = First(Window(50, 9000000), shortChart, BarLayout::Sparkline);
+        CHECK_NEAR(tiny.faceHeight, 12); CHECK_NEAR(tiny.sparkKeyFont, 14);
+        // The key's box on the 48 x 32 chart: 8 DIPs: x 35.4 to 45, at the bottom y 23.4 to 29; 12
+        // DIPs (0.6 of it per character, a 0.7 cap height): x 30.6 to 45, y 20.6 to 29, at the top
+        // 3 to 11.4. 20% at 60% of the window, the dot at (28.75, 24.5) reaching x 30.75: clear of
+        // the 8 DIP key (kept), on the 12 DIP one (moved to the top).
+        auto first = [](double pct, double share, const MeterDisplay& d) {
+            return spark(Window(pct, std::llround((1 - share) * kFiveHours)), {}, d).quotas[0];
+        };
+        dot(first(20, 0.6, sized(8)), 28.75, 24.5);
+        CHECK(!first(20, 0.6, sized(8)).sparkKeyTop);
+        CHECK(first(20, 0.6, sized(12)).sparkKeyTop);
+        // The now line stops a DIP short of the larger box: 90% at 80% of the window, x 38.5, the dot
+        // clear of the key at the bottom: down to 19.6 at 12 DIPs (22.4 at 8).
+        QuotaMeter large = first(90, 0.8, sized(12));
+        CHECK(!large.sparkKeyTop);
+        path(large.spark[kSparkNowLine], 38, 1, {{39, 1}, {39, 19.6}, {38, 19.6}});
+        path(first(90, 0.8, sized(8)).spark[kSparkNowLine], 38, 1, {{39, 1}, {39, 22.4}, {38, 22.4}});
+        // The extra usage's box: "$20.00" from x 3 to 3 + 6 x 0.6 of the size: 24.6 at 6 DIPs, 31.8
+        // at 8, 46.2 at 12 (across the 12 DIP key's box: the two never share an edge). The weekly
+        // dot at 110% at 60% of the week, (28.75, 2), from x 26.75: clear of it at 6 DIPs (kept);
+        // on it at 8 (moved to the bottom); at 12 on it, and with both moved on the key at the top:
+        // one hit either way (kept).
+        auto weekly = [](const MeterDisplay& d) {
+            AccountData data = Fresh();
+            data.winWeek = {110, kNow + (ULONGLONG)std::llround(0.4 * kWeeklyWindowMs), kWeeklyWindowMs};
+            data.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+            data.extraUsedAmount = 20;
+            data.extraLimitAmount = 50;
+            return AccountMeterState(d, BarLayout::Sparkline, Account(L"anthropic", L"A", {false, true, false, true}), data,
+                                     0, 0);
+        };
+        AccountMeters six = weekly(sized(6)), eight = weekly(sized(8)), twelve = weekly(sized(12));
+        CHECK(six.sparkExtraText == L"$20.00" && !six.sparkExtraBottom && !six.quotas[1].sparkKeyTop);
+        CHECK(eight.sparkExtraBottom && !eight.quotas[1].sparkKeyTop);
+        CHECK(!twelve.sparkExtraBottom && !twelve.quotas[1].sparkKeyTop);
+    });
+
+    Run("sparkline: the even-use diagonal across each window, with pace markers on", [] {
         // From 0% at the window's start to 100% at its reset, 2 DIPs inside the plot's bottom and top.
-        AccountMeters m = spark(Window(30, 9000000));
-        CHECK(m.sparkPace.size() == 1 && m.sparkPace[0].segments.size() == 1);
-        point(m.sparkPace[0], 0, 22); point(m.sparkPace[0].segments[0], 100, 2);
-        CHECK_NEAR(m.sparkPace[0].segments[0].radius, 0);
-        AccountMeters standard = First(Window(30, 9000000), Display(), BarLayout::Sparkline);
-        point(standard.sparkPace[0], 0, 30); point(standard.sparkPace[0].segments[0], 48, 2);
+        line(spark(Window(30, 9000000)).quotas[0].spark[kSparkPace], 0, 22, 100, 2);
+        line(First(Window(30, 9000000), Display(), BarLayout::Sparkline).quotas[0].spark[kSparkPace], 0, 30, 48, 2);
         // The plot is used %: the same diagonal in remaining mode.
         AccountMeters left = spark(Window(30, 9000000), {}, plot([](Settings& s) { s.barMode = BarMode::Remaining; }));
-        point(left.sparkPace[0], 0, 22); point(left.sparkPace[0].segments[0], 100, 2);
+        line(left.quotas[0].spark[kSparkPace], 0, 22, 100, 2);
+        // Each chart its own, from its own corner.
+        AccountData both = Fresh();
+        both.win5h = Window(30, 9000000);
+        both.winWeek = {50, kNow + kMinute, kWeeklyWindowMs};
+        AccountMeters two = AccountMeterState(Display(), BarLayout::Sparkline, Account(L"anthropic", L"A", {true, true, false, false}),
+                                              both, 0, 0);
+        line(two.quotas[0].spark[kSparkPace], 0, 30, 48, 2);
+        line(two.quotas[1].spark[kSparkPace], 0, 30, 48, 2);
         // Markers off, or no window: none.
-        CHECK(spark(Window(30, 9000000), {}, plot([](Settings& s) { s.showPaceTicks = false; })).sparkPace.empty());
-        CHECK(spark({30, 0, 0}).sparkPace.empty());
-        CHECK(spark({30, kFiveHours, kFiveHours}).sparkPace.empty());
+        CHECK(spark(Window(30, 9000000), {}, plot([](Settings& s) { s.showPaceTicks = false; })).quotas[0].spark[kSparkPace].empty());
+        CHECK(spark({30, 0, 0}).quotas[0].spark[kSparkPace].empty());
+        CHECK(spark({30, kFiveHours, kFiveHours}).quotas[0].spark[kSparkPace].empty());
     });
 
     Run("sparkline: recorded runs with an area under each, lone readings as dots, clamped to the plot", [] {
@@ -1922,34 +2102,37 @@ static void RunSparklineTests() {
         // a run ending past 100% (at the top inset).
         AccountMeters m = spark(Window(45, 9000000), {{at(-0.1), 10, false}, {at(0.1), 20, true}, {at(0.2), 30, true},
                                                       {at(0.3), 35, false}, {at(0.4), 40, false}, {at(0.45), 120, true}});
-        CHECK(m.sparkLines.size() == 2 && m.sparkArea.size() == 2 && m.sparkDots.size() == 1);
-        const TileOutlineFigure &run = m.sparkLines[0], &last = m.sparkLines[1];
+        const auto& shapes = m.quotas[0].spark;
+        CHECK(shapes[kSparkLines].size() == 2 && shapes[kSparkArea].size() == 2 && shapes[kSparkDots].size() == 1);
+        const TileOutlineFigure &run = shapes[kSparkLines][0], &last = shapes[kSparkLines][1];
         CHECK(run.segments.size() == 2 && last.segments.size() == 1);
         point(run, 0, 20); point(run.segments[0], 10, 18); point(run.segments[1], 20, 16);
         point(last, 40, 14); point(last.segments[0], 45, 2);
-        for (const TileOutlineFigure& line : m.sparkLines) {
-            for (const TileOutlineSegment& s : line.segments) CHECK_NEAR(s.radius, 0);
+        for (const TileOutlineFigure& figure : shapes[kSparkLines]) {
+            for (const TileOutlineSegment& s : figure.segments) CHECK_NEAR(s.radius, 0);
         }
         // Each area up from the plot's bottom under its run's start, along the run and back down.
-        const TileOutlineFigure &under = m.sparkArea[0], &underLast = m.sparkArea[1];
+        const TileOutlineFigure &under = shapes[kSparkArea][0], &underLast = shapes[kSparkArea][1];
         CHECK(under.segments.size() == 4 && underLast.segments.size() == 3);
         point(under, 0, 24); point(under.segments[0], 0, 20); point(under.segments[1], 10, 18);
         point(under.segments[2], 20, 16); point(under.segments[3], 20, 24);
         point(underLast, 40, 24); point(underLast.segments[0], 40, 14); point(underLast.segments[1], 45, 2);
         point(underLast.segments[2], 45, 24);
         // The lone reading: a 1.5 DIP dot.
-        circle(m.sparkDots, 30, 15, 1.5);
+        circle(shapes[kSparkDots], 30, 15, 1.5);
         // Quarter DIPs: on the 48 x 32 plot a tenth of the window at 10% is (4.8, 27.2), drawn at
         // (4.75, 27.25); a fifth at 20%, (9.6, 24.4), at (9.5, 24.5).
         AccountMeters snapped = spark(Window(45, 9000000), {{at(0.1), 10, false}, {at(0.2), 20, true}}, Display());
-        CHECK(snapped.sparkLines.size() == 1 && snapped.sparkDots.empty());
-        point(snapped.sparkLines[0], 4.75, 27.25); point(snapped.sparkLines[0].segments[0], 9.5, 24.5);
-        // No history: no runs, areas or dots; the current point stays.
-        AccountMeters bare = spark(Window(45, 9000000));
-        CHECK(bare.sparkLines.empty() && bare.sparkArea.empty() && bare.sparkDots.empty() && bare.sparkNow.size() == 1);
+        CHECK(snapped.quotas[0].spark[kSparkLines].size() == 1 && snapped.quotas[0].spark[kSparkDots].empty());
+        point(snapped.quotas[0].spark[kSparkLines][0], 4.75, 27.25);
+        point(snapped.quotas[0].spark[kSparkLines][0].segments[0], 9.5, 24.5);
+        // No history: no runs, areas or dots; the current reading stays.
+        AccountMeters none = spark(Window(45, 9000000));
+        CHECK(none.quotas[0].spark[kSparkLines].empty() && none.quotas[0].spark[kSparkArea].empty() &&
+              none.quotas[0].spark[kSparkDots].empty() && !unmarked(none.quotas[0]));
     });
 
-    Run("sparkline: the recorded usage asked for the charted quota only, with its reading, only with a window", [] {
+    Run("sparkline: the recorded usage asked for each charted quota with a window, with its reading", [] {
         struct Ask {
             int slot;
             WindowUsage reading;
@@ -1959,13 +2142,25 @@ static void RunSparklineTests() {
             asked.push_back({slot, reading});
             return std::vector<TileTracePoint>{};
         };
+        // Windows on the weekly, Fable and extra usage quotas ($10 of $50 spent); the 5-hour one
+        // has none.
         AccountData data = Fresh({90, 40, 60, 20});
         data.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
         data.fableWeek = {60, kNow + 2 * kMinute, kWeeklyWindowMs};
         data.extraUsage = {20, kNow + 3 * kMinute, kFiveHours};
+        data.extraUsedAmount = 10;
+        data.extraLimitAmount = 50;
+        // In slot order; extra usage in the weekly chart's corner is never asked.
         AccountMeterState(Display(), BarLayout::Sparkline, Account(), data, 0, 0, source);
-        CHECK(asked.size() == 1 && asked[0].slot == 2 && asked[0].reading.pct == 60 &&
-              asked[0].reading.resetUnixMs == kNow + 2 * kMinute && asked[0].reading.windowDurationMs == kWeeklyWindowMs);
+        CHECK(asked.size() == 2 && asked[0].slot == 1 && asked[0].reading.pct == 40 &&
+              asked[0].reading.resetUnixMs == kNow + kMinute && asked[1].slot == 2 && asked[1].reading.pct == 60 &&
+              asked[1].reading.resetUnixMs == kNow + 2 * kMinute && asked[1].reading.windowDurationMs == kWeeklyWindowMs);
+        // With the corner off, its chart asks too.
+        asked.clear();
+        MeterDisplay off = Display(With([](Settings& s) { s.sparklineExtra = SparklineExtra::Off; }));
+        AccountMeterState(off, BarLayout::Sparkline, Account(), data, 0, 0, source);
+        CHECK(asked.size() == 3 && asked[2].slot == 3 && asked[2].reading.pct == 20 &&
+              asked[2].reading.windowDurationMs == kFiveHours);
         // Without a window: the most-used quota, never asked.
         asked.clear();
         AccountMeterState(Display(), BarLayout::Sparkline, Account(), Fresh({90, 40, 60, 20}), 0, 0, source);
@@ -1978,99 +2173,749 @@ static void RunSparklineTests() {
         }
         CHECK(asked.empty());
         // No source: charted without history.
-        AccountMeters bare = AccountMeterState(Display(), BarLayout::Sparkline, Account(), data, 0, 0);
-        CHECK(bare.barMask == 0b0100 && bare.sparkLines.empty() && bare.sparkNow.size() == 1);
+        AccountMeters none = AccountMeterState(Display(), BarLayout::Sparkline, Account(), data, 0, 0);
+        CHECK(none.barMask == 0b0110 && none.quotas[1].spark[kSparkLines].empty() && !unmarked(none.quotas[1]) &&
+              !unmarked(none.quotas[2]));
     });
 
-    Run("sparkline: the current point at now, after the newest reading, or at the right edge without a window", [] {
-        // Half way through the window at 45%: (50, 13), a 2 DIP mark.
-        circle(spark(Window(45, 9000000)).sparkNow, 50, 13, 2);
-        // A history ending at the poll: the same point, on its last reading.
-        AccountMeters recorded = spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.5), 45, true}});
-        circle(recorded.sparkNow, 50, 13, 2);
-        point(recorded.sparkLines[0].segments[0], 50, 13);
-        // A clock rolled back behind the newest reading: the point stays at that reading's time,
-        // and the projection starts there at the rate up to it: 45% in 60% of the window is 75%
-        // at the reset.
-        AccountMeters rolled = spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.6), 45, true}});
-        circle(rolled.sparkNow, 60, 13, 2);
-        CHECK(rolled.sparkProjection.size() == 1);
-        point(rolled.sparkProjection[0], 60, 13);
-        point(rolled.sparkProjection[0].segments[0], 100, 7);
+    Run("sparkline: the current reading at now, after the newest reading, or at the right edge without a window", [] {
+        // With the ring (and the caret) on.
+        const MeterDisplay ringed = plot(cues);
+        // Half way through the window at 45%: (50, 13).
+        reading(spark(Window(45, 9000000), {}, ringed).quotas[0], 50, 13);
+        // A history ending at the poll: the same place, on its last reading.
+        AccountMeters recorded = spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.5), 45, true}}, ringed);
+        reading(recorded.quotas[0], 50, 13);
+        point(recorded.quotas[0].spark[kSparkLines][0].segments[0], 50, 13);
+        // A clock rolled back behind the newest reading: the reading and the time stay at that
+        // reading's (the lit part, the now line and the caret at x 60), and the projection starts
+        // there at the rate up to it: 45% in 60% of the window is 75% at the reset.
+        AccountMeters rolled = spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.6), 45, true}}, ringed);
+        reading(rolled.quotas[0], 60, 13);
+        line(rolled.quotas[0].spark[kSparkProjection], 60, 13, 100, 7);
+        point(rolled.quotas[0].spark[kSparkLit][0].segments[0], 60, 0);
+        point(rolled.quotas[0].spark[kSparkNowLine][0], 59.5, 1);
+        point(rolled.quotas[0].spark[kSparkCaret][0].segments[0], 60, 20.8);
         // Over pace, it still runs forward: 80% in 70% reaches the limit at 87.5%.
-        AccountMeters ahead = spark(Window(80, 9000000), {{at(0.2), 20, false}, {at(0.7), 80, true}});
-        point(ahead.sparkProjection[0], 70, 6);
-        point(ahead.sparkProjection[0].segments[0], 87.5, 2);
-        CHECK(ahead.sparkLimit.size() == 1);
+        AccountMeters ahead = spark(Window(80, 9000000), {{at(0.2), 20, false}, {at(0.7), 80, true}}, ringed);
+        line(ahead.quotas[0].spark[kSparkProjection], 70, 6, 87.5, 2);
+        circle(ahead.quotas[0].spark[kSparkLimit], 87.5, 2, 1.75);
         // Before the window starts: at its start; past the reset: at its end.
-        circle(spark(Window(45, kFiveHours + 3600000)).sparkNow, 0, 13, 2);
-        circle(spark(Window(45, -(long long)kMinute)).sparkNow, 100, 13, 2);
+        reading(spark(Window(45, kFiveHours + 3600000), {}, ringed).quotas[0], 0, 13);
+        reading(spark(Window(45, -(long long)kMinute), {}, ringed).quotas[0], 100, 13);
         // Used % in either mode; at the top past 100%.
-        circle(spark(Window(45, 9000000), {}, plot([](Settings& s) { s.barMode = BarMode::Remaining; })).sparkNow, 50, 13, 2);
-        circle(spark(Window(130, 9000000)).sparkNow, 50, 2, 2);
-        // Without a window: alone at the plot's right edge, a mark's radius in.
-        AccountMeters alone = spark({45, 0, 0});
-        circle(alone.sparkNow, 98, 13, 2);
-        CHECK(alone.sparkPace.empty() && alone.sparkProjection.empty() && alone.sparkLimit.empty());
-        circle(First({45, 0, 0}, Display(), BarLayout::Sparkline).sparkNow, 46, 17.5, 2);
-        // A window without a reading yet (before the first success): the diagonal, no point.
+        MeterDisplay left = plot([](Settings& s) {
+            cues(s);
+            s.barMode = BarMode::Remaining;
+        });
+        reading(spark(Window(45, 9000000), {}, left).quotas[0], 50, 13);
+        reading(spark(Window(130, 9000000), {}, ringed).quotas[0], 50, 2);
+        // Without a window: alone, the ring's radius in from the plot's right edge; no diagonal,
+        // time, projection or limit.
+        AccountMeters alone = spark({45, 0, 0}, {}, ringed);
+        const auto& shapes = alone.quotas[0].spark;
+        reading(alone.quotas[0], 95.9, 13);
+        CHECK(shapes[kSparkPace].empty() && shapes[kSparkNowLine].empty() && shapes[kSparkCaret].empty() &&
+              shapes[kSparkProjection].empty() && shapes[kSparkLimit].empty() && !shapes[kSparkLit].empty());
+        reading(First({45, 0, 0}, Display(With(cues)), BarLayout::Sparkline).quotas[0], 43.9, 17.5);
+        // A window without a reading yet (before the first success): the diagonal and the time, no
+        // reading, projection or limit.
         AccountData before = Fresh();
         before.lastSuccessMs = 0;
         before.win5h = {-1, kNow + 9000000, kFiveHours};
+        AccountMeters waiting = AccountMeterState(ringed, BarLayout::Sparkline,
+                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
+        const auto& empty = waiting.quotas[0].spark;
+        CHECK(waiting.barMask == 0b0001 && empty[kSparkPace].size() == 1 && !empty[kSparkLit].empty() &&
+              !empty[kSparkNowLine].empty() && !empty[kSparkCaret].empty());
+        CHECK(unmarked(waiting.quotas[0]) && empty[kSparkProjection].empty() && empty[kSparkLimit].empty());
+
+        // The ring off, the default: a plain 2 DIP dot at the same places, without a window its own
+        // radius in from the right edge: (98, 13) on the plot, (46, 17.5) on the 48 x 32 chart.
+        dot(spark(Window(45, 9000000)).quotas[0], 50, 13);
+        dot(spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.6), 45, true}}).quotas[0], 60, 13);
+        dot(spark(Window(130, 9000000)).quotas[0], 50, 2);
+        dot(spark({45, 0, 0}).quotas[0], 98, 13);
+        dot(First({45, 0, 0}, Display(), BarLayout::Sparkline).quotas[0], 46, 17.5);
+        // None before a reading.
+        AccountMeters plainWaiting = AccountMeterState(plot(), BarLayout::Sparkline,
+                                                       Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
+        CHECK(unmarked(plainWaiting.quotas[0]));
+    });
+
+    Run("sparkline: the plot lit up to now, clockwise from its top edge, cut through its rounded corners", [] {
+        // Where x 1 DIP in from a side meets a 3 DIP corner's arc: 3 - sqrt(3^2 - 2^2) from the edge.
+        const double k = 3 - std::sqrt(5.0);
+        // Before the window starts, or at its start: nothing lit.
+        CHECK(spark(Window(45, kFiveHours + 3600000)).quotas[0].spark[kSparkLit].empty());
+        CHECK(spark(Window(45, kFiveHours)).quotas[0].spark[kSparkLit].empty());
+        // Half way: along the top edge to x 50, down, back along the bottom, around the bottom-left
+        // corner, up the left side and around the top-left corner.
+        path(spark(Window(45, 9000000)).quotas[0].spark[kSparkLit], 3, 0,
+             {{50, 0}, {50, 24}, {3, 24}, {0, 21, 3}, {0, 3}, {3, 0, 3}});
+        // 1% in (x 1), inside the left corners: from the top-left arc down to the bottom-left one,
+        // around it, up the left side and around the top-left arc back.
+        path(spark(Window(45, 17820000)).quotas[0].spark[kSparkLit], 1, k, {{1, 24 - k}, {0, 21, 3}, {0, 3}, {1, k, 3}});
+        // 99% in (x 99), inside the right corners: the top edge, the top-right arc to x 99, down to the
+        // bottom-right arc and around it, then as above.
+        path(spark(Window(45, 180000)).quotas[0].spark[kSparkLit], 3, 0,
+             {{97, 0}, {99, k, 3}, {99, 24 - k}, {97, 24, 3}, {3, 24}, {0, 21, 3}, {0, 3}, {3, 0, 3}});
+        // 97% in, where the right corners start: a straight cut.
+        path(spark(Window(45, 540000)).quotas[0].spark[kSparkLit], 3, 0,
+             {{97, 0}, {97, 24}, {3, 24}, {0, 21, 3}, {0, 3}, {3, 0, 3}});
+        // Past the reset, and without a window (with a reading or not yet): the whole plot.
+        const std::vector<Seg> whole = {{97, 0}, {100, 3, 3}, {100, 21}, {97, 24, 3}, {3, 24}, {0, 21, 3}, {0, 3}, {3, 0, 3}};
+        path(spark(Window(45, -(long long)kMinute)).quotas[0].spark[kSparkLit], 3, 0, whole);
+        path(spark({45, 0, 0}).quotas[0].spark[kSparkLit], 3, 0, whole);
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
         AccountMeters waiting = AccountMeterState(plot(), BarLayout::Sparkline,
                                                   Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
-        CHECK(waiting.barMask == 0b0001 && waiting.sparkPace.size() == 1);
-        CHECK(waiting.sparkNow.empty() && waiting.sparkProjection.empty() && waiting.sparkLimit.empty());
+        path(waiting.quotas[0].spark[kSparkLit], 3, 0, whole);
+        // Elapsed time off: the whole plot with a window too, half way or before it starts.
+        const MeterDisplay unlit = plot([](Settings& s) { s.sparklineElapsed = false; });
+        path(spark(Window(45, 9000000), {}, unlit).quotas[0].spark[kSparkLit], 3, 0, whole);
+        path(spark(Window(45, kFiveHours + 3600000), {}, unlit).quotas[0].spark[kSparkLit], 3, 0, whole);
+        // The default 48 x 32 chart half way, and stale: to x 24.
+        AccountData stale = Fresh();
+        stale.win5h = Window(45, 9000000);
+        stale.stale = true;
+        AccountMeters grey = AccountMeterState(Display(), BarLayout::Sparkline,
+                                               Account(L"anthropic", L"A", {true, false, false, false}), stale, 0, 0);
+        path(grey.quotas[0].spark[kSparkLit], 3, 0, {{24, 0}, {24, 32}, {3, 32}, {0, 29, 3}, {0, 3}, {3, 0, 3}});
+    });
+
+    Run("sparkline: the plot's outline half a DIP in, clockwise from its top edge; off with its toggle", [] {
+        // The 1 DIP stroke's centre half a DIP in from the plot's edges, its corners 2.5 DIPs round
+        // (the plot's 3 less half the stroke). On the 48 x 32 chart: from (3, 0.5) along the top to
+        // x 45, around to the right side at y 3, down to 29, around to the bottom at x 45, along to 3,
+        // around to the left side at y 29, up to 3 and around to the start.
+        const std::vector<Seg> standard = {{45, 0.5}, {47.5, 3, 2.5}, {47.5, 29}, {45, 31.5, 2.5},
+                                           {3, 31.5}, {0.5, 29, 2.5}, {0.5, 3}, {3, 0.5, 2.5}};
+        path(First(Window(45, 9000000), Display(), BarLayout::Sparkline).quotas[0].spark[kSparkOutline], 3, 0.5, standard);
+        // The 100 x 24 plot: the right side at x 99.5, the bottom at y 23.5.
+        const std::vector<Seg> wide = {{97, 0.5}, {99.5, 3, 2.5}, {99.5, 21}, {97, 23.5, 2.5},
+                                       {3, 23.5}, {0.5, 21, 2.5}, {0.5, 3}, {3, 0.5, 2.5}};
+        path(spark(Window(45, 9000000)).quotas[0].spark[kSparkOutline], 3, 0.5, wide);
+        // A 24 x 12 chart (50% of a 32 DIP taskbar's tile): x 23.5, y 11.5.
+        MeterDisplay small = Display(With([](Settings& s) {
+            s.sparklineWidth = 24;
+            s.sparklineHeight = 50;
+        }), 1, 32);
+        path(First(Window(45, 9000000), small, BarLayout::Sparkline).quotas[0].spark[kSparkOutline], 3, 0.5,
+             {{21, 0.5}, {23.5, 3, 2.5}, {23.5, 9}, {21, 11.5, 2.5}, {3, 11.5}, {0.5, 9, 2.5}, {0.5, 3}, {3, 0.5, 2.5}});
+        // Whatever the chart shows: without a window, before the first reading, the cues off.
+        path(spark({45, 0, 0}).quotas[0].spark[kSparkOutline], 3, 0.5, wide);
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        AccountMeters waiting = AccountMeterState(plot(), BarLayout::Sparkline,
+                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
+        path(waiting.quotas[0].spark[kSparkOutline], 3, 0.5, wide);
+        MeterDisplay noCues = plot([](Settings& s) { s.sparklineElapsed = s.sparklineNowLine = false; });
+        path(spark(Window(45, 9000000), {}, noCues).quotas[0].spark[kSparkOutline], 3, 0.5, wide);
+        // Each chart its own, from its own corner.
+        AccountData both = Fresh();
+        both.win5h = Window(30, 9000000);
+        both.winWeek = {50, kNow + kMinute, kWeeklyWindowMs};
+        AccountMeters two = AccountMeterState(Display(), BarLayout::Sparkline, Account(L"anthropic", L"A", {true, true, false, false}),
+                                              both, 0, 0);
+        path(two.quotas[0].spark[kSparkOutline], 3, 0.5, standard);
+        path(two.quotas[1].spark[kSparkOutline], 3, 0.5, standard);
+        // The toggle off: none, on any chart; the other shapes stay.
+        MeterDisplay off = Display(With([](Settings& s) { s.sparklineOutline = false; }));
+        CHECK(Display().sparklineOutline && !off.sparklineOutline);
+        AccountMeters plain = AccountMeterState(off, BarLayout::Sparkline, Account(L"anthropic", L"A", {true, true, false, false}),
+                                                both, 0, 0);
+        CHECK(plain.quotas[0].spark[kSparkOutline].empty() && plain.quotas[1].spark[kSparkOutline].empty());
+        CHECK(!plain.quotas[0].spark[kSparkLit].empty() && !plain.quotas[0].spark[kSparkNow].empty());
+        CHECK(spark({45, 0, 0}, {}, plot([](Settings& s) { s.sparklineOutline = false; })).quotas[0].spark[kSparkOutline].empty());
+    });
+
+    Run("sparkline: the current time's line across the plot, inside its edges, and its caret on the bottom edge", [] {
+        // The caret on (off by default).
+        const MeterDisplay shown = plot([](Settings& s) { s.sparklineNowCaret = true; });
+        // Half way: 1 DIP wide around x 50, from 1 DIP below the top to 1 above the bottom; the caret
+        // 4.8 DIPs wide on the bottom edge, its tip 3.2 DIPs up.
+        AccountMeters half = spark(Window(45, 9000000), {}, shown);
+        path(half.quotas[0].spark[kSparkNowLine], 49.5, 1, {{50.5, 1}, {50.5, 23}, {49.5, 23}});
+        path(half.quotas[0].spark[kSparkCaret], 47.6, 24, {{50, 20.8}, {52.4, 24}});
+        // Before the window starts (x 0) and a quarter DIP in: the line kept inside the left edge;
+        // the caret around x itself.
+        AccountMeters before = spark(Window(45, kFiveHours + 3600000), {}, shown);
+        path(before.quotas[0].spark[kSparkNowLine], 0, 1, {{1, 1}, {1, 23}, {0, 23}});
+        path(before.quotas[0].spark[kSparkCaret], -2.4, 24, {{0, 20.8}, {2.4, 24}});
+        AccountMeters early = spark(Window(45, 17955000), {}, shown);
+        path(early.quotas[0].spark[kSparkNowLine], 0, 1, {{1, 1}, {1, 23}, {0, 23}});
+        path(early.quotas[0].spark[kSparkCaret], -2.15, 24, {{0.25, 20.8}, {2.65, 24}});
+        // Past the reset (x 100): inside the right edge, the line clear of the key (x 87.4 to 97).
+        AccountMeters after = spark(Window(45, -(long long)kMinute), {}, shown);
+        path(after.quotas[0].spark[kSparkNowLine], 99, 1, {{100, 1}, {100, 23}, {99, 23}});
+        path(after.quotas[0].spark[kSparkCaret], 97.6, 24, {{100, 20.8}, {102.4, 24}});
+        // The same place in remaining mode; on the default 48 x 32 chart from y 1 to 31.
+        AccountMeters left = spark(Window(45, 9000000), {}, plot([](Settings& s) {
+                                       s.sparklineNowCaret = true;
+                                       s.barMode = BarMode::Remaining;
+                                   }));
+        path(left.quotas[0].spark[kSparkNowLine], 49.5, 1, {{50.5, 1}, {50.5, 23}, {49.5, 23}});
+        AccountMeters standard =
+            First(Window(45, 9000000), Display(With([](Settings& s) { s.sparklineNowCaret = true; })), BarLayout::Sparkline);
+        path(standard.quotas[0].spark[kSparkNowLine], 23.5, 1, {{24.5, 1}, {24.5, 31}, {23.5, 31}});
+        path(standard.quotas[0].spark[kSparkCaret], 21.6, 32, {{24, 28.8}, {26.4, 32}});
+        // Without a window: neither.
+        AccountMeters alone = spark({45, 0, 0}, {}, shown);
+        CHECK(alone.quotas[0].spark[kSparkNowLine].empty() && alone.quotas[0].spark[kSparkCaret].empty());
+
+        // Each on its own toggle: by default the line without the caret; the line off with the caret
+        // on, the caret alone; both off, neither. The reading and the lit part stay.
+        AccountMeters plain = spark(Window(45, 9000000));
+        path(plain.quotas[0].spark[kSparkNowLine], 49.5, 1, {{50.5, 1}, {50.5, 23}, {49.5, 23}});
+        CHECK(plain.quotas[0].spark[kSparkCaret].empty());
+        AccountMeters caretOnly = spark(Window(45, 9000000), {}, plot([](Settings& s) {
+                                            s.sparklineNowLine = false;
+                                            s.sparklineNowCaret = true;
+                                        }));
+        CHECK(caretOnly.quotas[0].spark[kSparkNowLine].empty());
+        path(caretOnly.quotas[0].spark[kSparkCaret], 47.6, 24, {{50, 20.8}, {52.4, 24}});
+        AccountMeters neither = spark(Window(45, 9000000), {}, plot([](Settings& s) { s.sparklineNowLine = false; }));
+        CHECK(neither.quotas[0].spark[kSparkNowLine].empty() && neither.quotas[0].spark[kSparkCaret].empty());
+        dot(neither.quotas[0], 50, 13);
+        CHECK(!neither.quotas[0].spark[kSparkLit].empty());
+    });
+
+    Run("sparkline: the now line stops a DIP short of the text it crosses; the caret yields to text at the bottom", [] {
+        // Line pieces, top first: each 1 DIP wide from `left` to `right`, from y `from` to `to`.
+        auto pieces = [](const TileOutline& outline, double left, double right,
+                         const std::vector<std::pair<double, double>>& spans) {
+            CHECK(outline.size() == spans.size());
+            for (size_t k = 0; k < spans.size(); k++) {
+                auto [from, to] = spans[k];
+                path({outline[k]}, left, from, {{right, from}, {right, to}, {left, to}});
+            }
+        };
+        // With the ring and the caret on.
+        const MeterDisplay ringed = Display(With(cues));
+        auto first = [&](double pct, double share) {
+            return spark(Window(pct, std::llround((1 - share) * kFiveHours)), {}, ringed).quotas[0];
+        };
+        // On the 48 x 32 chart (8 DIP font, 5.6 cap height) the key from x 35.4 to 45. The line runs
+        // from 1 to 31; text on an edge it crosses takes it from that edge to a DIP past the text: at
+        // the top (y 3 to 8.6) down to 9.6, at the bottom (23.4 to 29) up from 22.4.
+        // Clear of the text, half way (x 24): one piece; the caret.
+        QuotaMeter clear = first(45, 0.5);
+        pieces(clear.spark[kSparkNowLine], 23.5, 24.5, {{1, 31}});
+        CHECK(clear.spark[kSparkCaret].size() == 1);
+        // Through the key at the bottom: 90% at 80% of the window, (38.5, 4.75), its ring clear of the
+        // key: from 1 to 22.4; the caret, under the key, dropped.
+        QuotaMeter under = first(90, 0.8);
+        CHECK(!under.sparkKeyTop);
+        pieces(under.spark[kSparkNowLine], 38, 39, {{1, 22.4}});
+        CHECK(under.spark[kSparkCaret].empty());
+        // Through the key moved to the top: 10% at 80%, (38.5, 27.25): from 9.6 to 31; the caret kept.
+        QuotaMeter over = first(10, 0.8);
+        CHECK(over.sparkKeyTop);
+        pieces(over.spark[kSparkNowLine], 38, 39, {{9.6, 31}});
+        path(over.spark[kSparkCaret], 36.1, 32, {{38.5, 28.8}, {40.9, 32}});
+        // The caret beside the key at the bottom: 90% at x 33, its right corner on the key's left
+        // edge (35.4): kept; a quarter DIP later, at 33.25, under it: dropped. The line clear of it.
+        QuotaMeter beside = first(90, 0.6875);
+        CHECK(!beside.sparkKeyTop && beside.spark[kSparkCaret].size() == 1);
+        pieces(beside.spark[kSparkNowLine], 32.5, 33.5, {{1, 31}});
+        QuotaMeter past = first(90, 0.6927);
+        CHECK(!past.sparkKeyTop && past.spark[kSparkCaret].empty());
+        pieces(past.spark[kSparkNowLine], 32.75, 33.75, {{1, 31}});
+
+        // The weekly chart alone, its corner per `data`, at `pct` `share` of the way through the week.
+        auto weekly = [&](AccountData data, std::wstring provider, double pct, double share,
+                          const MeterDisplay* d = nullptr) {
+            data.winWeek = {pct, kNow + (ULONGLONG)std::llround((1 - share) * kWeeklyWindowMs), kWeeklyWindowMs};
+            return AccountMeterState(d ? *d : ringed, BarLayout::Sparkline, Account(provider, L"A", {false, true, false, true}),
+                                     data, 0, 0);
+        };
+        AccountData dollars = Fresh();
+        dollars.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+        dollars.extraUsedAmount = 20;
+        dollars.extraLimitAmount = 50;
+        // Text on both edges: "Cr" and a 12345 credit balance at the top, x 3 to 38.6, over the key
+        // at the bottom; 50% at 75% of the week, (36, 16), clear of both: between them, from 9.6 to
+        // 22.4; the caret, under the key, dropped.
+        AccountData balance = Fresh();
+        balance.creditsBalance = 12345;
+        AccountMeters both = weekly(balance, L"openai", 50, 0.75);
+        CHECK(both.sparkExtraText == L"12345" && !both.sparkExtraBottom && !both.quotas[1].sparkKeyTop);
+        pieces(both.quotas[1].spark[kSparkNowLine], 35.5, 36.5, {{9.6, 22.4}});
+        CHECK(both.quotas[1].spark[kSparkCaret].empty());
+        // "$20.00" (x 3 to 31.8) at the top, half way at 40%: the line below it, the caret kept.
+        AccountMeters top = weekly(dollars, L"anthropic", 40, 0.5);
+        CHECK(!top.sparkExtraBottom);
+        pieces(top.quotas[1].spark[kSparkNowLine], 23.5, 24.5, {{9.6, 31}});
+        CHECK(top.quotas[1].spark[kSparkCaret].size() == 1);
+        // Moved to the bottom by 110% half way, (24, 2): the line above it, the caret dropped.
+        AccountMeters bottom = weekly(dollars, L"anthropic", 110, 0.5);
+        CHECK(bottom.sparkExtraBottom);
+        pieces(bottom.quotas[1].spark[kSparkNowLine], 23.5, 24.5, {{1, 22.4}});
+        CHECK(bottom.quotas[1].spark[kSparkCaret].empty());
+        // A 24 x 12 chart (7 DIP text, 4.9 cap height; the line from 1 to 11): "$20.00" at the top (x 3
+        // to 28.2, y 3 to 7.9) over the key at the bottom (x 12.6 to 21, y 4.1 to 9); 50% at 62.5% of
+        // the week, (15, 6), hitting both wherever they go. The top text takes the line down to 8.9,
+        // the bottom text up from 3.1: no line left; the caret dropped.
+        const MeterDisplay tiny = Display(With([](Settings& s) {
+            cues(s);
+            s.sparklineWidth = 24;
+            s.sparklineHeight = 50;
+            s.sparklineTextSize = 7;
+        }), 1, 32);
+        AccountMeters cramped = weekly(dollars, L"anthropic", 50, 0.625, &tiny);
+        CHECK(!cramped.sparkExtraBottom && !cramped.quotas[1].sparkKeyTop);
+        CHECK(cramped.quotas[1].spark[kSparkNowLine].empty());
+        CHECK(cramped.quotas[1].spark[kSparkCaret].empty());
     });
 
     Run("sparkline: the projection at the window's average rate, to the reset or to the limit", [] {
-        auto line = [](const TileOutline& outline, double x0, double y0, double x1, double y1) {
-            CHECK(outline.size() == 1 && outline[0].segments.size() == 1);
-            point(outline[0], x0, y0);
-            point(outline[0].segments[0], x1, y1);
-            CHECK_NEAR(outline[0].segments[0].radius, 0);
-        };
         // Under pace: 45% half way reaches 90% at the reset.
         AccountMeters under = spark(Window(45, 9000000));
-        line(under.sparkProjection, 50, 13, 100, 4);
-        CHECK(under.sparkLimit.empty());
+        line(under.quotas[0].spark[kSparkProjection], 50, 13, 100, 4);
+        CHECK(under.quotas[0].spark[kSparkLimit].empty());
         // Even use reaches the limit just at the reset: no mark.
         AccountMeters even = spark(Window(50, 9000000));
-        line(even.sparkProjection, 50, 12, 100, 2);
-        CHECK(even.sparkLimit.empty());
+        line(even.quotas[0].spark[kSparkProjection], 50, 12, 100, 2);
+        CHECK(even.quotas[0].spark[kSparkLimit].empty());
         // Over pace: 80% half way reaches 100% at 62.5% of the window, marked there in the 100%
         // color (red), whatever the quota's own (orange).
         AccountMeters over = spark(Window(80, 9000000));
-        line(over.sparkProjection, 50, 6, 62.5, 2);
-        circle(over.sparkLimit, 62.5, 2, 1.75);
-        CHECK(over.sparkLimitColor == 0xFFE53935 && over.headlineColor == 0xFFFB8C00);
+        line(over.quotas[0].spark[kSparkProjection], 50, 6, 62.5, 2);
+        circle(over.quotas[0].spark[kSparkLimit], 62.5, 2, 1.75);
+        CHECK(over.sparkLimitColor == 0xFFE53935 && over.quotas[0].color == 0xFFFB8C00);
         // 60% half way reaches the limit at 83.33, drawn at 83.25.
-        line(spark(Window(60, 9000000)).sparkProjection, 50, 10, 83.25, 2);
+        line(spark(Window(60, 9000000)).quotas[0].spark[kSparkProjection], 50, 10, 83.25, 2);
         CHECK(spark(Window(80, 9000000), {}, plot([](Settings& s) { s.colorblindMode = true; })).sparkLimitColor == 0xFFD55E00);
         // From 5% of the window on: 1% there reaches 20%.
-        line(spark(Window(1, 17100000)).sparkProjection, 5, 21.75, 100, 18);
+        line(spark(Window(1, 17100000)).quotas[0].spark[kSparkProjection], 5, 21.75, 100, 18);
         // None before 5% of the window, at 0% or from 100%, at the reset, or before the window
-        // starts; the point stays.
-        for (WindowUsage reading : {Window(45, 17280000), Window(0, 9000000), Window(100, 9000000), Window(110, 9000000),
-                                    Window(45, 0), Window(45, kFiveHours + 1000)}) {
-            AccountMeters m = spark(reading);
-            CHECK(m.sparkProjection.empty() && m.sparkLimit.empty() && m.sparkNow.size() == 1);
+        // starts; the reading stays.
+        for (WindowUsage r : {Window(45, 17280000), Window(0, 9000000), Window(100, 9000000), Window(110, 9000000),
+                              Window(45, 0), Window(45, kFiveHours + 1000)}) {
+            AccountMeters m = spark(r);
+            CHECK(m.quotas[0].spark[kSparkProjection].empty() && m.quotas[0].spark[kSparkLimit].empty() && !unmarked(m.quotas[0]));
         }
-        // Stale: none either; the point greys, the limit color stays.
+        // Stale: none either; the quota greys, the limit color stays.
         AccountData stale = Fresh();
         stale.win5h = Window(80, 9000000);
         stale.stale = true;
         AccountMeters grey = AccountMeterState(plot(), BarLayout::Sparkline,
                                                Account(L"anthropic", L"A", {true, false, false, false}), stale, 0, 0);
-        CHECK(grey.sparkProjection.empty() && grey.sparkLimit.empty() && grey.sparkNow.size() == 1);
-        CHECK(grey.headlineColor == 0xFF9E9E9E && grey.sparkLimitColor == 0xFFE53935);
+        CHECK(grey.quotas[0].spark[kSparkProjection].empty() && grey.quotas[0].spark[kSparkLimit].empty() &&
+              !unmarked(grey.quotas[0]));
+        CHECK(grey.quotas[0].color == 0xFF9E9E9E && grey.sparkLimitColor == 0xFFE53935);
+    });
+
+    Run("sparkline: extra usage in the weekly chart's top-left corner instead of a chart of its own", [] {
+        const ULONGLONG kMonth = 30ULL * 24 * 60 * kMinute;
+        // An Anthropic account's 5-hour and weekly quotas and its monthly extra usage, each with a
+        // window: `used` of `limit` dollars spent (no limit: unlimited, no percentage).
+        auto anthropic = [&](double used, double limit) {
+            AccountData data = Fresh();
+            data.win5h = Window(30, 9000000);
+            data.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
+            data.extraUsage = {limit > 0 ? used * 100 / limit : -1, kNow + 10 * 24 * 60 * kMinute, kMonth};
+            data.extraUsedAmount = used;
+            data.extraLimitAmount = limit;
+            return data;
+        };
+        auto corner = [](const AccountData& data, SparklineExtra extra = SparklineExtra::Amount, BarMode mode = BarMode::Used,
+                         std::wstring provider = L"anthropic", std::array<bool, kQuotaBarCount> bars = {true, true, false, true}) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.sparklineExtra = extra; s.barMode = mode; }));
+            return AccountMeterState(d, BarLayout::Sparkline, Account(provider, L"A", bars), data, 0, 0);
+        };
+        auto shows = [](const AccountMeters& m, std::wstring_view key, std::wstring_view text, uint32_t color) {
+            CHECK(m.sparkExtraKey == key && m.sparkExtraText == text && m.sparkExtraColor == color);
+        };
+        using enum SparklineExtra;
+        constexpr BarMode kUsed = BarMode::Used, kLeft = BarMode::Remaining;
+        constexpr uint32_t green = 0xFF43A047, orange = 0xFFFB8C00, red = 0xFFE53935, grey = 0xFF9E9E9E;
+
+        // Amount, the default: $20 of $50 spent, without a key, in extra usage's usage color (40%:
+        // green); extra usage gets no chart, the other two 100 DIPs.
+        AccountMeters spent = corner(anthropic(20, 50));
+        shows(spent, L"", L"$20.00", green);
+        CHECK(spent.barMask == 0b0011 && bare(spent.quotas[3]));
+        CHECK_NEAR(spent.faceWidth, 100);
+        // Remaining mode: what's left of the limit; past it, none.
+        shows(corner(anthropic(20, 50), Amount, kLeft), L"", L"$30.00", green);
+        shows(corner(anthropic(60, 50)), L"", L"$60.00", red);
+        shows(corner(anthropic(60, 50), Amount, kLeft), L"", L"$0.00", red);
+        // Unlimited: the amount spent in either mode, in the taskbar's text color (0).
+        shows(corner(anthropic(12.5, -1)), L"", L"$12.50", 0);
+        shows(corner(anthropic(12.5, -1), Amount, kLeft), L"", L"$12.50", 0);
+        // Percent: of the limit, keyed "Ex"; in remaining mode the share left, at least 0%.
+        shows(corner(anthropic(20, 50), Percent), L"Ex", L"40%", green);
+        shows(corner(anthropic(20, 50), Percent, kLeft), L"Ex", L"60%", green);
+        shows(corner(anthropic(60, 50), Percent), L"Ex", L"120%", red);
+        shows(corner(anthropic(60, 50), Percent, kLeft), L"Ex", L"0%", red);
+        // Without a limit Percent shows the amount.
+        shows(corner(anthropic(12.5, -1), Percent), L"", L"$12.50", 0);
+        shows(corner(anthropic(12.5, -1), Percent, kLeft), L"", L"$12.50", 0);
+
+        // OpenAI credits against a 1000 credit max with 250 left (75% used: orange), keyed "Cr":
+        // 750 spent, 250 left; 75%, 25%. Credits have no window: never a chart of their own.
+        AccountData credits = Fresh();
+        credits.win5h = Window(30, 9000000);
+        credits.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
+        credits.creditsBalance = 250;
+        credits.extraUsage.pct = 75;
+        credits.extraUsedAmount = 750;
+        credits.extraLimitAmount = 1000;
+        AccountMeters used = corner(credits, Amount, kUsed, L"openai");
+        shows(used, L"Cr", L"750", orange);
+        CHECK(used.barMask == 0b0011);
+        shows(corner(credits, Amount, kLeft, L"openai"), L"Cr", L"250", orange);
+        shows(corner(credits, Percent, kUsed, L"openai"), L"Cr", L"75%", orange);
+        shows(corner(credits, Percent, kLeft, L"openai"), L"Cr", L"25%", orange);
+        // A balance without a max: the balance, in either mode and for Percent, in the text color.
+        AccountData balance = credits;
+        balance.creditsBalance = 420;
+        balance.extraUsage.pct = balance.extraUsedAmount = balance.extraLimitAmount = -1;
+        for (SparklineExtra extra : {Amount, Percent}) {
+            for (BarMode mode : {kUsed, kLeft}) shows(corner(balance, extra, mode, L"openai"), L"Cr", L"420", 0);
+        }
+        // A percentage with neither amounts nor a balance: shown as such in Amount mode too, keyed,
+        // in either bar mode.
+        AccountData share = anthropic(-1, -1);
+        share.extraUsage.pct = 40;
+        shows(corner(share), L"Ex", L"40%", green);
+        shows(corner(share, Amount, kLeft), L"Ex", L"60%", green);
+        shows(corner(share, Percent), L"Ex", L"40%", green);
+        AccountData creditShare = balance;
+        creditShare.extraUsage.pct = 75;
+        creditShare.creditsBalance = -1;
+        shows(corner(creditShare, Amount, kUsed, L"openai"), L"Cr", L"75%", orange);
+        // With a balance (no amounts) Amount shows the balance, Percent the percentage.
+        creditShare.creditsBalance = 250;
+        shows(corner(creditShare, Amount, kUsed, L"openai"), L"Cr", L"250", orange);
+        shows(corner(creditShare, Percent, kUsed, L"openai"), L"Cr", L"75%", orange);
+        // A balance counts for OpenAI only.
+        AccountData stray = anthropic(-1, -1);
+        stray.creditsBalance = 420;
+        AccountMeters unreported = corner(stray);
+        shows(unreported, L"", L"", 0);
+        CHECK(unreported.barMask == 0b0011);
+        // Stale: grey, with a percentage or without.
+        AccountData stale = anthropic(20, 50);
+        stale.stale = true;
+        shows(corner(stale), L"", L"$20.00", grey);
+        stale = anthropic(12.5, -1);
+        stale.stale = true;
+        shows(corner(stale), L"", L"$12.50", grey);
+
+        // Off: no corner; extra usage charted third with its window, 104 DIPs in.
+        AccountMeters off = corner(anthropic(20, 50), Off);
+        shows(off, L"", L"", 0);
+        CHECK(off.barMask == 0b1011 && !bare(off.quotas[3]));
+        CHECK_NEAR(off.faceWidth, 152); CHECK_NEAR(off.quotas[3].sparkLeft, 104);
+        // The weekly quota not charted (hidden, or without a window): no corner; extra usage charted
+        // second.
+        for (AccountMeters m : {corner(anthropic(20, 50), Amount, kUsed, L"anthropic", {true, false, false, true}),
+                                corner([&] {
+                                    AccountData flat = anthropic(20, 50);
+                                    flat.winWeek = {40, 0, 0};
+                                    return flat;
+                                }())}) {
+            shows(m, L"", L"", 0);
+            CHECK(m.barMask == 0b1001);
+            CHECK_NEAR(m.quotas[3].sparkLeft, 52);
+        }
+        // Nor as the most-used quota's chart without any window.
+        AccountData flat = Fresh({30, 70, -1, 40});
+        flat.extraUsedAmount = 20;
+        flat.extraLimitAmount = 50;
+        AccountMeters fallback = corner(flat);
+        shows(fallback, L"", L"", 0);
+        CHECK(fallback.barMask == 0b0010);
+        // Extra usage itself not shown: its amount still goes in the corner.
+        shows(corner(anthropic(20, 50), Amount, kUsed, L"anthropic", {true, true, false, false}), L"", L"$20.00", green);
+        // The setting clamps at the display entry: Amount by default.
+        CHECK(Display().sparklineExtra == Amount);
+        CHECK(Display(With([](Settings& s) { s.sparklineExtra = SparklineExtra(7); })).sparklineExtra == Percent);
+        CHECK(Display(With([](Settings& s) { s.sparklineExtra = SparklineExtra(-3); })).sparklineExtra == Off);
+    });
+
+    Run("sparkline: the key and the extra usage move to the plot's other edge, clear of the current reading", [] {
+        // Text boxes 3 DIPs in from the plot's edges, a cap height (0.7 of the key's font) tall and
+        // 0.6 of the font wide per character (plus 2 DIPs after the extra usage's key); the
+        // reading's box its ring's, 4.1 DIPs around it (the ring on, as below unless noted; a plain
+        // dot's 2 DIPs). On the 48 x 32 chart (8 DIP text, 5.6 cap height): the 2-letter key from x
+        // 35.4 to 45, at the bottom from y 23.4 to 29, at the top from 3 to 8.6.
+        const MeterDisplay ringed = Display(With(cues));
+        auto chart = [&](double pct, double share, const MeterDisplay* d = nullptr) {
+            return spark(Window(pct, std::llround((1 - share) * kFiveHours)), {}, d ? *d : ringed).quotas[0];
+        };
+        // 10% at 80% of the window, (38.5, 27.25): in the bottom box, clear of the top: moved.
+        CHECK(chart(10, 0.8).sparkKeyTop);
+        // Clear of the bottom box: half way (24, 27.25), or at 90% (38.5, 4.75): kept.
+        CHECK(!chart(10, 0.5).sparkKeyTop);
+        CHECK(!chart(90, 0.8).sparkKeyTop);
+        // Without a window, 10% at (43.9, 27.25): moved.
+        CHECK(spark({10, 0, 0}, {}, ringed).quotas[0].sparkKeyTop);
+        // A 12 DIP chart (50% of a 32 DIP taskbar's tile; 7 DIP text, 4.9 cap height): both boxes,
+        // y 4.1 to 9 and 3 to 7.9, under the ring at (38.5, 9.25): kept.
+        const MeterDisplay low = Display(With([](Settings& s) {
+            cues(s);
+            s.sparklineHeight = 50;
+            s.sparklineTextSize = 7;
+        }), 1, 32);
+        CHECK(!chart(10, 0.8, &low).sparkKeyTop);
+        // Touching counts as clear: on a 24 x 28 chart (7 DIP text) the key from x 12.6 to 21, at the
+        // bottom from y 20.1 to 25; 17% at (8.5, 22) has its ring end at x 12.6: kept; a quarter DIP
+        // later, at 8.75: moved.
+        const MeterDisplay narrow = Display(With([](Settings& s) {
+            cues(s);
+            s.sparklineWidth = 24;
+            s.sparklineHeight = 70;
+            s.sparklineTextSize = 7;
+        }));
+        CHECK(!chart(17, 0.355, &narrow).sparkKeyTop);
+        CHECK(chart(17, 0.365, &narrow).sparkKeyTop);
+        // No reading (a window before the first success): kept.
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        before.win5h = {-1, kNow + 3600000, kFiveHours};
+        AccountMeters waiting = AccountMeterState(ringed, BarLayout::Sparkline,
+                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
+        CHECK(waiting.barMask == 0b0001 && unmarked(waiting.quotas[0]) && !waiting.quotas[0].sparkKeyTop);
+
+        // The weekly chart places its key and the extra usage together, trying in order: the key at
+        // the bottom and the extra usage at the top, the key moved, the extra usage moved, both moved;
+        // skipping placements with both on one edge where their boxes overlap across, and keeping the
+        // first the ring overlaps the fewest boxes in. With $20 of $50 extra usage: "$20.00" (6
+        // characters) from x 3 to 31.8, at the top from y 3 to 8.6, at the bottom from 23.4 to 29.
+        auto weekly = [](double pct, double share, SparklineExtra extra = SparklineExtra::Amount,
+                         const MeterDisplay* d = nullptr) {
+            AccountData data = Fresh();
+            data.win5h = Window(110, 9000000);
+            data.winWeek = {pct, kNow + (ULONGLONG)std::llround((1 - share) * kWeeklyWindowMs), kWeeklyWindowMs};
+            data.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+            data.extraUsedAmount = 20;
+            data.extraLimitAmount = 50;
+            MeterDisplay display = d ? *d : Display(With(cues));
+            display.sparklineExtra = extra;
+            return AccountMeterState(display, BarLayout::Sparkline, Account(L"anthropic", L"A", {true, true, false, true}),
+                                     data, 0, 0);
+        };
+        // 110% half way, (24, 2): only the extra usage's top box hit; it moves, the key stays. The
+        // 5-hour chart's 110% reading at its top-left moves nothing here.
+        AccountMeters high = weekly(110, 0.5);
+        CHECK(high.sparkExtraText == L"$20.00" && high.sparkExtraBottom && !high.quotas[1].sparkKeyTop);
+        // 40% half way, (24, 18.75): no box hit: nothing moves.
+        AccountMeters middle = weekly(40, 0.5);
+        CHECK(!middle.sparkExtraBottom && !middle.quotas[1].sparkKeyTop);
+        // 10% at 80%, (38.5, 27.25): only the key's bottom box hit; the key moves, and the extra
+        // usage stays at the top (moving both is as clear, no improvement).
+        AccountMeters late = weekly(10, 0.8);
+        CHECK(late.quotas[1].sparkKeyTop && !late.sparkExtraBottom);
+        // The box's width per its text: at (33.25, 2) the ring starts at x 29.15, inside "$20.00"
+        // (moved) but past "Ex" and "40%" (5 characters and the 2 DIP gap: x 3 to 29; kept); at
+        // (31.5, 2), from 27.4, inside that too (moved).
+        CHECK(weekly(110, 0.6925).sparkExtraBottom);
+        AccountMeters keyed = weekly(110, 0.6925, SparklineExtra::Percent);
+        CHECK(keyed.sparkExtraKey == L"Ex" && keyed.sparkExtraText == L"40%" && !keyed.sparkExtraBottom);
+        CHECK(weekly(110, 0.656, SparklineExtra::Percent).sparkExtraBottom);
+        // The 12 DIP chart (key from x 36.6 to 45, "$20.00" from 3 to 28.2): the ring at (24, 2) hits
+        // the extra usage on either edge and the key on neither; one hit in every placement, the first
+        // kept.
+        AccountMeters crowded = weekly(110, 0.5, SparklineExtra::Amount, &low);
+        CHECK(!crowded.sparkExtraBottom && !crowded.quotas[1].sparkKeyTop);
+
+        // The weekly chart alone, its corner per `data`, on `d`.
+        auto placed = [&](const AccountData& data, std::wstring provider, const MeterDisplay* d = nullptr) {
+            return AccountMeterState(d ? *d : ringed, BarLayout::Sparkline, Account(provider, L"A", {false, true, false, true}),
+                                     data, 0, 0);
+        };
+        auto weekReading = [](double pct, double share) {
+            return WindowUsage{pct, kNow + (ULONGLONG)std::llround((1 - share) * kWeeklyWindowMs), kWeeklyWindowMs};
+        };
+        // A 12345 credit balance: "Cr" and "12345" (7 characters and the gap) from x 3 to 38.6, past
+        // the key's 35.4: the two never share an edge.
+        AccountData balance = Fresh();
+        balance.creditsBalance = 12345;
+        // 10% at 80%, (38.5, 27.25): the key's bottom box hit; moved alone it would sit on the extra
+        // usage, and moving both puts the extra usage under the ring: one hit either way, neither
+        // moves.
+        balance.winWeek = weekReading(10, 0.8);
+        AccountMeters stuck = placed(balance, L"openai");
+        CHECK(stuck.barMask == 0b0010 && stuck.sparkExtraKey == L"Cr" && stuck.sparkExtraText == L"12345");
+        CHECK(!stuck.sparkExtraBottom && !stuck.quotas[1].sparkKeyTop);
+        // 110% a quarter of the way, (12, 2): the extra usage's top box hit; moved alone it would sit
+        // on the key: both move, swapping edges, clear of the ring.
+        balance.winWeek = weekReading(110, 0.25);
+        AccountMeters swapped = placed(balance, L"openai");
+        CHECK(swapped.sparkExtraBottom && swapped.quotas[1].sparkKeyTop);
+
+        // 24 DIP charts: the key's box overlaps any corner text across, so they never share an edge.
+        // OpenAI credits, 875 of a 1000 credit max left: "Cr" and "125" (5 characters and the gap:
+        // x 3 to 26), on a 24 x 20 chart (50% of a 40 DIP tile; 7 DIP text, 4.9 cap height: the key
+        // from x 12.6 to 21; boxes y 3 to 7.9 and 12.1 to 17). 62.5% half way, (12, 8): the ring hits
+        // the extra usage at the top, and with both moved the key at the top (it ends at y 12.1,
+        // touching the bottom boxes): one hit either way, neither moves.
+        AccountData credits = Fresh();
+        credits.winWeek = weekReading(62.5, 0.5);
+        credits.creditsBalance = 875;
+        credits.extraUsage.pct = 12.5;
+        credits.extraUsedAmount = 125;
+        credits.extraLimitAmount = 1000;
+        const MeterDisplay short24 = Display(With([](Settings& s) {
+            cues(s);
+            s.sparklineWidth = 24;
+            s.sparklineHeight = 50;
+            s.sparklineTextSize = 7;
+        }));
+        AccountMeters oai = placed(credits, L"openai", &short24);
+        CHECK(oai.sparkExtraKey == L"Cr" && oai.sparkExtraText == L"125");
+        CHECK(!oai.sparkExtraBottom && !oai.quotas[1].sparkKeyTop);
+        // $12.50 of $50 on a 24 x 40 chart (100%; 9 DIP text, 6.3 cap height: the key from x 10.2 to
+        // 21, "$12.50" from 3 to 35.4; boxes y 3 to 9.3 and 30.7 to 37). 110% at 60% of the window,
+        // (14.5, 2): the extra usage's top box hit, or with both moved the key's: neither moves.
+        AccountData dollars = Fresh();
+        dollars.winWeek = weekReading(110, 0.6);
+        dollars.extraUsage = {25, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+        dollars.extraUsedAmount = 12.5;
+        dollars.extraLimitAmount = 50;
+        const MeterDisplay tall24 = Display(With([](Settings& s) {
+            cues(s);
+            s.sparklineWidth = 24;
+            s.sparklineHeight = 100;
+            s.sparklineTextSize = 9;
+        }));
+        AccountMeters cc = placed(dollars, L"anthropic", &tall24);
+        CHECK(cc.sparkExtraText == L"$12.50" && cc.sparkExtraKey.empty());
+        CHECK(!cc.sparkExtraBottom && !cc.quotas[1].sparkKeyTop);
+        // The same reading on the 24 x 20 chart ("$12.50" from 3 to 28.2): likewise.
+        AccountMeters ccShort = placed(dollars, L"anthropic", &short24);
+        CHECK(!ccShort.sparkExtraBottom && !ccShort.quotas[1].sparkKeyTop);
+        // Without corner text the weekly key moves as any other: on the 24 x 20 chart 10% at 80% of the
+        // way, (19.25, 16.5), hits the key's bottom box and clears its top one: moved.
+        AccountData plain = Fresh();
+        plain.winWeek = weekReading(10, 0.8);
+        CHECK(placed(plain, L"anthropic", &short24).quotas[1].sparkKeyTop);
+
+        // The ring off, the default: the dot's box, 2 DIPs around it. 35% at 80% of the window,
+        // (38.5, 20.25): the ring reaches y 24.35, into the key's bottom box (moved); the dot only
+        // 22.25 (kept). Without a window the dot at (46, 27.25), in that box: moved.
+        const MeterDisplay plainDot = Display();
+        CHECK(chart(35, 0.8).sparkKeyTop && !chart(35, 0.8, &plainDot).sparkKeyTop);
+        CHECK(spark({10, 0, 0}, {}, plainDot).quotas[0].sparkKeyTop);
+        // 110% at (34, 2): the ring from x 29.9, into "$20.00" (moved); the dot from 32, past its
+        // 31.8 (kept).
+        CHECK(weekly(110, 0.7083).sparkExtraBottom);
+        AccountMeters plainHigh = weekly(110, 0.7083, SparklineExtra::Amount, &plainDot);
+        CHECK(!plainHigh.sparkExtraBottom && !plainHigh.quotas[1].sparkKeyTop);
+        // No reading (the weekly quota not read yet, before the first success): kept.
+        AccountData unread = Fresh();
+        unread.lastSuccessMs = 0;
+        unread.winWeek = {-1, kNow + kWeeklyWindowMs / 2, kWeeklyWindowMs};
+        unread.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+        unread.extraUsedAmount = 20;
+        unread.extraLimitAmount = 50;
+        AccountMeters blank = AccountMeterState(Display(), BarLayout::Sparkline,
+                                                Account(L"anthropic", L"A", {false, true, false, true}), unread, 0, 0);
+        CHECK(blank.barMask == 0b0010 && blank.sparkExtraText == L"$20.00" && unmarked(blank.quotas[1]) &&
+              !blank.sparkExtraBottom && !blank.quotas[1].sparkKeyTop);
+    });
+
+    Run("sparkline: shape colors per taskbar theme, each chart in its quota's; strokes and drawing order", [] {
+        // 80% half way (orange), over pace, with a run and a lone reading, the ring and the caret on:
+        // every shape.
+        const MeterDisplay d = plot(cues);
+        AccountMeters m = spark(Window(80, 9000000), {{at(0.1), 10, false}, {at(0.2), 20, true}, {at(0.3), 30, false}}, d);
+        for (int k = 0; k < kSparkShapeCount; k++) CHECK(!m.quotas[0].spark[k].empty());
+        // Dark taskbar: the lit part, the outline, the now line, the caret and the ring white at their
+        // alphas, the cut-out in the taskbar's color, the diagonal the pace color at half alpha; the
+        // area (at 0x47), runs, dots and projection in the usage color; the dot 0.03 lighter in OKLCH
+        // lightness, keeping its hue; the limit mark the 100% color. Light: the same in black, the
+        // light pace color.
+        const std::pair<int, uint32_t> dark[] = {
+            {kSparkLit, 0x1FFFFFFF},     {kSparkOutline, 0x2EFFFFFF},     {kSparkPace, 0x80DEDEDE},
+            {kSparkArea, 0x47FB8C00},
+            {kSparkLines, 0xFFFB8C00},   {kSparkDots, 0xFFFB8C00},        {kSparkNowLine, 0x80FFFFFF},
+            {kSparkProjection, 0xFFFB8C00}, {kSparkCaret, 0xF0FFFFFF},    {kSparkNowCut, 0xFF1C1C1C},
+            {kSparkNowRing, 0xF0FFFFFF}, {kSparkLimit, 0xFFE53935}};
+        const std::pair<int, uint32_t> light[] = {
+            {kSparkLit, 0x12000000},     {kSparkOutline, 0x24000000},     {kSparkPace, 0x801A1A1A},
+            {kSparkArea, 0x47FB8C00},
+            {kSparkLines, 0xFFFB8C00},   {kSparkDots, 0xFFFB8C00},        {kSparkNowLine, 0x80000000},
+            {kSparkProjection, 0xFFFB8C00}, {kSparkCaret, 0xF0000000},    {kSparkNowCut, 0xFFF3F3F3},
+            {kSparkNowRing, 0xF0000000}, {kSparkLimit, 0xFFE53935}};
+        for (auto [shape, color] : dark) CHECK(SparkShapeColor(shape, m, 0, d, false) == color);
+        for (auto [shape, color] : light) CHECK(SparkShapeColor(shape, m, 0, d, true) == color);
+        for (bool theme : {false, true}) nearColor(SparkShapeColor(kSparkNow, m, 0, d, theme), 0xFFFF9A3A);
+        // A chosen pace color, at half alpha on either taskbar.
+        MeterDisplay pink = plot([](Settings& s) { s.paceTickColor = RGB(0xFF, 0x6E, 0xC7); });
+        for (bool theme : {false, true}) CHECK(SparkShapeColor(kSparkPace, m, 0, pink, theme) == 0x80FF6EC7);
+        // Each chart in its own quota's color: the 5-hour quota's 90% red, the weekly 60% yellow, Fable's
+        // 40% green, each dot a shade lighter.
+        AccountData three = Fresh({90, 60, 40, -1});
+        three.win5h = Window(90, 9000000);
+        three.winWeek = {60, kNow + kMinute, kWeeklyWindowMs};
+        three.fableWeek = {40, kNow + kMinute, kWeeklyWindowMs};
+        const MeterDisplay ringed = Display(With(cues));
+        AccountMeters each = AccountMeterState(ringed, BarLayout::Sparkline, Account(), three, 0, 0);
+        CHECK(each.barMask == 0b0111);
+        const std::tuple<int, uint32_t, uint32_t> slots[] = {
+            {0, 0xFFE53935, 0xFFF0453E}, {1, 0xFFFDD835, 0xFFFFE377}, {2, 0xFF43A047, 0xFF4DA950}};
+        for (auto [slot, usage, lifted] : slots) {
+            CHECK(SparkShapeColor(kSparkLines, each, slot, ringed, false) == usage);
+            CHECK(SparkShapeColor(kSparkArea, each, slot, ringed, true) == ((usage & 0xFFFFFF) | 0x47000000));
+            nearColor(SparkShapeColor(kSparkNow, each, slot, ringed, false), lifted);
+            // The ring off: the dot in the plain usage color.
+            CHECK(SparkShapeColor(kSparkNow, each, slot, Display(), false) == usage);
+        }
+        // The ring off, the default: no cut-out or ring, no caret, the dot unlifted on either taskbar.
+        const MeterDisplay plain = plot();
+        AccountMeters flat = spark(Window(80, 9000000), {}, plain);
+        CHECK(flat.quotas[0].spark[kSparkNowCut].empty() && flat.quotas[0].spark[kSparkNowRing].empty() &&
+              flat.quotas[0].spark[kSparkCaret].empty() && !flat.quotas[0].spark[kSparkNow].empty());
+        for (bool theme : {false, true}) CHECK(SparkShapeColor(kSparkNow, flat, 0, plain, theme) == 0xFFFB8C00);
+        // Stale: grey, the dot a lighter grey; the limit color stays red.
+        AccountData staleData = Fresh();
+        staleData.win5h = Window(80, 9000000);
+        staleData.stale = true;
+        AccountMeters stale = AccountMeterState(d, BarLayout::Sparkline, Account(L"anthropic", L"A", {true, false, false, false}),
+                                                staleData, 0, 0);
+        CHECK(SparkShapeColor(kSparkLines, stale, 0, d, false) == 0xFF9E9E9E);
+        nearColor(SparkShapeColor(kSparkNow, stale, 0, d, false), 0xFFA7A7A7);
+        CHECK(SparkShapeColor(kSparkLimit, stale, 0, d, false) == 0xFFE53935);
+        // Colorblind: 80% is the orange band, the limit vermillion.
+        MeterDisplay colorblind = plot([](Settings& s) {
+            cues(s);
+            s.colorblindMode = true;
+        });
+        AccountMeters cb = spark(Window(80, 9000000), {}, colorblind);
+        CHECK(SparkShapeColor(kSparkLines, cb, 0, colorblind, false) == 0xFFE69F00);
+        nearColor(SparkShapeColor(kSparkNow, cb, 0, colorblind, false), 0xFFF0A91E);
+        CHECK(SparkShapeColor(kSparkLimit, cb, 0, colorblind, false) == 0xFFD55E00);
+        // Strokes: the outline 1 DIP solid, the diagonal 1 DIP dashed 2-2, the runs 1.3 solid, the
+        // projection 1.2 dashed 1-1.5 (in stroke widths); every other shape filled.
+        for (int k = 0; k < kSparkShapeCount; k++) {
+            const SparkShapeStyle& style = kSparkShapeStyles[k];
+            const std::array<double, 3> expected = k == kSparkOutline ? std::array<double, 3>{1, 0, 0} :
+                                                   k == kSparkPace ? std::array<double, 3>{1, 2, 2} :
+                                                   k == kSparkLines ? std::array<double, 3>{1.3, 0, 0} :
+                                                   k == kSparkProjection ? std::array<double, 3>{1.2, 1, 1.5} :
+                                                                           std::array<double, 3>{0, 0, 0};
+            CHECK_NEAR(style.stroke, expected[0]);
+            CHECK_NEAR(style.dashes[0], expected[1]);
+            CHECK_NEAR(style.dashes[1], expected[2]);
+        }
+        // Drawing order: the lit part first, then the outline, the limit mark last.
+        CHECK(kSparkLit == 0 && kSparkOutline == 1 && kSparkPace == 2 && kSparkArea == 3 && kSparkLines == 4 &&
+              kSparkDots == 5 && kSparkNowLine == 6 && kSparkProjection == 7 && kSparkCaret == 8 &&
+              kSparkNowCut == 9 && kSparkNowRing == 10 && kSparkNow == 11 && kSparkLimit == 12 &&
+              kSparkShapeCount == 13);
     });
 
     Run("visual test trace: readings from part-way into the window up to now, two runs and a lone reading", [] {
         const AccountConfig claude = Account(L"anthropic", L"CC 1");
-        const WindowUsage reading = Window(60, 9000000);
+        const WindowUsage reading60 = Window(60, 9000000);
         const ULONGLONG start = kNow - 9000000;
-        std::vector<TileTracePoint> trace = VisualTestTrace(claude, reading, kNow);
+        std::vector<TileTracePoint> trace = VisualTestTrace(claude, reading60, kNow);
         CHECK(!trace.empty() && !trace[0].connect);
         // Oldest first, inside the window's elapsed part, rising to the reading at now.
         for (size_t k = 0; k < trace.size(); k++) {
@@ -2087,25 +2932,27 @@ static void RunSparklineTests() {
         }
         CHECK(std::count(runs.begin(), runs.end(), size_t(1)) == 1 &&
               std::count_if(runs.begin(), runs.end(), [](size_t n) { return n > 1; }) == 2);
-        // Charted on the 48 x 32 plot: two runs and their areas, a dot, and the point on the last
-        // reading, half way at 60% (13.2, drawn at 13.25).
+        // Charted on the 48 x 32 plot: two runs and their areas, a dot, and the current reading on
+        // the last one, half way at 60% (13.2, drawn at 13.25).
         AccountData data = Fresh();
-        data.win5h = reading;
+        data.win5h = reading60;
         AccountMeters m = AccountMeterState(Display(), BarLayout::Sparkline, Account(L"anthropic", L"CC 1", {true, false, false, false}),
                                             data, 0, 0, [&](int, const WindowUsage& r) { return VisualTestTrace(claude, r, kNow); });
-        CHECK(m.sparkLines.size() == 2 && m.sparkArea.size() == 2 && m.sparkDots.size() == 1);
-        point(m.sparkLines[1].segments.back(), 24, 13.25);
-        circle(m.sparkNow, 24, 13.25, 2);
+        const auto& shapes = m.quotas[0].spark;
+        CHECK(shapes[kSparkLines].size() == 2 && shapes[kSparkArea].size() == 2 && shapes[kSparkDots].size() == 1);
+        point(shapes[kSparkLines][1].segments.back(), 24, 13.25);
+        dot(m.quotas[0], 24, 13.25);
         // A tick later, its window moved with it: the same readings, a tick later.
-        std::vector<TileTracePoint> later = VisualTestTrace(claude, {60, reading.resetUnixMs + kMinute, kFiveHours}, kNow + kMinute);
+        std::vector<TileTracePoint> later =
+            VisualTestTrace(claude, {60, reading60.resetUnixMs + kMinute, kFiveHours}, kNow + kMinute);
         CHECK(later.size() == trace.size());
         for (size_t k = 0; k < later.size(); k++) {
             CHECK(later[k].timeMs == trace[k].timeMs + kMinute && later[k].used == trace[k].used &&
                   later[k].connect == trace[k].connect);
         }
         // None for the OpenAI sample, without a reading or a window, or before the window starts.
-        CHECK(VisualTestTrace(Account(L"openai", L"OAI"), reading, kNow).empty());
-        CHECK(VisualTestTrace(claude, {-1, reading.resetUnixMs, kFiveHours}, kNow).empty());
+        CHECK(VisualTestTrace(Account(L"openai", L"OAI"), reading60, kNow).empty());
+        CHECK(VisualTestTrace(claude, {-1, reading60.resetUnixMs, kFiveHours}, kNow).empty());
         CHECK(VisualTestTrace(claude, {60, 0, 0}, kNow).empty());
         CHECK(VisualTestTrace(claude, {60, kFiveHours, kFiveHours}, kNow).empty());
         CHECK(VisualTestTrace(claude, Window(60, kFiveHours), kNow).empty());

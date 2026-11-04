@@ -109,7 +109,7 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 48 scalar settings changed: the four page resets restore every one, and no field
+        // All 56 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -131,6 +131,14 @@ static void RunDisplayPageTests() {
         every.headlineBarThickness = 7;
         every.headlineCountdown = true;
         every.sparklineWidth = 80;
+        every.sparklineHeight = 60;
+        every.sparklineExtra = SparklineExtra::Percent;
+        every.sparklineTextSize = 12;
+        every.sparklineElapsed = false;
+        every.sparklineNowLine = false;
+        every.sparklineNowCaret = true;
+        every.sparklineRing = true;
+        every.sparklineOutline = false;
         every.logoScale = 150;
         every.logoBrands = {true, true};
         every.badgeSize = 12;
@@ -160,7 +168,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 48 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 56 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {

@@ -484,40 +484,59 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
                 width = padLeft + idWidth + 6 + faceWidth + padRight;
             } else if (layout == BarLayout::Sparkline) {
-                // Sparklines: the identity, then 6 DIP after it the plot: its background, its shapes
-                // in tiles.h's drawing order, and the key 3 DIPs in from its bottom-right corner.
+                // Sparklines: the identity, then 6 DIP after it each charted quota's chart at its
+                // place: its plot's background, its shapes in tiles.h's drawing order, and its key
+                // kSparkTextInset in from its bottom-right corner (or top-right); on the weekly
+                // chart, the extra usage's key and number kSparkExtraKeyGap apart, as far in from
+                // its top-left corner (or bottom-left), clipped to the insets.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
-                rect(ops, {faceLeft, faceTop, faceLeft + faceWidth, faceTop + faceHeight}, float(kSparkPlotRadius),
-                     palette.plot);
-                auto outline = [&](const TileOutline& shape, uint32_t color, double stroke = 0,
-                                   const std::array<double, 2>* dashes = nullptr) {
-                    if (shape.empty()) return;
-                    Op op;
-                    op.kind = stroke > 0 ? Op::Kind::Stroke : Op::Kind::Shape;
-                    op.shape = shape;
-                    op.origin = {faceLeft, faceTop};
-                    op.color = color;
-                    op.strokeWidth = float(stroke);
-                    op.winding = true;
-                    if (dashes) op.dashes = {float((*dashes)[0]), float((*dashes)[1])};
-                    add(ops, std::move(op));
-                };
-                const uint32_t usage = meters.headlineColor;
-                outline(meters.sparkPace, (pace.core & 0x00FFFFFF) | kSparkGuideAlpha, kSparkGuideStroke,
-                        &kSparkGuideDashes);
-                outline(meters.sparkArea, (usage & 0x00FFFFFF) | kSparkAreaAlpha);
-                outline(meters.sparkLines, usage, kSparkLineStroke);
-                outline(meters.sparkDots, usage);
-                outline(meters.sparkProjection, usage, kSparkProjectionStroke, &kSparkProjectionDashes);
-                outline(meters.sparkNow, usage);
-                outline(meters.sparkLimit, meters.sparkLimitColor);
-                if (!meters.headlineKey.empty()) {
-                    UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.sparkKeyFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
-                    Measured key = measure(meters.headlineKey, keyStyle);
-                    label(ops, meters.headlineKey, keyStyle, faceLeft + faceWidth - 3 - key.width,
-                          faceTop + faceHeight - 3 - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, 0.75f, true);
+                const float chartWidth = float(display.sparklineWidth);
+                const UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.sparkKeyFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    if (!(meters.barMask & (1 << w))) continue;
+                    const QuotaMeter& q = meters.quotas[w];
+                    const float left = faceLeft + float(q.sparkLeft);
+                    rect(ops, {left, faceTop, left + chartWidth, faceTop + faceHeight}, float(kSparkPlotRadius),
+                         palette.plot);
+                    for (int k = 0; k < kSparkShapeCount; k++) {
+                        if (q.spark[k].empty()) continue;
+                        const SparkShapeStyle& style = kSparkShapeStyles[k];
+                        Op op;
+                        op.kind = style.stroke > 0 ? Op::Kind::Stroke : Op::Kind::Shape;
+                        op.shape = q.spark[k];
+                        op.origin = {left, faceTop};
+                        op.color = SparkShapeColor(k, meters, w, display, light);
+                        op.strokeWidth = float(style.stroke);
+                        op.winding = true;
+                        if (style.dashes[0] > 0) op.dashes = {float(style.dashes[0]), float(style.dashes[1])};
+                        add(ops, std::move(op));
+                    }
+                    const float inset = float(kSparkTextInset);
+                    Measured key = measure(q.key, keyStyle);
+                    label(ops, q.key, keyStyle, left + chartWidth - inset - key.width,
+                          q.sparkKeyTop ? faceTop + inset : faceTop + faceHeight - inset - key.cap, key.width,
+                          DWRITE_TEXT_ALIGNMENT_LEADING, text, 0.75f, true);
+                    if (w != kWeeklyBar || meters.sparkExtraText.empty()) continue;
+                    const float extraTop = meters.sparkExtraBottom ? faceTop + faceHeight - inset - key.cap : faceTop + inset;
+                    const float extraEnd = left + chartWidth - inset;
+                    float extraLeft = left + inset;
+                    if (!meters.sparkExtraKey.empty()) {
+                        const UiTextStyle extraKeyStyle{UiFamily::Taskbar, float(meters.sparkKeyFont), 0,
+                                                        DWRITE_FONT_WEIGHT_NORMAL};
+                        Measured extraKey = measure(meters.sparkExtraKey, extraKeyStyle);
+                        label(ops, meters.sparkExtraKey, extraKeyStyle, extraLeft, extraTop,
+                              std::clamp(extraEnd - extraLeft, 0.0f, extraKey.width), DWRITE_TEXT_ALIGNMENT_LEADING,
+                              text, 0.6f, true, -1, true);
+                        extraLeft += extraKey.width + float(kSparkExtraKeyGap);
+                    }
+                    Measured extra = measure(meters.sparkExtraText, keyStyle);
+                    if (extraLeft < extraEnd) {
+                        label(ops, meters.sparkExtraText, keyStyle, extraLeft, extraTop,
+                              std::min(extraEnd - extraLeft, extra.width), DWRITE_TEXT_ALIGNMENT_LEADING,
+                              meters.sparkExtraColor ? meters.sparkExtraColor : text, 1, true, -1, true);
+                    }
                 }
                 width = padLeft + idWidth + 6 + faceWidth + padRight;
             } else if (layout == BarLayout::QuotaMatrix) {

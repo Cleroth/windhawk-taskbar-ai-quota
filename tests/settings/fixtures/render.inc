@@ -101,7 +101,8 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 // styles and colors, extreme sizes, overflow (scrolled and not), hover, a 32 DIP taskbar, the
 // sample identities (label, badged logos, a stale logo) on stacked and vertical bars at every
 // identity position and two identity gaps, the hover box around each form (grown by tall vertical
-// bars), tile fills near their ends and at their minimums, logo sizes with the badge's size
+// bars), tile fills near their ends and at their minimums, sparkline chart sizes, text sizes,
+// current position cues and extra usage corners, logo sizes with the badge's size
 // and offsets on bars, rings and headline tiles, badge colors and logo brand colors. Display sheet: percentage text never/hover/always, each alignment, bar modes
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Each strip is a Preview item painted by the production painter.
@@ -392,17 +393,54 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              thresholds(s, 6, 75, 90);
          }},
         {L"Square, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; }, -1, 32},
-        // Sparklines (the visual test samples' history; the OpenAI sample has none) and the quota
-        // matrix at their defaults and extremes.
+        // Sparklines (the visual test samples' history; the OpenAI sample has none; OAI's credits
+        // and CC 2's extra usage in their weekly charts' corners) and the quota matrix at their
+        // defaults and extremes.
         {L"Burn-up sparkline", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }},
         {L"Sparkline, remaining", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.barMode = BarMode::Remaining; }},
         {L"Sparkline, pace off", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.showPaceTicks = false; }},
-        {L"Sparkline 24 x 24",
-         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineWidth = 24; s.ringSize = 24; }},
-        {L"Sparkline 120 x 40",
-         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineWidth = 120; s.ringSize = 40; }},
+        {L"Sparkline, extra off",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineExtra = SparklineExtra::Off; }},
+        {L"Sparkline, extra percent",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineExtra = SparklineExtra::Percent; }},
+        {L"Sparkline, percent, remaining", [](Settings& s) {
+             s.barLayout = BarLayout::Sparkline;
+             s.sparklineExtra = SparklineExtra::Percent;
+             s.barMode = BarMode::Remaining;
+         }},
+        {L"Sparkline 24 wide, 50%",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineWidth = 24; s.sparklineHeight = 50; }},
+        {L"Sparkline 24 wide, 100%",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineWidth = 24; s.sparklineHeight = 100; }},
+        {L"Sparkline 120 wide, 100%",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineWidth = 120; s.sparklineHeight = 100; }},
+        {L"Sparkline, all cues", [](Settings& s) {
+             s.barLayout = BarLayout::Sparkline;
+             s.sparklineNowCaret = true;
+             s.sparklineRing = true;
+         }},
+        {L"Sparkline, caret on", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineNowCaret = true; }},
+        {L"Sparkline, ring on", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineRing = true; }},
+        {L"Sparkline, no cues", [](Settings& s) {
+             s.barLayout = BarLayout::Sparkline;
+             s.sparklineElapsed = false;
+             s.sparklineNowLine = false;
+         }},
+        {L"Sparkline, outline off", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineOutline = false; }},
+        {L"Sparkline, outline and cues off", [](Settings& s) {
+             s.barLayout = BarLayout::Sparkline;
+             s.sparklineOutline = false;
+             s.sparklineElapsed = false;
+             s.sparklineNowLine = false;
+         }},
+        {L"Sparkline, text 6", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 6; }},
+        {L"Sparkline, text 12", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 12; }},
         {L"Sparkline, colorblind", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.colorblindMode = true; }},
         {L"Sparkline, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }, -1, 32},
+        {L"Sparkline 50%, 32 DIP taskbar",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineHeight = 50; }, -1, 32},
+        {L"Sparkline 100%, 32 DIP taskbar",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineHeight = 100; }, -1, 32},
         {L"Quota matrix", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }},
         {L"Matrix, remaining", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; s.barMode = BarMode::Remaining; }},
         {L"Matrix, number 10", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; s.headlineFontSize = 10; }},

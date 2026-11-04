@@ -94,6 +94,13 @@ static bool NormalizeSettings(Settings* s) {
                                          kHeadlineBarThicknessMin, kHeadlineBarThicknessMax);
     s->sparklineWidth = std::clamp(s->sparklineWidth > 0 ? s->sparklineWidth : 48, kSparklineWidthMin,
                                    kSparklineWidthMax);
+    s->sparklineHeight = std::clamp(s->sparklineHeight > 0 ? s->sparklineHeight : 80, kSparklineHeightMin,
+                                    kSparklineHeightMax);
+    s->sparklineTextSize = std::clamp(s->sparklineTextSize > 0 ? s->sparklineTextSize : 8, kSparklineTextSizeMin,
+                                      kSparklineTextSizeMax);
+    if (s->sparklineExtra < SparklineExtra::Off || s->sparklineExtra > SparklineExtra::Percent) {
+        s->sparklineExtra = SparklineExtra::Amount;
+    }
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -195,6 +202,15 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"headlineBarThickness", s.headlineBarThickness);
         setBool(L"headlineCountdown", s.headlineCountdown);
         setNumber(L"sparklineWidth", s.sparklineWidth);
+        setNumber(L"sparklineHeight", s.sparklineHeight);
+        setNumber(L"sparklineTextSize", s.sparklineTextSize);
+        setBool(L"sparklineOutline", s.sparklineOutline);
+        setBool(L"sparklineElapsed", s.sparklineElapsed);
+        setBool(L"sparklineNowLine", s.sparklineNowLine);
+        setBool(L"sparklineNowCaret", s.sparklineNowCaret);
+        setBool(L"sparklineRing", s.sparklineRing);
+        setString(L"sparklineExtra", s.sparklineExtra == SparklineExtra::Off ? L"off" :
+                                     s.sparklineExtra == SparklineExtra::Percent ? L"percent" : L"amount");
         setNumber(L"logoScale", s.logoScale);
         setBool(L"brandClaudeLogo", s.logoBrands.claude);
         setBool(L"brandGeminiLogo", s.logoBrands.gemini);
@@ -342,6 +358,20 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         double sparklineWidth = GetNum(root, L"sparklineWidth", 48);
         s.sparklineWidth = std::isfinite(sparklineWidth) ?
                                (int)std::clamp(sparklineWidth, 0.0, (double)kSparklineWidthMax) : 0;
+        double sparklineHeight = GetNum(root, L"sparklineHeight", 80);
+        s.sparklineHeight = std::isfinite(sparklineHeight) ?
+                                (int)std::clamp(sparklineHeight, 0.0, (double)kSparklineHeightMax) : 0;
+        double sparklineTextSize = GetNum(root, L"sparklineTextSize", 8);
+        s.sparklineTextSize = std::isfinite(sparklineTextSize) ?
+                                  (int)std::clamp(sparklineTextSize, 0.0, (double)kSparklineTextSizeMax) : 0;
+        s.sparklineOutline = getBoolDefault(L"sparklineOutline", true);
+        s.sparklineElapsed = getBoolDefault(L"sparklineElapsed", true);
+        s.sparklineNowLine = getBoolDefault(L"sparklineNowLine", true);
+        s.sparklineNowCaret = getBoolDefault(L"sparklineNowCaret", false);
+        s.sparklineRing = getBoolDefault(L"sparklineRing", false);
+        std::wstring sparklineExtra = GetStr(root, L"sparklineExtra");
+        s.sparklineExtra = sparklineExtra == L"off" ? SparklineExtra::Off :
+                           sparklineExtra == L"percent" ? SparklineExtra::Percent : SparklineExtra::Amount;
         double logoScale = GetNum(root, L"logoScale", 100);
         double badgeSize = GetNum(root, L"badgeSize", 13);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);

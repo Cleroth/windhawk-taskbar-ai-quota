@@ -42,7 +42,7 @@ enum class TaskbarMonitorMode {
 enum class BarLayout {
     Stacked,
     Vertical,
-    Sparkline,      // The most-used quota's burn-up over its window, the identity beside.
+    Sparkline,      // Each quota's burn-up over its window side by side, the identity beside.
     SegmentedRing,
     ConcentricRings,
     Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
@@ -70,9 +70,22 @@ static constexpr int kHeadlineBarLengthMin = 4;
 static constexpr int kHeadlineBarLengthMax = 60;
 static constexpr int kHeadlineBarThicknessMin = 2;
 static constexpr int kHeadlineBarThicknessMax = 10;
-// Sparkline tiles' chart width, in DIPs.
+// Sparkline tiles' chart width, in DIPs, and height, in percent of the tile's height.
 static constexpr int kSparklineWidthMin = 24;
 static constexpr int kSparklineWidthMax = 120;
+static constexpr int kSparklineHeightMin = 50;
+static constexpr int kSparklineHeightMax = 100;
+// Their keys' and extra usage's text size, in DIPs.
+static constexpr int kSparklineTextSizeMin = 6;
+static constexpr int kSparklineTextSizeMax = 16;
+
+// What a sparkline's weekly chart shows in its top-left corner of the account's extra usage
+// (Anthropic extra usage, OpenAI credits) while the provider reports it.
+enum class SparklineExtra {
+    Off,
+    Amount,   // $ or credits.
+    Percent,  // Of the limit; the amount without one.
+};
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -150,8 +163,8 @@ struct Settings {
     int barThickness = 8;
     BarStyle barStyle = BarStyle::Track;
     // Ring diameter and stroke, in DIPs, also the gauge's, the rounded square's and (size only)
-    // the pies' and sparkline chart's height; rendering shrinks the stroke and gaps further when
-    // the meters wouldn't fit around the identity.
+    // the pies' height; rendering shrinks the stroke and gaps further when the meters wouldn't fit
+    // around the identity.
     int ringSize = 32;
     int ringThickness = 3;
     // Headline tiles: the most-used quota's number size (also the quota matrix's), and the size
@@ -161,7 +174,18 @@ struct Settings {
     int headlineBarThickness = 4;
     // Headline tiles show the time until the quota resets under the number instead of the bars.
     bool headlineCountdown = false;
-    int sparklineWidth = 48;  // Sparkline tiles' chart width, in DIPs.
+    int sparklineWidth = 48;   // Sparkline tiles' chart width, in DIPs.
+    int sparklineHeight = 80;  // Their height, in percent of the tile's height.
+    int sparklineTextSize = 8;
+    bool sparklineOutline = true;  // A faint outline around each chart.
+    SparklineExtra sparklineExtra = SparklineExtra::Amount;
+    // Sparklines' current position cues: the window's elapsed part lit (else the whole plot), a
+    // line and a caret at the current time, and a ring around the current reading (else a plain
+    // dot).
+    bool sparklineElapsed = true;
+    bool sparklineNowLine = true;
+    bool sparklineNowCaret = false;
+    bool sparklineRing = false;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.

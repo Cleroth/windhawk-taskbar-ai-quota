@@ -75,8 +75,11 @@ regenerates.
   badge's size, offsets (the logo staying centred across its bars) and color with its contrasting
   outline, the logos' brand colors per provider, pace marks,
   bar styles with their shaded fills and tick overhang, the time track, ring tiles' model shapes,
-  gauge, clock pie and rounded square faces, sparkline plots (marks in drawing order, strokes, the
-key; painted strokes), quota matrix cells, headline fills and the reset countdown,
+  gauge, clock pie and rounded square faces, sparkline charts (side by side per quota, shapes in
+  drawing order, strokes, the key and the weekly chart's extra usage corner moved clear of the
+  reading, the corner clipped, the now line and caret yielding to text, each current position cue
+  and the outline on and off, the text size; painted strokes), quota matrix cells, headline fills and the reset
+  countdown,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), threshold

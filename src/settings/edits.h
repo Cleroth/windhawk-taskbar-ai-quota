@@ -38,6 +38,14 @@ enum class SettingsField : uint8_t {
     HeadlineBarThickness,
     HeadlineCountdown,
     SparklineWidth,
+    SparklineHeight,  // Percent of the tile's height
+    SparklineTextSize,
+    SparklineOutline,
+    SparklineExtra,   // A SparklineExtra
+    SparklineElapsed,
+    SparklineNowLine,
+    SparklineNowCaret,
+    SparklineRing,
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -118,6 +126,9 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::HeadlineBarThickness:
             return SettingsNumberRange{kHeadlineBarThicknessMin, kHeadlineBarThicknessMax};
         case SettingsField::SparklineWidth: return SettingsNumberRange{kSparklineWidthMin, kSparklineWidthMax};
+        case SettingsField::SparklineHeight: return SettingsNumberRange{kSparklineHeightMin, kSparklineHeightMax};
+        case SettingsField::SparklineTextSize:
+            return SettingsNumberRange{kSparklineTextSizeMin, kSparklineTextSizeMax};
         case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
         case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
         case SettingsField::BadgeOffsetX:
@@ -152,6 +163,11 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
                     SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
                     SettingsField::HeadlineCountdown, SettingsField::SparklineWidth,
+                    SettingsField::SparklineHeight, SettingsField::SparklineTextSize,
+                    SettingsField::SparklineOutline,
+                    SettingsField::SparklineExtra,  SettingsField::SparklineElapsed,
+                    SettingsField::SparklineNowLine, SettingsField::SparklineNowCaret,
+                    SettingsField::SparklineRing,
                     SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
@@ -198,6 +214,14 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::HeadlineBarThickness: return s.headlineBarThickness;
         case SettingsField::HeadlineCountdown: return s.headlineCountdown;
         case SettingsField::SparklineWidth: return s.sparklineWidth;
+        case SettingsField::SparklineHeight: return s.sparklineHeight;
+        case SettingsField::SparklineTextSize: return s.sparklineTextSize;
+        case SettingsField::SparklineOutline: return s.sparklineOutline;
+        case SettingsField::SparklineExtra: return int(s.sparklineExtra);
+        case SettingsField::SparklineElapsed: return s.sparklineElapsed;
+        case SettingsField::SparklineNowLine: return s.sparklineNowLine;
+        case SettingsField::SparklineNowCaret: return s.sparklineNowCaret;
+        case SettingsField::SparklineRing: return s.sparklineRing;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -272,6 +296,16 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::HeadlineBarThickness: s.headlineBarThickness = value; break;
         case SettingsField::HeadlineCountdown: s.headlineCountdown = value != 0; break;
         case SettingsField::SparklineWidth: s.sparklineWidth = value; break;
+        case SettingsField::SparklineHeight: s.sparklineHeight = value; break;
+        case SettingsField::SparklineTextSize: s.sparklineTextSize = value; break;
+        case SettingsField::SparklineOutline: s.sparklineOutline = value != 0; break;
+        case SettingsField::SparklineExtra:
+            s.sparklineExtra = SparklineExtra(std::clamp(value, int(SparklineExtra::Off), int(SparklineExtra::Percent)));
+            break;
+        case SettingsField::SparklineElapsed: s.sparklineElapsed = value != 0; break;
+        case SettingsField::SparklineNowLine: s.sparklineNowLine = value != 0; break;
+        case SettingsField::SparklineNowCaret: s.sparklineNowCaret = value != 0; break;
+        case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -338,6 +372,14 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.headlineBarThickness = defaults.headlineBarThickness;
             s.headlineCountdown = defaults.headlineCountdown;
             s.sparklineWidth = defaults.sparklineWidth;
+            s.sparklineHeight = defaults.sparklineHeight;
+            s.sparklineTextSize = defaults.sparklineTextSize;
+            s.sparklineOutline = defaults.sparklineOutline;
+            s.sparklineExtra = defaults.sparklineExtra;
+            s.sparklineElapsed = defaults.sparklineElapsed;
+            s.sparklineNowLine = defaults.sparklineNowLine;
+            s.sparklineNowCaret = defaults.sparklineNowCaret;
+            s.sparklineRing = defaults.sparklineRing;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;

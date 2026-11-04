@@ -26,16 +26,63 @@ static constexpr double kTileCapShare = 0.7;
 // their gaps.
 static constexpr double kMatrixKeyGap = 3, kMatrixColumnGap = 8, kMatrixRowGap = 5;
 // Sparkline strokes and marks, in DIPs. Dash patterns are in stroke widths, as XAML's and
-// Direct2D's dash arrays take them. The plot keeps kSparkInset DIPs free at its top and bottom.
+// Direct2D's dash arrays take them. The plot keeps kSparkInset DIPs free at its top and bottom;
+// an account's charts sit kSparkChartGap apart.
 static constexpr double kSparkLineStroke = 1.3;
 static constexpr double kSparkGuideStroke = 1;
 static constexpr std::array<double, 2> kSparkGuideDashes = {2, 2};
 static constexpr double kSparkProjectionStroke = 1.2;
 static constexpr std::array<double, 2> kSparkProjectionDashes = {1, 1.5};
-static constexpr double kSparkDotRadius = 1.5, kSparkNowRadius = 2, kSparkLimitRadius = 1.75;
-static constexpr double kSparkInset = 2, kSparkPlotRadius = 3;
+static constexpr double kSparkDotRadius = 1.5, kSparkLimitRadius = 1.75;
+// The current reading: a dot (its usage color lifted by kSparkNowLift) inside a ring, cut out of
+// the marks under them in the taskbar's color; without the ring, a plain dot. The current time: a
+// line across the plot, and a caret on its bottom edge.
+static constexpr double kSparkNowRadius = 2.2, kSparkRingInner = 3, kSparkRingOuter = 4.1, kSparkNowLift = 0.03;
+static constexpr double kSparkPlainNowRadius = 2;
+static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSparkCaretHeight = 3.2;
+static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
+// Room for sparkline shapes past the plot: a ring around a point on its edge.
+static constexpr double kSparkOverflow = 4.5;
+// Chart text, 3 DIPs in from the plot's edges: the weekly chart's extra usage, its key, then the
+// number, kSparkExtraKeyGap DIPs apart. Text placement estimates widths at kSparkTextWidthShare
+// of the font size per character, generously.
+static constexpr double kSparkExtraKeyGap = 2, kSparkTextInset = 3, kSparkTextWidthShare = 0.6;
 // Sparkline fills' and guides' alpha over their usage or pace color.
 static constexpr uint32_t kSparkAreaAlpha = 0x47000000, kSparkGuideAlpha = 0x80000000;
+
+// A sparkline chart's shapes, in drawing order, from its plot's top-left: the lit part of the plot
+// (the window's elapsed part), the plot's outline, the even-pace diagonal, the recorded usage (an area under each
+// connected run, the runs, isolated readings as dots), the current time's line, the projection,
+// the current time's caret, the current reading's cut-out, ring and dot, and the limit mark.
+enum SparkShape {
+    kSparkLit,
+    kSparkOutline,
+    kSparkPace,
+    kSparkArea,
+    kSparkLines,
+    kSparkDots,
+    kSparkNowLine,
+    kSparkProjection,
+    kSparkCaret,
+    kSparkNowCut,
+    kSparkNowRing,
+    kSparkNow,
+    kSparkLimit,
+    kSparkShapeCount,
+};
+
+// Each shape's stroke: open figures stroked `stroke` DIPs wide, solid with round caps and joins,
+// or dashed (flat caps); 0: closed figures filled nonzero, so overlapping dots merge and a ring's
+// reversed inner circle cuts its hole.
+struct SparkShapeStyle {
+    double stroke = 0;
+    std::array<double, 2> dashes{};  // In stroke widths; zeros: solid.
+};
+
+static constexpr SparkShapeStyle kSparkShapeStyles[kSparkShapeCount] = {
+    {}, {kSparkOutlineStroke}, {kSparkGuideStroke, kSparkGuideDashes}, {}, {kSparkLineStroke}, {}, {},
+    {kSparkProjectionStroke, kSparkProjectionDashes}, {}, {}, {}, {}, {},
+};
 
 static bool IsTileLayout(BarLayout layout) {
     return layout != BarLayout::Stacked && layout != BarLayout::Vertical;
@@ -50,7 +97,7 @@ static bool IsRingTile(BarLayout layout) {
 
 // Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauge and the
 // pies. Gauges and pies show the identity beside the face, as headline tiles do. Sparklines draw
-// outlines in their plot too, but one quota's chart rather than a meter per quota.
+// outlines in their plots too, a chart per quota rather than a meter.
 static bool IsFaceTile(BarLayout layout) {
     return IsRingTile(layout) || layout == BarLayout::Gauge || layout == BarLayout::ClockPies;
 }
@@ -72,10 +119,10 @@ static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int oran
     return 0xFF43A047;
 }
 
-// A bar fill's highlight: the usage color 0.06 lighter in OKLCH lightness with the same hue and
+// A bar fill's highlight: the usage color `lift` lighter in OKLCH lightness with the same hue and
 // chroma, the chroma reduced only as far as sRGB requires. Fills shade from it at their top edge
 // (vertical bars: left) to the usage color 60% across. Alpha is kept.
-static uint32_t UsageHighlight(uint32_t argb) {
+static uint32_t UsageHighlight(uint32_t argb, double lift = 0.06) {
     auto linear = [](uint32_t channel) {
         double c = channel / 255.0;
         return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
@@ -84,7 +131,7 @@ static uint32_t UsageHighlight(uint32_t argb) {
     double l = std::cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
     double m = std::cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
     double s = std::cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-    double lightness = std::min(0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s + 0.06, 0.999);
+    double lightness = std::min(0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s + lift, 0.999);
     double okA = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
     double okB = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
     // Linear sRGB of the lifted color with its chroma scaled by `k`.
@@ -382,13 +429,23 @@ struct TilePalette {
     uint32_t track;
     uint32_t hover;
     uint32_t open;       // Tile whose flyout is open.
-    uint32_t badgeHalo;  // The number badge's outline, the taskbar's own color.
-    uint32_t plot;       // A sparkline's chart background.
+    // The taskbar's own color: the number badge's outline, and the cut-out around a sparkline's
+    // current reading.
+    uint32_t badgeHalo;
+    uint32_t plot;     // A sparkline chart's background, darker than the taskbar,
+    uint32_t lit;      // over it the window's elapsed part,
+    uint32_t outline;  // and the plot's outline.
+    uint32_t nowLine;  // A sparkline's current time line,
+    uint32_t nowMark;  // and its caret and the current reading's ring.
 };
 
 static TilePalette TilePaletteFor(bool light) {
-    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFF3F3F3, 0x0F000000};
-    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C, 0x14FFFFFF};
+    if (light) {
+        return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFF3F3F3, 0x14000000, 0x12000000, 0x24000000, 0x80000000,
+                0xF0000000};
+    }
+    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C, 0x59000000, 0x1FFFFFFF, 0x2EFFFFFF, 0x80FFFFFF,
+            0xF0FFFFFF};
 }
 
 // The number badge's text (0: the taskbar's text color, inherited) and outline. White is the
@@ -421,6 +478,14 @@ struct MeterDisplay {
     int headlineBarThickness; // kHeadlineBarThicknessMin-kHeadlineBarThicknessMax DIPs.
     bool headlineCountdown;
     int sparklineWidth;       // kSparklineWidthMin-kSparklineWidthMax DIPs.
+    int sparklineHeight;      // kSparklineHeightMin-kSparklineHeightMax percent of tileHeight.
+    int sparklineTextSize;    // kSparklineTextSizeMin-kSparklineTextSizeMax DIPs.
+    bool sparklineOutline;
+    SparklineExtra sparklineExtra;
+    bool sparklineElapsed;
+    bool sparklineNowLine;
+    bool sparklineNowCaret;
+    bool sparklineRing;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -465,6 +530,15 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
             std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
         .headlineCountdown = settings.headlineCountdown,
         .sparklineWidth = std::clamp(settings.sparklineWidth, kSparklineWidthMin, kSparklineWidthMax),
+        .sparklineHeight = std::clamp(settings.sparklineHeight, kSparklineHeightMin, kSparklineHeightMax),
+        .sparklineTextSize = std::clamp(settings.sparklineTextSize, kSparklineTextSizeMin, kSparklineTextSizeMax),
+        .sparklineOutline = settings.sparklineOutline,
+        .sparklineExtra = SparklineExtra(std::clamp(int(settings.sparklineExtra), int(SparklineExtra::Off),
+                                                    int(SparklineExtra::Percent))),
+        .sparklineElapsed = settings.sparklineElapsed,
+        .sparklineNowLine = settings.sparklineNowLine,
+        .sparklineNowCaret = settings.sparklineNowCaret,
+        .sparklineRing = settings.sparklineRing,
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -889,6 +963,12 @@ struct QuotaMeter {
     TileOutline paceCore;
     // Quota matrix: the cell, down the first column, then the second from the third quota on.
     int matrixRow = 0, matrixColumn = 0;
+    // Sparklines: the quota's chart, `sparkLeft` DIPs from the face's left, its shapes
+    // (AccountMeters describes them), and its key in the plot's top-right corner instead of its
+    // bottom-right one, clear of the current reading.
+    double sparkLeft = 0;
+    std::array<TileOutline, kSparkShapeCount> spark;
+    bool sparkKeyTop = false;
 };
 
 struct AccountMeters {
@@ -911,23 +991,30 @@ struct AccountMeters {
     double faceWidth = 0, faceHeight = 0;
     double faceFont = 0, faceKeyFont = 0;
     double faceNumberCenter = 0, faceKeyCenter = 0;
-    // Logo + headline tiles, gauges and sparklines: the most-used quota's number (gauges: without
-    // "%"), window key and color; sparklines chart the most-used quota with a window, if any.
+    // Logo + headline tiles and gauges: the most-used quota's number (gauges: without "%"), window
+    // key and color.
     std::wstring headline;
     std::wstring headlineKey;
     uint32_t headlineColor = 0;
     // Logo + headline tiles with the countdown: the time until that quota resets.
     std::wstring headlineCountdown;
-    // Sparklines, in the face (the plot) from its top-left, used % in either bar mode across the
-    // window: the recorded usage (an area under each connected run, the runs, isolated readings
-    // as dots), the even-pace diagonal (with pace markers on), the current point, and the
-    // projection at the window's average rate from the current point to the reset or, over pace,
-    // to the limit, marked in the 100% color. Lines are open figures to stroke; the rest fill
-    // nonzero, so overlapping dots merge. Without a window the current point sits at the plot's
-    // right edge, alone.
-    TileOutline sparkArea, sparkLines, sparkDots, sparkPace, sparkProjection, sparkNow, sparkLimit;
+    // Sparklines: a chart per quota in the mask (QuotaMeter::spark), display.sparklineWidth by
+    // faceHeight, side by side in slot order in the face; the face's height is the tile's at the
+    // chart height. A chart plots used % in either bar mode across the window: the lit part up to
+    // now (or the whole plot), the recorded usage, the even-pace diagonal (with pace markers on),
+    // the current time (line and caret, each with its cue on) and reading (ringed or plain), and
+    // the projection at the window's average rate from the current reading to the reset or, over
+    // pace, to the limit, marked in the 100% color. Without a window the plot is lit whole and the
+    // current reading sits at its right edge, alone.
     uint32_t sparkLimitColor = 0;
-    double sparkKeyFont = 0;  // The key, in the plot's bottom-right corner.
+    double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
+    // The weekly chart's top-left corner (bottom-left with sparkExtraBottom, clear of the current
+    // reading), at the key's font: the account's extra usage per display.sparklineExtra, its key
+    // (empty for dollars) and number, in extra usage's usage color (0: the taskbar's text color).
+    // Empty without.
+    std::wstring sparkExtraKey, sparkExtraText;
+    uint32_t sparkExtraColor = 0;
+    bool sparkExtraBottom = false;
     // Quota matrix: the numbers' and keys' font sizes, two rows shrunk to fit the tile.
     double matrixFont = 0, matrixKeyFont = 0;
 };
@@ -937,7 +1024,7 @@ using TileTraceSource = std::function<std::vector<TileTracePoint>(int slot, cons
 
 // `layout`: the layout the meters are drawn in. `badgeChars`: the tile badge's text length, 0
 // without a badge. `textWidthPerPt`: the tile identity text's width per DIP of font size, 0
-// without text. `traceOf`: a sparkline's recorded usage, asked for its charted quota only.
+// without text. `traceOf`: a sparkline's recorded usage, asked for its charted quotas only.
 static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout layout,
                                        const AccountConfig& account, const AccountData& data,
                                        int badgeChars, double textWidthPerPt,
@@ -980,24 +1067,58 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     auto timed = [&](int w) {
         return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs;
     };
-    // The most-used tile quota: the headline's, and the only one a gauge or sparkline shows
-    // (until the first success, its first selected quota). Sparklines prefer a quota with a
-    // window, which they can chart.
-    int top = -1, timedTop = -1;
+    // The most-used tile quota: the headline's, and the only one a gauge shows (until the first
+    // success, its first selected quota).
+    int top = -1;
     for (int w = 0; w < kQuotaBarCount; w++) {
         if (!(meters.barMask & (1 << w)) || usage[w]->pct < 0) continue;
         if (top < 0 || usage[w]->pct > usage[top]->pct) top = w;
-        if (timed(w) && (timedTop < 0 || usage[w]->pct > usage[timedTop]->pct)) timedTop = w;
     }
-    if (spark && timedTop >= 0) top = timedTop;
-    if (gauge || spark) {
+    if (gauge) {
         meters.barMask = top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
         count = meters.barMask ? 1 : 0;
     }
     if (spark) {
-        meters.faceWidth = display.sparklineWidth;
-        meters.faceHeight = std::min<double>(display.ringSize, display.tileHeight);
-        meters.sparkKeyFont = std::clamp(meters.faceHeight / 4, 7.0, 9.0);
+        // A chart per quota with a window, and per quota not read yet (until the first success);
+        // without any, the most-used quota's. The extra usage goes in the weekly chart's corner,
+        // instead of a chart of its own, while the provider reports it.
+        int charted = 0;
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            if ((meters.barMask & (1 << w)) && (timed(w) || usage[w]->pct < 0)) charted |= 1 << w;
+        }
+        bool openAi = account.provider == L"openai";
+        const WindowUsage& extra = data.extraUsage;
+        bool extraReported = extra.pct >= 0 || data.extraUsedAmount >= 0 || (openAi && data.creditsBalance >= 0);
+        if (display.sparklineExtra != SparklineExtra::Off && (charted & (1 << kWeeklyBar)) && extraReported) {
+            charted &= ~(1 << kExtraUsageBar);
+            // Percent of the limit, else the amount: dollars, or credits spent against the max or
+            // the balance left; a percentage when it's all there is. Spent in used mode, left in
+            // remaining mode (without a limit: spent dollars, the credits balance).
+            wchar_t text[32];
+            bool dollars = false;
+            bool amounts = data.extraUsedAmount >= 0 || data.extraLimitAmount >= 0;
+            bool balance = openAi && data.creditsBalance >= 0;
+            if (extra.pct >= 0 && (display.sparklineExtra == SparklineExtra::Percent || (!amounts && !balance))) {
+                swprintf(text, ARRAYSIZE(text), L"%.0f%%",
+                         remainingMode ? std::clamp(100.0 - extra.pct, 0.0, 100.0) : extra.pct);
+            } else if (amounts) {
+                double amount = remainingMode && data.extraLimitAmount >= 0 ?
+                                    data.extraLimitAmount - data.extraUsedAmount : data.extraUsedAmount;
+                dollars = !openAi;
+                swprintf(text, ARRAYSIZE(text), dollars ? L"$%.2f" : L"%.0f", std::max(amount, 0.0));
+            } else {
+                swprintf(text, ARRAYSIZE(text), L"%.0f", data.creditsBalance);
+            }
+            meters.sparkExtraText = text;
+            if (!dollars) meters.sparkExtraKey = openAi ? L"Cr" : kQuotaKeys[kExtraUsageBar];
+            meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
+                UsageColor(extra.pct, meters.stale, yellow, orange, red, display.colorblindMode) : 0;
+        }
+        meters.barMask = charted ? charted : top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
+        count = std::popcount(unsigned(meters.barMask));
+        meters.faceHeight = std::round(display.tileHeight * display.sparklineHeight / 100.0);
+        meters.faceWidth = count * display.sparklineWidth + std::max(count - 1, 0) * kSparkChartGap;
+        meters.sparkKeyFont = display.sparklineTextSize;
         meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.colorblindMode);
     }
     if (matrix) {
@@ -1272,7 +1393,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         } else if (spark) {
             // Left to right the window, bottom to top 0-100% used inside the insets; positions
             // snap to quarter DIPs, so they change only when the drawing does.
-            double width = meters.faceWidth, height = meters.faceHeight;
+            m.sparkLeft = slotPosition * (display.sparklineWidth + kSparkChartGap);
+            double width = display.sparklineWidth, height = meters.faceHeight;
             auto snap = [](double dip) { return std::round(dip * 4) / 4; };
             ULONGLONG start = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
             auto xAt = [&](ULONGLONG timeMs) {
@@ -1281,11 +1403,58 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             auto yAt = [&](double used) {
                 return snap(height - kSparkInset - (height - 2 * kSparkInset) * std::clamp(used, 0.0, 100.0) / 100);
             };
-            auto circle = [](double x, double y, double r) {
-                return TileOutlineFigure{x, y - r, {{x, y + r, r, true}, {x, y - r, r, true}}};
+            // Clockwise from its top, or counterclockwise to cut a hole in a nonzero fill.
+            auto circle = [](double x, double y, double r, bool clockwise = true) {
+                return TileOutlineFigure{x, y - r, {{x, y + r, r, clockwise}, {x, y - r, r, clockwise}}};
+            };
+            std::array<TileOutline, kSparkShapeCount>& shapes = m.spark;
+            // The outline: the plot's edge, drawn half its stroke in.
+            if (display.sparklineOutline) {
+                double o = kSparkOutlineStroke / 2, r = kSparkPlotRadius - o, right = width - o, bottom = height - o;
+                shapes[kSparkOutline] = {{o + r, o, {{right - r, o}, {right, o + r, r}, {right, bottom - r},
+                                                     {right - r, bottom, r}, {o + r, bottom}, {o, bottom - r, r},
+                                                     {o, o + r}, {o + r, o, r}}}};
+            }
+            // The current reading: the dot in its ring, both cut out of the marks under them, or a
+            // plain dot; `mark` DIPs around its centre.
+            const bool ring = display.sparklineRing;
+            const double mark = ring ? kSparkRingOuter : kSparkPlainNowRadius;
+            std::optional<std::pair<double, double>> readingAt;
+            std::optional<double> nowX;
+            auto reading = [&](double x, double y) {
+                readingAt = {x, y};
+                if (ring) {
+                    shapes[kSparkNowCut] = {circle(x, y, kSparkRingOuter)};
+                    shapes[kSparkNowRing] = {circle(x, y, kSparkRingOuter), circle(x, y, kSparkRingInner, false)};
+                }
+                shapes[kSparkNow] = {circle(x, y, ring ? kSparkNowRadius : kSparkPlainNowRadius)};
+            };
+            // The plot's rounded rectangle up to `lit` DIPs across, clockwise from its top edge;
+            // a cut through a corner meets its arc.
+            auto litPlot = [&](double lit) -> TileOutline {
+                double r = kSparkPlotRadius;
+                if (lit <= 0) return {};
+                lit = std::min(lit, width);
+                auto cornerY = [&](double fromSide) {
+                    return r - std::sqrt(std::max(2 * r * fromSide - fromSide * fromSide, 0.0));
+                };
+                TileOutlineSegment left{0, height - r, r}, top{0, r};
+                if (lit < r) {
+                    double y = cornerY(lit);
+                    return {{lit, y, {{lit, height - y}, left, top, {lit, y, r}}}};
+                }
+                TileOutlineFigure figure{r, 0, {}};
+                if (lit <= width - r) {
+                    figure.segments = {{lit, 0}, {lit, height}};
+                } else {
+                    double y = cornerY(width - lit);
+                    figure.segments = {{width - r, 0}, {lit, y, r}, {lit, height - y}, {width - r, height, r}};
+                }
+                figure.segments.insert(figure.segments.end(), {{r, height}, left, top, {r, 0, r}});
+                return {std::move(figure)};
             };
             if (timed(w)) {
-                if (display.showPaceTicks) meters.sparkPace = {{0, yAt(0), {{width, yAt(100)}}}};
+                if (display.showPaceTicks) shapes[kSparkPace] = {{0, yAt(0), {{width, yAt(100)}}}};
                 std::vector<TileTracePoint> trace = traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
                 for (size_t begin = 0, end; begin < trace.size(); begin = end) {
                     TileOutlineFigure line{xAt(trace[begin].timeMs), yAt(trace[begin].used), {}};
@@ -1293,22 +1462,27 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                         line.segments.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
                     }
                     if (line.segments.empty()) {
-                        meters.sparkDots.push_back(circle(line.x, line.y, kSparkDotRadius));
+                        shapes[kSparkDots].push_back(circle(line.x, line.y, kSparkDotRadius));
                         continue;
                     }
                     // Up from the plot's bottom under the run's start, along it, then back down.
                     TileOutlineFigure under{line.x, height, {{line.x, line.y}}};
                     under.segments.insert(under.segments.end(), line.segments.begin(), line.segments.end());
                     under.segments.push_back({line.segments.back().x, height});
-                    meters.sparkArea.push_back(std::move(under));
-                    meters.sparkLines.push_back(std::move(line));
+                    shapes[kSparkArea].push_back(std::move(under));
+                    shapes[kSparkLines].push_back(std::move(line));
                 }
+                // Now: the lit part's edge, a line across the plot and a caret on its bottom edge
+                // (below, once the text is placed). A rolled-back clock can put now before the
+                // newest reading: the time, the current reading and the projection take the later
+                // of the two.
+                ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
+                double x = xAt(now);
+                nowX = x;
+                shapes[kSparkLit] = litPlot(display.sparklineElapsed ? x : width);
                 if (wu.pct >= 0) {
-                    // A rolled-back clock can put now before the newest reading: the current
-                    // point and the projection take the later of the two.
-                    ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
-                    double x = xAt(now), y = yAt(wu.pct);
-                    meters.sparkNow = {circle(x, y, kSparkNowRadius)};
+                    double y = yAt(wu.pct);
+                    reading(x, y);
                     // The average rate since the window started (fixed windows start at 0%), from
                     // 5% of the window on, while fresh and short of the limit.
                     double elapsed = std::clamp(((double)now - (double)start) / wu.windowDurationMs, 0.0, 1.0);
@@ -1317,12 +1491,82 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                         bool limit = atReset > 100;
                         double endX = limit ? snap(elapsed * 100 / wu.pct * width) : width;
                         double endY = yAt(limit ? 100 : atReset);
-                        meters.sparkProjection = {{x, y, {{endX, endY}}}};
-                        if (limit) meters.sparkLimit = {circle(endX, endY, kSparkLimitRadius)};
+                        shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
+                        if (limit) shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
                     }
                 }
-            } else if (wu.pct >= 0) {
-                meters.sparkNow = {circle(width - kSparkNowRadius, yAt(wu.pct), kSparkNowRadius)};
+            } else {
+                shapes[kSparkLit] = litPlot(width);
+                if (wu.pct >= 0) reading(width - mark, yAt(wu.pct));
+            }
+
+            // Text, in boxes estimated from its length: the key at the right, the weekly chart's
+            // extra usage at the left, on the top or bottom edge.
+            struct TextBox {
+                double left, right;
+                bool top;
+            };
+            double cap = meters.sparkKeyFont * kTileCapShare, inset = kSparkTextInset;
+            auto boxTop = [&](TextBox box) { return box.top ? inset : height - inset - cap; };
+            double keyLeft = width - inset - m.key.size() * meters.sparkKeyFont * kSparkTextWidthShare;
+            double extraRight = inset;
+            if (w == kWeeklyBar && !meters.sparkExtraText.empty()) {
+                double chars = double(meters.sparkExtraKey.size() + meters.sparkExtraText.size());
+                extraRight += chars * meters.sparkKeyFont * kSparkTextWidthShare +
+                              (meters.sparkExtraKey.empty() ? 0 : kSparkExtraKeyGap);
+            }
+            // Text moves to the plot's other edge, clear of the current reading's mark: the key
+            // from the bottom-right corner to the top-right, the extra usage from the top-left to
+            // the bottom-left. The placement the mark overlaps the fewest texts in wins, preferring
+            // fewer moves (the key's first); texts on one edge never overlap.
+            if (readingAt) {
+                auto [x, y] = *readingAt;
+                auto hit = [&](TextBox box) {
+                    return box.right > box.left && x + mark > box.left && x - mark < box.right &&
+                           y + mark > boxTop(box) && y - mark < boxTop(box) + cap;
+                };
+                int best = 0, bestHits = 3;
+                for (int placement = 0; placement < 4; placement++) {
+                    TextBox key{keyLeft, width - inset, (placement & 1) != 0};
+                    TextBox extra{inset, extraRight, (placement & 2) == 0};
+                    if (key.top == extra.top && extra.right > extra.left && key.left < extra.right &&
+                        extra.left < key.right) {
+                        continue;
+                    }
+                    int hits = int(hit(key)) + int(hit(extra));
+                    if (hits < bestHits) best = placement, bestHits = hits;
+                }
+                m.sparkKeyTop = best & 1;
+                if (extraRight > inset) meters.sparkExtraBottom = best & 2;
+            }
+            // With their cues on: the now line, inside the plot's edges, stops a DIP short of the
+            // text it crosses on either edge; the caret yields to text on the bottom edge.
+            if (nowX) {
+                double x = *nowX;
+                double lineX = std::clamp(x, kSparkNowLineWidth / 2, width - kSparkNowLineWidth / 2);
+                double lineLeft = lineX - kSparkNowLineWidth / 2, lineRight = lineX + kSparkNowLineWidth / 2;
+                std::vector<TextBox> texts{{keyLeft, width - inset, m.sparkKeyTop}};
+                if (extraRight > inset) texts.push_back({inset, extraRight, !meters.sparkExtraBottom});
+                double from = 1, to = height - 1;
+                bool caret = true;
+                for (TextBox box : texts) {
+                    if (box.left < x + kSparkCaretHalfWidth && x - kSparkCaretHalfWidth < box.right && !box.top) {
+                        caret = false;
+                    }
+                    if (box.left >= lineRight || box.right <= lineLeft) continue;
+                    if (box.top) {
+                        from = std::max(from, boxTop(box) + cap + 1);
+                    } else {
+                        to = std::min(to, boxTop(box) - 1);
+                    }
+                }
+                if (display.sparklineNowLine && to > from) {
+                    shapes[kSparkNowLine] = {{lineLeft, from, {{lineRight, from}, {lineRight, to}, {lineLeft, to}}}};
+                }
+                if (display.sparklineNowCaret && caret) {
+                    shapes[kSparkCaret] = {{x - kSparkCaretHalfWidth, height,
+                                            {{x, height - kSparkCaretHeight}, {x + kSparkCaretHalfWidth, height}}}};
+                }
             }
         } else if (matrix) {
             // Per the bar mode, as the bars' text: remaining clamped to 0-100%, used unclamped.
@@ -1344,9 +1588,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
     }
 
-    // Headline, gauge and sparkline: the most-used tile quota, shown per the bar mode in its usage
-    // color (a sparkline's: the key and color only).
-    if (layout == BarLayout::LogoHeadline || gauge || spark) {
+    // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
+    if (layout == BarLayout::LogoHeadline || gauge) {
         bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
         meters.headline = L"\u2013";
         if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";
@@ -1383,4 +1626,26 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                           orange, red, display.colorblindMode);
     }
     return meters;
+}
+
+// A sparkline chart's shape color (SparkShape `shape` of slot `slot`'s chart) on a light (`light`)
+// or dark taskbar: the theme's chrome, the pace guide's color, or the quota's usage color (the
+// area translucent, the current reading's dot lifted in its ring), the limit mark the 100% color.
+static uint32_t SparkShapeColor(int shape, const AccountMeters& meters, int slot, const MeterDisplay& display,
+                                bool light) {
+    const TilePalette palette = TilePaletteFor(light);
+    const uint32_t usage = meters.quotas[slot].color;
+    switch (shape) {
+        case kSparkLit: return palette.lit;
+        case kSparkOutline: return palette.outline;
+        case kSparkPace: return (PaceMarkColorsFor(display.paceTickColor, light).core & 0x00FFFFFF) | kSparkGuideAlpha;
+        case kSparkArea: return (usage & 0x00FFFFFF) | kSparkAreaAlpha;
+        case kSparkNowLine: return palette.nowLine;
+        case kSparkCaret:
+        case kSparkNowRing: return palette.nowMark;
+        case kSparkNowCut: return palette.badgeHalo;
+        case kSparkNow: return display.sparklineRing ? UsageHighlight(usage, kSparkNowLift) : usage;
+        case kSparkLimit: return meters.sparkLimitColor;
+        default: return usage;
+    }
 }

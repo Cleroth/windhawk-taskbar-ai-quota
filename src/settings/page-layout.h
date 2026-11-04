@@ -246,19 +246,64 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
-        // Sparklines: the chart's width, and its height, the rings' size.
+        // Sparklines: each chart's width and height, its text size, the extra usage on the weekly
+        // chart, then the current position cues.
         y = UiAddSection(items, id, x, y + 20, width, L"Sparkline");
         {
             UiCardSpec spec;
             spec.title = L"Chart width";
-            spec.description = {{L"Pixels across the quota\u2019s whole window."}};
+            spec.description = {{L"Pixels across each quota\u2019s whole window."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineWidth);
         }
         {
             UiCardSpec spec;
             spec.title = L"Chart height";
-            spec.description = {{L"Pixels from 0% to 100% used."}};
-            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingSize);
+            spec.description = {{L"Percent of the tile\u2019s height, from 0% to 100% used."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHeight);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Text size";
+            spec.description = {{L"Quota keys (5h, 7d, ...) and extra usage on the charts, in pixels."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineTextSize);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Chart outline";
+            spec.description = {{L"A faint border around each chart."}};
+            y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineOutline);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Extra usage";
+            spec.description = {{L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner, when "
+                                 L"reported: spent in Used mode, left in Remaining mode. Percent shows the amount "
+                                 L"without a limit."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineExtra, 200,
+                                        {{L"Off", int(SparklineExtra::Off)},
+                                         {L"Amount", int(SparklineExtra::Amount)},
+                                         {L"Percent", int(SparklineExtra::Percent)}},
+                                        int(s.sparklineExtra));
+        }
+        y = UiAddSection(items, id, x, y + 20, width, L"Current position");
+        struct Cue {
+            PCWSTR title, description;
+            SettingsField field;
+        };
+        static constexpr Cue kCues[] = {
+            {L"Elapsed time", L"Lights the part of the quota\u2019s window that has passed; the rest stays dim.",
+             SettingsField::SparklineElapsed},
+            {L"Now line", L"A thin line across the chart at the current time.", SettingsField::SparklineNowLine},
+            {L"Now caret", L"A small triangle on the chart\u2019s bottom edge at the current time.",
+             SettingsField::SparklineNowCaret},
+            {L"Ringed reading", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+             SettingsField::SparklineRing},
+        };
+        for (size_t k = 0; k < std::size(kCues); k++) {
+            UiCardSpec spec;
+            spec.title = kCues[k].title;
+            spec.description = {{kCues[k].description}};
+            y = SettingsAddToggleCard(g, view, items, id, x, k ? y + 3 : y, width, spec, kCues[k].field);
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);

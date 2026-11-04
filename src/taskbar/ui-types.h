@@ -41,8 +41,11 @@ struct AppliedState {
     int highlight = -1;
     std::wstring headline;
     uint32_t headlineColor = 0;
-    // Sparklines: the drawn shapes' points and colors, flattened.
-    std::vector<double> spark;
+    // Sparklines: per slot, its chart's drawn shapes' points and colors and its key's corner,
+    // flattened; the weekly chart's extra usage key, text and corner, and its color.
+    std::array<std::vector<double>, kQuotaBarCount> spark;
+    std::wstring sparkExtra;
+    uint32_t sparkExtraColor = 0;
 };
 
 struct PointerHandlers {
@@ -65,12 +68,26 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
+// A sparkline chart's elements: placed in the face, its plot's background, its shapes in
+// SparkShape order (created by UpdateAccountTile), its key, and on the weekly chart the extra
+// usage's key and number in their panel.
+struct SparkChartUi {
+    Grid root{nullptr};
+    Border plot{nullptr};
+    Grid shapes{nullptr};
+    std::vector<wuxs::Path> paths;
+    TextBlock key{nullptr};
+    StackPanel extra{nullptr};
+    TextBlock extraKey{nullptr};
+    TextBlock extraText{nullptr};
+};
+
 // A tile layout's elements (face tiles, logo + headline, sparkline, quota matrix); bar columns
 // with a logo identity hold only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
     // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
-    // gauge's number and key on top.
+    // gauge's number and key on top. Sparklines: the face holding the charts, also the meters.
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
@@ -84,16 +101,13 @@ struct TileUiRefs {
     TextBlock badgeText{nullptr};
     SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
-    // Logo + headline and gauges: the most-used quota's number and window key (sparklines: the
-    // key); headline tiles with the countdown show it instead of their segments.
+    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
+    // with the countdown show it instead of their segments.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
     TextBlock countdown{nullptr};
-    // Sparklines: the plot's background, and its shapes in drawing order (UpdateAccountTile).
-    Border plot{nullptr};
-    std::array<wuxs::Path, 7> spark{wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr},
-                                    wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr},
-                                    wuxs::Path{nullptr}};
+    // Sparklines: per quota slot, its chart.
+    std::array<SparkChartUi, kQuotaBarCount> charts;
     // Quota matrix: each slot's cell, its key and number.
     std::array<StackPanel, kQuotaBarCount> matrixCells{
         StackPanel{nullptr}, StackPanel{nullptr}, StackPanel{nullptr}, StackPanel{nullptr}};

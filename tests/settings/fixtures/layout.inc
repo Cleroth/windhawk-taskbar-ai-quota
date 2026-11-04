@@ -127,7 +127,10 @@ static void RunLayoutTests() {
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
             {SettingsField::HeadlineFontSize, 18}, {SettingsField::HeadlineBarLength, 24},
             {SettingsField::HeadlineBarThickness, 6}, {SettingsField::HeadlineCountdown, 1},
-            {SettingsField::SparklineWidth, 64},
+            {SettingsField::SparklineWidth, 64}, {SettingsField::SparklineHeight, 65}, {SettingsField::SparklineExtra, 2},
+            {SettingsField::SparklineTextSize, 12}, {SettingsField::SparklineElapsed, 0},
+            {SettingsField::SparklineNowLine, 0}, {SettingsField::SparklineNowCaret, 1}, {SettingsField::SparklineRing, 1},
+            {SettingsField::SparklineOutline, 0},
             {SettingsField::LogoScale, 150},   {SettingsField::ClaudeLogoBrand, 1}, {SettingsField::GeminiLogoBrand, 1},
             {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
@@ -142,7 +145,19 @@ static void RunLayoutTests() {
         CHECK(s.barLayout == BarLayout::ConcentricRings && s.barStyle == BarStyle::Rail &&
               s.labelPosition == LabelPosition::Top && s.headlineCountdown &&
               s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456 && s.badgeColor == 0x654321 &&
-              s.logoBrands.claude && s.logoBrands.gemini);
+              s.logoBrands.claude && s.logoBrands.gemini && s.sparklineHeight == 65 &&
+              s.sparklineExtra == SparklineExtra::Percent && s.sparklineTextSize == 12 && !s.sparklineElapsed &&
+              !s.sparklineNowLine && s.sparklineNowCaret && s.sparklineRing && !s.sparklineOutline);
+        CHECK(SettingsFieldRange(SettingsField::SparklineTextSize)->minimum == 6 &&
+              SettingsFieldRange(SettingsField::SparklineTextSize)->maximum == 16);
+        for (SettingsField toggle : {SettingsField::SparklineElapsed, SettingsField::SparklineNowLine,
+                                     SettingsField::SparklineNowCaret, SettingsField::SparklineRing,
+                                     SettingsField::SparklineOutline}) {
+            CHECK(!SettingsFieldRange(toggle));
+        }
+        CHECK(SettingsFieldRange(SettingsField::SparklineHeight)->minimum == 50 &&
+              SettingsFieldRange(SettingsField::SparklineHeight)->maximum == 100);
+        CHECK(!SettingsFieldRange(SettingsField::SparklineExtra));
         const std::tuple<SettingsField, int, int> clamps[] = {
             {SettingsField::BarLength, 99999, 500},   {SettingsField::BarThickness, 0, 2},
             {SettingsField::RingSize, 100, 40},       {SettingsField::RingThickness, -3, 1},
@@ -153,7 +168,11 @@ static void RunLayoutTests() {
             {SettingsField::BarGap, -1, 0},           {SettingsField::AccountMargin, 501, 500},
             {SettingsField::BarLayout, 12, 9},        {SettingsField::BarLayout, -1, 0},
             {SettingsField::BarLayout, 8, 8},         {SettingsField::SparklineWidth, 10, 24},
-            {SettingsField::SparklineWidth, 999, 120},
+            {SettingsField::SparklineWidth, 999, 120}, {SettingsField::SparklineHeight, 10, 50},
+            {SettingsField::SparklineHeight, 999, 100}, {SettingsField::SparklineExtra, 7, 2},
+            {SettingsField::SparklineExtra, -1, 0},   {SettingsField::SparklineTextSize, 2, 6},
+            {SettingsField::SparklineTextSize, 99, 16}, {SettingsField::SparklineRing, 5, 1},
+            {SettingsField::SparklineElapsed, 7, 1},   {SettingsField::SparklineOutline, -4, 1},
             {SettingsField::BarLayout, 6, 6},         {SettingsField::PaceTickStyle, 4, 4},
             {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 4},
             {SettingsField::HeadlineCountdown, 5, 1}, {SettingsField::HeadlineCountdown, 0, 0},
@@ -169,7 +188,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the twenty-nine Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the thirty-seven Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -183,6 +202,14 @@ static void RunLayoutTests() {
         changed.headlineBarThickness = 7;
         changed.headlineCountdown = true;
         changed.sparklineWidth = 80;
+        changed.sparklineHeight = 60;
+        changed.sparklineExtra = SparklineExtra::Off;
+        changed.sparklineTextSize = 12;
+        changed.sparklineElapsed = false;
+        changed.sparklineNowLine = false;
+        changed.sparklineNowCaret = true;
+        changed.sparklineRing = true;
+        changed.sparklineOutline = false;
         changed.logoScale = 150;
         changed.logoBrands = {true, true};
         changed.badgeSize = 12;
@@ -223,6 +250,14 @@ static void RunLayoutTests() {
         expected.headlineBarThickness = defaults.headlineBarThickness;
         expected.headlineCountdown = defaults.headlineCountdown;
         expected.sparklineWidth = defaults.sparklineWidth;
+        expected.sparklineHeight = defaults.sparklineHeight;
+        expected.sparklineExtra = defaults.sparklineExtra;
+        expected.sparklineTextSize = defaults.sparklineTextSize;
+        expected.sparklineElapsed = defaults.sparklineElapsed;
+        expected.sparklineNowLine = defaults.sparklineNowLine;
+        expected.sparklineNowCaret = defaults.sparklineNowCaret;
+        expected.sparklineRing = defaults.sparklineRing;
+        expected.sparklineOutline = defaults.sparklineOutline;
         expected.logoScale = defaults.logoScale;
         expected.logoBrands = defaults.logoBrands;
         expected.badgeSize = defaults.badgeSize;
@@ -242,7 +277,10 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 29);
+        CHECK(reset.sparklineHeight == 80 && reset.sparklineExtra == SparklineExtra::Amount && reset.sparklineTextSize == 8 &&
+              reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && !reset.sparklineRing &&
+              reset.sparklineOutline);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 37);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -1519,11 +1557,11 @@ static void RunLayoutTests() {
         CHECK(OpsOfColor(strip, track).size() == 2 && TextOps(strip, L"\u21BB 3d 12h").empty());
     });
 
-    Run("preview: a sparkline's plot beside the identity, its marks in drawing order, the key in its corner", [] {
+    Run("preview: sparkline charts beside the identity, each plot's shapes in drawing order and its key", [] {
         using Kind = SettingsPreviewOp::Kind;
         // One account with its logo alone (16 DIPs), its 5-hour quota half way through the window;
         // a 10 DIP margin: tiles pad 7 before and 8 after. The preview charts the visual test
-        // samples' history of the reading.
+        // samples' history of each reading.
         std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, false, false, false})};
         accounts[0].tileIdentity = TileIdentity::Logo;
         auto at = [&](const Settings& settings, WindowUsage reading, double taskbar = 48) {
@@ -1532,101 +1570,322 @@ static void RunLayoutTests() {
             return StripOf(settings, accounts, {data}, taskbar);
         };
         auto width = [](const SettingsPreviewStrip& strip) { return strip.columns[0].right - strip.columns[0].left; };
-        Settings s;
-        s.barLayout = BarLayout::Sparkline;
-        s.accountMargin = 10;
-        const uint32_t plotColor = TilePaletteFor(false).plot;
-
-        // 7 + 16 + 6 + 48 + 8 DIPs; the plot 6 DIPs after the logo, 48 x 32 centred on the 40 DIP
-        // tile, 3 DIP corners.
-        SettingsPreviewStrip strip = at(s, Window(25, 9000000));
-        CHECK(NearDip(strip.columns[0].left, 3) && NearDip(width(strip), 85));
-        std::vector<SettingsPreviewOp> plot = OpsOfColor(strip, plotColor);
-        CHECK(plot.size() == 1 && plot[0].kind == Kind::Rect && NearDip(plot[0].radius, 3));
-        CHECK(NearDip(plot[0].rect.left, 32) && NearDip(plot[0].rect.top, 8) && NearDip(plot[0].rect.right, 80) &&
-              NearDip(plot[0].rect.bottom, 40));
-        // Then its marks, one operation each from the plot's corner: the dashed diagonal at half the
-        // pace color's alpha, the areas at 0x47 alpha, the runs, the lone reading, the dashed
-        // projection and the current point in the usage color (25%: green); then the key.
-        auto plotOp = std::find_if(strip.ops.begin(), strip.ops.end(),
-                                   [&](const SettingsPreviewOp& op) { return op.color == plotColor; });
-        std::vector<SettingsPreviewOp> marks(plotOp + 1, strip.ops.end());
-        CHECK(marks.size() == 7);
+        // Channels within one step of a hand-picked OKLCH lift.
+        auto nearColor = [](uint32_t actual, uint32_t expected) {
+            if (actual >> 24 != expected >> 24) return false;
+            for (int shift : {16, 8, 0}) {
+                if (std::abs(int(actual >> shift & 0xFF) - int(expected >> shift & 0xFF)) > 1) return false;
+            }
+            return true;
+        };
+        // The operations after the plot's background.
+        auto after = [](const SettingsPreviewStrip& strip, uint32_t plotColor) {
+            auto plotOp = std::find_if(strip.ops.begin(), strip.ops.end(),
+                                       [&](const SettingsPreviewOp& op) { return op.color == plotColor; });
+            return std::vector<SettingsPreviewOp>(plotOp + 1, strip.ops.end());
+        };
         struct Mark {
             Kind kind;
             uint32_t color;
             float stroke;
             std::vector<float> dashes;
         };
-        const Mark expected[] = {{Kind::Stroke, 0x80DEDEDE, 1, {2, 2}}, {Kind::Shape, 0x4743A047, 0, {}},
-                                 {Kind::Stroke, 0xFF43A047, 1.3f, {}},  {Kind::Shape, 0xFF43A047, 0, {}},
-                                 {Kind::Stroke, 0xFF43A047, 1.2f, {1, 1.5f}}, {Kind::Shape, 0xFF43A047, 0, {}}};
-        for (size_t k = 0; k < std::size(expected); k++) {
-            CHECK(marks[k].kind == expected[k].kind && marks[k].color == expected[k].color);
-            CHECK(NearDip(marks[k].strokeWidth, expected[k].stroke) && marks[k].dashes == expected[k].dashes);
-            CHECK(NearDip(marks[k].origin.x, 32) && NearDip(marks[k].origin.y, 8));
-            // Filled nonzero, so overlapping dots merge.
-            CHECK(marks[k].kind == Kind::Stroke || marks[k].winding);
-        }
-        // The model's shapes: two runs and their areas, one dot; the point at (24, 23) half way at
-        // 25%, the projection from it to 50% (y 16) at the reset.
-        CHECK(marks[1].shape.size() == 2 && marks[2].shape.size() == 2 && marks[3].shape.size() == 1);
-        CHECK(NearDip(marks[5].shape[0].x, 24) && NearDip(marks[5].shape[0].y, 21));
-        CHECK(NearDip(marks[4].shape[0].x, 24) && NearDip(marks[4].shape[0].y, 23) &&
-              NearDip(marks[4].shape[0].segments[0].x, 48) && NearDip(marks[4].shape[0].segments[0].y, 16));
-        // The key at a quarter of the plot's height, semi-bold, its right edge and baseline 3 DIPs in
-        // from the plot's bottom-right corner.
-        const SettingsPreviewOp& key = marks[6];
+        auto expect = [](const std::vector<SettingsPreviewOp>& marks, std::initializer_list<Mark> expected) {
+            size_t k = 0;
+            for (const Mark& mark : expected) {
+                CHECK(marks[k].kind == mark.kind && marks[k].color == mark.color);
+                CHECK(NearDip(marks[k].strokeWidth, mark.stroke) && marks[k].dashes == mark.dashes);
+                CHECK(NearDip(marks[k].origin.x, 32) && NearDip(marks[k].origin.y, 8));
+                // Filled nonzero, so overlapping dots merge and the ring keeps its hole.
+                CHECK(marks[k].kind == Kind::Stroke || marks[k].winding);
+                k++;
+            }
+        };
+        Settings s;
+        s.barLayout = BarLayout::Sparkline;
+        s.accountMargin = 10;
+        const uint32_t plotColor = 0x59000000;
+        const Mark lit{Kind::Shape, 0x1FFFFFFF, 0, {}}, outline{Kind::Stroke, 0x2EFFFFFF, 1, {}},
+            diagonal{Kind::Stroke, 0x80DEDEDE, 1, {2, 2}},
+            area{Kind::Shape, 0x4743A047, 0, {}}, runs{Kind::Stroke, 0xFF43A047, 1.3f, {}},
+            dots{Kind::Shape, 0xFF43A047, 0, {}}, nowLine{Kind::Shape, 0x80FFFFFF, 0, {}},
+            projection{Kind::Stroke, 0xFF43A047, 1.2f, {1, 1.5f}}, plainDot{Kind::Shape, 0xFF43A047, 0, {}};
+
+        // 7 + 16 + 6 + 48 + 8 DIPs; the plot 6 DIPs after the logo, 48 x 32 (80% of the 40 DIP
+        // tile) centred on the tile, 3 DIP corners.
+        SettingsPreviewStrip strip = at(s, Window(25, 9000000));
+        CHECK(NearDip(strip.columns[0].left, 3) && NearDip(width(strip), 85));
+        std::vector<SettingsPreviewOp> plot = OpsOfColor(strip, plotColor);
+        CHECK(plot.size() == 1 && plot[0].kind == Kind::Rect && NearDip(plot[0].radius, 3));
+        CHECK(NearDip(plot[0].rect.left, 32) && NearDip(plot[0].rect.top, 8) && NearDip(plot[0].rect.right, 80) &&
+              NearDip(plot[0].rect.bottom, 40));
+        // By default its shapes, one operation each from the plot's corner: the lit part, the solid
+        // 1 DIP outline, the dashed diagonal at half the pace color's alpha, the areas at 0x47 alpha,
+        // the runs and the lone reading in the usage color (25%: green), the now line, the dashed
+        // projection and the plain dot in the usage color; then the key.
+        std::vector<SettingsPreviewOp> marks = after(strip, plotColor);
+        CHECK(marks.size() == 10);
+        expect(marks, {lit, outline, diagonal, area, runs, dots, nowLine, projection, plainDot});
+        // The model's shapes: lit to x 24, half way; the outline from (3, 0.5) to the right side at
+        // x 47.5 and down to y 29; two runs and their areas, one dot; the now line 1 DIP wide around
+        // x 24 from y 1 to 31; the projection from the reading at (24, 23) at 25% to 50% (y 16) at the
+        // reset; the dot's top 2 DIPs above the reading.
+        CHECK(NearDip(marks[0].shape[0].segments[0].x, 24) && NearDip(marks[0].shape[0].segments[1].y, 32));
+        CHECK(NearDip(marks[1].shape[0].x, 3) && NearDip(marks[1].shape[0].y, 0.5) && marks[1].shape[0].segments.size() == 8 &&
+              NearDip(marks[1].shape[0].segments[2].x, 47.5) && NearDip(marks[1].shape[0].segments[2].y, 29));
+        CHECK(marks[3].shape.size() == 2 && marks[4].shape.size() == 2 && marks[5].shape.size() == 1);
+        CHECK(NearDip(marks[6].shape[0].x, 23.5) && NearDip(marks[6].shape[0].y, 1) &&
+              NearDip(marks[6].shape[0].segments[1].x, 24.5) && NearDip(marks[6].shape[0].segments[1].y, 31));
+        CHECK(NearDip(marks[7].shape[0].x, 24) && NearDip(marks[7].shape[0].y, 23) &&
+              NearDip(marks[7].shape[0].segments[0].x, 48) && NearDip(marks[7].shape[0].segments[0].y, 16));
+        CHECK(NearDip(marks[8].shape[0].x, 24) && NearDip(marks[8].shape[0].y, 21));
+        // The key at the text size (8 DIPs by default), semi-bold, its right edge and baseline 3 DIPs
+        // in from the plot's bottom-right corner.
+        const SettingsPreviewOp& key = marks[9];
         CHECK(key.kind == Kind::Text && key.text == L"5h" && NearDip(key.style.size, 8) &&
               key.style.family == UiFamily::Taskbar && key.style.weight == DWRITE_FONT_WEIGHT_SEMI_BOLD &&
               key.color == 0xFFFFFFFF && NearDip(key.opacity, 0.75));
         CHECK(NearDip(key.rect.right, 77) && NearDip(key.rect.top + AboveCap(8) + CapHeight(8), 37));
 
-        // Over pace (80% half way, orange) the limit mark follows in the 100% color.
+        // Every cue on: the caret after the projection, then the cut-out in the taskbar's color, the
+        // ring, and the dot lifted from green; the caret's tip 3.2 DIPs up from the bottom, the
+        // cut-out's top 4.1 DIPs above the reading, the ring's two circles, the dot's top 2.2 above it.
+        Settings cued = s;
+        cued.sparklineNowCaret = cued.sparklineRing = true;
+        marks = after(at(cued, Window(25, 9000000)), plotColor);
+        CHECK(marks.size() == 13);
+        expect(marks, {lit, outline, diagonal, area, runs, dots, nowLine, projection, {Kind::Shape, 0xF0FFFFFF, 0, {}},
+                       {Kind::Shape, 0xFF1C1C1C, 0, {}}, {Kind::Shape, 0xF0FFFFFF, 0, {}}});
+        CHECK(marks[11].kind == Kind::Shape && nearColor(marks[11].color, 0xFF4DA950) && marks[12].text == L"5h");
+        CHECK(NearDip(marks[8].shape[0].segments[0].x, 24) && NearDip(marks[8].shape[0].segments[0].y, 28.8));
+        CHECK(NearDip(marks[9].shape[0].x, 24) && NearDip(marks[9].shape[0].y, 18.9) && marks[10].shape.size() == 2);
+        CHECK(NearDip(marks[11].shape[0].x, 24) && NearDip(marks[11].shape[0].y, 20.8));
+        // Every cue off: the whole plot lit, no now line or caret, the plain dot; the outline stays.
+        Settings bare = s;
+        bare.sparklineElapsed = bare.sparklineNowLine = false;
+        marks = after(at(bare, Window(25, 9000000)), plotColor);
+        CHECK(marks.size() == 9);
+        expect(marks, {lit, outline, diagonal, area, runs, dots, projection, plainDot});
+        CHECK(marks[0].shape[0].segments.size() == 8 && NearDip(marks[0].shape[0].segments[1].x, 48));
+        // The outline off too: the diagonal right after the lit part.
+        bare.sparklineOutline = false;
+        marks = after(at(bare, Window(25, 9000000)), plotColor);
+        CHECK(marks.size() == 8);
+        expect(marks, {lit, diagonal, area, runs, dots, projection, plainDot});
+        // The outline alone off, every other default kept: no outline operation, the rest as by default.
+        Settings unframed = s;
+        unframed.sparklineOutline = false;
+        strip = at(unframed, Window(25, 9000000));
+        marks = after(strip, plotColor);
+        CHECK(marks.size() == 9 && OpsOfColor(strip, 0x2EFFFFFF).empty());
+        expect(marks, {lit, diagonal, area, runs, dots, nowLine, projection, plainDot});
+        // Elapsed time alone off: the whole plot lit, the now line still there.
+        Settings unlit = s;
+        unlit.sparklineElapsed = false;
+        marks = after(at(unlit, Window(25, 9000000)), plotColor);
+        CHECK(marks.size() == 10 && marks[0].shape[0].segments.size() == 8 && marks[6].color == 0x80FFFFFF);
+
+        // Over pace (80% half way, orange): the runs, the lone reading, the projection and the dot
+        // orange, then the limit mark in the 100% color, last before the key.
         strip = at(s, Window(80, 9000000));
         std::vector<SettingsPreviewOp> limit = OpsOfColor(strip, 0xFFE53935);
         CHECK(limit.size() == 1 && limit[0].kind == Kind::Shape && OpsOfColor(strip, 0xFFFB8C00).size() == 4);
         CHECK(strip.ops.back().kind == Kind::Text && strip.ops[strip.ops.size() - 2].color == 0xFFE53935);
-        // Markers off: no diagonal.
+        // Markers off: no diagonal; the outline, the runs and the projection stroked.
         Settings off = s;
         off.showPaceTicks = false;
         strip = at(off, Window(25, 9000000));
-        CHECK(OpsOfKind(strip, Kind::Stroke).size() == 2 && OpsOfColor(strip, 0x80DEDEDE).empty());
-        // No history (the OpenAI sample has none): the diagonal, the projection and the point.
+        CHECK(OpsOfKind(strip, Kind::Stroke).size() == 3 && OpsOfColor(strip, 0x80DEDEDE).empty());
+        // No history (the OpenAI sample has none): the outline, the diagonal and the projection; the
+        // lit part, the now line and the dot.
         std::vector<AccountConfig> openai = {Account(L"openai", L"O", {true, false, false, false})};
         openai[0].tileIdentity = TileIdentity::Logo;
         AccountData openaiData = Fresh();
         openaiData.win5h = Window(25, 9000000);
         strip = StripOf(s, openai, {openaiData});
         std::vector<SettingsPreviewOp> strokes = OpsOfKind(strip, Kind::Stroke), shapes = OpsOfKind(strip, Kind::Shape);
-        CHECK(strokes.size() == 2 && NearDip(strokes[0].strokeWidth, 1) && NearDip(strokes[1].strokeWidth, 1.2));
-        CHECK(shapes.size() == 1 && shapes[0].color == 0xFF43A047);
-        // Without a window: the point alone at the plot's right edge, the key still there.
+        CHECK(strokes.size() == 3 && strokes[0].color == 0x2EFFFFFF && NearDip(strokes[0].strokeWidth, 1) &&
+              NearDip(strokes[1].strokeWidth, 1) && NearDip(strokes[2].strokeWidth, 1.2));
+        CHECK(shapes.size() == 3 && shapes[0].color == 0x1FFFFFFF && shapes[1].color == 0x80FFFFFF &&
+              shapes[2].color == 0xFF43A047);
+        // Without a window: the whole plot lit and outlined, the dot alone its radius in from the
+        // right edge at (46, 23), on the key's box at the bottom: the key moved to the top-right
+        // corner, its cap height 3 DIPs below the plot's top.
         strip = at(s, {25, 0, 0});
         shapes = OpsOfKind(strip, Kind::Shape);
-        CHECK(OpsOfKind(strip, Kind::Stroke).empty() && TextOps(strip, L"5h").size() == 1);
-        CHECK(shapes.size() == 1 && NearDip(shapes[0].shape[0].x, 46) && NearDip(shapes[0].shape[0].y, 21));
+        strokes = OpsOfKind(strip, Kind::Stroke);
+        CHECK(strokes.size() == 1 && strokes[0].color == 0x2EFFFFFF && TextOps(strip, L"5h").size() == 1);
+        CHECK(shapes.size() == 2 && shapes[0].color == 0x1FFFFFFF && shapes[0].shape[0].segments.size() == 8);
+        CHECK(NearDip(shapes[1].shape[0].x, 46) && NearDip(shapes[1].shape[0].y, 21));
+        const SettingsPreviewOp moved = TextOps(strip, L"5h")[0];
+        CHECK(NearDip(moved.rect.right, 77) && NearDip(moved.rect.top + AboveCap(8), 11));
 
-        // The chart width sets the column; the ring size the plot's height (the key a quarter of it,
-        // at most 9 DIPs).
+        // The chart width sets the column; the chart height the plot's, a percentage of the tile; the
+        // key keeps the text size.
         Settings wide = s;
         wide.sparklineWidth = 120;
-        wide.ringSize = 40;
+        wide.sparklineHeight = 100;
         strip = at(wide, Window(25, 9000000));
         plot = OpsOfColor(strip, plotColor);
         CHECK(NearDip(width(strip), 7 + 16 + 6 + 120 + 8) && NearDip(plot[0].rect.right - plot[0].rect.left, 120));
-        CHECK(NearDip(plot[0].rect.top, 4) && NearDip(plot[0].rect.bottom, 44) && NearDip(TextOps(strip, L"5h")[0].style.size, 9));
-        // A 32 DIP taskbar's 24 DIP tile caps the plot; the key at its 7 DIP floor.
+        CHECK(NearDip(plot[0].rect.top, 4) && NearDip(plot[0].rect.bottom, 44) && NearDip(TextOps(strip, L"5h")[0].style.size, 8));
+        Settings low = s;
+        low.sparklineHeight = 50;
+        strip = at(low, Window(25, 9000000));
+        plot = OpsOfColor(strip, plotColor);
+        CHECK(NearDip(plot[0].rect.top, 14) && NearDip(plot[0].rect.bottom, 34) && NearDip(TextOps(strip, L"5h")[0].style.size, 8));
+        // A 32 DIP taskbar's 24 DIP tile: 80% is 19 DIPs, 6.5 DIPs down the strip.
         strip = at(s, Window(25, 9000000), 32);
         plot = OpsOfColor(strip, plotColor);
-        CHECK(NearDip(plot[0].rect.top, 4) && NearDip(plot[0].rect.bottom, 28) && NearDip(TextOps(strip, L"5h")[0].style.size, 7));
-        // A light taskbar: its plot color, and the diagonal in its dark pace color.
+        CHECK(NearDip(plot[0].rect.top, 6.5) && NearDip(plot[0].rect.bottom, 25.5) &&
+              NearDip(TextOps(strip, L"5h")[0].style.size, 8));
+        // Text sizes 6 and 12: the key at that size, its right edge and baseline still 3 DIPs in.
+        for (int size : {6, 12}) {
+            Settings sized = s;
+            sized.sparklineTextSize = size;
+            const SettingsPreviewOp sizedKey = TextOps(at(sized, Window(25, 9000000)), L"5h")[0];
+            CHECK(NearDip(sizedKey.style.size, size) && NearDip(sizedKey.rect.right, 77) &&
+                  NearDip(sizedKey.rect.top + AboveCap(size) + CapHeight(size), 37));
+        }
+        // A light taskbar: its plot, lit and outline colors, the diagonal in its dark pace color, the
+        // now line black at its alpha; with every cue on also the caret and ring, and the cut-out in
+        // its color.
         AccountData data = Fresh();
         data.win5h = Window(25, 9000000);
         std::vector<AccountData> one = {data};
         SettingsPreviewStrip light =
             SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xE4000000, &accounts, &one);
-        CHECK(OpsOfColor(light, TilePaletteFor(true).plot).size() == 1 && OpsOfColor(light, 0x801A1A1A).size() == 1);
+        CHECK(OpsOfColor(light, 0x14000000).size() == 1 && OpsOfColor(light, 0x12000000).size() == 1 &&
+              OpsOfColor(light, 0x24000000).size() == 1 && OpsOfColor(light, 0x24000000)[0].kind == Kind::Stroke &&
+              OpsOfColor(light, 0x801A1A1A).size() == 1 && OpsOfColor(light, 0x80000000).size() == 1 &&
+              OpsOfColor(light, 0xF0000000).empty() && OpsOfColor(light, 0xFFF3F3F3).empty());
+        light = SettingsPreviewLayout(TestGraphics(), cued, 48, 1, kNow, false, true, 0xE4000000, &accounts, &one);
+        CHECK(OpsOfColor(light, 0xF0000000).size() == 2 && OpsOfColor(light, 0xFFF3F3F3).size() == 1);
+    });
+
+    Run("preview: an account's sparkline charts side by side; extra usage in the weekly chart's corner", [] {
+        using Kind = SettingsPreviewOp::Kind;
+        // One account with its logo alone, a 10 DIP margin as above: its 5-hour quota at 25% half way
+        // through its window, the weekly one at `weekly`% `share` of the way through its own (half
+        // way at 60% unless given), and `used` of `limit` dollars of monthly extra usage (OpenAI: a
+        // credits balance).
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, true, false, true})};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+        auto at = [&](const Settings& settings, double used = -1, double limit = -1, double balance = -1,
+                      std::wstring provider = L"anthropic", double weekly = 60, double share = 0.5) {
+            std::vector<AccountConfig> configured = accounts;
+            configured[0].provider = provider;
+            AccountData data = Fresh();
+            data.win5h = Window(25, 9000000);
+            data.winWeek = {weekly, kNow + (ULONGLONG)std::llround((1 - share) * kWeeklyWindowMs), kWeeklyWindowMs};
+            if (limit > 0) data.extraUsage = {used * 100 / limit, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+            data.extraUsedAmount = used;
+            data.extraLimitAmount = limit;
+            data.creditsBalance = balance;
+            return StripOf(settings, configured, {data});
+        };
+        auto width = [](const SettingsPreviewStrip& strip) { return strip.columns[0].right - strip.columns[0].left; };
+        auto only = [](const SettingsPreviewStrip& strip, std::wstring_view text) {
+            std::vector<SettingsPreviewOp> ops = TextOps(strip, text);
+            CHECK(ops.size() == 1);
+            return ops[0];
+        };
+        // Text whose cap height starts 3 DIPs below the plots' top (8).
+        auto capTop = [](const SettingsPreviewOp& op) { return op.rect.top + AboveCap(op.style.size); };
+        const uint32_t plotColor = 0x59000000;
+        Settings s;
+        s.barLayout = BarLayout::Sparkline;
+        s.accountMargin = 10;
+
+        // No extra usage reported: two 48 DIP plots 4 apart (7 + 16 + 6 + 48 + 4 + 48 + 8), each key
+        // 3 DIPs in from its own plot's corner, each chart's shapes from its own corner; no other text.
+        SettingsPreviewStrip two = at(s);
+        std::vector<SettingsPreviewOp> plots = OpsOfColor(two, plotColor);
+        CHECK(plots.size() == 2 && NearDip(width(two), 137));
+        CHECK(NearDip(plots[0].rect.left, 32) && NearDip(plots[0].rect.right, 80) && NearDip(plots[1].rect.left, 84) &&
+              NearDip(plots[1].rect.right, 132) && NearDip(plots[1].rect.top, 8) && NearDip(plots[1].rect.bottom, 40));
+        CHECK(NearDip(only(two, L"5h").rect.right, 77) && NearDip(only(two, L"7d").rect.right, 129));
+        CHECK(OpsOfKind(two, Kind::Text).size() == 2);
+        auto second = std::find_if(two.ops.begin(), two.ops.end(), [&](const SettingsPreviewOp& op) {
+            return op.color == plotColor && op.rect.left > 50;
+        });
+        CHECK(second != two.ops.end() && std::next(second)->kind != Kind::Text);
+        for (auto op = std::next(second); op != two.ops.end() && op->kind != Kind::Text; ++op) {
+            CHECK(NearDip(op->origin.x, 84) && NearDip(op->origin.y, 8));
+        }
+
+        // $20 of $50 spent (40%): no chart of its own, the column's width kept. Amount: "$20.00"
+        // without a key, semi-bold at the key's 8 DIPs in extra usage's green, its left and cap
+        // height 3 DIPs in from the weekly plot's top-left corner.
+        SettingsPreviewStrip spent = at(s, 20, 50);
+        CHECK(OpsOfColor(spent, plotColor).size() == 2 && NearDip(width(spent), 137) && TextOps(spent, L"Ex").empty());
+        const SettingsPreviewOp amount = only(spent, L"$20.00");
+        CHECK(amount.color == 0xFF43A047 && amount.opacity == 1 && NearDip(amount.style.size, 8) &&
+              amount.style.family == UiFamily::Taskbar && amount.style.weight == DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        CHECK(NearDip(amount.rect.left, 87) && NearDip(capTop(amount), 11) && amount.clip && amount.rect.right < 129);
+        // After the weekly chart's key.
+        CHECK(std::prev(std::find_if(spent.ops.begin(), spent.ops.end(), [](const SettingsPreviewOp& op) {
+                  return op.text == L"$20.00";
+              }))->text == L"7d");
+        // Percent: the "Ex" key first, regular at 0.6 opacity in the text color, the number 2 DIPs
+        // after it, both on the same cap line; remaining mode the share left.
+        Settings percent = s;
+        percent.sparklineExtra = SparklineExtra::Percent;
+        SettingsPreviewStrip shares = at(percent, 20, 50);
+        const SettingsPreviewOp ex = only(shares, L"Ex"), share = only(shares, L"40%");
+        CHECK(ex.style.weight == DWRITE_FONT_WEIGHT_NORMAL && NearDip(ex.style.size, 8) && NearDip(ex.opacity, 0.6) &&
+              ex.color == 0xFFFFFFFF && share.color == 0xFF43A047 && share.style.weight == DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        CHECK(NearDip(ex.rect.left, 87) && NearDip(share.rect.left, ex.rect.right + 2) && NearDip(capTop(ex), 11) &&
+              NearDip(capTop(share), 11));
+        percent.barMode = BarMode::Remaining;
+        CHECK(TextOps(at(percent, 20, 50), L"60%").size() == 1);
+        // OpenAI credits without a max: "Cr" and the balance, in the taskbar's text color.
+        SettingsPreviewStrip credits = at(s, -1, -1, 420, L"openai");
+        const SettingsPreviewOp cr = only(credits, L"Cr"), left = only(credits, L"420");
+        CHECK(NearDip(cr.rect.left, 87) && NearDip(left.rect.left, cr.rect.right + 2) && left.color == 0xFFFFFFFF);
+        // Off: no corner; extra usage's own chart third, 104 DIPs into the charts, with its key.
+        Settings none = s;
+        none.sparklineExtra = SparklineExtra::Off;
+        SettingsPreviewStrip charted = at(none, 20, 50);
+        plots = OpsOfColor(charted, plotColor);
+        CHECK(plots.size() == 3 && NearDip(plots[2].rect.left, 136) && NearDip(width(charted), 189));
+        CHECK(NearDip(only(charted, L"Ex").rect.right, 181) && TextOps(charted, L"$20.00").empty());
+
+        // Text clear of the weekly reading. At 110% half way, (24, 2) under the corner's top-left
+        // box: the amount moved to the bottom-left corner, its baseline 3 DIPs above the plot's
+        // bottom (40); the key stays at the bottom-right. At 10% 80% of the way, (38.5, 27.25) under
+        // the key's box: the key moved to the top-right corner, the amount stays at the top-left.
+        auto baseline = [](const SettingsPreviewOp& op) { return op.rect.top + AboveCap(op.style.size) + CapHeight(op.style.size); };
+        SettingsPreviewStrip high = at(s, 20, 50, -1, L"anthropic", 110);
+        const SettingsPreviewOp lowAmount = only(high, L"$20.00"), lowKey = only(high, L"7d");
+        CHECK(NearDip(lowAmount.rect.left, 87) && NearDip(baseline(lowAmount), 37) && NearDip(baseline(lowKey), 37) &&
+              NearDip(lowKey.rect.right, 129) && lowAmount.rect.right < lowKey.rect.left);
+        SettingsPreviewStrip late = at(s, 20, 50, -1, L"anthropic", 10, 0.8);
+        const SettingsPreviewOp topAmount = only(late, L"$20.00"), topKey = only(late, L"7d");
+        CHECK(NearDip(capTop(topAmount), 11) && NearDip(capTop(topKey), 11) && NearDip(topKey.rect.right, 129) &&
+              topAmount.rect.right < topKey.rect.left);
+
+        // 24 DIP charts (the weekly one 28 DIPs after the first, at 60): the corner's text clipped 3
+        // DIPs in from the plot's right edge, at x 81, like the weekly key's right edge.
+        Settings narrow = s;
+        narrow.sparklineWidth = 24;
+        SettingsPreviewStrip clipped = at(narrow, 20, 50);
+        plots = OpsOfColor(clipped, plotColor);
+        CHECK(plots.size() == 2 && NearDip(plots[1].rect.left, 60) && NearDip(plots[1].rect.right, 84));
+        const SettingsPreviewOp cut = only(clipped, L"$20.00");
+        CHECK(cut.clip && NearDip(cut.rect.left, 63) && NearDip(cut.rect.right, 81) && NearDip(only(clipped, L"7d").rect.right, 81));
+        narrow.sparklineExtra = SparklineExtra::Percent;
+        clipped = at(narrow, 20, 50);
+        const SettingsPreviewOp cutKey = only(clipped, L"Ex"), cutShare = only(clipped, L"40%");
+        CHECK(cutKey.clip && NearDip(cutKey.rect.left, 63) && cutKey.rect.right < 81);
+        CHECK(cutShare.clip && NearDip(cutShare.rect.left, cutKey.rect.right + 2) && NearDip(cutShare.rect.right, 81));
+        // At 110% half way, the dot at (12, 2) over the corner: moving it to the bottom would put it on
+        // the key, and moving both the key under the dot; neither moves, apart.
+        narrow.sparklineExtra = SparklineExtra::Amount;
+        SettingsPreviewStrip crowded = at(narrow, 20, 50, -1, L"anthropic", 110);
+        const SettingsPreviewOp topCut = only(crowded, L"$20.00"), bottomKey = only(crowded, L"7d");
+        CHECK(NearDip(capTop(topCut), 11) && NearDip(topCut.rect.right, 81) && NearDip(baseline(bottomKey), 37) &&
+              NearDip(bottomKey.rect.right, 81));
     });
 
     Run("preview: a quota matrix's cells beside the identity, down the first column, rows centred on the tile", [] {
@@ -1790,12 +2049,16 @@ static void RunLayoutTests() {
         large.headlineCountdown = true;
         large.paceTickStyle = PaceTickStyle::TimeTrack;
         large.sparklineWidth = 120;
+        large.sparklineHeight = 100;
+        large.sparklineExtra = SparklineExtra::Percent;
         Settings wild = large;
         wild.ringSize = 900;
         wild.ringThickness = -1;
         wild.logoScale = -5;
         wild.accountMargin = 99999;
         wild.sparklineWidth = 1 << 30;
+        wild.sparklineHeight = -(1 << 30);
+        wild.sparklineExtra = SparklineExtra(42);
         for (const Settings& base : {large, wild}) {
             for (BarLayout layout : {BarLayout::Gauge, BarLayout::ClockPies, BarLayout::RoundedSquare,
                                      BarLayout::LogoHeadline, BarLayout::Stacked, BarLayout::Vertical,
@@ -1804,7 +2067,8 @@ static void RunLayoutTests() {
                 s.barLayout = layout;
                 for (double taskbar : {0.0, 24.0, 48.0, 1e9}) {
                     // Per column two 500 DIP margins, a 32 DIP logo, 6 DIPs and a face (pies: 48
-                    // DIPs across; a sparkline's plot: 120), or bars: well under 1000 + 600.
+                    // DIPs across; sparklines: three 120 DIP plots 4 apart), or bars: well under
+                    // 1000 + 600.
                     SettingsPreviewStrip strip = Strip(s, taskbar, false, 2.5f);
                     CHECK(Finite(strip));
                     CHECK(strip.width < 4 * 1600 && strip.height <= 96);
@@ -1836,6 +2100,40 @@ static void RunLayoutTests() {
         // The Layout reset brings back the full track.
         CHECK(edits.Commit(0, SettingsField::BarStyle, int(BarStyle::Rail)) == 0);
         CHECK(edits.Reset(SettingsField::ResetLayout) == 0 && store.settings.barStyle == BarStyle::Track);
+    });
+
+    Run("controller: the sparkline's chart height and extra usage corner commit as chosen and the preview follows", [] {
+        TestStore store;
+        store.settings.barLayout = BarLayout::Sparkline;
+        SettingsEdits edits(store);
+        edits.Reload();
+        // The samples' plots: 32 DIPs at the default 80% of the 40 DIP tile, 20 at 50%.
+        auto plotHeights = [](const SettingsPreviewStrip& strip) {
+            std::vector<SettingsPreviewOp> plots = OpsOfColor(strip, 0x59000000);
+            CHECK(!plots.empty());
+            return std::all_of(plots.begin(), plots.end(), [&](const SettingsPreviewOp& op) {
+                return NearDip(op.rect.bottom - op.rect.top, plots[0].rect.bottom - plots[0].rect.top);
+            }) ? plots[0].rect.bottom - plots[0].rect.top : -1.0f;
+        };
+        CHECK(NearDip(plotHeights(Strip(edits.Projection())), 32));
+        CHECK(edits.Commit(0, SettingsField::SparklineHeight, 50) == 0 && store.settings.sparklineHeight == 50);
+        CHECK(NearDip(plotHeights(Strip(edits.Projection())), 20));
+        CHECK(edits.Commit(0, SettingsField::SparklineHeight, 140) == 0 && store.settings.sparklineHeight == 100);
+        // The corner off: the CC 2 sample's dollars gone; then Percent; out-of-range choices clamp.
+        auto dollars = [](const SettingsPreviewStrip& strip) {
+            return std::count_if(strip.ops.begin(), strip.ops.end(), [](const SettingsPreviewOp& op) {
+                return op.kind == SettingsPreviewOp::Kind::Text && op.text.starts_with(L"$");
+            });
+        };
+        CHECK(dollars(Strip(edits.Projection())) == 1);
+        CHECK(edits.Commit(0, SettingsField::SparklineExtra, int(SparklineExtra::Off)) == 0 &&
+              store.settings.sparklineExtra == SparklineExtra::Off);
+        CHECK(dollars(Strip(edits.Projection())) == 0);
+        CHECK(edits.Commit(0, SettingsField::SparklineExtra, 9) == 0 && store.settings.sparklineExtra == SparklineExtra::Percent);
+        CHECK(edits.Commit(0, SettingsField::SparklineExtra, -2) == 0 && store.settings.sparklineExtra == SparklineExtra::Off);
+        // The Layout reset brings back 80% and the amount.
+        CHECK(edits.Reset(SettingsField::ResetLayout) == 0 && store.settings.sparklineHeight == 80 &&
+              store.settings.sparklineExtra == SparklineExtra::Amount);
     });
 
     Run("preview: extreme and out-of-range settings stay drawable and bounded", [] {
@@ -2229,24 +2527,65 @@ static void RunLayoutTests() {
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::BarLayout, 2).selected && !Control(frame, SettingsField::BarLayout, 0).selected);
-        CHECK(section(frame, L"Sparkline") && section(frame, L"Identity") && section(frame, L"Pace markers") &&
-              section(frame, L"Spacing") && !section(frame, L"Matrix") && !section(frame, L"Ring") &&
-              !section(frame, L"Headline") && !section(frame, L"Bars"));
-        // The chart's width, then its height (the ring size), before the identity's card.
+        CHECK(section(frame, L"Sparkline") && section(frame, L"Current position") && section(frame, L"Identity") &&
+              section(frame, L"Pace markers") && section(frame, L"Spacing") && !section(frame, L"Matrix") &&
+              !section(frame, L"Ring") && !section(frame, L"Headline") && !section(frame, L"Bars"));
+        // Each chart's width, its height (percent of the tile), the text size and the extra usage
+        // corner, then the current position cues, before the identity's card; no ring size.
         const UiItem& chartWidth = Control(frame, SettingsField::SparklineWidth, 1);
-        const UiItem& chartHeight = Control(frame, SettingsField::RingSize, 1);
+        const UiItem& chartHeight = Control(frame, SettingsField::SparklineHeight, 1);
+        const UiItem& textSize = Control(frame, SettingsField::SparklineTextSize, 1);
+        const UiItem& extra = Control(frame, SettingsField::SparklineExtra);
+        CHECK(textSize.kind == UiItemKind::Slider && textSize.minimum == 6 && textSize.maximum == 16 &&
+              textSize.action.value == 8 && textSize.enabled && Control(frame, SettingsField::SparklineTextSize).text == L"8");
+        CHECK(HasText(frame, L"Text size") &&
+              HasText(frame, L"Quota keys (5h, 7d, ...) and extra usage on the charts, in pixels."));
+        // The chart outline: a toggle, on by default, between the text size and the extra usage.
+        const UiItem& outline = Control(frame, SettingsField::SparklineOutline);
+        CHECK(outline.kind == UiItemKind::Toggle && outline.enabled && outline.selected && outline.action.value == 0);
+        CHECK(HasText(frame, L"Chart outline") && HasText(frame, L"A faint border around each chart."));
+        // The cues: elapsed time and the now line on, the caret and the ring off by default; each a
+        // toggle whose action flips it, in that order after the extra usage card.
+        const std::tuple<SettingsField, PCWSTR, PCWSTR, bool> cueCards[] = {
+            {SettingsField::SparklineElapsed, L"Elapsed time",
+             L"Lights the part of the quota\u2019s window that has passed; the rest stays dim.", true},
+            {SettingsField::SparklineNowLine, L"Now line", L"A thin line across the chart at the current time.", true},
+            {SettingsField::SparklineNowCaret, L"Now caret",
+             L"A small triangle on the chart\u2019s bottom edge at the current time.", false},
+            {SettingsField::SparklineRing, L"Ringed reading",
+             L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.", false}};
+        float cueTop = extra.rect.bottom;
+        for (auto [field, title, description, on] : cueCards) {
+            const UiItem& toggle = Control(frame, field);
+            CHECK(toggle.kind == UiItemKind::Toggle && toggle.enabled && toggle.selected == on &&
+                  toggle.action.value == int(!on));
+            CHECK(HasText(frame, title) && HasText(frame, description));
+            CHECK(toggle.rect.top > cueTop);
+            cueTop = toggle.rect.bottom;
+        }
         CHECK(chartWidth.kind == UiItemKind::Slider && chartWidth.minimum == 24 && chartWidth.maximum == 120 &&
               chartWidth.action.value == 48 && chartWidth.enabled && Control(frame, SettingsField::SparklineWidth).text == L"48");
-        CHECK(chartHeight.kind == UiItemKind::Slider && chartHeight.minimum == 24 && chartHeight.maximum == 40 &&
-              chartHeight.action.value == 32 && chartHeight.enabled);
-        CHECK(HasText(frame, L"Chart width") && HasText(frame, L"Pixels across the quota\u2019s whole window.") &&
-              HasText(frame, L"Chart height") && HasText(frame, L"Pixels from 0% to 100% used.") &&
-              !HasText(frame, L"Ring size"));
+        CHECK(chartHeight.kind == UiItemKind::Slider && chartHeight.minimum == 50 && chartHeight.maximum == 100 &&
+              chartHeight.action.value == 80 && chartHeight.enabled && Control(frame, SettingsField::SparklineHeight).text == L"80");
+        CHECK(extra.kind == UiItemKind::Dropdown && extra.enabled && extra.text == L"Amount" && extra.options.size() == 3 &&
+              extra.options[0].text == L"Off" && extra.options[0].value == int(SparklineExtra::Off) &&
+              extra.options[1].text == L"Amount" && extra.options[1].value == int(SparklineExtra::Amount) &&
+              extra.options[2].text == L"Percent" && extra.options[2].value == int(SparklineExtra::Percent));
+        CHECK(HasText(frame, L"Chart width") && HasText(frame, L"Pixels across each quota\u2019s whole window.") &&
+              HasText(frame, L"Chart height") && HasText(frame, L"Percent of the tile\u2019s height, from 0% to 100% used.") &&
+              HasText(frame, L"Extra usage") &&
+              HasText(frame, L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner, when "
+                             L"reported: spent in Used mode, left in Remaining mode. Percent shows the amount without a "
+                             L"limit.") &&
+              !HasText(frame, L"Ring size") && !HasText(frame, L"Pixels from 0% to 100% used."));
         const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
-        CHECK(chartWidth.rect.bottom < chartHeight.rect.top && chartHeight.rect.bottom < identity.rect.top);
+        CHECK(chartWidth.rect.bottom < chartHeight.rect.top && chartHeight.rect.bottom < textSize.rect.top &&
+              textSize.rect.bottom < outline.rect.top && outline.rect.bottom < extra.rect.top &&
+              cueTop < identity.rect.top);
         CHECK(identity.action.kind == UiActionKind::Navigate && Control(frame, SettingsField::LogoScale, 1).enabled);
-        absent(frame, {{SettingsField::RingThickness, 1}, {SettingsField::BarLength, 1}, {SettingsField::BarStyle, 0},
-                       {SettingsField::HeadlineFontSize, 1}, {SettingsField::HeadlineCountdown, 0}, {SettingsField::BarGap, 0}});
+        absent(frame, {{SettingsField::RingSize, 0}, {SettingsField::RingSize, 1}, {SettingsField::RingThickness, 1},
+                       {SettingsField::BarLength, 1}, {SettingsField::BarStyle, 0}, {SettingsField::HeadlineFontSize, 1},
+                       {SettingsField::HeadlineCountdown, 0}, {SettingsField::BarGap, 0}});
         // Pace markers: the toggle, describing the diagonal, and the color; no marker style.
         const UiItem& pace = Control(frame, SettingsField::ShowPaceTicks);
         CHECK(pace.kind == UiItemKind::Toggle && pace.selected && Control(frame, SettingsField::PaceTickColor, 1).enabled);
@@ -2258,13 +2597,30 @@ static void RunLayoutTests() {
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(!Control(frame, SettingsField::PaceTickColor, 1).enabled && HasText(frame, L"Turn on Pace markers to change this."));
-        // A chosen width on the slider and in its box.
+        // A chosen width, height and text size on the sliders and in their boxes; a chosen corner;
+        // the cues flipped.
         view.settings.showPaceTicks = true;
         view.settings.sparklineWidth = 80;
+        view.settings.sparklineHeight = 65;
+        view.settings.sparklineTextSize = 12;
+        view.settings.sparklineExtra = SparklineExtra::Percent;
+        view.settings.sparklineElapsed = view.settings.sparklineNowLine = false;
+        view.settings.sparklineNowCaret = view.settings.sparklineRing = true;
+        view.settings.sparklineOutline = false;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::SparklineWidth, 1).action.value == 80 &&
               Control(frame, SettingsField::SparklineWidth).text == L"80");
+        CHECK(Control(frame, SettingsField::SparklineHeight, 1).action.value == 65 &&
+              Control(frame, SettingsField::SparklineHeight).text == L"65");
+        CHECK(Control(frame, SettingsField::SparklineExtra).text == L"Percent");
+        CHECK(Control(frame, SettingsField::SparklineTextSize, 1).action.value == 12 &&
+              Control(frame, SettingsField::SparklineTextSize).text == L"12");
+        CHECK(!Control(frame, SettingsField::SparklineElapsed).selected && !Control(frame, SettingsField::SparklineNowLine).selected &&
+              Control(frame, SettingsField::SparklineNowCaret).selected && Control(frame, SettingsField::SparklineRing).selected &&
+              Control(frame, SettingsField::SparklineRing).action.value == 0);
+        CHECK(!Control(frame, SettingsField::SparklineOutline).selected &&
+              Control(frame, SettingsField::SparklineOutline).action.value == 1);
 
         // Quota matrix: the number size, then the identity; no pace markers or other sizes.
         view = TestView(SettingsUiPage::Layout);
@@ -2284,15 +2640,25 @@ static void RunLayoutTests() {
               Control(frame, SettingsField::BarLayout, 10).action.kind == UiActionKind::Navigate &&
               Control(frame, SettingsField::LogoScale, 1).enabled);
         absent(frame, {{SettingsField::ShowPaceTicks, 0}, {SettingsField::PaceTickColor, 1}, {SettingsField::PaceTickStyle, 0},
-                       {SettingsField::SparklineWidth, 1}, {SettingsField::RingSize, 1}, {SettingsField::RingThickness, 1},
+                       {SettingsField::SparklineWidth, 1}, {SettingsField::SparklineHeight, 1}, {SettingsField::SparklineExtra, 0},
+                       {SettingsField::SparklineTextSize, 1}, {SettingsField::SparklineElapsed, 0},
+                       {SettingsField::SparklineNowLine, 0}, {SettingsField::SparklineNowCaret, 0}, {SettingsField::SparklineRing, 0},
+                       {SettingsField::SparklineOutline, 0}, {SettingsField::RingSize, 1}, {SettingsField::RingThickness, 1},
                        {SettingsField::HeadlineBarLength, 1}, {SettingsField::HeadlineCountdown, 0}, {SettingsField::BarGap, 0}});
         CHECK(!HasText(frame, L"Pace markers"));
-        // The chart width is the sparkline's alone.
-        for (BarLayout layout : {BarLayout::Stacked, BarLayout::LogoHeadline, BarLayout::Gauge, BarLayout::ClockPies}) {
+        // The chart's width, height and corner are the sparkline's alone.
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::LogoHeadline, BarLayout::Gauge, BarLayout::ClockPies,
+                                 BarLayout::SegmentedRing}) {
             view.settings.barLayout = layout;
             frame = {};
             SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-            absent(frame, {{SettingsField::SparklineWidth, 0}, {SettingsField::SparklineWidth, 1}});
+            absent(frame, {{SettingsField::SparklineWidth, 0}, {SettingsField::SparklineWidth, 1},
+                           {SettingsField::SparklineHeight, 0}, {SettingsField::SparklineHeight, 1},
+                           {SettingsField::SparklineTextSize, 1}, {SettingsField::SparklineExtra, 0},
+                           {SettingsField::SparklineElapsed, 0}, {SettingsField::SparklineNowLine, 0},
+                           {SettingsField::SparklineNowCaret, 0}, {SettingsField::SparklineRing, 0},
+                           {SettingsField::SparklineOutline, 0}});
+            CHECK(!HasText(frame, L"Current position"));
         }
     });
 
