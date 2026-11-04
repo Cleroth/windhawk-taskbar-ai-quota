@@ -711,6 +711,80 @@ static std::vector<TileTracePoint> VisualTestTrace(const AccountConfig& account,
     return trace;
 }
 
+// How far back a quota's projection measures its rate: a day, so it follows a start late in a
+// weekly window while sleep and breaks stay in the average. 5-hour windows (and a window's first
+// day) get their window's average; monthly extra usage passes 0 for it, since its percentage
+// moves with its budget.
+static constexpr ULONGLONG kProjectionLookbackMs = 24ULL * 60 * 60 * 1000;
+
+// A quota's projection from its current reading, to the reset or, reaching 100% before it, to
+// the limit.
+struct UsageProjection {
+    ULONGLONG fromMs = 0;   // The current reading's time: now, or the newest recorded reading if later.
+    // The rate's span start: the window's start (its average), the lookback's cutoff, or the
+    // reading before a recording gap across that cutoff.
+    ULONGLONG sinceMs = 0;
+    ULONGLONG toMs = 0;     // The reset, or the limit's time.
+    double toUsed = 0;      // Used % at toMs; 100 at the limit.
+    bool limit = false;
+};
+
+// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its window
+// on and before its reset, at the average rate since its window started at 0%, or with a
+// `lookbackMs` ending after that, since the cutoff it gives. `trace` (oldest first) places the
+// cutoff's usage: interpolated between connected readings, across a recording gap only between
+// equal ones, else the span starts at the reading before the gap. Any decrease from there to the
+// current reading (a reset, a changed budget) falls back to the window's average.
+static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
+                                                   const std::vector<TileTracePoint>& trace,
+                                                   ULONGLONG now, ULONGLONG lookbackMs) {
+    double pct = reading.pct;
+    if (pct <= 0 || pct >= 100 || !reading.windowDurationMs || reading.resetUnixMs <= reading.windowDurationMs) {
+        return std::nullopt;
+    }
+    ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+    ULONGLONG from = trace.empty() ? now : std::max(now, trace.back().timeMs);
+    double elapsed = ((double)from - (double)start) / reading.windowDurationMs;
+    if (elapsed < 0.05 || from >= reading.resetUnixMs) return std::nullopt;
+
+    TileTracePoint base{start, 0, false};
+    if (lookbackMs && from - start > lookbackMs) {
+        // The readings around the cutoff: the window's start before the first, the current
+        // reading after the last.
+        ULONGLONG cutoff = from - lookbackMs;
+        auto next = std::upper_bound(trace.begin(), trace.end(), cutoff,
+                                     [](ULONGLONG time, const TileTracePoint& point) { return time < point.timeMs; });
+        TileTracePoint before = next == trace.begin() ? base : next[-1];
+        TileTracePoint after = next == trace.end() ? TileTracePoint{from, pct, false} : *next;
+        TileTracePoint cut = before;
+        if (next != trace.begin() && after.connect) {
+            cut = {cutoff, before.used + (after.used - before.used) * double(cutoff - before.timeMs) /
+                                             double(after.timeMs - before.timeMs)};
+        } else if (after.used == before.used) {
+            cut = {cutoff, before.used};
+        }
+        bool rising = true;
+        double previous = before.used;
+        for (auto point = next; point != trace.end() && rising; ++point) {
+            rising = point->used >= previous;
+            previous = point->used;
+        }
+        if (rising && pct >= previous) base = cut;
+    }
+
+    // Products before quotients keep exact cases exact (even use reaching 100% at the reset).
+    double rise = pct - base.used;
+    double span = double(from - base.timeMs);
+    UsageProjection projection{from, base.timeMs, reading.resetUnixMs,
+                               pct + rise * double(reading.resetUnixMs - from) / span, false};
+    if (projection.toUsed > 100) {
+        projection.toMs = from + (ULONGLONG)std::llround((100 - pct) * span / rise);
+        projection.toUsed = 100;
+        projection.limit = true;
+    }
+    return projection;
+}
+
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
 // the bar. Pixel details scale with 1 / rasterizationScale.
 struct BarGeometry {
@@ -1014,8 +1088,8 @@ struct AccountMeters {
     // chart height. A chart plots used % across the window, or % left in remaining mode: the lit
     // part up to now (or the whole plot), the recorded usage, the even-pace diagonal (with pace
     // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
-    // plain), and the projection at the window's average rate from the current reading to the
-    // reset or, over pace, to the limit, marked in the 100% color. Without a window the plot is
+    // plain), and the projection (ProjectUsage) from the current reading to the reset or, reaching
+    // 100% before it, to the limit, marked in the 100% color. Without a window the plot is
     // lit whole and the current reading sits at its right edge, alone.
     uint32_t sparkLimitColor = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
@@ -1497,16 +1571,15 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 if (wu.pct >= 0) {
                     double y = yAt(wu.pct);
                     reading(x, y);
-                    // The average rate since the window started (fixed windows start at 0%), from
-                    // 5% of the window on, while fresh and short of the limit.
-                    double elapsed = std::clamp(((double)now - (double)start) / wu.windowDurationMs, 0.0, 1.0);
-                    if (!meters.stale && wu.pct > 0 && wu.pct < 100 && elapsed >= 0.05 && now < wu.resetUnixMs) {
-                        double atReset = wu.pct / elapsed;
-                        bool limit = atReset > 100;
-                        double endX = limit ? snap(elapsed * 100 / wu.pct * width) : width;
-                        double endY = yAt(limit ? 100 : atReset);
+                    std::optional<UsageProjection> projection;
+                    if (!meters.stale) {
+                        projection = ProjectUsage(wu, trace, display.now,
+                                                  w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
+                    }
+                    if (projection) {
+                        double endX = xAt(projection->toMs), endY = yAt(projection->toUsed);
                         shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
-                        if (limit) shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                        if (projection->limit) shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
                     }
                 }
             } else {

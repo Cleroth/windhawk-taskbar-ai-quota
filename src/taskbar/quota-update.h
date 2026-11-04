@@ -78,18 +78,21 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
-            // A sparkline's recorded usage: the burn-up curve of the flyout row showing the
-            // quota's reading (the accessor takes the settings and data locks, so none may be
-            // held here), or the visual test samples.
-            TileTraceSource traceOf = [&](int slot, const WindowUsage& reading) {
+            // A flyout row's recorded usage of its reading: the row's burn-up curve (the accessor
+            // takes the settings and data locks, so none may be held here), or the visual test
+            // samples. Sparklines ask for the row showing their quota.
+            auto rowTrace = [&](int row, const WindowUsage& reading) {
                 if (visualTestMode) return VisualTestTrace(accounts[i], reading, now);
-                static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow,
-                                                              kFlyoutFableRow, kFlyoutExtraRow};
                 std::vector<TileTracePoint> trace;
-                if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(accounts[i].historyId, kRows[slot], reading)) {
+                if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(accounts[i].historyId, row, reading)) {
                     for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
                 }
                 return trace;
+            };
+            TileTraceSource traceOf = [&](int slot, const WindowUsage& reading) {
+                static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow,
+                                                              kFlyoutFableRow, kFlyoutExtraRow};
+                return rowTrace(kRows[slot], reading);
             };
             AccountMeters meters = AccountMeterState(
                 display, state.buildBarLayout, accounts[i], d,
@@ -276,32 +279,16 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 if (AccountIdentityHash(accounts[i]) != flyout.accountIdentity) {
                     CloseAccountFlyout(state);
                 } else {
-                    // Burn-up curves per flyout row. The accessor takes the settings and data
-                    // locks, so none may be held here.
-                    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> curves;
+                    std::array<std::vector<TileTracePoint>, kFlyoutRowCount> traces;
                     const auto readings = FlyoutRowReadings(d);
-                    for (int r = 0; r < kFlyoutRowCount; r++) {
-                        const WindowUsage& reading = *readings[r];
-                        if (!visualTestMode) {
-                            curves[r] = CopyBurnUpCurve(accounts[i].historyId, r, reading);
-                            continue;
-                        }
-                        // Visual test samples; the OpenAI sample keeps the no-history bars.
-                        std::vector<TileTracePoint> trace = VisualTestTrace(accounts[i], reading, now);
-                        if (trace.empty()) continue;
-                        BurnUpCurve& curve = curves[r].emplace(
-                            BurnUpCurve{reading.resetUnixMs, reading.windowDurationMs, {}});
-                        for (const TileTracePoint& point : trace) {
-                            curve.points.push_back({point.timeMs, point.used, point.connect});
-                        }
-                    }
+                    for (int r = 0; r < kFlyoutRowCount; r++) traces[r] = rowTrace(r, *readings[r]);
                     UpdateAccountFlyout(state, accounts[i], d,
                                         {now, display.barMode, display.yellowThreshold,
                                          display.orangeThreshold, display.redThreshold,
                                          display.colorblindMode, settings.showOpenAiExtraLimits,
                                          meters.stale, meters.warn, accountRefreshing,
                                          visualTestMode},
-                                        curves);
+                                        traces);
                 }
             }
 

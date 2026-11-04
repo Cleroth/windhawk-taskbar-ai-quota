@@ -564,12 +564,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     return card;
 }
 
-// `curves` holds each row's burn-up curve for its displayed reading (FlyoutRowReadings); rows
-// without one show the bar.
+// `traces` holds each row's recorded usage of its displayed reading (FlyoutRowReadings); rows
+// without any show the bar.
 static void UpdateAccountFlyout(
     QuotaUiInstance& state, AccountConfig const& account, AccountData const& d,
     FlyoutDisplay const& display,
-    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> const& curves) {
+    std::array<std::vector<TileTracePoint>, kFlyoutRowCount> const& traces) {
     FlyoutPopup& popup = state.flyout.popup;
     if (!popup.card) return;
     FlyoutTheme const& theme = popup.theme;
@@ -678,31 +678,42 @@ static void UpdateAccountFlyout(
                 row.paceRestColumn.Width({100.0 - pacePct, GridUnitType::Star});
             }
 
-            // Average rate since the window started (fixed windows start at 0%). Over pace means
-            // the limit is reached before the reset.
-            bool projected = paced && wu.pct > 0 && elapsed >= 0.05 &&
-                             display.now < wu.resetUnixMs;
-            bool overPace = projected && wu.pct > elapsed * 100.0;
+            // Over pace: more used than even use would have by now (fixed windows start at 0%).
+            bool overPace = paced && wu.pct > 0 && elapsed >= 0.05 &&
+                            display.now < wu.resetUnixMs && wu.pct > elapsed * 100.0;
             show(row.trend, overPace);
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
+
+            // The usage graph tiles' projection; the text, naming the rate's span, when it
+            // reaches the limit before the reset.
+            const std::vector<TileTracePoint>& trace = traces[r];
+            std::optional<UsageProjection> projected;
+            if (!display.stale) {
+                projected = ProjectUsage(wu, trace, display.now,
+                                         r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
+            }
             std::wstring projection;
-            double msToLimit = -1;
-            if (overPace && wu.pct < 100) {
-                msToLimit = elapsed * wu.windowDurationMs * (100.0 - wu.pct) / wu.pct;
-                ULONGLONG minutes =
-                    std::max<ULONGLONG>(1, (ULONGLONG)std::ceil(msToLimit / 60000.0));
-                projection = L"At this pace: limit in ~" + FormatShortDuration(minutes * 60);
+            if (projected && projected->limit) {
+                std::wstring rate = L"this window's average rate";
+                SYSTEMTIME since;
+                if (projected->sinceMs + kProjectionLookbackMs == projected->fromMs) {
+                    rate = L"the last 24h's rate";
+                } else if (projected->sinceMs != wu.resetUnixMs - wu.windowDurationMs &&
+                           UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
+                    rate = L"the rate since " + FormatLocalDayTime(since);
+                }
+                ULONGLONG minutes = std::max<ULONGLONG>(
+                    1, (projected->toMs - projected->fromMs + 59999) / 60000);
+                projection = L"At " + rate + L": limit in ~" + FormatShortDuration(minutes * 60);
             }
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
 
             // Usage chart in place of the bar: used %, or % left in remaining mode, over the
-            // displayed reading's window, with the projection at the same average rate to the
-            // reset or, over pace, to the limit. Shapes are regenerated only when the drawn
-            // geometry changes.
-            const std::optional<BurnUpCurve>& curve = curves[r];
-            bool charted = row.chart && curve && !curve->points.empty() &&
-                           wu.windowDurationMs > 0 && wu.resetUnixMs > wu.windowDurationMs;
+            // displayed reading's window, with the projection. Shapes are regenerated only when
+            // the drawn geometry changes.
+            bool charted = row.chart && !trace.empty() && wu.windowDurationMs > 0 &&
+                           wu.resetUnixMs > wu.windowDurationMs;
             show(row.visual, !charted);
             show(row.chart, charted);
             if (charted) {
@@ -720,23 +731,18 @@ static void UpdateAccountFlyout(
                                 (kFlyoutChartHeight - 2 * kFlyoutChartInset) * shown / 100.0);
                 };
                 FlyoutChartShape shape;
-                const std::vector<BurnUpPoint>& points = curve->points;
-                for (size_t begin = 0, end; begin < points.size(); begin = end) {
-                    std::vector<Point> run{{xAt(points[begin].timeMs), yAt(points[begin].used)}};
-                    for (end = begin + 1; end < points.size() && points[end].connect; end++) {
-                        run.push_back({xAt(points[end].timeMs), yAt(points[end].used)});
+                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
+                    std::vector<Point> run{{xAt(trace[begin].timeMs), yAt(trace[begin].used)}};
+                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
+                        run.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
                     }
                     if (run.size() == 1) shape.dots.push_back(run.front());
                     else shape.lines.push_back(std::move(run));
                 }
                 // A rolled-back clock can put now before the newest reading.
-                ULONGLONG now = std::max(display.now, points.back().timeMs);
+                ULONGLONG now = std::max(display.now, trace.back().timeMs);
                 shape.now = {xAt(now), yAt(wu.pct)};
-                if (msToLimit >= 0) {
-                    shape.projectionEnd = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
-                } else if (projected && wu.pct < 100) {
-                    shape.projectionEnd = {xAt(wu.resetUnixMs), yAt(wu.pct / elapsed)};
-                }
+                if (projected) shape.projectionEnd = {xAt(projected->toMs), yAt(projected->toUsed)};
                 shape.color = colorValue;
                 shape.remaining = remainingMode;
 

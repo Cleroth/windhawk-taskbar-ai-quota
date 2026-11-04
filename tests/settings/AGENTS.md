@@ -46,7 +46,7 @@ regenerates.
 ## Phases
 
 - `model`: pure fixtures (meter model with ring tile outlines, sparkline geometry and its history
-  requests, quota matrix cells, logos, toolkit palette/input/focus/
+  requests, usage projections (the tiles' and the flyout's), quota matrix cells, logos, toolkit palette/input/focus/
   hit testing/scroll, controls, popup rows/placement/keys, settings shell and pages).
   `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis

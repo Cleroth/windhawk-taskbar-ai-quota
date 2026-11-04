@@ -96,6 +96,13 @@ static std::wstring FormatLocalTime(SYSTEMTIME const& local) {
     return buf;
 }
 
+// The local time with its abbreviated weekday, e.g. "Fri 04:59".
+static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
+    wchar_t day[16] = L"";
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd", day, ARRAYSIZE(day), nullptr);
+    return std::wstring(day) + L" " + FormatLocalTime(local);
+}
+
 static std::wstring FormatReset(ULONGLONG unixMs) {
     if (!unixMs) return L"?";
     LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
@@ -122,14 +129,9 @@ static std::wstring FormatReset(ULONGLONG unixMs) {
         return rel;
     }
 
-    std::wstring localTime = FormatLocalTime(local);
-    if (delta < 24LL * 3600 * 1000) {
-        return std::wstring(rel) + L" (" + localTime + L")";
-    }
-
-    wchar_t day[16] = L"";
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd", day, ARRAYSIZE(day), nullptr);
-    return std::wstring(rel) + L" (" + day + L" " + localTime + L")";
+    std::wstring localTime =
+        delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local);
+    return std::wstring(rel) + L" (" + localTime + L")";
 }
 
 static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {

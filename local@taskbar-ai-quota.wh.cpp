@@ -1113,6 +1113,13 @@ static std::wstring FormatLocalTime(SYSTEMTIME const& local) {
     return buf;
 }
 
+// The local time with its abbreviated weekday, e.g. "Fri 04:59".
+static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
+    wchar_t day[16] = L"";
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd", day, ARRAYSIZE(day), nullptr);
+    return std::wstring(day) + L" " + FormatLocalTime(local);
+}
+
 static std::wstring FormatReset(ULONGLONG unixMs) {
     if (!unixMs) return L"?";
     LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
@@ -1139,14 +1146,9 @@ static std::wstring FormatReset(ULONGLONG unixMs) {
         return rel;
     }
 
-    std::wstring localTime = FormatLocalTime(local);
-    if (delta < 24LL * 3600 * 1000) {
-        return std::wstring(rel) + L" (" + localTime + L")";
-    }
-
-    wchar_t day[16] = L"";
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd", day, ARRAYSIZE(day), nullptr);
-    return std::wstring(rel) + L" (" + day + L" " + localTime + L")";
+    std::wstring localTime =
+        delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local);
+    return std::wstring(rel) + L" (" + localTime + L")";
 }
 
 static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
@@ -6657,6 +6659,80 @@ static std::vector<TileTracePoint> VisualTestTrace(const AccountConfig& account,
     return trace;
 }
 
+// How far back a quota's projection measures its rate: a day, so it follows a start late in a
+// weekly window while sleep and breaks stay in the average. 5-hour windows (and a window's first
+// day) get their window's average; monthly extra usage passes 0 for it, since its percentage
+// moves with its budget.
+static constexpr ULONGLONG kProjectionLookbackMs = 24ULL * 60 * 60 * 1000;
+
+// A quota's projection from its current reading, to the reset or, reaching 100% before it, to
+// the limit.
+struct UsageProjection {
+    ULONGLONG fromMs = 0;   // The current reading's time: now, or the newest recorded reading if later.
+    // The rate's span start: the window's start (its average), the lookback's cutoff, or the
+    // reading before a recording gap across that cutoff.
+    ULONGLONG sinceMs = 0;
+    ULONGLONG toMs = 0;     // The reset, or the limit's time.
+    double toUsed = 0;      // Used % at toMs; 100 at the limit.
+    bool limit = false;
+};
+
+// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its window
+// on and before its reset, at the average rate since its window started at 0%, or with a
+// `lookbackMs` ending after that, since the cutoff it gives. `trace` (oldest first) places the
+// cutoff's usage: interpolated between connected readings, across a recording gap only between
+// equal ones, else the span starts at the reading before the gap. Any decrease from there to the
+// current reading (a reset, a changed budget) falls back to the window's average.
+static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
+                                                   const std::vector<TileTracePoint>& trace,
+                                                   ULONGLONG now, ULONGLONG lookbackMs) {
+    double pct = reading.pct;
+    if (pct <= 0 || pct >= 100 || !reading.windowDurationMs || reading.resetUnixMs <= reading.windowDurationMs) {
+        return std::nullopt;
+    }
+    ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+    ULONGLONG from = trace.empty() ? now : std::max(now, trace.back().timeMs);
+    double elapsed = ((double)from - (double)start) / reading.windowDurationMs;
+    if (elapsed < 0.05 || from >= reading.resetUnixMs) return std::nullopt;
+
+    TileTracePoint base{start, 0, false};
+    if (lookbackMs && from - start > lookbackMs) {
+        // The readings around the cutoff: the window's start before the first, the current
+        // reading after the last.
+        ULONGLONG cutoff = from - lookbackMs;
+        auto next = std::upper_bound(trace.begin(), trace.end(), cutoff,
+                                     [](ULONGLONG time, const TileTracePoint& point) { return time < point.timeMs; });
+        TileTracePoint before = next == trace.begin() ? base : next[-1];
+        TileTracePoint after = next == trace.end() ? TileTracePoint{from, pct, false} : *next;
+        TileTracePoint cut = before;
+        if (next != trace.begin() && after.connect) {
+            cut = {cutoff, before.used + (after.used - before.used) * double(cutoff - before.timeMs) /
+                                             double(after.timeMs - before.timeMs)};
+        } else if (after.used == before.used) {
+            cut = {cutoff, before.used};
+        }
+        bool rising = true;
+        double previous = before.used;
+        for (auto point = next; point != trace.end() && rising; ++point) {
+            rising = point->used >= previous;
+            previous = point->used;
+        }
+        if (rising && pct >= previous) base = cut;
+    }
+
+    // Products before quotients keep exact cases exact (even use reaching 100% at the reset).
+    double rise = pct - base.used;
+    double span = double(from - base.timeMs);
+    UsageProjection projection{from, base.timeMs, reading.resetUnixMs,
+                               pct + rise * double(reading.resetUnixMs - from) / span, false};
+    if (projection.toUsed > 100) {
+        projection.toMs = from + (ULONGLONG)std::llround((100 - pct) * span / rise);
+        projection.toUsed = 100;
+        projection.limit = true;
+    }
+    return projection;
+}
+
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
 // the bar. Pixel details scale with 1 / rasterizationScale.
 struct BarGeometry {
@@ -6960,8 +7036,8 @@ struct AccountMeters {
     // chart height. A chart plots used % across the window, or % left in remaining mode: the lit
     // part up to now (or the whole plot), the recorded usage, the even-pace diagonal (with pace
     // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
-    // plain), and the projection at the window's average rate from the current reading to the
-    // reset or, over pace, to the limit, marked in the 100% color. Without a window the plot is
+    // plain), and the projection (ProjectUsage) from the current reading to the reset or, reaching
+    // 100% before it, to the limit, marked in the 100% color. Without a window the plot is
     // lit whole and the current reading sits at its right edge, alone.
     uint32_t sparkLimitColor = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
@@ -7443,16 +7519,15 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 if (wu.pct >= 0) {
                     double y = yAt(wu.pct);
                     reading(x, y);
-                    // The average rate since the window started (fixed windows start at 0%), from
-                    // 5% of the window on, while fresh and short of the limit.
-                    double elapsed = std::clamp(((double)now - (double)start) / wu.windowDurationMs, 0.0, 1.0);
-                    if (!meters.stale && wu.pct > 0 && wu.pct < 100 && elapsed >= 0.05 && now < wu.resetUnixMs) {
-                        double atReset = wu.pct / elapsed;
-                        bool limit = atReset > 100;
-                        double endX = limit ? snap(elapsed * 100 / wu.pct * width) : width;
-                        double endY = yAt(limit ? 100 : atReset);
+                    std::optional<UsageProjection> projection;
+                    if (!meters.stale) {
+                        projection = ProjectUsage(wu, trace, display.now,
+                                                  w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
+                    }
+                    if (projection) {
+                        double endX = xAt(projection->toMs), endY = yAt(projection->toUsed);
                         shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
-                        if (limit) shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                        if (projection->limit) shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
                     }
                 }
             } else {
@@ -9357,12 +9432,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     return card;
 }
 
-// `curves` holds each row's burn-up curve for its displayed reading (FlyoutRowReadings); rows
-// without one show the bar.
+// `traces` holds each row's recorded usage of its displayed reading (FlyoutRowReadings); rows
+// without any show the bar.
 static void UpdateAccountFlyout(
     QuotaUiInstance& state, AccountConfig const& account, AccountData const& d,
     FlyoutDisplay const& display,
-    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> const& curves) {
+    std::array<std::vector<TileTracePoint>, kFlyoutRowCount> const& traces) {
     FlyoutPopup& popup = state.flyout.popup;
     if (!popup.card) return;
     FlyoutTheme const& theme = popup.theme;
@@ -9471,31 +9546,42 @@ static void UpdateAccountFlyout(
                 row.paceRestColumn.Width({100.0 - pacePct, GridUnitType::Star});
             }
 
-            // Average rate since the window started (fixed windows start at 0%). Over pace means
-            // the limit is reached before the reset.
-            bool projected = paced && wu.pct > 0 && elapsed >= 0.05 &&
-                             display.now < wu.resetUnixMs;
-            bool overPace = projected && wu.pct > elapsed * 100.0;
+            // Over pace: more used than even use would have by now (fixed windows start at 0%).
+            bool overPace = paced && wu.pct > 0 && elapsed >= 0.05 &&
+                            display.now < wu.resetUnixMs && wu.pct > elapsed * 100.0;
             show(row.trend, overPace);
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
+
+            // The usage graph tiles' projection; the text, naming the rate's span, when it
+            // reaches the limit before the reset.
+            const std::vector<TileTracePoint>& trace = traces[r];
+            std::optional<UsageProjection> projected;
+            if (!display.stale) {
+                projected = ProjectUsage(wu, trace, display.now,
+                                         r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
+            }
             std::wstring projection;
-            double msToLimit = -1;
-            if (overPace && wu.pct < 100) {
-                msToLimit = elapsed * wu.windowDurationMs * (100.0 - wu.pct) / wu.pct;
-                ULONGLONG minutes =
-                    std::max<ULONGLONG>(1, (ULONGLONG)std::ceil(msToLimit / 60000.0));
-                projection = L"At this pace: limit in ~" + FormatShortDuration(minutes * 60);
+            if (projected && projected->limit) {
+                std::wstring rate = L"this window's average rate";
+                SYSTEMTIME since;
+                if (projected->sinceMs + kProjectionLookbackMs == projected->fromMs) {
+                    rate = L"the last 24h's rate";
+                } else if (projected->sinceMs != wu.resetUnixMs - wu.windowDurationMs &&
+                           UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
+                    rate = L"the rate since " + FormatLocalDayTime(since);
+                }
+                ULONGLONG minutes = std::max<ULONGLONG>(
+                    1, (projected->toMs - projected->fromMs + 59999) / 60000);
+                projection = L"At " + rate + L": limit in ~" + FormatShortDuration(minutes * 60);
             }
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
 
             // Usage chart in place of the bar: used %, or % left in remaining mode, over the
-            // displayed reading's window, with the projection at the same average rate to the
-            // reset or, over pace, to the limit. Shapes are regenerated only when the drawn
-            // geometry changes.
-            const std::optional<BurnUpCurve>& curve = curves[r];
-            bool charted = row.chart && curve && !curve->points.empty() &&
-                           wu.windowDurationMs > 0 && wu.resetUnixMs > wu.windowDurationMs;
+            // displayed reading's window, with the projection. Shapes are regenerated only when
+            // the drawn geometry changes.
+            bool charted = row.chart && !trace.empty() && wu.windowDurationMs > 0 &&
+                           wu.resetUnixMs > wu.windowDurationMs;
             show(row.visual, !charted);
             show(row.chart, charted);
             if (charted) {
@@ -9513,23 +9599,18 @@ static void UpdateAccountFlyout(
                                 (kFlyoutChartHeight - 2 * kFlyoutChartInset) * shown / 100.0);
                 };
                 FlyoutChartShape shape;
-                const std::vector<BurnUpPoint>& points = curve->points;
-                for (size_t begin = 0, end; begin < points.size(); begin = end) {
-                    std::vector<Point> run{{xAt(points[begin].timeMs), yAt(points[begin].used)}};
-                    for (end = begin + 1; end < points.size() && points[end].connect; end++) {
-                        run.push_back({xAt(points[end].timeMs), yAt(points[end].used)});
+                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
+                    std::vector<Point> run{{xAt(trace[begin].timeMs), yAt(trace[begin].used)}};
+                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
+                        run.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
                     }
                     if (run.size() == 1) shape.dots.push_back(run.front());
                     else shape.lines.push_back(std::move(run));
                 }
                 // A rolled-back clock can put now before the newest reading.
-                ULONGLONG now = std::max(display.now, points.back().timeMs);
+                ULONGLONG now = std::max(display.now, trace.back().timeMs);
                 shape.now = {xAt(now), yAt(wu.pct)};
-                if (msToLimit >= 0) {
-                    shape.projectionEnd = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
-                } else if (projected && wu.pct < 100) {
-                    shape.projectionEnd = {xAt(wu.resetUnixMs), yAt(wu.pct / elapsed)};
-                }
+                if (projected) shape.projectionEnd = {xAt(projected->toMs), yAt(projected->toUsed)};
                 shape.color = colorValue;
                 shape.remaining = remainingMode;
 
@@ -10987,18 +11068,21 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
-            // A sparkline's recorded usage: the burn-up curve of the flyout row showing the
-            // quota's reading (the accessor takes the settings and data locks, so none may be
-            // held here), or the visual test samples.
-            TileTraceSource traceOf = [&](int slot, const WindowUsage& reading) {
+            // A flyout row's recorded usage of its reading: the row's burn-up curve (the accessor
+            // takes the settings and data locks, so none may be held here), or the visual test
+            // samples. Sparklines ask for the row showing their quota.
+            auto rowTrace = [&](int row, const WindowUsage& reading) {
                 if (visualTestMode) return VisualTestTrace(accounts[i], reading, now);
-                static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow,
-                                                              kFlyoutFableRow, kFlyoutExtraRow};
                 std::vector<TileTracePoint> trace;
-                if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(accounts[i].historyId, kRows[slot], reading)) {
+                if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(accounts[i].historyId, row, reading)) {
                     for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
                 }
                 return trace;
+            };
+            TileTraceSource traceOf = [&](int slot, const WindowUsage& reading) {
+                static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow,
+                                                              kFlyoutFableRow, kFlyoutExtraRow};
+                return rowTrace(kRows[slot], reading);
             };
             AccountMeters meters = AccountMeterState(
                 display, state.buildBarLayout, accounts[i], d,
@@ -11185,32 +11269,16 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 if (AccountIdentityHash(accounts[i]) != flyout.accountIdentity) {
                     CloseAccountFlyout(state);
                 } else {
-                    // Burn-up curves per flyout row. The accessor takes the settings and data
-                    // locks, so none may be held here.
-                    std::array<std::optional<BurnUpCurve>, kFlyoutRowCount> curves;
+                    std::array<std::vector<TileTracePoint>, kFlyoutRowCount> traces;
                     const auto readings = FlyoutRowReadings(d);
-                    for (int r = 0; r < kFlyoutRowCount; r++) {
-                        const WindowUsage& reading = *readings[r];
-                        if (!visualTestMode) {
-                            curves[r] = CopyBurnUpCurve(accounts[i].historyId, r, reading);
-                            continue;
-                        }
-                        // Visual test samples; the OpenAI sample keeps the no-history bars.
-                        std::vector<TileTracePoint> trace = VisualTestTrace(accounts[i], reading, now);
-                        if (trace.empty()) continue;
-                        BurnUpCurve& curve = curves[r].emplace(
-                            BurnUpCurve{reading.resetUnixMs, reading.windowDurationMs, {}});
-                        for (const TileTracePoint& point : trace) {
-                            curve.points.push_back({point.timeMs, point.used, point.connect});
-                        }
-                    }
+                    for (int r = 0; r < kFlyoutRowCount; r++) traces[r] = rowTrace(r, *readings[r]);
                     UpdateAccountFlyout(state, accounts[i], d,
                                         {now, display.barMode, display.yellowThreshold,
                                          display.orangeThreshold, display.redThreshold,
                                          display.colorblindMode, settings.showOpenAiExtraLimits,
                                          meters.stale, meters.warn, accountRefreshing,
                                          visualTestMode},
-                                        curves);
+                                        traces);
                 }
             }
 

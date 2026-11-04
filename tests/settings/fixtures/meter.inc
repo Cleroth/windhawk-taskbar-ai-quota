@@ -2553,6 +2553,77 @@ static void RunSparklineTests() {
         CHECK(grey.quotas[0].color == 0xFF9E9E9E && grey.sparkLimitColor == 0xFFE53935);
     });
 
+    Run("projection: the last day's average rate in a weekly window, across gaps and drops", [] {
+        // A week resetting 1.5 days after kNow: kNow is day 5.5 (78.6%) and the cutoff day 4.5.
+        const ULONGLONG kDay = 24 * 60 * kMinute;
+        const ULONGLONG start = kNow + 36 * 60 * kMinute - kWeeklyWindowMs;
+        auto day = [&](double d) { return start + (ULONGLONG)std::llround(d * kDay); };
+        auto week = [&](double pct) { return WindowUsage{pct, kNow + 36 * 60 * kMinute, kWeeklyWindowMs}; };
+        auto project = [&](double pct, std::vector<TileTracePoint> trace, ULONGLONG lookback = kProjectionLookbackMs) {
+            std::optional<UsageProjection> p = ProjectUsage(week(pct), trace, kNow, lookback);
+            CHECK(p && p->fromMs == kNow);
+            return *p;
+        };
+        auto toReset = [&](const UsageProjection& p, ULONGLONG since, double used) {
+            CHECK(p.sinceMs == since && p.toMs == kNow + 36 * 60 * kMinute && !p.limit);
+            CHECK_NEAR(p.toUsed, used);
+        };
+        // A late start: idle readings at 0%, then 6% at the cutoff (between 0% on day 4 and 12% on
+        // day 5) to 66% now is 60% a day, reaching the limit in 13.6 hours; the week's average
+        // (84% at the reset) wouldn't.
+        const std::vector<TileTracePoint> late = {{day(1), 0, false}, {day(2), 0, false}, {day(4), 0, false},
+                                                  {day(5), 12, true}, {day(5.5), 66, true}};
+        UsageProjection hit = project(66, late);
+        CHECK(hit.sinceMs == kNow - kDay && hit.limit && hit.toMs == kNow + 48960000);
+        CHECK_NEAR(hit.toUsed, 100);
+        // Monthly extra usage passes no lookback: the window's average.
+        toReset(project(66, late, 0), start, 84);
+        // Stopping after a burst: 60% at the cutoff and now, flat to the reset.
+        toReset(project(60, {{day(4), 0, false}, {day(4.4), 60, true}, {day(5.5), 60, true}}), kNow - kDay, 60);
+        // A gap across the cutoff from 10% on day 3 to 40% on day 5: the span starts at day 3, 16% a
+        // day; between equal readings it starts at the cutoff: 40% to 52% is 12% a day.
+        toReset(project(50, {{day(3), 10, false}, {day(5), 40, false}, {day(5.5), 50, true}}), day(3), 74);
+        toReset(project(52, {{day(3), 40, false}, {day(5), 40, false}, {day(5.5), 52, true}}), kNow - kDay, 70);
+        // Recording started after the cutoff: from the window's start at 0%, unless it started at
+        // 0%: then 0% to 30% since the cutoff.
+        toReset(project(40, {{day(5), 30, false}, {day(5.5), 40, true}}), start, 40.0 * 7 / 5.5);
+        toReset(project(30, {{day(5), 0, false}, {day(5.5), 30, true}}), kNow - kDay, 75);
+        // The newest recorded reading before the cutoff: the current reading follows it, equal
+        // (flat since the cutoff) or not (from that reading on day 4: 10% a day).
+        const std::vector<TileTracePoint> old = {{day(3), 20, false}, {day(4), 30, true}};
+        toReset(project(30, old), kNow - kDay, 30);
+        toReset(project(45, old), day(4), 60);
+        // Any decrease from the cutoff's earlier reading to the current one: the window's average.
+        toReset(project(40, {{day(4), 50, false}, {day(4.75), 10, true}, {day(5.5), 40, true}}), start, 40.0 * 7 / 5.5);
+        toReset(project(30, {{day(4), 20, false}, {day(4.4), 60, true}, {day(4.8), 10, true}, {day(5.5), 30, true}}),
+                start, 30.0 * 7 / 5.5);
+        toReset(project(45, {{day(4), 0, false}, {day(5), 50, true}}), start, 45.0 * 7 / 5.5);
+        // A decrease before the cutoff's earlier reading doesn't count.
+        toReset(project(52, {{day(1), 30, false}, {day(2), 5, true}, {day(3), 40, false}, {day(5), 40, false},
+                             {day(5.5), 52, true}}), kNow - kDay, 70);
+        // Within the window's first day: its average.
+        std::optional<UsageProjection> early =
+            ProjectUsage({20, kNow + kWeeklyWindowMs - 12 * 60 * kMinute, kWeeklyWindowMs}, {}, kNow, kProjectionLookbackMs);
+        CHECK(early && early->sinceMs == kNow - 12 * 60 * kMinute && early->limit && early->toMs == kNow + 48 * 60 * kMinute);
+        // 5-hour windows: their average, 45% half way reaching 90%.
+        std::optional<UsageProjection> hours = ProjectUsage(Window(45, 9000000), {}, kNow, kProjectionLookbackMs);
+        CHECK(hours && hours->sinceMs == kNow - 9000000 && !hours->limit);
+        CHECK_NEAR(hours->toUsed, 90);
+
+        // The usage graph draws it: the late start's 66% at (78.5, 8.75) to the limit at 86.67% of
+        // the week, drawn at 86.75 and marked there; as monthly extra usage, to 84% (y 5.25) at the reset.
+        AccountMeters weekly = spark(week(66), late);
+        line(weekly.quotas[0].spark[kSparkProjection], 78.5, 8.75, 86.75, 2);
+        circle(weekly.quotas[0].spark[kSparkLimit], 86.75, 2, 1.75);
+        AccountData extra = Fresh();
+        extra.extraUsage = week(66);
+        AccountMeters monthly = AccountMeterState(plot([](Settings& s) { s.sparklineExtra = SparklineExtra::Off; }),
+                                                  BarLayout::Sparkline, Account(L"anthropic", L"A", {false, false, false, true}),
+                                                  extra, 0, 0, [&](int, const WindowUsage&) { return late; });
+        line(monthly.quotas[kExtraUsageBar].spark[kSparkProjection], 78.5, 8.75, 100, 5.25);
+        CHECK(monthly.quotas[kExtraUsageBar].spark[kSparkLimit].empty());
+    });
+
     Run("sparkline: remaining mode plots what is left, its runs over areas from the bottom, down to the limit", [] {
         // 100% left at the top inset, 0% at the bottom one: y = 2 + used / 5 on the 100 x 24 plot.
         const MeterDisplay left = plot([](Settings& s) { s.barMode = BarMode::Remaining; });
