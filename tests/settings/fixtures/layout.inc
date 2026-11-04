@@ -132,7 +132,7 @@ static void RunLayoutTests() {
             {SettingsField::SparklineWidth, 64}, {SettingsField::SparklineHeight, 65}, {SettingsField::SparklineExtra, 2},
             {SettingsField::SparklineTextSize, 12}, {SettingsField::SparklineElapsed, 0},
             {SettingsField::SparklineNowLine, 0}, {SettingsField::SparklineNowCaret, 1}, {SettingsField::SparklineRing, 1},
-            {SettingsField::SparklineOutline, 0},
+            {SettingsField::SparklineOutline, 0}, {SettingsField::SparklineSpan, 4}, {SettingsField::SparklineHoverSpan, -1},
             {SettingsField::LogoScale, 150},   {SettingsField::ClaudeLogoBrand, 1}, {SettingsField::GeminiLogoBrand, 1},
             {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
@@ -151,12 +151,14 @@ static void RunLayoutTests() {
               s.placement == TaskbarPlacement::LeftSide &&
               s.logoBrands.claude && s.logoBrands.gemini && s.sparklineHeight == 65 &&
               s.sparklineExtra == SparklineExtra::Percent && s.sparklineTextSize == 12 && !s.sparklineElapsed &&
-              !s.sparklineNowLine && s.sparklineNowCaret && s.sparklineRing && !s.sparklineOutline);
+              !s.sparklineNowLine && s.sparklineNowCaret && s.sparklineRing && !s.sparklineOutline &&
+              s.sparklineSpan == SparklineSpan::Hours48 && !s.sparklineHoverSpan);
         CHECK(SettingsFieldRange(SettingsField::SparklineTextSize)->minimum == 6 &&
               SettingsFieldRange(SettingsField::SparklineTextSize)->maximum == 16);
         for (SettingsField toggle : {SettingsField::SparklineElapsed, SettingsField::SparklineNowLine,
                                      SettingsField::SparklineNowCaret, SettingsField::SparklineRing,
-                                     SettingsField::SparklineOutline}) {
+                                     SettingsField::SparklineOutline, SettingsField::SparklineSpan,
+                                     SettingsField::SparklineHoverSpan}) {
             CHECK(!SettingsFieldRange(toggle));
         }
         CHECK(SettingsFieldRange(SettingsField::SparklineHeight)->minimum == 50 &&
@@ -177,6 +179,10 @@ static void RunLayoutTests() {
             {SettingsField::SparklineExtra, -1, 0},   {SettingsField::SparklineTextSize, 2, 6},
             {SettingsField::SparklineTextSize, 99, 16}, {SettingsField::SparklineRing, 5, 1},
             {SettingsField::SparklineElapsed, 7, 1},   {SettingsField::SparklineOutline, -4, 1},
+            {SettingsField::SparklineSpan, 7, 4},     {SettingsField::SparklineSpan, -1, 0},
+            {SettingsField::SparklineSpan, 1, 1},     {SettingsField::SparklineSpan, 3, 3},
+            {SettingsField::SparklineHoverSpan, 9, 4}, {SettingsField::SparklineHoverSpan, 0, 0},
+            {SettingsField::SparklineHoverSpan, -5, -1},
             {SettingsField::BarLayout, 6, 6},         {SettingsField::PaceTickStyle, 4, 4},
             {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 4},
             {SettingsField::HeadlineCountdown, 5, 1}, {SettingsField::HeadlineCountdown, 0, 0},
@@ -193,7 +199,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the thirty-eight Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the forty Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -215,6 +221,8 @@ static void RunLayoutTests() {
         changed.sparklineNowCaret = true;
         changed.sparklineRing = true;
         changed.sparklineOutline = false;
+        changed.sparklineSpan = SparklineSpan::Hours48;
+        changed.sparklineHoverSpan = std::nullopt;
         changed.logoScale = 150;
         changed.logoBrands = {true, true};
         changed.badgeSize = 12;
@@ -264,6 +272,8 @@ static void RunLayoutTests() {
         expected.sparklineNowCaret = defaults.sparklineNowCaret;
         expected.sparklineRing = defaults.sparklineRing;
         expected.sparklineOutline = defaults.sparklineOutline;
+        expected.sparklineSpan = defaults.sparklineSpan;
+        expected.sparklineHoverSpan = defaults.sparklineHoverSpan;
         expected.logoScale = defaults.logoScale;
         expected.logoBrands = defaults.logoBrands;
         expected.badgeSize = defaults.badgeSize;
@@ -287,8 +297,9 @@ static void RunLayoutTests() {
         CHECK(reset.barLayout == BarLayout::Sparkline && reset.placement == TaskbarPlacement::BeforeIcons);
         CHECK(reset.sparklineHeight == 80 && reset.sparklineExtra == SparklineExtra::Amount && reset.sparklineTextSize == 8 &&
               reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && !reset.sparklineRing &&
-              reset.sparklineOutline);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 38);
+              reset.sparklineOutline && reset.sparklineSpan == SparklineSpan::Window &&
+              reset.sparklineHoverSpan == SparklineSpan::Hours24);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 40);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -2870,6 +2881,30 @@ static void RunLayoutTests() {
             CHECK(toggle.rect.top > cueTop);
             cueTop = toggle.rect.bottom;
         }
+        // Their own section between the extra usage and the cues: the long windows' span, on the
+        // whole window by default, or 12 to 48 hours each side, then theirs on hover, 24 hours each
+        // side by default, or off.
+        const UiItem& span = Control(frame, SettingsField::SparklineSpan);
+        const UiItem& hover = Control(frame, SettingsField::SparklineHoverSpan);
+        CHECK(section(frame, L"Time span"));
+        const std::pair<PCWSTR, SparklineSpan> spans[] = {
+            {L"Whole window", SparklineSpan::Window},         {L"12 hours each side", SparklineSpan::Hours12},
+            {L"24 hours each side", SparklineSpan::Hours24}, {L"36 hours each side", SparklineSpan::Hours36},
+            {L"48 hours each side", SparklineSpan::Hours48}};
+        CHECK(span.kind == UiItemKind::Dropdown && span.enabled && span.text == L"Whole window" && span.options.size() == 5);
+        CHECK(hover.kind == UiItemKind::Dropdown && hover.enabled && hover.text == L"24 hours each side" &&
+              hover.options.size() == 6 && hover.options[0].text == L"Off" && hover.options[0].value == -1);
+        for (size_t k = 0; k < std::size(spans); k++) {
+            CHECK(span.options[k].text == spans[k].first && span.options[k].value == int(spans[k].second));
+            CHECK(hover.options[k + 1].text == spans[k].first && hover.options[k + 1].value == int(spans[k].second));
+        }
+        CHECK(HasText(frame, L"Long windows") &&
+              HasText(frame, L"Weekly and monthly charts (7d, Fa, Ex, Mo): the whole window, or 12 to 48 hours "
+                             L"before and after now.") &&
+              HasText(frame, L"On hover") &&
+              HasText(frame, L"What those charts show while the pointer rests on the account."));
+        CHECK(extra.rect.bottom < span.rect.top && span.rect.bottom < hover.rect.top &&
+              hover.rect.bottom < Control(frame, SettingsField::SparklineElapsed).rect.top);
         CHECK(chartWidth.kind == UiItemKind::Slider && chartWidth.minimum == 24 && chartWidth.maximum == 120 &&
               chartWidth.action.value == 48 && chartWidth.enabled && Control(frame, SettingsField::SparklineWidth).text == L"48");
         CHECK(chartHeight.kind == UiItemKind::Slider && chartHeight.minimum == 50 && chartHeight.maximum == 100 &&
@@ -2878,7 +2913,7 @@ static void RunLayoutTests() {
               extra.options[0].text == L"Off" && extra.options[0].value == int(SparklineExtra::Off) &&
               extra.options[1].text == L"Amount" && extra.options[1].value == int(SparklineExtra::Amount) &&
               extra.options[2].text == L"Percent" && extra.options[2].value == int(SparklineExtra::Percent));
-        CHECK(HasText(frame, L"Chart width") && HasText(frame, L"Pixels across each quota\u2019s whole window.") &&
+        CHECK(HasText(frame, L"Chart width") && HasText(frame, L"Pixels across each quota\u2019s chart.") &&
               HasText(frame, L"Chart height") && HasText(frame, L"Percent of the tile\u2019s height, from 0% to 100% used, or left in Remaining mode.") &&
               HasText(frame, L"Extra usage") &&
               HasText(frame, L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner "
@@ -2915,8 +2950,12 @@ static void RunLayoutTests() {
         view.settings.sparklineElapsed = view.settings.sparklineNowLine = false;
         view.settings.sparklineNowCaret = view.settings.sparklineRing = true;
         view.settings.sparklineOutline = false;
+        view.settings.sparklineSpan = SparklineSpan::Hours48;
+        view.settings.sparklineHoverSpan = std::nullopt;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::SparklineSpan).text == L"48 hours each side" &&
+              Control(frame, SettingsField::SparklineHoverSpan).text == L"Off");
         CHECK(Control(frame, SettingsField::SparklineWidth, 1).action.value == 80 &&
               Control(frame, SettingsField::SparklineWidth).text == L"80");
         CHECK(Control(frame, SettingsField::SparklineHeight, 1).action.value == 65 &&
@@ -2951,7 +2990,8 @@ static void RunLayoutTests() {
                        {SettingsField::SparklineWidth, 1}, {SettingsField::SparklineHeight, 1}, {SettingsField::SparklineExtra, 0},
                        {SettingsField::SparklineTextSize, 1}, {SettingsField::SparklineElapsed, 0},
                        {SettingsField::SparklineNowLine, 0}, {SettingsField::SparklineNowCaret, 0}, {SettingsField::SparklineRing, 0},
-                       {SettingsField::SparklineOutline, 0}, {SettingsField::RingSize, 1}, {SettingsField::RingThickness, 1},
+                       {SettingsField::SparklineOutline, 0}, {SettingsField::SparklineSpan, 0},
+                       {SettingsField::SparklineHoverSpan, 0}, {SettingsField::RingSize, 1}, {SettingsField::RingThickness, 1},
                        {SettingsField::HeadlineBarLength, 1}, {SettingsField::HeadlineCountdown, 0}, {SettingsField::BarGap, 0}});
         CHECK(!HasText(frame, L"Pace markers"));
         // The chart's width, height and corner are the sparkline's alone.
@@ -2965,8 +3005,9 @@ static void RunLayoutTests() {
                            {SettingsField::SparklineTextSize, 1}, {SettingsField::SparklineExtra, 0},
                            {SettingsField::SparklineElapsed, 0}, {SettingsField::SparklineNowLine, 0},
                            {SettingsField::SparklineNowCaret, 0}, {SettingsField::SparklineRing, 0},
-                           {SettingsField::SparklineOutline, 0}});
-            CHECK(!HasText(frame, L"Current position"));
+                           {SettingsField::SparklineOutline, 0}, {SettingsField::SparklineSpan, 0},
+                           {SettingsField::SparklineHoverSpan, 0}});
+            CHECK(!HasText(frame, L"Current position") && !HasText(frame, L"Time span"));
         }
     });
 

@@ -46,6 +46,8 @@ enum class SettingsField : uint8_t {
     SparklineNowLine,
     SparklineNowCaret,
     SparklineRing,
+    SparklineSpan,    // A SparklineSpan
+    SparklineHoverSpan,  // A SparklineSpan, or -1: none
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -169,7 +171,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::SparklineOutline,
                     SettingsField::SparklineExtra,  SettingsField::SparklineElapsed,
                     SettingsField::SparklineNowLine, SettingsField::SparklineNowCaret,
-                    SettingsField::SparklineRing,
+                    SettingsField::SparklineRing,   SettingsField::SparklineSpan,
+                    SettingsField::SparklineHoverSpan,
                     SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
@@ -225,6 +228,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::SparklineNowLine: return s.sparklineNowLine;
         case SettingsField::SparklineNowCaret: return s.sparklineNowCaret;
         case SettingsField::SparklineRing: return s.sparklineRing;
+        case SettingsField::SparklineSpan: return int(s.sparklineSpan);
+        case SettingsField::SparklineHoverSpan: return s.sparklineHoverSpan ? int(*s.sparklineHoverSpan) : -1;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -311,6 +316,13 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SparklineNowLine: s.sparklineNowLine = value != 0; break;
         case SettingsField::SparklineNowCaret: s.sparklineNowCaret = value != 0; break;
         case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
+        case SettingsField::SparklineSpan:
+            s.sparklineSpan = SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
+            break;
+        case SettingsField::SparklineHoverSpan:
+            s.sparklineHoverSpan = value < 0 ? std::nullopt :
+                                   std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
+            break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -393,6 +405,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.sparklineNowLine = defaults.sparklineNowLine;
             s.sparklineNowCaret = defaults.sparklineNowCaret;
             s.sparklineRing = defaults.sparklineRing;
+            s.sparklineSpan = defaults.sparklineSpan;
+            s.sparklineHoverSpan = defaults.sparklineHoverSpan;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;

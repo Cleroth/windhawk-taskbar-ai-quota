@@ -50,6 +50,18 @@ static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSpa
 static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
 // Room for sparkline shapes past the plot: a ring around a point on its edge.
 static constexpr double kSparkOverflow = 4.5;
+// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs); 0:
+// the whole window.
+static ULONGLONG SparklineAroundMs(SparklineSpan span) {
+    static constexpr ULONGLONG kHourMs = 60 * 60 * 1000;
+    switch (span) {
+        case SparklineSpan::Hours12: return 12 * kHourMs;
+        case SparklineSpan::Hours24: return 24 * kHourMs;
+        case SparklineSpan::Hours36: return 36 * kHourMs;
+        case SparklineSpan::Hours48: return 48 * kHourMs;
+        default: return 0;
+    }
+}
 // Chart text, 3 DIPs in from the plot's edges: the weekly chart's extra usage, its key, then the
 // number, kSparkExtraKeyGap DIPs apart. Text placement estimates widths at kSparkTextWidthShare
 // of the font size per character, generously.
@@ -510,6 +522,8 @@ struct MeterDisplay {
     bool sparklineNowLine;
     bool sparklineNowCaret;
     bool sparklineRing;
+    // Long windows' charts span this before and after now (AccountMeters); 0: the whole window.
+    ULONGLONG sparklineAroundMs;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -563,6 +577,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .sparklineNowLine = settings.sparklineNowLine,
         .sparklineNowCaret = settings.sparklineNowCaret,
         .sparklineRing = settings.sparklineRing,
+        .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -1097,7 +1112,11 @@ struct AccountMeters {
     // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
     // plain), and the projection (ProjectUsage) from the current reading to the reset or, reaching
     // 100% before it, to the limit, marked in the 100% color. Without a window the plot is
-    // lit whole and the current reading sits at its right edge, alone.
+    // lit whole and the current reading sits at its right edge, alone. With
+    // display.sparklineAroundMs, a window longer than twice it spans only that much each side of
+    // now, kept inside the window: earlier readings drop out, the diagonal is the
+    // window's even use across that span, and the projection stops at its end (with the limit mark
+    // only when it reaches the limit before then).
     uint32_t sparkLimitColor = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
     // The weekly chart's top-left corner (bottom-left with sparkExtraBottom), at the key's font:
@@ -1485,15 +1504,27 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                   outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else if (spark) {
-            // Left to right the window, bottom to top 0-100% inside the insets, per the bar mode:
-            // used, or left (100 - used); positions snap to quarter DIPs, so they change only when
-            // the drawing does.
+            // Left to right the window (or the day each side of now), bottom to top 0-100% inside
+            // the insets, per the bar mode: used, or left (100 - used); positions snap to quarter
+            // DIPs, so they change only when the drawing does.
             m.sparkLeft = slotPosition * (display.sparklineWidth + kSparkChartGap);
             double width = display.sparklineWidth, height = meters.faceHeight;
             auto snap = [](double dip) { return std::round(dip * 4) / 4; };
-            ULONGLONG start = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
+            std::vector<TileTracePoint> trace = timed(w) && traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
+            // A rolled-back clock can put now before the newest reading: the time, the current
+            // reading and the projection take the later of the two.
+            ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
+            // The span drawn: the window, or a long window's day each side of now, kept inside the
+            // window.
+            ULONGLONG windowStart = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
+            ULONGLONG start = windowStart, span = wu.windowDurationMs;
+            const ULONGLONG around = display.sparklineAroundMs;
+            if (timed(w) && around && span > 2 * around) {
+                start = std::min(now > windowStart + around ? now - around : windowStart, wu.resetUnixMs - 2 * around);
+                span = 2 * around;
+            }
             auto xAt = [&](ULONGLONG timeMs) {
-                return snap(std::clamp(((double)timeMs - (double)start) / wu.windowDurationMs, 0.0, 1.0) * width);
+                return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) * width);
             };
             auto yAt = [&](double used) {
                 double shown = std::clamp(remainingMode ? 100 - used : used, 0.0, 100.0);
@@ -1550,12 +1581,31 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                if (display.showPaceTicks) shapes[kSparkPace] = {{0, yAt(0), {{width, yAt(100)}}}};
-                std::vector<TileTracePoint> trace = traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
-                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
-                    TileOutlineFigure line{xAt(trace[begin].timeMs), yAt(trace[begin].used), {}};
-                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
-                        line.segments.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
+                // The window's even use across the span: 0% to 100% across the whole window.
+                if (display.showPaceTicks) {
+                    double from = 100.0 * double(start - windowStart) / double(wu.windowDurationMs);
+                    double to = 100.0 * double(start + span - windowStart) / double(wu.windowDurationMs);
+                    shapes[kSparkPace] = {{0, yAt(from), {{width, yAt(to)}}}};
+                }
+                // Readings before a span around now drop out; a run across its start begins there.
+                std::vector<TileTracePoint> drawn = trace;
+                if (start > windowStart) {
+                    auto first = std::lower_bound(drawn.begin(), drawn.end(), start,
+                                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
+                    if (first != drawn.begin() && first != drawn.end() && first->connect && first->timeMs > start) {
+                        const TileTracePoint &before = first[-1], &after = *first;
+                        first[-1] = {start,
+                                     before.used + (after.used - before.used) * double(start - before.timeMs) /
+                                                       double(after.timeMs - before.timeMs),
+                                     false};
+                        --first;
+                    }
+                    drawn.erase(drawn.begin(), first);
+                }
+                for (size_t begin = 0, end; begin < drawn.size(); begin = end) {
+                    TileOutlineFigure line{xAt(drawn[begin].timeMs), yAt(drawn[begin].used), {}};
+                    for (end = begin + 1; end < drawn.size() && drawn[end].connect; end++) {
+                        line.segments.push_back({xAt(drawn[end].timeMs), yAt(drawn[end].used)});
                     }
                     if (line.segments.empty()) {
                         shapes[kSparkDots].push_back(circle(line.x, line.y, kSparkDotRadius));
@@ -1569,10 +1619,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                     shapes[kSparkLines].push_back(std::move(line));
                 }
                 // Now: the lit part's edge, a line across the plot and a caret on its bottom edge
-                // (below, once the text is placed). A rolled-back clock can put now before the
-                // newest reading: the time, the current reading and the projection take the later
-                // of the two.
-                ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
+                // (below, once the text is placed).
                 double x = xAt(now);
                 nowX = x;
                 shapes[kSparkLit] = litPlot(display.sparklineElapsed ? x : width);
@@ -1585,9 +1632,18 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                                   w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
                     }
                     if (projection) {
-                        double endX = xAt(projection->toMs), endY = yAt(projection->toUsed);
+                        // Cut at the span's end, before a later reset or limit.
+                        ULONGLONG toMs = std::min(projection->toMs, start + span);
+                        double toUsed = projection->toUsed;
+                        if (toMs < projection->toMs) {
+                            toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projection->fromMs) /
+                                                  ((double)projection->toMs - (double)projection->fromMs);
+                        }
+                        double endX = xAt(toMs), endY = yAt(toUsed);
                         shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
-                        if (projection->limit) shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                        if (projection->limit && toMs == projection->toMs) {
+                            shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                        }
                     }
                 }
             } else {

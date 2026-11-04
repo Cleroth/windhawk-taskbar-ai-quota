@@ -86,6 +86,16 @@ enum class SparklineExtra {
     Amount,   // $ or credits.
     Percent,  // Of the limit; the amount without one.
 };
+
+// How much of a window longer than its span a sparkline's chart shows: the whole window, or the
+// hours before and after now.
+enum class SparklineSpan {
+    Window,
+    Hours12,
+    Hours24,
+    Hours36,
+    Hours48,
+};
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -216,6 +226,10 @@ struct Settings {
     bool sparklineNowLine = true;
     bool sparklineNowCaret = false;
     bool sparklineRing = false;
+    // Sparklines' charts of long windows, and theirs while the pointer rests on the account (none:
+    // as without it).
+    SparklineSpan sparklineSpan = SparklineSpan::Window;
+    std::optional<SparklineSpan> sparklineHoverSpan = SparklineSpan::Hours24;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.

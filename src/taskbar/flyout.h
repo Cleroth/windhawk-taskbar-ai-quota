@@ -94,23 +94,24 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                     if (!uiState) return;
                     FlyoutUi& fo = uiState->flyout;
                     FlyoutPopup& popup = fo.popup;
-                    if (!popup.flyout) {
-                        // Without a popup it runs only while a tile is hovered: XAML can miss
-                        // the pointer leaving the taskbar for another window, so the hover ends
-                        // once the real cursor is off this taskbar. Exits within the taskbar are
-                        // left to XAML's own events.
-                        if (IsTileHovered(*uiState)) {
-                            int index = fo.hoverIndex;
-                            POINT pt{};
-                            RECT window{};
-                            bool inside = GetCursorPos(&pt) &&
-                                          GetWindowRect(uiState->hWnd, &window) &&
-                                          PtInRect(&window, pt);
-                            if (!inside) {
-                                OnTilePointerExited(*uiState, index);
-                                UpdateTileHighlight(*uiState, index);
-                            }
+                    // XAML can miss the pointer leaving the taskbar for another window (the
+                    // popup's too), so the hover ends once the real cursor is off this taskbar.
+                    // Exits within the taskbar are left to XAML's own events. Ending it can
+                    // update the tiles, which may close the popup.
+                    if (IsTileHovered(*uiState)) {
+                        int index = fo.hoverIndex;
+                        POINT pt{};
+                        RECT window{};
+                        bool inside = GetCursorPos(&pt) && GetWindowRect(uiState->hWnd, &window) &&
+                                      PtInRect(&window, pt);
+                        if (!inside) {
+                            OnTilePointerExited(*uiState, index);
+                            UpdateTileHighlight(*uiState, index);
+                            UpdateHoverSpans(*uiState);
                         }
+                    }
+                    if (!popup.flyout) {
+                        // Without a popup it runs only while a tile is hovered.
                         if (fo.pollTimer && !IsTileHovered(*uiState)) fo.pollTimer.Stop();
                         return;
                     }

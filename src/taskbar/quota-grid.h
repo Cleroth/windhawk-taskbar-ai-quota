@@ -36,6 +36,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         BarLayout barLayout = settings.barLayout;
         state.buildVisualTestMode = visualTestMode;
         state.buildBarLayout = barLayout;
+        state.buildSparkHoverSwap = barLayout == BarLayout::Sparkline && settings.sparklineHoverSpan &&
+                                    *settings.sparklineHoverSpan != settings.sparklineSpan;
         bool tileLayout = IsTileLayout(barLayout);
         // Tiles are kTileHeight tall, less on a taskbar too short for that; bar columns at least.
         state.taskbarHeight = 0;
@@ -548,6 +550,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                                 UpdateTileHighlight(*statePtr, previousHover);
                             }
                             UpdateTileHighlight(*statePtr, accountIndex);
+                            UpdateHoverSpans(*statePtr);
                         }
                     } catch (...) {}
                 });
@@ -566,6 +569,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         }
                         OnTilePointerExited(*statePtr, accountIndex);
                         UpdateTileHighlight(*statePtr, accountIndex);
+                        UpdateHoverSpans(*statePtr);
                     } catch (...) {}
                 };
             auto pointerExitedToken = tappedElement.PointerExited(pointerExited);

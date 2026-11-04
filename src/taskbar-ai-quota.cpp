@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
-// @version         2.4.0
+// @version         2.5.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -49,6 +49,8 @@ running.
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
+  usage graph spans at rest and on hover (whole weekly or monthly windows, or 12 to 48 hours
+  each side of now),
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
   position, identity position, pace markers, position on the taskbar (tray slots, or Left side
   and Right of Start, experimental), and spacing.

@@ -58,6 +58,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     state.lightTheme = light;
     BarGeometry bar = BarGeometryFor(display);
     FlyoutPopup& flyout = state.flyout.popup;
+    // Usage graphs with a span on hover: the hovered account's long windows in it.
+    MeterDisplay swappedDisplay = display;
+    if (settings.sparklineHoverSpan) swappedDisplay.sparklineAroundMs = SparklineAroundMs(*settings.sparklineHoverSpan);
+    state.sparkSwapIndex = state.buildSparkHoverSwap ? state.flyout.hoverIndex : -1;
     try {
         for (size_t i = 0; i < data.size(); i++) {
             const AccountData& d = data[i];
@@ -95,7 +99,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 return rowTrace(kRows[slot], reading);
             };
             AccountMeters meters = AccountMeterState(
-                display, state.buildBarLayout, accounts[i], d,
+                (int)i == state.sparkSwapIndex ? swappedDisplay : display, state.buildBarLayout, accounts[i], d,
                 ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
             bool accountRefreshing = !visualTestMode && refreshing &&
                 (!refreshAccountIdentity ||

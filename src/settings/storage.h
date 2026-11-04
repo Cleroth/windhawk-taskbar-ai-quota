@@ -103,6 +103,13 @@ static bool NormalizeSettings(Settings* s) {
     if (s->sparklineExtra < SparklineExtra::Off || s->sparklineExtra > SparklineExtra::Percent) {
         s->sparklineExtra = SparklineExtra::Amount;
     }
+    if (s->sparklineSpan < SparklineSpan::Window || s->sparklineSpan > SparklineSpan::Hours48) {
+        s->sparklineSpan = SparklineSpan::Window;
+    }
+    if (s->sparklineHoverSpan &&
+        (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
+        s->sparklineHoverSpan = SparklineSpan::Hours24;
+    }
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -215,6 +222,12 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"sparklineNowLine", s.sparklineNowLine);
         setBool(L"sparklineNowCaret", s.sparklineNowCaret);
         setBool(L"sparklineRing", s.sparklineRing);
+        auto spanName = [](SparklineSpan span) {
+            return span == SparklineSpan::Hours12 ? L"12h" : span == SparklineSpan::Hours24 ? L"24h" :
+                   span == SparklineSpan::Hours36 ? L"36h" : span == SparklineSpan::Hours48 ? L"48h" : L"window";
+        };
+        setString(L"sparklineSpan", spanName(s.sparklineSpan));
+        setString(L"sparklineHoverSpan", s.sparklineHoverSpan ? spanName(*s.sparklineHoverSpan) : L"off");
         setString(L"sparklineExtra", s.sparklineExtra == SparklineExtra::Off ? L"off" :
                                      s.sparklineExtra == SparklineExtra::Percent ? L"percent" : L"amount");
         setNumber(L"logoScale", s.logoScale);
@@ -385,6 +398,17 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.sparklineNowLine = getBoolDefault(L"sparklineNowLine", true);
         s.sparklineNowCaret = getBoolDefault(L"sparklineNowCaret", false);
         s.sparklineRing = getBoolDefault(L"sparklineRing", false);
+        // A span by name; `missing` for none or an unknown one.
+        auto spanOf = [&](PCWSTR key, SparklineSpan missing) {
+            std::wstring name = GetStr(root, key);
+            return name == L"window" ? SparklineSpan::Window : name == L"12h" ? SparklineSpan::Hours12 :
+                   name == L"24h"    ? SparklineSpan::Hours24 : name == L"36h" ? SparklineSpan::Hours36 :
+                   name == L"48h"    ? SparklineSpan::Hours48 : missing;
+        };
+        s.sparklineSpan = spanOf(L"sparklineSpan", SparklineSpan::Window);
+        s.sparklineHoverSpan = GetStr(root, L"sparklineHoverSpan") == L"off" ?
+                                   std::nullopt :
+                                   std::optional(spanOf(L"sparklineHoverSpan", SparklineSpan::Hours24));
         std::wstring sparklineExtra = GetStr(root, L"sparklineExtra");
         s.sparklineExtra = sparklineExtra == L"off" ? SparklineExtra::Off :
                            sparklineExtra == L"percent" ? SparklineExtra::Percent : SparklineExtra::Amount;

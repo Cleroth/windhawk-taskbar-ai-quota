@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
-// @version         2.4.0
+// @version         2.5.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -52,6 +52,8 @@ running.
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
 - **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
+  usage graph spans at rest and on hover (whole weekly or monthly windows, or 12 to 48 hours
+  each side of now),
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
   position, identity position, pace markers, position on the taskbar (tray slots, or Left side
   and Right of Start, experimental), and spacing.
@@ -274,6 +276,16 @@ enum class SparklineExtra {
     Amount,   // $ or credits.
     Percent,  // Of the limit; the amount without one.
 };
+
+// How much of a window longer than its span a sparkline's chart shows: the whole window, or the
+// hours before and after now.
+enum class SparklineSpan {
+    Window,
+    Hours12,
+    Hours24,
+    Hours36,
+    Hours48,
+};
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -404,6 +416,10 @@ struct Settings {
     bool sparklineNowLine = true;
     bool sparklineNowCaret = false;
     bool sparklineRing = false;
+    // Sparklines' charts of long windows, and theirs while the pointer rests on the account (none:
+    // as without it).
+    SparklineSpan sparklineSpan = SparklineSpan::Window;
+    std::optional<SparklineSpan> sparklineHoverSpan = SparklineSpan::Hours24;
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
@@ -909,6 +925,10 @@ struct QuotaUiInstance {
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
+    // Usage graphs built to swap spans on hover, and the account whose charts the last update
+    // swapped (-1: none).
+    bool buildSparkHoverSwap = false;
+    int sparkSwapIndex = -1;
     double taskbarHeight = 0;  // DIPs, measured at build; 0 if unknown.
     // Bar layouts: the label line's space beyond its text at the label font size, over its cap
     // height and under its baseline, measured at build (BarIdentityMarginFor).
@@ -6546,6 +6566,18 @@ static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSpa
 static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
 // Room for sparkline shapes past the plot: a ring around a point on its edge.
 static constexpr double kSparkOverflow = 4.5;
+// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs); 0:
+// the whole window.
+static ULONGLONG SparklineAroundMs(SparklineSpan span) {
+    static constexpr ULONGLONG kHourMs = 60 * 60 * 1000;
+    switch (span) {
+        case SparklineSpan::Hours12: return 12 * kHourMs;
+        case SparklineSpan::Hours24: return 24 * kHourMs;
+        case SparklineSpan::Hours36: return 36 * kHourMs;
+        case SparklineSpan::Hours48: return 48 * kHourMs;
+        default: return 0;
+    }
+}
 // Chart text, 3 DIPs in from the plot's edges: the weekly chart's extra usage, its key, then the
 // number, kSparkExtraKeyGap DIPs apart. Text placement estimates widths at kSparkTextWidthShare
 // of the font size per character, generously.
@@ -7006,6 +7038,8 @@ struct MeterDisplay {
     bool sparklineNowLine;
     bool sparklineNowCaret;
     bool sparklineRing;
+    // Long windows' charts span this before and after now (AccountMeters); 0: the whole window.
+    ULONGLONG sparklineAroundMs;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -7059,6 +7093,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .sparklineNowLine = settings.sparklineNowLine,
         .sparklineNowCaret = settings.sparklineNowCaret,
         .sparklineRing = settings.sparklineRing,
+        .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -7593,7 +7628,11 @@ struct AccountMeters {
     // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
     // plain), and the projection (ProjectUsage) from the current reading to the reset or, reaching
     // 100% before it, to the limit, marked in the 100% color. Without a window the plot is
-    // lit whole and the current reading sits at its right edge, alone.
+    // lit whole and the current reading sits at its right edge, alone. With
+    // display.sparklineAroundMs, a window longer than twice it spans only that much each side of
+    // now, kept inside the window: earlier readings drop out, the diagonal is the
+    // window's even use across that span, and the projection stops at its end (with the limit mark
+    // only when it reaches the limit before then).
     uint32_t sparkLimitColor = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
     // The weekly chart's top-left corner (bottom-left with sparkExtraBottom), at the key's font:
@@ -7981,15 +8020,27 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                   outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else if (spark) {
-            // Left to right the window, bottom to top 0-100% inside the insets, per the bar mode:
-            // used, or left (100 - used); positions snap to quarter DIPs, so they change only when
-            // the drawing does.
+            // Left to right the window (or the day each side of now), bottom to top 0-100% inside
+            // the insets, per the bar mode: used, or left (100 - used); positions snap to quarter
+            // DIPs, so they change only when the drawing does.
             m.sparkLeft = slotPosition * (display.sparklineWidth + kSparkChartGap);
             double width = display.sparklineWidth, height = meters.faceHeight;
             auto snap = [](double dip) { return std::round(dip * 4) / 4; };
-            ULONGLONG start = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
+            std::vector<TileTracePoint> trace = timed(w) && traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
+            // A rolled-back clock can put now before the newest reading: the time, the current
+            // reading and the projection take the later of the two.
+            ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
+            // The span drawn: the window, or a long window's day each side of now, kept inside the
+            // window.
+            ULONGLONG windowStart = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
+            ULONGLONG start = windowStart, span = wu.windowDurationMs;
+            const ULONGLONG around = display.sparklineAroundMs;
+            if (timed(w) && around && span > 2 * around) {
+                start = std::min(now > windowStart + around ? now - around : windowStart, wu.resetUnixMs - 2 * around);
+                span = 2 * around;
+            }
             auto xAt = [&](ULONGLONG timeMs) {
-                return snap(std::clamp(((double)timeMs - (double)start) / wu.windowDurationMs, 0.0, 1.0) * width);
+                return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) * width);
             };
             auto yAt = [&](double used) {
                 double shown = std::clamp(remainingMode ? 100 - used : used, 0.0, 100.0);
@@ -8046,12 +8097,31 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                if (display.showPaceTicks) shapes[kSparkPace] = {{0, yAt(0), {{width, yAt(100)}}}};
-                std::vector<TileTracePoint> trace = traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
-                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
-                    TileOutlineFigure line{xAt(trace[begin].timeMs), yAt(trace[begin].used), {}};
-                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
-                        line.segments.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
+                // The window's even use across the span: 0% to 100% across the whole window.
+                if (display.showPaceTicks) {
+                    double from = 100.0 * double(start - windowStart) / double(wu.windowDurationMs);
+                    double to = 100.0 * double(start + span - windowStart) / double(wu.windowDurationMs);
+                    shapes[kSparkPace] = {{0, yAt(from), {{width, yAt(to)}}}};
+                }
+                // Readings before a span around now drop out; a run across its start begins there.
+                std::vector<TileTracePoint> drawn = trace;
+                if (start > windowStart) {
+                    auto first = std::lower_bound(drawn.begin(), drawn.end(), start,
+                                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
+                    if (first != drawn.begin() && first != drawn.end() && first->connect && first->timeMs > start) {
+                        const TileTracePoint &before = first[-1], &after = *first;
+                        first[-1] = {start,
+                                     before.used + (after.used - before.used) * double(start - before.timeMs) /
+                                                       double(after.timeMs - before.timeMs),
+                                     false};
+                        --first;
+                    }
+                    drawn.erase(drawn.begin(), first);
+                }
+                for (size_t begin = 0, end; begin < drawn.size(); begin = end) {
+                    TileOutlineFigure line{xAt(drawn[begin].timeMs), yAt(drawn[begin].used), {}};
+                    for (end = begin + 1; end < drawn.size() && drawn[end].connect; end++) {
+                        line.segments.push_back({xAt(drawn[end].timeMs), yAt(drawn[end].used)});
                     }
                     if (line.segments.empty()) {
                         shapes[kSparkDots].push_back(circle(line.x, line.y, kSparkDotRadius));
@@ -8065,10 +8135,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                     shapes[kSparkLines].push_back(std::move(line));
                 }
                 // Now: the lit part's edge, a line across the plot and a caret on its bottom edge
-                // (below, once the text is placed). A rolled-back clock can put now before the
-                // newest reading: the time, the current reading and the projection take the later
-                // of the two.
-                ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
+                // (below, once the text is placed).
                 double x = xAt(now);
                 nowX = x;
                 shapes[kSparkLit] = litPlot(display.sparklineElapsed ? x : width);
@@ -8081,9 +8148,18 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                                   w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
                     }
                     if (projection) {
-                        double endX = xAt(projection->toMs), endY = yAt(projection->toUsed);
+                        // Cut at the span's end, before a later reset or limit.
+                        ULONGLONG toMs = std::min(projection->toMs, start + span);
+                        double toUsed = projection->toUsed;
+                        if (toMs < projection->toMs) {
+                            toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projection->fromMs) /
+                                                  ((double)projection->toMs - (double)projection->fromMs);
+                        }
+                        double endX = xAt(toMs), endY = yAt(toUsed);
                         shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
-                        if (projection->limit) shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                        if (projection->limit && toMs == projection->toMs) {
+                            shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                        }
                     }
                 }
             } else {
@@ -8358,6 +8434,11 @@ static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
                                                        level == 1 ? palette.hover : 0)));
         if (applied) *applied = key;
     } catch (...) {}
+}
+
+// Usage graphs that swap spans on hover: updates the tiles once the hovered account changed.
+static void UpdateHoverSpans(QuotaUiInstance& state) {
+    if (state.buildSparkHoverSwap && state.sparkSwapIndex != state.flyout.hoverIndex) UpdateQuotaUi(state);
 }
 
 // Text width per DIP of font size, measured out of the tree; estimated if measuring fails.
@@ -10445,23 +10526,24 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                     if (!uiState) return;
                     FlyoutUi& fo = uiState->flyout;
                     FlyoutPopup& popup = fo.popup;
-                    if (!popup.flyout) {
-                        // Without a popup it runs only while a tile is hovered: XAML can miss
-                        // the pointer leaving the taskbar for another window, so the hover ends
-                        // once the real cursor is off this taskbar. Exits within the taskbar are
-                        // left to XAML's own events.
-                        if (IsTileHovered(*uiState)) {
-                            int index = fo.hoverIndex;
-                            POINT pt{};
-                            RECT window{};
-                            bool inside = GetCursorPos(&pt) &&
-                                          GetWindowRect(uiState->hWnd, &window) &&
-                                          PtInRect(&window, pt);
-                            if (!inside) {
-                                OnTilePointerExited(*uiState, index);
-                                UpdateTileHighlight(*uiState, index);
-                            }
+                    // XAML can miss the pointer leaving the taskbar for another window (the
+                    // popup's too), so the hover ends once the real cursor is off this taskbar.
+                    // Exits within the taskbar are left to XAML's own events. Ending it can
+                    // update the tiles, which may close the popup.
+                    if (IsTileHovered(*uiState)) {
+                        int index = fo.hoverIndex;
+                        POINT pt{};
+                        RECT window{};
+                        bool inside = GetCursorPos(&pt) && GetWindowRect(uiState->hWnd, &window) &&
+                                      PtInRect(&window, pt);
+                        if (!inside) {
+                            OnTilePointerExited(*uiState, index);
+                            UpdateTileHighlight(*uiState, index);
+                            UpdateHoverSpans(*uiState);
                         }
+                    }
+                    if (!popup.flyout) {
+                        // Without a popup it runs only while a tile is hovered.
                         if (fo.pollTimer && !IsTileHovered(*uiState)) fo.pollTimer.Stop();
                         return;
                     }
@@ -10770,6 +10852,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         BarLayout barLayout = settings.barLayout;
         state.buildVisualTestMode = visualTestMode;
         state.buildBarLayout = barLayout;
+        state.buildSparkHoverSwap = barLayout == BarLayout::Sparkline && settings.sparklineHoverSpan &&
+                                    *settings.sparklineHoverSpan != settings.sparklineSpan;
         bool tileLayout = IsTileLayout(barLayout);
         // Tiles are kTileHeight tall, less on a taskbar too short for that; bar columns at least.
         state.taskbarHeight = 0;
@@ -11282,6 +11366,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                                 UpdateTileHighlight(*statePtr, previousHover);
                             }
                             UpdateTileHighlight(*statePtr, accountIndex);
+                            UpdateHoverSpans(*statePtr);
                         }
                     } catch (...) {}
                 });
@@ -11300,6 +11385,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         }
                         OnTilePointerExited(*statePtr, accountIndex);
                         UpdateTileHighlight(*statePtr, accountIndex);
+                        UpdateHoverSpans(*statePtr);
                     } catch (...) {}
                 };
             auto pointerExitedToken = tappedElement.PointerExited(pointerExited);
@@ -11646,6 +11732,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     state.lightTheme = light;
     BarGeometry bar = BarGeometryFor(display);
     FlyoutPopup& flyout = state.flyout.popup;
+    // Usage graphs with a span on hover: the hovered account's long windows in it.
+    MeterDisplay swappedDisplay = display;
+    if (settings.sparklineHoverSpan) swappedDisplay.sparklineAroundMs = SparklineAroundMs(*settings.sparklineHoverSpan);
+    state.sparkSwapIndex = state.buildSparkHoverSwap ? state.flyout.hoverIndex : -1;
     try {
         for (size_t i = 0; i < data.size(); i++) {
             const AccountData& d = data[i];
@@ -11683,7 +11773,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 return rowTrace(kRows[slot], reading);
             };
             AccountMeters meters = AccountMeterState(
-                display, state.buildBarLayout, accounts[i], d,
+                (int)i == state.sparkSwapIndex ? swappedDisplay : display, state.buildBarLayout, accounts[i], d,
                 ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
             bool accountRefreshing = !visualTestMode && refreshing &&
                 (!refreshAccountIdentity ||
@@ -18239,6 +18329,13 @@ static bool NormalizeSettings(Settings* s) {
     if (s->sparklineExtra < SparklineExtra::Off || s->sparklineExtra > SparklineExtra::Percent) {
         s->sparklineExtra = SparklineExtra::Amount;
     }
+    if (s->sparklineSpan < SparklineSpan::Window || s->sparklineSpan > SparklineSpan::Hours48) {
+        s->sparklineSpan = SparklineSpan::Window;
+    }
+    if (s->sparklineHoverSpan &&
+        (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
+        s->sparklineHoverSpan = SparklineSpan::Hours24;
+    }
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -18351,6 +18448,12 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"sparklineNowLine", s.sparklineNowLine);
         setBool(L"sparklineNowCaret", s.sparklineNowCaret);
         setBool(L"sparklineRing", s.sparklineRing);
+        auto spanName = [](SparklineSpan span) {
+            return span == SparklineSpan::Hours12 ? L"12h" : span == SparklineSpan::Hours24 ? L"24h" :
+                   span == SparklineSpan::Hours36 ? L"36h" : span == SparklineSpan::Hours48 ? L"48h" : L"window";
+        };
+        setString(L"sparklineSpan", spanName(s.sparklineSpan));
+        setString(L"sparklineHoverSpan", s.sparklineHoverSpan ? spanName(*s.sparklineHoverSpan) : L"off");
         setString(L"sparklineExtra", s.sparklineExtra == SparklineExtra::Off ? L"off" :
                                      s.sparklineExtra == SparklineExtra::Percent ? L"percent" : L"amount");
         setNumber(L"logoScale", s.logoScale);
@@ -18521,6 +18624,17 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.sparklineNowLine = getBoolDefault(L"sparklineNowLine", true);
         s.sparklineNowCaret = getBoolDefault(L"sparklineNowCaret", false);
         s.sparklineRing = getBoolDefault(L"sparklineRing", false);
+        // A span by name; `missing` for none or an unknown one.
+        auto spanOf = [&](PCWSTR key, SparklineSpan missing) {
+            std::wstring name = GetStr(root, key);
+            return name == L"window" ? SparklineSpan::Window : name == L"12h" ? SparklineSpan::Hours12 :
+                   name == L"24h"    ? SparklineSpan::Hours24 : name == L"36h" ? SparklineSpan::Hours36 :
+                   name == L"48h"    ? SparklineSpan::Hours48 : missing;
+        };
+        s.sparklineSpan = spanOf(L"sparklineSpan", SparklineSpan::Window);
+        s.sparklineHoverSpan = GetStr(root, L"sparklineHoverSpan") == L"off" ?
+                                   std::nullopt :
+                                   std::optional(spanOf(L"sparklineHoverSpan", SparklineSpan::Hours24));
         std::wstring sparklineExtra = GetStr(root, L"sparklineExtra");
         s.sparklineExtra = sparklineExtra == L"off" ? SparklineExtra::Off :
                            sparklineExtra == L"percent" ? SparklineExtra::Percent : SparklineExtra::Amount;
@@ -19512,6 +19626,8 @@ enum class SettingsField : uint8_t {
     SparklineNowLine,
     SparklineNowCaret,
     SparklineRing,
+    SparklineSpan,    // A SparklineSpan
+    SparklineHoverSpan,  // A SparklineSpan, or -1: none
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -19635,7 +19751,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::SparklineOutline,
                     SettingsField::SparklineExtra,  SettingsField::SparklineElapsed,
                     SettingsField::SparklineNowLine, SettingsField::SparklineNowCaret,
-                    SettingsField::SparklineRing,
+                    SettingsField::SparklineRing,   SettingsField::SparklineSpan,
+                    SettingsField::SparklineHoverSpan,
                     SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
@@ -19691,6 +19808,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::SparklineNowLine: return s.sparklineNowLine;
         case SettingsField::SparklineNowCaret: return s.sparklineNowCaret;
         case SettingsField::SparklineRing: return s.sparklineRing;
+        case SettingsField::SparklineSpan: return int(s.sparklineSpan);
+        case SettingsField::SparklineHoverSpan: return s.sparklineHoverSpan ? int(*s.sparklineHoverSpan) : -1;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -19777,6 +19896,13 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SparklineNowLine: s.sparklineNowLine = value != 0; break;
         case SettingsField::SparklineNowCaret: s.sparklineNowCaret = value != 0; break;
         case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
+        case SettingsField::SparklineSpan:
+            s.sparklineSpan = SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
+            break;
+        case SettingsField::SparklineHoverSpan:
+            s.sparklineHoverSpan = value < 0 ? std::nullopt :
+                                   std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
+            break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -19859,6 +19985,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.sparklineNowLine = defaults.sparklineNowLine;
             s.sparklineNowCaret = defaults.sparklineNowCaret;
             s.sparklineRing = defaults.sparklineRing;
+            s.sparklineSpan = defaults.sparklineSpan;
+            s.sparklineHoverSpan = defaults.sparklineHoverSpan;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;
@@ -22634,12 +22762,12 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
-        // chart, then the current position cues.
+        // chart, the long windows' span and its swap on hover, then the current position cues.
         y = UiAddSection(items, id, x, y + 20, width, L"Usage graph");
         {
             UiCardSpec spec;
             spec.title = L"Chart width";
-            spec.description = {{L"Pixels across each quota\u2019s whole window."}};
+            spec.description = {{L"Pixels across each quota\u2019s chart."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineWidth);
         }
         {
@@ -22672,6 +22800,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {L"Amount", int(SparklineExtra::Amount)},
                                          {L"Percent", int(SparklineExtra::Percent)}},
                                         int(s.sparklineExtra));
+        }
+        y = UiAddSection(items, id, x, y + 20, width, L"Time span");
+        {
+            UiCardSpec spec;
+            spec.title = L"Long windows";
+            spec.description = {{L"Weekly and monthly charts (7d, Fa, Ex, Mo): the whole window, or 12 to 48 hours "
+                                 L"before and after now."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
+                                        {{L"Whole window", int(SparklineSpan::Window)},
+                                         {L"12 hours each side", int(SparklineSpan::Hours12)},
+                                         {L"24 hours each side", int(SparklineSpan::Hours24)},
+                                         {L"36 hours each side", int(SparklineSpan::Hours36)},
+                                         {L"48 hours each side", int(SparklineSpan::Hours48)}},
+                                        int(s.sparklineSpan));
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"On hover";
+            spec.description = {{L"What those charts show while the pointer rests on the account."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHoverSpan, 200,
+                                        {{L"Off", -1},
+                                         {L"Whole window", int(SparklineSpan::Window)},
+                                         {L"12 hours each side", int(SparklineSpan::Hours12)},
+                                         {L"24 hours each side", int(SparklineSpan::Hours24)},
+                                         {L"36 hours each side", int(SparklineSpan::Hours36)},
+                                         {L"48 hours each side", int(SparklineSpan::Hours48)}},
+                                        SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Current position");
         struct Cue {

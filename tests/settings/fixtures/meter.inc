@@ -2650,6 +2650,119 @@ static void RunSparklineTests() {
         CHECK(monthly.quotas[kExtraUsageBar].spark[kSparkLimit].empty());
     });
 
+    Run("sparkline: a span around now: a long window's 12 to 48 hours each side of now, kept inside it", [] {
+        const ULONGLONG kHour = 60 * kMinute;
+        const MeterDisplay around = plot([](Settings& s) { s.sparklineSpan = SparklineSpan::Hours24; });
+        // The whole window by default; 12, 24, 36 or 48 hours each side.
+        CHECK(Display().sparklineAroundMs == 0 && around.sparklineAroundMs == 24 * kHour &&
+              Display(With([](Settings& s) { s.sparklineSpan = SparklineSpan::Hours48; })).sparklineAroundMs == 48 * kHour);
+        CHECK(SparklineAroundMs(SparklineSpan::Window) == 0 && SparklineAroundMs(SparklineSpan::Hours12) == 12 * kHour &&
+              SparklineAroundMs(SparklineSpan::Hours24) == 24 * kHour && SparklineAroundMs(SparklineSpan::Hours36) == 36 * kHour &&
+              SparklineAroundMs(SparklineSpan::Hours48) == 48 * kHour && SparklineAroundMs(SparklineSpan(9)) == 0);
+        // A week resetting `left` hours after kNow; readings `hours` before kNow. On the 100 x 24 plot
+        // the span's 48 hours put kNow half way, 2.08 DIPs an hour; y = 22 - used / 5.
+        auto week = [&](double pct, double left) {
+            return WindowUsage{pct, kNow + (ULONGLONG)std::llround(left * kHour), kWeeklyWindowMs};
+        };
+        auto ago = [&](double hours) { return kNow - (ULONGLONG)std::llround(hours * kHour); };
+
+        // Three days in (day 3 of 7): from kNow - 24 h to kNow + 24 h. A lone reading 48 hours ago
+        // drops out; the run from 20% 36 hours ago to 30% 12 hours ago starts at the span's start, at
+        // 25%: (0, 17), (25, 16), then 45% now at (50, 13), with its area.
+        const std::vector<TileTracePoint> trace = {{ago(48), 10, false}, {ago(36), 20, false}, {ago(12), 30, true},
+                                                   {kNow, 45, true}};
+        AccountMeters mid = spark(week(45, 96), trace, around);
+        const auto& shapes = mid.quotas[0].spark;
+        CHECK(shapes[kSparkLines].size() == 1 && shapes[kSparkArea].size() == 1 && shapes[kSparkDots].empty());
+        path(shapes[kSparkLines], 0, 17, {{25, 16}, {50, 13}});
+        path(shapes[kSparkArea], 0, 24, {{0, 17}, {25, 16}, {50, 13}, {50, 24}});
+        dot(mid.quotas[0], 50, 13);
+        // The lit part and the now line at kNow.
+        point(shapes[kSparkLit][0].segments[0], 50, 0);
+        point(shapes[kSparkNowLine][0], 49.5, 1);
+        // The week's even use across the span: 28.57% (y 16.29, drawn at 16.25) to 57.14% (10.57, at
+        // 10.5).
+        line(shapes[kSparkPace], 0, 16.25, 100, 10.5);
+        // The projection still measures the last day's rate from the readings before the span (25%
+        // to 45%: 20% a day, the limit 66 hours on), cut at the span's end: 65% at (100, 9), unmarked.
+        line(shapes[kSparkProjection], 50, 13, 100, 9);
+        CHECK(shapes[kSparkLimit].empty());
+        // Off, the default: the whole week, kNow 3/7 across at 42.75, the lone reading drawn.
+        AccountMeters whole = spark(week(45, 96), trace);
+        dot(whole.quotas[0], 42.75, 13);
+        circle(whole.quotas[0].spark[kSparkDots], 14.25, 20, 1.5);
+        line(whole.quotas[0].spark[kSparkPace], 0, 22, 100, 2);
+        // 48 hours each side: from kNow - 48 h to kNow + 48 h, 1.04 DIPs an hour. The lone reading at
+        // its start stays, a dot at (0, 20); the run from (12.5, 18) through (37.5, 16) to (50, 13);
+        // the diagonal from 14.29% (y 19.14, at 19.25) to 71.43% (7.71, at 7.75); the projection cut
+        // 48 hours on, at 85% (100, 5).
+        AccountMeters wide = spark(week(45, 96), trace, plot([](Settings& s) { s.sparklineSpan = SparklineSpan::Hours48; }));
+        const auto& two = wide.quotas[0].spark;
+        circle(two[kSparkDots], 0, 20, 1.5);
+        path(two[kSparkLines], 12.5, 18, {{37.5, 16}, {50, 13}});
+        dot(wide.quotas[0], 50, 13);
+        line(two[kSparkPace], 0, 19.25, 100, 7.75);
+        line(two[kSparkProjection], 50, 13, 100, 5);
+        CHECK(two[kSparkLimit].empty());
+        // 12 hours each side: from kNow - 12 h, 4.17 DIPs an hour. The run's reading 12 hours ago is at
+        // the span's start: (0, 16) to (50, 13); the diagonal from 35.71% (y 14.86, at 14.75) to 50%
+        // (12); the projection cut 12 hours on, at 55% (100, 11).
+        AccountMeters narrow = spark(week(45, 96), trace, plot([](Settings& s) { s.sparklineSpan = SparklineSpan::Hours12; }));
+        const auto& half = narrow.quotas[0].spark;
+        CHECK(half[kSparkDots].empty());
+        path(half[kSparkLines], 0, 16, {{50, 13}});
+        line(half[kSparkPace], 0, 14.75, 100, 12);
+        line(half[kSparkProjection], 50, 13, 100, 11);
+
+        // A limit within the next 24 hours: 30% at the span's start to 90% now is 60% a day, 100% 4
+        // hours on, at 58.33 (drawn at 58.25), marked there.
+        AccountMeters fast = spark(week(90, 96), {{ago(36), 20, false}, {ago(12), 40, true}, {kNow, 90, true}}, around);
+        path(fast.quotas[0].spark[kSparkLines], 0, 16, {{25, 14}, {50, 4}});
+        line(fast.quotas[0].spark[kSparkProjection], 50, 4, 58.25, 2);
+        circle(fast.quotas[0].spark[kSparkLimit], 58.25, 2, 1.75);
+
+        // The window's first day, started 10 hours ago: its first 48 hours, kNow at 20.83 (20.75);
+        // the diagonal from 0% to 28.57% (y 16.29, at 16.25). Its average rate, 1% an hour, cut at the
+        // span's end 38 hours on: 48% (y 12.4, at 12.5).
+        AccountMeters first = spark(week(10, 158), {{ago(8), 2, false}, {ago(4), 6, true}}, around);
+        dot(first.quotas[0], 20.75, 20);
+        path(first.quotas[0].spark[kSparkLines], 4.25, 21.5, {{12.5, 20.75}});
+        line(first.quotas[0].spark[kSparkPace], 0, 22, 100, 16.25);
+        line(first.quotas[0].spark[kSparkProjection], 20.75, 20, 100, 12.5);
+        CHECK(first.quotas[0].spark[kSparkLimit].empty());
+        // Its last day, 2 hours left: the last 48, kNow at 95.83 (95.75); the diagonal from 71.43% (y
+        // 7.71, at 7.75) to 100% at the reset; the projection to the reset, 50.6% (y 11.88, at 12).
+        AccountMeters last = spark(week(50, 2), {}, around);
+        dot(last.quotas[0], 95.75, 12);
+        line(last.quotas[0].spark[kSparkPace], 0, 7.75, 100, 2);
+        line(last.quotas[0].spark[kSparkProjection], 95.75, 12, 100, 12);
+
+        // Remaining mode: 55% left at (50, 11).
+        dot(spark(week(45, 96), trace, plot([](Settings& s) {
+                s.sparklineSpan = SparklineSpan::Hours24;
+                s.barMode = BarMode::Remaining;
+            })).quotas[0], 50, 11);
+        // Windows up to 48 hours stay whole: the five-hour one half way, as with it off.
+        AccountMeters hours = spark(Window(45, 9000000), {}, around);
+        dot(hours.quotas[0], 50, 13);
+        line(hours.quotas[0].spark[kSparkPace], 0, 22, 100, 2);
+        line(hours.quotas[0].spark[kSparkProjection], 50, 13, 100, 4);
+        // Every long window: the weekly chart and a monthly extra usage chart (20% ten days before its
+        // reset), each with kNow half way.
+        AccountData data = Fresh();
+        data.winWeek = week(45, 96);
+        data.extraUsage = {20, kNow + 240 * kHour, 720 * kHour};
+        AccountMeters both = AccountMeterState(plot([](Settings& s) {
+                                                   s.sparklineSpan = SparklineSpan::Hours24;
+                                                   s.sparklineExtra = SparklineExtra::Off;
+                                               }),
+                                               BarLayout::Sparkline, Account(L"anthropic", L"A", {false, true, false, true}),
+                                               data, 0, 0);
+        CHECK(both.barMask == 0b1010);
+        dot(both.quotas[kWeeklyBar], 50, 13);
+        dot(both.quotas[kExtraUsageBar], 50, 18);
+    });
+
     Run("sparkline: remaining mode plots what is left, its runs over areas from the bottom, down to the limit", [] {
         // 100% left at the top inset, 0% at the bottom one: y = 2 + used / 5 on the 100 x 24 plot.
         const MeterDisplay left = plot([](Settings& s) { s.barMode = BarMode::Remaining; });

@@ -436,6 +436,17 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.sparklineElapsed = false;
              s.sparklineNowLine = false;
          }},
+        {L"Sparkline, 12 hours each side",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineSpan = SparklineSpan::Hours12; }},
+        {L"Sparkline, 24 hours each side",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineSpan = SparklineSpan::Hours24; }},
+        {L"Sparkline, 48 hours each side",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineSpan = SparklineSpan::Hours48; }},
+        {L"Sparkline, 24 hours each side, remaining", [](Settings& s) {
+             s.barLayout = BarLayout::Sparkline;
+             s.sparklineSpan = SparklineSpan::Hours24;
+             s.barMode = BarMode::Remaining;
+         }},
         {L"Sparkline, outline off", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineOutline = false; }},
         {L"Sparkline, outline and cues off", [](Settings& s) {
              s.barLayout = BarLayout::Sparkline;

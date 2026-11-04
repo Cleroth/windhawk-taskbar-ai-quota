@@ -328,6 +328,10 @@ struct QuotaUiInstance {
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
+    // Usage graphs built to swap spans on hover, and the account whose charts the last update
+    // swapped (-1: none).
+    bool buildSparkHoverSwap = false;
+    int sparkSwapIndex = -1;
     double taskbarHeight = 0;  // DIPs, measured at build; 0 if unknown.
     // Bar layouts: the label line's space beyond its text at the label font size, over its cap
     // height and under its baseline, measured at build (BarIdentityMarginFor).

@@ -247,12 +247,12 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
-        // chart, then the current position cues.
+        // chart, the long windows' span and its swap on hover, then the current position cues.
         y = UiAddSection(items, id, x, y + 20, width, L"Usage graph");
         {
             UiCardSpec spec;
             spec.title = L"Chart width";
-            spec.description = {{L"Pixels across each quota\u2019s whole window."}};
+            spec.description = {{L"Pixels across each quota\u2019s chart."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineWidth);
         }
         {
@@ -285,6 +285,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {L"Amount", int(SparklineExtra::Amount)},
                                          {L"Percent", int(SparklineExtra::Percent)}},
                                         int(s.sparklineExtra));
+        }
+        y = UiAddSection(items, id, x, y + 20, width, L"Time span");
+        {
+            UiCardSpec spec;
+            spec.title = L"Long windows";
+            spec.description = {{L"Weekly and monthly charts (7d, Fa, Ex, Mo): the whole window, or 12 to 48 hours "
+                                 L"before and after now."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
+                                        {{L"Whole window", int(SparklineSpan::Window)},
+                                         {L"12 hours each side", int(SparklineSpan::Hours12)},
+                                         {L"24 hours each side", int(SparklineSpan::Hours24)},
+                                         {L"36 hours each side", int(SparklineSpan::Hours36)},
+                                         {L"48 hours each side", int(SparklineSpan::Hours48)}},
+                                        int(s.sparklineSpan));
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"On hover";
+            spec.description = {{L"What those charts show while the pointer rests on the account."}};
+            y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHoverSpan, 200,
+                                        {{L"Off", -1},
+                                         {L"Whole window", int(SparklineSpan::Window)},
+                                         {L"12 hours each side", int(SparklineSpan::Hours12)},
+                                         {L"24 hours each side", int(SparklineSpan::Hours24)},
+                                         {L"36 hours each side", int(SparklineSpan::Hours36)},
+                                         {L"48 hours each side", int(SparklineSpan::Hours48)}},
+                                        SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Current position");
         struct Cue {

@@ -89,6 +89,11 @@ static void UpdateTileHighlight(QuotaUiInstance& state, int index) {
     } catch (...) {}
 }
 
+// Usage graphs that swap spans on hover: updates the tiles once the hovered account changed.
+static void UpdateHoverSpans(QuotaUiInstance& state) {
+    if (state.buildSparkHoverSwap && state.sparkSwapIndex != state.flyout.hoverIndex) UpdateQuotaUi(state);
+}
+
 // Text width per DIP of font size, measured out of the tree; estimated if measuring fails.
 static double TileTextWidthPerPt(TextBlock const& text) {
     try {
