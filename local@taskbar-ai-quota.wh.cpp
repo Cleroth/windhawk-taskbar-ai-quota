@@ -100,6 +100,7 @@ Have a suggestion or found a bug?
 #include <winternl.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <propkey.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #include <winhttp.h>
@@ -887,6 +888,8 @@ static void CloseAccountFlyout(QuotaUiInstance& state);
 static void PostUiUpdate();
 static void OpenSettingsWindow();
 static void OpenHistoryWindow(uint64_t historyId = 0);
+static void UiSetWindowAppId(HWND window, PCWSTR appId);
+static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons);
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
                             uint64_t newIdentity = 0);
@@ -925,6 +928,9 @@ static std::atomic<HWND> g_historyWindow{nullptr};
 static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
 static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
 static constexpr UINT kHistoryConsentChangedMessage = WM_APP + 22;
+
+// The settings, usage history and sign-in windows' shared taskbar identity (ui/window-icon.h).
+static constexpr PCWSTR kWindowAppId = L"Windhawk.TaskbarAIQuota";
 
 // Settings, sign-in, visibility, history ID, storage status, consent, poll and journal changes
 // (an account's history deleted): posted to the settings window and the usage history window,
@@ -1979,6 +1985,7 @@ struct LoginDialogState {
     HWND edit = nullptr;
     HFONT font = nullptr;
     UINT dpi = 96;
+    std::array<HICON, 2> icons{};  // App icon (ICON_SMALL, ICON_BIG), destroyed after the window
 };
 
 static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
@@ -2114,13 +2121,17 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                          suggested->right - suggested->left,
                          suggested->bottom - suggested->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
-            if (st) LayoutLoginDialog(hWnd, *st, HIWORD(wParam));
+            if (st) {
+                LayoutLoginDialog(hWnd, *st, HIWORD(wParam));
+                SetAppWindowIcons(hWnd, HIWORD(wParam), st->icons);
+            }
             return 0;
         }
         case WM_CLOSE:
             DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
+            UiSetWindowAppId(hWnd, nullptr);
             if (st) st->done = true;
             PostQuitMessage(0);
             return 0;
@@ -2166,6 +2177,9 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     g_loginWnd.store(wnd);
 
     UINT dpi = WindowDpi(wnd);
+    // The taskbar shows the app icon instead of File Explorer's (ui/window-icon.h).
+    UiSetWindowAppId(wnd, kWindowAppId);
+    SetAppWindowIcons(wnd, dpi, st.icons);
     RECT windowRect{0, 0, ScaleForDpi(448, dpi), ScaleForDpi(st.edit ? 186 : 108, dpi)};
     using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
     auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
@@ -2200,6 +2214,9 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     g_loginWnd.store(nullptr);
     if (IsWindow(wnd)) DestroyWindow(wnd);
     if (st.font) DeleteObject(st.font);
+    for (HICON icon : st.icons) {
+        if (icon) DestroyIcon(icon);
+    }
     // Unregister so a later mod reload can't reuse a class pointing at this now-unloaded WndProc.
     UnregisterClassW(kClass, hInst);
     return st.ok;
@@ -14325,7 +14342,34 @@ static bool UiSurfaceDrawResult(UiSurface& surface, HRESULT result) {
 // Window icons drawn by the toolkit (native): a Shape item, its view box filling the icon, as the
 // title bar's small and Alt+Tab's big icon at a window's DPI and in its palette. A window doesn't
 // own icons set with WM_SETICON: the caller keeps them and destroys each once the window holds
-// its successor or is gone.
+// its successor or is gone. The taskbar shows them only for a window with its own taskbar
+// identity; otherwise it shows its process's (Explorer's) app icon.
+
+// Gives `window` its own taskbar identity (AppUserModelID), unpinnable: the taskbar groups it
+// apart from its process's windows and shows its window icon. nullptr removes both properties,
+// which a window must do before it is destroyed. PreventPinning is ignored once the ID is set.
+static void UiSetWindowAppId(HWND window, PCWSTR appId) {
+    winrt::com_ptr<IPropertyStore> store;
+    if (HRESULT hr = SHGetPropertyStoreForWindow(window, IID_PPV_ARGS(store.put())); FAILED(hr)) {
+        Wh_Log(L"Could not open the window's property store: 0x%08lX", hr);
+        return;
+    }
+    // SetValue copies the value.
+    PROPVARIANT value{};
+    if (!appId) {
+        store->SetValue(PKEY_AppUserModel_ID, value);
+        store->SetValue(PKEY_AppUserModel_PreventPinning, value);
+        return;
+    }
+    value.vt = VT_BOOL;
+    value.boolVal = VARIANT_TRUE;
+    store->SetValue(PKEY_AppUserModel_PreventPinning, value);
+    value.vt = VT_LPWSTR;
+    value.pwszVal = const_cast<PWSTR>(appId);
+    if (HRESULT hr = store->SetValue(PKEY_AppUserModel_ID, value); FAILED(hr)) {
+        Wh_Log(L"Could not set the window's taskbar identity: 0x%08lX", hr);
+    }
+}
 
 // Draws `shape` at the small and big icon sizes of `dpi` and sets them on `window`, destroying
 // the ones in `icons` (indexed by ICON_SMALL and ICON_BIG) they replace. A size that can't be
@@ -14744,6 +14788,7 @@ struct UiHostConfig {
     bool activate = true;              // Show active and in the foreground.
     std::optional<POINT> position;     // Top-left in pixels; default: centered on the cursor's monitor.
     std::optional<UiItem> icon;        // Title bar and Alt+Tab icon (a Shape); none: the default.
+    PCWSTR appId = nullptr;            // Taskbar identity (UiSetWindowAppId); none: the process's.
 };
 
 struct UiHost {
@@ -15438,6 +15483,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     result = -1;
                     break;
                 }
+                if (host.config->appId) UiSetWindowAppId(window, host.config->appId);
                 UiHostRequestRebuild(host, true);
                 break;
             case WM_CLOSE:
@@ -15467,6 +15513,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_DESTROY:
                 if (isMain) {
                     host.closing = true;
+                    if (host.config->appId) UiSetWindowAppId(window, nullptr);
                     UiPopupClose(host.popup);
                     if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
                         ReleaseCapture();
@@ -22474,6 +22521,19 @@ struct SettingsUiClient final : UiHostClient {
 // src/settings/window.h
 // Settings window thread and opener: one window at a time, on its own STA thread.
 
+// The app icon on a window the toolkit doesn't host (the sign-in window): drawn at `dpi` in the
+// app theme's palette, `icons` kept and destroyed by the caller as UiSetWindowIcons describes.
+static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons) {
+    try {
+        UiGraphics graphics;
+        UiCreateGraphics(graphics);
+        UiThemeReader themes;
+        UiSetWindowIcons(window, graphics, UiPaletteFor(UiReadTheme(themes)), SettingsAppIcon({}), dpi, icons);
+    } catch (...) {
+        Wh_Log(L"Could not draw the window icons");
+    }
+}
+
 static UINT GetSettingsActivateMessage() {
     static const UINT message =
         RegisterWindowMessageW(L"Windhawk_ActivateSettings_" WH_MOD_ID);
@@ -22504,6 +22564,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         config.title = L"Taskbar AI Quota Bars \u2014 Settings";
         config.activateMessage = GetSettingsActivateMessage();
         config.icon = SettingsAppIcon({});
+        config.appId = kWindowAppId;
         if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
     }
     SetVisualTestMode(false);
@@ -25934,6 +25995,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
             config.size = {1100, 830};
             config.minSize = {800, 590};
             config.icon = SettingsAppIcon({});
+            config.appId = kWindowAppId;
             if (!UiHostRun(config, client)) Wh_Log(L"Could not open the usage history window");
         } catch (...) {
             Wh_Log(L"History worker failed");

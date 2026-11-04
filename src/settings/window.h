@@ -1,5 +1,18 @@
 // Settings window thread and opener: one window at a time, on its own STA thread.
 
+// The app icon on a window the toolkit doesn't host (the sign-in window): drawn at `dpi` in the
+// app theme's palette, `icons` kept and destroyed by the caller as UiSetWindowIcons describes.
+static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons) {
+    try {
+        UiGraphics graphics;
+        UiCreateGraphics(graphics);
+        UiThemeReader themes;
+        UiSetWindowIcons(window, graphics, UiPaletteFor(UiReadTheme(themes)), SettingsAppIcon({}), dpi, icons);
+    } catch (...) {
+        Wh_Log(L"Could not draw the window icons");
+    }
+}
+
 static UINT GetSettingsActivateMessage() {
     static const UINT message =
         RegisterWindowMessageW(L"Windhawk_ActivateSettings_" WH_MOD_ID);
@@ -30,6 +43,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         config.title = L"Taskbar AI Quota Bars \u2014 Settings";
         config.activateMessage = GetSettingsActivateMessage();
         config.icon = SettingsAppIcon({});
+        config.appId = kWindowAppId;
         if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
     }
     SetVisualTestMode(false);

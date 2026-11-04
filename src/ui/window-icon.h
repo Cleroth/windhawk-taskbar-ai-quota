@@ -1,7 +1,34 @@
 // Window icons drawn by the toolkit (native): a Shape item, its view box filling the icon, as the
 // title bar's small and Alt+Tab's big icon at a window's DPI and in its palette. A window doesn't
 // own icons set with WM_SETICON: the caller keeps them and destroys each once the window holds
-// its successor or is gone.
+// its successor or is gone. The taskbar shows them only for a window with its own taskbar
+// identity; otherwise it shows its process's (Explorer's) app icon.
+
+// Gives `window` its own taskbar identity (AppUserModelID), unpinnable: the taskbar groups it
+// apart from its process's windows and shows its window icon. nullptr removes both properties,
+// which a window must do before it is destroyed. PreventPinning is ignored once the ID is set.
+static void UiSetWindowAppId(HWND window, PCWSTR appId) {
+    winrt::com_ptr<IPropertyStore> store;
+    if (HRESULT hr = SHGetPropertyStoreForWindow(window, IID_PPV_ARGS(store.put())); FAILED(hr)) {
+        Wh_Log(L"Could not open the window's property store: 0x%08lX", hr);
+        return;
+    }
+    // SetValue copies the value.
+    PROPVARIANT value{};
+    if (!appId) {
+        store->SetValue(PKEY_AppUserModel_ID, value);
+        store->SetValue(PKEY_AppUserModel_PreventPinning, value);
+        return;
+    }
+    value.vt = VT_BOOL;
+    value.boolVal = VARIANT_TRUE;
+    store->SetValue(PKEY_AppUserModel_PreventPinning, value);
+    value.vt = VT_LPWSTR;
+    value.pwszVal = const_cast<PWSTR>(appId);
+    if (HRESULT hr = store->SetValue(PKEY_AppUserModel_ID, value); FAILED(hr)) {
+        Wh_Log(L"Could not set the window's taskbar identity: 0x%08lX", hr);
+    }
+}
 
 // Draws `shape` at the small and big icon sizes of `dpi` and sets them on `window`, destroying
 // the ones in `icons` (indexed by ICON_SMALL and ICON_BIG) they replace. A size that can't be

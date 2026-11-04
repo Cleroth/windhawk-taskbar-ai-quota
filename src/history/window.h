@@ -26,6 +26,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
             config.size = {1100, 830};
             config.minSize = {800, 590};
             config.icon = SettingsAppIcon({});
+            config.appId = kWindowAppId;
             if (!UiHostRun(config, client)) Wh_Log(L"Could not open the usage history window");
         } catch (...) {
             Wh_Log(L"History worker failed");

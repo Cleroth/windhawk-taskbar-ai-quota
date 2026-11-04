@@ -130,6 +130,7 @@ struct LoginDialogState {
     HWND edit = nullptr;
     HFONT font = nullptr;
     UINT dpi = 96;
+    std::array<HICON, 2> icons{};  // App icon (ICON_SMALL, ICON_BIG), destroyed after the window
 };
 
 static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
@@ -265,13 +266,17 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                          suggested->right - suggested->left,
                          suggested->bottom - suggested->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
-            if (st) LayoutLoginDialog(hWnd, *st, HIWORD(wParam));
+            if (st) {
+                LayoutLoginDialog(hWnd, *st, HIWORD(wParam));
+                SetAppWindowIcons(hWnd, HIWORD(wParam), st->icons);
+            }
             return 0;
         }
         case WM_CLOSE:
             DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
+            UiSetWindowAppId(hWnd, nullptr);
             if (st) st->done = true;
             PostQuitMessage(0);
             return 0;
@@ -317,6 +322,9 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     g_loginWnd.store(wnd);
 
     UINT dpi = WindowDpi(wnd);
+    // The taskbar shows the app icon instead of File Explorer's (ui/window-icon.h).
+    UiSetWindowAppId(wnd, kWindowAppId);
+    SetAppWindowIcons(wnd, dpi, st.icons);
     RECT windowRect{0, 0, ScaleForDpi(448, dpi), ScaleForDpi(st.edit ? 186 : 108, dpi)};
     using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
     auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
@@ -351,6 +359,9 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     g_loginWnd.store(nullptr);
     if (IsWindow(wnd)) DestroyWindow(wnd);
     if (st.font) DeleteObject(st.font);
+    for (HICON icon : st.icons) {
+        if (icon) DestroyIcon(icon);
+    }
     // Unregister so a later mod reload can't reuse a class pointing at this now-unloaded WndProc.
     UnregisterClassW(kClass, hInst);
     return st.ok;

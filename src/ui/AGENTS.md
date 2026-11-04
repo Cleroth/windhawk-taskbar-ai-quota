@@ -38,7 +38,10 @@ a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
   `D2DERR_RECREATE_TARGET`: discard target and cache, repaint.
 - Window icons (`UiHostConfig::icon`): drawn by the host at the window's DPI and in its palette,
   redrawn on DPI and theme changes (each replaced icon destroyed after its successor is set),
-  destroyed in `UiHostRun` after the window, never while it can still show them.
+  destroyed in `UiHostRun` after the window, never while it can still show them. The taskbar
+  shows them only with `UiHostConfig::appId` (a per-window AppUserModelID, unpinnable, set at
+  the end of `WM_CREATE`, removed in `WM_DESTROY`); without it the window groups with File
+  Explorer and shows its icon.
 - Window classes are host-specific (`AiQuotaSettingsUi*_<mod id>`, `AiQuotaHistoryUi*_<mod id>`);
   another host uses its own.
 

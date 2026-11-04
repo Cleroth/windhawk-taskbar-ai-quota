@@ -28,6 +28,9 @@ static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
 static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
 static constexpr UINT kHistoryConsentChangedMessage = WM_APP + 22;
 
+// The settings, usage history and sign-in windows' shared taskbar identity (ui/window-icon.h).
+static constexpr PCWSTR kWindowAppId = L"Windhawk.TaskbarAIQuota";
+
 // Settings, sign-in, visibility, history ID, storage status, consent, poll and journal changes
 // (an account's history deleted): posted to the settings window and the usage history window,
 // never waited on.

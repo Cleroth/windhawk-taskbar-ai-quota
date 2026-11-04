@@ -97,6 +97,7 @@ Have a suggestion or found a bug?
 #include <winternl.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <propkey.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #include <winhttp.h>

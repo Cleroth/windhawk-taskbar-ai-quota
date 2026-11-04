@@ -56,6 +56,7 @@ struct UiHostConfig {
     bool activate = true;              // Show active and in the foreground.
     std::optional<POINT> position;     // Top-left in pixels; default: centered on the cursor's monitor.
     std::optional<UiItem> icon;        // Title bar and Alt+Tab icon (a Shape); none: the default.
+    PCWSTR appId = nullptr;            // Taskbar identity (UiSetWindowAppId); none: the process's.
 };
 
 struct UiHost {
@@ -750,6 +751,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     result = -1;
                     break;
                 }
+                if (host.config->appId) UiSetWindowAppId(window, host.config->appId);
                 UiHostRequestRebuild(host, true);
                 break;
             case WM_CLOSE:
@@ -779,6 +781,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
             case WM_DESTROY:
                 if (isMain) {
                     host.closing = true;
+                    if (host.config->appId) UiSetWindowAppId(window, nullptr);
                     UiPopupClose(host.popup);
                     if (HWND capture = GetCapture(); capture == host.main || capture == host.viewport) {
                         ReleaseCapture();
