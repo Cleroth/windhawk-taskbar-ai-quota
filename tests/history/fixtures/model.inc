@@ -233,6 +233,26 @@
         state.selected = 1;
         CHECK(Series(Build(state), 1, 4).legendTitle == L"Claude/GPT " + antigravityDurations[d]);
     });
+    Run("remaining mode: titles name percentages left; legends, dollars, credits and statistics unchanged", [] {
+        auto state = Model(); AllLanes(state);
+        state.view = HistoryView::AllMeters;
+        auto used = Build(state);
+        CHECK(Series(used, 0, 3).hoverTitle == L"account-100 · Extra budget used (%)");
+        state.remaining = true;
+        auto left = Build(state);
+        CHECK(left.series.size() == used.series.size());
+        CHECK(Series(left, 0, 0).hoverTitle == L"account-100 · 5h left (%)");
+        CHECK(Series(left, 0, 1).hoverTitle == L"account-100 · Weekly left (%)");
+        CHECK(Series(left, 0, 3).hoverTitle == L"account-100 · Extra budget left (%)");
+        CHECK(Series(left, 2, 1).hoverTitle == L"account-102 · Gemini weekly left (%)");
+        CHECK(Series(left, 2, 4).hoverTitle == L"account-102 · Claude/GPT 5h left (%)");
+        CHECK(Series(left, 0, 6).hoverTitle == L"account-100 · Extra spending (USD)");
+        CHECK(Series(left, 1, 7).hoverTitle == L"account-101 · Credits remaining");
+        CHECK(Series(left, 0, 1).legendTitle == L"account-100 · Weekly" && Series(left, 2, 4).legendTitle == L"account-102 · Claude/GPT 5h");
+        // Statistics and ranges stay in recorded (used) values: weekly 20 then 25.
+        const auto& weekly = Series(left, 0, 1);
+        CHECK(weekly.current.peak == 25 && weekly.current.latest == 25 && weekly.low == 0 && weekly.high == 25);
+    });
     Run("duration labels include previous period, ignore missing/failed/outside", [] {
         auto state = Model({1}); state.overlay = true; state.readFrom -= kHistoryWeekMs;
         AddRow(state, 0, state.readFrom - 1, {{0, 10}}).meters[0].durationMs = hour;

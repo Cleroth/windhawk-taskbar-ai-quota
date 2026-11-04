@@ -60,11 +60,12 @@ static std::wstring HistoryChartAxisLabel(size_t axis, double value) {
 }
 
 // Axes over the visible lines (percent, USD, credits; never shared by unlike units). Percent is
-// always shown, from 0 (or below) to 100, or the next multiple of 25 above its readings; labels
-// 0, its bounds, 100 and 50 (the layout keeps those with room). An extra axis shows while one of
-// its lines does, from 0 (or below) to 1, 2, 3, 4, 5, 6 or 8 times a power of ten at or above its
-// readings, labeled at its bounds and middle.
-static std::array<HistoryChartAxis, 3> HistoryChartAxes(const std::vector<HistoryUiLine>& lines) {
+// always shown, from 0 (or the next multiple of 25 below its readings) to 100 (or the next one
+// above them), over the shown values: in the Remaining bar mode the shares left, below 0 past the
+// limit; labels 0, its bounds, 100 and 50 (the layout keeps those with room). An extra axis shows
+// while one of its lines does, from 0 (or below) to 1, 2, 3, 4, 5, 6 or 8 times a power of ten
+// at or above its readings, labeled at its bounds and middle.
+static std::array<HistoryChartAxis, 3> HistoryChartAxes(const std::vector<HistoryUiLine>& lines, bool remaining) {
     std::array<HistoryChartAxis, 3> axes;
     axes[0].visible = true;
     axes[0].high = 100;
@@ -72,8 +73,10 @@ static std::array<HistoryChartAxis, 3> HistoryChartAxes(const std::vector<Histor
         if (line.hidden) continue;
         HistoryChartAxis& axis = axes[line.meter < 6 ? 0 : size_t(line.meter - 5)];
         axis.visible = true;
-        axis.low = std::min(axis.low, line.low);
-        axis.high = std::max(axis.high, line.high);
+        // Shares left turn the readings' range over.
+        bool left = remaining && line.meter < 6;
+        axis.low = std::min(axis.low, HistoryUiShown(line.meter, left ? line.high : line.low, remaining));
+        axis.high = std::max(axis.high, HistoryUiShown(line.meter, left ? line.low : line.high, remaining));
     }
     auto nice = [](double value) {
         if (!(value > 0) || !std::isfinite(value)) return value;
@@ -132,11 +135,13 @@ struct HistoryChartKey {
 // build.
 struct HistoryChart {
     // Data: the view's lines, the period ([readFrom, from) is the previous week while comparing),
-    // the red threshold, the snapshot with its generation, and a message instead of lines
+    // the red threshold, whether percentages show what is left (the Remaining bar mode), the
+    // snapshot with its generation, and a message instead of lines
     std::vector<HistoryUiLine> lines;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     bool compare = false;
     int redThreshold = 90;
+    bool remaining = false;
     std::shared_ptr<const HistorySnapshot> snapshot;
     uint64_t generation = 0;
     std::wstring message;
@@ -166,10 +171,11 @@ static float HistoryChartY(const HistoryChartAxis& axis, const D2D1_RECT_F& plot
     return plot.bottom - float(std::clamp(fraction, 0.0, 1.0)) * (plot.bottom - plot.top);
 }
 
-// A reduced point: its pixel column of the plot and its value's height on its line's axis.
+// A reduced point: its pixel column of the plot and its shown value's height on its line's axis.
 static D2D1_POINT_2F HistoryChartPoint(const HistoryChart& c, const HistoryUiLine& line, const HistoryRenderPoint& point) {
     return {c.plot.left + float(point.x) / c.scale,
-            HistoryChartY(c.axes[line.meter < 6 ? 0 : size_t(line.meter - 5)], c.plot, point.value)};
+            HistoryChartY(c.axes[line.meter < 6 ? 0 : size_t(line.meter - 5)], c.plot,
+                          HistoryUiShown(line.meter, point.value, c.remaining))};
 }
 
 // The plot inside the chart's item (mockup .plot): 10 DIP above it, 26 below for the time
@@ -385,9 +391,9 @@ static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::ve
         mix(line.chip);
         mix(uint64_t(hit.period));
         mix(point.sourceRow);
-        content.rows.push_back(HistoryChartRow(line.name, HistoryChartColor(line, p), line.stroke, line.meter,
-                                               hit.period, point.value, c.snapshot->samples[point.sourceRow].timeMs,
-                                               now, localTime));
+        content.rows.push_back(HistoryChartRow(line.name, HistoryChartColor(line, p), line.stroke, line.meter, hit.period,
+                                               HistoryUiShown(line.meter, point.value, c.remaining),
+                                               c.snapshot->samples[point.sourceRow].timeMs, now, localTime));
     }
     if (content.rows.empty()) return {};
     content.key = key ? key : 1;
@@ -443,7 +449,8 @@ struct HistoryChartScene {
 };
 
 // The chart as drawn (mockup .plot): while a percent line shows, the red band from the threshold
-// to the percent axis's top (high contrast: hatched) and its dashed line and label; percent
+// to the percent axis's top, or in the Remaining bar mode from what it leaves down to the axis's
+// bottom (high contrast: hatched), and its dashed line and label; percent
 // gridlines; each axis's labels (percent left, extra axes in their columns right) and the time
 // labels below; then, clipped, the lines: muted ones first, each line's previous week (dashed,
 // lone readings hollow) before its current period, 3 or 2 DIP wide; and the message over the
@@ -483,12 +490,14 @@ static HistoryChartScene HistoryChartBuildScene(const HistoryChart& c, const std
     const HistoryChartAxis& percent = c.axes[0];
     bool percentLine = std::any_of(c.lines.begin(), c.lines.end(),
                                    [](const HistoryUiLine& l) { return !l.hidden && l.meter < 6; });
-    bool threshold = percentLine && c.redThreshold >= percent.low && c.redThreshold <= percent.high;
-    float red = HistoryChartY(percent, plot, c.redThreshold);
-    if (threshold && red > plot.top) {
+    int level = c.remaining ? 100 - c.redThreshold : c.redThreshold;
+    bool threshold = percentLine && level >= percent.low && level <= percent.high;
+    float red = HistoryChartY(percent, plot, level);
+    if (threshold && (c.remaining ? red < plot.bottom : red > plot.top)) {
         add(hc ? HistoryChartMark::Hatch : HistoryChartMark::Fill,
             hc ? UiFade(p.textDisabled, 0.55f) : light ? UiRgb(0xC42B1C, 0.07f) : UiRgb(0xE53935, 0.08f))
-            .rect = {plot.left, plot.top, plot.right, red};
+            .rect = c.remaining ? D2D1_RECT_F{plot.left, red, plot.right, plot.bottom} :
+                                  D2D1_RECT_F{plot.left, plot.top, plot.right, red};
     }
     for (double value : percent.values) {
         line(HistoryChartY(percent, plot, value), hc ? p.textDisabled : light ? UiRgb(0, 0.09f) : UiRgb(0xFFFFFF, 0.08f), 0);
@@ -510,7 +519,7 @@ static HistoryChartScene HistoryChartBuildScene(const HistoryChart& c, const std
         if (i) x += c.columns[i];
     }
     if (threshold) {
-        label(std::to_wstring(c.redThreshold) + L"%", {plot.left, red - 16, plot.right - 2, red - 2},
+        label(std::to_wstring(level) + L"%", {plot.left, red - 16, plot.right - 2, red - 2},
               DWRITE_TEXT_ALIGNMENT_TRAILING, hc ? p.text : light ? UiRgb(0xC42B1C) : UiRgb(0xE57373));
     }
     for (const HistoryChartTick& tick : c.ticks) {

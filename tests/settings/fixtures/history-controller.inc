@@ -500,8 +500,9 @@ static void RunHistoryControllerTests() {
         CHECK(v.accounts[0].weeklyPct == 47 && !v.accounts[0].stale && v.accounts[0].lastPollMs == kWeekTo - 5 * kMinute);
         CHECK(v.accounts[1].weeklyPct == 62 && v.accounts[1].stale);
         CHECK(v.cards.size() == 3 && v.cards[1].title == L"OAI \u00B7 Weekly");
-        CHECK((v.cards[1].lines == std::vector<std::wstring>{L"Peak 100% \u00B7 Sat 24 Oct 16:32",
-                                                              L"Coverage 1 h (0.6%)", L"Est. \u226580%: 0.5 h"}));
+        // Remaining mode: none left at the lowest, and the time at or below the 20% the threshold leaves.
+        CHECK((v.cards[1].lines == std::vector<std::wstring>{L"Lowest 0% \u00B7 Sat 24 Oct 16:32",
+                                                              L"Coverage 1 h (0.6%)", L"Est. \u226420%: 0.5 h"}));
         CHECK(v.cards[1].when == L"Sat 24 Oct 16:32");  // Stale: never "now"
         CHECK(v.pill == HistoryUiPill::Recording && v.status == L"Updated Sat 31 Oct 14:32" && v.storageError.empty() &&
               !v.storageCapped);

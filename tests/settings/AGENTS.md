@@ -155,7 +155,7 @@ regenerates.
   mockups' shapes: axes, the plot's layout on device pixels, local time ticks per range, across
   daylight saving and over ten years; picking (every nearby or coincident line in both periods at
   a recorded endpoint, breaks never picked, extremes kept within a pixel) and readout rows;
-  emphasis; the legend's filter; the scene's draw list; the
+  emphasis; the legend's filter; the scene's draw list; the Remaining bar mode's shares left; the
   reduction cache's key). `history-render` paints `render-history-*` (every theme at 96/144/192
   DPI, `fixtures/history-render.inc`) as the host composes the window (main surface, navigation
   pane at its scroll, viewport, scrollbar, the More menu and a chart's readout where the host
@@ -166,8 +166,8 @@ regenerates.
   `notices` (each operation's notice), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings with brand-colored logos,
   dollars only, the No readings card beside cards), `menu`, `min` (the minimum window scrolled),
   `nav` (the scrolled sidebar, brand-colored logos), `band` (above 100%), `chart-views` (every view, both extra axes),
-  `chart-ticks` (each range's ticks) and `chart-states` (comparing, above 100%, every line hidden,
-  chips off, hot and focused, chart focus, a readout on the chart). `render-history-tooltips-*`
+  `chart-ticks` (each range's ticks) and `chart-states` (comparing, above 100%, the Remaining bar
+  mode with its cards, every line hidden, chips off, hot and focused, chart focus, a readout on the chart). `render-history-tooltips-*`
   (same themes and DPIs): the readout placed on each side of the pointer by the production
   placement, row forms, a shortened name, the production time forms (a previous year's, this
   year's), two columns, the "+N more" hint, and the complete-text tooltips (a chip's, the icon

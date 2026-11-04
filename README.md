@@ -104,8 +104,9 @@ state and storage errors stay visible in the main window.
     pools. Anthropic follows each account's taskbar weekly selections: normal, Fable, both,
     or neither. **Refresh / F5** picks up changed selections. Removed accounts retain both
     weeklies because they no longer have taskbar settings.
-  - **Extra usage** plots Anthropic extra-usage budget used (%) on the left axis and OpenAI
-    credits remaining on the right. USD spending appears in details, not on this graph.
+  - **Extra usage** plots Anthropic extra-usage budget used (%) (left, in the Remaining bar
+    mode) on the left axis and OpenAI credits remaining on the right. USD spending appears in
+    details, not on this graph.
 - Selecting one account defaults to **All meters**, with the same three groups also available.
   All-account and single-account modes remember their view selections separately until the window
   closes. **All meters** includes weeklies hidden on the taskbar and plots Anthropic USD
@@ -133,6 +134,12 @@ state and storage errors stay visible in the main window.
 - Charts show recorded peaks, coverage, and estimated time above the current
   red threshold. Near-limit estimates interpolate only connected samples, not gaps or time after
   the last sample. Short and weekly limits overlap and must not be added together.
+- In the **Remaining** bar mode (**Settings > Display**), percentage lines, the percent axis,
+  readouts and cards show quota left (100% minus used, below 0% past the limit, as Used mode
+  goes above 100%): lines fall as usage rises, the red-threshold band sits at the bottom, and
+  cards give the lowest share left and the estimated time at or below what the threshold leaves.
+  The sidebar's current values stop at 0%, like the taskbar. Dollar spending and credits keep
+  their recorded values, and the CSV always holds the recorded values.
 - OpenAI credits are not dollars or a spending ledger; the user-set credits ceiling is not
   stored as historical usage. View selection does not change the journal or CSV contents.
 - **Export CSV...** exports all meters for the selected account or all accounts in the selected

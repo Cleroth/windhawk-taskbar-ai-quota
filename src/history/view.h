@@ -228,6 +228,13 @@ static std::wstring HistoryUiHours(double ms) {
     return std::wstring(printed.begin(), printed.end()) + L" h";
 }
 
+// A recorded value as the window shows it: in the Remaining bar mode a percentage's share left
+// (100 - used, below 0% past the limit, as used readings go past 100%); dollars, credits and used
+// percentages as recorded.
+static double HistoryUiShown(int meter, double value, bool remaining) {
+    return remaining && meter < 6 ? 100 - value : value;
+}
+
 // A meter's value with its unit: percentages with `percentDecimals` places (cards whole, the
 // readout and shares one), dollars and credits with two.
 static std::wstring HistoryUiValue(int meter, double value, int percentDecimals) {
@@ -238,9 +245,11 @@ static std::wstring HistoryUiValue(int meter, double value, int percentDecimals)
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
 // accounts without readings, from the view's accounts (parallel to the set's), selection,
-// comparison and consent: every peak and its time, coverage with its share, time at or above the
-// red threshold the set was analyzed with for percentages, dollar spending's last and peak
-// readings, and an account's recording status once (in All accounts, on its first card).
+// comparison, bar mode and consent: every peak and its time, coverage with its share, time at or
+// above the red threshold the set was analyzed with for percentages, dollar spending's last and
+// peak readings, and an account's recording status once (in All accounts, on its first card).
+// The Remaining bar mode shows percentages left: the peak is the lowest share left, the time at
+// or below what the threshold leaves.
 static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, ULONGLONG from, ULONGLONG to,
                               ULONGLONG now, const HistoryUiLocalTime& localTime) {
     view.cards.clear();
@@ -262,12 +271,17 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
         previousAccount = series.account;
         card.color = series.color;
         card.detailsOnly = !series.plotted;
-        auto reading = [&](double value, ULONGLONG time) {
-            return HistoryUiValue(series.meter, value, 0) + L" \u00B7 " + HistoryUiTime(time, now, localTime);
+        const bool left = view.remaining && series.meter < 6;
+        auto shown = [&](double value) {
+            return HistoryUiValue(series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
+        auto reading = [&](double value, ULONGLONG time) {
+            return shown(value) + L" \u00B7 " + HistoryUiTime(time, now, localTime);
+        };
+        const PCWSTR peak = left ? L"Lowest " : L"Peak ";
         const HistoryStatistics& current = series.current;
         if (current.hasValue) {
-            card.value = HistoryUiValue(series.meter, current.latest, 0);
+            card.value = shown(current.latest);
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
             card.when = latestPoll ? L"now" : HistoryUiTime(current.latestTime, now, localTime);
         }
@@ -278,16 +292,17 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             std::wstring prefix = !view.compare ? L"" : period ? L"Previous: " : L"Current: ";
             auto line = [&](std::wstring text) { card.lines.push_back(std::exchange(prefix, {}) + text); };
             if (!stats.hasValue) {
-                line(series.plotted ? L"Peak \u2014" : L"No dollar readings in this period.");
+                line(series.plotted ? std::wstring(peak) + L"\u2014" : L"No dollar readings in this period.");
                 continue;
             }
             if (!series.plotted && period) line(L"Last recorded spend: " + reading(stats.latest, stats.latestTime));
-            line(L"Peak " + reading(stats.peak, stats.peakTime));
+            line(peak + reading(stats.peak, stats.peakTime));
             if (!series.plotted) continue;
             line(L"Coverage " + HistoryUiHours(stats.coverageMs) + L" (" +
                  HistoryUiNumber(duration > 0 ? 100 * stats.coverageMs / duration : 0, 1) + L"%)");
             if (series.meter < 6) {
-                line(L"Est. \u2265" + std::to_wstring(set.redThreshold) + L"%: " +
+                line((left ? L"Est. \u2264" + std::to_wstring(100 - set.redThreshold) :
+                             L"Est. \u2265" + std::to_wstring(set.redThreshold)) + L"%: " +
                      (stats.coverageMs ? HistoryUiHours(stats.nearLimitMs) : L"\u2014"));
             }
         }

@@ -2,9 +2,9 @@
 // reduction, series building, account collection and selection resolution. Explicit inputs
 // only; loops stop as soon as `cancelled` returns true.
 
+// Percentages (meters 0-5) get " used (%)" or, in the Remaining bar mode, " left (%)" after them.
 static constexpr PCWSTR kHistoryMeterNames[kHistoryMeterCount] = {
-    L"Short-term used (%)", L"Weekly used (%)", L"Fable weekly used (%)", L"Extra budget used (%)",
-    L"Claude/GPT short-term used (%)", L"Claude/GPT weekly used (%)",
+    L"Short-term", L"Weekly", L"Fable weekly", L"Extra budget", L"Claude/GPT short-term", L"Claude/GPT weekly",
     L"Extra spending (USD)", L"Credits remaining",
 };
 static constexpr const char* kHistoryMeterIds[kHistoryMeterCount] = {
@@ -80,6 +80,7 @@ struct HistorySeriesQuery {
     ULONGLONG from = 0, to = 0, readFrom = 0;
     bool overlay = false;  // Compare previous week: [readFrom, from) is the previous period.
     int redThreshold = 90;
+    bool remaining = false;  // Titles name percentages left (the Remaining bar mode)
 };
 
 struct HistorySeriesSet {
@@ -260,7 +261,7 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                    (GetBValue(color) * 3 + 255) / 4);
             }
             std::wstring label = kHistoryMeterNames[meter];
-            if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
+            if (account.provider == 3 && meter == 1) label = L"Gemini weekly";
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;
             for (size_t row : account.rows) {
@@ -286,12 +287,10 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                     label.front() = wchar_t(towlower(label.front()));
                     label = (meter == 4 ? L"Claude/GPT " : L"Gemini ") + label;
                 }
-                label += L" used (%)";
             }
+            series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + label;
+            if (meter < 6) label += query.remaining ? L" left (%)" : L" used (%)";
             series.hoverTitle = account.label + L" · " + label;
-            std::wstring compact = label;
-            if (compact.ends_with(L" used (%)")) compact.resize(compact.size() - 9);
-            series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + compact;
             result.series.push_back(std::move(series));
         }
         if (result.series.size() == firstSeries) result.noReadingAccounts.push_back(i);

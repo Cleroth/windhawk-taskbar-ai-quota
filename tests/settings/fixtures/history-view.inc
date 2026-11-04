@@ -85,7 +85,7 @@ static HistoryUiView TestCards(const TestHistory& h,
         view.accounts.push_back(std::move(account));
     }
     if (live) live(view);
-    HistorySeriesQuery query{h.selected, h.view, kWeekFrom, kWeekTo, readFrom, h.compare, 90};
+    HistorySeriesQuery query{h.selected, h.view, kWeekFrom, kWeekTo, readFrom, h.compare, 90, view.remaining};
     HistorySeriesSet set = HistoryBuildSeries(h.samples, collected, query, never);
     HistoryUiSetCards(view, set, kWeekFrom, kWeekTo, kWeekTo, TestZone());
     return view;
@@ -205,6 +205,52 @@ static void RunHistoryViewTests() {
         CHECK((TestCards(lone).cards[0].lines ==
                std::vector<std::wstring>{L"Peak 40% \u00B7 Sat 24 Oct 15:32", L"Coverage 0 h (0.0%)",
                                          L"Est. \u226590%: \u2014"}));
+    });
+
+    Run("history cards: the Remaining bar mode shows percentages left: the headline, the lowest share left, the "
+        "time at or below what the threshold leaves; dollars and credits as recorded", [] {
+        auto left = [](std::function<void(HistoryUiView&)> live = {}) {
+            return [live](HistoryUiView& view) {
+                if (live) live(view);
+                view.remaining = true;
+            };
+        };
+        // Weekly 40, 95 and 93% used: 7% left now, 5% at its lowest; Fable weekly 30% used, 70% left.
+        HistoryUiView view = TestCards(TestOneAccount(), left(TestPolled(kWeekFrom + 3 * kHourMs - 5)));
+        CHECK(view.cards.size() == 2);
+        const HistoryUiCard& weekly = view.cards[0];
+        CHECK(weekly.title == L"Weekly" && weekly.value == L"7%" && weekly.when == L"now");
+        CHECK((weekly.lines == std::vector<std::wstring>{L"Lowest 5% \u00B7 Sat 24 Oct 16:32",
+                                                          L"Coverage 2 h (1.2%)", L"Est. \u226410%: 1.1 h"}));
+        CHECK(view.cards[1].value == L"70%" && view.cards[1].lines[0] == L"Lowest 70% \u00B7 Sat 24 Oct 17:32");
+        // Past 100% used: below 0% left. Comparing: each period's lowest; one without readings has none.
+        TestHistory h = TestOneAccount();
+        h.samples.push_back(TestReading(0xC2, 1, kWeekFrom + 4 * kHourMs, {{1, 110}}));
+        h.compare = true;
+        h.samples.insert(h.samples.begin(), {TestReading(0xC2, 1, kWeekFrom - kHistoryWeekMs + kHourMs, {{1, 50}}),
+                                             TestReading(0xC2, 1, kWeekFrom - kHistoryWeekMs + 2 * kHourMs, {{1, 60}})});
+        view = TestCards(h, left());
+        CHECK(view.cards[0].value == L"-10%");
+        CHECK(view.cards[0].lines[0] == L"Current: Lowest -10% \u00B7 Sat 24 Oct 18:32" &&
+              view.cards[0].lines[3] == L"Previous: Lowest 40% \u00B7 Sat 17 Oct 16:32" &&
+              view.cards[0].lines[5] == L"Est. \u226410%: 0 h");
+        CHECK(view.cards[1].lines[3] == L"Previous: Lowest \u2014");
+        // Credits and dollars keep their recorded values and peaks.
+        TestHistory credits;
+        credits.configured = {TestHistoryAccount(L"openai", L"OAI", 0x0A)};
+        credits.samples = {TestReading(0x0A, 2, kWeekFrom + kHourMs, {{7, 2500}}),
+                           TestReading(0x0A, 2, kWeekFrom + 2 * kHourMs, {{7, 1240}})};
+        credits.view = HistoryView::ExtraUsage;
+        credits.selected = 0;
+        view = TestCards(credits, left());
+        CHECK(view.cards[0].value == L"1240.00 credits" && view.cards[0].lines[0] == L"Peak 2500.00 credits \u00B7 Sat 24 Oct 15:32");
+        TestHistory dollars;
+        dollars.configured = {TestHistoryAccount(L"anthropic", L"CC 1", 0xC1)};
+        dollars.samples = {TestReading(0xC1, 1, kWeekFrom + kHourMs, {{6, 11}})};
+        dollars.view = HistoryView::ExtraUsage;
+        dollars.selected = 0;
+        view = TestCards(dollars, left());
+        CHECK(view.cards[0].value == L"USD 11.00" && view.cards[0].lines[0] == L"Peak USD 11.00 \u00B7 Sat 24 Oct 15:32");
     });
 
     Run("history cards: comparing lists the current then the previous period, each first line "

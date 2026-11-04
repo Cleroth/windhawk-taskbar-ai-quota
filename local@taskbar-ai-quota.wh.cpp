@@ -22605,9 +22605,9 @@ static void OpenSettingsWindow() {
 // reduction, series building, account collection and selection resolution. Explicit inputs
 // only; loops stop as soon as `cancelled` returns true.
 
+// Percentages (meters 0-5) get " used (%)" or, in the Remaining bar mode, " left (%)" after them.
 static constexpr PCWSTR kHistoryMeterNames[kHistoryMeterCount] = {
-    L"Short-term used (%)", L"Weekly used (%)", L"Fable weekly used (%)", L"Extra budget used (%)",
-    L"Claude/GPT short-term used (%)", L"Claude/GPT weekly used (%)",
+    L"Short-term", L"Weekly", L"Fable weekly", L"Extra budget", L"Claude/GPT short-term", L"Claude/GPT weekly",
     L"Extra spending (USD)", L"Credits remaining",
 };
 static constexpr const char* kHistoryMeterIds[kHistoryMeterCount] = {
@@ -22683,6 +22683,7 @@ struct HistorySeriesQuery {
     ULONGLONG from = 0, to = 0, readFrom = 0;
     bool overlay = false;  // Compare previous week: [readFrom, from) is the previous period.
     int redThreshold = 90;
+    bool remaining = false;  // Titles name percentages left (the Remaining bar mode)
 };
 
 struct HistorySeriesSet {
@@ -22863,7 +22864,7 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                    (GetBValue(color) * 3 + 255) / 4);
             }
             std::wstring label = kHistoryMeterNames[meter];
-            if (account.provider == 3 && meter == 1) label = L"Gemini weekly used (%)";
+            if (account.provider == 3 && meter == 1) label = L"Gemini weekly";
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;
             for (size_t row : account.rows) {
@@ -22889,12 +22890,10 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                     label.front() = wchar_t(towlower(label.front()));
                     label = (meter == 4 ? L"Claude/GPT " : L"Gemini ") + label;
                 }
-                label += L" used (%)";
             }
+            series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + label;
+            if (meter < 6) label += query.remaining ? L" left (%)" : L" used (%)";
             series.hoverTitle = account.label + L" · " + label;
-            std::wstring compact = label;
-            if (compact.ends_with(L" used (%)")) compact.resize(compact.size() - 9);
-            series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + compact;
             result.series.push_back(std::move(series));
         }
         if (result.series.size() == firstSeries) result.noReadingAccounts.push_back(i);
@@ -23278,6 +23277,13 @@ static std::wstring HistoryUiHours(double ms) {
     return std::wstring(printed.begin(), printed.end()) + L" h";
 }
 
+// A recorded value as the window shows it: in the Remaining bar mode a percentage's share left
+// (100 - used, below 0% past the limit, as used readings go past 100%); dollars, credits and used
+// percentages as recorded.
+static double HistoryUiShown(int meter, double value, bool remaining) {
+    return remaining && meter < 6 ? 100 - value : value;
+}
+
 // A meter's value with its unit: percentages with `percentDecimals` places (cards whole, the
 // readout and shares one), dollars and credits with two.
 static std::wstring HistoryUiValue(int meter, double value, int percentDecimals) {
@@ -23288,9 +23294,11 @@ static std::wstring HistoryUiValue(int meter, double value, int percentDecimals)
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
 // accounts without readings, from the view's accounts (parallel to the set's), selection,
-// comparison and consent: every peak and its time, coverage with its share, time at or above the
-// red threshold the set was analyzed with for percentages, dollar spending's last and peak
-// readings, and an account's recording status once (in All accounts, on its first card).
+// comparison, bar mode and consent: every peak and its time, coverage with its share, time at or
+// above the red threshold the set was analyzed with for percentages, dollar spending's last and
+// peak readings, and an account's recording status once (in All accounts, on its first card).
+// The Remaining bar mode shows percentages left: the peak is the lowest share left, the time at
+// or below what the threshold leaves.
 static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, ULONGLONG from, ULONGLONG to,
                               ULONGLONG now, const HistoryUiLocalTime& localTime) {
     view.cards.clear();
@@ -23312,12 +23320,17 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
         previousAccount = series.account;
         card.color = series.color;
         card.detailsOnly = !series.plotted;
-        auto reading = [&](double value, ULONGLONG time) {
-            return HistoryUiValue(series.meter, value, 0) + L" \u00B7 " + HistoryUiTime(time, now, localTime);
+        const bool left = view.remaining && series.meter < 6;
+        auto shown = [&](double value) {
+            return HistoryUiValue(series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
+        auto reading = [&](double value, ULONGLONG time) {
+            return shown(value) + L" \u00B7 " + HistoryUiTime(time, now, localTime);
+        };
+        const PCWSTR peak = left ? L"Lowest " : L"Peak ";
         const HistoryStatistics& current = series.current;
         if (current.hasValue) {
-            card.value = HistoryUiValue(series.meter, current.latest, 0);
+            card.value = shown(current.latest);
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
             card.when = latestPoll ? L"now" : HistoryUiTime(current.latestTime, now, localTime);
         }
@@ -23328,16 +23341,17 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             std::wstring prefix = !view.compare ? L"" : period ? L"Previous: " : L"Current: ";
             auto line = [&](std::wstring text) { card.lines.push_back(std::exchange(prefix, {}) + text); };
             if (!stats.hasValue) {
-                line(series.plotted ? L"Peak \u2014" : L"No dollar readings in this period.");
+                line(series.plotted ? std::wstring(peak) + L"\u2014" : L"No dollar readings in this period.");
                 continue;
             }
             if (!series.plotted && period) line(L"Last recorded spend: " + reading(stats.latest, stats.latestTime));
-            line(L"Peak " + reading(stats.peak, stats.peakTime));
+            line(peak + reading(stats.peak, stats.peakTime));
             if (!series.plotted) continue;
             line(L"Coverage " + HistoryUiHours(stats.coverageMs) + L" (" +
                  HistoryUiNumber(duration > 0 ? 100 * stats.coverageMs / duration : 0, 1) + L"%)");
             if (series.meter < 6) {
-                line(L"Est. \u2265" + std::to_wstring(set.redThreshold) + L"%: " +
+                line((left ? L"Est. \u2264" + std::to_wstring(100 - set.redThreshold) :
+                             L"Est. \u2265" + std::to_wstring(set.redThreshold)) + L"%: " +
                      (stats.coverageMs ? HistoryUiHours(stats.nearLimitMs) : L"\u2014"));
             }
         }
@@ -23416,11 +23430,12 @@ static std::wstring HistoryChartAxisLabel(size_t axis, double value) {
 }
 
 // Axes over the visible lines (percent, USD, credits; never shared by unlike units). Percent is
-// always shown, from 0 (or below) to 100, or the next multiple of 25 above its readings; labels
-// 0, its bounds, 100 and 50 (the layout keeps those with room). An extra axis shows while one of
-// its lines does, from 0 (or below) to 1, 2, 3, 4, 5, 6 or 8 times a power of ten at or above its
-// readings, labeled at its bounds and middle.
-static std::array<HistoryChartAxis, 3> HistoryChartAxes(const std::vector<HistoryUiLine>& lines) {
+// always shown, from 0 (or the next multiple of 25 below its readings) to 100 (or the next one
+// above them), over the shown values: in the Remaining bar mode the shares left, below 0 past the
+// limit; labels 0, its bounds, 100 and 50 (the layout keeps those with room). An extra axis shows
+// while one of its lines does, from 0 (or below) to 1, 2, 3, 4, 5, 6 or 8 times a power of ten
+// at or above its readings, labeled at its bounds and middle.
+static std::array<HistoryChartAxis, 3> HistoryChartAxes(const std::vector<HistoryUiLine>& lines, bool remaining) {
     std::array<HistoryChartAxis, 3> axes;
     axes[0].visible = true;
     axes[0].high = 100;
@@ -23428,8 +23443,10 @@ static std::array<HistoryChartAxis, 3> HistoryChartAxes(const std::vector<Histor
         if (line.hidden) continue;
         HistoryChartAxis& axis = axes[line.meter < 6 ? 0 : size_t(line.meter - 5)];
         axis.visible = true;
-        axis.low = std::min(axis.low, line.low);
-        axis.high = std::max(axis.high, line.high);
+        // Shares left turn the readings' range over.
+        bool left = remaining && line.meter < 6;
+        axis.low = std::min(axis.low, HistoryUiShown(line.meter, left ? line.high : line.low, remaining));
+        axis.high = std::max(axis.high, HistoryUiShown(line.meter, left ? line.low : line.high, remaining));
     }
     auto nice = [](double value) {
         if (!(value > 0) || !std::isfinite(value)) return value;
@@ -23488,11 +23505,13 @@ struct HistoryChartKey {
 // build.
 struct HistoryChart {
     // Data: the view's lines, the period ([readFrom, from) is the previous week while comparing),
-    // the red threshold, the snapshot with its generation, and a message instead of lines
+    // the red threshold, whether percentages show what is left (the Remaining bar mode), the
+    // snapshot with its generation, and a message instead of lines
     std::vector<HistoryUiLine> lines;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     bool compare = false;
     int redThreshold = 90;
+    bool remaining = false;
     std::shared_ptr<const HistorySnapshot> snapshot;
     uint64_t generation = 0;
     std::wstring message;
@@ -23522,10 +23541,11 @@ static float HistoryChartY(const HistoryChartAxis& axis, const D2D1_RECT_F& plot
     return plot.bottom - float(std::clamp(fraction, 0.0, 1.0)) * (plot.bottom - plot.top);
 }
 
-// A reduced point: its pixel column of the plot and its value's height on its line's axis.
+// A reduced point: its pixel column of the plot and its shown value's height on its line's axis.
 static D2D1_POINT_2F HistoryChartPoint(const HistoryChart& c, const HistoryUiLine& line, const HistoryRenderPoint& point) {
     return {c.plot.left + float(point.x) / c.scale,
-            HistoryChartY(c.axes[line.meter < 6 ? 0 : size_t(line.meter - 5)], c.plot, point.value)};
+            HistoryChartY(c.axes[line.meter < 6 ? 0 : size_t(line.meter - 5)], c.plot,
+                          HistoryUiShown(line.meter, point.value, c.remaining))};
 }
 
 // The plot inside the chart's item (mockup .plot): 10 DIP above it, 26 below for the time
@@ -23741,9 +23761,9 @@ static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::ve
         mix(line.chip);
         mix(uint64_t(hit.period));
         mix(point.sourceRow);
-        content.rows.push_back(HistoryChartRow(line.name, HistoryChartColor(line, p), line.stroke, line.meter,
-                                               hit.period, point.value, c.snapshot->samples[point.sourceRow].timeMs,
-                                               now, localTime));
+        content.rows.push_back(HistoryChartRow(line.name, HistoryChartColor(line, p), line.stroke, line.meter, hit.period,
+                                               HistoryUiShown(line.meter, point.value, c.remaining),
+                                               c.snapshot->samples[point.sourceRow].timeMs, now, localTime));
     }
     if (content.rows.empty()) return {};
     content.key = key ? key : 1;
@@ -23799,7 +23819,8 @@ struct HistoryChartScene {
 };
 
 // The chart as drawn (mockup .plot): while a percent line shows, the red band from the threshold
-// to the percent axis's top (high contrast: hatched) and its dashed line and label; percent
+// to the percent axis's top, or in the Remaining bar mode from what it leaves down to the axis's
+// bottom (high contrast: hatched), and its dashed line and label; percent
 // gridlines; each axis's labels (percent left, extra axes in their columns right) and the time
 // labels below; then, clipped, the lines: muted ones first, each line's previous week (dashed,
 // lone readings hollow) before its current period, 3 or 2 DIP wide; and the message over the
@@ -23839,12 +23860,14 @@ static HistoryChartScene HistoryChartBuildScene(const HistoryChart& c, const std
     const HistoryChartAxis& percent = c.axes[0];
     bool percentLine = std::any_of(c.lines.begin(), c.lines.end(),
                                    [](const HistoryUiLine& l) { return !l.hidden && l.meter < 6; });
-    bool threshold = percentLine && c.redThreshold >= percent.low && c.redThreshold <= percent.high;
-    float red = HistoryChartY(percent, plot, c.redThreshold);
-    if (threshold && red > plot.top) {
+    int level = c.remaining ? 100 - c.redThreshold : c.redThreshold;
+    bool threshold = percentLine && level >= percent.low && level <= percent.high;
+    float red = HistoryChartY(percent, plot, level);
+    if (threshold && (c.remaining ? red < plot.bottom : red > plot.top)) {
         add(hc ? HistoryChartMark::Hatch : HistoryChartMark::Fill,
             hc ? UiFade(p.textDisabled, 0.55f) : light ? UiRgb(0xC42B1C, 0.07f) : UiRgb(0xE53935, 0.08f))
-            .rect = {plot.left, plot.top, plot.right, red};
+            .rect = c.remaining ? D2D1_RECT_F{plot.left, red, plot.right, plot.bottom} :
+                                  D2D1_RECT_F{plot.left, plot.top, plot.right, red};
     }
     for (double value : percent.values) {
         line(HistoryChartY(percent, plot, value), hc ? p.textDisabled : light ? UiRgb(0, 0.09f) : UiRgb(0xFFFFFF, 0.08f), 0);
@@ -23866,7 +23889,7 @@ static HistoryChartScene HistoryChartBuildScene(const HistoryChart& c, const std
         if (i) x += c.columns[i];
     }
     if (threshold) {
-        label(std::to_wstring(c.redThreshold) + L"%", {plot.left, red - 16, plot.right - 2, red - 2},
+        label(std::to_wstring(level) + L"%", {plot.left, red - 16, plot.right - 2, red - 2},
               DWRITE_TEXT_ALIGNMENT_TRAILING, hc ? p.text : light ? UiRgb(0xC42B1C) : UiRgb(0xE57373));
     }
     for (const HistoryChartTick& tick : c.ticks) {
@@ -24429,10 +24452,12 @@ struct HistoryController {
             L"value. Values are rounded for display; the CSV keeps them exact. Previous-week times are the original "
             L"sample times. Gaps are not lines and have no readings.\r\n\r\n"
             L"Axes and units\r\n"
-            L"Percentages use the left axis; the shaded band marks your red threshold. Extra usage shows Anthropic "
-            L"budget used (%) and OpenAI credits remaining, which fall as usage rises, on their own axis. Dollar "
-            L"spending shows on the cards; All meters also plots it on its own axis. Accounts without readings in "
-            L"the range are listed under No readings.\r\n\r\n"
+            L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
+            L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
+            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used (%) (left, in the Remaining mode) and OpenAI credits "
+            L"remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
+            L"also plots it on its own axis. Accounts without readings in the range are listed under No "
+            L"readings.\r\n\r\n"
             L"Lines and markers\r\n"
             L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
             L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots "
@@ -24441,9 +24466,10 @@ struct HistoryController {
             L"cards and the CSV use the raw samples.\r\n\r\n"
             L"Cards\r\n"
             L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh "
-            L"poll. Peak is the highest recorded value. Coverage counts connected intervals. Time at or above the red "
-            L"threshold is estimated within those intervals, never across gaps or beyond the last sample. Dollar "
-            L"details report sampled last and peak spending, not total spending in the range. Times are local. Week "
+            L"poll. Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage "
+            L"counts connected intervals. Time at or above the red threshold (at or below what it leaves, in the "
+            L"Remaining mode) is estimated within those intervals, never across gaps or beyond the last sample. "
+            L"Dollar details report sampled last and peak spending, not total spending in the range. Times are local. Week "
             L"comparison uses two elapsed seven-day periods; daylight saving can shift local clock times.\r\n\r\n"
             L"Recording and export\r\n"
             L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice "
@@ -24747,7 +24773,7 @@ struct HistoryController {
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
                                  v.selected >= 0 ? selectedId : 0, compare};
             if (!(key == seriesKey)) {
-                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold};
+                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold, v.remaining};
                 series = HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
                 // A build cut short is never taken for a complete one.
                 seriesKey = ops->Unloading() ? HistorySeriesKey{} : key;
@@ -24795,10 +24821,11 @@ struct HistoryController {
         c.readFrom = readFrom;
         c.compare = compare;
         c.redThreshold = view.redThreshold;
+        c.remaining = view.remaining;
         c.message = view.lines.empty() ? (view.cards.empty() ? L"No readings in this range." :
                                               L"No percentage readings to plot. Dollar spending is shown below.") :
                     hiddenAll ? L"All lines are hidden" : L"";
-        c.axes = HistoryChartAxes(c.lines);
+        c.axes = HistoryChartAxes(c.lines, c.remaining);
         float plotWidth = c.plot.right - c.plot.left;
         HistoryChartLayout(g, c, rect, scale);
         HistoryChartKey key{generation, settingsRevision, from, to, readFrom, view.selected >= 0 ? selectedId : 0,

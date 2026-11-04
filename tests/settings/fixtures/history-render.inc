@@ -425,6 +425,11 @@ static void RunHistoryRenders(const std::wstring& directory) {
                  }
              })),
     };
+    auto falling = TestChartOf(TestMockupBand());
+    falling->ops.settings.settings.barMode = BarMode::Remaining;
+    falling->controller.Load();
+    states.push_back(real(L"Remaining bar mode: shares left fall, the band at the bottom; CC 2 past 100% below 0%; cards",
+                          falling, 790));
     auto filtered = TestChartOf(TestMockupWeek(), [](HistoryController& c) {
         for (size_t i : {size_t(1), size_t(4)}) {
             HistoryUiLine line = c.view.lines[i];

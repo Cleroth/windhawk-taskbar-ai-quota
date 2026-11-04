@@ -284,24 +284,24 @@ static void RunHistoryChartTests() {
             l.hidden = hidden;
             return l;
         };
-        std::array<HistoryChartAxis, 3> axes = HistoryChartAxes({});
+        std::array<HistoryChartAxis, 3> axes = HistoryChartAxes({}, false);
         CHECK(axes[0].visible && axes[0].low == 0 && axes[0].high == 100 && !axes[1].visible && !axes[2].visible);
         CHECK((axes[0].values == std::vector<double>{0, 100, 50}));
         // s-band: 112% -> 125; s-account: 2500 credits -> 3000; hidden dollars leave their axis.
-        axes = HistoryChartAxes({line(1, 0, 112), line(7, 0, 2500), line(6, 0, 11, true)});
+        axes = HistoryChartAxes({line(1, 0, 112), line(7, 0, 2500), line(6, 0, 11, true)}, false);
         CHECK(axes[0].high == 125 && (axes[0].values == std::vector<double>{0, 125, 100, 50}));
         CHECK(!axes[1].visible && axes[2].visible && axes[2].high == 3000 &&
               (axes[2].values == std::vector<double>{0, 1500, 3000}));
         // A hidden percent line leaves the axis's range, never the axis.
-        axes = HistoryChartAxes({line(1, 0, 112, true), line(6, 0, 11), line(5, -3, 40)});
+        axes = HistoryChartAxes({line(1, 0, 112, true), line(6, 0, 11), line(5, -3, 40)}, false);
         CHECK(axes[0].visible && axes[0].high == 100 && axes[0].low == -25 &&
               (axes[0].values == std::vector<double>{0, -25, 100, 50}));
         CHECK(axes[1].visible && axes[1].high == 20 && (axes[1].values == std::vector<double>{0, 10, 20}));
-        CHECK(HistoryChartAxes({line(6, 0, 0.3)})[1].high == 1);
-        CHECK(HistoryChartAxes({line(7, 0, 4100)})[2].high == 5000);
-        CHECK(HistoryChartAxes({line(7, 0, 100)})[2].high == 100);
-        CHECK(HistoryChartAxes({line(7, 0, 100.0001)})[2].high == 200);
-        CHECK(HistoryChartAxes({line(7, -700, 10)})[2].low == -800);
+        CHECK(HistoryChartAxes({line(6, 0, 0.3)}, false)[1].high == 1);
+        CHECK(HistoryChartAxes({line(7, 0, 4100)}, false)[2].high == 5000);
+        CHECK(HistoryChartAxes({line(7, 0, 100)}, false)[2].high == 100);
+        CHECK(HistoryChartAxes({line(7, 0, 100.0001)}, false)[2].high == 200);
+        CHECK(HistoryChartAxes({line(7, -700, 10)}, false)[2].low == -800);
         CHECK(HistoryChartAxisLabel(0, 50) == L"50%" && HistoryChartAxisLabel(0, -25) == L"-25%");
         CHECK(HistoryChartAxisLabel(1, 0.5) == L"0.5 USD" && HistoryChartAxisLabel(1, 1250) == L"1250 USD");
         CHECK(HistoryChartAxisLabel(1, 0.75) == L"0.75 USD" && HistoryChartAxisLabel(2, 0) == L"0 cr");
@@ -315,7 +315,7 @@ static void RunHistoryChartTests() {
             return std::ceil(UiLayoutSize(UiLayout(g, text, kHistoryChartAxisStyle, 10000, false)).width);
         };
         HistoryChart c;
-        c.axes = HistoryChartAxes({});
+        c.axes = HistoryChartAxes({}, false);
         HistoryChartLayout(g, c, kTestChartRect, 1);
         CHECK(TestSameRect(c.plot, {71, 69, 775, 333}) && c.width == 704 && c.scale == 1);
         HistoryUiLine credits;
@@ -324,16 +324,16 @@ static void RunHistoryChartTests() {
         HistoryUiLine dollars = credits;
         dollars.meter = 6;
         dollars.high = 11;
-        c.axes = HistoryChartAxes({credits});
+        c.axes = HistoryChartAxes({credits}, false);
         HistoryChartLayout(g, c, kTestChartRect, 1);
         CHECK(c.columns[2] == width(L"3000 cr") && c.columns[1] == 0);
         CHECK_NEAR(c.plot.right, 801 - 8 - width(L"3000 cr") - 12);
-        c.axes = HistoryChartAxes({credits, dollars});
+        c.axes = HistoryChartAxes({credits, dollars}, false);
         HistoryChartLayout(g, c, kTestChartRect, 1);
         CHECK(c.columns[1] == width(L"20 USD"));
         CHECK_NEAR(c.plot.right, 801 - 8 - width(L"20 USD") - 8 - width(L"3000 cr") - 12);
         // 150%: every edge on a device pixel; the reduction's width in pixels.
-        c.axes = HistoryChartAxes({});
+        c.axes = HistoryChartAxes({}, false);
         HistoryChartLayout(g, c, kTestChartRect, 1.5f);
         for (float edge : {c.plot.left, c.plot.top, c.plot.right, c.plot.bottom}) {
             CHECK(std::abs(edge * 1.5 - std::round(edge * 1.5)) < 1e-3);
@@ -342,7 +342,7 @@ static void RunHistoryChartTests() {
         // Up to 1000%: 50 is too close to 0 (13.2 DIP in a 264 DIP plot), 100 isn't.
         HistoryUiLine high;
         high.high = 1000;
-        c.axes = HistoryChartAxes({high});
+        c.axes = HistoryChartAxes({high}, false);
         HistoryChartLayout(g, c, kTestChartRect, 1);
         CHECK((c.axes[0].values == std::vector<double>{0, 100, 1000}));
         CHECK(HistoryChartY(c.axes[0], c.plot, 1000) == c.plot.top && HistoryChartY(c.axes[0], c.plot, 0) == c.plot.bottom);
@@ -889,6 +889,111 @@ static void RunHistoryChartTests() {
         scene = HistoryChartBuildScene(none, {}, TestPalette(UiThemeKind::Dark));
         CHECK(TestMarks(scene, HistoryChartMark::Fill).empty() && TestLabeled(scene, L"No readings in this range.") &&
               TestLabeled(scene, L"Sat 31"));
+    });
+
+    Run("history chart: the Remaining bar mode plots percentages left, below 0% past the limit, the band from what "
+        "the threshold leaves down to the axis's bottom; readouts and titles left; dollars and credits as recorded", [] {
+        // OAI's weekly quota at 20, 80 and 112% used six hours apart over the last day.
+        std::vector<HistorySample> journal;
+        for (auto [hour, used] : {std::pair{1, 20.0}, std::pair{7, 80.0}, std::pair{13, 112.0}}) {
+            HistorySample sample = TestReading(0x0A, 2, kWeekTo - kHistoryDayMs + ULONGLONG(hour) * kHourMs, {{1, used}});
+            sample.intervalMs = 6 * kHourMs;
+            journal.push_back(sample);
+        }
+        auto w = TestChartOf(journal, [](HistoryController& c) { c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Day)); });
+        CHECK(TestLaid(*w).axes[0].high == 125 && w->controller.chart.lines[0].title == L"OAI \u00B7 Weekly used (%)");
+        // The mode switched in Settings: the next load re-lays the chart.
+        w->ops.settings.settings.barMode = BarMode::Remaining;
+        w->controller.Load();
+        HistoryChart& c = TestLaid(*w);
+        CHECK(c.remaining && c.lines.size() == 1 && c.lines[0].title == L"OAI \u00B7 Weekly left (%)" &&
+              c.lines[0].name == L"OAI \u00B7 Weekly");
+        // The axis from -25 to 100%: 80 and 20% left, then 12% below 0 past the limit, so the line keeps the
+        // recorded crossing times (as in Used mode, mirrored).
+        CHECK(c.axes[0].low == -25 && c.axes[0].high == 100 && c.render[0][0].points.size() == 3);
+        CHECK((c.axes[0].values == std::vector<double>{-25, 0, 50, 100}));
+        const double shares[] = {80, 20, -12};
+        for (size_t i = 0; i < 3; i++) CHECK(TestAt(c, 0, 0, i).y == HistoryChartY(c.axes[0], c.plot, shares[i]));
+        for (auto [i, value] : {std::pair{size_t(0), L"80.0%"}, std::pair{size_t(2), L"-12.0%"}}) {
+            UiTooltipContent readout;
+            w->controller.Hover(TestAt(c, 0, 0, i), readout, TestPalette(UiThemeKind::Dark));
+            CHECK(readout.rows.size() == 1 &&
+                  UiRunsText(readout.rows[0].detail) == std::wstring(L"[Current] ") + value + L" \u00B7 " + TestTime(journal[i].timeMs));
+        }
+        // The band from 10% left (the 90% threshold) down to the bottom, its line and label there.
+        HistoryChartScene scene = HistoryChartBuildScene(c, {}, TestPalette(UiThemeKind::Dark));
+        std::vector<const HistoryChartPrim*> fills = TestMarks(scene, HistoryChartMark::Fill);
+        float height = c.plot.bottom - c.plot.top;
+        float band = height * 35 / 125;
+        CHECK(fills.size() == 1 &&
+              TestSameRect(fills[0]->rect, {c.plot.left, c.plot.bottom - band, c.plot.right, c.plot.bottom}));
+        std::vector<const HistoryChartPrim*> rules = TestMarks(scene, HistoryChartMark::Rule);
+        CHECK(rules.size() == 5 && rules[4]->dash == 4 && rules[4]->points[0].y == std::round(c.plot.bottom - band - 0.5f) + 0.5f);
+        CHECK(TestLabeled(scene, L"10%") && TestLabeled(scene, L"-25%") && !TestLabeled(scene, L"90%") &&
+              !TestLabeled(scene, L"125%"));
+        // Axes alone: a percent line's range turns over (-30 to 112% used is 130 to -12% left); dollars and
+        // credits keep theirs.
+        HistoryUiLine over, dollars, credits;
+        over.meter = 1;
+        over.low = -30;
+        over.high = 112;
+        dollars.meter = 6;
+        dollars.high = 11;
+        credits.meter = 7;
+        credits.high = 2500;
+        std::array<HistoryChartAxis, 3> axes = HistoryChartAxes({over, dollars, credits}, true);
+        CHECK(axes[0].low == -25 && axes[0].high == 150 && (axes[0].values == std::vector<double>{0, -25, 150, 100, 50}) &&
+              axes[1].visible && axes[1].high == 20 && axes[2].visible && axes[2].high == 3000);
+        // OAI's credits on their own axis as recorded; no band without a percent line.
+        auto balance = TestChartOf(TestMockupWeek(), [](HistoryController& h) {
+            h.Command(HistoryUiCommand::Select, 0, 0x0A);
+            h.Command(HistoryUiCommand::View, int(HistoryView::ExtraUsage));
+        });
+        balance->ops.settings.settings.barMode = BarMode::Remaining;
+        balance->controller.Load();
+        HistoryChart& cr = TestLaid(*balance);
+        CHECK(cr.lines.size() == 1 && cr.lines[0].meter == 7 && cr.axes[2].high == 3000);
+        CHECK(TestAt(cr, 0, 0, 0).y == HistoryChartY(cr.axes[2], cr.plot, cr.render[0][0].points[0].value));
+        CHECK(TestMarks(HistoryChartBuildScene(cr, {}, TestPalette(UiThemeKind::Dark)), HistoryChartMark::Fill).empty());
+    });
+
+    Run("history chart: the bar mode switched in Settings takes a live refresh alone: titles, cards, the chart and "
+        "its readout follow from the same snapshot, both ways, also with the pointer on the chart", [] {
+        // OAI's weekly quota at 20 then 80% used over the last day; the clock stays put.
+        std::vector<HistorySample> journal;
+        for (auto [hour, used] : {std::pair{1, 20.0}, std::pair{7, 80.0}}) {
+            HistorySample sample = TestReading(0x0A, 2, kWeekTo - kHistoryDayMs + ULONGLONG(hour) * kHourMs, {{1, used}});
+            sample.intervalMs = 6 * kHourMs;
+            journal.push_back(sample);
+        }
+        auto w = TestChartOf(journal, [](HistoryController& c) { c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Day)); });
+        HistoryController& c = w->controller;
+        TestLaid(*w);
+        const std::shared_ptr<const HistorySnapshot> held = c.snapshot;
+        const uint64_t generation = c.generation;
+        auto check = [&](bool left) {
+            HistoryChart& chart = TestLaid(*w);
+            CHECK(c.snapshot == held && c.generation == generation && c.view.remaining == left && chart.remaining == left);
+            CHECK(c.view.lines.size() == 1 && c.view.lines[0].title == (left ? L"OAI \u00B7 Weekly left (%)" : L"OAI \u00B7 Weekly used (%)"));
+            CHECK(c.view.cards.size() == 1 && c.view.cards[0].value == (left ? L"20%" : L"80%") &&
+                  c.view.cards[0].lines[0] == (left ? L"Lowest 20% \u00B7 " : L"Peak 80% \u00B7 ") + TestTime(journal[1].timeMs));
+            CHECK(TestAt(chart, 0, 0, 0).y == HistoryChartY(chart.axes[0], chart.plot, left ? 80 : 20));
+            UiTooltipContent readout;
+            c.Hover(TestAt(chart, 0, 0, 1), readout, TestPalette(UiThemeKind::Dark));
+            CHECK(readout.rows.size() == 1 && UiRunsText(readout.rows[0].detail) ==
+                                                  (left ? L"[Current] 20.0% \u00B7 " : L"[Current] 80.0% \u00B7 ") + TestTime(journal[1].timeMs));
+            c.Hover(std::nullopt, readout, TestPalette(UiThemeKind::Dark));
+        };
+        check(false);
+        for (auto [mode, pointer] : {std::pair{BarMode::Remaining, false}, std::pair{BarMode::Used, false},
+                                     std::pair{BarMode::Remaining, true}}) {
+            w->ops.settings.settings.barMode = mode;
+            c.Notify();
+            // The window rebuilds; with the pointer on the chart the sample part waits on the deferral timer.
+            CHECK(TestDeliver(c, w->ops, false, pointer));
+            CHECK(c.samplesDirty == pointer && c.timer == pointer && w->ops.timer == pointer);
+            check(mode == BarMode::Remaining);
+        }
     });
 
     Run("history chart: the reduction is kept while its key holds (data generation, plot pixels, period, selection, "

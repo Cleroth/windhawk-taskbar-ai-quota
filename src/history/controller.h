@@ -480,10 +480,12 @@ struct HistoryController {
             L"value. Values are rounded for display; the CSV keeps them exact. Previous-week times are the original "
             L"sample times. Gaps are not lines and have no readings.\r\n\r\n"
             L"Axes and units\r\n"
-            L"Percentages use the left axis; the shaded band marks your red threshold. Extra usage shows Anthropic "
-            L"budget used (%) and OpenAI credits remaining, which fall as usage rises, on their own axis. Dollar "
-            L"spending shows on the cards; All meters also plots it on its own axis. Accounts without readings in "
-            L"the range are listed under No readings.\r\n\r\n"
+            L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
+            L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
+            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used (%) (left, in the Remaining mode) and OpenAI credits "
+            L"remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
+            L"also plots it on its own axis. Accounts without readings in the range are listed under No "
+            L"readings.\r\n\r\n"
             L"Lines and markers\r\n"
             L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
             L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots "
@@ -492,9 +494,10 @@ struct HistoryController {
             L"cards and the CSV use the raw samples.\r\n\r\n"
             L"Cards\r\n"
             L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh "
-            L"poll. Peak is the highest recorded value. Coverage counts connected intervals. Time at or above the red "
-            L"threshold is estimated within those intervals, never across gaps or beyond the last sample. Dollar "
-            L"details report sampled last and peak spending, not total spending in the range. Times are local. Week "
+            L"poll. Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage "
+            L"counts connected intervals. Time at or above the red threshold (at or below what it leaves, in the "
+            L"Remaining mode) is estimated within those intervals, never across gaps or beyond the last sample. "
+            L"Dollar details report sampled last and peak spending, not total spending in the range. Times are local. Week "
             L"comparison uses two elapsed seven-day periods; daylight saving can shift local clock times.\r\n\r\n"
             L"Recording and export\r\n"
             L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice "
@@ -798,7 +801,7 @@ struct HistoryController {
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
                                  v.selected >= 0 ? selectedId : 0, compare};
             if (!(key == seriesKey)) {
-                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold};
+                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold, v.remaining};
                 series = HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
                 // A build cut short is never taken for a complete one.
                 seriesKey = ops->Unloading() ? HistorySeriesKey{} : key;
@@ -846,10 +849,11 @@ struct HistoryController {
         c.readFrom = readFrom;
         c.compare = compare;
         c.redThreshold = view.redThreshold;
+        c.remaining = view.remaining;
         c.message = view.lines.empty() ? (view.cards.empty() ? L"No readings in this range." :
                                               L"No percentage readings to plot. Dollar spending is shown below.") :
                     hiddenAll ? L"All lines are hidden" : L"";
-        c.axes = HistoryChartAxes(c.lines);
+        c.axes = HistoryChartAxes(c.lines, c.remaining);
         float plotWidth = c.plot.right - c.plot.left;
         HistoryChartLayout(g, c, rect, scale);
         HistoryChartKey key{generation, settingsRevision, from, to, readFrom, view.selected >= 0 ? selectedId : 0,
