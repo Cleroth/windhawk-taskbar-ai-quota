@@ -3,7 +3,7 @@
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Burn-up sparkline",
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Usage graph",
                                                  L"Segmented ring", L"Concentric rings", L"Gauge %",
                                                  L"Clock pies",     L"Rounded square",   L"Headline %",
                                                  L"Quota matrix"};
@@ -246,9 +246,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
-        // Sparklines: each chart's width and height, its text size, the extra usage on the weekly
+        // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
         // chart, then the current position cues.
-        y = UiAddSection(items, id, x, y + 20, width, L"Sparkline");
+        y = UiAddSection(items, id, x, y + 20, width, L"Usage graph");
         {
             UiCardSpec spec;
             spec.title = L"Chart width";
@@ -258,7 +258,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Chart height";
-            spec.description = {{L"Percent of the tile\u2019s height, from 0% to 100% used."}};
+            spec.description = {{L"Percent of the tile\u2019s height, from 0% to 100% used, or left in Remaining mode."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHeight);
         }
         {
@@ -276,9 +276,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Extra usage";
-            spec.description = {{L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner, when "
-                                 L"selected for the account and reported: spent in Used mode, left in Remaining mode. "
-                                 L"Percent shows the amount without a limit. Credits never get a chart of their own."}};
+            spec.description = {{L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner "
+                                 L"(bottom-left in Remaining mode), when selected for the account and reported: spent "
+                                 L"in Used mode, left in Remaining mode. Percent shows the amount without a limit. "
+                                 L"Credits never get a chart of their own."}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineExtra, 200,
                                         {{L"Off", int(SparklineExtra::Off)},
                                          {L"Amount", int(SparklineExtra::Amount)},

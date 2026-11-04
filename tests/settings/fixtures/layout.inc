@@ -1865,6 +1865,14 @@ static void RunLayoutTests() {
         const SettingsPreviewOp topAmount = only(late, L"$20.00"), topKey = only(late, L"7d");
         CHECK(NearDip(capTop(topAmount), 11) && NearDip(capTop(topKey), 11) && NearDip(topKey.rect.right, 129) &&
               topAmount.rect.right < topKey.rect.left);
+        // Remaining mode, the reading clear of both: the amount left at the bottom-left, the key at the
+        // top-right.
+        Settings falling = s;
+        falling.barMode = BarMode::Remaining;
+        SettingsPreviewStrip fallingStrip = at(falling, 20, 50);
+        const SettingsPreviewOp leftAmount = only(fallingStrip, L"$30.00"), leftKey = only(fallingStrip, L"7d");
+        CHECK(NearDip(leftAmount.rect.left, 87) && NearDip(baseline(leftAmount), 37) && NearDip(capTop(leftKey), 11) &&
+              NearDip(leftKey.rect.right, 129));
 
         // 24 DIP charts (the weekly one 28 DIPs after the first, at 60): the corner's text clipped 3
         // DIPs in from the plot's right edge, at x 81, like the weekly key's right edge.
@@ -2195,8 +2203,8 @@ static void RunLayoutTests() {
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         // Ten gallery cards, three a row: the tile styles in BarLayout order.
-        const PCWSTR styles[] = {L"Stacked bars",     L"Vertical bars", L"Burn-up sparkline", L"Segmented ring",
-                                 L"Concentric rings", L"Gauge %",       L"Clock pies",        L"Rounded square",
+        const PCWSTR styles[] = {L"Stacked bars",     L"Vertical bars", L"Usage graph", L"Segmented ring",
+                                 L"Concentric rings", L"Gauge %",       L"Clock pies",  L"Rounded square",
                                  L"Headline %",       L"Quota matrix"};
         for (int i = 0; i < 10; i++) {
             const UiItem& card = Control(frame, SettingsField::BarLayout, uint32_t(i));
@@ -2529,7 +2537,7 @@ static void RunLayoutTests() {
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::BarLayout, 2).selected && !Control(frame, SettingsField::BarLayout, 0).selected);
-        CHECK(section(frame, L"Sparkline") && section(frame, L"Current position") && section(frame, L"Identity") &&
+        CHECK(section(frame, L"Usage graph") && section(frame, L"Current position") && section(frame, L"Identity") &&
               section(frame, L"Pace markers") && section(frame, L"Spacing") && !section(frame, L"Matrix") &&
               !section(frame, L"Ring") && !section(frame, L"Headline") && !section(frame, L"Bars"));
         // Each chart's width, its height (percent of the tile), the text size and the extra usage
@@ -2574,11 +2582,12 @@ static void RunLayoutTests() {
               extra.options[1].text == L"Amount" && extra.options[1].value == int(SparklineExtra::Amount) &&
               extra.options[2].text == L"Percent" && extra.options[2].value == int(SparklineExtra::Percent));
         CHECK(HasText(frame, L"Chart width") && HasText(frame, L"Pixels across each quota\u2019s whole window.") &&
-              HasText(frame, L"Chart height") && HasText(frame, L"Percent of the tile\u2019s height, from 0% to 100% used.") &&
+              HasText(frame, L"Chart height") && HasText(frame, L"Percent of the tile\u2019s height, from 0% to 100% used, or left in Remaining mode.") &&
               HasText(frame, L"Extra usage") &&
-              HasText(frame, L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner, when "
-                             L"selected for the account and reported: spent in Used mode, left in Remaining mode. "
-                             L"Percent shows the amount without a limit. Credits never get a chart of their own.") &&
+              HasText(frame, L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner "
+                             L"(bottom-left in Remaining mode), when selected for the account and reported: spent "
+                             L"in Used mode, left in Remaining mode. Percent shows the amount without a limit. "
+                             L"Credits never get a chart of their own.") &&
               !HasText(frame, L"Ring size") && !HasText(frame, L"Pixels from 0% to 100% used."));
         const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
         CHECK(chartWidth.rect.bottom < chartHeight.rect.top && chartHeight.rect.bottom < textSize.rect.top &&
@@ -2631,7 +2640,7 @@ static void RunLayoutTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::BarLayout, 9).selected);
         CHECK(section(frame, L"Matrix") && section(frame, L"Identity") && section(frame, L"Spacing") &&
-              !section(frame, L"Pace markers") && !section(frame, L"Sparkline") && !section(frame, L"Headline"));
+              !section(frame, L"Pace markers") && !section(frame, L"Usage graph") && !section(frame, L"Headline"));
         const UiItem& number = Control(frame, SettingsField::HeadlineFontSize, 1);
         CHECK(number.kind == UiItemKind::Slider && number.minimum == 10 && number.maximum == 24 && number.action.value == 14 &&
               number.enabled && Control(frame, SettingsField::HeadlineFontSize).text == L"14");

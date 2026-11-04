@@ -976,7 +976,7 @@ struct QuotaMeter {
     int matrixRow = 0, matrixColumn = 0;
     // Sparklines: the quota's chart, `sparkLeft` DIPs from the face's left, its shapes
     // (AccountMeters describes them), and its key in the plot's top-right corner instead of its
-    // bottom-right one, clear of the current reading.
+    // bottom-right one.
     double sparkLeft = 0;
     std::array<TileOutline, kSparkShapeCount> spark;
     bool sparkKeyTop = false;
@@ -1011,18 +1011,17 @@ struct AccountMeters {
     std::wstring headlineCountdown;
     // Sparklines: a chart per quota in the mask (QuotaMeter::spark), display.sparklineWidth by
     // faceHeight, side by side in slot order in the face; the face's height is the tile's at the
-    // chart height. A chart plots used % in either bar mode across the window: the lit part up to
-    // now (or the whole plot), the recorded usage, the even-pace diagonal (with pace markers on),
-    // the current time (line and caret, each with its cue on) and reading (ringed or plain), and
-    // the projection at the window's average rate from the current reading to the reset or, over
-    // pace, to the limit, marked in the 100% color. Without a window the plot is lit whole and the
-    // current reading sits at its right edge, alone.
+    // chart height. A chart plots used % across the window, or % left in remaining mode: the lit
+    // part up to now (or the whole plot), the recorded usage, the even-pace diagonal (with pace
+    // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
+    // plain), and the projection at the window's average rate from the current reading to the
+    // reset or, over pace, to the limit, marked in the 100% color. Without a window the plot is
+    // lit whole and the current reading sits at its right edge, alone.
     uint32_t sparkLimitColor = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
-    // The weekly chart's top-left corner (bottom-left with sparkExtraBottom, clear of the current
-    // reading), at the key's font: the account's selected extra usage per display.sparklineExtra,
-    // its key (empty for dollars) and number, in extra usage's usage color (0: the taskbar's text
-    // color). Empty without.
+    // The weekly chart's top-left corner (bottom-left with sparkExtraBottom), at the key's font:
+    // the account's selected extra usage per display.sparklineExtra, its key (empty for dollars)
+    // and number, in extra usage's usage color (0: the taskbar's text color). Empty without.
     std::wstring sparkExtraKey, sparkExtraText;
     uint32_t sparkExtraColor = 0;
     bool sparkExtraBottom = false;
@@ -1402,8 +1401,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                   outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else if (spark) {
-            // Left to right the window, bottom to top 0-100% used inside the insets; positions
-            // snap to quarter DIPs, so they change only when the drawing does.
+            // Left to right the window, bottom to top 0-100% inside the insets, per the bar mode:
+            // used, or left (100 - used); positions snap to quarter DIPs, so they change only when
+            // the drawing does.
             m.sparkLeft = slotPosition * (display.sparklineWidth + kSparkChartGap);
             double width = display.sparklineWidth, height = meters.faceHeight;
             auto snap = [](double dip) { return std::round(dip * 4) / 4; };
@@ -1412,7 +1412,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return snap(std::clamp(((double)timeMs - (double)start) / wu.windowDurationMs, 0.0, 1.0) * width);
             };
             auto yAt = [&](double used) {
-                return snap(height - kSparkInset - (height - 2 * kSparkInset) * std::clamp(used, 0.0, 100.0) / 100);
+                double shown = std::clamp(remainingMode ? 100 - used : used, 0.0, 100.0);
+                return snap(height - kSparkInset - (height - 2 * kSparkInset) * shown / 100);
             };
             // Clockwise from its top, or counterclockwise to cut a hole in a nonzero fill.
             auto circle = [](double x, double y, double r, bool clockwise = true) {
@@ -1528,28 +1529,29 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
             // Text moves to the plot's other edge, clear of the current reading's mark: the key
             // from the bottom-right corner to the top-right, the extra usage from the top-left to
-            // the bottom-left. The placement the mark overlaps the fewest texts in wins, preferring
+            // the bottom-left. Remaining mode's line falls from the top-left, so each starts on the
+            // other edge there. The placement the mark overlaps the fewest texts in wins, preferring
             // fewer moves (the key's first); texts on one edge never overlap.
-            if (readingAt) {
+            auto hit = [&](TextBox box) {
+                if (!readingAt) return false;
                 auto [x, y] = *readingAt;
-                auto hit = [&](TextBox box) {
-                    return box.right > box.left && x + mark > box.left && x - mark < box.right &&
-                           y + mark > boxTop(box) && y - mark < boxTop(box) + cap;
-                };
-                int best = 0, bestHits = 3;
-                for (int placement = 0; placement < 4; placement++) {
-                    TextBox key{keyLeft, width - inset, (placement & 1) != 0};
-                    TextBox extra{inset, extraRight, (placement & 2) == 0};
-                    if (key.top == extra.top && extra.right > extra.left && key.left < extra.right &&
-                        extra.left < key.right) {
-                        continue;
-                    }
-                    int hits = int(hit(key)) + int(hit(extra));
-                    if (hits < bestHits) best = placement, bestHits = hits;
+                return box.right > box.left && x + mark > box.left && x - mark < box.right &&
+                       y + mark > boxTop(box) && y - mark < boxTop(box) + cap;
+            };
+            int best = 0, bestHits = 3;
+            for (int placement = 0; placement < 4; placement++) {
+                bool keyMoved = placement & 1, extraMoved = placement & 2;
+                TextBox key{keyLeft, width - inset, keyMoved != remainingMode};
+                TextBox extra{inset, extraRight, extraMoved == remainingMode};
+                if (key.top == extra.top && extra.right > extra.left && key.left < extra.right &&
+                    extra.left < key.right) {
+                    continue;
                 }
-                m.sparkKeyTop = best & 1;
-                if (extraRight > inset) meters.sparkExtraBottom = best & 2;
+                int hits = int(hit(key)) + int(hit(extra));
+                if (hits < bestHits) best = placement, bestHits = hits;
             }
+            m.sparkKeyTop = bool(best & 1) != remainingMode;
+            if (extraRight > inset) meters.sparkExtraBottom = bool(best & 2) != remainingMode;
             // With their cues on: the now line, inside the plot's edges, stops a DIP short of the
             // text it crosses on either edge; the caret yields to text on the bottom edge.
             if (nowX) {

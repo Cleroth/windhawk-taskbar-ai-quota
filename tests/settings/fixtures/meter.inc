@@ -2090,9 +2090,9 @@ static void RunSparklineTests() {
         // From 0% at the window's start to 100% at its reset, 2 DIPs inside the plot's bottom and top.
         line(spark(Window(30, 9000000)).quotas[0].spark[kSparkPace], 0, 22, 100, 2);
         line(First(Window(30, 9000000), Display(), BarLayout::Sparkline).quotas[0].spark[kSparkPace], 0, 30, 48, 2);
-        // The plot is used %: the same diagonal in remaining mode.
+        // Remaining mode plots what is left: from 100% at the window's start down to 0% at its reset.
         AccountMeters left = spark(Window(30, 9000000), {}, plot([](Settings& s) { s.barMode = BarMode::Remaining; }));
-        line(left.quotas[0].spark[kSparkPace], 0, 22, 100, 2);
+        line(left.quotas[0].spark[kSparkPace], 0, 2, 100, 22);
         // Each chart its own, from its own corner.
         AccountData both = Fresh();
         both.win5h = Window(30, 9000000);
@@ -2213,13 +2213,16 @@ static void RunSparklineTests() {
         // Before the window starts: at its start; past the reset: at its end.
         reading(spark(Window(45, kFiveHours + 3600000), {}, ringed).quotas[0], 0, 13);
         reading(spark(Window(45, -(long long)kMinute), {}, ringed).quotas[0], 100, 13);
-        // Used % in either mode; at the top past 100%.
+        // At the top past 100%. Remaining mode plots what is left (y = 2 + used / 5): 55% at y 11,
+        // at the bottom past 100% used; without a window too.
         MeterDisplay left = plot([](Settings& s) {
             cues(s);
             s.barMode = BarMode::Remaining;
         });
-        reading(spark(Window(45, 9000000), {}, left).quotas[0], 50, 13);
         reading(spark(Window(130, 9000000), {}, ringed).quotas[0], 50, 2);
+        reading(spark(Window(45, 9000000), {}, left).quotas[0], 50, 11);
+        reading(spark(Window(130, 9000000), {}, left).quotas[0], 50, 22);
+        reading(spark({45, 0, 0}, {}, left).quotas[0], 95.9, 11);
         // Without a window: alone, the ring's radius in from the plot's right edge; no diagonal,
         // time, projection or limit.
         AccountMeters alone = spark({45, 0, 0}, {}, ringed);
@@ -2478,6 +2481,22 @@ static void RunSparklineTests() {
         CHECK(!cramped.sparkExtraBottom && !cramped.quotas[1].sparkKeyTop);
         CHECK(cramped.quotas[1].spark[kSparkNowLine].empty());
         CHECK(cramped.quotas[1].spark[kSparkCaret].empty());
+
+        // Remaining mode's text corners: the key at the top takes the line down from 9.6 and leaves the
+        // caret (90% used at 80%, (38.5, 27.25), clear of it); "$30.00" left at the bottom (40% used
+        // half way, (24, 13.25)) takes it up from 22.4 and drops the caret.
+        const MeterDisplay falling = Display(With([](Settings& s) {
+            cues(s);
+            s.barMode = BarMode::Remaining;
+        }));
+        QuotaMeter top5h = spark(Window(90, std::llround(0.2 * kFiveHours)), {}, falling).quotas[0];
+        CHECK(top5h.sparkKeyTop);
+        pieces(top5h.spark[kSparkNowLine], 38, 39, {{9.6, 31}});
+        path(top5h.spark[kSparkCaret], 36.1, 32, {{38.5, 28.8}, {40.9, 32}});
+        AccountMeters leftDollars = weekly(dollars, L"anthropic", 40, 0.5, &falling);
+        CHECK(leftDollars.sparkExtraText == L"$30.00" && leftDollars.sparkExtraBottom && leftDollars.quotas[1].sparkKeyTop);
+        pieces(leftDollars.quotas[1].spark[kSparkNowLine], 23.5, 24.5, {{1, 22.4}});
+        CHECK(leftDollars.quotas[1].spark[kSparkCaret].empty());
     });
 
     Run("sparkline: the projection at the window's average rate, to the reset or to the limit", [] {
@@ -2516,6 +2535,37 @@ static void RunSparklineTests() {
         CHECK(grey.quotas[0].spark[kSparkProjection].empty() && grey.quotas[0].spark[kSparkLimit].empty() &&
               !unmarked(grey.quotas[0]));
         CHECK(grey.quotas[0].color == 0xFF9E9E9E && grey.sparkLimitColor == 0xFFE53935);
+    });
+
+    Run("sparkline: remaining mode plots what is left, its runs over areas from the bottom, down to the limit", [] {
+        // 100% left at the top inset, 0% at the bottom one: y = 2 + used / 5 on the 100 x 24 plot.
+        const MeterDisplay left = plot([](Settings& s) { s.barMode = BarMode::Remaining; });
+        // A run (90% and 70% left, then none past 100% used) and a lone reading (55% left); the area
+        // still rises from the plot's bottom under the run.
+        AccountMeters m = spark(Window(45, 9000000), {{at(0.1), 10, false}, {at(0.2), 30, true}, {at(0.4), 120, true},
+                                                      {at(0.45), 45, false}}, left);
+        const auto& shapes = m.quotas[0].spark;
+        CHECK(shapes[kSparkLines].size() == 1 && shapes[kSparkArea].size() == 1);
+        const TileOutlineFigure& run = shapes[kSparkLines][0];
+        CHECK(run.segments.size() == 2);
+        point(run, 10, 4); point(run.segments[0], 20, 8); point(run.segments[1], 40, 22);
+        const TileOutlineFigure& under = shapes[kSparkArea][0];
+        CHECK(under.segments.size() == 4);
+        point(under, 10, 24); point(under.segments[0], 10, 4); point(under.segments[1], 20, 8);
+        point(under.segments[2], 40, 22); point(under.segments[3], 40, 24);
+        circle(shapes[kSparkDots], 45, 11, 1.5);
+        dot(m.quotas[0], 50, 11);
+        // The projection at the average rate: 45% used half way leaves 10% at the reset, no mark.
+        line(shapes[kSparkProjection], 50, 11, 100, 20);
+        CHECK(shapes[kSparkLimit].empty());
+        // Over pace, 80% used half way runs out at 62.5% of the window: marked on the bottom edge in
+        // the 100% color.
+        AccountMeters over = spark(Window(80, 9000000), {}, left);
+        line(over.quotas[0].spark[kSparkProjection], 50, 18, 62.5, 22);
+        circle(over.quotas[0].spark[kSparkLimit], 62.5, 22, 1.75);
+        CHECK(over.sparkLimitColor == 0xFFE53935 && over.quotas[0].color == 0xFFFB8C00);
+        // The lit part keeps to the time: to x 50 half way.
+        path(shapes[kSparkLit], 3, 0, {{50, 0}, {50, 24}, {3, 24}, {0, 21, 3}, {0, 3}, {3, 0, 3}});
     });
 
     Run("sparkline: extra usage in the weekly chart's top-left corner instead of a chart of its own", [] {
@@ -2847,6 +2897,33 @@ static void RunSparklineTests() {
                                                 Account(L"anthropic", L"A", {false, true, false, true}), unread, 0, 0);
         CHECK(blank.barMask == 0b0010 && blank.sparkExtraText == L"$20.00" && unmarked(blank.quotas[1]) &&
               !blank.sparkExtraBottom && !blank.quotas[1].sparkKeyTop);
+
+        // Remaining mode, whose line falls from the top-left: the key starts at the top-right and the
+        // extra usage at the bottom-left, each moving to the other edge as above. Readings sit at
+        // y = 2 + 0.28 x used on the 48 x 32 chart.
+        const MeterDisplay falling = Display(With([](Settings& s) {
+            cues(s);
+            s.barMode = BarMode::Remaining;
+        }));
+        // 10% used at 80% of the window, (38.5, 4.75), on the key's top box: moved down. 90% there,
+        // (38.5, 27.25), or 10% half way, (24, 4.75): kept at the top.
+        CHECK(!chart(10, 0.8, &falling).sparkKeyTop);
+        CHECK(chart(90, 0.8, &falling).sparkKeyTop);
+        CHECK(chart(10, 0.5, &falling).sparkKeyTop);
+        // The weekly chart, "$30.00" left: 40% used half way, (24, 13.25), hits neither: as placed. Past
+        // 100% half way, (24, 30), on the extra usage: it moves to the top, the key stays. 10% at 80%,
+        // (38.5, 4.75), on the key: it moves to the bottom, beside the extra usage.
+        AccountMeters even = weekly(40, 0.5, SparklineExtra::Amount, &falling);
+        CHECK(even.sparkExtraText == L"$30.00" && even.sparkExtraBottom && even.quotas[1].sparkKeyTop);
+        AccountMeters spent = weekly(110, 0.5, SparklineExtra::Amount, &falling);
+        CHECK(!spent.sparkExtraBottom && spent.quotas[1].sparkKeyTop);
+        AccountMeters light = weekly(10, 0.8, SparklineExtra::Amount, &falling);
+        CHECK(light.sparkExtraBottom && !light.quotas[1].sparkKeyTop);
+        // No reading: as placed.
+        MeterDisplay unreadLeft = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
+        AccountMeters blankLeft = AccountMeterState(unreadLeft, BarLayout::Sparkline,
+                                                    Account(L"anthropic", L"A", {false, true, false, true}), unread, 0, 0);
+        CHECK(unmarked(blankLeft.quotas[1]) && blankLeft.sparkExtraBottom && blankLeft.quotas[1].sparkKeyTop);
     });
 
     Run("sparkline: shape colors per taskbar theme, each chart in its quota's; strokes and drawing order", [] {

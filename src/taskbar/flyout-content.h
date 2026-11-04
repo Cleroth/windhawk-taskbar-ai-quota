@@ -324,9 +324,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.visual.Children().Append(paceLayer);
         details.Children().Append(row.visual);
 
-        // Burn-up chart: card-tinted plot and the even-pace diagonal from the window start to
-        // the reset, under the recorded usage (area, segments, isolated readings), projection,
-        // now line and current point, whose geometry UpdateAccountFlyout sets.
+        // Usage chart: card-tinted plot and the even-pace diagonal from the window start to the
+        // reset (rising; UpdateAccountFlyout turns it in remaining mode), under the recorded
+        // usage (area, segments, isolated readings), projection, now line and current point,
+        // whose geometry UpdateAccountFlyout sets.
         Grid chart;
         chart.Width(kFlyoutChartWidth);
         chart.Height(kFlyoutChartHeight);
@@ -357,6 +358,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         pace.Y2(kFlyoutChartInset);
         paceStroke(pace);
         canvas.Children().Append(pace);
+        row.chartPace = pace;
         row.chartArea = wuxs::Path{};
         canvas.Children().Append(row.chartArea);
         row.chartLines = wuxs::Path{};
@@ -433,12 +435,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         keys.Children().Append(label);
     }
     legendGrid.Children().Append(keys);
-    popup.legendSource = makeText(11, theme.mutedText);
-    singleLine(popup.legendSource);
-    popup.legendSource.TextAlignment(TextAlignment::Right);
-    popup.legendSource.VerticalAlignment(VerticalAlignment::Center);
-    Grid::SetColumn(popup.legendSource, 1);
-    legendGrid.Children().Append(popup.legendSource);
+    TextBlock source = makeText(11, theme.mutedText);
+    singleLine(source);
+    source.Text(L"from local history");
+    source.TextAlignment(TextAlignment::Right);
+    source.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetColumn(source, 1);
+    legendGrid.Children().Append(source);
     Border legend = section(legendGrid);
     legend.Padding({16, 6, 16, 9});
     collapsed(legend);
@@ -680,9 +683,9 @@ static void UpdateAccountFlyout(
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
 
-            // Burn-up chart in place of the bar: used % in either bar mode over the displayed
-            // reading's window, with the projection of the text above. Shapes are regenerated
-            // only when the drawn geometry changes.
+            // Usage chart in place of the bar: used %, or % left in remaining mode, over the
+            // displayed reading's window, with the projection of the text above. Shapes are
+            // regenerated only when the drawn geometry changes.
             const std::optional<BurnUpCurve>& curve = curves[r];
             bool charted = row.chart && curve && !curve->points.empty() &&
                            wu.windowDurationMs > 0 && wu.resetUnixMs > wu.windowDurationMs;
@@ -698,9 +701,9 @@ static void UpdateAccountFlyout(
                                            0.0, 1.0) * kFlyoutChartWidth);
                 };
                 auto yAt = [&](double used) {
+                    double shown = std::clamp(remainingMode ? 100.0 - used : used, 0.0, 100.0);
                     return snap(kFlyoutChartHeight - kFlyoutChartInset -
-                                (kFlyoutChartHeight - 2 * kFlyoutChartInset) *
-                                    std::clamp(used, 0.0, 100.0) / 100.0);
+                                (kFlyoutChartHeight - 2 * kFlyoutChartInset) * shown / 100.0);
                 };
                 FlyoutChartShape shape;
                 const std::vector<BurnUpPoint>& points = curve->points;
@@ -717,8 +720,13 @@ static void UpdateAccountFlyout(
                 shape.now = {xAt(now), yAt(wu.pct)};
                 if (msToLimit >= 0) shape.limit = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
                 shape.color = colorValue;
+                shape.remaining = remainingMode;
 
                 FlyoutChartShape& drawn = row.chartShape;
+                if (shape.remaining != drawn.remaining) {
+                    row.chartPace.Y1(yAt(0));
+                    row.chartPace.Y2(yAt(100));
+                }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.
                     PathGeometry area;
@@ -799,13 +807,7 @@ static void UpdateAccountFlyout(
             show(row.reset, !reset.empty());
         }
 
-        // Charts plot used % in either bar mode; the legend says so when numbers show what is
-        // left.
         show(popup.legend, anyChart);
-        if (anyChart) {
-            popup.legendSource.Text(display.barMode == BarMode::Remaining ?
-                                        L"% used, from local history" : L"from local history");
-        }
         // With charts the details column fits the fixed-width chart and names take the rest;
         // otherwise names fit their widest entry and bars take the rest.
         if (popup.namesColumn && popup.detailsColumn &&

@@ -714,7 +714,7 @@ enum FlyoutRowIndex {
     kFlyoutRowCount,
 };
 
-// A burn-up chart's drawn geometry in plot DIPs. It is the chart's update key: shapes are
+// A usage chart's drawn geometry in plot DIPs. It is the chart's update key: shapes are
 // regenerated only when it changes.
 struct FlyoutChartShape {
     std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
@@ -722,6 +722,7 @@ struct FlyoutChartShape {
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
     winrt::Windows::Foundation::Point limit{-1.f, -1.f};  // Projection end; X < 0 without one.
     uint32_t color = 0;
+    bool remaining = false;  // Plots % left; the even-pace diagonal falls.
 
     bool operator==(const FlyoutChartShape&) const = default;
 };
@@ -746,8 +747,9 @@ struct FlyoutQuotaRow {
     FrameworkElement paceTick{nullptr};
     uint32_t fillColor = 0;
 
-    // Burn-up chart, shown instead of the bar while the row has a recorded curve.
+    // Usage chart, shown instead of the bar while the row has a recorded curve.
     FrameworkElement chart{nullptr};
+    wuxs::Line chartPace{nullptr};
     wuxs::Path chartArea{nullptr};
     wuxs::Path chartLines{nullptr};
     wuxs::Path chartDots{nullptr};
@@ -788,7 +790,6 @@ struct FlyoutPopup {
     ColumnDefinition detailsColumn{nullptr};
     // Chart legend, shown while a row shows a chart.
     FrameworkElement legend{nullptr};
-    TextBlock legendSource{nullptr};
     FrameworkElement notes{nullptr};
     TextBlock extraLimits{nullptr};
     TextBlock extraLines{nullptr};
@@ -6849,7 +6850,7 @@ struct QuotaMeter {
     int matrixRow = 0, matrixColumn = 0;
     // Sparklines: the quota's chart, `sparkLeft` DIPs from the face's left, its shapes
     // (AccountMeters describes them), and its key in the plot's top-right corner instead of its
-    // bottom-right one, clear of the current reading.
+    // bottom-right one.
     double sparkLeft = 0;
     std::array<TileOutline, kSparkShapeCount> spark;
     bool sparkKeyTop = false;
@@ -6884,18 +6885,17 @@ struct AccountMeters {
     std::wstring headlineCountdown;
     // Sparklines: a chart per quota in the mask (QuotaMeter::spark), display.sparklineWidth by
     // faceHeight, side by side in slot order in the face; the face's height is the tile's at the
-    // chart height. A chart plots used % in either bar mode across the window: the lit part up to
-    // now (or the whole plot), the recorded usage, the even-pace diagonal (with pace markers on),
-    // the current time (line and caret, each with its cue on) and reading (ringed or plain), and
-    // the projection at the window's average rate from the current reading to the reset or, over
-    // pace, to the limit, marked in the 100% color. Without a window the plot is lit whole and the
-    // current reading sits at its right edge, alone.
+    // chart height. A chart plots used % across the window, or % left in remaining mode: the lit
+    // part up to now (or the whole plot), the recorded usage, the even-pace diagonal (with pace
+    // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
+    // plain), and the projection at the window's average rate from the current reading to the
+    // reset or, over pace, to the limit, marked in the 100% color. Without a window the plot is
+    // lit whole and the current reading sits at its right edge, alone.
     uint32_t sparkLimitColor = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
-    // The weekly chart's top-left corner (bottom-left with sparkExtraBottom, clear of the current
-    // reading), at the key's font: the account's selected extra usage per display.sparklineExtra,
-    // its key (empty for dollars) and number, in extra usage's usage color (0: the taskbar's text
-    // color). Empty without.
+    // The weekly chart's top-left corner (bottom-left with sparkExtraBottom), at the key's font:
+    // the account's selected extra usage per display.sparklineExtra, its key (empty for dollars)
+    // and number, in extra usage's usage color (0: the taskbar's text color). Empty without.
     std::wstring sparkExtraKey, sparkExtraText;
     uint32_t sparkExtraColor = 0;
     bool sparkExtraBottom = false;
@@ -7275,8 +7275,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                   outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else if (spark) {
-            // Left to right the window, bottom to top 0-100% used inside the insets; positions
-            // snap to quarter DIPs, so they change only when the drawing does.
+            // Left to right the window, bottom to top 0-100% inside the insets, per the bar mode:
+            // used, or left (100 - used); positions snap to quarter DIPs, so they change only when
+            // the drawing does.
             m.sparkLeft = slotPosition * (display.sparklineWidth + kSparkChartGap);
             double width = display.sparklineWidth, height = meters.faceHeight;
             auto snap = [](double dip) { return std::round(dip * 4) / 4; };
@@ -7285,7 +7286,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return snap(std::clamp(((double)timeMs - (double)start) / wu.windowDurationMs, 0.0, 1.0) * width);
             };
             auto yAt = [&](double used) {
-                return snap(height - kSparkInset - (height - 2 * kSparkInset) * std::clamp(used, 0.0, 100.0) / 100);
+                double shown = std::clamp(remainingMode ? 100 - used : used, 0.0, 100.0);
+                return snap(height - kSparkInset - (height - 2 * kSparkInset) * shown / 100);
             };
             // Clockwise from its top, or counterclockwise to cut a hole in a nonzero fill.
             auto circle = [](double x, double y, double r, bool clockwise = true) {
@@ -7401,28 +7403,29 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
             // Text moves to the plot's other edge, clear of the current reading's mark: the key
             // from the bottom-right corner to the top-right, the extra usage from the top-left to
-            // the bottom-left. The placement the mark overlaps the fewest texts in wins, preferring
+            // the bottom-left. Remaining mode's line falls from the top-left, so each starts on the
+            // other edge there. The placement the mark overlaps the fewest texts in wins, preferring
             // fewer moves (the key's first); texts on one edge never overlap.
-            if (readingAt) {
+            auto hit = [&](TextBox box) {
+                if (!readingAt) return false;
                 auto [x, y] = *readingAt;
-                auto hit = [&](TextBox box) {
-                    return box.right > box.left && x + mark > box.left && x - mark < box.right &&
-                           y + mark > boxTop(box) && y - mark < boxTop(box) + cap;
-                };
-                int best = 0, bestHits = 3;
-                for (int placement = 0; placement < 4; placement++) {
-                    TextBox key{keyLeft, width - inset, (placement & 1) != 0};
-                    TextBox extra{inset, extraRight, (placement & 2) == 0};
-                    if (key.top == extra.top && extra.right > extra.left && key.left < extra.right &&
-                        extra.left < key.right) {
-                        continue;
-                    }
-                    int hits = int(hit(key)) + int(hit(extra));
-                    if (hits < bestHits) best = placement, bestHits = hits;
+                return box.right > box.left && x + mark > box.left && x - mark < box.right &&
+                       y + mark > boxTop(box) && y - mark < boxTop(box) + cap;
+            };
+            int best = 0, bestHits = 3;
+            for (int placement = 0; placement < 4; placement++) {
+                bool keyMoved = placement & 1, extraMoved = placement & 2;
+                TextBox key{keyLeft, width - inset, keyMoved != remainingMode};
+                TextBox extra{inset, extraRight, extraMoved == remainingMode};
+                if (key.top == extra.top && extra.right > extra.left && key.left < extra.right &&
+                    extra.left < key.right) {
+                    continue;
                 }
-                m.sparkKeyTop = best & 1;
-                if (extraRight > inset) meters.sparkExtraBottom = best & 2;
+                int hits = int(hit(key)) + int(hit(extra));
+                if (hits < bestHits) best = placement, bestHits = hits;
             }
+            m.sparkKeyTop = bool(best & 1) != remainingMode;
+            if (extraRight > inset) meters.sparkExtraBottom = bool(best & 2) != remainingMode;
             // With their cues on: the now line, inside the plot's edges, stops a DIP short of the
             // text it crosses on either edge; the caret yields to text on the bottom edge.
             if (nowX) {
@@ -8790,9 +8793,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.visual.Children().Append(paceLayer);
         details.Children().Append(row.visual);
 
-        // Burn-up chart: card-tinted plot and the even-pace diagonal from the window start to
-        // the reset, under the recorded usage (area, segments, isolated readings), projection,
-        // now line and current point, whose geometry UpdateAccountFlyout sets.
+        // Usage chart: card-tinted plot and the even-pace diagonal from the window start to the
+        // reset (rising; UpdateAccountFlyout turns it in remaining mode), under the recorded
+        // usage (area, segments, isolated readings), projection, now line and current point,
+        // whose geometry UpdateAccountFlyout sets.
         Grid chart;
         chart.Width(kFlyoutChartWidth);
         chart.Height(kFlyoutChartHeight);
@@ -8823,6 +8827,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         pace.Y2(kFlyoutChartInset);
         paceStroke(pace);
         canvas.Children().Append(pace);
+        row.chartPace = pace;
         row.chartArea = wuxs::Path{};
         canvas.Children().Append(row.chartArea);
         row.chartLines = wuxs::Path{};
@@ -8899,12 +8904,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         keys.Children().Append(label);
     }
     legendGrid.Children().Append(keys);
-    popup.legendSource = makeText(11, theme.mutedText);
-    singleLine(popup.legendSource);
-    popup.legendSource.TextAlignment(TextAlignment::Right);
-    popup.legendSource.VerticalAlignment(VerticalAlignment::Center);
-    Grid::SetColumn(popup.legendSource, 1);
-    legendGrid.Children().Append(popup.legendSource);
+    TextBlock source = makeText(11, theme.mutedText);
+    singleLine(source);
+    source.Text(L"from local history");
+    source.TextAlignment(TextAlignment::Right);
+    source.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetColumn(source, 1);
+    legendGrid.Children().Append(source);
     Border legend = section(legendGrid);
     legend.Padding({16, 6, 16, 9});
     collapsed(legend);
@@ -9146,9 +9152,9 @@ static void UpdateAccountFlyout(
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
 
-            // Burn-up chart in place of the bar: used % in either bar mode over the displayed
-            // reading's window, with the projection of the text above. Shapes are regenerated
-            // only when the drawn geometry changes.
+            // Usage chart in place of the bar: used %, or % left in remaining mode, over the
+            // displayed reading's window, with the projection of the text above. Shapes are
+            // regenerated only when the drawn geometry changes.
             const std::optional<BurnUpCurve>& curve = curves[r];
             bool charted = row.chart && curve && !curve->points.empty() &&
                            wu.windowDurationMs > 0 && wu.resetUnixMs > wu.windowDurationMs;
@@ -9164,9 +9170,9 @@ static void UpdateAccountFlyout(
                                            0.0, 1.0) * kFlyoutChartWidth);
                 };
                 auto yAt = [&](double used) {
+                    double shown = std::clamp(remainingMode ? 100.0 - used : used, 0.0, 100.0);
                     return snap(kFlyoutChartHeight - kFlyoutChartInset -
-                                (kFlyoutChartHeight - 2 * kFlyoutChartInset) *
-                                    std::clamp(used, 0.0, 100.0) / 100.0);
+                                (kFlyoutChartHeight - 2 * kFlyoutChartInset) * shown / 100.0);
                 };
                 FlyoutChartShape shape;
                 const std::vector<BurnUpPoint>& points = curve->points;
@@ -9183,8 +9189,13 @@ static void UpdateAccountFlyout(
                 shape.now = {xAt(now), yAt(wu.pct)};
                 if (msToLimit >= 0) shape.limit = {xAt(now + (ULONGLONG)msToLimit), yAt(100)};
                 shape.color = colorValue;
+                shape.remaining = remainingMode;
 
                 FlyoutChartShape& drawn = row.chartShape;
+                if (shape.remaining != drawn.remaining) {
+                    row.chartPace.Y1(yAt(0));
+                    row.chartPace.Y2(yAt(100));
+                }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.
                     PathGeometry area;
@@ -9265,13 +9276,7 @@ static void UpdateAccountFlyout(
             show(row.reset, !reset.empty());
         }
 
-        // Charts plot used % in either bar mode; the legend says so when numbers show what is
-        // left.
         show(popup.legend, anyChart);
-        if (anyChart) {
-            popup.legendSource.Text(display.barMode == BarMode::Remaining ?
-                                        L"% used, from local history" : L"from local history");
-        }
         // With charts the details column fits the fixed-width chart and names take the rest;
         // otherwise names fit their widest entry and bars take the rest.
         if (popup.namesColumn && popup.detailsColumn &&
@@ -20715,7 +20720,7 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Burn-up sparkline",
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Usage graph",
                                                  L"Segmented ring", L"Concentric rings", L"Gauge %",
                                                  L"Clock pies",     L"Rounded square",   L"Headline %",
                                                  L"Quota matrix"};
@@ -20958,9 +20963,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
-        // Sparklines: each chart's width and height, its text size, the extra usage on the weekly
+        // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
         // chart, then the current position cues.
-        y = UiAddSection(items, id, x, y + 20, width, L"Sparkline");
+        y = UiAddSection(items, id, x, y + 20, width, L"Usage graph");
         {
             UiCardSpec spec;
             spec.title = L"Chart width";
@@ -20970,7 +20975,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Chart height";
-            spec.description = {{L"Percent of the tile\u2019s height, from 0% to 100% used."}};
+            spec.description = {{L"Percent of the tile\u2019s height, from 0% to 100% used, or left in Remaining mode."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHeight);
         }
         {
@@ -20988,9 +20993,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Extra usage";
-            spec.description = {{L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner, when "
-                                 L"selected for the account and reported: spent in Used mode, left in Remaining mode. "
-                                 L"Percent shows the amount without a limit. Credits never get a chart of their own."}};
+            spec.description = {{L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner "
+                                 L"(bottom-left in Remaining mode), when selected for the account and reported: spent "
+                                 L"in Used mode, left in Remaining mode. Percent shows the amount without a limit. "
+                                 L"Credits never get a chart of their own."}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineExtra, 200,
                                         {{L"Off", int(SparklineExtra::Off)},
                                          {L"Amount", int(SparklineExtra::Amount)},
@@ -21565,7 +21571,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.title = L"Quotas on taskbar";
                 spec.description = {{L"Unavailable quotas hide automatically. At least one stays selected."}};
                 if (openai && s.barLayout == BarLayout::Sparkline) {
-                    spec.description[0].text += L" Sparklines show Credits as a number on the 7d chart.";
+                    spec.description[0].text += L" Usage graphs show Credits as a number on the 7d chart.";
                 }
                 spec.trailing = {chipsWidth - 4, 26};
                 if (openai && !account.creditsMax) spec.reason = L"Set Credits max to show the Credits bar.";

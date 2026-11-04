@@ -194,7 +194,7 @@ enum FlyoutRowIndex {
     kFlyoutRowCount,
 };
 
-// A burn-up chart's drawn geometry in plot DIPs. It is the chart's update key: shapes are
+// A usage chart's drawn geometry in plot DIPs. It is the chart's update key: shapes are
 // regenerated only when it changes.
 struct FlyoutChartShape {
     std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
@@ -202,6 +202,7 @@ struct FlyoutChartShape {
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
     winrt::Windows::Foundation::Point limit{-1.f, -1.f};  // Projection end; X < 0 without one.
     uint32_t color = 0;
+    bool remaining = false;  // Plots % left; the even-pace diagonal falls.
 
     bool operator==(const FlyoutChartShape&) const = default;
 };
@@ -226,8 +227,9 @@ struct FlyoutQuotaRow {
     FrameworkElement paceTick{nullptr};
     uint32_t fillColor = 0;
 
-    // Burn-up chart, shown instead of the bar while the row has a recorded curve.
+    // Usage chart, shown instead of the bar while the row has a recorded curve.
     FrameworkElement chart{nullptr};
+    wuxs::Line chartPace{nullptr};
     wuxs::Path chartArea{nullptr};
     wuxs::Path chartLines{nullptr};
     wuxs::Path chartDots{nullptr};
@@ -268,7 +270,6 @@ struct FlyoutPopup {
     ColumnDefinition detailsColumn{nullptr};
     // Chart legend, shown while a row shows a chart.
     FrameworkElement legend{nullptr};
-    TextBlock legendSource{nullptr};
     FrameworkElement notes{nullptr};
     TextBlock extraLimits{nullptr};
     TextBlock extraLines{nullptr};

@@ -396,7 +396,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         // Sparklines (the visual test samples' history; the OpenAI sample has none; OAI's credits
         // and CC 2's extra usage in their weekly charts' corners) and the quota matrix at their
         // defaults and extremes.
-        {L"Burn-up sparkline", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }},
+        {L"Usage graph", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }},
         {L"Sparkline, remaining", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.barMode = BarMode::Remaining; }},
         {L"Sparkline, pace off", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.showPaceTicks = false; }},
         {L"Sparkline, extra off",
