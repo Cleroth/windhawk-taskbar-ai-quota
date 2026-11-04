@@ -46,8 +46,8 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         float textWidth = std::max(x + width - 1 - kPadX - textLeft, 40.0f);
         std::wstring versionLine =
             L"Version " + std::wstring(version) + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
-        PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI and Google Antigravity on "
-                         L"the Windows 11 taskbar.";
+        PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity and GitHub "
+                         L"Copilot on the Windows 11 taskbar.";
         UiTextStyle caption = UiTextStyleFor(UiFont::Caption);
         float versionHeight = UiLayoutSize(UiLayout(g, versionLine, caption, textWidth)).height;
         float summaryHeight = UiLayoutSize(UiLayout(g, summary, caption, textWidth)).height;
@@ -121,15 +121,18 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
             {L"From "},
             {L"Simple Icons", UiRunStyle::Link, UiInk::Inherit,
              {UiActionKind::OpenUrl, 0, L"https://simpleicons.org"}},
-            {L" (CC0 1.0). Google Antigravity uses the Gemini mark.\n"
-             L"Claude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini and Antigravity are "
-             L"trademarks of their respective owners. Logos only identify which account a tile "
-             L"shows."},
+            {L" (CC0 1.0); the GitHub Copilot mark from "},
+            {L"Primer Octicons", UiRunStyle::Link, UiInk::Inherit,
+             {UiActionKind::OpenUrl, 0, L"https://github.com/primer/octicons"}},
+            {L" (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity uses the Gemini mark.\n"
+             L"Claude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub and "
+             L"GitHub Copilot are trademarks of their respective owners. Logos only identify which "
+             L"account a tile shows."},
         };
-        spec.trailing = {3 * kLogo + 2 * kLogoGap, kLogo};
+        spec.trailing = {4 * kLogo + 3 * kLogoGap, kLogo};
         UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
         float logoLeft = card.trailing.left;
-        for (PCWSTR path : {kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath}) {
+        for (PCWSTR path : {kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath, kCopilotLogoPath}) {
             UiItem logo;
             logo.id = id++;
             logo.kind = UiItemKind::Shape;

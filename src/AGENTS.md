@@ -28,7 +28,11 @@ The mod is injected into `explorer.exe`. Execution domains:
   a taskbar UI thread by `StartLogin`): runs an OAuth sign-in in the sign-in window (`g_loginWnd`,
   own message loop), which offers the authorize link to copy or open; never launch a browser
   unprompted. Anthropic codes are pasted there; the OpenAI loopback listener (`g_loginSocket`)
-  notifies that window via `WSAAsyncSelect`. Network and token storage only; NEVER XAML.
+  notifies that window via `WSAAsyncSelect`; GitHub Copilot's device flow shows its code there
+  and polls the token endpoint from that message loop between pumps, never from the window
+  procedure, discarding a result once the window closed; the loop also sets its status line, and
+  a sign-in that ends without a token keeps the window open, not polling, until closed. Network
+  and token storage only; NEVER XAML.
 - **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the custom-drawn settings
   window (`settings/ui-window.h`, a client of the `ui/` toolkit host; toolkit rules:
   [ui/AGENTS.md](ui/AGENTS.md)), persists autosaved configuration to mod LocalStorage and
@@ -124,10 +128,12 @@ first, then reads/updates XAML.
 
 ## Credentials and history storage
 
-The mod owns its OAuth credentials: it signs in (PKCE, public Claude Code / Codex clients), stores
-access+refresh tokens, and refreshes/rotates them itself.
+The mod owns its OAuth credentials: it signs in (PKCE with the public Claude Code / Codex clients;
+GitHub's device flow with copilot.vim's public client), stores access+refresh tokens, and
+refreshes/rotates them itself.
 
-- Never read or write the OpenCode/Claude Code/Codex credential files. Tokens live only in the
+- Never read or write the OpenCode/Claude Code/Codex credential files, or any other app's GitHub
+  or Copilot credentials (Visual Studio, GitHub CLI, Credential Manager). Tokens live only in the
   mod's Windhawk storage (`auth_<identityHash>`), DPAPI-encrypted for the current user via
   `DpapiProtect`/`DpapiUnprotect`; never persist them in plaintext.
 - Refresh tokens go only to provider token endpoints, never as a bearer token to a quota endpoint.

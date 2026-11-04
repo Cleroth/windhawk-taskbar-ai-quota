@@ -802,7 +802,7 @@ static void RunRenders(const std::wstring& directory) {
                 state.focusVisible = true;
                 std::string dragged = std::string("render-accounts-drag-") + theme.name + "-144.png";
                 RenderFrame(g, wic.get(), path(dragged), frame, view, client, 144, theme.input, state, 0, false);
-                CHECK(rows.size() == 3 && UiFindItem(frame, AccountId(4, SettingsField::AccountExpand, 1))->selected);
+                CHECK(rows.size() == 4 && UiFindItem(frame, AccountId(4, SettingsField::AccountExpand, 1))->selected);
             });
 
             // Layout states at 144 DPI. Ring: the taskbar showing the sample (switch on), the
@@ -1004,7 +1004,7 @@ static void RunRenders(const std::wstring& directory) {
                     if (item.kind == UiItemKind::Card && item.action.kind != UiActionKind::None && !linkCard) {
                         linkCard = item.id;
                     }
-                    if (item.runs.size() == 3) logos = item.id;
+                    if (item.runs.size() == 5) logos = item.id;
                     if (item.kind == UiItemKind::Link) license = item.id;
                 }
                 state.hot = {linkCard};

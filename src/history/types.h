@@ -20,13 +20,18 @@ struct HistorySample {
     ULONGLONG timeMs = 0;
     ULONGLONG intervalMs = 0;
     uint64_t session = 0;
-    uint32_t provider = 0;  // 1 Anthropic, 2 OpenAI, 3 Antigravity.
+    uint32_t provider = 0;  // HistoryProviderCode.
     uint32_t failed = 0;
     // Short, weekly, Fable weekly, extra %, 3p short, 3p weekly, extra $, credits.
     std::array<HistoryValue, kHistoryMeterCount> meters{};
     uint64_t checksum = 0;
 };
 static_assert(sizeof(HistorySample) == 240);
+// A provider's journal code: 1 Anthropic, 2 OpenAI, 3 Antigravity, 4 GitHub Copilot; 0 unknown.
+static uint32_t HistoryProviderCode(const std::wstring& provider) {
+    return provider == L"anthropic" ? 1 : provider == L"openai" ? 2 : provider == L"antigravity" ? 3 :
+           provider == L"copilot" ? 4 : 0;
+}
 // The journal's state when it was read: loaded (a damaged or unreadable journal stays loaded with
 // an error status), then its epoch (Clear), revision (load, cap eviction, retention pruning) and
 // append count. Equal stamps hold the same samples.

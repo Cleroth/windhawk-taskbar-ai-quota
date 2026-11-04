@@ -17,7 +17,7 @@ enum class TileIdentity {
 };
 
 struct AccountConfig {
-    std::wstring provider;  // "anthropic", "openai", or "antigravity".
+    std::wstring provider;  // "anthropic", "openai", "antigravity", or "copilot".
     std::wstring label;
     TileIdentity tileIdentity = TileIdentity::LogoBadge;
     std::wstring tileText;  // Optional short text for TileIdentity::Text on tiles.
@@ -261,6 +261,14 @@ struct WindowUsage {
     ULONGLONG windowDurationMs = 0;
 };
 
+// What GitHub Copilot's monthly allowance counts: AI credits, premium requests where billing
+// isn't token based, or legacy Copilot Free's chat requests.
+enum class CopilotUnit {
+    AiCredits,
+    PremiumRequests,
+    ChatRequests,
+};
+
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
@@ -271,8 +279,8 @@ struct AccountData {
     std::wstring plan;
     std::wstring openAiExtraLimitLines;
     std::wstring extraLines;
-    // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI);
-    // -1 when unknown. Left = limit - used. Used may go negative if a credits balance
+    // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI, GitHub
+    // Copilot); -1 when unknown. Left = limit - used. Used may go negative if a credits balance
     // exceeds the configured max.
     double extraUsedAmount = -1;
     double extraLimitAmount = -1;
@@ -280,6 +288,14 @@ struct AccountData {
     bool hasCredits = false;
     bool creditsUnlimited = false;
     double creditsBalance = -1;
+    // GitHub Copilot's monthly allowance in the extra-usage slot: unlimited (an organization's
+    // pooled budget, without a percentage; extraUsedAmount holds its credits used when
+    // reported), that pool used up, the additional usage GitHub reports past a finite allowance,
+    // and the allowance's unit.
+    bool copilotUnlimited = false;
+    bool copilotExhausted = false;
+    double copilotOverage = 0;
+    CopilotUnit copilotUnit = CopilotUnit::AiCredits;
     std::wstring error;
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;

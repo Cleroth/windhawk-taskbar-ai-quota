@@ -279,7 +279,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.description = {{L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner "
                                  L"(bottom-left in Remaining mode), when selected for the account and reported: spent "
                                  L"in Used mode, left in Remaining mode. Percent shows the amount without a limit. "
-                                 L"Credits never get a chart of their own."}};
+                                 L"OpenAI credits never get a chart of their own."}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineExtra, 200,
                                         {{L"Off", int(SparklineExtra::Off)},
                                          {L"Amount", int(SparklineExtra::Amount)},

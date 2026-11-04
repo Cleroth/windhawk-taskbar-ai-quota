@@ -578,6 +578,7 @@ static void UpdateAccountFlyout(
     };
     bool openAi = account.provider == L"openai";
     bool antigravity = account.provider == L"antigravity";
+    bool copilot = account.provider == L"copilot";
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
@@ -600,6 +601,22 @@ static void UpdateAccountFlyout(
         bool creditsBar = openAi && d.extraUsage.pct >= 0 && account.showBars[kExtraUsageBar];
         bool creditsAmount = openAi && !creditsBar &&
                              (d.creditsUnlimited || d.creditsBalance >= 0 || d.hasCredits);
+        // GitHub Copilot's monthly allowance, in its unit, which also names its row: a percentage
+        // of a finite allowance, else an unlimited pooled one without. Credits are fractional:
+        // two decimals at most, trailing zeros trimmed.
+        PCWSTR copilotUnit = CopilotUnitName(d.copilotUnit);
+        std::wstring copilotRow = copilotUnit;
+        copilotRow[0] = wchar_t(towupper(copilotRow[0]));
+        auto copilotAmount = [](double amount) {
+            wchar_t number[64];
+            swprintf(number, ARRAYSIZE(number), L"%.2f", amount);
+            std::wstring trimmed = number;
+            trimmed.erase(trimmed.find_last_not_of(L'0') + 1);
+            if (trimmed.ends_with(L'.')) trimmed.pop_back();
+            return trimmed;
+        };
+        std::wstring copilotOverage = copilot && d.copilotOverage > 0 ?
+            L"\nAdditional usage: " + copilotAmount(d.copilotOverage) + L" " + copilotUnit : L"";
         struct RowSource {
             std::wstring name;
             bool available;
@@ -612,8 +629,8 @@ static void UpdateAccountFlyout(
              antigravity && d.antigravityThirdParty5h.pct >= 0},
             {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
             {L"Fable weekly", d.fableWeek.pct >= 0},
-            {openAi ? L"Credits" : L"Extra usage",
-             openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0},
+            {openAi ? L"Credits" : copilot ? copilotRow : L"Extra usage",
+             openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
         const auto readings = FlyoutRowReadings(d);
 
@@ -642,6 +659,29 @@ static void UpdateAccountFlyout(
                 show(row.amount, false);
                 show(row.reset, false);
                 show(row.projection, false);
+                continue;
+            }
+            if (r == kFlyoutExtraRow && copilot) {
+                // The number turns to the warning color only while the pool is used up.
+                row.number.Foreground(d.copilotExhausted ? theme.warning : theme.text);
+            }
+            if (r == kFlyoutExtraRow && copilot && d.copilotUnlimited) {
+                // No percentage: the pool's credits used when reported, else that it's unlimited,
+                // or used up.
+                bool used = !d.copilotExhausted && d.extraUsedAmount >= 0;
+                row.number.Text(d.copilotExhausted ? L"Used up" : used ? copilotAmount(d.extraUsedAmount) :
+                                                                         L"Unlimited");
+                row.unit.Text(used ? L"used" : L"");
+                row.unit.Foreground(theme.mutedText);
+                show(row.trend, false);
+                show(row.visual, false);
+                show(row.chart, false);
+                show(row.projection, false);
+                row.amount.Text(L"Pooled " + std::wstring(copilotUnit) + L", no per-user limit" + copilotOverage);
+                show(row.amount, true);
+                std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+                row.reset.Text(reset);
+                show(row.reset, !reset.empty());
                 continue;
             }
 
@@ -812,7 +852,11 @@ static void UpdateAccountFlyout(
             }
 
             std::wstring amount;
-            if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
+            if (r == kFlyoutExtraRow && copilot) {
+                // Past the allowance the bar stays full; the additional usage gets its own line.
+                amount = copilotAmount(d.extraUsedAmount) + L" of " + copilotAmount(d.extraLimitAmount) + L" " +
+                         copilotUnit + L" used" + copilotOverage;
+            } else if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
                 // Credits state the balance so the text reads the same in both bar modes.
                 if (openAi) {
                     swprintf(text, ARRAYSIZE(text), L"%.0f left of %.0f credits",

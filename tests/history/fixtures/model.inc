@@ -1,12 +1,13 @@
 // The history model (history/series.h) through its explicit inputs: grouping, accounts without
 // readings, styles, labels, reduction, statistics, account collection, selection and
 // cancellation.
-    const std::array<std::array<std::set<int>, 4>, 3> expected{{
+    const std::array<std::array<std::set<int>, 4>, 4> expected{{
         {{{0}, {1, 2}, {3, 6}, {0, 1, 2, 3, 6}}},
         {{{0}, {1}, {7}, {0, 1, 7}}},
         {{{0, 4}, {1, 5}, {}, {0, 1, 4, 5}}},
+        {{{}, {}, {3}, {3}}},
     }};
-    for (int selected : {-1, 0}) for (uint32_t provider = 1; provider <= 3; ++provider) {
+    for (int selected : {-1, 0}) for (uint32_t provider = 1; provider <= 4; ++provider) {
         for (int view = 0; view < 4; ++view) {
             std::string key = "p" + std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected);
             Run("provider/view inclusion " + key, [&, provider, view, selected] {
@@ -23,6 +24,14 @@
                 if (provider == 3 && (view == 1 || view == 3)) {
                     CHECK(Series(built, 0, 1).hoverTitle.find(L"Gemini weekly") != std::wstring::npos);
                     CHECK(Series(built, 0, 5).hoverTitle.find(L"Claude/GPT weekly") != std::wstring::npos);
+                }
+                // GitHub Copilot's extra percentage is its AI credits.
+                if (provider == 4 && (view == 2 || view == 3)) {
+                    CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · AI credits used (%)");
+                    CHECK(Series(built, 0, 3).legendTitle == (selected < 0 ? L"account-100 · AI credits" : L"AI credits"));
+                }
+                if (provider == 1 && (view == 2 || view == 3)) {
+                    CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · Extra budget used (%)");
                 }
             });
             Run("no readings " + key, [&, provider, view, selected] {
@@ -49,7 +58,7 @@
             });
         }
     }
-    for (int selected : {-1, 0}) for (uint32_t provider : {0U, 4U, UINT_MAX}) for (int view = 0; view < 4; ++view) {
+    for (int selected : {-1, 0}) for (uint32_t provider : {0U, 5U, UINT_MAX}) for (int view = 0; view < 4; ++view) {
         Run("unsupported provider " + std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected), [=] {
             auto state = Model({provider}); AllLanes(state);
             state.view = HistoryView(view); state.selected = selected;

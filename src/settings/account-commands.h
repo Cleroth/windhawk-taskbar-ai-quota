@@ -205,7 +205,7 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     return result;
 }
 
-// Removes the account with its stored sign-in (Anthropic, OpenAI; deleted first), then, when
+// Removes the account with its stored sign-in (all but Antigravity; deleted first), then, when
 // asked, its recorded usage history, outside every settings lock; if that fails the account
 // stays removed and the message says its history was kept. Not during a sign-in.
 static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteHistory) {

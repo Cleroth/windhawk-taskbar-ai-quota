@@ -57,8 +57,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         options.push_back({L"Custom", 0});
         UiCardSpec spec;
         spec.title = L"Cloud poll interval";
-        spec.description = {{L"How often Anthropic and OpenAI are polled. Antigravity polls its "
-                             L"local session every minute."}};
+        spec.description = {{L"How often Anthropic, OpenAI and GitHub Copilot are polled. Antigravity "
+                             L"polls its local session every minute."}};
         // It edits the same field as the custom box: a distinct control id.
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::PollMinutes,
                                     200, std::move(options), custom ? 0 : s.pollMinutes, 8);

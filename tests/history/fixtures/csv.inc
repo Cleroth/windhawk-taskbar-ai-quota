@@ -3,8 +3,8 @@
 // Memory sinks only; no file is written.
 {
     // Anthropic with every kind of value, a failed OpenAI poll, Antigravity with a zero reading,
-    // an unknown provider (every lane), then rows the scope leaves out: no account, before its
-    // start, at its end.
+    // GitHub Copilot (its AI credits lane only), an unknown provider (every lane), then rows the
+    // scope leaves out: no account, before its start, at its end.
     auto sample = [](uint64_t account, uint32_t provider, ULONGLONG time, ULONGLONG interval, uint64_t session) {
         HistorySample s;
         s.accountId = account;
@@ -27,6 +27,9 @@
     HistorySample c = sample(0xC3, 3, baseTime + 3000, 120000, 0x2A);
     c.meters[0].value = 0;
     c.meters[4].value = 99.9;
+    HistorySample e = sample(0xE5, 4, baseTime + 3500, 600000, 9);
+    e.meters[0].value = 11;  // Not a Copilot lane: never exported.
+    e.meters[3] = {33.25, baseTime + 30 * kHistoryDayMs, 30 * kHistoryDayMs};
     HistorySample d = sample(0xD4, 7, baseTime + 4000, 0, 1);
     d.meters[6].value = 0.1;
     HistorySample unowned = sample(0, 1, baseTime + 5000, 60000, 5), before = a, atEnd = a;
@@ -35,13 +38,14 @@
     atEnd.timeMs = baseTime + kHistoryWeekMs;
     atEnd.meters[1].value = 52;
     // In time order, as snapshots hold them.
-    const std::vector<HistorySample> samples = {before, a, b, c, d, unowned, atEnd};
+    const std::vector<HistorySample> samples = {before, a, b, c, e, d, unowned, atEnd};
 
     const std::string header = "timestamp_utc,timestamp_unix_ms,account_id,provider,provider_id,meter_id,unit,value,"
                                "reset_utc,reset_unix_ms,duration_ms,poll_interval_ms,session_id,failed,missing\r\n";
     const std::string at = "2023-11-14T22:13:21.000Z,1700000001000,account_00000000000000a1,anthropic,1,";
     const std::string bt = "2023-11-14T22:13:22.000Z,1700000002000,account_000000000000000b,openai,2,";
     const std::string ct = "2023-11-14T22:13:23.000Z,1700000003000,account_00000000000000c3,antigravity,3,";
+    const std::string et = "2023-11-14T22:13:23.500Z,1700000003500,account_00000000000000e5,copilot,4,";
     const std::string dt = "2023-11-14T22:13:24.000Z,1700000004000,account_00000000000000d4,unknown,7,";
     const std::string accountA =
         at + "short,percent,12.5,2023-11-15T03:13:20.000Z,1700018000000,18000000,60000,session_0000000000000005,0,0\r\n" +
@@ -57,6 +61,7 @@
         ct + "weekly,percent,,,0,0,120000,session_000000000000002a,0,1\r\n" +
         ct + "third_party_short,percent,99.9,,0,0,120000,session_000000000000002a,0,0\r\n" +
         ct + "third_party_weekly,percent,,,0,0,120000,session_000000000000002a,0,1\r\n" +
+        et + "extra_percent,percent,33.25,2023-12-14T22:13:20.000Z,1702592000000,2592000000,600000,session_0000000000000009,0,0\r\n" +
         dt + "short,percent,,,0,0,0,session_0000000000000001,0,1\r\n" +
         dt + "weekly,percent,,,0,0,0,session_0000000000000001,0,1\r\n" +
         dt + "fable_weekly,percent,,,0,0,0,session_0000000000000001,0,1\r\n" +
@@ -99,7 +104,7 @@
             Pieces pieces;
             size_t rows = 0;
             CHECK(direct(scope(account), rows, pieces, Never) == HistoryCsvEnd::Written);
-            CHECK(rows == (account ? 5u : 20u) && pieces.pieces.size() == 1 && pieces.lasts[0] &&
+            CHECK(rows == (account ? 5u : 21u) && pieces.pieces.size() == 1 && pieces.lasts[0] &&
                   pieces.Joined() == expected);
         }
         // A scope from its start (inclusive) to its end (exclusive): the earlier and the last

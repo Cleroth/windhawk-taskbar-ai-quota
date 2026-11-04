@@ -1,4 +1,5 @@
-// Sign-in thread: the sign-in window, OpenAI loopback listener, and code exchange.
+// Sign-in thread: the sign-in window, OpenAI loopback listener, GitHub device flow, and code
+// exchange.
 
 struct LoginRequest {
     std::wstring provider;
@@ -103,21 +104,35 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedSta
 }
 
 // Sign-in window: offers the authorize link to copy or open, then either collects the pasted
-// Anthropic code#state or waits for the OpenAI loopback callback. Runs its own message loop on
-// the login thread; closed on cancel, submit, callback, or unload.
+// Anthropic code#state or waits for the OpenAI loopback callback; for GitHub's device flow it
+// shows the code to enter and a status line while its message loop polls for the token. Runs its
+// own message loop on the login thread; closed on cancel, submit, callback, a granted device
+// sign-in, or unload. A device sign-in that ends otherwise stays open with the reason until closed.
 enum {
     kLoginInstructions = 100,
     kLoginCode,
     kLoginCopyLink,
     kLoginOpenLink,
+    kLoginStatus,
 };
 constexpr UINT kLoginAccept = WM_APP + 1;  // FD_ACCEPT notification for the loopback listener.
 
 struct LoginDialogState {
     // Inputs
-    std::wstring url;
-    SOCKET listener = INVALID_SOCKET;  // Loopback flow when set; otherwise a code is pasted.
+    std::wstring url;  // The authorize link, or the device flow's verification page.
+    // Loopback flow when set; device flow with `poll`; otherwise a code is pasted.
+    SOCKET listener = INVALID_SOCKET;
     std::string expectedState;
+    // Device flow: the code to enter on the verification page, and the token poll the message
+    // loop runs, never the window procedure, once GetTickCount64 reaches nextPollMs. It catches
+    // everything itself, may set `status`, which the loop then shows, and returns the wait before
+    // the next poll, or 0 when the sign-in ended: granted if it set ok, else the window keeps the
+    // status, without polling, until closed. A fixed buffer, so showing it allocates nothing
+    // outside the poll's own catch.
+    std::wstring userCode;
+    std::function<ULONGLONG()> poll;
+    ULONGLONG nextPollMs = 0;
+    wchar_t status[128] = L"";
 
     // Results
     std::wstring pastedCode;
@@ -136,14 +151,20 @@ struct LoginDialogState {
 static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
     auto sc = [dpi](int value) { return ScaleForDpi(value, dpi); };
     constexpr UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    // The device flow's code and status line sit between the instructions and the buttons.
+    int buttonsTop = state.poll ? 128 : 68;
     SetWindowPos(GetDlgItem(hWnd, kLoginInstructions), nullptr, sc(12), sc(10), sc(424), sc(52), flags);
-    SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(12), sc(68), sc(120), sc(30), flags);
-    SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(138), sc(68), sc(120), sc(30), flags);
+    if (state.poll) {
+        SetWindowPos(GetDlgItem(hWnd, kLoginCode), nullptr, sc(12), sc(68), sc(424), sc(24), flags);
+        SetWindowPos(GetDlgItem(hWnd, kLoginStatus), nullptr, sc(12), sc(100), sc(424), sc(20), flags);
+    }
+    SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(12), sc(buttonsTop), sc(120), sc(30), flags);
+    SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
     if (state.edit) {
         SetWindowPos(state.edit, nullptr, sc(12), sc(110), sc(424), sc(24), flags);
         SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr, sc(262), sc(146), sc(84), sc(30), flags);
     }
-    SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr, sc(352), sc(state.edit ? 146 : 68),
+    SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr, sc(352), sc(state.edit ? 146 : buttonsTop),
                  sc(84), sc(30), flags);
 
     NONCLIENTMETRICSW metrics{sizeof(metrics)};
@@ -163,7 +184,7 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
     HFONT font = CreateFontIndirectW(&fontDescription);
     if (font) {
         for (int id : {(int)kLoginInstructions, (int)kLoginCode, (int)kLoginCopyLink,
-                       (int)kLoginOpenLink, IDOK, IDCANCEL}) {
+                       (int)kLoginOpenLink, (int)kLoginStatus, IDOK, IDCANCEL}) {
             if (HWND child = GetDlgItem(hWnd, id)) {
                 SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
             }
@@ -194,9 +215,16 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                                        hInst, nullptr);
             };
             create(0, L"STATIC", L"", SS_LEFT, kLoginInstructions);
-            create(0, L"BUTTON", L"Copy link", WS_TABSTOP | BS_PUSHBUTTON, kLoginCopyLink);
+            if (st->poll) {
+                // Read-only but selectable, so the code can also be copied by hand.
+                create(WS_EX_CLIENTEDGE, L"EDIT", st->userCode.c_str(),
+                       WS_TABSTOP | ES_READONLY | ES_CENTER | ES_AUTOHSCROLL, kLoginCode);
+                create(0, L"STATIC", L"", SS_LEFTNOWORDWRAP | SS_ENDELLIPSIS | SS_NOPREFIX, kLoginStatus);
+            }
+            create(0, L"BUTTON", st->poll ? L"Copy code" : L"Copy link", WS_TABSTOP | BS_PUSHBUTTON,
+                   kLoginCopyLink);
             create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
-            if (st->listener == INVALID_SOCKET) {
+            if (st->listener == INVALID_SOCKET && !st->poll) {
                 st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL,
                                   kLoginCode);
                 create(0, L"BUTTON", L"Sign in", WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK);
@@ -208,12 +236,13 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             if (!st) break;
             switch (LOWORD(wParam)) {
                 case kLoginCopyLink: {
+                    const std::wstring& text = st->poll ? st->userCode : st->url;
                     bool copied = false;
                     if (OpenClipboard(hWnd)) {
-                        size_t bytes = (st->url.size() + 1) * sizeof(wchar_t);
+                        size_t bytes = (text.size() + 1) * sizeof(wchar_t);
                         if (HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
                             if (void* data = GlobalLock(mem)) {
-                                memcpy(data, st->url.c_str(), bytes);
+                                memcpy(data, text.c_str(), bytes);
                                 GlobalUnlock(mem);
                                 copied = EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, mem);
                             }
@@ -325,7 +354,7 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     // The taskbar shows the app icon instead of File Explorer's (ui/window-icon.h).
     UiSetWindowAppId(wnd, kWindowAppId);
     SetAppWindowIcons(wnd, dpi, st.icons);
-    RECT windowRect{0, 0, ScaleForDpi(448, dpi), ScaleForDpi(st.edit ? 186 : 108, dpi)};
+    RECT windowRect{0, 0, ScaleForDpi(448, dpi), ScaleForDpi(st.edit ? 186 : st.poll ? 170 : 108, dpi)};
     using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
     auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
         GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi"));
@@ -342,19 +371,73 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     SetWindowPos(wnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
     LayoutLoginDialog(wnd, st, dpi);
     SetWindowTextW(GetDlgItem(wnd, kLoginInstructions), instructions.c_str());
+    if (st.poll) SetWindowTextW(GetDlgItem(wnd, kLoginStatus), st.status);
     ShowWindow(wnd, SW_SHOW);
     SetForegroundWindow(wnd);
     SetFocus(st.edit ? st.edit : GetDlgItem(wnd, kLoginCopyLink));
 
     MSG msg;
-    while (!g_unloading) {
-        int getMessageResult = GetMessageW(&msg, nullptr, 0, 0);
-        if (getMessageResult <= 0) break;
-        if (!IsDialogMessageW(wnd, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+    if (st.poll) {
+        // Device flow: waits for input, unload or the next poll's time, and polls between pumps.
+        // Input that arrived during a poll's request (Cancel, a close, unload's WM_CLOSE) is
+        // handled before its result counts, so a sign-in closed meanwhile never completes. A
+        // sign-in that ended without a token stops polling and waits, its reason shown, for the
+        // window to close.
+        bool stopped = false;
+        auto pump = [&] {
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) return false;
+                if (!IsDialogMessageW(wnd, &msg)) {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+            return true;
+        };
+        while (!g_unloading && !st.done) {
+            ULONGLONG now = GetTickCount64();
+            if (stopped || now < st.nextPollMs) {
+                MsgWaitForMultipleObjectsEx(1, &g_stopEvent, stopped ? INFINITE : (DWORD)(st.nextPollMs - now),
+                                            QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                if (!pump()) break;
+                continue;
+            }
+            ULONGLONG wait = st.poll();
+            ULONGLONG ended = GetTickCount64();
+            if (!pump() || st.done || g_unloading) {
+                st.ok = false;
+                break;
+            }
+            if (!wait && st.ok) {
+                DestroyWindow(wnd);
+                break;
+            }
+            HWND status = GetDlgItem(wnd, kLoginStatus);
+            wchar_t shown[ARRAYSIZE(st.status)] = L"";
+            GetWindowTextW(status, shown, ARRAYSIZE(shown));
+            if (wcscmp(shown, st.status) != 0) SetWindowTextW(status, st.status);
+            if (!wait) {
+                // Focus moves to Close before the buttons it could be on are disabled.
+                stopped = true;
+                HWND close = GetDlgItem(wnd, IDCANCEL);
+                SetWindowTextW(close, L"Close");
+                SetFocus(close);
+                EnableWindow(GetDlgItem(wnd, kLoginCopyLink), FALSE);
+                EnableWindow(GetDlgItem(wnd, kLoginOpenLink), FALSE);
+                continue;
+            }
+            st.nextPollMs = ended + wait;
         }
-        if (st.done) break;
+    } else {
+        while (!g_unloading) {
+            int getMessageResult = GetMessageW(&msg, nullptr, 0, 0);
+            if (getMessageResult <= 0) break;
+            if (!IsDialogMessageW(wnd, &msg)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            if (st.done) break;
+        }
     }
     g_loginWnd.store(nullptr);
     if (IsWindow(wnd)) DestroyWindow(wnd);
@@ -494,6 +577,156 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     }
 }
 
+// GitHub device flow (copilot.vim's client): the window shows the code to enter on the fixed
+// verification page while its message loop polls the token endpoint at GitHub's interval, until
+// the user approves, the code expires, GitHub ends it or the window closes.
+static void DoCopilotLogin(const LoginRequest& req) {
+    const std::wstring headers =
+        L"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n";
+    std::string clientId = "client_id=" + UrlEncode(WideToUtf8(kCopilotClientId));
+    HttpResult r = HttpRequest(L"POST", L"github.com", L"/login/device/code", kOAuthUserAgent, headers,
+                               clientId + "&scope=" + UrlEncode(WideToUtf8(kCopilotScope)));
+    if (g_unloading) return;
+    std::wstring deviceCode, userCode;
+    double expiresIn = 0, interval = 0;
+    if (r.ok && r.status == 200) {
+        try {
+            auto root = JsonObject::Parse(Utf8ToWide(r.body));
+            deviceCode = GetStr(root, L"device_code");
+            userCode = GetStr(root, L"user_code");
+            expiresIn = GetNum(root, L"expires_in", 0);
+            interval = GetNum(root, L"interval", 5);
+        } catch (...) {}
+    }
+    if (deviceCode.empty() || deviceCode.size() > 1024 || userCode.empty() || userCode.size() > 32 ||
+        !std::isfinite(expiresIn) || expiresIn <= 0 || !std::isfinite(interval)) {
+        std::wstring detail = r.ok ? ParseOAuthError(r.body) : L"network error";
+        if (detail.empty()) detail = L"HTTP " + std::to_wstring(r.status);
+        Wh_Log(L"Sign-in [%s] failed: no device code (%s)", req.label.c_str(), detail.c_str());
+        return;
+    }
+    // At most 15 minutes, polled no faster than every 5 seconds.
+    ULONGLONG deadline = GetTickCount64() + (ULONGLONG)(std::min(expiresIn, 900.0) * 1000);
+    ULONGLONG intervalMs = (ULONGLONG)(std::clamp(interval, 5.0, 900.0) * 1000);
+    std::string pollBody = clientId + "&device_code=" + UrlEncode(WideToUtf8(deviceCode)) +
+                           "&grant_type=" + UrlEncode("urn:ietf:params:oauth:grant-type:device_code");
+
+    StoredToken tok;
+    bool ended = false;  // The poll ended the sign-in and logged why.
+    // The last transient failure: logged once per run of them, and named if the code expires.
+    std::wstring transient;
+    // The status line: waiting, retrying after a transient failure, or a terminal end's reason.
+    static constexpr PCWSTR kWaiting = L"Waiting for approval on GitHub\u2026";
+    static constexpr PCWSTR kExpired = L"The code expired. Close this window and sign in again.";
+    static constexpr PCWSTR kFailed = L"Sign-in failed. See the Windhawk log for details.";
+    LoginDialogState dialog;
+    dialog.url = kCopilotVerificationUrl;
+    dialog.userCode = userCode;
+    dialog.nextPollMs = GetTickCount64() + intervalMs;
+    wcsncpy_s(dialog.status, kWaiting, _TRUNCATE);
+    dialog.poll = [&]() -> ULONGLONG {
+        try {
+            if (GetTickCount64() >= deadline) {
+                ended = true;
+                Wh_Log(L"Sign-in [%s] failed: the code expired%s", req.label.c_str(),
+                       transient.empty() ? L"" : (L" (last poll: " + transient + L")").c_str());
+                wcsncpy_s(dialog.status, kExpired, _TRUNCATE);
+                return 0;
+            }
+            HttpResult poll = HttpRequest(L"POST", kCopilotTokenHost, kCopilotTokenPath, kOAuthUserAgent,
+                                          headers, pollBody);
+            // Network errors, 408, 429, 5xx and unreadable answers keep polling until the
+            // deadline; only GitHub's own error codes end the sign-in.
+            std::wstring failure;
+            if (!poll.ok) {
+                failure = L"network error";
+            } else if (poll.status == 408 || poll.status == 429 || poll.status >= 500) {
+                failure = L"HTTP " + std::to_wstring(poll.status);
+            } else {
+                try {
+                    auto root = JsonObject::Parse(Utf8ToWide(poll.body));
+                    std::wstring access = GetStr(root, L"access_token");
+                    if (poll.status == 200 && !access.empty()) {
+                        tok.accessToken = access;
+                        tok.refreshToken = GetStr(root, L"refresh_token");
+                        double expires = GetNum(root, L"expires_in", 0);
+                        if (expires > 0 && expires < 1e9) tok.expiresMs = NowUnixMs() + (ULONGLONG)(expires * 1000);
+                        dialog.ok = true;
+                        return 0;
+                    }
+                    std::wstring code = GetStr(root, L"error");
+                    if (code == L"slow_down") {
+                        // Only ever slower: 5 seconds more, or GitHub's new interval when longer.
+                        double next = GetNum(root, L"interval", 0);
+                        intervalMs = std::max(intervalMs + 5000,
+                                              next > 0 && next <= 900 ? (ULONGLONG)(next * 1000) : 0ULL);
+                    } else if (code.empty()) {
+                        failure = L"unexpected token response";
+                    } else if (code != L"authorization_pending") {
+                        ended = true;
+                        std::wstring detail = GetStr(root, L"error_description");
+                        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(),
+                               detail.empty() ? code.c_str() : detail.c_str());
+                        PCWSTR reason = code == L"access_denied" ? L"Sign-in was denied on GitHub." :
+                                        code == L"expired_token" ? kExpired : kFailed;
+                        wcsncpy_s(dialog.status, reason, _TRUNCATE);
+                        return 0;
+                    }
+                } catch (winrt::hresult_error const&) {
+                    failure = L"invalid token response";
+                }
+            }
+            // A rate limit only ever slows polling down: 5 seconds more on 429, Retry-After when
+            // longer.
+            if (poll.ok) {
+                ULONGLONG slower = poll.status == 429 ? intervalMs + 5000 : intervalMs;
+                intervalMs = std::max(slower, poll.retryAfterSec > 0 ? (ULONGLONG)poll.retryAfterSec * 1000 : 0ULL);
+            }
+            if (failure.empty()) {
+                transient.clear();
+                wcsncpy_s(dialog.status, kWaiting, _TRUNCATE);
+            } else {
+                if (failure != transient) {
+                    transient = failure;
+                    Wh_Log(L"Sign-in [%s]: %s, polling on", req.label.c_str(), failure.c_str());
+                }
+                failure[0] = wchar_t(towupper(failure[0]));
+                swprintf(dialog.status, ARRAYSIZE(dialog.status), L"%s, retrying\u2026", failure.c_str());
+            }
+            // Wakes at the expiry at the latest, where the next call ends without a request.
+            ULONGLONG now = GetTickCount64();
+            return now < deadline ? std::min(intervalMs, deadline - now) : 1;
+        } catch (...) {
+            ended = true;
+            Wh_Log(L"Sign-in [%s] failed: invalid token response", req.label.c_str());
+            wcsncpy_s(dialog.status, kFailed, _TRUNCATE);
+            return 0;
+        }
+    };
+    std::wstring title = L"Sign in: " + req.label + L" (GitHub Copilot)";
+    std::wstring instructions =
+        L"Open github.com/login/device in a browser, sign in to the GitHub account with Copilot "
+        L"and enter the code below. This window closes once sign-in completes.";
+    bool granted = ShowLoginDialog(title, instructions, dialog);
+    if (g_unloading) return;
+    if (!granted) {
+        if (!ended) Wh_Log(L"Sign-in [%s]: cancelled", req.label.c_str());
+        return;
+    }
+
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    if (saved == TokenSaveResult::Stale) {
+        Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
+        return;
+    }
+    if (saved != TokenSaveResult::Saved) {
+        Wh_Log(L"Sign-in [%s] failed: could not save token", req.label.c_str());
+        return;
+    }
+    RefreshQuotaByIdentity(req.idHash);
+    Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
+}
+
 static DWORD WINAPI LoginThreadProc(LPVOID param) {
     std::unique_ptr<LoginRequest> req(reinterpret_cast<LoginRequest*>(param));
     using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
@@ -511,6 +744,7 @@ static DWORD WINAPI LoginThreadProc(LPVOID param) {
         if (!g_unloading) {
             if (req->provider == L"anthropic") DoAnthropicLogin(*req);
             else if (req->provider == L"openai") DoOpenAiLogin(*req);
+            else if (req->provider == L"copilot") DoCopilotLogin(*req);
         }
     } catch (...) {
         Wh_Log(L"Sign-in: exception");
@@ -535,7 +769,9 @@ static void StartLoginByIdentity(uint64_t identityHash) {
                 return AccountIdentityHash(candidate) == identityHash;
             });
         if (it == g_settings.accounts.end() ||
-            (it->provider != L"anthropic" && it->provider != L"openai")) return;
+            (it->provider != L"anthropic" && it->provider != L"openai" && it->provider != L"copilot")) {
+            return;
+        }
         account = *it;
     }
     bool expected = false;

@@ -321,8 +321,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         barItem.ColumnDefinitions().Append(trackColumn);
 
                         TextBlock barLabel;
-                        barLabel.Text(w == kExtraUsageBar && accounts[i].provider == L"openai" ?
-                                          L"Cr" : kQuotaKeys[w]);
+                        barLabel.Text(QuotaKey(accounts[i].provider, w));
                         barLabel.FontSize(compactLabelFontSize);
                         barLabel.Opacity(0.8);
                         barLabel.IsHitTestVisible(false);

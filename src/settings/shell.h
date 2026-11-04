@@ -67,6 +67,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             {L"OpenAI (ChatGPT/Codex)", 1, L"Sign in with your browser", {{kOpenAiLogoPath, {}, UiInk::Primary}}},
             {L"Google Antigravity", 2, L"Uses the signed-in Antigravity app or CLI",
              {{kGeminiLogoPath, {}, UiInk::Primary}}},
+            {L"GitHub Copilot", 3, L"Sign in with a code on github.com", {{kCopilotLogoPath, {}, UiInk::Primary}}},
         };
         frame.main.push_back(std::move(add));
         if (!view.settings.accounts.empty()) {

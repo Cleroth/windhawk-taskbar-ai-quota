@@ -218,6 +218,12 @@ static void RunBarTests() {
         CHECK(amount(L"anthropic", 100, 60, 50, BarMode::Remaining).quotas[3].text == L"$0.00");
         CHECK(amount(L"openai", 25, 250, 1000).quotas[3].text == L"250");
         CHECK(amount(L"openai", 25, 250, 1000, BarMode::Remaining).quotas[3].text == L"750");
+        // GitHub Copilot's fractional AI credits: whole credits on the taskbar, never dollars.
+        CHECK(amount(L"copilot", 4.1, 12.4, 300).quotas[3].text == L"12");
+        CHECK(amount(L"copilot", 4.1, 12.4, 300, BarMode::Remaining).quotas[3].text == L"288");
+        CHECK(amount(L"copilot", 100, 300, 300, BarMode::Remaining).quotas[3].text == L"0");
+        CHECK(amount(L"copilot", 25, 1500.5, 6000).quotas[3].text == L"1.5k");
+        CHECK(amount(L"copilot", 25, 75, 300, BarMode::Used, false).quotas[3].text == L"25%");
         // From 1,000 on: three significant digits with k or M; amounts that round into the next
         // suffix read as 1 of it.
         auto spent = [&](std::wstring provider, double used) {
@@ -235,6 +241,26 @@ static void RunBarTests() {
         CHECK(amount(L"anthropic", 25, 12.5, 50, BarMode::Used, false).quotas[3].text == L"25%");
         CHECK(amount(L"anthropic", 25, 12.5, 50).quotas[0].text == L"25%");
         CHECK(amount(L"anthropic", -1, 12.5, 50).quotas[3].text.empty());
+    });
+
+    Run("GitHub Copilot: its monthly AI credits get their own usage graph and gauge, keyed Mo; none while unlimited", [] {
+        AccountConfig copilot = Account(L"copilot", L"C", {false, false, false, true});
+        AccountData data = Fresh();
+        data.extraUsage = {40, kNow + 10 * 86400000ULL, 30 * 86400000ULL};
+        data.extraUsedAmount = 120;
+        data.extraLimitAmount = 300;
+        AccountMeters graph = AccountMeterState(Display(), BarLayout::Sparkline, copilot, data, 0, 0);
+        CHECK(graph.barMask == 0b1000 && graph.quotas[3].key == L"Mo" && graph.sparkExtraText.empty());
+        CHECK(!graph.quotas[3].spark[kSparkNow].empty());
+        AccountMeters gauge = AccountMeterState(Display(), BarLayout::Gauge, copilot, data, 0, 0);
+        CHECK(gauge.headline == L"40" && gauge.headlineKey == L"Mo");
+        // An unlimited pooled allowance has no percentage: no meter once read.
+        AccountData pooled = Fresh();
+        pooled.copilotUnlimited = true;
+        pooled.extraUsedAmount = 55;
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Sparkline, BarLayout::Gauge}) {
+            CHECK(AccountMeterState(Display(), layout, copilot, pooled, 0, 0).barMask == 0);
+        }
     });
 
     Run("bar pace: window start, end and middle in both modes", [] {
@@ -3201,13 +3227,14 @@ static void RunMatrixTests() {
         CHECK(waiting.barMask == 0b1111 && waiting.quotas[0].text == L"42%" && waiting.quotas[1].text == L"\u2013" &&
               waiting.quotas[3].text == L"\u2013");
         CHECK(matrix(before, BarMode::Remaining).quotas[2].text == L"\u2013");
-        // Keys on every slot in every style, selected or not; OpenAI's fourth is its credits.
+        // Keys on every slot in every style, selected or not; OpenAI's fourth is its credits,
+        // GitHub Copilot's its monthly AI credits.
         for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
-            for (std::wstring provider : {L"anthropic", L"openai", L"antigravity"}) {
+            for (std::wstring provider : {L"anthropic", L"openai", L"antigravity", L"copilot"}) {
                 AccountMeters m = AccountMeterState(Display(), BarLayout(layout), Account(provider, L"A", {true, false, false, false}),
                                                     Fresh({10, -1, -1, -1}), 0, 0);
                 CHECK(m.quotas[0].key == L"5h" && m.quotas[1].key == L"7d" && m.quotas[2].key == L"Fa");
-                CHECK(m.quotas[3].key == (provider == L"openai" ? L"Cr" : L"Ex"));
+                CHECK(m.quotas[3].key == (provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : L"Ex"));
             }
         }
     });

@@ -103,43 +103,9 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
                 d->extraUsage.pct = utilization;
                 d->extraUsedAmount = std::max(usedCents, 0.0) / 100.0;
                 d->extraLimitAmount = limitCents / 100.0;
-                if (d->extraUsage.resetUnixMs) {
-                    // The API omits the cycle start. Derive the previous monthly billing
-                    // boundary from its authoritative next-reset timestamp.
-                    ULONGLONG resetFileTime =
-                        (d->extraUsage.resetUnixMs + kFileTimeUnixEpochOffsetMs) * 10000;
-                    FILETIME resetFt{(DWORD)resetFileTime, (DWORD)(resetFileTime >> 32)};
-                    SYSTEMTIME start{};
-                    if (FileTimeToSystemTime(&resetFt, &start)) {
-                        if (start.wMonth == 1) {
-                            start.wMonth = 12;
-                            start.wYear--;
-                        } else {
-                            start.wMonth--;
-                        }
-                        static constexpr int kDaysPerMonth[] = {
-                            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-                        int days = kDaysPerMonth[start.wMonth - 1];
-                        if (start.wMonth == 2 &&
-                            (start.wYear % 4 == 0 &&
-                             (start.wYear % 100 != 0 || start.wYear % 400 == 0))) {
-                            days = 29;
-                        }
-                        start.wDay = (WORD)std::min<int>(start.wDay, days);
-                        FILETIME startFt;
-                        if (SystemTimeToFileTime(&start, &startFt)) {
-                            ULONGLONG startFileTime =
-                                ((ULONGLONG)startFt.dwHighDateTime << 32) |
-                                startFt.dwLowDateTime;
-                            ULONGLONG startUnixMs =
-                                startFileTime / 10000 - kFileTimeUnixEpochOffsetMs;
-                            if (startUnixMs < d->extraUsage.resetUnixMs) {
-                                d->extraUsage.windowDurationMs =
-                                    d->extraUsage.resetUnixMs - startUnixMs;
-                            }
-                        }
-                    }
-                }
+                // The API omits the cycle start: the previous monthly billing boundary, from its
+                // authoritative next-reset timestamp.
+                d->extraUsage.windowDurationMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
             }
         }
         bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||

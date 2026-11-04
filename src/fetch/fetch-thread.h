@@ -11,6 +11,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         return;
     }
 
+    bool copilot = acc.provider == L"copilot";
     uint64_t idHash = AccountIdentityHash(acc);
     ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
     StoredToken tok;
@@ -20,13 +21,17 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->error = L"not signed in - click to sign in";
         return;
     }
+    // GitHub refreshes through its own form-encoded endpoint.
+    auto refresh = [&](std::wstring* err, int* retryAfterSec) {
+        return copilot ? RefreshCopilotToken(&tok, err, retryAfterSec) :
+                         RefreshToken(acc.provider, &tok, err, retryAfterSec);
+    };
 
     // Refresh just before expiry so a request rarely races the token going stale.
     if (tok.expiresMs && tok.expiresMs < NowUnixMs() + 60000) {
         std::wstring refreshErr;
         int refreshRetryAfter = 0;
-        TokenEndpointResult refreshResult =
-            RefreshToken(acc.provider, &tok, &refreshErr, &refreshRetryAfter);
+        TokenEndpointResult refreshResult = refresh(&refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
             uint64_t savedIdentity = 0;
             TokenSaveResult saved =
@@ -65,6 +70,13 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
             return HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/usage",
                                L"claude-code/2.1.0", headers);
         }
+        if (copilot) {
+            std::wstring headers = L"Authorization: token " + t.accessToken +
+                                   L"\r\nAccept: application/json"
+                                   L"\r\nX-GitHub-Api-Version: 2025-04-01\r\n";
+            return HttpRequest(L"GET", L"api.github.com", L"/copilot_internal/user", kOAuthUserAgent,
+                               headers);
+        }
         std::wstring headers = L"Authorization: Bearer " + t.accessToken +
                                L"\r\nOrigin: https://chatgpt.com"
                                L"\r\nReferer: https://chatgpt.com/"
@@ -79,8 +91,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     if (r.ok && r.status == 401 && !tok.refreshToken.empty()) {
         std::wstring refreshErr;
         int refreshRetryAfter = 0;
-        TokenEndpointResult refreshResult =
-            RefreshToken(acc.provider, &tok, &refreshErr, &refreshRetryAfter);
+        TokenEndpointResult refreshResult = refresh(&refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
             uint64_t savedIdentity = 0;
             TokenSaveResult saved =
@@ -118,10 +129,24 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->error = L"unauthorized - click to sign in";
         return;
     }
-    if (r.status == 429) {
+    // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
+    // other 403 means the signed-in GitHub account has no Copilot seat or plan.
+    bool githubRateLimited = false;
+    if (copilot && r.status == 403) {
+        std::string message = r.body;
+        std::transform(message.begin(), message.end(), message.begin(),
+                       [](unsigned char c) { return (char)std::tolower(c); });
+        githubRateLimited = r.retryAfterSec > 0 || message.find("rate limit") != std::string::npos;
+    }
+    if (r.status == 429 || githubRateLimited) {
         d->stale = true;
         d->error = L"rate limited by API";
         *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
+        return;
+    }
+    if (copilot && r.status == 403) {
+        d->stale = true;
+        d->error = L"no Copilot access on this GitHub account";
         return;
     }
     if (r.status != 200) {
@@ -132,8 +157,9 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
 
     AccountData fresh;
     std::wstring parseError;
-    bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError)
-                                               : ParseOpenAiUsage(r.body, &fresh, &parseError);
+    bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
+                  copilot ? ParseCopilotUsage(r.body, &fresh, &parseError) :
+                            ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
         d->error = parseError.empty() ? L"unexpected response format" : parseError;
@@ -323,7 +349,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
 
             int retryAfter = 0;
             FetchAccount(accounts[i], &results[i], &retryAfter);
-            if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId) {
+            // The journal rejects samples without a known provider code.
+            uint32_t providerCode = HistoryProviderCode(accounts[i].provider);
+            if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId && providerCode) {
                 HistorySample sample;
                 sample.accountId = accounts[i].historyId;
                 sample.timeMs = NowUnixMs();
@@ -332,8 +360,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 // A settings pause/resume or poll-rate change must not bridge an interval
                 // where recording was disabled, even if it was shorter than two polls.
                 sample.session = historySession ^ (historyContinuityGeneration * 0x9e3779b97f4a7c15ULL);
-                sample.provider = accounts[i].provider == L"anthropic" ? 1 :
-                                  accounts[i].provider == L"openai" ? 2 : 3;
+                sample.provider = providerCode;
                 sample.failed = !results[i].error.empty() || results[i].stale ||
                                 results[i].needsLogin;
                 if (!sample.failed) {
@@ -342,8 +369,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         &results[i].extraUsage, &results[i].antigravityThirdParty5h,
                         &results[i].antigravityThirdPartyWeek};
                     for (size_t m = 0; m < windows.size(); ++m) {
-                        // OpenAI's user-chosen credit ceiling is not a historical quota.
-                        if (m == 3 && sample.provider != 1) continue;
+                        // Anthropic's extra budget and Copilot's AI credits; OpenAI's
+                        // user-chosen credit ceiling is not a historical quota.
+                        if (m == 3 && sample.provider != 1 && sample.provider != 4) continue;
                         sample.meters[m] = {windows[m]->pct, windows[m]->resetUnixMs,
                                             windows[m]->windowDurationMs};
                     }
@@ -539,6 +567,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         } else if (publishedAccounts[i].provider == L"openai" &&
                                    w == kExtraUsageBar) {
                             quotaName = L"credits";
+                        } else if (publishedAccounts[i].provider == L"copilot") {
+                            quotaName = CopilotUnitName(publishedResults[i].copilotUnit);
                         }
                         swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
                                  quotaName, wu.pct);

@@ -540,6 +540,37 @@ static void RunHistoryControllerTests() {
         CHECK(c.view.pill == HistoryUiPill::Off && !c.view.recordingEnabled);
     });
 
+    Run("history controller: a GitHub Copilot account's sidebar value is its AI credits' used %, the others' "
+        "their weekly one", [] {
+        // Work (Copilot, 0xC0) 33% used; Org (Copilot, 0xC2) an unlimited pool without a percentage;
+        // CC 1's extra usage at 80% changes nothing. A removed Copilot account (0xC9) has no poll.
+        TestHistoryOps ops = TestControllerOps();
+        ops.settings.settings.accounts.push_back(TestHistoryAccount(L"copilot", L"Work", 0xC0));
+        ops.settings.settings.accounts.push_back(TestHistoryAccount(L"copilot", L"Org", 0xC2));
+        AccountData credits = TestPoll(-1, kWeekTo - 5 * kMinute);
+        credits.extraUsage.pct = 33;
+        AccountData pooled = TestPoll(-1, kWeekTo - 5 * kMinute);
+        pooled.copilotUnlimited = true;
+        pooled.extraUsedAmount = 12.5;
+        ops.settings.polls.push_back(credits);
+        ops.settings.polls.push_back(pooled);
+        ops.settings.polls[0].extraUsage.pct = 80;
+        ops.journal.push_back(TestReading(0xC0, 4, kWeekFrom + 4 * kHourMs, {{3, 20}}));
+        ops.journal.push_back(TestReading(0xC9, 4, kWeekFrom + 5 * kHourMs, {{3, 25}}));
+        ops.stamp.appended = ops.journal.size();
+        HistoryController c(ops);
+        c.Open();
+        const std::vector<HistoryUiViewAccount>* a = &c.view.accounts;
+        CHECK(a->size() == 4 && (*a)[2].label == L"Work" && (*a)[2].weeklyPct == 33 && (*a)[3].weeklyPct < 0);
+        CHECK((*a)[0].weeklyPct == 47 && (*a)[1].weeklyPct == 62);
+        c.Load();
+        a = &c.view.accounts;
+        CHECK(a->size() == 6 && (*a)[2].provider == 4 && (*a)[2].weeklyPct == 33 && !(*a)[2].stale &&
+              (*a)[2].lastPollMs == kWeekTo - 5 * kMinute && (*a)[3].weeklyPct < 0);
+        CHECK((*a)[0].weeklyPct == 47 && (*a)[1].weeklyPct == 62);
+        CHECK((*a)[5].historyId == 0xC9 && (*a)[5].removed && (*a)[5].provider == 4 && (*a)[5].weeklyPct < 0);
+    });
+
     Run("history controller: navigation slots stay with their history IDs across loads and reorders", [] {
         TestHistoryOps ops = TestControllerOps();
         HistoryController c(ops);

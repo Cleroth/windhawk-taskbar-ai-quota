@@ -380,4 +380,37 @@ static void RunHistoryViewTests() {
         view = TestCards(TestOneAccount(), [](HistoryUiView& v) { v.redThreshold = 70; });
         CHECK(view.cards[0].lines[2] == L"Est. \u226590%: 1.1 h");
     });
+
+    Run("history cards: a GitHub Copilot account's AI credits show in Extra usage and All meters only; its "
+        "provider name and mark, without brand colors", [] {
+        // Work (Copilot, 0xC0): AI credits 20, 35 and 50% used at hours 1-3, and a short-term
+        // value no Copilot meter holds.
+        TestHistory h;
+        h.configured = {TestHistoryAccount(L"copilot", L"Work", 0xC0)};
+        double used[] = {20, 35, 50};
+        for (int i = 0; i < 3; i++) {
+            h.samples.push_back(TestReading(0xC0, 4, kWeekFrom + ULONGLONG(i + 1) * kHourMs, {{3, used[i]}, {0, 9}}));
+        }
+        h.selected = 0;
+        for (HistoryView v : {HistoryView::ExtraUsage, HistoryView::AllMeters}) {
+            h.view = v;
+            HistoryUiView view = TestCards(h);
+            CHECK(view.cards.size() == 1 && view.cards[0].title == L"AI credits" && view.cards[0].value == L"50%" &&
+                  view.noReadings.empty());
+        }
+        for (HistoryView v : {HistoryView::ShortTerm, HistoryView::Weekly}) {
+            h.view = v;
+            HistoryUiView view = TestCards(h);
+            CHECK(view.cards.empty() && view.noReadings.empty());
+        }
+        h.selected = -1;
+        h.view = HistoryView::ExtraUsage;
+        HistoryUiView all = TestCards(h);
+        CHECK(all.cards.size() == 1 && all.cards[0].title == L"Work \u00B7 AI credits");
+        CHECK(HistoryUiProviderName(4) == std::wstring_view(L"GitHub Copilot"));
+        HistoryUiView branded;
+        branded.logoBrands = {true, true};
+        std::vector<UiShapePart> logo = HistoryUiLogo(branded, 4, true);
+        CHECK(logo.size() == 1 && logo[0].path == kCopilotLogoPath && !logo[0].fill);
+    });
 }

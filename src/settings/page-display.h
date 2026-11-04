@@ -78,8 +78,8 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
     {
         UiCardSpec spec;
         spec.title = L"Amounts on extra usage and credits";
-        spec.description = {{L"$ or credits instead of % on Anthropic extra usage and OpenAI credits: spent in "
-                             L"Used mode, left in Remaining mode."}};
+        spec.description = {{L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
+                             L"Copilot AI credits: spent in Used mode, left in Remaining mode."}};
         spec.enabled = text;
         if (!text) spec.reason = bars ? textOff : barsOnly;
         y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);

@@ -40,7 +40,8 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
         if (!sample.accountId || (scope.accountId && sample.accountId != scope.accountId) ||
             sample.timeMs < scope.from || sample.timeMs >= scope.to) continue;
         const char* provider = sample.provider == 1 ? "anthropic" : sample.provider == 2 ? "openai" :
-                               sample.provider == 3 ? "antigravity" : "unknown";
+                               sample.provider == 3 ? "antigravity" : sample.provider == 4 ? "copilot" :
+                                                                                            "unknown";
         // Nonnumeric, non-formula text survives Excel's 15-digit number coercion.
         std::string id = HistoryCsvId("account_", sample.accountId);
         std::string session = HistoryCsvId("session_", sample.session);
@@ -49,7 +50,8 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
             // for each provider's supported meters so exports retain gap information.
             if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
                 (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
-                (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5)) continue;
+                (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5) ||
+                (sample.provider == 4 && meter != 3)) continue;
             const auto& value = sample.meters[meter];
             bool present = HistoryHasValue(sample, int(meter));
             buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +

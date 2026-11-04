@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
-// @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         2.3.0
+// @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
+// @version         2.4.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -23,6 +23,8 @@ Supported providers and quotas:
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
 - **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
 - **Google Antigravity:** short-window and weekly Gemini pools; Claude/GPT pool limits in the details flyout
+- **GitHub Copilot:** the monthly AI credits allowance (Copilot Free's included); the additional
+  usage GitHub reports past it and an organization's pooled credits in the details flyout
 
 Optional notifications warn when usage crosses the configured red threshold.
 
@@ -36,8 +38,9 @@ Optional notifications warn when usage crosses the configured red threshold.
 
 Click the **AI +** taskbar tile (later: right-click a quota column, **Settings**) and choose
 **Add account**. A new account is polled right away; Anthropic and OpenAI use browser
-sign-in, with tokens encrypted locally with Windows DPAPI. Antigravity uses its signed-in
-local app or CLI session, which must remain running.
+sign-in and GitHub Copilot a code you enter on github.com, with tokens encrypted locally with
+Windows DPAPI. Antigravity uses its signed-in local app or CLI session, which must remain
+running.
 
 ## Settings
 
@@ -210,6 +213,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "providers/openai.h"
 
 #include "providers/antigravity.h"
+
+#include "providers/copilot.h"
 
 #include "history/journal.h"
 

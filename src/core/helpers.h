@@ -33,6 +33,8 @@ static ULONGLONG ParseIso8601Ms(const std::wstring& s) {
     if (swscanf(s.c_str(), L"%d-%d-%dT%d:%d:%lf", &y, &mo, &d, &h, &mi, &sec) != 6) {
         return 0;
     }
+    // The seconds must fit the SYSTEMTIME casts; SystemTimeToFileTime rejects other bad fields.
+    if (!(sec >= 0 && sec < 61)) return 0;
 
     SYSTEMTIME st{};
     st.wYear = (WORD)y;
@@ -73,6 +75,34 @@ static ULONGLONG ParseIso8601Ms(const std::wstring& s) {
         }
     }
     return unixMs;
+}
+
+// The length of the calendar month ending at `resetUnixMs`: from the same day and time (UTC) of
+// the month before, that month's last day when it is shorter; 0 without a reset.
+static ULONGLONG MonthBeforeMs(ULONGLONG resetUnixMs) {
+    if (!resetUnixMs) return 0;
+    ULONGLONG resetFileTime = (resetUnixMs + kFileTimeUnixEpochOffsetMs) * 10000;
+    FILETIME resetFt{(DWORD)resetFileTime, (DWORD)(resetFileTime >> 32)};
+    SYSTEMTIME start{};
+    if (!FileTimeToSystemTime(&resetFt, &start)) return 0;
+    if (start.wMonth == 1) {
+        start.wMonth = 12;
+        start.wYear--;
+    } else {
+        start.wMonth--;
+    }
+    static constexpr int kDaysPerMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int days = kDaysPerMonth[start.wMonth - 1];
+    if (start.wMonth == 2 &&
+        (start.wYear % 4 == 0 && (start.wYear % 100 != 0 || start.wYear % 400 == 0))) {
+        days = 29;
+    }
+    start.wDay = (WORD)std::min<int>(start.wDay, days);
+    FILETIME startFt;
+    if (!SystemTimeToFileTime(&start, &startFt)) return 0;
+    ULONGLONG startFileTime = ((ULONGLONG)startFt.dwHighDateTime << 32) | startFt.dwLowDateTime;
+    ULONGLONG startUnixMs = startFileTime / 10000 - kFileTimeUnixEpochOffsetMs;
+    return startUnixMs < resetUnixMs ? resetUnixMs - startUnixMs : 0;
 }
 
 static bool UnixMsToLocalSystemTime(ULONGLONG unixMs, SYSTEMTIME* local) {
@@ -191,5 +221,12 @@ static void OpenUrl(PCWSTR url) {
 static PCWSTR ProviderDisplayName(const std::wstring& provider) {
     if (provider == L"anthropic") return L"Anthropic";
     if (provider == L"openai") return L"OpenAI";
+    if (provider == L"copilot") return L"GitHub Copilot";
     return L"Google Antigravity";
+}
+
+// A GitHub Copilot allowance's unit, as running text names it.
+static PCWSTR CopilotUnitName(CopilotUnit unit) {
+    return unit == CopilotUnit::PremiumRequests ? L"premium requests" :
+           unit == CopilotUnit::ChatRequests ? L"chat requests" : L"AI credits";
 }

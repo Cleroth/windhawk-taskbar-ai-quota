@@ -198,7 +198,7 @@ enum FlyoutRowIndex {
     kFlyoutPoolShortRow,  // Antigravity Claude/GPT pools.
     kFlyoutPoolWeeklyRow,
     kFlyoutFableRow,
-    kFlyoutExtraRow,      // Anthropic extra usage or OpenAI credits.
+    kFlyoutExtraRow,      // Anthropic extra usage, OpenAI credits or GitHub Copilot's AI credits.
     kFlyoutRowCount,
 };
 

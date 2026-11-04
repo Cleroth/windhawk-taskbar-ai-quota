@@ -1943,14 +1943,18 @@ static void RunLayoutTests() {
                   NearDip(k.opacity, 0.6));
         }
         // The first column's keys 6 DIPs after the logo, its numbers 3 DIPs past the widest key
-        // ("Cr" included, from an OpenAI tile); the second column a cell (which reserves "100%") and
-        // 8 DIPs further.
+        // ("Cr" and "Mo" included, from OpenAI and GitHub Copilot tiles); the second column a cell
+        // (which reserves "100%") and 8 DIPs further.
         std::vector<AccountConfig> openai = {Account(L"openai", L"O", {false, false, false, true})};
         openai[0].tileIdentity = TileIdentity::Logo;
         const SettingsPreviewOp kCr = only(StripOf(s, openai, {Fresh({-1, -1, -1, 40})}), L"Cr");
         CHECK(NearDip(kCr.style.size, 9));
+        std::vector<AccountConfig> copilot = {Account(L"copilot", L"C", {false, false, false, true})};
+        copilot[0].tileIdentity = TileIdentity::Logo;
+        const SettingsPreviewOp kMo = only(StripOf(s, copilot, {Fresh({-1, -1, -1, 40})}), L"Mo");
+        CHECK(NearDip(kMo.style.size, 9));
         float keyReserve = 0;
-        for (const SettingsPreviewOp& k : {k5, k7, kFa, kEx, kCr}) keyReserve = std::max(keyReserve, k.rect.right - k.rect.left);
+        for (const SettingsPreviewOp& k : {k5, k7, kFa, kEx, kCr, kMo}) keyReserve = std::max(keyReserve, k.rect.right - k.rect.left);
         keyReserve = std::ceil(keyReserve);
         const float cell = keyReserve + 3 + std::ceil(n100.rect.right - n100.rect.left);
         CHECK(NearDip(k5.rect.left, 32) && NearDip(k7.rect.left, 32));
@@ -2880,7 +2884,7 @@ static void RunLayoutTests() {
               HasText(frame, L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner "
                              L"(bottom-left in Remaining mode), when selected for the account and reported: spent "
                              L"in Used mode, left in Remaining mode. Percent shows the amount without a limit. "
-                             L"Credits never get a chart of their own.") &&
+                             L"OpenAI credits never get a chart of their own.") &&
               !HasText(frame, L"Ring size") && !HasText(frame, L"Pixels from 0% to 100% used."));
         const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
         CHECK(chartWidth.rect.bottom < chartHeight.rect.top && chartHeight.rect.bottom < textSize.rect.top &&
@@ -3202,7 +3206,7 @@ static void RunLayoutTests() {
 
     Run("logos: winding and even-odd fills agree (XAML path data fills even-odd)", [] {
         UiGraphics& g = TestGraphics();
-        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath}) {
+        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath, kCopilotLogoPath}) {
             winrt::com_ptr<ID2D1PathGeometry> evenOdd;
             winrt::check_hresult(g.d2d->CreatePathGeometry(evenOdd.put()));
             winrt::com_ptr<ID2D1GeometrySink> sink;

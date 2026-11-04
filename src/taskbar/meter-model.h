@@ -18,8 +18,15 @@ static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // kHeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
 static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
-// Quota window keys on bar labels and tiles; OpenAI credits show "Cr" instead of "Ex".
+// Quota window keys on bar labels and tiles; QuotaKey gives the extra slot's per provider.
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
+
+// A slot's key: OpenAI credits show "Cr" instead of "Ex", GitHub Copilot's monthly AI credits
+// "Mo".
+static PCWSTR QuotaKey(std::wstring_view provider, int slot) {
+    if (slot != kExtraUsageBar) return kQuotaKeys[slot];
+    return provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : kQuotaKeys[slot];
+}
 // Tile text's cap height, as a share of its font size (Segoe UI Variable).
 static constexpr double kTileCapShare = 0.7;
 // Quota matrix cells: the key, kMatrixKeyGap DIPs, then the number; columns and rows apart by
@@ -1013,7 +1020,7 @@ static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label
 struct QuotaMeter {
     uint32_t color = 0;        // Usage color: follows used % in either bar mode.
     bool paceVisible = false;  // Pace mark shown, in layouts that draw one.
-    std::wstring key;          // Window key (kQuotaKeys; "Cr" for OpenAI credits).
+    std::wstring key;          // Window key (QuotaKey).
 
     // The fill's corner radius toward 100%, in bars, headline segments and ring arcs;
     // its start corners are the track's. Over a full track the fill ends in a straight cut until
@@ -1193,12 +1200,12 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             } else if (amounts) {
                 double amount = remainingMode && data.extraLimitAmount >= 0 ?
                                     data.extraLimitAmount - data.extraUsedAmount : data.extraUsedAmount;
-                dollars = !openAi;
+                dollars = account.provider == L"anthropic";
                 meters.sparkExtraText = TaskbarAmountText(std::max(amount, 0.0), dollars);
             } else {
                 meters.sparkExtraText = TaskbarAmountText(data.creditsBalance, false);
             }
-            if (!dollars) meters.sparkExtraKey = openAi ? L"Cr" : kQuotaKeys[kExtraUsageBar];
+            if (!dollars) meters.sparkExtraKey = QuotaKey(account.provider, kExtraUsageBar);
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
                 UsageColor(extra.pct, meters.stale, yellow, orange, red, display.colorblindMode) : 0;
         }
@@ -1294,7 +1301,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         QuotaMeter& m = meters.quotas[w];
         // Color stays keyed to actual usage so depleting quota still reds out.
         m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.colorblindMode);
-        m.key = w == kExtraUsageBar && account.provider == L"openai" ? L"Cr" : kQuotaKeys[w];
+        m.key = QuotaKey(account.provider, w);
         m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
                         wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
@@ -1342,10 +1349,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 if (w == kExtraUsageBar && display.showExtraBarAmounts &&
                     data.extraLimitAmount >= 0) {
                     // Amount follows the bar mode: spent in used mode, left in remaining mode.
-                    // Dollars for Anthropic, credits for OpenAI.
+                    // Dollars for Anthropic, credits otherwise (whole ones on the taskbar).
                     double amount = remainingMode ? data.extraLimitAmount - data.extraUsedAmount :
                                                     data.extraUsedAmount;
-                    m.text = TaskbarAmountText(std::max(amount, 0.0), account.provider != L"openai");
+                    m.text = TaskbarAmountText(std::max(amount, 0.0), account.provider == L"anthropic");
                 } else {
                     wchar_t text[24];
                     swprintf(text, ARRAYSIZE(text), L"%.0f%%", displayed);

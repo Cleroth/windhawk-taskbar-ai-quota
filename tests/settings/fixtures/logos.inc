@@ -2,19 +2,22 @@
 
 static void RunLogoTests() {
     Run("logo paths are SVG path data", [] {
-        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath}) {
+        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath, kCopilotLogoPath}) {
             std::wstring text = path;
             CHECK(text.size() > 100);
             CHECK(text.front() == L'M' || text.front() == L'm');
             CHECK(text.find_first_not_of(L"0123456789.,- MmLlHhVvCcSsQqTtAaZz") == std::wstring::npos);
         }
+        // Each provider's own mark; Antigravity uses Gemini's.
+        CHECK(ProviderLogoPath(L"anthropic") == kClaudeLogoPath && ProviderLogoPath(L"openai") == kOpenAiLogoPath &&
+              ProviderLogoPath(L"antigravity") == kGeminiLogoPath && ProviderLogoPath(L"copilot") == kCopilotLogoPath);
     });
 
     Run("logo brand colors: Claude's orange and the Gemini gradient, each only when chosen", [] {
         CHECK(!ProviderLogoBrand({}, L"anthropic") && !ProviderLogoBrand({}, L"antigravity"));
-        // OpenAI's mark has none.
+        // OpenAI's and GitHub Copilot's marks have none.
         const LogoBrands both{true, true};
-        CHECK(!ProviderLogoBrand(both, L"openai") && !ProviderLogoBrand(both, L""));
+        CHECK(!ProviderLogoBrand(both, L"openai") && !ProviderLogoBrand(both, L"copilot") && !ProviderLogoBrand(both, L""));
         // Claude: flat #D97757 (hsl(14.8, 63.1%, 59.6%), the Claude symbol's fill).
         const LogoBrand* claude = ProviderLogoBrand({true, false}, L"anthropic");
         CHECK(claude && claude->from == 0xFFD97757 && claude->to == 0xFFD97757);

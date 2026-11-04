@@ -35,7 +35,7 @@ static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<Acco
             if (!rebuild[i] || !account.recordHistory || !account.historyId) continue;
             BurnUpRequest& target = targets.emplace_back();
             target.historyId = account.historyId;
-            target.provider = account.provider == L"anthropic" ? 1 : account.provider == L"openai" ? 2 : 3;
+            target.provider = HistoryProviderCode(account.provider);
             // Back to the earliest start among the displayed windows, within retention.
             const AccountData& data = readings[i];
             for (const WindowUsage* usage : {&data.win5h, &data.winWeek, &data.fableWeek,
@@ -105,7 +105,8 @@ static void InvalidateBurnUpCurves() {
 // reading's. Takes g_settingsMutex then g_dataMutex; call it holding neither.
 static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyoutRow,
                                                   const WindowUsage& reading) {
-    // The extra row's curve is Anthropic extra usage; OpenAI credits are not a windowed meter.
+    // The extra row's curve is Anthropic extra usage or GitHub Copilot's AI credits; OpenAI
+    // credits are not a windowed meter.
     int meter = flyoutRow == kFlyoutFiveHourRow ? 0 : flyoutRow == kFlyoutWeeklyRow ? 1 :
                 flyoutRow == kFlyoutFableRow ? 2 : flyoutRow == kFlyoutExtraRow ? 3 :
                 flyoutRow == kFlyoutPoolShortRow ? 4 : flyoutRow == kFlyoutPoolWeeklyRow ? 5 : -1;
@@ -117,7 +118,7 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
         !account->recordHistory || (account->hidden && g_settings.skipHiddenPolling)) {
         return std::nullopt;
     }
-    uint32_t provider = account->provider == L"anthropic" ? 1 : account->provider == L"openai" ? 2 : 3;
+    uint32_t provider = HistoryProviderCode(account->provider);
     int retentionDays = g_settings.historyRetentionDays;
     std::lock_guard<std::mutex> dataLock(g_dataMutex);
     const BurnUpCurve* curve = FindBurnUpCurve(g_burnUpCurves, g_historyEpoch.load(),

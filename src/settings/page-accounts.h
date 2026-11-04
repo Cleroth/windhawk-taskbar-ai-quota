@@ -54,10 +54,10 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         float top = y + 14, center = x + width / 2;
         float lines = std::clamp(width - 120, 40.0f, 440.0f);
         std::vector<UiRun> first = {{L"Select "}, {L"Add account", UiRunStyle::Strong},
-                                    {L" to show an Anthropic, OpenAI or Google Antigravity account on the "
-                                     L"taskbar."}};
-        std::vector<UiRun> second = {{L"Anthropic and OpenAI sign in through your browser. Google Antigravity "
-                                      L"uses its signed-in app or CLI, which must keep running."}};
+                                    {L" to show an Anthropic, OpenAI, Google Antigravity or GitHub Copilot "
+                                     L"account on the taskbar."}};
+        std::vector<UiRun> second = {{L"Anthropic, OpenAI and GitHub Copilot sign in through your browser. "
+                                      L"Google Antigravity uses its signed-in app or CLI, which must keep running."}};
         float firstHeight = UiLayoutSize(UiRichLayout(g, first, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float secondHeight = UiLayoutSize(UiRichLayout(g, second, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float bottom = top + 1 + kPadTop + kIcon + 6 + kGap + 26 + kGap + firstHeight + kGap + secondHeight +
@@ -125,7 +125,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             return nullptr;
         };
         const bool anthropic = account.provider == L"anthropic", openai = account.provider == L"openai";
-        const bool oauth = anthropic || openai;
+        const bool copilot = account.provider == L"copilot";
+        const bool oauth = anthropic || openai || copilot;
         const bool notPolled = account.hidden && (s.skipHiddenPolling || !s.historyEnabled || !account.recordHistory);
         const bool signInNeeded = oauth && !status.signingIn && (!status.signedIn || status.needsSignIn);
         const int bars = SettingsAccountValue(account, SettingsField::AccountBars);
@@ -164,8 +165,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         logo.id = id++;
         logo.kind = UiItemKind::Shape;
         logo.rect = {x + 41, cy - 11, x + 63, cy + 11};
-        logo.parts.push_back({anthropic ? kClaudeLogoPath : openai ? kOpenAiLogoPath : kGeminiLogoPath, {},
-                              UiInk::Primary});
+        logo.parts.push_back({ProviderLogoPath(account.provider), {}, UiInk::Primary});
         if (const LogoBrand* brand = ProviderLogoBrand(s.logoBrands, account.provider)) {
             logo.parts[0].fill = UiPartFill{UiRgb(brand->from & 0xFFFFFF), UiRgb(brand->to & 0xFFFFFF),
                                             {brand->x0, brand->y0}, {brand->x1, brand->y1}};
@@ -188,10 +188,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     command(SettingsField::AccountHidden, !account.hidden));
         trailing.back().text.clear();
         right -= 40 + 14;
-        static constexpr PCWSTR kKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
         for (int bar = kQuotaBarCount - 1; bar >= 0; bar--) {
             if (!((bars >> bar) & 1)) continue;
-            PCWSTR text = openai && bar == kExtraUsageBar ? L"Cr" : kKeys[bar];
+            PCWSTR text = QuotaKey(account.provider, bar);
             float chipWidth = textWidth(text, UiFont::Caption) + 18;
             UiItem chip;
             chip.id = id++;
@@ -243,7 +242,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         } else {
             stateText = L"Signed in";
         }
-        std::wstring details = anthropic ? L"Anthropic \u00B7 " : openai ? L"OpenAI \u00B7 " : L"Antigravity \u00B7 ";
+        std::wstring details = anthropic ? L"Anthropic \u00B7 " : openai ? L"OpenAI \u00B7 " :
+                               copilot ? L"GitHub Copilot \u00B7 " : L"Antigravity \u00B7 ";
         if (!status.plan.empty()) details += status.plan + L" \u00B7 ";
         float textRight = std::max(right, x + 77 + 40);
         UiItem title;
@@ -302,6 +302,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     quotas.push_back({kExtraUsageBar, L"Extra usage"});
                 } else if (openai) {
                     quotas.push_back({kExtraUsageBar, L"Credits"});
+                } else if (copilot) {
+                    // The monthly allowance is its only quota.
+                    quotas = {{kExtraUsageBar, L"AI credits"}};
                 }
                 float chipsWidth = 0;
                 for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;

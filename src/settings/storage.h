@@ -9,21 +9,23 @@ static bool NormalizeSettings(Settings* s) {
     std::vector<AccountConfig> accounts;
     for (auto& a : s->accounts) {
         if (a.provider != L"anthropic" && a.provider != L"openai" &&
-            a.provider != L"antigravity") {
+            a.provider != L"antigravity" && a.provider != L"copilot") {
             continue;
         }
         // Labels are stable identities; only the native editor trims deliberate edits.
         if (a.label.empty()) {
-            a.label = a.provider == L"anthropic" ? L"A" :
-                      a.provider == L"openai" ? L"O" : L"G";
+            a.label = a.provider == L"anthropic" ? L"A" : a.provider == L"openai" ? L"O" :
+                      a.provider == L"copilot" ? L"C" : L"G";
         }
         if (a.provider != L"anthropic") a.showBars[kFableWeeklyBar] = false;
         if (a.provider != L"openai") a.creditsMax = 0;
         a.creditsMax = std::max(a.creditsMax, 0);
-        // The extra-usage slot is Anthropic monthly extra usage or OpenAI credits vs. max.
+        // The extra-usage slot is Anthropic monthly extra usage, OpenAI credits vs. max, or
+        // GitHub Copilot's monthly AI credits, its only quota.
         if (a.provider == L"antigravity" || (a.provider == L"openai" && a.creditsMax == 0)) {
             a.showBars[kExtraUsageBar] = false;
         }
+        if (a.provider == L"copilot") a.showBars = {false, false, false, true};
         if (!a.showBars[kFiveHourBar] && !a.showBars[kWeeklyBar] &&
             !a.showBars[kFableWeeklyBar] &&
             !a.showBars[kExtraUsageBar]) {

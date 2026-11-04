@@ -4,11 +4,9 @@
 // a PathIcon, which inherits the surrounding text color like a TextBlock. Throws if it fails to
 // load.
 static FrameworkElement LoadProviderLogoShape(std::wstring const& provider, Brush const& fill) {
-    PCWSTR data = provider == L"openai" ? kOpenAiLogoPath :
-                  provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
     std::wstring xaml = fill ? L"<Path" : L"<PathIcon";
     xaml += L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
-    xaml += data;
+    xaml += ProviderLogoPath(provider);
     xaml += L"\"/>";
     auto logo = winrt::Windows::UI::Xaml::Markup::XamlReader::Load(winrt::hstring(xaml))
                     .as<FrameworkElement>();

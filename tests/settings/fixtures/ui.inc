@@ -48,7 +48,7 @@ static void RunUiTests() {
         CHECK_NEAR(bounds.top, 0);
         CHECK_NEAR(bounds.right, 24);
         CHECK_NEAR(bounds.bottom, 24);
-        for (PCWSTR path : {kClaudeLogoPath, kOpenAiLogoPath}) {
+        for (PCWSTR path : {kClaudeLogoPath, kOpenAiLogoPath, kCopilotLogoPath}) {
             CHECK(SUCCEEDED(UiPathGeometry(g, path)->GetBounds(nullptr, &bounds)));
             CHECK(bounds.left > -0.5f && bounds.top > -0.5f && bounds.right < 24.5f &&
                   bounds.bottom < 24.5f && bounds.right - bounds.left > 20);
@@ -288,7 +288,7 @@ static void RunUiTests() {
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota",
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new",
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history",
-            L"https://simpleicons.org", L"https://opensource.org/license/mit"};
+            L"https://simpleicons.org", L"https://github.com/primer/octicons", L"https://opensource.org/license/mit"};
         CHECK(urls == expected);
         bool version = std::any_of(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
             return !item.runs.empty() && item.runs[0].text.starts_with(L"Version 9.8.7");
@@ -302,12 +302,13 @@ static void RunUiTests() {
                 CHECK_NEAR(item.rect.bottom - item.rect.top, 62);
                 linkCards++;
             }
-            if (item.font == UiFont::Caption && !item.runs.empty() && item.runs.size() == 3) {
+            if (item.font == UiFont::Caption && !item.runs.empty() && item.runs.size() == 5) {
                 CHECK(item.rect.bottom - item.rect.top >= 48);
             }
         }
         CHECK(linkCards == 3);
-        CHECK(UiFocusStops(frame).size() == 6 + 3 + 2);
+        // The logos' two links, then the license's.
+        CHECK(UiFocusStops(frame).size() == 6 + 3 + 3);
     });
 
     Run("controls: toggles, dropdowns and number boxes are tab stops; spin buttons click only", [] {

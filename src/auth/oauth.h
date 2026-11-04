@@ -1,7 +1,8 @@
 // OAuth client constants, authorize URLs, and token-endpoint exchange and refresh.
 
-// Public OAuth clients used by the official CLIs; the mod runs the same flows so a sign-in
-// here is independent of (and never touches) OpenCode/Claude Code/Codex credential files.
+// Public OAuth clients used by the official CLIs and GitHub's copilot.vim; the mod runs the same
+// flows so a sign-in here is independent of (and never touches) OpenCode/Claude Code/Codex or any
+// other app's GitHub credentials.
 static constexpr PCWSTR kAnthropicClientId = L"9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 static constexpr PCWSTR kAnthropicTokenHost = L"console.anthropic.com";
 static constexpr PCWSTR kAnthropicTokenPath = L"/v1/oauth/token";
@@ -12,6 +13,12 @@ static constexpr PCWSTR kOpenAiTokenHost = L"auth.openai.com";
 static constexpr PCWSTR kOpenAiTokenPath = L"/oauth/token";
 static constexpr PCWSTR kOpenAiScope =
     L"openid profile email offline_access api.connectors.read api.connectors.invoke";
+// GitHub's device flow; sign-in and refresh share the token endpoint.
+static constexpr PCWSTR kCopilotClientId = L"Iv1.b507a08c87ecfe98";
+static constexpr PCWSTR kCopilotScope = L"read:user";
+static constexpr PCWSTR kCopilotTokenHost = L"github.com";
+static constexpr PCWSTR kCopilotTokenPath = L"/login/oauth/access_token";
+static constexpr PCWSTR kCopilotVerificationUrl = L"https://github.com/login/device";
 static constexpr PCWSTR kOAuthUserAgent = L"taskbar-ai-quota/0.1";
 
 static std::string UrlEncode(const std::string& s) {

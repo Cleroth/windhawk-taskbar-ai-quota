@@ -347,7 +347,7 @@ struct HistoryController {
         for (const HistorySample& sample : snapshot->samples) {
             if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
                 sample.timeMs < scope.to) {
-                estimate += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : 4;
+                estimate += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : 4;
             }
         }
         operation = HistoryOperation::Export;
@@ -482,7 +482,8 @@ struct HistoryController {
             L"Axes and units\r\n"
             L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
             L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
-            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used (%) (left, in the Remaining mode) and OpenAI credits "
+            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used and GitHub Copilot AI "
+            L"credits used (%) (left, in the Remaining mode) and OpenAI credits "
             L"remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
             L"also plots it on its own axis. Accounts without readings in the range are listed under No "
             L"readings.\r\n\r\n"
@@ -757,11 +758,12 @@ struct HistoryController {
             account.removed = !a.configured;
             account.recordingOff = a.configured && !a.recording;
             account.paused = a.hidden && s.skipHiddenPolling;
-            // The flyout's weekly row: the latest poll's weekly used % and its staleness.
+            // The flyout's weekly row (GitHub Copilot's: its AI credits row): the latest poll's
+            // used % and its staleness.
             auto index = a.configured ? configured.find(a.id) : configured.end();
             if (index != configured.end() && index->second < settings.polls.size()) {
                 const AccountData& poll = settings.polls[index->second];
-                account.weeklyPct = poll.winWeek.pct;
+                account.weeklyPct = a.provider == 4 ? poll.extraUsage.pct : poll.winWeek.pct;
                 account.stale = AccountMeterState(display, s.barLayout, s.accounts[index->second], poll, 0, 0).stale;
                 account.lastPollMs = poll.lastSuccessMs;
             }

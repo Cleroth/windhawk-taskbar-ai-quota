@@ -1,6 +1,6 @@
 # Taskbar AI Quota Bars
 
-Shows Anthropic Claude, OpenAI/Codex, and Google Antigravity AI agent and LLM subscription quota usage as compact bars on the Windows 11 taskbar.
+Shows Anthropic Claude, OpenAI/Codex, Google Antigravity, and GitHub Copilot AI agent and LLM subscription quota usage as compact bars on the Windows 11 taskbar.
 Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ![Quota tooltip](ss1.png)
@@ -9,7 +9,7 @@ Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ## What It Shows
 
-Each visible account gets one compact taskbar column. Choose among the provider's supported bars: 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra usage, and OpenAI prepaid credits measured against a max you set (the API reports only the balance). Antigravity maps available short-window and weekly Gemini pools to its bars; Claude/GPT pool limits appear in the details flyout. Selected bars auto-hide when the provider does not return that quota.
+Each visible account gets one compact taskbar column. Choose among the provider's supported bars: 5-hour, weekly, Anthropic Fable weekly, Anthropic monthly extra usage, and OpenAI prepaid credits measured against a max you set (the API reports only the balance). Antigravity maps available short-window and weekly Gemini pools to its bars; Claude/GPT pool limits appear in the details flyout. GitHub Copilot shows one bar, its monthly AI credits allowance (keyed `Mo`; Copilot Free's included), resetting on the 1st of each month; the details flyout shows the credits used of the allowance (to two decimals), an additional-usage line when GitHub reports usage past the allowance (only what GitHub reports as additional usage, not a bill), and for an organization's pooled seat without a per-user limit the pooled credits used (or that the pool is used up) instead of a bar. The flyout and notifications name the allowance's unit: AI credits; premium requests on plans GitHub doesn't bill by tokens; chat requests for a Copilot Free account that GitHub still reports in the older form. Selected bars auto-hide when the provider does not return that quota.
 
 - stacked layout: horizontal bars stack vertically and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
@@ -24,7 +24,7 @@ It can also fire a Windows notification when an account first crosses the red th
 
 Install **Taskbar AI Quota Bars** from the Windhawk catalog. On a fresh install, click the **AI +** taskbar tile to open the settings window, then choose **Add account** and a provider. Existing Windhawk settings are imported once when upgrading. Updating from a version without per-account identities shows each account's logo beside its bars instead of its label; choose **Label** as the account's identity in **Settings > Accounts** to bring the label back. Settings autosave; most appearance and behavior edits do not immediately re-query providers, while new or identity-changed accounts and stale accounts made visible can fetch.
 
-Adding an account creates it at once, with a default label (`A`, `O` or `G`, then `A2`, `A3`, ...; labels that still have a stored sign-in are skipped, so a new account never reuses an old one), and polls it right away: Anthropic and OpenAI accounts show **Sign-in needed** until you sign in, while Antigravity accounts query the local app and record history immediately. Expand the account's card to rename it and choose its taskbar quotas (at least one stays selected). Each provider-and-label pair must be unique. The provider can't be changed later: remove the account and add a new one.
+Adding an account creates it at once, with a default label (`A`, `O`, `G` or `C`, then `A2`, `A3`, ...; labels that still have a stored sign-in are skipped, so a new account never reuses an old one), and polls it right away: Anthropic, OpenAI and GitHub Copilot accounts show **Sign-in needed** until you sign in, while Antigravity accounts query the local app and record history immediately. Expand the account's card to rename it and choose its taskbar quotas (at least one stays selected). Each provider-and-label pair must be unique. The provider can't be changed later: remove the account and add a new one.
 
 ## Signing In
 
@@ -34,28 +34,29 @@ Signing in shows a window instead of launching a browser: **Copy link** lets you
 
 - **Anthropic**: after you approve on claude.ai, the page shows a code like `abc...#xyz...`; paste it into the window and click **Sign in**.
 - **OpenAI**: open the link in a browser on this PC. The mod catches the redirect on `localhost:1455` (falling back to `1457`) and the window closes by itself, so there's nothing to paste. The window waits until you approve or click **Cancel**; while it is open the port stays busy, so a Codex CLI sign-in at the same time can fail - finish or cancel one first.
+- **GitHub Copilot**: the window shows a code instead of a link. **Copy code**, then **Open in browser** (or open `github.com/login/device` in any browser or profile, on any device), sign in to the GitHub account with Copilot and enter the code. The mod checks with GitHub every few seconds, with a status line under the code: "Waiting for approval on GitHub…", or the failure while a check that failed on the network or a GitHub server error is retried (more slowly when GitHub asks to). The window closes by itself once you approve; the code expires after 15 minutes. When the sign-in ends otherwise (approval denied, the code expired, or another failure, which the Windhawk log details), the window stays open with the reason and **Close**. **Cancel** ends it at any time; while a check is under way the window waits for it, then discards its result. A GitHub account without a Copilot plan or seat signs in, then shows "no Copilot access on this GitHub account".
 - **Google Antigravity**: no separate mod sign-in is needed. Keep the signed-in Antigravity app or CLI running so the mod can query its local language server. Older IDE builds also need an open workspace.
 
-Use **Sign out** on the account's expanded card in Settings to delete an Anthropic/OpenAI stored token; the card also offers **Sign in again**. Renaming a label preserves its stored sign-in when possible. **Remove account** names the account and asks for confirmation; removing an Anthropic/OpenAI account always deletes its stored sign-in. Its recorded usage history is kept unless you check **Also delete its usage history** (offered when it may have some). Sign-ins that earlier versions retained for removed accounts stay stored; renaming a new, signed-out account of that provider to the old label takes one over, and removing that account then deletes it.
+Use **Sign out** on the account's expanded card in Settings to delete an Anthropic/OpenAI/GitHub Copilot stored token; the card also offers **Sign in again**. Renaming a label preserves its stored sign-in when possible. **Remove account** names the account and asks for confirmation; removing an Anthropic/OpenAI/GitHub Copilot account always deletes its stored sign-in. Its recorded usage history is kept unless you check **Also delete its usage history** (offered when it may have some). Sign-ins that earlier versions retained for removed accounts stay stored; renaming a new, signed-out account of that provider to the old label takes one over, and removing that account then deletes it.
 
 ## Settings
 
 Right-click any quota column and choose **Settings**. The window follows the Windows light, dark, or high-contrast theme and has six pages:
 
-- **Accounts**: **Add account** (Anthropic, OpenAI, or Google Antigravity); drag a card by its handle (or press Alt+Up/Down) to reorder; its switch shows or hides the account on the taskbar (the last visible account can't be hidden). Expand a card for:
+- **Accounts**: **Add account** (Anthropic, OpenAI, Google Antigravity, or GitHub Copilot); drag a card by its handle (or press Alt+Up/Down) to reorder; its switch shows or hides the account on the taskbar (the last visible account can't be hidden). Expand a card for:
   - label: unique per provider; renaming keeps the sign-in and history
-  - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and monthly extra usage, OpenAI credits; unavailable quotas auto-hide
+  - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and monthly extra usage, OpenAI credits; GitHub Copilot's AI credits are its only quota; unavailable quotas auto-hide
   - OpenAI credits max: the balance the credits bar treats as 100% (credits have no server-side ceiling)
   - identity, shown beside the account's stacked or vertical bars and on tiles: provider logo with a number badge when several accounts share a provider, hidden ones included (default), logo only, or label (the full label on bars; on tiles up to 4 characters of short text, else the label without spaces)
   - record history for this account
-  - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
+  - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI, GitHub Copilot), and **Remove account**
 - **Layout**, with a live preview of the taskbar:
   - tile style: stacked bars, vertical bars, usage graph (the default for new installs; a chart per quota of its recorded usage across its window, side by side, with an even-use diagonal, the current reading, and a projection at its recent average rate, as described under [Usage history](#usage-history)), segmented ring, concentric rings, gauge % (the most-used quota's arc around its number), clock pies (a pie per quota with an elapsed-time hand), rounded square (segmented-ring arcs along a rounded square around the identity), headline %, or quota matrix (each quota's key and percentage in up to two rows and columns); settings the chosen style ignores are hidden or disabled with the reason
-  - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); size and thickness (rings, gauge, and rounded square; pies take the size); each chart's width and its height (50 to 100% of the tile, default 80%), the size of its quota keys and extra usage text (6 to 16 px, default 8), a faint outline around each chart (on by default), the current position cues, each optional (the window's elapsed part lit and a now line by default, a now caret on the bottom edge, and a ring around the current reading), and the account's extra usage in the 7d chart's top-left corner (bottom-left in remaining mode) while it is selected for the account and the provider reports it: the amount (`$` for Anthropic extra usage, credits for OpenAI; default), the percentage of the limit (the amount without one), or off, spent in used mode and left in remaining mode; credits never get a chart of their own (usage graph); the number size, a reset countdown (the time until the quota resets under the number, instead of its bars), and the length and thickness of the bars under it, with the same bar gap (headline %; the matrix takes the number size)
+  - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); size and thickness (rings, gauge, and rounded square; pies take the size); each chart's width and its height (50 to 100% of the tile, default 80%), the size of its quota keys and extra usage text (6 to 16 px, default 8), a faint outline around each chart (on by default), the current position cues, each optional (the window's elapsed part lit and a now line by default, a now caret on the bottom edge, and a ring around the current reading), and the account's extra usage in the 7d chart's top-left corner (bottom-left in remaining mode) while it is selected for the account and the provider reports it: the amount (`$` for Anthropic extra usage, credits for OpenAI; default), the percentage of the limit (the amount without one), or off, spent in used mode and left in remaining mode; OpenAI credits never get a chart of their own, GitHub Copilot's monthly AI credits do (usage graph); the number size, a reset countdown (the time until the quota resets under the number, instead of its bars), and the length and thickness of the bars under it, with the same bar gap (headline %; the matrix takes the number size)
   - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label font size for label identities, and the identity gap
   - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number badge's size (6 to 20 px, default 13), color, and horizontal and vertical offsets; the badge is an outlined number centered on the logo's lower-right corner (on rings, pulled inside the hole), in the taskbar's text color by default (the white swatch), or another color from the swatches or **Custom...**, outlined dark or light to contrast with it
   - logo colors: the Claude logo in the taskbar's text color (default) or Claude's orange, and the Antigravity (Gemini sparkle) logo in the text color (default) or Gemini's purple-to-blue gradient; the details flyout, the Accounts page and the usage history window follow them, and high contrast always uses the text color
-  - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`), hidden by default, and the bar text size
+  - compact quota keys (`5h`, `7d`, `Fa`, `Ex`, `Cr`, `Mo`), hidden by default, and the bar text size
   - pace markers comparing quota usage with elapsed time (or quota remaining with time remaining), with caret, full-line, edge-notch, dot, and time-track (a small bar under each bar, or beside each vertical bar, that fills with the elapsed time) styles on bars and a color from the swatches or **Custom...** (the default light grey turns dark on a light taskbar)
   - position on the taskbar: before the notification icons (default), before network and volume, before or after the clock, or after Show desktop (the far right); or, experimental, **Left side** (the taskbar's left edge, after any space another mod such as Taskbar System Info keeps there; Widgets, Start and the apps move right, on a centered taskbar by half the bars' width) and **Right of Start** (between Start and the buttons after it, which move over). A secondary taskbar without the chosen tray neighbour uses the next one to its right. For these two, a taskbar whose buttons aren't found, whose Start is hidden (Right of Start only), or where another mod controls the space the bars need shows them at the first tray slot instead, with a note under Position; after a conflict, restart Explorer to retry
   - account margin and the gap after accounts
@@ -64,14 +65,14 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - material: the background of the details flyout and the settings and usage history windows, which all follow it: **Acrylic** (default; a tinted blur of what's behind), Mica or Mica Alt (the blurred desktop wallpaper, tinted as Windows does), Tinted wallpaper (the blurred wallpaper under the theme color; the windows use Mica for it), or Solid; all but Solid need Windows transparency effects, and show solid without them and in high contrast
   - bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"; usage graphs and the details flyout's charts plot quota left, falling from 100%); threshold colors always represent consumed quota
   - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
-  - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI) instead of a percentage, following the bar mode; from 1,000 on, taskbar amounts are shortened to three digits with `k` or `M` (`62.5k`)
+  - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI, and GitHub Copilot's AI credits rounded to whole credits) instead of a percentage, following the bar mode; from 1,000 on, taskbar amounts are shortened to three digits with `k` or `M` (`62.5k`)
   - colorblind palette, and the yellow, orange, and red thresholds, each with its color
   - stale-data marker (`!`)
   - additional OpenAI rate limits in account details (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - **Behavior**:
   - show on: the primary display, all displays, or a detected display with its resolution
   - show details on hover: resting the pointer on a column opens its details flyout (on by default)
-  - cloud poll interval presets plus a custom interval (Antigravity polls its local server every minute)
+  - cloud poll interval presets plus a custom interval for Anthropic, OpenAI and GitHub Copilot (Antigravity polls its local server every minute)
   - do not poll hidden accounts (on by default; overrides per-account history recording)
   - threshold notifications (toast when an account crosses the red threshold)
 - **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, the time span the usage history window opens on (24 hours, **7 days** by default, 30 days, 90 days, or All retained), and the storage folder
@@ -110,9 +111,12 @@ state and storage errors stay visible in the main window.
     pools. Anthropic follows each account's taskbar weekly selections: normal, Fable, both,
     or neither. **Refresh / F5** picks up changed selections. Removed accounts retain both
     weeklies because they no longer have taskbar settings.
-  - **Extra usage** plots Anthropic extra-usage budget used (%) (left, in the Remaining bar
-    mode) on the left axis and OpenAI credits remaining on the right. USD spending appears in
-    details, not on this graph.
+  - **Extra usage** plots Anthropic extra-usage budget used (%) and GitHub Copilot AI credits
+    used (%) (left, in the Remaining bar mode) on the left axis and OpenAI credits remaining on
+    the right. USD spending appears in details, not on this graph. GitHub Copilot records only
+    this percentage, so its accounts appear in Extra usage and All meters only; its pooled
+    credits and additional usage are not recorded. In the sidebar, a Copilot account shows its
+    latest AI credits used (%) where other accounts show their weekly one.
 - Selecting one account defaults to **All meters**, with the same three groups also available.
   All-account and single-account modes remember their view selections separately until the window
   closes. **All meters** includes weeklies hidden on the taskbar and plots Anthropic USD
@@ -197,7 +201,9 @@ batches; many accounts or frequent polls can shorten effective retention. Leavin
 asks first, since both limits apply again. Only the taskbar-owning Explorer records, with
 exclusive journal ownership to prevent competing writers. Storage failures appear in the viewer.
 Downgrading to a version without history support can discard saved history IDs when settings are
-edited; old samples then appear as anonymous retained history. Downgrading to a version without
+edited; old samples then appear as anonymous retained history. Versions before 2.4.0 don't know
+GitHub Copilot: they report a journal with Copilot samples as damaged (until Clear) and drop
+Copilot accounts from their settings. Downgrading to a version without
 **Forever** keeps 3650 days but applies its size cap, permanently discarding samples beyond the
 newest 250,000.
 
@@ -264,11 +270,11 @@ enabling recording. A local compile alone cannot validate Windhawk injection int
 
 ## Security Notes
 
-For Anthropic and OpenAI, the mod owns its OAuth credentials end to end: it signs in, stores the access and refresh tokens, and refreshes them itself. Tokens are stored encrypted with Windows DPAPI (current user) in the mod's own Windhawk storage; they are never written to disk in plaintext.
+For Anthropic, OpenAI and GitHub Copilot, the mod owns its OAuth credentials end to end: it signs in, stores the access and refresh tokens, and refreshes them itself. Tokens are stored encrypted with Windows DPAPI (current user) in the mod's own Windhawk storage; they are never written to disk in plaintext.
 
-The mod never reads or writes the OpenCode, Claude Code, or Codex credential files. Refresh tokens are used only against the provider token endpoints and are never sent as bearer tokens to the quota endpoints.
+The mod never reads or writes the OpenCode, Claude Code, or Codex credential files, nor any other app's GitHub or Copilot sign-in (Visual Studio, VS Code, the GitHub CLI, Windows Credential Manager). Refresh tokens are used only against the provider token endpoints and are never sent as bearer tokens to the quota endpoints.
 
-Signing in uses the public OAuth clients of the official CLIs (Claude Code for Anthropic, Codex for OpenAI) with PKCE. Antigravity uses only its signed-in loopback language server and stores no Google token.
+Signing in uses the public OAuth clients of the official CLIs (Claude Code for Anthropic, Codex for OpenAI) with PKCE. GitHub Copilot uses GitHub's device flow with the public client of GitHub's copilot.vim (`Iv1.b507a08c87ecfe98`) and only the `read:user` scope; the mod talks to `github.com` (sign-in and token refresh) and `api.github.com` (the Copilot usage endpoint, `copilot_internal/user`), and opens a browser only when you click **Open in browser**. Antigravity uses only its signed-in loopback language server and stores no Google token.
 
 ## Limitations
 
@@ -276,11 +282,12 @@ Signing in uses the public OAuth clients of the official CLIs (Claude Code for A
 - x86-64 only.
 - Left side and Right of Start are experimental. They share the taskbar's spacing only with mods that add to it the same way (such as Taskbar System Info); Start Button Position and Taskbar Styler rules on the app list's margin conflict with them. A conflicting mod the bars don't detect can leave the taskbar's spacing wrong after the bars move or the mod is disabled, until that mod rewrites it or Explorer restarts.
 - Specific displays use detected taskbar order: `Display 1` is primary and later entries are secondary taskbars.
-- Anthropic/OpenAI require one browser sign-in per configured account.
+- Anthropic/OpenAI/GitHub Copilot require one browser sign-in per configured account.
 - Antigravity requires a signed-in app or CLI session to remain running; older IDE builds may also require an open workspace.
 - Antigravity servers without pooled-quota support show only their current limiting quota; weekly stays unavailable and pace ticks are disabled.
 - OpenAI sign-in needs `localhost:1455` (or `1457`) free for the browser redirect.
-- Anthropic and OpenAI sessions refresh automatically; sign in again if a stored session is missing, invalid, or revoked.
+- Anthropic and OpenAI sessions refresh automatically, and GitHub Copilot sessions do when GitHub issues expiring tokens; sign in again if a stored session is missing, invalid, or revoked.
+- GitHub Copilot uses an undocumented endpoint (`copilot_internal/user`, as VS Code does) that GitHub can change. Its 5-hour and weekly rate limits are reported only to editors during chats, so they aren't shown; neither are code completions.
 
 ## Building from source
 

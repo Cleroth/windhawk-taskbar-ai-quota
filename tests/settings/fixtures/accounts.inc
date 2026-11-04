@@ -259,6 +259,9 @@ static void RunAccountEditTests() {
         CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"openai")))].label == L"O");
         CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"antigravity")))].label == L"G");
         CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"openai")))].label == L"O2");
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"copilot")))].label == L"C");
+        store.signIns.push_back(Identity(L"copilot", L"C2"));
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"copilot")))].label == L"C3");
         store.failNext = 1;
         CHECK(edits.AddAccount(L"openai") == 0);
         CHECK(edits.notices.size() == 1 && edits.notices[0].failure);
@@ -379,10 +382,15 @@ static void RunAccountEditTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         // Pinned header: title, Add account (right-aligned in the column), the note.
         const UiItem* add = UiFindItem(frame, SettingsControlId(SettingsField::AccountAdd));
-        CHECK(add && add->kind == UiItemKind::Button && add->button == UiButtonStyle::Accent && add->options.size() == 3);
+        CHECK(add && add->kind == UiItemKind::Button && add->button == UiButtonStyle::Accent && add->options.size() == 4);
         CHECK_NEAR(add->rect.right, 260 + 20 + 680);
         CHECK_NEAR(add->rect.top, 14);
         CHECK(add->options[2].detail == L"Uses the signed-in Antigravity app or CLI" && add->action.value == -1);
+        // GitHub Copilot last, by its value the controller's fourth provider.
+        CHECK(add->options[3].text == L"GitHub Copilot" && add->options[3].value == 3 &&
+              add->options[3].detail == L"Sign in with a code on github.com" &&
+              add->options[3].parts.size() == 1 && add->options[3].parts[0].path == kCopilotLogoPath);
+        CHECK(std::size(kSettingsProviders) == 4 && kSettingsProviders[3] == std::wstring_view(L"copilot"));
         CHECK_NEAR(frame.viewport.top, 69);
         // Cards: 68 DIP collapsed, 4 DIP apart from 14 DIP down.
         for (uint32_t slot = 1; slot <= 4; slot++) {
@@ -541,6 +549,45 @@ static void RunAccountEditTests() {
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(HasText(frame, L"At least one stays selected. Usage graphs show Credits as a number on the 7d chart."));
+    });
+
+    Run("accounts page: a GitHub Copilot card: its mark, the AI credits quota keyed Mo, sign-in and dashboard", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = TestView(SettingsUiPage::Accounts);
+        view.settings.accounts = {TestAccount(L"copilot", L"C", 31, {false, false, false, true})};
+        SettingsViewAccount card;
+        card.key = 31;
+        card.slot = 1;
+        card.status = {L"Free", L"", true, true, false, false};
+        card.expanded = true;
+        view.accounts.push_back(card);
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        // Header: the Copilot mark, the provider with the plan, one key chip.
+        CHECK(std::any_of(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+            return item.kind == UiItemKind::Shape && item.parts.size() == 1 && item.parts[0].path == kCopilotLogoPath;
+        }));
+        CHECK(HasText(frame, L"GitHub Copilot \u00B7 Free \u00B7 Signed in"));
+        std::vector<std::wstring> keys;
+        for (const UiItem& item : frame.content) {
+            if (item.kind == UiItemKind::Chip && item.rect.top < 14 + 68) keys.push_back(item.text);
+        }
+        CHECK((keys == std::vector<std::wstring>{L"Mo"}));
+        // Its one quota stays selected; no credits max; the browser sign-in's actions.
+        const UiItem* credits = UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kExtraUsageBar));
+        CHECK(credits && credits->text == L"AI credits" && credits->selected && credits->enabled &&
+              credits->action.value == 0b1000);
+        CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kFiveHourBar)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kWeeklyBar)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountCreditsMax)));
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountDashboard, 1)) &&
+              UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn, 1))->text == L"Sign in again" &&
+              UiFindItem(frame, AccountId(1, SettingsField::AccountSignOut, 1)));
+        // Without a sign-in: Sign in in its header.
+        view.accounts[0].status = {L"", L"not signed in - click to sign in", false, false, true, false};
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)) && HasText(frame, L"Sign-in needed"));
     });
 
     Run("accounts page: empty state; a dragged card is lifted and drawn last", [] {

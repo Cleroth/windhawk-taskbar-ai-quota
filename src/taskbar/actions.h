@@ -16,8 +16,9 @@ static void OpenDashboardForIdentity(uint64_t identityHash) {
     if (provider == L"antigravity") {
         RefreshQuotaByIdentity(identityHash);
     } else {
-        OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage"
-                                         : L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
+        OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage" :
+                provider == L"copilot"   ? L"https://github.com/settings/copilot" :
+                                           L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
     }
 }
 

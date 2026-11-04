@@ -15,12 +15,12 @@ enum class HistoryUiPill : uint8_t { Recording, Waiting, NotSaving, Off };
 struct HistoryUiViewAccount {
     uint64_t historyId = 0;
     uint32_t slot = 0;          // Session-stable per history ID (below 0xFF000): its entry's item id
-    uint32_t provider = 0;      // 1 Anthropic, 2 OpenAI, 3 Antigravity; else unknown
+    uint32_t provider = 0;      // HistoryProviderCode; else unknown
     std::wstring label;         // Removed accounts: account_<16 hex digits>
     bool removed = false;
     bool recordingOff = false;  // Its Record history is off
     bool paused = false;        // Hidden while hidden accounts aren't polled
-    double weeklyPct = -1;      // The latest poll's weekly used %; < 0 unknown
+    double weeklyPct = -1;      // The latest poll's weekly (GitHub Copilot: AI credits) used %; < 0 unknown
     bool stale = false;         // That poll is stale: the value shows muted, cards never say "now"
     ULONGLONG lastPollMs = 0;   // The latest successful poll; 0 none
     bool operator==(const HistoryUiViewAccount&) const = default;
@@ -145,14 +145,14 @@ static UiAction HistoryUiAction(HistoryUiCommand command, int value = 0, uint64_
 
 static PCWSTR HistoryUiProviderName(uint32_t provider) {
     return provider == 1 ? L"Anthropic" : provider == 2 ? L"OpenAI" :
-           provider == 3 ? L"Google Antigravity" : L"Unknown provider";
+           provider == 3 ? L"Google Antigravity" : provider == 4 ? L"GitHub Copilot" : L"Unknown provider";
 }
 
 // A provider's logo (taskbar/logo-paths.h, 24 DIP view box) in the primary ink, or in its brand
 // colors when chosen and `brand`; none for an unknown provider.
 static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_t provider, bool brand) {
     PCWSTR path = provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
-                  provider == 3 ? kGeminiLogoPath : nullptr;
+                  provider == 3 ? kGeminiLogoPath : provider == 4 ? kCopilotLogoPath : nullptr;
     if (!path) return {};
     UiShapePart part{path, {}, UiInk::Primary};
     const LogoBrand* colors =

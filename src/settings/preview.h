@@ -204,8 +204,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         op.rect = box;
         op.color = text;
         op.opacity = opacity;
-        op.path = provider == L"openai" ? kOpenAiLogoPath :
-                  provider == L"anthropic" ? kClaudeLogoPath : kGeminiLogoPath;
+        op.path = ProviderLogoPath(provider);
         op.brand = ProviderLogoBrand(display.logoBrands, provider);
         add(ops, std::move(op));
     };
@@ -446,9 +445,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     }
                 }
                 if (keys) {
-                    label(ops, w == kExtraUsageBar && account.provider == L"openai" ? L"Cr" : kQuotaKeys[w],
-                          textStyle, itemLeft, itemTop + (itemHeight - measure(L"5h", textStyle).height) / 2 - 0.5f,
-                          keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
+                    label(ops, QuotaKey(account.provider, w), textStyle, itemLeft,
+                          itemTop + (itemHeight - measure(L"5h", textStyle).height) / 2 - 0.5f, keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
                 }
                 if (settings.percentTextVisibility != PercentTextVisibility::Never && !q.text.empty()) {
                     // As wide as the bar (vertical: at least four characters), aligned per the
@@ -626,7 +624,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
                     keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
                 }
                 keyReserve = std::ceil(keyReserve);
@@ -675,7 +673,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 Measured number = measure(meters.headline, numberStyle);
                 Measured key = measure(meters.headlineKey, keyStyle);
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
                     keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
                 }
                 float rowWidth = std::max(std::ceil(measure(L"100%", numberStyle).width) + 3 + std::ceil(keyReserve),
