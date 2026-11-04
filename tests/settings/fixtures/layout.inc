@@ -2773,7 +2773,7 @@ static void RunLayoutTests() {
         const PCWSTR aroundIdentity = L"Narrows automatically when the meters don\u2019t fit around the logo or text.";
         for (const Case& c : {Case{BarLayout::Gauge, L"Gauge", L"Gauge size", L"Diameter in pixels.", L"Gauge thickness", aroundNumber},
                               Case{BarLayout::ClockPies, L"Pies", L"Pie area",
-                                   L"Height in pixels; one pie per quota, smaller from the second on.", nullptr, nullptr},
+                                   L"Height in pixels; one pie per quota, smaller from the third on.", nullptr, nullptr},
                               Case{BarLayout::RoundedSquare, L"Square", L"Square size", L"Side in pixels.",
                                    L"Square thickness", aroundIdentity}}) {
             SettingsView view = TestView(SettingsUiPage::Layout);

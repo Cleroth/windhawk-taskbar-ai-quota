@@ -229,7 +229,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = gauge ? L"Gauge size" : pies ? L"Pie area" : square ? L"Square size" : L"Ring size";
-            spec.description = {{pies   ? L"Height in pixels; one pie per quota, smaller from the second on." :
+            spec.description = {{pies   ? L"Height in pixels; one pie per quota, smaller from the third on." :
                                  square ? L"Side in pixels." :
                                           L"Diameter in pixels."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::RingSize);

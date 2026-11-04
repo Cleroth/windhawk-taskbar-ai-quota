@@ -7207,7 +7207,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         meters.matrixFont = std::max(font, 7.0);
         meters.matrixKeyFont = meters.matrixFont * kHeadlineKeyScale;
     }
-    // Pies: one per quota in slot order, in columns of two from the third on.
+    // Pies: one per quota in slot order, sized as a pair up to two, in columns of two from the
+    // third on.
     double pieDiameter = 0, pieGap = 0;
     // The rounded square's centreline corner radius and perimeter.
     double squareCorner = 0, squarePerimeter = 0;
@@ -7216,7 +7217,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         if (pies) {
             meters.ring.size = size;
             pieGap = count > 2 ? 2 : 3;
-            pieDiameter = count == 1 ? size * 0.75 : count == 2 ? size * 0.5625 : (size - pieGap) / 2;
+            pieDiameter = count > 2 ? (size - pieGap) / 2 : size * 0.5625;
             int columns = count > 2 ? 2 : count, rows = count > 2 ? 2 : 1;
             meters.faceWidth = count ? columns * pieDiameter + (columns - 1) * pieGap : 0;
             meters.faceHeight = count ? rows * pieDiameter + (rows - 1) * pieGap : 0;
@@ -22057,7 +22058,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = gauge ? L"Gauge size" : pies ? L"Pie area" : square ? L"Square size" : L"Ring size";
-            spec.description = {{pies   ? L"Height in pixels; one pie per quota, smaller from the second on." :
+            spec.description = {{pies   ? L"Height in pixels; one pie per quota, smaller from the third on." :
                                  square ? L"Side in pixels." :
                                           L"Diameter in pixels."}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::RingSize);

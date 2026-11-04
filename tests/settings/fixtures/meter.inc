@@ -1212,11 +1212,11 @@ static void RunFaceTileTests() {
             CHECK(m.track.size() == 1);
             point(m.track[0], x, y - r);
         };
-        // One: 0.75 of the 32 DIP face.
+        // One: sized as a pair, 0.5625 of the 32 DIP face (18 DIPs).
         AccountMeters one = pies({true, false, false, false});
-        CHECK_NEAR(one.faceWidth, 24); CHECK_NEAR(one.faceHeight, 24);
-        pie(one.quotas[0], 12, 12, 12);
-        // Two, side by side: 0.5625 of it (18 DIPs), 3 apart.
+        CHECK_NEAR(one.faceWidth, 18); CHECK_NEAR(one.faceHeight, 18);
+        pie(one.quotas[0], 9, 9, 9);
+        // Two, side by side: 18 DIPs each, 3 apart.
         AccountMeters two = pies({false, true, false, true});
         CHECK_NEAR(two.faceWidth, 39); CHECK_NEAR(two.faceHeight, 18);
         pie(two.quotas[1], 9, 9, 9); pie(two.quotas[3], 30, 9, 9);
@@ -1233,7 +1233,7 @@ static void RunFaceTileTests() {
         CHECK_NEAR(small.faceWidth, 2 * 13.5 + 3); CHECK_NEAR(small.faceHeight, 13.5);
         CHECK_NEAR(pies({true, true, true, false}, 24).faceWidth, 2 * 11 + 2);
         AccountMeters capped = pies({true, false, false, false}, 40, 32);
-        CHECK_NEAR(capped.faceWidth, 18); pie(capped.quotas[0], 9, 9, 9);
+        CHECK_NEAR(capped.faceWidth, 13.5); pie(capped.quotas[0], 6.75, 6.75, 6.75);
         // Nothing reported: an empty face.
         AccountMeters none = AccountMeterState(Display(), BarLayout::ClockPies, Account(), Fresh(), 0, 0);
         CHECK(none.barMask == 0); CHECK_NEAR(none.faceWidth, 0); CHECK_NEAR(none.faceHeight, 0);
@@ -1245,28 +1245,28 @@ static void RunFaceTileTests() {
             return First({pct, 0, 0}, d, BarLayout::ClockPies).quotas[0];
         };
         auto arc = [](const TileOutlineSegment& s, double radius) { CHECK_NEAR(s.radius, radius); CHECK(s.clockwise); };
-        const double h = 12 / std::sqrt(2.0);
-        // One 24 DIP pie at (12, 12). The track: a disc from the top, in two clockwise halves.
+        const double h = 9 / std::sqrt(2.0);
+        // One 18 DIP pie at (9, 9). The track: a disc from the top, in two clockwise halves.
         QuotaMeter quarter = pie(25);
         CHECK(quarter.track.size() == 1 && quarter.track[0].segments.size() == 2);
-        point(quarter.track[0], 12, 0);
-        point(quarter.track[0].segments[0], 12, 24); arc(quarter.track[0].segments[0], 12);
-        point(quarter.track[0].segments[1], 12, 0); arc(quarter.track[0].segments[1], 12);
+        point(quarter.track[0], 9, 0);
+        point(quarter.track[0].segments[0], 9, 18); arc(quarter.track[0].segments[0], 9);
+        point(quarter.track[0].segments[1], 9, 0); arc(quarter.track[0].segments[1], 9);
         // A quarter: from the centre up to the rim, then 45 and 90 degrees round.
         CHECK(quarter.fillUnits == 250); CHECK_NEAR(quarter.fillSweep, 90);
         CHECK(quarter.fill.size() == 1 && quarter.fill[0].segments.size() == 3);
-        point(quarter.fill[0], 12, 12);
-        point(quarter.fill[0].segments[0], 12, 0); CHECK_NEAR(quarter.fill[0].segments[0].radius, 0);
-        point(quarter.fill[0].segments[1], 12 + h, 12 - h); arc(quarter.fill[0].segments[1], 12);
-        point(quarter.fill[0].segments[2], 24, 12); arc(quarter.fill[0].segments[2], 12);
+        point(quarter.fill[0], 9, 9);
+        point(quarter.fill[0].segments[0], 9, 0); CHECK_NEAR(quarter.fill[0].segments[0].radius, 0);
+        point(quarter.fill[0].segments[1], 9 + h, 9 - h); arc(quarter.fill[0].segments[1], 9);
+        point(quarter.fill[0].segments[2], 18, 9); arc(quarter.fill[0].segments[2], 9);
         // Three quarters: halves of 135 degrees, ending at the left.
         QuotaMeter most = pie(75);
         CHECK_NEAR(most.fillSweep, 270);
-        point(most.fill[0].segments[1], 12 + h, 12 + h); point(most.fill[0].segments[2], 0, 12);
+        point(most.fill[0].segments[1], 9 + h, 9 + h); point(most.fill[0].segments[2], 0, 9);
         // Full: a disc like the track.
         QuotaMeter full = pie(100);
         CHECK(full.fillUnits == 1000 && full.fill.size() == 1 && full.fill[0].segments.size() == 2);
-        point(full.fill[0], 12, 0); point(full.fill[0].segments[0], 12, 24);
+        point(full.fill[0], 9, 0); point(full.fill[0].segments[0], 9, 18);
         // Any usage: 5 degrees; none: no wedge, the disc stays. Remaining: 30 used shows 70%.
         QuotaMeter tiny = pie(0.5);
         CHECK(tiny.fillUnits == 14); CHECK_NEAR(tiny.fillSweep, 5);
@@ -1278,23 +1278,23 @@ static void RunFaceTileTests() {
         auto hand = [](long long resetIn, const MeterDisplay& d = Display()) {
             return First(Window(10, resetIn), d, BarLayout::ClockPies).quotas[0];
         };
-        // A quarter elapsed: pointing right from (12, 12); the halo 3 wide to a DIP past the 12 DIP
+        // A quarter elapsed: pointing right from (9, 9); the halo 3 wide to a DIP past the 9 DIP
         // rim, the core 1.5 wide to half a DIP past it.
         QuotaMeter q = hand(13500000);
         CHECK(q.paceVisible && q.paceUnits == 250); CHECK_NEAR(q.paceAngle, 360);
         CHECK(q.paceHalo.size() == 1 && q.paceHalo[0].segments.size() == 3);
-        point(q.paceHalo[0], 12, 13.5);
-        point(q.paceHalo[0].segments[0], 25, 13.5);
-        point(q.paceHalo[0].segments[1], 25, 10.5);
-        point(q.paceHalo[0].segments[2], 12, 10.5);
-        point(q.paceCore[0], 12, 12.75);
-        point(q.paceCore[0].segments[0], 24.5, 12.75);
-        point(q.paceCore[0].segments[1], 24.5, 11.25);
+        point(q.paceHalo[0], 9, 10.5);
+        point(q.paceHalo[0].segments[0], 19, 10.5);
+        point(q.paceHalo[0].segments[1], 19, 7.5);
+        point(q.paceHalo[0].segments[2], 9, 7.5);
+        point(q.paceCore[0], 9, 9.75);
+        point(q.paceCore[0].segments[0], 18.5, 9.75);
+        point(q.paceCore[0].segments[1], 18.5, 8.25);
         // None elapsed: straight up; all elapsed: round to the top again. Never clamped.
         QuotaMeter top = hand(kFiveHours);
         CHECK_NEAR(top.paceAngle, 270);
-        point(top.paceHalo[0], 13.5, 12); point(top.paceHalo[0].segments[0], 13.5, -1);
-        point(top.paceHalo[0].segments[1], 10.5, -1);
+        point(top.paceHalo[0], 10.5, 9); point(top.paceHalo[0].segments[0], 10.5, -1);
+        point(top.paceHalo[0].segments[1], 7.5, -1);
         CHECK_NEAR(hand(0).paceAngle, 630);
         // Remaining mode: the time left, three quarters.
         MeterDisplay left = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
