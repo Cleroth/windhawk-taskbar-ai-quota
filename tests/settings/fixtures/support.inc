@@ -72,6 +72,13 @@ static QuotaMeter Bar(double pct, const MeterDisplay& display = Display()) {
     return First({pct, 0, 0}, display).quotas[0];
 }
 
+// Default settings on stacked bars, the baseline the page and preview fixtures are written for.
+static Settings StackedSettings() {
+    Settings settings;
+    settings.barLayout = BarLayout::Stacked;
+    return settings;
+}
+
 static Settings With(const std::function<void(Settings&)>& edit) {
     Settings settings;
     edit(settings);

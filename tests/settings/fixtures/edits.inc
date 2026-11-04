@@ -508,6 +508,7 @@ static void RunEditTests() {
 static SettingsView TestView(SettingsUiPage page) {
     SettingsView view;
     view.page = page;
+    view.settings = StackedSettings();
     view.status.displays = {{1, 2560, 1440, true}, {2, 1920, 1080, false}};
     view.status.historyFolder = L"C:\\Users\\clero\\AppData\\Local\\TaskbarAIQuota\\taskbar-ai-quota";
     return view;

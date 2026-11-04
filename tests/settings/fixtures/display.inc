@@ -368,7 +368,7 @@ static void RunDisplayPageTests() {
     Run("preview: percentage text visibility, bar mode, amounts and alignment", [] {
         // Sample bars in order: OAI 5h 7d Cr, CC 1 5h 7d, CC 2 5h 7d Fa Ex, Go 5h; used 25, 62.5,
         // 12.5 | 82.5, 25 | 12.5, 110, 62.5, 25 | 25 (stale) with the default thresholds.
-        Settings s;
+        Settings s = StackedSettings();
         std::vector<SettingsPreviewOp> values = Values(Strip(s));
         CHECK(values.size() == 10);
         CHECK(std::all_of(values.begin(), values.end(), [](const SettingsPreviewOp& op) { return op.hover >= 0; }));
@@ -397,7 +397,7 @@ static void RunDisplayPageTests() {
             return std::count_if(values.begin(), values.end(),
                                  [](const SettingsPreviewOp& op) { return op.color == 0xFF000000; });
         };
-        s = {};
+        s = StackedSettings();
         s.percentTextVisibility = PercentTextVisibility::Always;
         CHECK(dark(s) == 3);
         s.percentTextAlignment = PercentTextAlignment::Left;
@@ -422,7 +422,7 @@ static void RunDisplayPageTests() {
     Run("preview: usage colors follow the palette and the thresholds; the stale account greys and marks", [] {
         // Go is stale: grey in either palette.
         auto fills = [](const Settings& s, uint32_t color) { return OpsOfColor(Strip(s), color).size(); };
-        Settings s;
+        Settings s = StackedSettings();
         CHECK(fills(s, 0xFF43A047) == 5 && fills(s, 0xFFFDD835) == 2 && fills(s, 0xFFFB8C00) == 1 &&
               fills(s, 0xFFE53935) == 1 && fills(s, 0xFF9E9E9E) == 1);
         s.colorblindMode = true;
@@ -433,7 +433,7 @@ static void RunDisplayPageTests() {
         CHECK(fills(s, 0xFFD55E00) == 1 && fills(s, 0xFFE53935) == 0 && fills(s, 0xFF9E9E9E) == 1);
         // The samples sit mid-band (red past the quota): thresholds move their values, every band
         // still shows.
-        s = {};
+        s = StackedSettings();
         s.percentTextVisibility = PercentTextVisibility::Always;
         s.yellowThreshold = 20;
         s.orangeThreshold = 40;
@@ -455,7 +455,7 @@ static void RunDisplayPageTests() {
                 return op.kind == SettingsPreviewOp::Kind::Text && op.text == text;
             });
         };
-        s = {};
+        s = StackedSettings();
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
             s.barLayout = layout;
             s.showStaleWarning = true;

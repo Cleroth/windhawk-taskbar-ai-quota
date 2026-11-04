@@ -326,7 +326,9 @@ struct Settings {
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
     // Hovering a column opens its details flyout.
     bool showDetailsOnHover = true;
-    BarLayout barLayout = BarLayout::Stacked;
+    // The default for new installs and the Layout reset; stored settings and legacy imports keep
+    // theirs.
+    BarLayout barLayout = BarLayout::Sparkline;
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
@@ -16968,6 +16970,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                              (int)std::clamp(badgeOffsetX, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
         s.badgeOffsetY = std::isfinite(badgeOffsetY) ?
                              (int)std::clamp(badgeOffsetY, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
+        // Stored settings always name their layout; a missing or unknown one reads as stacked
+        // bars, not the new-install default.
         std::wstring barLayout = GetStr(root, L"barLayout");
         s.barLayout = barLayout == L"vertical" ? BarLayout::Vertical :
                       barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :

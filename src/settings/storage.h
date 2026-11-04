@@ -386,6 +386,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                              (int)std::clamp(badgeOffsetX, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
         s.badgeOffsetY = std::isfinite(badgeOffsetY) ?
                              (int)std::clamp(badgeOffsetY, -kBadgeOffsetMax * 1.0, kBadgeOffsetMax * 1.0) : 0;
+        // Stored settings always name their layout; a missing or unknown one reads as stacked
+        // bars, not the new-install default.
         std::wstring barLayout = GetStr(root, L"barLayout");
         s.barLayout = barLayout == L"vertical" ? BarLayout::Vertical :
                       barLayout == L"segmentedRing" ? BarLayout::SegmentedRing :

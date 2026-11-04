@@ -149,7 +149,9 @@ struct Settings {
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
     // Hovering a column opens its details flyout.
     bool showDetailsOnHover = true;
-    BarLayout barLayout = BarLayout::Stacked;
+    // The default for new installs and the Layout reset; stored settings and legacy imports keep
+    // theirs.
+    BarLayout barLayout = BarLayout::Sparkline;
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;

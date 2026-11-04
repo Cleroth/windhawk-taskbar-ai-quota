@@ -277,6 +277,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
+        CHECK(reset.barLayout == BarLayout::Sparkline);
         CHECK(reset.sparklineHeight == 80 && reset.sparklineExtra == SparklineExtra::Amount && reset.sparklineTextSize == 8 &&
               reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && !reset.sparklineRing &&
               reset.sparklineOutline);
@@ -333,7 +334,7 @@ static void RunLayoutTests() {
     });
 
     Run("preview: ring tiles right-sized from the tile height; hover fills per column", [] {
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::SegmentedRing;
         SettingsPreviewStrip strip = Strip(s);
         // Four 3 + 32 + 3 DIP tiles: the box's 4 DIP padding takes all of the 3 DIP account margin,
@@ -382,7 +383,7 @@ static void RunLayoutTests() {
     });
 
     Run("preview: bars mirror the XAML columns; percent text follows its visibility", [] {
-        Settings s;
+        Settings s = StackedSettings();
         SettingsPreviewStrip strip = Strip(s);
         std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
         // Sample bars: OpenAI 3, Claude 2 and 4, Antigravity 1.
@@ -411,7 +412,7 @@ static void RunLayoutTests() {
         CHECK(percents(Strip(s)).empty());
         // Left labels: the box's padding (the 3 DIP account margin) into it, the label, the label
         // gap, then the 100 DIP bars, the padding before its end.
-        s = {};
+        s = StackedSettings();
         strip = Strip(s);
         const SettingsPreviewOp label = FirstText(strip);
         CHECK(label.text == L"OAI");
@@ -423,7 +424,7 @@ static void RunLayoutTests() {
         strip = Strip(s);
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left - FirstText(strip).rect.right, 3 + 16);
         // Hidden labels: just the bars in the box.
-        s = {};
+        s = StackedSettings();
         s.labelPosition = LabelPosition::Hidden;
         strip = Strip(s);
         CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 3 + 100 + 3);
@@ -443,7 +444,7 @@ static void RunLayoutTests() {
         // touching, at 10 the full padding with 3 DIPs outside the box.
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
             for (int margin : {0, 3, 10}) {
-                Settings s;
+                Settings s = StackedSettings();
                 s.barLayout = layout;
                 s.accountMargin = margin;
                 SettingsPreviewStrip strip = Strip(s);
@@ -474,7 +475,7 @@ static void RunLayoutTests() {
 
         // Stacked: the tile height, 40 DIPs on a 48 DIP taskbar (CC 2's four bars just fill it:
         // 4 * 8 + 3 * 2 + 2 DIPs), the content centred across it.
-        Settings s;
+        Settings s = StackedSettings();
         SettingsPreviewStrip strip = Strip(s);
         for (const D2D1_RECT_F& box : strip.columns) {
             CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
@@ -500,7 +501,7 @@ static void RunLayoutTests() {
 
         // The gallery's Anthropic pair: their logos badged "1" and "2" (each the number over eight
         // halo copies), the bars after the logo, the badge's overhang and the 3 DIP gap; no label.
-        s = {};
+        s = StackedSettings();
         strip = Strip(s, 48, true);
         std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         CHECK(logos.size() == 2 && OpsOfColor(strip, TilePaletteFor(false).badgeHalo).size() == 16 &&
@@ -524,7 +525,7 @@ static void RunLayoutTests() {
         for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
                                        LabelPosition::Bottom, LabelPosition::Hidden}) {
             // The box's full 7 DIP padding, 3 DIPs outside it.
-            Settings s;
+            Settings s = StackedSettings();
             s.accountMargin = 10;
             s.labelPosition = position;
             SettingsPreviewStrip strip = StripOf(s, accounts, data);
@@ -651,7 +652,7 @@ static void RunLayoutTests() {
 
         // No gap: beside the bars they meet the badge's overhang, never under it, or a plain logo's
         // edge; over them the label line's space under its baseline stays.
-        Settings s;
+        Settings s = StackedSettings();
         s.labelGap = 0;
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
         std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
@@ -664,14 +665,14 @@ static void RunLayoutTests() {
                           (OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.bottom + kBadgeBelow),
                       BelowBaseline(11)));
         // A wider gap moves every form's bars alike.
-        s = {};
+        s = StackedSettings();
         s.labelGap = 9;
         strip = StripOf(s, accounts, data);
         tracks = OpsOfColor(strip, 0x46808080);
         CHECK(NearDip(tracks[0].rect.left, OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.right + kBadgeRight + 9));
         CHECK_NEAR(tracks[2].rect.left, TextOps(strip, L"CC 2")[0].rect.right + 9);
         // Tiles show the Label form's short text instead.
-        s = {};
+        s = StackedSettings();
         s.barLayout = BarLayout::LogoHeadline;
         strip = StripOf(s, accounts, data);
         CHECK(TextOps(strip, L"AB").size() == 1 && TextOps(strip, L"CC 2").empty());
@@ -685,7 +686,7 @@ static void RunLayoutTests() {
         accounts[1].tileIdentity = TileIdentity::Text;
         accounts[2].tileIdentity = TileIdentity::Logo;
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
-        Settings s;
+        Settings s = StackedSettings();
         s.accountMargin = 10;  // The box's full 7 DIP padding, 3 DIPs outside it.
         s.barLayout = BarLayout::Vertical;
         s.barLength = 32;
@@ -770,7 +771,7 @@ static void RunLayoutTests() {
 
         // Stale with an error: "!" on each logo's top-right corner, 4 DIPs past it, dimmed with it;
         // the label ends in "!" instead. A 9 DIP badge, whose overhang the mark's exceeds.
-        Settings s;
+        Settings s = StackedSettings();
         s.badgeSize = 9;
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
         std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
@@ -805,7 +806,7 @@ static void RunLayoutTests() {
         CHECK(NearDip(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo)[0].rect.top - strip.columns[0].top,
                       AboveCap(11) + 3));
         // Marks off: none; the boxes as fresh ones'.
-        s = {};
+        s = StackedSettings();
         s.showStaleWarning = false;
         strip = StripOf(s, accounts, data);
         CHECK(TextOps(strip, L"!").empty() && TextOps(strip, L"CC 2").size() == 1);
@@ -818,7 +819,7 @@ static void RunLayoutTests() {
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
             for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
                                            LabelPosition::Bottom}) {
-                s = {};
+                s = StackedSettings();
                 s.accountMargin = 10;  // The box's full 7 DIP padding, 3 DIPs outside it.
                 s.barLayout = layout;
                 s.labelPosition = position;
@@ -865,7 +866,7 @@ static void RunLayoutTests() {
                 }
                 const double mark = stale ? 3 : 0;
                 for (LabelPosition position : {LabelPosition::Top, LabelPosition::Bottom}) {
-                    Settings s;
+                    Settings s = StackedSettings();
                     s.labelFontSize = size;
                     s.labelPosition = position;
                     SettingsPreviewStrip strip = StripOf(s, accounts, data);
@@ -902,7 +903,7 @@ static void RunLayoutTests() {
         }
         // Beside the bars nothing changes with the label size: CC 1's logo stays centred on its
         // bars.
-        Settings s;
+        Settings s = StackedSettings();
         s.labelFontSize = 15;
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
@@ -927,7 +928,7 @@ static void RunLayoutTests() {
         // Beside bars: 15 DIP logos at 100%, 7.5 at 50%, 30 at 200%; the badge stays on the
         // corner, the bars after its overhang.
         for (auto [percent, side] : {std::pair{50, 7.5}, std::pair{100, 15.0}, std::pair{200, 30.0}}) {
-            Settings s;
+            Settings s = StackedSettings();
             s.logoScale = percent;
             SettingsPreviewStrip strip = StripOf(s, accounts, data);
             std::vector<SettingsPreviewOp> logo = logos(strip);
@@ -940,7 +941,7 @@ static void RunLayoutTests() {
         }
 
         // The badge size: the number at 14 DIPs, its box 0.6 * 14 + 2 = 10.4 DIPs wide.
-        Settings s;
+        Settings s = StackedSettings();
         s.badgeSize = 14;
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
         std::vector<SettingsPreviewOp> logo = logos(strip);
@@ -962,7 +963,7 @@ static void RunLayoutTests() {
                               Case{RGB(0x4C, 0xC2, 0xFF), false, 0xFFFFFFFF, 0xFF4CC2FF, 0xFF1C1C1C},
                               Case{RGB(0x4C, 0xC2, 0xFF), true, 0xFF1A1A1A, 0xFF4CC2FF, 0xFF1C1C1C},
                               Case{RGB(0x1C, 0x1C, 0x1C), false, 0xFFFFFFFF, 0xFF1C1C1C, 0xFFF3F3F3}}) {
-            s = {};
+            s = StackedSettings();
             if (c.color) s.badgeColor = *c.color;
             strip = SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, c.light, c.text, &accounts, &data);
             std::vector<SettingsPreviewOp> badge = TextOps(strip, L"1");
@@ -972,7 +973,7 @@ static void RunLayoutTests() {
 
         // 6 left and 6 up: the box (4.1 to 13.9 across, 3.45 to 14.55 down) stays within the logo,
         // so the logo's box is a plain logo's.
-        s = {};
+        s = StackedSettings();
         s.badgeOffsetX = -6;
         s.badgeOffsetY = -6;
         strip = StripOf(s, accounts, data);
@@ -988,7 +989,7 @@ static void RunLayoutTests() {
         // Lowered or raised, the badge leaves the logo centred on its bars (y 14 to 34), the bars
         // where they were.
         for (int y : {-20, -10, 10, 20}) {
-            s = {};
+            s = StackedSettings();
             s.badgeOffsetY = y;
             strip = StripOf(s, accounts, data);
             logo = logos(strip);
@@ -998,7 +999,7 @@ static void RunLayoutTests() {
         }
         // Above the bars, moved either way, it leaves the logo centred over them.
         for (int x : {-20, 20}) {
-            s = {};
+            s = StackedSettings();
             s.labelPosition = LabelPosition::Top;
             s.badgeOffsetX = x;
             strip = StripOf(s, accounts, data);
@@ -1008,7 +1009,7 @@ static void RunLayoutTests() {
         }
 
         // Headline tiles: 16 DIP logos at 100%, 24 at 150%, badged on the corner.
-        s = {};
+        s = StackedSettings();
         s.barLayout = BarLayout::LogoHeadline;
         s.logoScale = 150;
         strip = StripOf(s, accounts, data);
@@ -1034,7 +1035,7 @@ static void RunLayoutTests() {
         s.badgeOffsetY = -3;
         number = TextOps(StripOf(s, accounts, data), L"1")[8];
         CHECK(NearDip(numberX(number) - cx, along + 2) && NearDip(numberY(number) - cy, along - 3));
-        s = {};
+        s = StackedSettings();
         s.barLayout = BarLayout::SegmentedRing;
         s.logoScale = 200;
         logo = logos(StripOf(s, accounts, data));
@@ -1047,7 +1048,7 @@ static void RunLayoutTests() {
                                                Account(L"antigravity", L"Go", {true, true, false, false})};
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::SegmentedRing, BarLayout::LogoHeadline}) {
-            Settings s;
+            Settings s = StackedSettings();
             s.barLayout = layout;
             const std::vector<SettingsPreviewOp> plain = OpsOfKind(
                 SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xFF1A1A1A, &accounts, &data),
@@ -1072,7 +1073,7 @@ static void RunLayoutTests() {
 
     Run("preview: pace marks per layout; none on headline tiles", [] {
         const uint32_t pace = 0xFF000000 | 0xDEDEDE;
-        Settings s;
+        Settings s = StackedSettings();
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical, BarLayout::SegmentedRing,
                                  BarLayout::ConcentricRings}) {
             s.barLayout = layout;
@@ -1130,7 +1131,7 @@ static void RunLayoutTests() {
             return std::pair{top, bottom - top};
         };
         using Corners = std::array<float, 4>;
-        Settings s;
+        Settings s = StackedSettings();
         SettingsPreviewStrip strip = Strip(s);
         std::vector<SettingsPreviewOp> tracks = OpsOfColor(strip, 0x46808080);
         std::vector<SettingsPreviewOp> shaded = fills(strip);
@@ -1166,7 +1167,7 @@ static void RunLayoutTests() {
         CHECK(std::abs(span(polygons(Strip(s, 48, false, 1.5f))[0]).second - (8 + 2 * 2 / 1.5)) < 1e-4);  // Floats
         // A notch hangs from the overhang's outer edge: its core 1 + 5 DIPs deep and flush with
         // that edge, its halo a pixel deeper.
-        s = {};
+        s = StackedSettings();
         s.paceTickStyle = PaceTickStyle::Notch;
         strip = Strip(s);
         std::vector<SettingsPreviewOp> notches = OpsOfColor(strip, 0xC0000000);
@@ -1207,7 +1208,7 @@ static void RunLayoutTests() {
         CHECK_NEAR(cores[0].rect.top, notches[0].rect.top + 1);
 
         // Vertical bars fill upward: start corners at the bottom, the highlight on the left.
-        s = {};
+        s = StackedSettings();
         s.barLayout = BarLayout::Vertical;
         strip = Strip(s);
         shaded = fills(strip);
@@ -1217,7 +1218,7 @@ static void RunLayoutTests() {
 
         // Thin rail: a 2 DIP rail centred across the 8 DIP bar, fills rounded at both ends, ticks
         // within the bar.
-        s = {};
+        s = StackedSettings();
         s.barStyle = BarStyle::Rail;
         strip = Strip(s);
         std::vector<SettingsPreviewOp> rails = OpsOfColor(strip, 0x66808080);
@@ -1261,7 +1262,7 @@ static void RunLayoutTests() {
         };
         using Corners = std::array<float, 4>;
         const uint32_t track = TilePaletteFor(false).track;
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::SegmentedRing;
         SettingsPreviewStrip strip = Strip(s);
         // Ten quotas on four tiles: a track shape each, then a flat fill shape per quota in use.
@@ -1328,7 +1329,7 @@ static void RunLayoutTests() {
 
     Run("preview: the headline key follows its number; the tile keeps its width as values change", [] {
         std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC", {true, true, false, false})};
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::LogoHeadline;
         auto at = [&](std::array<double, kQuotaBarCount> pct) {
             std::vector<AccountData> data = {Fresh(pct)};
@@ -1353,7 +1354,7 @@ static void RunLayoutTests() {
             return SettingsPreviewLayout(TestGraphics(), settings, 48, 1, kNow, false, light,
                                          light ? 0xE4000000 : 0xFFFFFFFF);
         };
-        Settings s;
+        Settings s = StackedSettings();
         SettingsPreviewStrip lightStrip = strip(s, true);
         size_t marks = OpsOfColor(strip(s, false), 0xFFDEDEDE).size();
         CHECK(marks > 0 && OpsOfColor(lightStrip, 0xFFDEDEDE).empty());
@@ -1366,7 +1367,7 @@ static void RunLayoutTests() {
         lightStrip = strip(s, true);
         CHECK(OpsOfColor(lightStrip, 0xFFFF6EC7).size() == marks && OpsOfColor(lightStrip, 0xC0000000).size() == marks);
         // Tile ticks follow the taskbar the same way.
-        s = {};
+        s = StackedSettings();
         for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
             s.barLayout = layout;
             size_t ticks = OpsOfColor(strip(s, false), 0xFFDEDEDE).size();
@@ -1381,7 +1382,7 @@ static void RunLayoutTests() {
         using Corners = std::array<float, 4>;
         std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, true, false, false})};
         accounts[0].tileIdentity = TileIdentity::Logo;
-        Settings s;
+        Settings s = StackedSettings();
         s.paceTickStyle = PaceTickStyle::TimeTrack;
         auto at = [&](long long resetIn) {
             AccountData data = Fresh();
@@ -1441,7 +1442,7 @@ static void RunLayoutTests() {
             return shapes;
         };
         auto capCentre = [](const SettingsPreviewOp& op) { return op.rect.top + AboveCap(op.style.size) + CapHeight(op.style.size) / 2; };
-        Settings s;
+        Settings s = StackedSettings();
         s.accountMargin = 10;
 
         // Gauge: 7 + 16 + 6 + 32 + 8 DIPs; the logo centred on the 40 DIP tile, the face 6 DIPs after it.
@@ -1493,7 +1494,7 @@ static void RunLayoutTests() {
     Run("preview: pace ticks on gauges, pies and rounded squares, a core shape after each halo", [] {
         const uint32_t pace = 0xFFDEDEDE;
         auto ticks = [&](BarLayout layout) {
-            Settings s;
+            Settings s = StackedSettings();
             s.barLayout = layout;
             SettingsPreviewStrip strip = Strip(s);
             for (size_t i = 0; i < strip.ops.size(); i++) {
@@ -1507,7 +1508,7 @@ static void RunLayoutTests() {
         size_t rings = ticks(BarLayout::SegmentedRing);
         CHECK(rings > 0 && ticks(BarLayout::ClockPies) == rings && ticks(BarLayout::RoundedSquare) == rings);
         CHECK(ticks(BarLayout::Gauge) == 3);
-        Settings off;
+        Settings off = StackedSettings();
         off.showPaceTicks = false;
         for (BarLayout layout : {BarLayout::Gauge, BarLayout::ClockPies, BarLayout::RoundedSquare}) {
             off.barLayout = layout;
@@ -1519,7 +1520,7 @@ static void RunLayoutTests() {
         const ULONGLONG hour = 60 * kMinute;
         std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC", {true, true, false, false})};
         accounts[0].tileIdentity = TileIdentity::Logo;
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::LogoHeadline;
         s.headlineCountdown = true;
         auto at = [&](ULONGLONG weeklyResetIn, double weekly = 80) {
@@ -1601,7 +1602,7 @@ static void RunLayoutTests() {
                 k++;
             }
         };
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::Sparkline;
         s.accountMargin = 10;
         const uint32_t plotColor = 0x59000000;
@@ -1793,7 +1794,7 @@ static void RunLayoutTests() {
         // Text whose cap height starts 3 DIPs below the plots' top (8).
         auto capTop = [](const SettingsPreviewOp& op) { return op.rect.top + AboveCap(op.style.size); };
         const uint32_t plotColor = 0x59000000;
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::Sparkline;
         s.accountMargin = 10;
 
@@ -1892,7 +1893,7 @@ static void RunLayoutTests() {
         // One account with its logo alone and a 10 DIP margin, as above.
         std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A")};
         accounts[0].tileIdentity = TileIdentity::Logo;
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::QuotaMatrix;
         s.accountMargin = 10;
         auto at = [&](std::array<double, kQuotaBarCount> pct, std::array<bool, kQuotaBarCount> bars = {true, true, true, true},
@@ -2040,7 +2041,7 @@ static void RunLayoutTests() {
     });
 
     Run("preview: the new tile styles stay drawable and bounded at extreme settings; unknown styles fall back", [] {
-        Settings large;
+        Settings large = StackedSettings();
         large.ringSize = 40;
         large.ringThickness = 6;
         large.logoScale = 200;
@@ -2087,6 +2088,7 @@ static void RunLayoutTests() {
 
     Run("controller: the bar style commits as chosen and the preview follows", [] {
         TestStore store;
+        store.settings = StackedSettings();
         SettingsEdits edits(store);
         edits.Reload();
         CHECK(edits.Projection().barStyle == BarStyle::Track);
@@ -2137,7 +2139,7 @@ static void RunLayoutTests() {
     });
 
     Run("preview: extreme and out-of-range settings stay drawable and bounded", [] {
-        Settings large;
+        Settings large = StackedSettings();
         large.barLength = 500;
         large.barThickness = 50;
         large.labelFontSize = large.percentFontSize = 24;
@@ -2178,7 +2180,7 @@ static void RunLayoutTests() {
     });
 
     Run("preview: overflow beyond the strip and its scroll range", [] {
-        Settings s;
+        Settings s = StackedSettings();
         s.barLayout = BarLayout::SegmentedRing;
         SettingsPreviewStrip strip = Strip(s);
         float fits = 4 + strip.width + strip.rightMargin + strip.trayWidth;
@@ -2729,6 +2731,7 @@ static void RunLayoutTests() {
         }
         // Chosen through the controller: committed, and the preview draws rails instead of carets.
         TestStore store;
+        store.settings = StackedSettings();
         SettingsEdits edits(store);
         edits.Reload();
         CHECK(edits.Commit(0, SettingsField::PaceTickStyle, int(PaceTickStyle::TimeTrack)) == 0);
