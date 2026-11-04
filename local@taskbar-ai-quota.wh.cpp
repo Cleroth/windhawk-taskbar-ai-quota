@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
-// @version         2.5.0
+// @version         2.6.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -25,7 +25,8 @@ Supported providers and quotas:
 
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
 - **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
-- **Google Antigravity:** short-window and weekly Gemini pools; Claude/GPT pool limits in the details flyout
+- **Google Antigravity:** short-window and weekly Gemini pools and Gemini Argon weekly; Claude/GPT
+  pool limits in the details flyout
 - **GitHub Copilot:** the monthly AI credits allowance (Copilot Free's included); the additional
   usage GitHub reports past it and an organization's pooled credits in the details flyout
 
@@ -193,7 +194,7 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 enum QuotaBarIndex {
     kFiveHourBar,
     kWeeklyBar,
-    kFableWeeklyBar,
+    kFableWeeklyBar,  // Anthropic Fable weekly, or Antigravity's Gemini Argon weekly.
     kExtraUsageBar,
     kQuotaBarCount,
 };
@@ -476,7 +477,7 @@ enum class CopilotUnit {
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
-    WindowUsage fableWeek;
+    WindowUsage fableWeek;  // Antigravity: Gemini Argon weekly.
     WindowUsage extraUsage;
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;
@@ -545,7 +546,8 @@ struct HistorySample {
     uint64_t session = 0;
     uint32_t provider = 0;  // HistoryProviderCode.
     uint32_t failed = 0;
-    // Short, weekly, Fable weekly, extra %, 3p short, 3p weekly, extra $, credits.
+    // Short, weekly, Fable weekly (Antigravity: Argon weekly), extra %, 3p short, 3p weekly,
+    // extra $, credits.
     std::array<HistoryValue, kHistoryMeterCount> meters{};
     uint64_t checksum = 0;
 };
@@ -792,9 +794,9 @@ struct FlyoutTheme {
 enum FlyoutRowIndex {
     kFlyoutFiveHourRow,
     kFlyoutWeeklyRow,
+    kFlyoutFableRow,      // Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
     kFlyoutPoolShortRow,  // Antigravity Claude/GPT pools.
     kFlyoutPoolWeeklyRow,
-    kFlyoutFableRow,
     kFlyoutExtraRow,      // Anthropic extra usage, OpenAI credits or GitHub Copilot's AI credits.
     kFlyoutRowCount,
 };
@@ -3557,6 +3559,7 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
             std::transform(dispName.begin(), dispName.end(), dispName.begin(),
                            [](wchar_t ch) { return (wchar_t)towlower(ch); });
             bool geminiGroup = dispName.find(L"gemini") != std::wstring::npos;
+            bool argonGroup = dispName.find(L"argon") != std::wstring::npos;
             bool thirdPartyGroup = dispName.find(L"claude") != std::wstring::npos ||
                                    dispName.find(L"gpt") != std::wstring::npos;
 
@@ -3584,6 +3587,18 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 bool isSession = window == L"session" || endsWith(bucketId, L"-session");
                 bool isShort = is5h || is3h || isHourly || isSession;
                 if (isWeekly) isShort = false;
+                // Gemini Argon is a pool of its own, known only weekly: its other windows stay
+                // out of the Gemini readings, unshown.
+                bool argonBucket = argonGroup || bucketId.find(L"argon") != std::wstring::npos;
+                if (argonBucket && !isWeekly) {
+                    static bool logged = false;
+                    if (!logged) {
+                        logged = true;
+                        Wh_Log(L"Ignoring Antigravity Argon bucket %s (window %s)",
+                               bucketId.c_str(), window.c_str());
+                    }
+                    continue;
+                }
                 if (!isShort && !isWeekly) continue;
 
                 bool geminiBucket = bucketId.rfind(L"gemini-", 0) == 0 ||
@@ -3591,7 +3606,9 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 bool thirdPartyBucket = bucketId.rfind(L"3p-", 0) == 0 ||
                                          (!geminiBucket && thirdPartyGroup);
                 WindowUsage* target = nullptr;
-                if (geminiBucket) {
+                if (argonBucket) {
+                    target = &d->fableWeek;
+                } else if (geminiBucket) {
                     target = isShort ? &d->win5h : &d->winWeek;
                 } else if (thirdPartyBucket) {
                     target = isShort ? &d->antigravityThirdParty5h :
@@ -3689,6 +3706,9 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                         continue;
                     }
 
+                    // Model quota has no window to tell Gemini Argon's weekly pool from others:
+                    // it stays out of the Gemini reading, unshown.
+                    if (identity.find(L"argon") != std::wstring::npos) continue;
                     WindowUsage* target = nullptr;
                     if (identity.find(L"gemini") != std::wstring::npos) {
                         target = &d->win5h;
@@ -3802,7 +3822,7 @@ static void FetchAntigravityAccount(AccountData* d) {
         }
 
         bool parsed = fresh->win5h.pct >= 0 || fresh->winWeek.pct >= 0 ||
-                      fresh->antigravityThirdParty5h.pct >= 0 ||
+                      fresh->fableWeek.pct >= 0 || fresh->antigravityThirdParty5h.pct >= 0 ||
                       fresh->antigravityThirdPartyWeek.pct >= 0;
         if (!parsed && parseError->empty()) {
             *parseError = L"no usable Antigravity quota in response";
@@ -5613,6 +5633,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                                             L"Gemini 5h";
                             } else if (w == kWeeklyBar) {
                                 quotaName = L"Gemini weekly";
+                            } else if (w == kFableWeeklyBar) {
+                                quotaName = L"Argon weekly";
                             }
                         } else if (publishedAccounts[i].provider == L"openai" &&
                                    w == kExtraUsageBar) {
@@ -6534,12 +6556,13 @@ static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // kHeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
 static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
-// Quota window keys on bar labels and tiles; QuotaKey gives the extra slot's per provider.
+// Quota window keys on bar labels and tiles; QuotaKey gives the per-provider ones.
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
-// A slot's key: OpenAI credits show "Cr" instead of "Ex", GitHub Copilot's monthly AI credits
-// "Mo".
+// A slot's key: Antigravity's Gemini Argon weekly shows "Ar" instead of "Fa", OpenAI credits "Cr"
+// instead of "Ex", GitHub Copilot's monthly AI credits "Mo".
 static PCWSTR QuotaKey(std::wstring_view provider, int slot) {
+    if (slot == kFableWeeklyBar) return provider == L"antigravity" ? L"Ar" : kQuotaKeys[slot];
     if (slot != kExtraUsageBar) return kQuotaKeys[slot];
     return provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : kQuotaKeys[slot];
 }
@@ -7144,7 +7167,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, TileIdentity::Text},
         {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},
         {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},
-        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}, TileIdentity::Logo},
+        {L"antigravity", L"Go", {green, green * 1.5, orange, -1}, {true, false, false, false}, TileIdentity::Logo},
     }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
@@ -7200,8 +7223,9 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         accountData.lastSuccessMs = now;
         accountData.stale = false;
         if (account.provider == L"antigravity") {
-            // Claude/GPT pools appear only in the details flyout. A failed refresh keeps the
-            // last success, as the fetch thread does; ten minutes before now, it stays stale.
+            // Claude/GPT pools, like its unselected weekly and Argon weekly, appear only in the
+            // details flyout. A failed refresh keeps the last success, as the fetch thread does;
+            // ten minutes before now, it stays stale.
             accountData.antigravityThirdParty5h = {
                 yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
             accountData.antigravityThirdPartyWeek = {
@@ -8745,7 +8769,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     double reserve = std::ceil(TileTextWidthPerPt(tile.headline) * fontSize) + 3;
     tile.headline.Text(L"");
     double keyWidth = 0;
-    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
+    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
         tile.headlineKey.Text(key);
         keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey) * keySize);
     }
@@ -8835,7 +8859,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             TextBlock keyProbe, valueProbe;
             keyProbe.FontSize(meters.matrixKeyFont);
             double keyWidth = 0;
-            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
+            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
                 keyProbe.Text(key);
                 keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe) * meters.matrixKeyFont);
             }
@@ -9538,8 +9562,8 @@ static constexpr double kFlyoutChartInset = 2;
 
 // The reading each flyout row shows, by FlyoutRowIndex.
 static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(AccountData const& d) {
-    return {&d.win5h, &d.winWeek, &d.antigravityThirdParty5h, &d.antigravityThirdPartyWeek,
-            &d.fableWeek, &d.extraUsage};
+    return {&d.win5h, &d.winWeek, &d.fableWeek, &d.antigravityThirdParty5h,
+            &d.antigravityThirdPartyWeek, &d.extraUsage};
 }
 
 // "1d 3h", "2h 15m", "4m 12s" or "45s".
@@ -10129,10 +10153,10 @@ static void UpdateAccountFlyout(
             {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
              d.win5h.pct >= 0},
             {antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
+            {antigravity ? L"Argon weekly" : L"Fable weekly", d.fableWeek.pct >= 0},
             {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
              antigravity && d.antigravityThirdParty5h.pct >= 0},
             {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {L"Fable weekly", d.fableWeek.pct >= 0},
             {openAi ? L"Credits" : copilot ? copilotRow : L"Extra usage",
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
@@ -18243,7 +18267,8 @@ static bool NormalizeSettings(Settings* s) {
             a.label = a.provider == L"anthropic" ? L"A" : a.provider == L"openai" ? L"O" :
                       a.provider == L"copilot" ? L"C" : L"G";
         }
-        if (a.provider != L"anthropic") a.showBars[kFableWeeklyBar] = false;
+        // The third slot is Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
+        if (a.provider != L"anthropic" && a.provider != L"antigravity") a.showBars[kFableWeeklyBar] = false;
         if (a.provider != L"openai") a.creditsMax = 0;
         a.creditsMax = std::max(a.creditsMax, 0);
         // The extra-usage slot is Anthropic monthly extra usage, OpenAI credits vs. max, or
@@ -18395,7 +18420,9 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"tileText", JsonValue::CreateStringValue(winrt::hstring(a.tileText)));
             account.SetNamedValue(L"fiveHour", JsonValue::CreateBooleanValue(a.showBars[kFiveHourBar]));
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
-            account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
+            // Antigravity's Argon weekly has a key of its own, on while absent.
+            account.SetNamedValue(a.provider == L"antigravity" ? L"argonWeekly" : L"fableWeekly",
+                                  JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
             account.SetNamedValue(L"creditsMax", JsonValue::CreateNumberValue(a.creditsMax));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
@@ -18551,7 +18578,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 };
                 a.showBars[kFiveHourBar] = getBoolDefault(L"fiveHour", true);
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
-                a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
+                a.showBars[kFableWeeklyBar] = a.provider == L"antigravity" ? getBoolDefault(L"argonWeekly", true) :
+                                                                             getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
@@ -18868,6 +18896,7 @@ static bool LoadLegacySettings(Settings* out) {
         a.showBars[kFiveHourBar] = getBool(L"accounts[%d].showFiveHourBar", true);
         a.showBars[kWeeklyBar] = getBool(L"accounts[%d].showWeeklyBar", true);
         a.showBars[kExtraUsageBar] = getBool(L"accounts[%d].showExtraUsageBar", false);
+        a.showBars[kFableWeeklyBar] = a.provider == L"antigravity";  // Argon weekly starts on.
         s.accounts.push_back(std::move(a));
     }
     if (reachedLegacyAccountLimit &&
@@ -20853,6 +20882,7 @@ struct SettingsProductionStore final : SettingsStore {
                                      const std::vector<std::wstring>& labels) override {
         AccountConfig account;
         account.provider = provider;
+        account.showBars[kFableWeeklyBar] = provider == L"antigravity";  // Argon weekly starts on.
         return Result(AddAccountCommand(std::move(account), labels));
     }
 
@@ -21651,7 +21681,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
+                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
                     keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
                 }
                 keyReserve = std::ceil(keyReserve);
@@ -21700,7 +21730,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 Measured number = measure(meters.headline, numberStyle);
                 Measured key = measure(meters.headlineKey, keyStyle);
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
+                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
                     keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
                 }
                 float rowWidth = std::max(std::ceil(measure(L"100%", numberStyle).width) + 3 + std::ceil(keyReserve),
@@ -22724,7 +22754,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Quota keys";
-            spec.description = {{L"Short key beside each bar: 5h, 7d, Fa, Ex, Cr."}};
+            spec.description = {{L"Short key beside each bar: 5h, 7d, Fa, Ar, Ex, Cr, Mo."}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
         }
         {
@@ -22805,8 +22835,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Long windows";
-            spec.description = {{L"Weekly and monthly charts (7d, Fa, Ex, Mo): the whole window, or 12 to 48 hours "
-                                 L"before and after now."}};
+            spec.description = {{L"Weekly and monthly charts (7d, Fa, Ar, Ex, Mo): the whole window, or 12 to 48 "
+                                 L"hours before and after now."}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
                                         {{L"Whole window", int(SparklineSpan::Window)},
                                          {L"12 hours each side", int(SparklineSpan::Hours12)},
@@ -23449,6 +23479,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 } else if (copilot) {
                     // The monthly allowance is its only quota.
                     quotas = {{kExtraUsageBar, L"AI credits"}};
+                } else {
+                    quotas.push_back({kFableWeeklyBar, L"Argon weekly"});
                 }
                 float chipsWidth = 0;
                 for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;
@@ -24527,10 +24559,11 @@ static constexpr unsigned kHistoryViewMeters[] = {
     (1U << 0) | (1U << 4), (1U << 1) | (1U << 2) | (1U << 5),
     (1U << 3) | (1U << 6) | (1U << 7), (1U << kHistoryMeterCount) - 1,
 };
-// By HistoryProviderCode; GitHub Copilot records only its AI credits used (%).
+// By HistoryProviderCode; Antigravity records its Gemini Argon weekly in the Fable weekly lane,
+// GitHub Copilot only its AI credits used (%).
 static constexpr unsigned kHistoryProviderMeters[] = {
     0, (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3) | (1U << 6),
-    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 4) | (1U << 5), 1U << 3,
+    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 2) | (1U << 4) | (1U << 5), 1U << 3,
 };
 static constexpr COLORREF kHistoryColors[] = {
     RGB(0, 80, 230), RGB(220, 100, 0), RGB(0, 140, 40), RGB(200, 0, 160),
@@ -24771,6 +24804,7 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             }
             std::wstring label = kHistoryMeterNames[meter];
             if (account.provider == 3 && meter == 1) label = L"Gemini weekly";
+            if (account.provider == 3 && meter == 2) label = L"Argon weekly";
             if (account.provider == 4 && meter == 3) label = L"AI credits";
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;
@@ -24915,13 +24949,15 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
             // for each provider's supported meters so exports retain gap information.
             if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
                 (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
-                (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5) ||
+                (sample.provider == 3 && meter != 0 && meter != 1 && meter != 2 && meter != 4 && meter != 5) ||
                 (sample.provider == 4 && meter != 3)) continue;
             const auto& value = sample.meters[meter];
             bool present = HistoryHasValue(sample, int(meter));
+            // Antigravity's Fable weekly lane holds its Gemini Argon weekly.
+            const char* meterId = sample.provider == 3 && meter == 2 ? "argon_weekly" : kHistoryMeterIds[meter];
             buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
                 id + "," + provider + "," + std::to_string(sample.provider) + "," +
-                kHistoryMeterIds[meter] + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
+                meterId + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
                 (present ? WideToUtf8(HistoryNumber(value.value)) : "") + "," + HistoryUtcDate(value.resetMs) + "," +
                 std::to_string(value.resetMs) + "," + std::to_string(value.durationMs) + "," +
                 std::to_string(sample.intervalMs) + "," + session + "," +
@@ -26230,7 +26266,7 @@ struct HistoryController {
         for (const HistorySample& sample : snapshot->samples) {
             if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
                 sample.timeMs < scope.to) {
-                estimate += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : 4;
+                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : 5;
             }
         }
         operation = HistoryOperation::Export;
@@ -26352,9 +26388,9 @@ struct HistoryController {
             L"one account on All meters; each keeps its view until the window closes. The window opens on the "
             L"Default time span set in Settings > History. Weekly follows each Anthropic "
             L"account's taskbar weekly selections; removed accounts keep both weeklies, and All meters includes "
-            L"weeklies hidden on the taskbar. Antigravity Gemini and Claude/GPT quotas share the matching short-term "
-            L"and weekly views. Each quota keeps its own line and resets; overlapping limits are never added or "
-            L"merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
+            L"weeklies hidden on the taskbar. Antigravity Gemini, Argon and Claude/GPT quotas share the matching "
+            L"short-term and weekly views. Each quota keeps its own line and resets; overlapping limits are never "
+            L"added or merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
             L"shows limiting pools, which can change.\r\n\r\n"
             L"Legend and readout\r\n"
             L"Each chip above the chart names a line with its color and width: click it to hide or show the line; "

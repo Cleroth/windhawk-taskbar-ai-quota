@@ -512,6 +512,22 @@ static void RunAccountEditTests() {
         CHECK(!UiFindItem(frame, AccountId(4, SettingsField::AccountDashboard, 1)) &&
               UiFindItem(frame, AccountId(4, SettingsField::AccountRemove, 1)));
         CHECK(UiFindItem(frame, AccountId(4, SettingsField::AccountBars, kFiveHourBar))->text == L"Short window");
+        // Then Weekly and Argon weekly (Gemini Argon, in the third slot); no extra usage.
+        const UiItem* argon = UiFindItem(frame, AccountId(4, SettingsField::AccountBars, kFableWeeklyBar));
+        CHECK(argon && argon->text == L"Argon weekly" && !argon->selected && argon->enabled &&
+              argon->action.value == 0b0111);
+        CHECK(!UiFindItem(frame, AccountId(4, SettingsField::AccountBars, kExtraUsageBar)));
+        // Selected, its header keys it "Ar".
+        view.settings.accounts[3].showBars = {true, false, true, false};
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiFindItem(frame, AccountId(4, SettingsField::AccountBars, kFableWeeklyBar))->selected);
+        CHECK(std::any_of(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+            return item.kind == UiItemKind::Chip && item.text == L"Ar";
+        }));
+        view.settings.accounts[3].showBars = {true, true, false, false};
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountExpand))->action.value == 0);
 
         // An expired sign-in (stored, rejected): the header's Sign in only; every id unique.

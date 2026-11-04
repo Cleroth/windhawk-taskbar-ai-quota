@@ -3,7 +3,7 @@
 enum QuotaBarIndex {
     kFiveHourBar,
     kWeeklyBar,
-    kFableWeeklyBar,
+    kFableWeeklyBar,  // Anthropic Fable weekly, or Antigravity's Gemini Argon weekly.
     kExtraUsageBar,
     kQuotaBarCount,
 };
@@ -286,7 +286,7 @@ enum class CopilotUnit {
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
-    WindowUsage fableWeek;
+    WindowUsage fableWeek;  // Antigravity: Gemini Argon weekly.
     WindowUsage extraUsage;
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;

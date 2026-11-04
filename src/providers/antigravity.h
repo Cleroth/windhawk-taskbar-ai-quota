@@ -434,6 +434,7 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
             std::transform(dispName.begin(), dispName.end(), dispName.begin(),
                            [](wchar_t ch) { return (wchar_t)towlower(ch); });
             bool geminiGroup = dispName.find(L"gemini") != std::wstring::npos;
+            bool argonGroup = dispName.find(L"argon") != std::wstring::npos;
             bool thirdPartyGroup = dispName.find(L"claude") != std::wstring::npos ||
                                    dispName.find(L"gpt") != std::wstring::npos;
 
@@ -461,6 +462,18 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 bool isSession = window == L"session" || endsWith(bucketId, L"-session");
                 bool isShort = is5h || is3h || isHourly || isSession;
                 if (isWeekly) isShort = false;
+                // Gemini Argon is a pool of its own, known only weekly: its other windows stay
+                // out of the Gemini readings, unshown.
+                bool argonBucket = argonGroup || bucketId.find(L"argon") != std::wstring::npos;
+                if (argonBucket && !isWeekly) {
+                    static bool logged = false;
+                    if (!logged) {
+                        logged = true;
+                        Wh_Log(L"Ignoring Antigravity Argon bucket %s (window %s)",
+                               bucketId.c_str(), window.c_str());
+                    }
+                    continue;
+                }
                 if (!isShort && !isWeekly) continue;
 
                 bool geminiBucket = bucketId.rfind(L"gemini-", 0) == 0 ||
@@ -468,7 +481,9 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 bool thirdPartyBucket = bucketId.rfind(L"3p-", 0) == 0 ||
                                          (!geminiBucket && thirdPartyGroup);
                 WindowUsage* target = nullptr;
-                if (geminiBucket) {
+                if (argonBucket) {
+                    target = &d->fableWeek;
+                } else if (geminiBucket) {
                     target = isShort ? &d->win5h : &d->winWeek;
                 } else if (thirdPartyBucket) {
                     target = isShort ? &d->antigravityThirdParty5h :
@@ -566,6 +581,9 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                         continue;
                     }
 
+                    // Model quota has no window to tell Gemini Argon's weekly pool from others:
+                    // it stays out of the Gemini reading, unshown.
+                    if (identity.find(L"argon") != std::wstring::npos) continue;
                     WindowUsage* target = nullptr;
                     if (identity.find(L"gemini") != std::wstring::npos) {
                         target = &d->win5h;
@@ -679,7 +697,7 @@ static void FetchAntigravityAccount(AccountData* d) {
         }
 
         bool parsed = fresh->win5h.pct >= 0 || fresh->winWeek.pct >= 0 ||
-                      fresh->antigravityThirdParty5h.pct >= 0 ||
+                      fresh->fableWeek.pct >= 0 || fresh->antigravityThirdParty5h.pct >= 0 ||
                       fresh->antigravityThirdPartyWeek.pct >= 0;
         if (!parsed && parseError->empty()) {
             *parseError = L"no usable Antigravity quota in response";

@@ -18,12 +18,13 @@ static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // kHeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
 static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
-// Quota window keys on bar labels and tiles; QuotaKey gives the extra slot's per provider.
+// Quota window keys on bar labels and tiles; QuotaKey gives the per-provider ones.
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
-// A slot's key: OpenAI credits show "Cr" instead of "Ex", GitHub Copilot's monthly AI credits
-// "Mo".
+// A slot's key: Antigravity's Gemini Argon weekly shows "Ar" instead of "Fa", OpenAI credits "Cr"
+// instead of "Ex", GitHub Copilot's monthly AI credits "Mo".
 static PCWSTR QuotaKey(std::wstring_view provider, int slot) {
+    if (slot == kFableWeeklyBar) return provider == L"antigravity" ? L"Ar" : kQuotaKeys[slot];
     if (slot != kExtraUsageBar) return kQuotaKeys[slot];
     return provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : kQuotaKeys[slot];
 }
@@ -628,7 +629,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, TileIdentity::Text},
         {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},
         {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},
-        {L"antigravity", L"Go", {green, green * 1.5, -1, -1}, {true, false, false, false}, TileIdentity::Logo},
+        {L"antigravity", L"Go", {green, green * 1.5, orange, -1}, {true, false, false, false}, TileIdentity::Logo},
     }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
@@ -684,8 +685,9 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         accountData.lastSuccessMs = now;
         accountData.stale = false;
         if (account.provider == L"antigravity") {
-            // Claude/GPT pools appear only in the details flyout. A failed refresh keeps the
-            // last success, as the fetch thread does; ten minutes before now, it stays stale.
+            // Claude/GPT pools, like its unselected weekly and Argon weekly, appear only in the
+            // details flyout. A failed refresh keeps the last success, as the fetch thread does;
+            // ten minutes before now, it stays stale.
             accountData.antigravityThirdParty5h = {
                 yellow, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.4), kFiveHourWindowMs};
             accountData.antigravityThirdPartyWeek = {

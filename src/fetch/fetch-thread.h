@@ -563,6 +563,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                                             L"Gemini 5h";
                             } else if (w == kWeeklyBar) {
                                 quotaName = L"Gemini weekly";
+                            } else if (w == kFableWeeklyBar) {
+                                quotaName = L"Argon weekly";
                             }
                         } else if (publishedAccounts[i].provider == L"openai" &&
                                    w == kExtraUsageBar) {

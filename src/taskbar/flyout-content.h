@@ -34,8 +34,8 @@ static constexpr double kFlyoutChartInset = 2;
 
 // The reading each flyout row shows, by FlyoutRowIndex.
 static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(AccountData const& d) {
-    return {&d.win5h, &d.winWeek, &d.antigravityThirdParty5h, &d.antigravityThirdPartyWeek,
-            &d.fableWeek, &d.extraUsage};
+    return {&d.win5h, &d.winWeek, &d.fableWeek, &d.antigravityThirdParty5h,
+            &d.antigravityThirdPartyWeek, &d.extraUsage};
 }
 
 // "1d 3h", "2h 15m", "4m 12s" or "45s".
@@ -625,10 +625,10 @@ static void UpdateAccountFlyout(
             {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
              d.win5h.pct >= 0},
             {antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
+            {antigravity ? L"Argon weekly" : L"Fable weekly", d.fableWeek.pct >= 0},
             {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
              antigravity && d.antigravityThirdParty5h.pct >= 0},
             {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {L"Fable weekly", d.fableWeek.pct >= 0},
             {openAi ? L"Credits" : copilot ? copilotRow : L"Extra usage",
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};

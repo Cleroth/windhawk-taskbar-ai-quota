@@ -141,6 +141,7 @@ struct SettingsProductionStore final : SettingsStore {
                                      const std::vector<std::wstring>& labels) override {
         AccountConfig account;
         account.provider = provider;
+        account.showBars[kFableWeeklyBar] = provider == L"antigravity";  // Argon weekly starts on.
         return Result(AddAccountCommand(std::move(account), labels));
     }
 

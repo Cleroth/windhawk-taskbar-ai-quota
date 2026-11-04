@@ -3340,13 +3340,14 @@ static void RunMatrixTests() {
         CHECK(waiting.barMask == 0b1111 && waiting.quotas[0].text == L"42%" && waiting.quotas[1].text == L"\u2013" &&
               waiting.quotas[3].text == L"\u2013");
         CHECK(matrix(before, BarMode::Remaining).quotas[2].text == L"\u2013");
-        // Keys on every slot in every style, selected or not; OpenAI's fourth is its credits,
-        // GitHub Copilot's its monthly AI credits.
+        // Keys on every slot in every style, selected or not; Antigravity's third is its Gemini
+        // Argon weekly, OpenAI's fourth its credits, GitHub Copilot's its monthly AI credits.
         for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
             for (std::wstring provider : {L"anthropic", L"openai", L"antigravity", L"copilot"}) {
                 AccountMeters m = AccountMeterState(Display(), BarLayout(layout), Account(provider, L"A", {true, false, false, false}),
                                                     Fresh({10, -1, -1, -1}), 0, 0);
-                CHECK(m.quotas[0].key == L"5h" && m.quotas[1].key == L"7d" && m.quotas[2].key == L"Fa");
+                CHECK(m.quotas[0].key == L"5h" && m.quotas[1].key == L"7d" &&
+                      m.quotas[2].key == (provider == L"antigravity" ? L"Ar" : L"Fa"));
                 CHECK(m.quotas[3].key == (provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : L"Ex"));
             }
         }

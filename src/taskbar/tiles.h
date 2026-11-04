@@ -398,7 +398,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     double reserve = std::ceil(TileTextWidthPerPt(tile.headline) * fontSize) + 3;
     tile.headline.Text(L"");
     double keyWidth = 0;
-    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
+    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
         tile.headlineKey.Text(key);
         keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey) * keySize);
     }
@@ -488,7 +488,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             TextBlock keyProbe, valueProbe;
             keyProbe.FontSize(meters.matrixKeyFont);
             double keyWidth = 0;
-            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr", L"Mo"}) {
+            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
                 keyProbe.Text(key);
                 keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe) * meters.matrixKeyFont);
             }

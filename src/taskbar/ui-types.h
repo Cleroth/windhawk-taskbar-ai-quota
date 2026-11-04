@@ -195,9 +195,9 @@ struct FlyoutTheme {
 enum FlyoutRowIndex {
     kFlyoutFiveHourRow,
     kFlyoutWeeklyRow,
+    kFlyoutFableRow,      // Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
     kFlyoutPoolShortRow,  // Antigravity Claude/GPT pools.
     kFlyoutPoolWeeklyRow,
-    kFlyoutFableRow,
     kFlyoutExtraRow,      // Anthropic extra usage, OpenAI credits or GitHub Copilot's AI credits.
     kFlyoutRowCount,
 };

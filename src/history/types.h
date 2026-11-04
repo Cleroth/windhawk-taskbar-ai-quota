@@ -22,7 +22,8 @@ struct HistorySample {
     uint64_t session = 0;
     uint32_t provider = 0;  // HistoryProviderCode.
     uint32_t failed = 0;
-    // Short, weekly, Fable weekly, extra %, 3p short, 3p weekly, extra $, credits.
+    // Short, weekly, Fable weekly (Antigravity: Argon weekly), extra %, 3p short, 3p weekly,
+    // extra $, credits.
     std::array<HistoryValue, kHistoryMeterCount> meters{};
     uint64_t checksum = 0;
 };

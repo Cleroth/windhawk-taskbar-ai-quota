@@ -17,7 +17,8 @@ static bool NormalizeSettings(Settings* s) {
             a.label = a.provider == L"anthropic" ? L"A" : a.provider == L"openai" ? L"O" :
                       a.provider == L"copilot" ? L"C" : L"G";
         }
-        if (a.provider != L"anthropic") a.showBars[kFableWeeklyBar] = false;
+        // The third slot is Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
+        if (a.provider != L"anthropic" && a.provider != L"antigravity") a.showBars[kFableWeeklyBar] = false;
         if (a.provider != L"openai") a.creditsMax = 0;
         a.creditsMax = std::max(a.creditsMax, 0);
         // The extra-usage slot is Anthropic monthly extra usage, OpenAI credits vs. max, or
@@ -169,7 +170,9 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"tileText", JsonValue::CreateStringValue(winrt::hstring(a.tileText)));
             account.SetNamedValue(L"fiveHour", JsonValue::CreateBooleanValue(a.showBars[kFiveHourBar]));
             account.SetNamedValue(L"weekly", JsonValue::CreateBooleanValue(a.showBars[kWeeklyBar]));
-            account.SetNamedValue(L"fableWeekly", JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
+            // Antigravity's Argon weekly has a key of its own, on while absent.
+            account.SetNamedValue(a.provider == L"antigravity" ? L"argonWeekly" : L"fableWeekly",
+                                  JsonValue::CreateBooleanValue(a.showBars[kFableWeeklyBar]));
             account.SetNamedValue(L"extraUsage", JsonValue::CreateBooleanValue(a.showBars[kExtraUsageBar]));
             account.SetNamedValue(L"creditsMax", JsonValue::CreateNumberValue(a.creditsMax));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
@@ -325,7 +328,8 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                 };
                 a.showBars[kFiveHourBar] = getBoolDefault(L"fiveHour", true);
                 a.showBars[kWeeklyBar] = getBoolDefault(L"weekly", true);
-                a.showBars[kFableWeeklyBar] = getBoolDefault(L"fableWeekly", false);
+                a.showBars[kFableWeeklyBar] = a.provider == L"antigravity" ? getBoolDefault(L"argonWeekly", true) :
+                                                                             getBoolDefault(L"fableWeekly", false);
                 a.showBars[kExtraUsageBar] = getBoolDefault(L"extraUsage", false);
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
@@ -642,6 +646,7 @@ static bool LoadLegacySettings(Settings* out) {
         a.showBars[kFiveHourBar] = getBool(L"accounts[%d].showFiveHourBar", true);
         a.showBars[kWeeklyBar] = getBool(L"accounts[%d].showWeeklyBar", true);
         a.showBars[kExtraUsageBar] = getBool(L"accounts[%d].showExtraUsageBar", false);
+        a.showBars[kFableWeeklyBar] = a.provider == L"antigravity";  // Argon weekly starts on.
         s.accounts.push_back(std::move(a));
     }
     if (reachedLegacyAccountLimit &&

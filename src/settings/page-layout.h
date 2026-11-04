@@ -209,7 +209,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Quota keys";
-            spec.description = {{L"Short key beside each bar: 5h, 7d, Fa, Ex, Cr."}};
+            spec.description = {{L"Short key beside each bar: 5h, 7d, Fa, Ar, Ex, Cr, Mo."}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
         }
         {
@@ -290,8 +290,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         {
             UiCardSpec spec;
             spec.title = L"Long windows";
-            spec.description = {{L"Weekly and monthly charts (7d, Fa, Ex, Mo): the whole window, or 12 to 48 hours "
-                                 L"before and after now."}};
+            spec.description = {{L"Weekly and monthly charts (7d, Fa, Ar, Ex, Mo): the whole window, or 12 to 48 "
+                                 L"hours before and after now."}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
                                         {{L"Whole window", int(SparklineSpan::Window)},
                                          {L"12 hours each side", int(SparklineSpan::Hours12)},

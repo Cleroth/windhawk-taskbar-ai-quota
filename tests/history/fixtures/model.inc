@@ -4,7 +4,7 @@
     const std::array<std::array<std::set<int>, 4>, 4> expected{{
         {{{0}, {1, 2}, {3, 6}, {0, 1, 2, 3, 6}}},
         {{{0}, {1}, {7}, {0, 1, 7}}},
-        {{{0, 4}, {1, 5}, {}, {0, 1, 4, 5}}},
+        {{{0, 4}, {1, 2, 5}, {}, {0, 1, 2, 4, 5}}},
         {{{}, {}, {3}, {3}}},
     }};
     for (int selected : {-1, 0}) for (uint32_t provider = 1; provider <= 4; ++provider) {
@@ -23,6 +23,9 @@
                 if (provider == 1 && (view == 1 || view == 3)) CHECK(Series(built, 0, 2).hoverTitle.find(L"Fable weekly") != std::wstring::npos);
                 if (provider == 3 && (view == 1 || view == 3)) {
                     CHECK(Series(built, 0, 1).hoverTitle.find(L"Gemini weekly") != std::wstring::npos);
+                    // Antigravity's Fable weekly lane is its Gemini Argon weekly.
+                    CHECK(Series(built, 0, 2).hoverTitle == L"account-100 · Argon weekly used (%)");
+                    CHECK(Series(built, 0, 2).legendTitle == (selected < 0 ? L"account-100 · Argon weekly" : L"Argon weekly"));
                     CHECK(Series(built, 0, 5).hoverTitle.find(L"Claude/GPT weekly") != std::wstring::npos);
                 }
                 // GitHub Copilot's extra percentage is its AI credits.
@@ -135,10 +138,10 @@
             state.accounts[i].showFableWeekly = weeklyFlags[i].second;
         }
         state.accounts[4].configured = false;
-        const std::array<std::set<int>, 7> mixedMeters{{{}, {1}, {2}, {1, 2}, {1, 2}, {1}, {1, 5}}};
+        const std::array<std::set<int>, 7> mixedMeters{{{}, {1}, {2}, {1, 2}, {1, 2}, {1}, {1, 2, 5}}};
         state.view = HistoryView::Weekly;
         auto built = Build(state);
-        CHECK(built.series.size() == 9); CHECK(built.noReadingAccounts.empty());
+        CHECK(built.series.size() == 10); CHECK(built.noReadingAccounts.empty());
         for (size_t i = 0; i < state.accounts.size(); ++i) CHECK(Meters(built, i) == mixedMeters[i]);
         for (size_t i = 0; i < state.accounts.size(); ++i) {
             state.selected = int(i); built = Build(state);

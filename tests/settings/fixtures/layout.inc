@@ -1954,8 +1954,12 @@ static void RunLayoutTests() {
                   NearDip(k.opacity, 0.6));
         }
         // The first column's keys 6 DIPs after the logo, its numbers 3 DIPs past the widest key
-        // ("Cr" and "Mo" included, from OpenAI and GitHub Copilot tiles); the second column a cell
-        // (which reserves "100%") and 8 DIPs further.
+        // ("Ar", "Cr" and "Mo" included, from Antigravity, OpenAI and GitHub Copilot tiles); the
+        // second column a cell (which reserves "100%") and 8 DIPs further.
+        std::vector<AccountConfig> antigravity = {Account(L"antigravity", L"G", {false, false, true, false})};
+        antigravity[0].tileIdentity = TileIdentity::Logo;
+        const SettingsPreviewOp kAr = only(StripOf(s, antigravity, {Fresh({-1, -1, 40, -1})}), L"Ar");
+        CHECK(NearDip(kAr.style.size, 9));
         std::vector<AccountConfig> openai = {Account(L"openai", L"O", {false, false, false, true})};
         openai[0].tileIdentity = TileIdentity::Logo;
         const SettingsPreviewOp kCr = only(StripOf(s, openai, {Fresh({-1, -1, -1, 40})}), L"Cr");
@@ -1965,7 +1969,7 @@ static void RunLayoutTests() {
         const SettingsPreviewOp kMo = only(StripOf(s, copilot, {Fresh({-1, -1, -1, 40})}), L"Mo");
         CHECK(NearDip(kMo.style.size, 9));
         float keyReserve = 0;
-        for (const SettingsPreviewOp& k : {k5, k7, kFa, kEx, kCr, kMo}) keyReserve = std::max(keyReserve, k.rect.right - k.rect.left);
+        for (const SettingsPreviewOp& k : {k5, k7, kFa, kAr, kEx, kCr, kMo}) keyReserve = std::max(keyReserve, k.rect.right - k.rect.left);
         keyReserve = std::ceil(keyReserve);
         const float cell = keyReserve + 3 + std::ceil(n100.rect.right - n100.rect.left);
         CHECK(NearDip(k5.rect.left, 32) && NearDip(k7.rect.left, 32));
@@ -2899,8 +2903,8 @@ static void RunLayoutTests() {
             CHECK(hover.options[k + 1].text == spans[k].first && hover.options[k + 1].value == int(spans[k].second));
         }
         CHECK(HasText(frame, L"Long windows") &&
-              HasText(frame, L"Weekly and monthly charts (7d, Fa, Ex, Mo): the whole window, or 12 to 48 hours "
-                             L"before and after now.") &&
+              HasText(frame, L"Weekly and monthly charts (7d, Fa, Ar, Ex, Mo): the whole window, or 12 to 48 "
+                             L"hours before and after now.") &&
               HasText(frame, L"On hover") &&
               HasText(frame, L"What those charts show while the pointer rests on the account."));
         CHECK(extra.rect.bottom < span.rect.top && span.rect.bottom < hover.rect.top &&

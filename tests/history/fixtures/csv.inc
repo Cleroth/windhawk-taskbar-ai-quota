@@ -2,8 +2,8 @@
 // provider, the scope's bounds and account, 64 KiB pieces, cancellation and a failing sink.
 // Memory sinks only; no file is written.
 {
-    // Anthropic with every kind of value, a failed OpenAI poll, Antigravity with a zero reading,
-    // GitHub Copilot (its AI credits lane only), an unknown provider (every lane), then rows the
+    // Anthropic with every kind of value, a failed OpenAI poll, Antigravity with a zero reading
+    // and its Gemini Argon weekly in the Fable weekly lane, GitHub Copilot (its AI credits lane only), an unknown provider (every lane), then rows the
     // scope leaves out: no account, before its start, at its end.
     auto sample = [](uint64_t account, uint32_t provider, ULONGLONG time, ULONGLONG interval, uint64_t session) {
         HistorySample s;
@@ -26,6 +26,7 @@
     b.meters[7].value = 800;
     HistorySample c = sample(0xC3, 3, baseTime + 3000, 120000, 0x2A);
     c.meters[0].value = 0;
+    c.meters[2] = {65, baseTime + 2 * kHistoryDayMs, kHistoryWeekMs};
     c.meters[4].value = 99.9;
     HistorySample e = sample(0xE5, 4, baseTime + 3500, 600000, 9);
     e.meters[0].value = 11;  // Not a Copilot lane: never exported.
@@ -59,6 +60,7 @@
         bt + "openai_credit_balance,credits,,,0,0,300000,session_0000000000000000,1,1\r\n" +
         ct + "short,percent,0,,0,0,120000,session_000000000000002a,0,0\r\n" +
         ct + "weekly,percent,,,0,0,120000,session_000000000000002a,0,1\r\n" +
+        ct + "argon_weekly,percent,65,2023-11-16T22:13:20.000Z,1700172800000,604800000,120000,session_000000000000002a,0,0\r\n" +
         ct + "third_party_short,percent,99.9,,0,0,120000,session_000000000000002a,0,0\r\n" +
         ct + "third_party_weekly,percent,,,0,0,120000,session_000000000000002a,0,1\r\n" +
         et + "extra_percent,percent,33.25,2023-12-14T22:13:20.000Z,1702592000000,2592000000,600000,session_0000000000000009,0,0\r\n" +
@@ -104,7 +106,7 @@
             Pieces pieces;
             size_t rows = 0;
             CHECK(direct(scope(account), rows, pieces, Never) == HistoryCsvEnd::Written);
-            CHECK(rows == (account ? 5u : 21u) && pieces.pieces.size() == 1 && pieces.lasts[0] &&
+            CHECK(rows == (account ? 5u : 22u) && pieces.pieces.size() == 1 && pieces.lasts[0] &&
                   pieces.Joined() == expected);
         }
         // A scope from its start (inclusive) to its end (exclusive): the earlier and the last

@@ -305,6 +305,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 } else if (copilot) {
                     // The monthly allowance is its only quota.
                     quotas = {{kExtraUsageBar, L"AI credits"}};
+                } else {
+                    quotas.push_back({kFableWeeklyBar, L"Argon weekly"});
                 }
                 float chipsWidth = 0;
                 for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;

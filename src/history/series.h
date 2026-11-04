@@ -19,10 +19,11 @@ static constexpr unsigned kHistoryViewMeters[] = {
     (1U << 0) | (1U << 4), (1U << 1) | (1U << 2) | (1U << 5),
     (1U << 3) | (1U << 6) | (1U << 7), (1U << kHistoryMeterCount) - 1,
 };
-// By HistoryProviderCode; GitHub Copilot records only its AI credits used (%).
+// By HistoryProviderCode; Antigravity records its Gemini Argon weekly in the Fable weekly lane,
+// GitHub Copilot only its AI credits used (%).
 static constexpr unsigned kHistoryProviderMeters[] = {
     0, (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3) | (1U << 6),
-    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 4) | (1U << 5), 1U << 3,
+    (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 2) | (1U << 4) | (1U << 5), 1U << 3,
 };
 static constexpr COLORREF kHistoryColors[] = {
     RGB(0, 80, 230), RGB(220, 100, 0), RGB(0, 140, 40), RGB(200, 0, 160),
@@ -263,6 +264,7 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             }
             std::wstring label = kHistoryMeterNames[meter];
             if (account.provider == 3 && meter == 1) label = L"Gemini weekly";
+            if (account.provider == 3 && meter == 2) label = L"Argon weekly";
             if (account.provider == 4 && meter == 3) label = L"AI credits";
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;

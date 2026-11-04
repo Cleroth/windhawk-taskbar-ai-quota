@@ -347,7 +347,7 @@ struct HistoryController {
         for (const HistorySample& sample : snapshot->samples) {
             if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
                 sample.timeMs < scope.to) {
-                estimate += sample.provider == 1 ? 5 : sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : 4;
+                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : 5;
             }
         }
         operation = HistoryOperation::Export;
@@ -469,9 +469,9 @@ struct HistoryController {
             L"one account on All meters; each keeps its view until the window closes. The window opens on the "
             L"Default time span set in Settings > History. Weekly follows each Anthropic "
             L"account's taskbar weekly selections; removed accounts keep both weeklies, and All meters includes "
-            L"weeklies hidden on the taskbar. Antigravity Gemini and Claude/GPT quotas share the matching short-term "
-            L"and weekly views. Each quota keeps its own line and resets; overlapping limits are never added or "
-            L"merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
+            L"weeklies hidden on the taskbar. Antigravity Gemini, Argon and Claude/GPT quotas share the matching "
+            L"short-term and weekly views. Each quota keeps its own line and resets; overlapping limits are never "
+            L"added or merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
             L"shows limiting pools, which can change.\r\n\r\n"
             L"Legend and readout\r\n"
             L"Each chip above the chart names a line with its color and width: click it to hide or show the line; "

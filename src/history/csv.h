@@ -50,13 +50,15 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
             // for each provider's supported meters so exports retain gap information.
             if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
                 (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
-                (sample.provider == 3 && meter != 0 && meter != 1 && meter != 4 && meter != 5) ||
+                (sample.provider == 3 && meter != 0 && meter != 1 && meter != 2 && meter != 4 && meter != 5) ||
                 (sample.provider == 4 && meter != 3)) continue;
             const auto& value = sample.meters[meter];
             bool present = HistoryHasValue(sample, int(meter));
+            // Antigravity's Fable weekly lane holds its Gemini Argon weekly.
+            const char* meterId = sample.provider == 3 && meter == 2 ? "argon_weekly" : kHistoryMeterIds[meter];
             buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
                 id + "," + provider + "," + std::to_string(sample.provider) + "," +
-                kHistoryMeterIds[meter] + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
+                meterId + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
                 (present ? WideToUtf8(HistoryNumber(value.value)) : "") + "," + HistoryUtcDate(value.resetMs) + "," +
                 std::to_string(value.resetMs) + "," + std::to_string(value.durationMs) + "," +
                 std::to_string(sample.intervalMs) + "," + session + "," +
