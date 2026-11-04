@@ -119,6 +119,23 @@ static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int oran
     return 0xFF43A047;
 }
 
+// An extra usage or credits amount on the taskbar: whole credits or dollars to the cent below
+// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k).
+static std::wstring TaskbarAmountText(double amount, bool dollars) {
+    wchar_t text[32];
+    PCWSTR sign = dollars ? L"$" : L"";
+    if (amount < (dollars ? 999.995 : 999.5)) {
+        swprintf(text, ARRAYSIZE(text), dollars ? L"$%.2f" : L"%.0f", amount);
+    } else {
+        // Amounts that round up into the next suffix read as 1 of it.
+        bool millions = amount >= 999.5e3;
+        double scaled = std::max(amount / (millions ? 1e6 : 1e3), 1.0);
+        swprintf(text, ARRAYSIZE(text), scaled < 999.5 ? L"%s%.3g%s" : L"%s%.0f%s", sign, scaled,
+                 millions ? L"M" : L"k");
+    }
+    return text;
+}
+
 // A bar fill's highlight: the usage color `lift` lighter in OKLCH lightness with the same hue and
 // chroma, the chroma reduced only as far as sRGB requires. Fills shade from it at their top edge
 // (vertical bars: left) to the usage color 60% across. Alpha is kept.
@@ -1009,9 +1026,9 @@ struct AccountMeters {
     uint32_t sparkLimitColor = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
     // The weekly chart's top-left corner (bottom-left with sparkExtraBottom, clear of the current
-    // reading), at the key's font: the account's extra usage per display.sparklineExtra, its key
-    // (empty for dollars) and number, in extra usage's usage color (0: the taskbar's text color).
-    // Empty without.
+    // reading), at the key's font: the account's selected extra usage per display.sparklineExtra,
+    // its key (empty for dollars) and number, in extra usage's usage color (0: the taskbar's text
+    // color). Empty without.
     std::wstring sparkExtraKey, sparkExtraText;
     uint32_t sparkExtraColor = 0;
     bool sparkExtraBottom = false;
@@ -1081,7 +1098,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     if (spark) {
         // A chart per quota with a window, and per quota not read yet (until the first success);
         // without any, the most-used quota's. The extra usage goes in the weekly chart's corner,
-        // instead of a chart of its own, while the provider reports it.
+        // instead of a chart of its own, while selected and reported; credits have no window, so
+        // never get a chart.
         int charted = 0;
         for (int w = 0; w < kQuotaBarCount; w++) {
             if ((meters.barMask & (1 << w)) && (timed(w) || usage[w]->pct < 0)) charted |= 1 << w;
@@ -1089,27 +1107,28 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         bool openAi = account.provider == L"openai";
         const WindowUsage& extra = data.extraUsage;
         bool extraReported = extra.pct >= 0 || data.extraUsedAmount >= 0 || (openAi && data.creditsBalance >= 0);
-        if (display.sparklineExtra != SparklineExtra::Off && (charted & (1 << kWeeklyBar)) && extraReported) {
+        if (display.sparklineExtra != SparklineExtra::Off && account.showBars[kExtraUsageBar] &&
+            (charted & (1 << kWeeklyBar)) && extraReported) {
             charted &= ~(1 << kExtraUsageBar);
             // Percent of the limit, else the amount: dollars, or credits spent against the max or
             // the balance left; a percentage when it's all there is. Spent in used mode, left in
             // remaining mode (without a limit: spent dollars, the credits balance).
-            wchar_t text[32];
             bool dollars = false;
             bool amounts = data.extraUsedAmount >= 0 || data.extraLimitAmount >= 0;
             bool balance = openAi && data.creditsBalance >= 0;
             if (extra.pct >= 0 && (display.sparklineExtra == SparklineExtra::Percent || (!amounts && !balance))) {
+                wchar_t text[32];
                 swprintf(text, ARRAYSIZE(text), L"%.0f%%",
                          remainingMode ? std::clamp(100.0 - extra.pct, 0.0, 100.0) : extra.pct);
+                meters.sparkExtraText = text;
             } else if (amounts) {
                 double amount = remainingMode && data.extraLimitAmount >= 0 ?
                                     data.extraLimitAmount - data.extraUsedAmount : data.extraUsedAmount;
                 dollars = !openAi;
-                swprintf(text, ARRAYSIZE(text), dollars ? L"$%.2f" : L"%.0f", std::max(amount, 0.0));
+                meters.sparkExtraText = TaskbarAmountText(std::max(amount, 0.0), dollars);
             } else {
-                swprintf(text, ARRAYSIZE(text), L"%.0f", data.creditsBalance);
+                meters.sparkExtraText = TaskbarAmountText(data.creditsBalance, false);
             }
-            meters.sparkExtraText = text;
             if (!dollars) meters.sparkExtraKey = openAi ? L"Cr" : kQuotaKeys[kExtraUsageBar];
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
                 UsageColor(extra.pct, meters.stale, yellow, orange, red, display.colorblindMode) : 0;
@@ -1250,20 +1269,18 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 ((wu.pct >= yellow && wu.pct < orange) || (wu.pct >= orange && wu.pct < red));
             m.darkText = m.textAlignment == PercentTextAlignment::Left && yellowOrOrange;
             if (wu.pct >= 0) {
-                wchar_t text[24];
                 if (w == kExtraUsageBar && display.showExtraBarAmounts &&
                     data.extraLimitAmount >= 0) {
                     // Amount follows the bar mode: spent in used mode, left in remaining mode.
                     // Dollars for Anthropic, credits for OpenAI.
                     double amount = remainingMode ? data.extraLimitAmount - data.extraUsedAmount :
                                                     data.extraUsedAmount;
-                    amount = std::max(amount, 0.0);
-                    swprintf(text, ARRAYSIZE(text),
-                             account.provider == L"openai" ? L"%.0f" : L"$%.2f", amount);
+                    m.text = TaskbarAmountText(std::max(amount, 0.0), account.provider != L"openai");
                 } else {
+                    wchar_t text[24];
                     swprintf(text, ARRAYSIZE(text), L"%.0f%%", displayed);
+                    m.text = text;
                 }
-                m.text = text;
             }
             continue;
         }

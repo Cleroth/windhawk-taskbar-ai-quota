@@ -534,6 +534,13 @@ static void RunAccountEditTests() {
         CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kExtraUsageBar))->enabled);
         CHECK(HasText(frame, L"Set Credits max to show the Credits bar."));
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountLabel))->text.empty() && HasText(frame, L"Enter a label."));
+        // Sparklines: the OpenAI card says where its credits show.
+        constexpr std::wstring_view kSparklineCredits = L"Sparklines show Credits as a number on the 7d chart.";
+        CHECK(!HasText(frame, kSparklineCredits));
+        view.settings.barLayout = BarLayout::Sparkline;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(HasText(frame, L"At least one stays selected. Sparklines show Credits as a number on the 7d chart."));
     });
 
     Run("accounts page: empty state; a dragged card is lifted and drawn last", [] {

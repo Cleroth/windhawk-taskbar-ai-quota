@@ -218,6 +218,18 @@ static void RunBarTests() {
         CHECK(amount(L"anthropic", 100, 60, 50, BarMode::Remaining).quotas[3].text == L"$0.00");
         CHECK(amount(L"openai", 25, 250, 1000).quotas[3].text == L"250");
         CHECK(amount(L"openai", 25, 250, 1000, BarMode::Remaining).quotas[3].text == L"750");
+        // From 1,000 on: three significant digits with k or M; amounts that round into the next
+        // suffix read as 1 of it.
+        auto spent = [&](std::wstring provider, double used) {
+            return amount(provider, 25, used, 1e10).quotas[3].text;
+        };
+        CHECK(spent(L"openai", 999.4) == L"999"); CHECK(spent(L"openai", 999.6) == L"1k");
+        CHECK(spent(L"openai", 1234) == L"1.23k"); CHECK(spent(L"openai", 62500) == L"62.5k");
+        CHECK(spent(L"openai", 110616) == L"111k"); CHECK(spent(L"openai", 999400) == L"999k");
+        CHECK(spent(L"openai", 999600) == L"1M"); CHECK(spent(L"openai", 1250000) == L"1.25M");
+        CHECK(spent(L"openai", 2.5e9) == L"2500M");
+        CHECK(spent(L"anthropic", 999.99) == L"$999.99"); CHECK(spent(L"anthropic", 1500) == L"$1.5k");
+        CHECK(spent(L"anthropic", 999.996) == L"$1k");
         CHECK(amount(L"anthropic", 25, 12.5, -1).quotas[3].text == L"25%");
         CHECK(amount(L"anthropic", 25, 12.5, -1, BarMode::Remaining).quotas[3].text == L"75%");
         CHECK(amount(L"anthropic", 25, 12.5, 50, BarMode::Used, false).quotas[3].text == L"25%");
@@ -2435,13 +2447,13 @@ static void RunSparklineTests() {
         dollars.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
         dollars.extraUsedAmount = 20;
         dollars.extraLimitAmount = 50;
-        // Text on both edges: "Cr" and a 12345 credit balance at the top, x 3 to 38.6, over the key
-        // at the bottom; 50% at 75% of the week, (36, 16), clear of both: between them, from 9.6 to
-        // 22.4; the caret, under the key, dropped.
+        // Text on both edges: "Cr" and a 12345 credit balance ("12.3k") at the top, x 3 to 38.6, over
+        // the key at the bottom; 50% at 75% of the week, (36, 16), clear of both: between them, from
+        // 9.6 to 22.4; the caret, under the key, dropped.
         AccountData balance = Fresh();
         balance.creditsBalance = 12345;
         AccountMeters both = weekly(balance, L"openai", 50, 0.75);
-        CHECK(both.sparkExtraText == L"12345" && !both.sparkExtraBottom && !both.quotas[1].sparkKeyTop);
+        CHECK(both.sparkExtraText == L"12.3k" && !both.sparkExtraBottom && !both.quotas[1].sparkKeyTop);
         pieces(both.quotas[1].spark[kSparkNowLine], 35.5, 36.5, {{9.6, 22.4}});
         CHECK(both.quotas[1].spark[kSparkCaret].empty());
         // "$20.00" (x 3 to 31.8) at the top, half way at 40%: the line below it, the caret kept.
@@ -2531,7 +2543,8 @@ static void RunSparklineTests() {
         };
         using enum SparklineExtra;
         constexpr BarMode kUsed = BarMode::Used, kLeft = BarMode::Remaining;
-        constexpr uint32_t green = 0xFF43A047, orange = 0xFFFB8C00, red = 0xFFE53935, grey = 0xFF9E9E9E;
+        constexpr uint32_t green = 0xFF43A047, yellow = 0xFFFDD835, orange = 0xFFFB8C00, red = 0xFFE53935,
+                           grey = 0xFF9E9E9E;
 
         // Amount, the default: $20 of $50 spent, without a key, in extra usage's usage color (40%:
         // green); extra usage gets no chart, the other two 100 DIPs.
@@ -2630,8 +2643,26 @@ static void RunSparklineTests() {
         AccountMeters fallback = corner(flat);
         shows(fallback, L"", L"", 0);
         CHECK(fallback.barMask == 0b0010);
-        // Extra usage itself not shown: its amount still goes in the corner.
-        shows(corner(anthropic(20, 50), Amount, kUsed, L"anthropic", {true, true, false, false}), L"", L"$20.00", green);
+        // Extra usage or credits not selected for the account: no corner, and no chart.
+        AccountMeters unselected = corner(anthropic(20, 50), Amount, kUsed, L"anthropic", {true, true, false, false});
+        shows(unselected, L"", L"", 0);
+        CHECK(unselected.barMask == 0b0011);
+        shows(corner(credits, Amount, kUsed, L"openai", {true, true, false, false}), L"", L"", 0);
+        shows(corner(balance, Amount, kUsed, L"openai", {true, true, false, false}), L"", L"", 0);
+        // Amounts from 1,000 on: three significant digits with k or M. 110616 of a 250000 credit max
+        // left (55.8% used: yellow): 139384 spent, 111k left; a 62500 balance without a max; $1500
+        // spent past a $1200 limit.
+        AccountData large = credits;
+        large.creditsBalance = 110616;
+        large.extraUsage.pct = 55.7536;
+        large.extraUsedAmount = 139384;
+        large.extraLimitAmount = 250000;
+        shows(corner(large, Amount, kUsed, L"openai"), L"Cr", L"139k", yellow);
+        shows(corner(large, Amount, kLeft, L"openai"), L"Cr", L"111k", yellow);
+        AccountData largeBalance = balance;
+        largeBalance.creditsBalance = 62500;
+        shows(corner(largeBalance, Amount, kUsed, L"openai"), L"Cr", L"62.5k", 0);
+        shows(corner(anthropic(1500, 1200)), L"", L"$1.5k", red);
         // The setting clamps at the display entry: Amount by default.
         CHECK(Display().sparklineExtra == Amount);
         CHECK(Display(With([](Settings& s) { s.sparklineExtra = SparklineExtra(7); })).sparklineExtra == Percent);
@@ -2732,7 +2763,7 @@ static void RunSparklineTests() {
         auto weekReading = [](double pct, double share) {
             return WindowUsage{pct, kNow + (ULONGLONG)std::llround((1 - share) * kWeeklyWindowMs), kWeeklyWindowMs};
         };
-        // A 12345 credit balance: "Cr" and "12345" (7 characters and the gap) from x 3 to 38.6, past
+        // A 12345 credit balance: "Cr" and "12.3k" (7 characters and the gap) from x 3 to 38.6, past
         // the key's 35.4: the two never share an edge.
         AccountData balance = Fresh();
         balance.creditsBalance = 12345;
@@ -2741,7 +2772,7 @@ static void RunSparklineTests() {
         // moves.
         balance.winWeek = weekReading(10, 0.8);
         AccountMeters stuck = placed(balance, L"openai");
-        CHECK(stuck.barMask == 0b0010 && stuck.sparkExtraKey == L"Cr" && stuck.sparkExtraText == L"12345");
+        CHECK(stuck.barMask == 0b0010 && stuck.sparkExtraKey == L"Cr" && stuck.sparkExtraText == L"12.3k");
         CHECK(!stuck.sparkExtraBottom && !stuck.quotas[1].sparkKeyTop);
         // 110% a quarter of the way, (12, 2): the extra usage's top box hit; moved alone it would sit
         // on the key: both move, swapping edges, clear of the ring.

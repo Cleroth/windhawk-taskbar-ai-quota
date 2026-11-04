@@ -2575,8 +2575,8 @@ static void RunLayoutTests() {
               HasText(frame, L"Chart height") && HasText(frame, L"Percent of the tile\u2019s height, from 0% to 100% used.") &&
               HasText(frame, L"Extra usage") &&
               HasText(frame, L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner, when "
-                             L"reported: spent in Used mode, left in Remaining mode. Percent shows the amount without a "
-                             L"limit.") &&
+                             L"selected for the account and reported: spent in Used mode, left in Remaining mode. "
+                             L"Percent shows the amount without a limit. Credits never get a chart of their own.") &&
               !HasText(frame, L"Ring size") && !HasText(frame, L"Pixels from 0% to 100% used."));
         const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
         CHECK(chartWidth.rect.bottom < chartHeight.rect.top && chartHeight.rect.bottom < textSize.rect.top &&

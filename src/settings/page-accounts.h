@@ -308,6 +308,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 UiCardSpec spec;
                 spec.title = L"Quotas on taskbar";
                 spec.description = {{L"Unavailable quotas hide automatically. At least one stays selected."}};
+                if (openai && s.barLayout == BarLayout::Sparkline) {
+                    spec.description[0].text += L" Sparklines show Credits as a number on the 7d chart.";
+                }
                 spec.trailing = {chipsWidth - 4, 26};
                 if (openai && !account.creditsMax) spec.reason = L"Set Credits max to show the Credits bar.";
                 UiCardLayout layout = row(spec);
