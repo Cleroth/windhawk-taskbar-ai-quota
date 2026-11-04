@@ -818,10 +818,9 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
 }
 
 // The identity text of a tile, or of a bar column's logo identity. A logo identity has a number
-// badge (`badgeText`) when another configured account shares the provider, shown (`badge`) while
-// another visible one does; text identities on tiles, and logos that fail to load, show `text`.
+// badge when another configured account, hidden or not, shares the provider; text identities on
+// tiles, and logos that fail to load, show `text`.
 struct TileIdentityText {
-    bool badge = false;
     std::wstring badgeText;  // Empty without a badge.
     std::wstring text;
 };
@@ -830,15 +829,10 @@ static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accoun
                                         size_t index) {
     const AccountConfig& account = accounts[index];
     TileIdentityText identity;
-    int others = 0, visibleOthers = 0;
-    for (size_t k = 0; k < accounts.size(); k++) {
-        if (k == index || accounts[k].provider != account.provider) continue;
-        others++;
-        if (!accounts[k].hidden) visibleOthers++;
-    }
-    const bool logoBadge = account.tileIdentity == TileIdentity::LogoBadge;
-    identity.badge = logoBadge && visibleOthers > 0;
-    if (logoBadge && others > 0) {
+    if (account.tileIdentity == TileIdentity::LogoBadge &&
+        std::count_if(accounts.begin(), accounts.end(), [&](const AccountConfig& other) {
+            return other.provider == account.provider;
+        }) > 1) {
         // The label's trailing digits (at most two), else its first letter, else its first
         // non-space character.
         const std::wstring& label = account.label;

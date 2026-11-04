@@ -351,7 +351,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.title = L"Identity";
                 spec.description = {{L"Marks this account beside its bars and on tiles. Label "
                                      L"shows the label on bars and its short text on tiles. The number badge "
-                                     L"appears only when several visible accounts share a provider."}};
+                                     L"appears when several accounts share a provider, hidden ones included."}};
                 spec.trailing = {220, 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
                 UiCardLayout layout = row(spec);

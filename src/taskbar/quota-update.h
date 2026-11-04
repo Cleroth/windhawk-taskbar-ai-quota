@@ -78,13 +78,6 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
-            // A built badge shows while another visible account shares the provider, so hiding or
-            // showing an account updates it in place. Rings place it whether it shows or not.
-            bool badgeShown = ui.tile.badge && TileIdentityFor(accounts, i).badge;
-            if (ui.tile.badge && (badgeShown ? 1 : 0) != ap.badge) {
-                ui.tile.badge.Visibility(badgeShown ? Visibility::Visible : Visibility::Collapsed);
-                ap.badge = badgeShown ? 1 : 0;
-            }
             // A sparkline's recorded usage: the burn-up curve of the flyout row showing the
             // quota's reading (the accessor takes the settings and data locks, so none may be
             // held here), or the visual test samples.
@@ -120,7 +113,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
                 if (identity) {
                     double side = kBarLogoSide * display.logoScale;
-                    BadgeBox badge = badgeShown ?
+                    BadgeBox badge = ui.tile.badge ?
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
                         settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,

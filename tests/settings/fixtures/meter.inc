@@ -1702,9 +1702,9 @@ static void RunIdentityTests() {
     Run("tile identity: number badges", [] {
         std::vector<AccountConfig> mixed = {Account(L"anthropic", L"CC 1"), Account(L"anthropic", L"CC 2"),
                                             Account(L"openai", L"OAI"), Account(L"antigravity", L"Go")};
-        CHECK(TileIdentityFor(mixed, 0).badge); CHECK(TileIdentityFor(mixed, 0).badgeText == L"1");
+        CHECK(TileIdentityFor(mixed, 0).badgeText == L"1");
         CHECK(TileIdentityFor(mixed, 1).badgeText == L"2");
-        CHECK(!TileIdentityFor(mixed, 2).badge); CHECK(!TileIdentityFor(mixed, 3).badge);
+        CHECK(TileIdentityFor(mixed, 2).badgeText.empty()); CHECK(TileIdentityFor(mixed, 3).badgeText.empty());
         auto badges = [](std::wstring a, std::wstring b) {
             std::vector<AccountConfig> pair = {Account(L"anthropic", a), Account(L"anthropic", b)};
             return std::pair{TileIdentityFor(pair, 0).badgeText, TileIdentityFor(pair, 1).badgeText};
@@ -1716,17 +1716,15 @@ static void RunIdentityTests() {
         std::vector<AccountConfig> plain = {Account(L"anthropic", L"A"), Account(L"anthropic", L"B")};
         plain[0].tileIdentity = TileIdentity::Logo;
         plain[1].tileIdentity = TileIdentity::Text;
-        CHECK(!TileIdentityFor(plain, 0).badge); CHECK(!TileIdentityFor(plain, 1).badge);
-        // Hidden accounts don't count: the badge text stays, shown only while another visible
-        // account shares the provider. A hidden account's own state is what it shows once shown.
+        CHECK(TileIdentityFor(plain, 0).badgeText.empty()); CHECK(TileIdentityFor(plain, 1).badgeText.empty());
+        // Hidden accounts count: the only visible account of a shared provider keeps its badge.
         std::vector<AccountConfig> shared = {Account(L"anthropic", L"CC 1"), Account(L"anthropic", L"CC 2"),
                                              Account(L"anthropic", L"CC 3"), Account(L"openai", L"OAI")};
-        shared[2].hidden = true;
-        CHECK(TileIdentityFor(shared, 0).badge && TileIdentityFor(shared, 1).badge && TileIdentityFor(shared, 2).badge);
         shared[1].hidden = true;
-        CHECK(!TileIdentityFor(shared, 0).badge); CHECK(TileIdentityFor(shared, 0).badgeText == L"1");
-        CHECK(TileIdentityFor(shared, 1).badge && TileIdentityFor(shared, 1).badgeText == L"2");
-        CHECK(!TileIdentityFor(shared, 3).badge && TileIdentityFor(shared, 3).badgeText.empty());
+        shared[2].hidden = true;
+        CHECK(TileIdentityFor(shared, 0).badgeText == L"1");
+        CHECK(TileIdentityFor(shared, 1).badgeText == L"2" && TileIdentityFor(shared, 2).badgeText == L"3");
+        CHECK(TileIdentityFor(shared, 3).badgeText.empty());
     });
 
     Run("tile identity: text", [] {
@@ -1753,7 +1751,7 @@ static void RunSnapshotTests() {
         CHECK(accounts[0].tileIdentity == TileIdentity::Text && accounts[1].tileIdentity == TileIdentity::LogoBadge &&
               accounts[2].tileIdentity == TileIdentity::LogoBadge && accounts[3].tileIdentity == TileIdentity::Logo);
         CHECK(TileIdentityFor(accounts, 1).badgeText == L"1" && TileIdentityFor(accounts, 2).badgeText == L"2");
-        CHECK(!TileIdentityFor(accounts, 0).badge && !TileIdentityFor(accounts, 3).badge);
+        CHECK(TileIdentityFor(accounts, 0).badgeText.empty() && TileIdentityFor(accounts, 3).badgeText.empty());
         for (const AccountConfig& account : accounts) CHECK(account.tileText.empty());
         CHECK((accounts[0].showBars == std::array<bool, kQuotaBarCount>{true, true, false, true}));
         CHECK(accounts[0].creditsMax == 1000);

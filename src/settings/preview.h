@@ -165,7 +165,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         if (account.tileIdentity != TileIdentity::Text) {
             float top = center - side / 2;
             logo(ops, account.provider, {left, top, left + side, top + side}, opacity);
-            if (identity.badge) {
+            if (!identity.badgeText.empty()) {
                 badge(ops, LogoBadgeBox(display, side, int(identity.badgeText.size())), left, top,
                       identity.badgeText, opacity);
             }
@@ -244,8 +244,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
             const BarIdentityMargin margin = BarIdentityMarginFor(
                 position, labelForm, logoSide,
-                !labelForm && identity.badge ? LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) :
-                                               BadgeBox{},
+                !labelForm && !identity.badgeText.empty() ?
+                    LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) : BadgeBox{},
                 meters.warn, count ? labelGap : 0, line.baseline - line.cap, line.height - line.baseline);
             float boxWidth = 0, boxHeight = 0;
             if (shown) {
@@ -397,7 +397,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // rounded box.
             TileIdentityText identity = TileIdentityFor(accounts, i);
             const bool hasLogo = account.tileIdentity != TileIdentity::Text;
-            const bool hasBadge = hasLogo && identity.badge;
+            const bool hasBadge = hasLogo && !identity.badgeText.empty();
             const UiTextStyle idStyle{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
             double perPt = hasLogo ? 0 : std::max(measure(identity.text, idStyle).width, 0.1f) / 10.0;
             // Sparklines chart the visual test samples' recorded usage.

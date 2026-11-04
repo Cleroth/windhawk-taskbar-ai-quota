@@ -102,8 +102,8 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 }
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
-// chosen), with a number badge when another configured account shares the provider (UpdateQuotaUi
-// shows it while a visible one does), or text, and the stale-warning mark. Ring tiles
+// chosen), with a number badge when another configured account, hidden or not, shares the
+// provider, or text, and the stale-warning mark. Ring tiles
 // resize the logo to their hole and place the badge; other tiles take a 16 DIP logo, bar
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,

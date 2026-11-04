@@ -11,7 +11,7 @@ enum QuotaBarIndex {
 // What marks an account on the taskbar: beside Stacked and Vertical bars at the identity position
 // (Settings::labelPosition), and on tiles.
 enum class TileIdentity {
-    LogoBadge,  // Provider logo, plus a number badge when several visible accounts share the provider.
+    LogoBadge,  // Provider logo, plus a number badge when several accounts, hidden ones included, share the provider.
     Logo,
     Text,  // "Label": the label on bars; tileText on tiles, or the label when tileText is empty.
 };

@@ -188,7 +188,7 @@ enum QuotaBarIndex {
 // What marks an account on the taskbar: beside Stacked and Vertical bars at the identity position
 // (Settings::labelPosition), and on tiles.
 enum class TileIdentity {
-    LogoBadge,  // Provider logo, plus a number badge when several visible accounts share the provider.
+    LogoBadge,  // Provider logo, plus a number badge when several accounts, hidden ones included, share the provider.
     Logo,
     Text,  // "Label": the label on bars; tileText on tiles, or the label when tileText is empty.
 };
@@ -552,7 +552,6 @@ struct AppliedState {
     // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
     int tileWarn = -1;
-    int badge = -1;       // Number badge shown (1) or collapsed (0).
     int badgeLight = -1;  // Badge halo color for a light (1) or dark (0) taskbar.
     // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
     int highlight = -1;
@@ -6673,10 +6672,9 @@ static BarGeometry BarGeometryFor(const MeterDisplay& display) {
 }
 
 // The identity text of a tile, or of a bar column's logo identity. A logo identity has a number
-// badge (`badgeText`) when another configured account shares the provider, shown (`badge`) while
-// another visible one does; text identities on tiles, and logos that fail to load, show `text`.
+// badge when another configured account, hidden or not, shares the provider; text identities on
+// tiles, and logos that fail to load, show `text`.
 struct TileIdentityText {
-    bool badge = false;
     std::wstring badgeText;  // Empty without a badge.
     std::wstring text;
 };
@@ -6685,15 +6683,10 @@ static TileIdentityText TileIdentityFor(const std::vector<AccountConfig>& accoun
                                         size_t index) {
     const AccountConfig& account = accounts[index];
     TileIdentityText identity;
-    int others = 0, visibleOthers = 0;
-    for (size_t k = 0; k < accounts.size(); k++) {
-        if (k == index || accounts[k].provider != account.provider) continue;
-        others++;
-        if (!accounts[k].hidden) visibleOthers++;
-    }
-    const bool logoBadge = account.tileIdentity == TileIdentity::LogoBadge;
-    identity.badge = logoBadge && visibleOthers > 0;
-    if (logoBadge && others > 0) {
+    if (account.tileIdentity == TileIdentity::LogoBadge &&
+        std::count_if(accounts.begin(), accounts.end(), [&](const AccountConfig& other) {
+            return other.provider == account.provider;
+        }) > 1) {
         // The label's trailing digits (at most two), else its first letter, else its first
         // non-space character.
         const std::wstring& label = account.label;
@@ -7655,8 +7648,8 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 }
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
-// chosen), with a number badge when another configured account shares the provider (UpdateQuotaUi
-// shows it while a visible one does), or text, and the stale-warning mark. Ring tiles
+// chosen), with a number badge when another configured account, hidden or not, shares the
+// provider, or text, and the stale-warning mark. Ring tiles
 // resize the logo to their hole and place the badge; other tiles take a 16 DIP logo, bar
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
@@ -10626,13 +10619,6 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 continue;
             }
 
-            // A built badge shows while another visible account shares the provider, so hiding or
-            // showing an account updates it in place. Rings place it whether it shows or not.
-            bool badgeShown = ui.tile.badge && TileIdentityFor(accounts, i).badge;
-            if (ui.tile.badge && (badgeShown ? 1 : 0) != ap.badge) {
-                ui.tile.badge.Visibility(badgeShown ? Visibility::Visible : Visibility::Collapsed);
-                ap.badge = badgeShown ? 1 : 0;
-            }
             // A sparkline's recorded usage: the burn-up curve of the flyout row showing the
             // quota's reading (the accessor takes the settings and data locks, so none may be
             // held here), or the visual test samples.
@@ -10668,7 +10654,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
                 if (identity) {
                     double side = kBarLogoSide * display.logoScale;
-                    BadgeBox badge = badgeShown ?
+                    BadgeBox badge = ui.tile.badge ?
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
                         settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,
@@ -19451,7 +19437,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         if (account.tileIdentity != TileIdentity::Text) {
             float top = center - side / 2;
             logo(ops, account.provider, {left, top, left + side, top + side}, opacity);
-            if (identity.badge) {
+            if (!identity.badgeText.empty()) {
                 badge(ops, LogoBadgeBox(display, side, int(identity.badgeText.size())), left, top,
                       identity.badgeText, opacity);
             }
@@ -19530,8 +19516,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
             const BarIdentityMargin margin = BarIdentityMarginFor(
                 position, labelForm, logoSide,
-                !labelForm && identity.badge ? LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) :
-                                               BadgeBox{},
+                !labelForm && !identity.badgeText.empty() ?
+                    LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) : BadgeBox{},
                 meters.warn, count ? labelGap : 0, line.baseline - line.cap, line.height - line.baseline);
             float boxWidth = 0, boxHeight = 0;
             if (shown) {
@@ -19683,7 +19669,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // rounded box.
             TileIdentityText identity = TileIdentityFor(accounts, i);
             const bool hasLogo = account.tileIdentity != TileIdentity::Text;
-            const bool hasBadge = hasLogo && identity.badge;
+            const bool hasBadge = hasLogo && !identity.badgeText.empty();
             const UiTextStyle idStyle{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
             double perPt = hasLogo ? 0 : std::max(measure(identity.text, idStyle).width, 0.1f) / 10.0;
             // Sparklines chart the visual test samples' recorded usage.
@@ -20796,7 +20782,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                     L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient.",
                     SettingsField::GeminiLogoBrand, L"Gemini gradient");
         top = slider(top + 3, L"Badge size",
-                     L"Text size of the number on a logo when several visible accounts share a provider, in pixels.",
+                     L"Text size of the number on a logo when several accounts share a provider, in pixels.",
                      SettingsField::BadgeSize);
         {
             UiCardSpec spec;
@@ -21570,7 +21556,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.title = L"Identity";
                 spec.description = {{L"Marks this account beside its bars and on tiles. Label "
                                      L"shows the label on bars and its short text on tiles. The number badge "
-                                     L"appears only when several visible accounts share a provider."}};
+                                     L"appears when several accounts share a provider, hidden ones included."}};
                 spec.trailing = {220, 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
                 UiCardLayout layout = row(spec);
