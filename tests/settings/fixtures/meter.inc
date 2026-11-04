@@ -1661,6 +1661,22 @@ static void RunAccountTests() {
         // The third arc's slot starts at 285 degrees; it grows by half its 3 DIP stroke.
         CHECK_NEAR(ring.quotas[3].arc.start, 285 - 1.5 / 14 * 180 / std::numbers::pi);
         CHECK(ring.quotas[3].fillUnits == 0);
+        // Needing a sign-in before any success: no quota in any layout, the identity marked.
+        AccountData signedOut = before;
+        signedOut.win5h.pct = -1;
+        signedOut.needsLogin = true;
+        signedOut.error = L"not signed in - click to sign in";
+        for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
+            AccountMeters m = AccountMeterState(Display(), BarLayout(layout), account, signedOut, 0, 0);
+            CHECK(m.barMask == 0 && m.warn);
+            if (BarLayout(layout) == BarLayout::Sparkline) CHECK_NEAR(m.faceWidth, 0);
+        }
+        // Needing one again after a success keeps the last readings.
+        AccountData expired = Fresh({10, 20, -1, -1});
+        expired.stale = true;
+        expired.needsLogin = true;
+        CHECK(AccountMeterState(Display(), BarLayout::Sparkline, account, expired, 0, 0).barMask == 0b0010);
+        CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, expired, 0, 0).barMask == 0b0011);
     });
 
     Run("headline: most-used quota, its key and color", [] {

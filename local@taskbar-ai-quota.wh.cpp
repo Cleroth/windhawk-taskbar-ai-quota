@@ -7002,10 +7002,12 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     meters.labelText = meters.warn ? account.label + L"!" : account.label;
     meters.labelOpacity = meters.stale ? 0.45 : 0.8;
     meters.identityOpacity = meters.stale ? 0.45 : 1.0;
-    // Every selected quota until the first success, then the reported ones.
+    // Every selected quota until the first success, then the reported ones. An account that needs
+    // signing in before any success shows none.
+    bool waiting = data.lastSuccessMs == 0 && !data.needsLogin;
     int count = 0;
     for (int w = 0; w < kQuotaBarCount; w++) {
-        if (account.showBars[w] && (data.lastSuccessMs == 0 || usage[w]->pct >= 0)) {
+        if (account.showBars[w] && (waiting || usage[w]->pct >= 0)) {
             meters.barMask |= 1 << w;
             count++;
         }
