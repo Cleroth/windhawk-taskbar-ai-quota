@@ -1,5 +1,6 @@
-// Meter model: display entry clamps, bars (time tracks included), tiles (gauges, pies and rounded
-// squares included), account state, the headline countdown, identity and visual test data.
+// Meter model: display entry clamps, bars (time tracks included), tiles (gauges, pies, rounded
+// squares, sparklines and the quota matrix included), account state, the headline countdown,
+// identity and visual test data.
 // Expected values are derived by hand from the documented behavior.
 
 static void RunDisplayTests() {
@@ -132,6 +133,7 @@ static void RunColorTests() {
         CHECK(light.open == 0xB3FFFFFF); CHECK(light.badgeHalo == 0xFFF3F3F3);
         CHECK(dark.track == 0x2BFFFFFF); CHECK(dark.hover == 0x0FFFFFFF);
         CHECK(dark.open == 0x1AFFFFFF); CHECK(dark.badgeHalo == 0xFF1C1C1C);
+        CHECK(light.plot == 0x0F000000); CHECK(dark.plot == 0x14FFFFFF);
     });
 }
 
@@ -1025,10 +1027,11 @@ static void RunFaceTileTests() {
         for (Kind k : {Kind{Stacked, false, false, false}, Kind{Vertical, false, false, false},
                        Kind{LogoHeadline, true, false, false}, Kind{SegmentedRing, true, true, true},
                        Kind{ConcentricRings, true, true, true}, Kind{Gauge, true, false, true},
-                       Kind{ClockPies, true, false, true}, Kind{RoundedSquare, true, true, true}}) {
+                       Kind{ClockPies, true, false, true}, Kind{RoundedSquare, true, true, true},
+                       Kind{Sparkline, true, false, false}, Kind{QuotaMatrix, true, false, false}}) {
             CHECK(IsTileLayout(k.layout) == k.tile && IsRingTile(k.layout) == k.ring && IsFaceTile(k.layout) == k.face);
         }
-        CHECK(kLastBarLayout == RoundedSquare);
+        CHECK(kLastBarLayout == QuotaMatrix);
     });
 
     Run("gauge: only the most-used tile quota; until a reading, the first selected one", [] {
@@ -1548,7 +1551,7 @@ static void RunCountdownTests() {
         CHECK(countdown({50, kNow + hour, kWeeklyWindowMs}, false).empty());
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical, BarLayout::SegmentedRing,
                                  BarLayout::ConcentricRings, BarLayout::Gauge, BarLayout::ClockPies,
-                                 BarLayout::RoundedSquare}) {
+                                 BarLayout::RoundedSquare, BarLayout::Sparkline, BarLayout::QuotaMatrix}) {
             CHECK(countdown({50, kNow + hour, kWeeklyWindowMs}, true, layout).empty());
         }
     });
@@ -1796,6 +1799,413 @@ static void RunSnapshotTests() {
     });
 }
 
+static void RunSparklineTests() {
+    static constexpr auto point = [](const auto& p, double x, double y) { CHECK_NEAR(p.x, x); CHECK_NEAR(p.y, y); };
+    // A filled mark: a circle from its top, clockwise through its bottom and back.
+    static constexpr auto circle = [](const TileOutline& outline, double x, double y, double r) {
+        CHECK(outline.size() == 1 && outline[0].segments.size() == 2);
+        point(outline[0], x, y - r);
+        point(outline[0].segments[0], x, y + r);
+        point(outline[0].segments[1], x, y - r);
+        for (const TileOutlineSegment& s : outline[0].segments) {
+            CHECK_NEAR(s.radius, r);
+            CHECK(s.clockwise);
+        }
+    };
+    // A 100 x 24 DIP plot: x is the window's share in hundredths, y = 22 - used / 5 (2 DIPs free
+    // at the top and bottom).
+    static constexpr auto plot = [](const std::function<void(Settings&)>& edit = {}) {
+        return Display(With([&](Settings& s) {
+            s.sparklineWidth = 100;
+            s.ringSize = 24;
+            if (edit) edit(s);
+        }));
+    };
+    // A time `share` of the way through a five-hour window that resets 2.5 hours after kNow
+    // (Window(pct, 9000000)), so kNow is half way.
+    static constexpr auto at = [](double share) {
+        return ULONGLONG((long long)kNow - 9000000 + std::llround(share * kFiveHours));
+    };
+    // A sparkline of the first slot's `first` reading, `trace` its recorded usage, on that plot
+    // unless given another display.
+    static constexpr auto spark = [](WindowUsage first, std::vector<TileTracePoint> trace = {},
+                                     std::optional<MeterDisplay> d = std::nullopt) {
+        AccountData data = Fresh();
+        data.win5h = first;
+        return AccountMeterState(d ? *d : plot(), BarLayout::Sparkline, Account(L"anthropic", L"A", {true, false, false, false}),
+                                 data, 0, 0, [trace](int, const WindowUsage&) { return trace; });
+    };
+
+    Run("sparkline: the most-used quota with a window; else the most-used one; else the first selected", [] {
+        auto chart = [](const AccountData& data, std::array<bool, kQuotaBarCount> bars = {true, true, true, true},
+                        std::wstring provider = L"anthropic") {
+            return AccountMeterState(Display(), BarLayout::Sparkline, Account(provider, L"A", bars), data, 0, 0);
+        };
+        // Windows on the weekly and Fable quotas: the 5-hour quota's 90% has none to chart.
+        AccountData data = Fresh({90, 40, 60, -1});
+        data.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
+        data.fableWeek = {60, kNow + kMinute, kWeeklyWindowMs};
+        AccountMeters fable = chart(data);
+        CHECK(fable.barMask == 0b0100 && fable.headlineKey == L"Fa" && fable.headlineColor == 0xFFFDD835);
+        CHECK(fable.sparkNow.size() == 1);
+        // A tie goes to the earlier slot; only selected quotas count.
+        data.winWeek.pct = 60;
+        CHECK(chart(data).barMask == 0b0010);
+        CHECK(chart(data, {true, false, true, false}).barMask == 0b0100);
+        CHECK(chart(data, {true, false, false, true}).barMask == 0b0001);
+        // Without a window to chart: the most-used quota.
+        AccountMeters plain = chart(Fresh({30, 70, -1, 50}));
+        CHECK(plain.barMask == 0b0010 && plain.headlineKey == L"7d" && plain.headlineColor == 0xFFFDD835);
+        CHECK(chart(Fresh({10, 20, -1, 95}), {true, true, false, true}, L"openai").headlineKey == L"Cr");
+        // A reset not past its duration, or no duration, isn't a window: the weekly quota still wins.
+        AccountData odd = Fresh({95, 70, -1, 99});
+        odd.win5h = {95, kFiveHours, kFiveHours};
+        odd.winWeek = {70, kNow + kMinute, kWeeklyWindowMs};
+        odd.extraUsage = {99, kNow + kMinute, 0};
+        CHECK(chart(odd).barMask == 0b0010);
+        // Before the first success: the first selected quota, without a key or a point.
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        before.extraUsage = {-1, kNow + kMinute, kFiveHours};
+        AccountMeters first = chart(before, {false, true, false, true});
+        CHECK(first.barMask == 0b0010 && first.headlineKey.empty() && first.sparkNow.empty());
+        // Nothing reported after a success: nothing charted.
+        AccountMeters none = chart(Fresh());
+        CHECK(none.barMask == 0 && none.headlineKey.empty() && none.sparkNow.empty() && none.sparkPace.empty());
+    });
+
+    Run("sparkline: the plot from the chart width and the ring size, capped by the tile; the key a quarter of its height", [] {
+        auto chart = [](int width, int height, double taskbar = 48) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.sparklineWidth = width; s.ringSize = height; }), 1, taskbar);
+            return First(Window(50, 9000000), d, BarLayout::Sparkline);
+        };
+        AccountMeters m = chart(48, 32);
+        CHECK_NEAR(m.faceWidth, 48); CHECK_NEAR(m.faceHeight, 32); CHECK_NEAR(m.sparkKeyFont, 8);
+        m = chart(64, 30);
+        CHECK_NEAR(m.faceWidth, 64); CHECK_NEAR(m.faceHeight, 30); CHECK_NEAR(m.sparkKeyFont, 7.5);
+        // The key between 7 and 9 DIPs.
+        m = chart(120, 40);
+        CHECK_NEAR(m.faceWidth, 120); CHECK_NEAR(m.faceHeight, 40); CHECK_NEAR(m.sparkKeyFont, 9);
+        m = chart(24, 24);
+        CHECK_NEAR(m.faceWidth, 24); CHECK_NEAR(m.faceHeight, 24); CHECK_NEAR(m.sparkKeyFont, 7);
+        // 40 DIPs on a 40 DIP taskbar's 32 DIP tile; 32 on a 32 DIP taskbar's 24.
+        m = chart(64, 40, 40);
+        CHECK_NEAR(m.faceHeight, 32); CHECK_NEAR(m.sparkKeyFont, 8);
+        CHECK_NEAR(chart(64, 32, 32).faceHeight, 24);
+        // The chart width clamps at the display entry: 48 by default, 24 to 120.
+        CHECK(Display().sparklineWidth == 48);
+        CHECK(Display(With([](Settings& s) { s.sparklineWidth = 64; })).sparklineWidth == 64);
+        CHECK(Display(With([](Settings& s) { s.sparklineWidth = 10; })).sparklineWidth == 24);
+        CHECK(Display(With([](Settings& s) { s.sparklineWidth = 999; })).sparklineWidth == 120);
+        CHECK_NEAR(chart(-5, 32).faceWidth, 24);
+    });
+
+    Run("sparkline: the even-use diagonal across a window, with pace markers on", [] {
+        // From 0% at the window's start to 100% at its reset, 2 DIPs inside the plot's bottom and top.
+        AccountMeters m = spark(Window(30, 9000000));
+        CHECK(m.sparkPace.size() == 1 && m.sparkPace[0].segments.size() == 1);
+        point(m.sparkPace[0], 0, 22); point(m.sparkPace[0].segments[0], 100, 2);
+        CHECK_NEAR(m.sparkPace[0].segments[0].radius, 0);
+        AccountMeters standard = First(Window(30, 9000000), Display(), BarLayout::Sparkline);
+        point(standard.sparkPace[0], 0, 30); point(standard.sparkPace[0].segments[0], 48, 2);
+        // The plot is used %: the same diagonal in remaining mode.
+        AccountMeters left = spark(Window(30, 9000000), {}, plot([](Settings& s) { s.barMode = BarMode::Remaining; }));
+        point(left.sparkPace[0], 0, 22); point(left.sparkPace[0].segments[0], 100, 2);
+        // Markers off, or no window: none.
+        CHECK(spark(Window(30, 9000000), {}, plot([](Settings& s) { s.showPaceTicks = false; })).sparkPace.empty());
+        CHECK(spark({30, 0, 0}).sparkPace.empty());
+        CHECK(spark({30, kFiveHours, kFiveHours}).sparkPace.empty());
+    });
+
+    Run("sparkline: recorded runs with an area under each, lone readings as dots, clamped to the plot", [] {
+        // A reading from before the window (drawn at its start), a run, a gap, a lone reading, then
+        // a run ending past 100% (at the top inset).
+        AccountMeters m = spark(Window(45, 9000000), {{at(-0.1), 10, false}, {at(0.1), 20, true}, {at(0.2), 30, true},
+                                                      {at(0.3), 35, false}, {at(0.4), 40, false}, {at(0.45), 120, true}});
+        CHECK(m.sparkLines.size() == 2 && m.sparkArea.size() == 2 && m.sparkDots.size() == 1);
+        const TileOutlineFigure &run = m.sparkLines[0], &last = m.sparkLines[1];
+        CHECK(run.segments.size() == 2 && last.segments.size() == 1);
+        point(run, 0, 20); point(run.segments[0], 10, 18); point(run.segments[1], 20, 16);
+        point(last, 40, 14); point(last.segments[0], 45, 2);
+        for (const TileOutlineFigure& line : m.sparkLines) {
+            for (const TileOutlineSegment& s : line.segments) CHECK_NEAR(s.radius, 0);
+        }
+        // Each area up from the plot's bottom under its run's start, along the run and back down.
+        const TileOutlineFigure &under = m.sparkArea[0], &underLast = m.sparkArea[1];
+        CHECK(under.segments.size() == 4 && underLast.segments.size() == 3);
+        point(under, 0, 24); point(under.segments[0], 0, 20); point(under.segments[1], 10, 18);
+        point(under.segments[2], 20, 16); point(under.segments[3], 20, 24);
+        point(underLast, 40, 24); point(underLast.segments[0], 40, 14); point(underLast.segments[1], 45, 2);
+        point(underLast.segments[2], 45, 24);
+        // The lone reading: a 1.5 DIP dot.
+        circle(m.sparkDots, 30, 15, 1.5);
+        // Quarter DIPs: on the 48 x 32 plot a tenth of the window at 10% is (4.8, 27.2), drawn at
+        // (4.75, 27.25); a fifth at 20%, (9.6, 24.4), at (9.5, 24.5).
+        AccountMeters snapped = spark(Window(45, 9000000), {{at(0.1), 10, false}, {at(0.2), 20, true}}, Display());
+        CHECK(snapped.sparkLines.size() == 1 && snapped.sparkDots.empty());
+        point(snapped.sparkLines[0], 4.75, 27.25); point(snapped.sparkLines[0].segments[0], 9.5, 24.5);
+        // No history: no runs, areas or dots; the current point stays.
+        AccountMeters bare = spark(Window(45, 9000000));
+        CHECK(bare.sparkLines.empty() && bare.sparkArea.empty() && bare.sparkDots.empty() && bare.sparkNow.size() == 1);
+    });
+
+    Run("sparkline: the recorded usage asked for the charted quota only, with its reading, only with a window", [] {
+        struct Ask {
+            int slot;
+            WindowUsage reading;
+        };
+        std::vector<Ask> asked;
+        TileTraceSource source = [&](int slot, const WindowUsage& reading) {
+            asked.push_back({slot, reading});
+            return std::vector<TileTracePoint>{};
+        };
+        AccountData data = Fresh({90, 40, 60, 20});
+        data.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
+        data.fableWeek = {60, kNow + 2 * kMinute, kWeeklyWindowMs};
+        data.extraUsage = {20, kNow + 3 * kMinute, kFiveHours};
+        AccountMeterState(Display(), BarLayout::Sparkline, Account(), data, 0, 0, source);
+        CHECK(asked.size() == 1 && asked[0].slot == 2 && asked[0].reading.pct == 60 &&
+              asked[0].reading.resetUnixMs == kNow + 2 * kMinute && asked[0].reading.windowDurationMs == kWeeklyWindowMs);
+        // Without a window: the most-used quota, never asked.
+        asked.clear();
+        AccountMeterState(Display(), BarLayout::Sparkline, Account(), Fresh({90, 40, 60, 20}), 0, 0, source);
+        CHECK(asked.empty());
+        // No other style asks, the bars included.
+        for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
+            if (BarLayout(layout) != BarLayout::Sparkline) {
+                AccountMeterState(Display(), BarLayout(layout), Account(), data, 0, 0, source);
+            }
+        }
+        CHECK(asked.empty());
+        // No source: charted without history.
+        AccountMeters bare = AccountMeterState(Display(), BarLayout::Sparkline, Account(), data, 0, 0);
+        CHECK(bare.barMask == 0b0100 && bare.sparkLines.empty() && bare.sparkNow.size() == 1);
+    });
+
+    Run("sparkline: the current point at now, after the newest reading, or at the right edge without a window", [] {
+        // Half way through the window at 45%: (50, 13), a 2 DIP mark.
+        circle(spark(Window(45, 9000000)).sparkNow, 50, 13, 2);
+        // A history ending at the poll: the same point, on its last reading.
+        AccountMeters recorded = spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.5), 45, true}});
+        circle(recorded.sparkNow, 50, 13, 2);
+        point(recorded.sparkLines[0].segments[0], 50, 13);
+        // A clock rolled back behind the newest reading: the point stays at that reading's time,
+        // and the projection starts there at the rate up to it: 45% in 60% of the window is 75%
+        // at the reset.
+        AccountMeters rolled = spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.6), 45, true}});
+        circle(rolled.sparkNow, 60, 13, 2);
+        CHECK(rolled.sparkProjection.size() == 1);
+        point(rolled.sparkProjection[0], 60, 13);
+        point(rolled.sparkProjection[0].segments[0], 100, 7);
+        // Over pace, it still runs forward: 80% in 70% reaches the limit at 87.5%.
+        AccountMeters ahead = spark(Window(80, 9000000), {{at(0.2), 20, false}, {at(0.7), 80, true}});
+        point(ahead.sparkProjection[0], 70, 6);
+        point(ahead.sparkProjection[0].segments[0], 87.5, 2);
+        CHECK(ahead.sparkLimit.size() == 1);
+        // Before the window starts: at its start; past the reset: at its end.
+        circle(spark(Window(45, kFiveHours + 3600000)).sparkNow, 0, 13, 2);
+        circle(spark(Window(45, -(long long)kMinute)).sparkNow, 100, 13, 2);
+        // Used % in either mode; at the top past 100%.
+        circle(spark(Window(45, 9000000), {}, plot([](Settings& s) { s.barMode = BarMode::Remaining; })).sparkNow, 50, 13, 2);
+        circle(spark(Window(130, 9000000)).sparkNow, 50, 2, 2);
+        // Without a window: alone at the plot's right edge, a mark's radius in.
+        AccountMeters alone = spark({45, 0, 0});
+        circle(alone.sparkNow, 98, 13, 2);
+        CHECK(alone.sparkPace.empty() && alone.sparkProjection.empty() && alone.sparkLimit.empty());
+        circle(First({45, 0, 0}, Display(), BarLayout::Sparkline).sparkNow, 46, 17.5, 2);
+        // A window without a reading yet (before the first success): the diagonal, no point.
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        before.win5h = {-1, kNow + 9000000, kFiveHours};
+        AccountMeters waiting = AccountMeterState(plot(), BarLayout::Sparkline,
+                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
+        CHECK(waiting.barMask == 0b0001 && waiting.sparkPace.size() == 1);
+        CHECK(waiting.sparkNow.empty() && waiting.sparkProjection.empty() && waiting.sparkLimit.empty());
+    });
+
+    Run("sparkline: the projection at the window's average rate, to the reset or to the limit", [] {
+        auto line = [](const TileOutline& outline, double x0, double y0, double x1, double y1) {
+            CHECK(outline.size() == 1 && outline[0].segments.size() == 1);
+            point(outline[0], x0, y0);
+            point(outline[0].segments[0], x1, y1);
+            CHECK_NEAR(outline[0].segments[0].radius, 0);
+        };
+        // Under pace: 45% half way reaches 90% at the reset.
+        AccountMeters under = spark(Window(45, 9000000));
+        line(under.sparkProjection, 50, 13, 100, 4);
+        CHECK(under.sparkLimit.empty());
+        // Even use reaches the limit just at the reset: no mark.
+        AccountMeters even = spark(Window(50, 9000000));
+        line(even.sparkProjection, 50, 12, 100, 2);
+        CHECK(even.sparkLimit.empty());
+        // Over pace: 80% half way reaches 100% at 62.5% of the window, marked there in the 100%
+        // color (red), whatever the quota's own (orange).
+        AccountMeters over = spark(Window(80, 9000000));
+        line(over.sparkProjection, 50, 6, 62.5, 2);
+        circle(over.sparkLimit, 62.5, 2, 1.75);
+        CHECK(over.sparkLimitColor == 0xFFE53935 && over.headlineColor == 0xFFFB8C00);
+        // 60% half way reaches the limit at 83.33, drawn at 83.25.
+        line(spark(Window(60, 9000000)).sparkProjection, 50, 10, 83.25, 2);
+        CHECK(spark(Window(80, 9000000), {}, plot([](Settings& s) { s.colorblindMode = true; })).sparkLimitColor == 0xFFD55E00);
+        // From 5% of the window on: 1% there reaches 20%.
+        line(spark(Window(1, 17100000)).sparkProjection, 5, 21.75, 100, 18);
+        // None before 5% of the window, at 0% or from 100%, at the reset, or before the window
+        // starts; the point stays.
+        for (WindowUsage reading : {Window(45, 17280000), Window(0, 9000000), Window(100, 9000000), Window(110, 9000000),
+                                    Window(45, 0), Window(45, kFiveHours + 1000)}) {
+            AccountMeters m = spark(reading);
+            CHECK(m.sparkProjection.empty() && m.sparkLimit.empty() && m.sparkNow.size() == 1);
+        }
+        // Stale: none either; the point greys, the limit color stays.
+        AccountData stale = Fresh();
+        stale.win5h = Window(80, 9000000);
+        stale.stale = true;
+        AccountMeters grey = AccountMeterState(plot(), BarLayout::Sparkline,
+                                               Account(L"anthropic", L"A", {true, false, false, false}), stale, 0, 0);
+        CHECK(grey.sparkProjection.empty() && grey.sparkLimit.empty() && grey.sparkNow.size() == 1);
+        CHECK(grey.headlineColor == 0xFF9E9E9E && grey.sparkLimitColor == 0xFFE53935);
+    });
+
+    Run("visual test trace: readings from part-way into the window up to now, two runs and a lone reading", [] {
+        const AccountConfig claude = Account(L"anthropic", L"CC 1");
+        const WindowUsage reading = Window(60, 9000000);
+        const ULONGLONG start = kNow - 9000000;
+        std::vector<TileTracePoint> trace = VisualTestTrace(claude, reading, kNow);
+        CHECK(!trace.empty() && !trace[0].connect);
+        // Oldest first, inside the window's elapsed part, rising to the reading at now.
+        for (size_t k = 0; k < trace.size(); k++) {
+            CHECK(trace[k].timeMs > start && trace[k].timeMs <= kNow);
+            CHECK(trace[k].used > 0 && trace[k].used <= 60);
+            if (k) CHECK(trace[k].timeMs > trace[k - 1].timeMs && trace[k].used >= trace[k - 1].used);
+        }
+        CHECK(trace.back().timeMs == kNow && trace.back().used == 60 && trace.back().connect);
+        // Connected runs: two of several readings, and one reading alone.
+        std::vector<size_t> runs;
+        for (const TileTracePoint& p : trace) {
+            if (!p.connect) runs.push_back(0);
+            runs.back()++;
+        }
+        CHECK(std::count(runs.begin(), runs.end(), size_t(1)) == 1 &&
+              std::count_if(runs.begin(), runs.end(), [](size_t n) { return n > 1; }) == 2);
+        // Charted on the 48 x 32 plot: two runs and their areas, a dot, and the point on the last
+        // reading, half way at 60% (13.2, drawn at 13.25).
+        AccountData data = Fresh();
+        data.win5h = reading;
+        AccountMeters m = AccountMeterState(Display(), BarLayout::Sparkline, Account(L"anthropic", L"CC 1", {true, false, false, false}),
+                                            data, 0, 0, [&](int, const WindowUsage& r) { return VisualTestTrace(claude, r, kNow); });
+        CHECK(m.sparkLines.size() == 2 && m.sparkArea.size() == 2 && m.sparkDots.size() == 1);
+        point(m.sparkLines[1].segments.back(), 24, 13.25);
+        circle(m.sparkNow, 24, 13.25, 2);
+        // A tick later, its window moved with it: the same readings, a tick later.
+        std::vector<TileTracePoint> later = VisualTestTrace(claude, {60, reading.resetUnixMs + kMinute, kFiveHours}, kNow + kMinute);
+        CHECK(later.size() == trace.size());
+        for (size_t k = 0; k < later.size(); k++) {
+            CHECK(later[k].timeMs == trace[k].timeMs + kMinute && later[k].used == trace[k].used &&
+                  later[k].connect == trace[k].connect);
+        }
+        // None for the OpenAI sample, without a reading or a window, or before the window starts.
+        CHECK(VisualTestTrace(Account(L"openai", L"OAI"), reading, kNow).empty());
+        CHECK(VisualTestTrace(claude, {-1, reading.resetUnixMs, kFiveHours}, kNow).empty());
+        CHECK(VisualTestTrace(claude, {60, 0, 0}, kNow).empty());
+        CHECK(VisualTestTrace(claude, {60, kFiveHours, kFiveHours}, kNow).empty());
+        CHECK(VisualTestTrace(claude, Window(60, kFiveHours), kNow).empty());
+    });
+}
+
+static void RunMatrixTests() {
+    Run("quota matrix: cells down the first column, then the second, in slot order; no pace marks", [] {
+        auto matrix = [](std::array<bool, kQuotaBarCount> bars, std::array<double, kQuotaBarCount> pct = {10, 20, 30, 40}) {
+            return AccountMeterState(Display(), BarLayout::QuotaMatrix, Account(L"anthropic", L"A", bars), Fresh(pct), 0, 0);
+        };
+        auto cell = [](const QuotaMeter& q, int row, int column) { CHECK(q.matrixRow == row && q.matrixColumn == column); };
+        AccountMeters one = matrix({false, false, true, false});
+        CHECK(one.barMask == 0b0100);
+        cell(one.quotas[2], 0, 0);
+        AccountMeters two = matrix({false, true, false, true});
+        CHECK(two.barMask == 0b1010);
+        cell(two.quotas[1], 0, 0); cell(two.quotas[3], 1, 0);
+        AccountMeters three = matrix({true, false, true, true});
+        cell(three.quotas[0], 0, 0); cell(three.quotas[2], 1, 0); cell(three.quotas[3], 0, 1);
+        AccountMeters four = matrix({true, true, true, true});
+        cell(four.quotas[0], 0, 0); cell(four.quotas[1], 1, 0); cell(four.quotas[2], 0, 1); cell(four.quotas[3], 1, 1);
+        // After the first success an unreported quota takes no cell; the next one moves up.
+        AccountMeters gap = matrix({true, true, true, true}, {10, -1, 30, 40});
+        CHECK(gap.barMask == 0b1101);
+        cell(gap.quotas[0], 0, 0); cell(gap.quotas[2], 1, 0); cell(gap.quotas[3], 0, 1);
+        // No pace marks, with markers on and a window running.
+        AccountData timed = Fresh();
+        timed.win5h = Window(10, 9000000);
+        AccountMeters paced = AccountMeterState(Display(), BarLayout::QuotaMatrix,
+                                                Account(L"anthropic", L"A", {true, false, false, false}), timed, 0, 0);
+        CHECK(!paced.quotas[0].paceVisible && paced.quotas[0].paceUnits == 0 && paced.quotas[0].paceHalo.empty());
+    });
+
+    Run("quota matrix: numbers per bar mode, a dash without a reading; keys on every slot in every style", [] {
+        auto matrix = [](const AccountData& data, BarMode mode = BarMode::Used) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.barMode = mode; }));
+            return AccountMeterState(d, BarLayout::QuotaMatrix, Account(), data, 0, 0);
+        };
+        // Used unclamped; remaining clamped to 0-100%.
+        AccountMeters used = matrix(Fresh({12, 110, 0, 99.4}));
+        CHECK(used.quotas[0].text == L"12%" && used.quotas[1].text == L"110%" && used.quotas[2].text == L"0%" &&
+              used.quotas[3].text == L"99%");
+        AccountMeters left = matrix(Fresh({12, 110, 0, 99.4}), BarMode::Remaining);
+        CHECK(left.quotas[0].text == L"88%" && left.quotas[1].text == L"0%" && left.quotas[2].text == L"100%" &&
+              left.quotas[3].text == L"1%");
+        // Colors follow the used share in either mode.
+        CHECK(used.quotas[1].color == 0xFFE53935 && left.quotas[1].color == 0xFFE53935 && left.quotas[0].color == 0xFF43A047);
+        // Before the first success every selected quota has a cell: a dash until it reads.
+        AccountData before = Fresh({42, -1, -1, -1});
+        before.lastSuccessMs = 0;
+        AccountMeters waiting = matrix(before);
+        CHECK(waiting.barMask == 0b1111 && waiting.quotas[0].text == L"42%" && waiting.quotas[1].text == L"\u2013" &&
+              waiting.quotas[3].text == L"\u2013");
+        CHECK(matrix(before, BarMode::Remaining).quotas[2].text == L"\u2013");
+        // Keys on every slot in every style, selected or not; OpenAI's fourth is its credits.
+        for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
+            for (std::wstring provider : {L"anthropic", L"openai", L"antigravity"}) {
+                AccountMeters m = AccountMeterState(Display(), BarLayout(layout), Account(provider, L"A", {true, false, false, false}),
+                                                    Fresh({10, -1, -1, -1}), 0, 0);
+                CHECK(m.quotas[0].key == L"5h" && m.quotas[1].key == L"7d" && m.quotas[2].key == L"Fa");
+                CHECK(m.quotas[3].key == (provider == L"openai" ? L"Cr" : L"Ex"));
+            }
+        }
+    });
+
+    Run("quota matrix: the number size, two rows shrunk to fit the tile, at least 7 DIPs; keys at 9/14 of it", [] {
+        auto fonts = [](int quotas, int size, double taskbar = 48) {
+            MeterDisplay d = Display(With([&](Settings& s) { s.headlineFontSize = size; }), 1, taskbar);
+            std::array<bool, kQuotaBarCount> bars{};
+            for (int k = 0; k < quotas; k++) bars[k] = true;
+            return AccountMeterState(d, BarLayout::QuotaMatrix, Account(L"anthropic", L"A", bars), Fresh({10, 20, 30, 40}), 0, 0);
+        };
+        auto check = [](const AccountMeters& m, double font) {
+            CHECK_NEAR(m.matrixFont, font);
+            CHECK_NEAR(m.matrixKeyFont, font * 9 / 14);
+        };
+        // 40 DIP tiles: two rows' 0.7 cap heights and their 5 DIP gap fit 2 DIPs clear of both edges
+        // up to (40 - 4 - 5) / 1.4 = 22.14 DIPs; one row takes the number size as it is.
+        check(fonts(1, 14), 14);
+        check(fonts(2, 14), 14);
+        check(fonts(4, 24), 31 / 1.4);
+        check(fonts(1, 24), 24);
+        // 24 DIP tiles (a 32 DIP taskbar): (24 - 9) / 1.4 = 10.71.
+        check(fonts(2, 14, 32), 15 / 1.4);
+        check(fonts(3, 10, 32), 10);
+        check(fonts(1, 14, 32), 14);
+        // Never under 7 DIPs: a 16 DIP tile would allow 5.
+        MeterDisplay tiny = Display();
+        tiny.tileHeight = 16;
+        check(AccountMeterState(tiny, BarLayout::QuotaMatrix, Account(), Fresh({10, 20, 30, 40}), 0, 0), 7);
+        // Before the first success every selected quota counts: two rows.
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        check(AccountMeterState(Display({}, 1, 32), BarLayout::QuotaMatrix, Account(L"anthropic", L"A", {true, true, false, false}),
+                                before, 0, 0),
+              15 / 1.4);
+    });
+}
+
 static void RunMeterTests() {
     RunDisplayTests();
     RunColorTests();
@@ -1803,6 +2213,8 @@ static void RunMeterTests() {
     RunTimeTrackTests();
     RunTileTests();
     RunFaceTileTests();
+    RunSparklineTests();
+    RunMatrixTests();
     RunAccountTests();
     RunCountdownTests();
     RunIdentityTests();

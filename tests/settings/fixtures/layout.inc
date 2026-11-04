@@ -127,6 +127,7 @@ static void RunLayoutTests() {
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
             {SettingsField::HeadlineFontSize, 18}, {SettingsField::HeadlineBarLength, 24},
             {SettingsField::HeadlineBarThickness, 6}, {SettingsField::HeadlineCountdown, 1},
+            {SettingsField::SparklineWidth, 64},
             {SettingsField::LogoScale, 150},   {SettingsField::ClaudeLogoBrand, 1}, {SettingsField::GeminiLogoBrand, 1},
             {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
@@ -150,7 +151,9 @@ static void RunLayoutTests() {
             {SettingsField::HeadlineBarThickness, 1, 2}, {SettingsField::HeadlineBarThickness, 11, 10},
             {SettingsField::LabelFontSize, 100, 24},  {SettingsField::PercentFontSize, 1, 6},
             {SettingsField::BarGap, -1, 0},           {SettingsField::AccountMargin, 501, 500},
-            {SettingsField::BarLayout, 9, 7},         {SettingsField::BarLayout, -1, 0},
+            {SettingsField::BarLayout, 12, 9},        {SettingsField::BarLayout, -1, 0},
+            {SettingsField::BarLayout, 8, 8},         {SettingsField::SparklineWidth, 10, 24},
+            {SettingsField::SparklineWidth, 999, 120},
             {SettingsField::BarLayout, 6, 6},         {SettingsField::PaceTickStyle, 4, 4},
             {SettingsField::LabelPosition, 7, 4},     {SettingsField::PaceTickStyle, 9, 4},
             {SettingsField::HeadlineCountdown, 5, 1}, {SettingsField::HeadlineCountdown, 0, 0},
@@ -166,7 +169,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the twenty-eight Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the twenty-nine Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -179,6 +182,7 @@ static void RunLayoutTests() {
         changed.headlineBarLength = 30;
         changed.headlineBarThickness = 7;
         changed.headlineCountdown = true;
+        changed.sparklineWidth = 80;
         changed.logoScale = 150;
         changed.logoBrands = {true, true};
         changed.badgeSize = 12;
@@ -218,6 +222,7 @@ static void RunLayoutTests() {
         expected.headlineBarLength = defaults.headlineBarLength;
         expected.headlineBarThickness = defaults.headlineBarThickness;
         expected.headlineCountdown = defaults.headlineCountdown;
+        expected.sparklineWidth = defaults.sparklineWidth;
         expected.logoScale = defaults.logoScale;
         expected.logoBrands = defaults.logoBrands;
         expected.badgeSize = defaults.badgeSize;
@@ -237,7 +242,7 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 28);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 29);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -1514,6 +1519,267 @@ static void RunLayoutTests() {
         CHECK(OpsOfColor(strip, track).size() == 2 && TextOps(strip, L"\u21BB 3d 12h").empty());
     });
 
+    Run("preview: a sparkline's plot beside the identity, its marks in drawing order, the key in its corner", [] {
+        using Kind = SettingsPreviewOp::Kind;
+        // One account with its logo alone (16 DIPs), its 5-hour quota half way through the window;
+        // a 10 DIP margin: tiles pad 7 before and 8 after. The preview charts the visual test
+        // samples' history of the reading.
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, false, false, false})};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+        auto at = [&](const Settings& settings, WindowUsage reading, double taskbar = 48) {
+            AccountData data = Fresh();
+            data.win5h = reading;
+            return StripOf(settings, accounts, {data}, taskbar);
+        };
+        auto width = [](const SettingsPreviewStrip& strip) { return strip.columns[0].right - strip.columns[0].left; };
+        Settings s;
+        s.barLayout = BarLayout::Sparkline;
+        s.accountMargin = 10;
+        const uint32_t plotColor = TilePaletteFor(false).plot;
+
+        // 7 + 16 + 6 + 48 + 8 DIPs; the plot 6 DIPs after the logo, 48 x 32 centred on the 40 DIP
+        // tile, 3 DIP corners.
+        SettingsPreviewStrip strip = at(s, Window(25, 9000000));
+        CHECK(NearDip(strip.columns[0].left, 3) && NearDip(width(strip), 85));
+        std::vector<SettingsPreviewOp> plot = OpsOfColor(strip, plotColor);
+        CHECK(plot.size() == 1 && plot[0].kind == Kind::Rect && NearDip(plot[0].radius, 3));
+        CHECK(NearDip(plot[0].rect.left, 32) && NearDip(plot[0].rect.top, 8) && NearDip(plot[0].rect.right, 80) &&
+              NearDip(plot[0].rect.bottom, 40));
+        // Then its marks, one operation each from the plot's corner: the dashed diagonal at half the
+        // pace color's alpha, the areas at 0x47 alpha, the runs, the lone reading, the dashed
+        // projection and the current point in the usage color (25%: green); then the key.
+        auto plotOp = std::find_if(strip.ops.begin(), strip.ops.end(),
+                                   [&](const SettingsPreviewOp& op) { return op.color == plotColor; });
+        std::vector<SettingsPreviewOp> marks(plotOp + 1, strip.ops.end());
+        CHECK(marks.size() == 7);
+        struct Mark {
+            Kind kind;
+            uint32_t color;
+            float stroke;
+            std::vector<float> dashes;
+        };
+        const Mark expected[] = {{Kind::Stroke, 0x80DEDEDE, 1, {2, 2}}, {Kind::Shape, 0x4743A047, 0, {}},
+                                 {Kind::Stroke, 0xFF43A047, 1.3f, {}},  {Kind::Shape, 0xFF43A047, 0, {}},
+                                 {Kind::Stroke, 0xFF43A047, 1.2f, {1, 1.5f}}, {Kind::Shape, 0xFF43A047, 0, {}}};
+        for (size_t k = 0; k < std::size(expected); k++) {
+            CHECK(marks[k].kind == expected[k].kind && marks[k].color == expected[k].color);
+            CHECK(NearDip(marks[k].strokeWidth, expected[k].stroke) && marks[k].dashes == expected[k].dashes);
+            CHECK(NearDip(marks[k].origin.x, 32) && NearDip(marks[k].origin.y, 8));
+            // Filled nonzero, so overlapping dots merge.
+            CHECK(marks[k].kind == Kind::Stroke || marks[k].winding);
+        }
+        // The model's shapes: two runs and their areas, one dot; the point at (24, 23) half way at
+        // 25%, the projection from it to 50% (y 16) at the reset.
+        CHECK(marks[1].shape.size() == 2 && marks[2].shape.size() == 2 && marks[3].shape.size() == 1);
+        CHECK(NearDip(marks[5].shape[0].x, 24) && NearDip(marks[5].shape[0].y, 21));
+        CHECK(NearDip(marks[4].shape[0].x, 24) && NearDip(marks[4].shape[0].y, 23) &&
+              NearDip(marks[4].shape[0].segments[0].x, 48) && NearDip(marks[4].shape[0].segments[0].y, 16));
+        // The key at a quarter of the plot's height, semi-bold, its right edge and baseline 3 DIPs in
+        // from the plot's bottom-right corner.
+        const SettingsPreviewOp& key = marks[6];
+        CHECK(key.kind == Kind::Text && key.text == L"5h" && NearDip(key.style.size, 8) &&
+              key.style.family == UiFamily::Taskbar && key.style.weight == DWRITE_FONT_WEIGHT_SEMI_BOLD &&
+              key.color == 0xFFFFFFFF && NearDip(key.opacity, 0.75));
+        CHECK(NearDip(key.rect.right, 77) && NearDip(key.rect.top + AboveCap(8) + CapHeight(8), 37));
+
+        // Over pace (80% half way, orange) the limit mark follows in the 100% color.
+        strip = at(s, Window(80, 9000000));
+        std::vector<SettingsPreviewOp> limit = OpsOfColor(strip, 0xFFE53935);
+        CHECK(limit.size() == 1 && limit[0].kind == Kind::Shape && OpsOfColor(strip, 0xFFFB8C00).size() == 4);
+        CHECK(strip.ops.back().kind == Kind::Text && strip.ops[strip.ops.size() - 2].color == 0xFFE53935);
+        // Markers off: no diagonal.
+        Settings off = s;
+        off.showPaceTicks = false;
+        strip = at(off, Window(25, 9000000));
+        CHECK(OpsOfKind(strip, Kind::Stroke).size() == 2 && OpsOfColor(strip, 0x80DEDEDE).empty());
+        // No history (the OpenAI sample has none): the diagonal, the projection and the point.
+        std::vector<AccountConfig> openai = {Account(L"openai", L"O", {true, false, false, false})};
+        openai[0].tileIdentity = TileIdentity::Logo;
+        AccountData openaiData = Fresh();
+        openaiData.win5h = Window(25, 9000000);
+        strip = StripOf(s, openai, {openaiData});
+        std::vector<SettingsPreviewOp> strokes = OpsOfKind(strip, Kind::Stroke), shapes = OpsOfKind(strip, Kind::Shape);
+        CHECK(strokes.size() == 2 && NearDip(strokes[0].strokeWidth, 1) && NearDip(strokes[1].strokeWidth, 1.2));
+        CHECK(shapes.size() == 1 && shapes[0].color == 0xFF43A047);
+        // Without a window: the point alone at the plot's right edge, the key still there.
+        strip = at(s, {25, 0, 0});
+        shapes = OpsOfKind(strip, Kind::Shape);
+        CHECK(OpsOfKind(strip, Kind::Stroke).empty() && TextOps(strip, L"5h").size() == 1);
+        CHECK(shapes.size() == 1 && NearDip(shapes[0].shape[0].x, 46) && NearDip(shapes[0].shape[0].y, 21));
+
+        // The chart width sets the column; the ring size the plot's height (the key a quarter of it,
+        // at most 9 DIPs).
+        Settings wide = s;
+        wide.sparklineWidth = 120;
+        wide.ringSize = 40;
+        strip = at(wide, Window(25, 9000000));
+        plot = OpsOfColor(strip, plotColor);
+        CHECK(NearDip(width(strip), 7 + 16 + 6 + 120 + 8) && NearDip(plot[0].rect.right - plot[0].rect.left, 120));
+        CHECK(NearDip(plot[0].rect.top, 4) && NearDip(plot[0].rect.bottom, 44) && NearDip(TextOps(strip, L"5h")[0].style.size, 9));
+        // A 32 DIP taskbar's 24 DIP tile caps the plot; the key at its 7 DIP floor.
+        strip = at(s, Window(25, 9000000), 32);
+        plot = OpsOfColor(strip, plotColor);
+        CHECK(NearDip(plot[0].rect.top, 4) && NearDip(plot[0].rect.bottom, 28) && NearDip(TextOps(strip, L"5h")[0].style.size, 7));
+        // A light taskbar: its plot color, and the diagonal in its dark pace color.
+        AccountData data = Fresh();
+        data.win5h = Window(25, 9000000);
+        std::vector<AccountData> one = {data};
+        SettingsPreviewStrip light =
+            SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xE4000000, &accounts, &one);
+        CHECK(OpsOfColor(light, TilePaletteFor(true).plot).size() == 1 && OpsOfColor(light, 0x801A1A1A).size() == 1);
+    });
+
+    Run("preview: a quota matrix's cells beside the identity, down the first column, rows centred on the tile", [] {
+        // One account with its logo alone and a 10 DIP margin, as above.
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A")};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+        Settings s;
+        s.barLayout = BarLayout::QuotaMatrix;
+        s.accountMargin = 10;
+        auto at = [&](std::array<double, kQuotaBarCount> pct, std::array<bool, kQuotaBarCount> bars = {true, true, true, true},
+                      double taskbar = 48) {
+            std::vector<AccountConfig> configured = accounts;
+            configured[0].showBars = bars;
+            return StripOf(s, configured, {Fresh(pct)}, taskbar);
+        };
+        auto width = [](const SettingsPreviewStrip& strip) { return strip.columns[0].right - strip.columns[0].left; };
+        auto only = [](const SettingsPreviewStrip& strip, std::wstring_view text) {
+            std::vector<SettingsPreviewOp> ops = TextOps(strip, text);
+            CHECK(ops.size() == 1);
+            return ops[0];
+        };
+        auto baseline = [](const SettingsPreviewOp& op) {
+            return op.rect.top + AboveCap(op.style.size) + CapHeight(op.style.size);
+        };
+
+        // Numbers at the 14 DIP number size, semi-bold, in their usage colors; keys at 9 DIPs in the
+        // taskbar's text color.
+        SettingsPreviewStrip four = at({5, 60, 80, 100});
+        const SettingsPreviewOp k5 = only(four, L"5h"), k7 = only(four, L"7d"), kFa = only(four, L"Fa"), kEx = only(four, L"Ex");
+        const SettingsPreviewOp n5 = only(four, L"5%"), n60 = only(four, L"60%"), n80 = only(four, L"80%"),
+                                n100 = only(four, L"100%");
+        for (const SettingsPreviewOp& n : {n5, n60, n80, n100}) {
+            CHECK(NearDip(n.style.size, 14) && n.style.family == UiFamily::Display &&
+                  n.style.weight == DWRITE_FONT_WEIGHT_SEMI_BOLD && n.opacity == 1);
+        }
+        CHECK(n5.color == 0xFF43A047 && n60.color == 0xFFFDD835 && n80.color == 0xFFFB8C00 && n100.color == 0xFFE53935);
+        for (const SettingsPreviewOp& k : {k5, k7, kFa, kEx}) {
+            CHECK(NearDip(k.style.size, 9) && k.style.family == UiFamily::Taskbar && k.color == 0xFFFFFFFF &&
+                  NearDip(k.opacity, 0.6));
+        }
+        // The first column's keys 6 DIPs after the logo, its numbers 3 DIPs past the widest key
+        // ("Cr" included, from an OpenAI tile); the second column a cell (which reserves "100%") and
+        // 8 DIPs further.
+        std::vector<AccountConfig> openai = {Account(L"openai", L"O", {false, false, false, true})};
+        openai[0].tileIdentity = TileIdentity::Logo;
+        const SettingsPreviewOp kCr = only(StripOf(s, openai, {Fresh({-1, -1, -1, 40})}), L"Cr");
+        CHECK(NearDip(kCr.style.size, 9));
+        float keyReserve = 0;
+        for (const SettingsPreviewOp& k : {k5, k7, kFa, kEx, kCr}) keyReserve = std::max(keyReserve, k.rect.right - k.rect.left);
+        keyReserve = std::ceil(keyReserve);
+        const float cell = keyReserve + 3 + std::ceil(n100.rect.right - n100.rect.left);
+        CHECK(NearDip(k5.rect.left, 32) && NearDip(k7.rect.left, 32));
+        CHECK(NearDip(n5.rect.left, 32 + keyReserve + 3) && NearDip(n60.rect.left, n5.rect.left));
+        CHECK(NearDip(kFa.rect.left, 32 + cell + 8) && NearDip(kEx.rect.left, kFa.rect.left));
+        CHECK(NearDip(n80.rect.left, kFa.rect.left + keyReserve + 3) && NearDip(n100.rect.left, n80.rect.left));
+        CHECK(NearDip(width(four), 7 + 16 + 6 + 2 * cell + 8 + 8));
+        // Each row's keys and numbers on one baseline; rows a cap height and 5 DIPs apart, the pair
+        // centred on the 40 DIP tile (24 DIPs down the strip).
+        const double cap = CapHeight(14);
+        CHECK(NearDip(baseline(k5), baseline(n5)) && NearDip(baseline(kFa), baseline(n5)) && NearDip(baseline(n80), baseline(n5)));
+        CHECK(NearDip(baseline(k7), baseline(n60)) && NearDip(baseline(kEx), baseline(n60)) && NearDip(baseline(n100), baseline(n60)));
+        CHECK(NearDip(baseline(n60) - baseline(n5), cap + 5));
+        CHECK(NearDip((baseline(n5) - cap + baseline(n60)) / 2, 24));
+        // The tile keeps its width as numbers change, and before the first reading (dashes).
+        AccountData before = Fresh();
+        before.lastSuccessMs = 0;
+        SettingsPreviewStrip waiting = StripOf(s, accounts, {before});
+        CHECK(NearDip(width(at({1, 2, 3, 4})), width(four)) && NearDip(width(waiting), width(four)));
+        CHECK(TextOps(waiting, L"\u2013").size() == 4);
+        // A number wider than "100%" widens its column, as XAML's auto columns do.
+        SettingsPreviewStrip wide = at({1234, 60, 80, 100});
+        const SettingsPreviewOp n1234 = only(wide, L"1234%");
+        const float wider = std::max(n1234.rect.right - n1234.rect.left, std::ceil(n100.rect.right - n100.rect.left));
+        CHECK(NearDip(only(wide, L"Fa").rect.left, 32 + keyReserve + 3 + wider + 8));
+        CHECK(NearDip(width(wide), 7 + 16 + 6 + keyReserve + 3 + wider + 8 + cell + 8));
+
+        // Two quotas: one column of two rows. Three: the third alone atop the second column. One: a
+        // single row centred on the tile.
+        SettingsPreviewStrip two = at({5, 60, -1, -1}, {true, true, false, false});
+        CHECK(NearDip(width(two), 7 + 16 + 6 + cell + 8) &&
+              NearDip(baseline(only(two, L"60%")) - baseline(only(two, L"5%")), cap + 5));
+        SettingsPreviewStrip three = at({5, 60, 80, -1}, {true, true, true, false});
+        CHECK(NearDip(width(three), width(four)) && NearDip(only(three, L"Fa").rect.left, 32 + cell + 8) &&
+              NearDip(baseline(only(three, L"80%")), baseline(only(three, L"5%"))));
+        SettingsPreviewStrip single = at({5, -1, -1, -1}, {true, false, false, false});
+        CHECK(NearDip(width(single), 7 + 16 + 6 + cell + 8) && NearDip(baseline(only(single, L"5%")) - cap / 2, 24));
+        // No readings after a success: no cells.
+        SettingsPreviewStrip none = at({-1, -1, -1, -1});
+        CHECK(OpsOfKind(none, SettingsPreviewOp::Kind::Text).empty() && NearDip(width(none), 7 + 16 + 6 + 8));
+        // A 32 DIP taskbar's 24 DIP tile: two rows shrink the numbers to 15 / 1.4 DIPs, still centred
+        // (16 DIPs down).
+        SettingsPreviewStrip low = at({5, 60, 80, 100}, {true, true, true, true}, 32);
+        const SettingsPreviewOp low5 = only(low, L"5%"), low60 = only(low, L"60%");
+        CHECK(NearDip(low5.style.size, 15 / 1.4) && NearDip(only(low, L"5h").style.size, 15 / 1.4 * 9 / 14));
+        CHECK(NearDip((baseline(low5) - CapHeight(15 / 1.4) + baseline(low60)) / 2, 16));
+    });
+
+    Run("preview paint: sparkline strokes draw, inside the plots' rows", [] {
+        // The sample accounts painted by the production painter with pace markers on and off: only
+        // the dashed diagonals differ, all inside the 32 DIP plots 8 DIPs down the 48 DIP strip.
+        UiGraphics& g = TestGraphics();
+        const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        CHECK(SUCCEEDED(com) || com == RPC_E_CHANGED_MODE);
+        constexpr UINT kWidth = 1000, kHeight = 48;
+        std::vector<std::vector<BYTE>> painted;
+        {
+            winrt::com_ptr<IWICImagingFactory> wic;
+            winrt::check_hresult(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                                  __uuidof(IWICImagingFactory), wic.put_void()));
+            for (bool pace : {true, false}) {
+                SettingsView view = TestView(SettingsUiPage::Layout);
+                view.settings.barLayout = BarLayout::Sparkline;
+                view.settings.showPaceTicks = pace;
+                view.status.taskbarHeight = 48;
+                view.now = kNow;
+                UiItem item;
+                item.kind = UiItemKind::Preview;
+                item.rect = {0, 0, float(kWidth), float(kHeight)};
+                winrt::com_ptr<IWICBitmap> bitmap;
+                winrt::check_hresult(wic->CreateBitmap(kWidth, kHeight, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad,
+                                                       bitmap.put()));
+                D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                    96, 96);
+                winrt::com_ptr<ID2D1RenderTarget> target;
+                winrt::check_hresult(g.d2d->CreateWicBitmapRenderTarget(bitmap.get(), &properties, target.put()));
+                UiTargetCache cache;
+                target->BeginDraw();
+                target->Clear(D2D1::ColorF(0, 0, 0, 1));
+                SettingsPaintPreview(target.get(), cache, g, UiThemeInput{}, view, item, {-1e9f, -1e9f});
+                winrt::check_hresult(target->EndDraw());
+                cache.Clear();
+                target = nullptr;
+                std::vector<BYTE> pixels(size_t(kWidth) * kHeight * 4);
+                WICRect all{0, 0, INT(kWidth), INT(kHeight)};
+                winrt::check_hresult(bitmap->CopyPixels(&all, kWidth * 4, UINT(pixels.size()), pixels.data()));
+                painted.push_back(std::move(pixels));
+            }
+        }
+        if (SUCCEEDED(com)) CoUninitialize();
+        int differing = 0, top = INT_MAX, bottom = -1;
+        for (UINT y = 0; y < kHeight; y++) {
+            for (UINT x = 0; x < kWidth; x++) {
+                const size_t at = (size_t(y) * kWidth + x) * 4;
+                if (std::equal(painted[0].begin() + at, painted[0].begin() + at + 4, painted[1].begin() + at)) continue;
+                differing++;
+                top = std::min(top, int(y));
+                bottom = std::max(bottom, int(y));
+            }
+        }
+        CHECK(differing > 0 && top >= 8 && bottom < 40);
+    });
+
     Run("preview: the new tile styles stay drawable and bounded at extreme settings; unknown styles fall back", [] {
         Settings large;
         large.ringSize = 40;
@@ -1523,19 +1789,22 @@ static void RunLayoutTests() {
         large.headlineFontSize = 24;
         large.headlineCountdown = true;
         large.paceTickStyle = PaceTickStyle::TimeTrack;
+        large.sparklineWidth = 120;
         Settings wild = large;
         wild.ringSize = 900;
         wild.ringThickness = -1;
         wild.logoScale = -5;
         wild.accountMargin = 99999;
+        wild.sparklineWidth = 1 << 30;
         for (const Settings& base : {large, wild}) {
             for (BarLayout layout : {BarLayout::Gauge, BarLayout::ClockPies, BarLayout::RoundedSquare,
-                                     BarLayout::LogoHeadline, BarLayout::Stacked, BarLayout::Vertical}) {
+                                     BarLayout::LogoHeadline, BarLayout::Stacked, BarLayout::Vertical,
+                                     BarLayout::Sparkline, BarLayout::QuotaMatrix}) {
                 Settings s = base;
                 s.barLayout = layout;
                 for (double taskbar : {0.0, 24.0, 48.0, 1e9}) {
                     // Per column two 500 DIP margins, a 32 DIP logo, 6 DIPs and a face (pies: 48
-                    // DIPs across), or bars: well under 1000 + 600.
+                    // DIPs across; a sparkline's plot: 120), or bars: well under 1000 + 600.
                     SettingsPreviewStrip strip = Strip(s, taskbar, false, 2.5f);
                     CHECK(Finite(strip));
                     CHECK(strip.width < 4 * 1600 && strip.height <= 96);
@@ -1594,9 +1863,10 @@ static void RunLayoutTests() {
         wild.labelPosition = LabelPosition(42);
         wild.barLayout = BarLayout(42);
         for (const Settings& base : {large, wild}) {
-            for (int layout = 0; layout <= int(BarLayout::ConcentricRings); layout++) {
+            for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical, BarLayout::LogoHeadline,
+                                     BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
                 Settings s = base;
-                if (&base == &large || layout) s.barLayout = BarLayout(layout);
+                if (&base == &large || layout != BarLayout::Stacked) s.barLayout = layout;
                 for (double taskbar : {0.0, 24.0, 48.0, 1e9}) {
                     // Bounded by the clamped ranges: per column two 500 DIP margins, a 500 DIP
                     // label gap, four bars with keys (37 + 50) and three 500 DIP gaps, and a
@@ -1624,19 +1894,20 @@ static void RunLayoutTests() {
         SettingsView view = TestView(SettingsUiPage::Layout);
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        // Eight gallery cards, three a row: the tile styles in BarLayout order.
-        const PCWSTR styles[] = {L"Stacked bars", L"Vertical bars", L"Headline %", L"Segmented ring",
-                                 L"Concentric rings", L"Gauge %", L"Clock pies", L"Rounded square"};
-        for (int i = 0; i < 8; i++) {
+        // Ten gallery cards, three a row: the tile styles in BarLayout order.
+        const PCWSTR styles[] = {L"Stacked bars",     L"Vertical bars", L"Burn-up sparkline", L"Segmented ring",
+                                 L"Concentric rings", L"Gauge %",       L"Clock pies",        L"Rounded square",
+                                 L"Headline %",       L"Quota matrix"};
+        for (int i = 0; i < 10; i++) {
             const UiItem& card = Control(frame, SettingsField::BarLayout, uint32_t(i));
             CHECK(card.kind == UiItemKind::Gallery && card.selected == (i == 0) && card.action.value == i);
             CHECK(card.text == styles[i]);
         }
         CHECK(std::count_if(frame.content.begin(), frame.content.end(),
-                            [](const UiItem& item) { return item.kind == UiItemKind::Gallery; }) == 8);
-        CHECK(std::size(kSettingsTileStyles) == 8 && int(BarLayout::LogoHeadline) == 2 &&
+                            [](const UiItem& item) { return item.kind == UiItemKind::Gallery; }) == 10);
+        CHECK(std::size(kSettingsTileStyles) == 10 && int(BarLayout::Sparkline) == 2 &&
               int(BarLayout::ConcentricRings) == 4 && int(BarLayout::Gauge) == 5 && int(BarLayout::ClockPies) == 6 &&
-              int(kLastBarLayout) == 7);
+              int(BarLayout::LogoHeadline) == 8 && int(kLastBarLayout) == 9);
         const UiItem& first = Control(frame, SettingsField::BarLayout, 0);
         const UiItem& fourth = Control(frame, SettingsField::BarLayout, 3);
         const UiItem& fifth = Control(frame, SettingsField::BarLayout, 4);
@@ -1649,6 +1920,9 @@ static void RunLayoutTests() {
         CHECK_NEAR(seventh.rect.left, first.rect.left);
         CHECK_NEAR(seventh.rect.top - fourth.rect.top, (first.rect.bottom - first.rect.top) + 8);
         CHECK_NEAR(eighth.rect.top, seventh.rect.top);
+        const UiItem& tenth = Control(frame, SettingsField::BarLayout, 9);
+        CHECK_NEAR(tenth.rect.left, first.rect.left);
+        CHECK_NEAR(tenth.rect.top - seventh.rect.top, (first.rect.bottom - first.rect.top) + 8);
         const UiItem& barStyle = Control(frame, SettingsField::BarStyle);
         CHECK(barStyle.kind == UiItemKind::Dropdown && barStyle.text == L"Full track" && barStyle.options.size() == 2 &&
               barStyle.options[1].text == L"Thin rail" && barStyle.options[1].value == int(BarStyle::Rail));
@@ -1666,7 +1940,7 @@ static void RunLayoutTests() {
               Control(frame, SettingsField::BarGap, 3).runs[0].text == L"px");
         // The identity is per account: the Identity and text section's first card goes to
         // Accounts, before Identity position; then Label font size and Identity gap.
-        const UiItem& identity = Control(frame, SettingsField::BarLayout, 8);
+        const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
         CHECK(identity.kind == UiItemKind::Card && identity.action.kind == UiActionKind::Navigate &&
               identity.action.value == int(SettingsUiPage::Accounts));
         CHECK(HasText(frame, L"Account identity is set per account in Accounts") &&
@@ -1752,13 +2026,13 @@ static void RunLayoutTests() {
         };
         CHECK(stop(SettingsControlId(SettingsField::BarLayout, 4)) && stop(SettingsControlId(SettingsField::BarLength, 1)) &&
               stop(SettingsControlId(SettingsField::PaceTickColor, 3)) &&
-              stop(SettingsControlId(SettingsField::BarLayout, 8)) &&
+              stop(SettingsControlId(SettingsField::BarLayout, 10)) &&
               !stop(SettingsControlId(SettingsField::PreviewScroll)));
         // Vertical bars have it too.
         view.settings.barLayout = BarLayout::Vertical;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate &&
+        CHECK(Control(frame, SettingsField::BarLayout, 10).action.kind == UiActionKind::Navigate &&
               HasText(frame, L"Account identity is set per account in Accounts") &&
               HasText(frame, L"Identity position"));
     });
@@ -1772,7 +2046,7 @@ static void RunLayoutTests() {
         const UiItem& size = Control(frame, SettingsField::RingSize, 1);
         CHECK(size.minimum == 24 && size.maximum == 40 && size.action.value == 32);
         CHECK(Control(frame, SettingsField::RingThickness, 1).maximum == 6);
-        const UiItem& identity = Control(frame, SettingsField::BarLayout, 8);
+        const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
         CHECK(identity.kind == UiItemKind::Card && identity.action.kind == UiActionKind::Navigate &&
               identity.action.value == int(SettingsUiPage::Accounts));
         CHECK(HasText(frame, L"Account identity is set per account in Accounts"));
@@ -1799,7 +2073,7 @@ static void RunLayoutTests() {
         view.settings.barLayout = BarLayout::LogoHeadline;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        CHECK(Control(frame, SettingsField::BarLayout, 2).selected);
+        CHECK(Control(frame, SettingsField::BarLayout, 8).selected);
         // The Headline section: the number size, its bars' length and thickness, then the bars'
         // gap, before the Identity section.
         const UiItem& number = Control(frame, SettingsField::HeadlineFontSize, 1);
@@ -1813,14 +2087,14 @@ static void RunLayoutTests() {
         CHECK(gap.kind == UiItemKind::NumberBox && gap.text == L"2");
         CHECK(number.rect.bottom < barLength.rect.top && barLength.rect.bottom < barThickness.rect.top &&
               barThickness.rect.bottom < gap.rect.top &&
-              gap.rect.bottom < Control(frame, SettingsField::BarLayout, 8).rect.top);
+              gap.rect.bottom < Control(frame, SettingsField::BarLayout, 10).rect.top);
         CHECK(HasText(frame, L"Headline") && HasText(frame, L"Number size") &&
               HasText(frame, L"its quota key scales with it") && !HasText(frame, L"fixed size"));
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::BarThickness, 1)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::RingSize, 1)));
-        CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate);
-        CHECK(Control(frame, SettingsField::BarLayout, 8).rect.bottom < Control(frame, SettingsField::LogoScale, 1).rect.top &&
+        CHECK(Control(frame, SettingsField::BarLayout, 10).action.kind == UiActionKind::Navigate);
+        CHECK(Control(frame, SettingsField::BarLayout, 10).rect.bottom < Control(frame, SettingsField::LogoScale, 1).rect.top &&
               Control(frame, SettingsField::BadgeSize, 1).enabled);
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::ShowPaceTicks)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::PaceTickColor, 1)) && !HasText(frame, L"Pace markers"));
@@ -1920,15 +2194,15 @@ static void RunLayoutTests() {
                 CHECK(thickness.maximum == 6 && thickness.action.value == 3 && thickness.enabled);
                 CHECK(HasText(frame, c.thickness) && HasText(frame, c.thicknessText));
                 CHECK(size.rect.bottom < thickness.rect.top &&
-                      thickness.rect.bottom < Control(frame, SettingsField::BarLayout, 8).rect.top);
+                      thickness.rect.bottom < Control(frame, SettingsField::BarLayout, 10).rect.top);
             } else {
                 CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::RingThickness)) &&
                       !UiFindItem(frame, SettingsControlId(SettingsField::RingThickness, 1)) && !HasText(frame, L"thickness"));
-                CHECK(size.rect.bottom < Control(frame, SettingsField::BarLayout, 8).rect.top);
+                CHECK(size.rect.bottom < Control(frame, SettingsField::BarLayout, 10).rect.top);
             }
             // Then the identity's card and the logo cards; pace markers without the bars' style; no
             // bar or headline cards.
-            CHECK(Control(frame, SettingsField::BarLayout, 8).action.kind == UiActionKind::Navigate &&
+            CHECK(Control(frame, SettingsField::BarLayout, 10).action.kind == UiActionKind::Navigate &&
                   Control(frame, SettingsField::LogoScale, 1).enabled);
             CHECK(Control(frame, SettingsField::ShowPaceTicks).kind == UiItemKind::Toggle &&
                   Control(frame, SettingsField::PaceTickColor, 1).enabled &&
@@ -1937,6 +2211,88 @@ static void RunLayoutTests() {
                   !UiFindItem(frame, SettingsControlId(SettingsField::BarStyle)) &&
                   !UiFindItem(frame, SettingsControlId(SettingsField::HeadlineBarLength, 1)) &&
                   !UiFindItem(frame, SettingsControlId(SettingsField::HeadlineCountdown)));
+        }
+    });
+
+    Run("layout page: sparkline and matrix sections; the sparkline's pace markers without a marker style", [] {
+        UiGraphics& g = TestGraphics();
+        auto section = [](const UiFrame& frame, std::wstring_view text) {
+            return std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+                return item.kind == UiItemKind::Text && item.font == UiFont::BodyStrong && UiRunsText(item.runs) == text;
+            });
+        };
+        auto absent = [](const UiFrame& frame, std::initializer_list<std::pair<SettingsField, uint32_t>> controls) {
+            for (auto [field, part] : controls) CHECK(!UiFindItem(frame, SettingsControlId(field, part)));
+        };
+        SettingsView view = TestView(SettingsUiPage::Layout);
+        view.settings.barLayout = BarLayout::Sparkline;
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::BarLayout, 2).selected && !Control(frame, SettingsField::BarLayout, 0).selected);
+        CHECK(section(frame, L"Sparkline") && section(frame, L"Identity") && section(frame, L"Pace markers") &&
+              section(frame, L"Spacing") && !section(frame, L"Matrix") && !section(frame, L"Ring") &&
+              !section(frame, L"Headline") && !section(frame, L"Bars"));
+        // The chart's width, then its height (the ring size), before the identity's card.
+        const UiItem& chartWidth = Control(frame, SettingsField::SparklineWidth, 1);
+        const UiItem& chartHeight = Control(frame, SettingsField::RingSize, 1);
+        CHECK(chartWidth.kind == UiItemKind::Slider && chartWidth.minimum == 24 && chartWidth.maximum == 120 &&
+              chartWidth.action.value == 48 && chartWidth.enabled && Control(frame, SettingsField::SparklineWidth).text == L"48");
+        CHECK(chartHeight.kind == UiItemKind::Slider && chartHeight.minimum == 24 && chartHeight.maximum == 40 &&
+              chartHeight.action.value == 32 && chartHeight.enabled);
+        CHECK(HasText(frame, L"Chart width") && HasText(frame, L"Pixels across the quota\u2019s whole window.") &&
+              HasText(frame, L"Chart height") && HasText(frame, L"Pixels from 0% to 100% used.") &&
+              !HasText(frame, L"Ring size"));
+        const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
+        CHECK(chartWidth.rect.bottom < chartHeight.rect.top && chartHeight.rect.bottom < identity.rect.top);
+        CHECK(identity.action.kind == UiActionKind::Navigate && Control(frame, SettingsField::LogoScale, 1).enabled);
+        absent(frame, {{SettingsField::RingThickness, 1}, {SettingsField::BarLength, 1}, {SettingsField::BarStyle, 0},
+                       {SettingsField::HeadlineFontSize, 1}, {SettingsField::HeadlineCountdown, 0}, {SettingsField::BarGap, 0}});
+        // Pace markers: the toggle, describing the diagonal, and the color; no marker style.
+        const UiItem& pace = Control(frame, SettingsField::ShowPaceTicks);
+        CHECK(pace.kind == UiItemKind::Toggle && pace.selected && Control(frame, SettingsField::PaceTickColor, 1).enabled);
+        absent(frame, {{SettingsField::PaceTickStyle, 0}});
+        CHECK(HasText(frame, L"A diagonal marks even use of the quota across its window, to compare with its usage.") &&
+              !HasText(frame, L"Ticks mark how much"));
+        // Markers off: the color waits for them.
+        view.settings.showPaceTicks = false;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(!Control(frame, SettingsField::PaceTickColor, 1).enabled && HasText(frame, L"Turn on Pace markers to change this."));
+        // A chosen width on the slider and in its box.
+        view.settings.showPaceTicks = true;
+        view.settings.sparklineWidth = 80;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::SparklineWidth, 1).action.value == 80 &&
+              Control(frame, SettingsField::SparklineWidth).text == L"80");
+
+        // Quota matrix: the number size, then the identity; no pace markers or other sizes.
+        view = TestView(SettingsUiPage::Layout);
+        view.settings.barLayout = BarLayout::QuotaMatrix;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::BarLayout, 9).selected);
+        CHECK(section(frame, L"Matrix") && section(frame, L"Identity") && section(frame, L"Spacing") &&
+              !section(frame, L"Pace markers") && !section(frame, L"Sparkline") && !section(frame, L"Headline"));
+        const UiItem& number = Control(frame, SettingsField::HeadlineFontSize, 1);
+        CHECK(number.kind == UiItemKind::Slider && number.minimum == 10 && number.maximum == 24 && number.action.value == 14 &&
+              number.enabled && Control(frame, SettingsField::HeadlineFontSize).text == L"14");
+        CHECK(HasText(frame, L"Number size") &&
+              HasText(frame, L"Text size of each quota\u2019s percentage, in pixels; its key scales with it. Two rows "
+                             L"shrink to fit the taskbar."));
+        CHECK(number.rect.bottom < Control(frame, SettingsField::BarLayout, 10).rect.top &&
+              Control(frame, SettingsField::BarLayout, 10).action.kind == UiActionKind::Navigate &&
+              Control(frame, SettingsField::LogoScale, 1).enabled);
+        absent(frame, {{SettingsField::ShowPaceTicks, 0}, {SettingsField::PaceTickColor, 1}, {SettingsField::PaceTickStyle, 0},
+                       {SettingsField::SparklineWidth, 1}, {SettingsField::RingSize, 1}, {SettingsField::RingThickness, 1},
+                       {SettingsField::HeadlineBarLength, 1}, {SettingsField::HeadlineCountdown, 0}, {SettingsField::BarGap, 0}});
+        CHECK(!HasText(frame, L"Pace markers"));
+        // The chart width is the sparkline's alone.
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::LogoHeadline, BarLayout::Gauge, BarLayout::ClockPies}) {
+            view.settings.barLayout = layout;
+            frame = {};
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            absent(frame, {{SettingsField::SparklineWidth, 0}, {SettingsField::SparklineWidth, 1}});
         }
     });
 

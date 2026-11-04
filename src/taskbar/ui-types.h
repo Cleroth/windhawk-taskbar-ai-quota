@@ -41,6 +41,8 @@ struct AppliedState {
     int highlight = -1;
     std::wstring headline;
     uint32_t headlineColor = 0;
+    // Sparklines: the drawn shapes' points and colors, flattened.
+    std::vector<double> spark;
 };
 
 struct PointerHandlers {
@@ -63,8 +65,8 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
-// A tile layout's elements (face tiles, logo + headline); bar columns with a logo identity hold
-// only the identity. Headline segment fills use AccountUiRefs::fills.
+// A tile layout's elements (face tiles, logo + headline, sparkline, quota matrix); bar columns
+// with a logo identity hold only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
     // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
@@ -82,11 +84,23 @@ struct TileUiRefs {
     TextBlock badgeText{nullptr};
     SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
-    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
-    // with the countdown show it instead of their segments.
+    // Logo + headline and gauges: the most-used quota's number and window key (sparklines: the
+    // key); headline tiles with the countdown show it instead of their segments.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
     TextBlock countdown{nullptr};
+    // Sparklines: the plot's background, and its shapes in drawing order (UpdateAccountTile).
+    Border plot{nullptr};
+    std::array<wuxs::Path, 7> spark{wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr},
+                                    wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr},
+                                    wuxs::Path{nullptr}};
+    // Quota matrix: each slot's cell, its key and number.
+    std::array<StackPanel, kQuotaBarCount> matrixCells{
+        StackPanel{nullptr}, StackPanel{nullptr}, StackPanel{nullptr}, StackPanel{nullptr}};
+    std::array<TextBlock, kQuotaBarCount> matrixKeys{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<TextBlock, kQuotaBarCount> matrixValues{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     // Face tiles' fills and pace ticks (halo and core) per quota slot.
     std::array<wuxs::Path, kQuotaBarCount> arcs{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};

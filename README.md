@@ -50,8 +50,8 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - record history for this account
   - **Open dashboard**, **Sign in again**, and **Sign out** (Anthropic, OpenAI), and **Remove account**
 - **Layout**, with a live preview of the taskbar:
-  - tile style: stacked bars, vertical bars, headline %, segmented ring, concentric rings, gauge % (the most-used quota's arc around its number), clock pies (a pie per quota with an elapsed-time hand), or rounded square (segmented-ring arcs along a rounded square around the identity); settings the chosen style ignores are hidden or disabled with the reason
-  - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); size and thickness (rings, gauge, and rounded square; pies take the size); the number size, a reset countdown (the time until the quota resets under the number, instead of its bars), and the length and thickness of the bars under it, with the same bar gap (headline %)
+  - tile style: stacked bars, vertical bars, burn-up sparkline (the most-used quota's recorded usage across its window, with an even-use diagonal and a projection at its average rate), segmented ring, concentric rings, gauge % (the most-used quota's arc around its number), clock pies (a pie per quota with an elapsed-time hand), rounded square (segmented-ring arcs along a rounded square around the identity), headline %, or quota matrix (each quota's key and percentage in up to two rows and columns); settings the chosen style ignores are hidden or disabled with the reason
+  - bar style: a full track behind each fill (default) or a thin rail under it; bar length, thickness, and gap (stacked and vertical bars); size and thickness (rings, gauge, and rounded square; pies take the size); the chart's width and height (sparkline); the number size, a reset countdown (the time until the quota resets under the number, instead of its bars), and the length and thickness of the bars under it, with the same bar gap (headline %; the matrix takes the number size)
   - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label font size for label identities, and the identity gap
   - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number badge's size (6 to 20 px, default 13), color, and horizontal and vertical offsets; the badge is an outlined number centered on the logo's lower-right corner (on rings, pulled inside the hole), in the taskbar's text color by default (the white swatch), or another color from the swatches or **Custom...**, outlined dark or light to contrast with it
   - logo colors: the Claude logo in the taskbar's text color (default) or Claude's orange, and the Antigravity (Gemini sparkle) logo in the text color (default) or Gemini's purple-to-blue gradient; the details flyout, the Accounts page and the usage history window follow them, and high contrast always uses the text color
@@ -84,7 +84,8 @@ history**, or click **Enable recording** in the history window's disabled banner
 applies to the current Windows user without changing per-account recording selections or
 hidden-account rules. Account recording defaults on; turn off **Record history** on an account's
 card in **Settings > Accounts** to exclude it. Recording starts with the next poll. The details
-flyout's burn-up charts use these recordings.
+flyout's burn-up charts and the burn-up sparkline tiles use these recordings; without them a
+sparkline shows only the current reading and its projection.
 Use **Usage history** from a column's right-click menu or **Open usage history** in
 **Settings > History** to open the native viewer.
 It reads local samples, not provider APIs. **Refresh / F5** updates the displayed snapshot.

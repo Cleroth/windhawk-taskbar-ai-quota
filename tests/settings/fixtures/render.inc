@@ -392,6 +392,22 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              thresholds(s, 6, 75, 90);
          }},
         {L"Square, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; }, -1, 32},
+        // Sparklines (the visual test samples' history; the OpenAI sample has none) and the quota
+        // matrix at their defaults and extremes.
+        {L"Burn-up sparkline", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }},
+        {L"Sparkline, remaining", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.barMode = BarMode::Remaining; }},
+        {L"Sparkline, pace off", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.showPaceTicks = false; }},
+        {L"Sparkline 24 x 24",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineWidth = 24; s.ringSize = 24; }},
+        {L"Sparkline 120 x 40",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineWidth = 120; s.ringSize = 40; }},
+        {L"Sparkline, colorblind", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.colorblindMode = true; }},
+        {L"Sparkline, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }, -1, 32},
+        {L"Quota matrix", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }},
+        {L"Matrix, remaining", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; s.barMode = BarMode::Remaining; }},
+        {L"Matrix, number 10", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; s.headlineFontSize = 10; }},
+        {L"Matrix, number 24", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; s.headlineFontSize = 24; }},
+        {L"Matrix, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }, -1, 32},
         // Logo sizes and the number badge's size and offsets per style.
         {L"Bars 60, logo 50%", [](Settings& s) { s.barLength = 60; s.logoScale = 50; }},
         {L"Bars 60, logo 150%, badge 12", [](Settings& s) { s.barLength = 60; s.logoScale = 150; s.badgeSize = 12; }},
@@ -496,8 +512,8 @@ static void RunRenders(const std::wstring& directory) {
         auto path = [&](const std::string& name) {
             return directory + L"\\" + std::wstring(name.begin(), name.end());
         };
-        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "headline", "ring",
-                                                      "concentric", "gauge", "pies", "square"};
+        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "spark",    "ring",     "concentric",
+                                                      "gauge",   "pies",     "square",   "headline", "matrix"};
         for (const RenderTheme& theme : RenderThemes()) {
             for (UINT dpi : {96u, 144u, 192u}) {
                 const std::pair<SettingsUiPage, const char*> pages[] = {
@@ -707,7 +723,7 @@ static void RunRenders(const std::wstring& directory) {
                             false);
 
                 // Scrolled to the Identity and text section, its link to Accounts hovered.
-                const UiItem& identity = *UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 8));
+                const UiItem& identity = *UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 10));
                 state = {};
                 state.hot = {identity.id};
                 std::string identityName = std::string("render-layout-identity-") + theme.name + "-144.png";

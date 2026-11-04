@@ -85,9 +85,22 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ui.tile.badge.Visibility(badgeShown ? Visibility::Visible : Visibility::Collapsed);
                 ap.badge = badgeShown ? 1 : 0;
             }
+            // A sparkline's recorded usage: the burn-up curve of the flyout row showing the
+            // quota's reading (the accessor takes the settings and data locks, so none may be
+            // held here), or the visual test samples.
+            TileTraceSource traceOf = [&](int slot, const WindowUsage& reading) {
+                if (visualTestMode) return VisualTestTrace(accounts[i], reading, now);
+                static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow,
+                                                              kFlyoutFableRow, kFlyoutExtraRow};
+                std::vector<TileTracePoint> trace;
+                if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(accounts[i].historyId, kRows[slot], reading)) {
+                    for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
+                }
+                return trace;
+            };
             AccountMeters meters = AccountMeterState(
                 display, state.buildBarLayout, accounts[i], d,
-                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt);
+                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
             bool accountRefreshing = !visualTestMode && refreshing &&
                 (!refreshAccountIdentity ||
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
@@ -280,34 +293,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                             curves[r] = CopyBurnUpCurve(accounts[i].historyId, r, reading);
                             continue;
                         }
-                        // Visual test samples: readings from part-way into the window up to now,
-                        // ending at the reading, with a recording gap and an isolated reading.
-                        // The OpenAI sample has none, so its flyout keeps the no-history bars.
-                        if (accounts[i].provider == L"openai" || reading.pct < 0 ||
-                            !reading.windowDurationMs ||
-                            reading.resetUnixMs <= reading.windowDurationMs ||
-                            now <= reading.resetUnixMs - reading.windowDurationMs) {
-                            continue;
-                        }
-                        // Times as fractions of the window's elapsed span from its start, usage
-                        // as shares of the reading. Sample windows move with now, so the drawn
-                        // geometry stays put between ticks.
-                        static constexpr struct {
-                            double time, share;
-                            bool connect;
-                        } kSamples[] = {
-                            {0.15, 0.10, false}, {0.22, 0.18, true}, {0.30, 0.22, true},
-                            {0.38, 0.36, true}, {0.45, 0.40, true}, {0.55, 0.52, false},
-                            {0.68, 0.60, false}, {0.76, 0.66, true}, {0.84, 0.80, true},
-                            {0.92, 0.88, true}, {1.00, 1.00, true},
-                        };
-                        ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+                        // Visual test samples; the OpenAI sample keeps the no-history bars.
+                        std::vector<TileTracePoint> trace = VisualTestTrace(accounts[i], reading, now);
+                        if (trace.empty()) continue;
                         BurnUpCurve& curve = curves[r].emplace(
                             BurnUpCurve{reading.resetUnixMs, reading.windowDurationMs, {}});
-                        for (const auto& sample : kSamples) {
-                            curve.points.push_back(
-                                {start + (ULONGLONG)std::llround((now - start) * sample.time),
-                                 reading.pct * sample.share, sample.connect});
+                        for (const TileTracePoint& point : trace) {
+                            curve.points.push_back({point.timeMs, point.used, point.connect});
                         }
                     }
                     UpdateAccountFlyout(state, accounts[i], d,

@@ -219,14 +219,16 @@ enum class TaskbarMonitorMode {
 enum class BarLayout {
     Stacked,
     Vertical,
-    LogoHeadline,
+    Sparkline,      // The most-used quota's burn-up over its window, the identity beside.
     SegmentedRing,
     ConcentricRings,
     Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
     ClockPies,      // A pie per quota with an elapsed-time hand, the identity beside.
     RoundedSquare,  // Segmented-ring arcs along a rounded square around the identity.
+    LogoHeadline,
+    QuotaMatrix,    // Each quota's key and number in up to two rows and columns, the identity beside.
 };
-static constexpr BarLayout kLastBarLayout = BarLayout::RoundedSquare;
+static constexpr BarLayout kLastBarLayout = BarLayout::QuotaMatrix;
 
 // How Stacked and Vertical bars draw behind their fill.
 enum class BarStyle {
@@ -245,6 +247,9 @@ static constexpr int kHeadlineBarLengthMin = 4;
 static constexpr int kHeadlineBarLengthMax = 60;
 static constexpr int kHeadlineBarThicknessMin = 2;
 static constexpr int kHeadlineBarThicknessMax = 10;
+// Sparkline tiles' chart width, in DIPs.
+static constexpr int kSparklineWidthMin = 24;
+static constexpr int kSparklineWidthMax = 120;
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -321,17 +326,19 @@ struct Settings {
     int barLength = 100;
     int barThickness = 8;
     BarStyle barStyle = BarStyle::Track;
-    // Segmented and concentric ring diameter and stroke, in DIPs; rendering shrinks the stroke
-    // and gaps further when the meters wouldn't fit around the identity.
+    // Ring diameter and stroke, in DIPs, also the gauge's, the rounded square's and (size only)
+    // the pies' and sparkline chart's height; rendering shrinks the stroke and gaps further when
+    // the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
-    // Headline tiles: the most-used quota's number size, and the size of each quota's bar under
-    // it (the bar gap is the bars').
+    // Headline tiles: the most-used quota's number size (also the quota matrix's), and the size
+    // of each quota's bar under it (the bar gap is the bars').
     int headlineFontSize = 14;
     int headlineBarLength = 16;
     int headlineBarThickness = 4;
     // Headline tiles show the time until the quota resets under the number instead of the bars.
     bool headlineCountdown = false;
+    int sparklineWidth = 48;  // Sparkline tiles' chart width, in DIPs.
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.
@@ -527,6 +534,8 @@ struct AppliedState {
     int highlight = -1;
     std::wstring headline;
     uint32_t headlineColor = 0;
+    // Sparklines: the drawn shapes' points and colors, flattened.
+    std::vector<double> spark;
 };
 
 struct PointerHandlers {
@@ -549,8 +558,8 @@ struct RoutedHandler {
     winrt::Windows::Foundation::IInspectable handler{nullptr};
 };
 
-// A tile layout's elements (face tiles, logo + headline); bar columns with a logo identity hold
-// only the identity. Headline segment fills use AccountUiRefs::fills.
+// A tile layout's elements (face tiles, logo + headline, sparkline, quota matrix); bar columns
+// with a logo identity hold only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
     // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
@@ -568,11 +577,23 @@ struct TileUiRefs {
     TextBlock badgeText{nullptr};
     SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
-    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
-    // with the countdown show it instead of their segments.
+    // Logo + headline and gauges: the most-used quota's number and window key (sparklines: the
+    // key); headline tiles with the countdown show it instead of their segments.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
     TextBlock countdown{nullptr};
+    // Sparklines: the plot's background, and its shapes in drawing order (UpdateAccountTile).
+    Border plot{nullptr};
+    std::array<wuxs::Path, 7> spark{wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr},
+                                    wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr},
+                                    wuxs::Path{nullptr}};
+    // Quota matrix: each slot's cell, its key and number.
+    std::array<StackPanel, kQuotaBarCount> matrixCells{
+        StackPanel{nullptr}, StackPanel{nullptr}, StackPanel{nullptr}, StackPanel{nullptr}};
+    std::array<TextBlock, kQuotaBarCount> matrixKeys{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<TextBlock, kQuotaBarCount> matrixValues{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     // Face tiles' fills and pace ticks (halo and core) per quota slot.
     std::array<wuxs::Path, kQuotaBarCount> arcs{
         wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}, wuxs::Path{nullptr}};
@@ -5814,8 +5835,24 @@ static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // kHeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
 static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
-// Quota window keys on bar labels and headline tiles; OpenAI credits show "Cr" instead of "Ex".
+// Quota window keys on bar labels and tiles; OpenAI credits show "Cr" instead of "Ex".
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
+// Tile text's cap height, as a share of its font size (Segoe UI Variable).
+static constexpr double kTileCapShare = 0.7;
+// Quota matrix cells: the key, kMatrixKeyGap DIPs, then the number; columns and rows apart by
+// their gaps.
+static constexpr double kMatrixKeyGap = 3, kMatrixColumnGap = 8, kMatrixRowGap = 5;
+// Sparkline strokes and marks, in DIPs. Dash patterns are in stroke widths, as XAML's and
+// Direct2D's dash arrays take them. The plot keeps kSparkInset DIPs free at its top and bottom.
+static constexpr double kSparkLineStroke = 1.3;
+static constexpr double kSparkGuideStroke = 1;
+static constexpr std::array<double, 2> kSparkGuideDashes = {2, 2};
+static constexpr double kSparkProjectionStroke = 1.2;
+static constexpr std::array<double, 2> kSparkProjectionDashes = {1, 1.5};
+static constexpr double kSparkDotRadius = 1.5, kSparkNowRadius = 2, kSparkLimitRadius = 1.75;
+static constexpr double kSparkInset = 2, kSparkPlotRadius = 3;
+// Sparkline fills' and guides' alpha over their usage or pace color.
+static constexpr uint32_t kSparkAreaAlpha = 0x47000000, kSparkGuideAlpha = 0x80000000;
 
 static bool IsTileLayout(BarLayout layout) {
     return layout != BarLayout::Stacked && layout != BarLayout::Vertical;
@@ -5829,7 +5866,8 @@ static bool IsRingTile(BarLayout layout) {
 }
 
 // Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauge and the
-// pies. Gauges and pies show the identity beside the face, as headline tiles do.
+// pies. Gauges and pies show the identity beside the face, as headline tiles do. Sparklines draw
+// outlines in their plot too, but one quota's chart rather than a meter per quota.
 static bool IsFaceTile(BarLayout layout) {
     return IsRingTile(layout) || layout == BarLayout::Gauge || layout == BarLayout::ClockPies;
 }
@@ -6162,11 +6200,12 @@ struct TilePalette {
     uint32_t hover;
     uint32_t open;       // Tile whose flyout is open.
     uint32_t badgeHalo;  // The number badge's outline, the taskbar's own color.
+    uint32_t plot;       // A sparkline's chart background.
 };
 
 static TilePalette TilePaletteFor(bool light) {
-    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFF3F3F3};
-    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C};
+    if (light) return {0x24000000, 0x0A000000, 0xB3FFFFFF, 0xFFF3F3F3, 0x0F000000};
+    return {0x2BFFFFFF, 0x0FFFFFFF, 0x1AFFFFFF, 0xFF1C1C1C, 0x14FFFFFF};
 }
 
 // The number badge's text (0: the taskbar's text color, inherited) and outline. White is the
@@ -6198,6 +6237,7 @@ struct MeterDisplay {
     int headlineBarLength;    // kHeadlineBarLengthMin-kHeadlineBarLengthMax DIPs.
     int headlineBarThickness; // kHeadlineBarThicknessMin-kHeadlineBarThicknessMax DIPs.
     bool headlineCountdown;
+    int sparklineWidth;       // kSparklineWidthMin-kSparklineWidthMax DIPs.
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -6241,6 +6281,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .headlineBarThickness =
             std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
         .headlineCountdown = settings.headlineCountdown,
+        .sparklineWidth = std::clamp(settings.sparklineWidth, kSparklineWidthMin, kSparklineWidthMax),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -6359,6 +6400,41 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         }
         data->push_back(std::move(accountData));
     }
+}
+
+// A recorded reading of a quota in its current window (the burn-up curve's), oldest first.
+struct TileTracePoint {
+    ULONGLONG timeMs = 0;
+    double used = 0;       // Used percentage as recorded; can exceed 100.
+    bool connect = false;  // Joined to the previous point; false starts a segment.
+};
+
+// Visual test samples' recorded usage of `reading`, for the details flyout and sparklines: from
+// part-way into its window up to `now`, ending at the reading, with a recording gap and an
+// isolated reading. Times are shares of the window's elapsed span, so the drawn geometry stays
+// put between ticks. None for the OpenAI sample, which keeps the views without history, or for a
+// reading without a window or before its window starts.
+static std::vector<TileTracePoint> VisualTestTrace(const AccountConfig& account, const WindowUsage& reading,
+                                                   ULONGLONG now) {
+    if (account.provider == L"openai" || reading.pct < 0 || !reading.windowDurationMs ||
+        reading.resetUnixMs <= reading.windowDurationMs || now <= reading.resetUnixMs - reading.windowDurationMs) {
+        return {};
+    }
+    static constexpr struct {
+        double time, share;
+        bool connect;
+    } kSamples[] = {
+        {0.15, 0.10, false}, {0.22, 0.18, true}, {0.30, 0.22, true}, {0.38, 0.36, true},
+        {0.45, 0.40, true},  {0.55, 0.52, false}, {0.68, 0.60, false}, {0.76, 0.66, true},
+        {0.84, 0.80, true},  {0.92, 0.88, true}, {1.00, 1.00, true},
+    };
+    ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+    std::vector<TileTracePoint> trace;
+    for (const auto& sample : kSamples) {
+        trace.push_back({start + (ULONGLONG)std::llround((now - start) * sample.time), reading.pct * sample.share,
+                         sample.connect});
+    }
+    return trace;
 }
 
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
@@ -6595,6 +6671,7 @@ static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label
 struct QuotaMeter {
     uint32_t color = 0;        // Usage color: follows used % in either bar mode.
     bool paceVisible = false;  // Pace mark shown, in layouts that draw one.
+    std::wstring key;          // Window key (kQuotaKeys; "Cr" for OpenAI credits).
 
     // The fill's corner radius toward 100%, in bars, headline segments and ring arcs;
     // its start corners are the track's. Over a full track the fill ends in a straight cut until
@@ -6608,7 +6685,9 @@ struct QuotaMeter {
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
     bool darkText = false;     // Black percent text over a yellow or orange fill.
-    std::wstring text;         // Percent or amount; empty while unavailable.
+    // Percent or amount; empty while unavailable. Also the quota matrix's number, "–" while
+    // unavailable.
+    std::wstring text;
 
     // Tiles. Fill and pace in thousandths of the meter are the update keys; the geometry
     // below follows them.
@@ -6625,6 +6704,8 @@ struct QuotaMeter {
     TileOutline fill;          // Empty without usage.
     TileOutline paceHalo;      // Empty while the pace mark is hidden.
     TileOutline paceCore;
+    // Quota matrix: the cell, down the first column, then the second from the third quota on.
+    int matrixRow = 0, matrixColumn = 0;
 };
 
 struct AccountMeters {
@@ -6647,21 +6728,37 @@ struct AccountMeters {
     double faceWidth = 0, faceHeight = 0;
     double faceFont = 0, faceKeyFont = 0;
     double faceNumberCenter = 0, faceKeyCenter = 0;
-    // Logo + headline tiles and gauges: the most-used quota's number (gauges: without "%"),
-    // window key and color.
+    // Logo + headline tiles, gauges and sparklines: the most-used quota's number (gauges: without
+    // "%"), window key and color; sparklines chart the most-used quota with a window, if any.
     std::wstring headline;
     std::wstring headlineKey;
     uint32_t headlineColor = 0;
     // Logo + headline tiles with the countdown: the time until that quota resets.
     std::wstring headlineCountdown;
+    // Sparklines, in the face (the plot) from its top-left, used % in either bar mode across the
+    // window: the recorded usage (an area under each connected run, the runs, isolated readings
+    // as dots), the even-pace diagonal (with pace markers on), the current point, and the
+    // projection at the window's average rate from the current point to the reset or, over pace,
+    // to the limit, marked in the 100% color. Lines are open figures to stroke; the rest fill
+    // nonzero, so overlapping dots merge. Without a window the current point sits at the plot's
+    // right edge, alone.
+    TileOutline sparkArea, sparkLines, sparkDots, sparkPace, sparkProjection, sparkNow, sparkLimit;
+    uint32_t sparkLimitColor = 0;
+    double sparkKeyFont = 0;  // The key, in the plot's bottom-right corner.
+    // Quota matrix: the numbers' and keys' font sizes, two rows shrunk to fit the tile.
+    double matrixFont = 0, matrixKeyFont = 0;
 };
+
+// A quota's recorded usage for a sparkline: its slot and reading. Empty without history.
+using TileTraceSource = std::function<std::vector<TileTracePoint>(int slot, const WindowUsage& reading)>;
 
 // `layout`: the layout the meters are drawn in. `badgeChars`: the tile badge's text length, 0
 // without a badge. `textWidthPerPt`: the tile identity text's width per DIP of font size, 0
-// without text.
+// without text. `traceOf`: a sparkline's recorded usage, asked for its charted quota only.
 static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout layout,
                                        const AccountConfig& account, const AccountData& data,
-                                       int badgeChars, double textWidthPerPt) {
+                                       int badgeChars, double textWidthPerPt,
+                                       const TileTraceSource& traceOf = {}) {
     AccountMeters meters;
     const std::array<const WindowUsage*, kQuotaBarCount> usage = {
         &data.win5h, &data.winWeek, &data.fableWeek, &data.extraUsage};
@@ -6692,21 +6789,40 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     bool concentric = layout == BarLayout::ConcentricRings;
     bool gauge = layout == BarLayout::Gauge, pies = layout == BarLayout::ClockPies;
     bool square = layout == BarLayout::RoundedSquare;
+    bool spark = layout == BarLayout::Sparkline, matrix = layout == BarLayout::QuotaMatrix;
     // Arcs of circles: the rings and the gauge.
     bool circular = concentric || layout == BarLayout::SegmentedRing || gauge;
     bool ring = IsRingTile(layout);
-    bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline;
-    // The most-used tile quota: the headline's, and the only one a gauge shows (until the first
-    // success, its first selected quota).
-    int top = -1;
+    bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline && !matrix;
+    auto timed = [&](int w) {
+        return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs;
+    };
+    // The most-used tile quota: the headline's, and the only one a gauge or sparkline shows
+    // (until the first success, its first selected quota). Sparklines prefer a quota with a
+    // window, which they can chart.
+    int top = -1, timedTop = -1;
     for (int w = 0; w < kQuotaBarCount; w++) {
-        if ((meters.barMask & (1 << w)) && usage[w]->pct >= 0 && (top < 0 || usage[w]->pct > usage[top]->pct)) {
-            top = w;
-        }
+        if (!(meters.barMask & (1 << w)) || usage[w]->pct < 0) continue;
+        if (top < 0 || usage[w]->pct > usage[top]->pct) top = w;
+        if (timed(w) && (timedTop < 0 || usage[w]->pct > usage[timedTop]->pct)) timedTop = w;
     }
-    if (gauge) {
+    if (spark && timedTop >= 0) top = timedTop;
+    if (gauge || spark) {
         meters.barMask = top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
         count = meters.barMask ? 1 : 0;
+    }
+    if (spark) {
+        meters.faceWidth = display.sparklineWidth;
+        meters.faceHeight = std::min<double>(display.ringSize, display.tileHeight);
+        meters.sparkKeyFont = std::clamp(meters.faceHeight / 4, 7.0, 9.0);
+        meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.colorblindMode);
+    }
+    if (matrix) {
+        // Two rows' cap heights and their gap fit the tile, 2 DIPs clear above and below.
+        double font = display.headlineFontSize;
+        if (count > 1) font = std::min(font, (display.tileHeight - 4 - kMatrixRowGap) / (2 * kTileCapShare));
+        meters.matrixFont = std::max(font, 7.0);
+        meters.matrixKeyFont = meters.matrixFont * kHeadlineKeyScale;
     }
     // Pies: one per quota in slot order, in columns of two from the third on.
     double pieDiameter = 0, pieGap = 0;
@@ -6785,6 +6901,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         QuotaMeter& m = meters.quotas[w];
         // Color stays keyed to actual usage so depleting quota still reds out.
         m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.colorblindMode);
+        m.key = w == kExtraUsageBar && account.provider == L"openai" ? L"Cr" : kQuotaKeys[w];
         m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
                         wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
@@ -6969,6 +7086,72 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 m.paceCore = tick(center, center, dx, dy, inner - inside + kTilePaceCoreInset,
                                   outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
+        } else if (spark) {
+            // Left to right the window, bottom to top 0-100% used inside the insets; positions
+            // snap to quarter DIPs, so they change only when the drawing does.
+            double width = meters.faceWidth, height = meters.faceHeight;
+            auto snap = [](double dip) { return std::round(dip * 4) / 4; };
+            ULONGLONG start = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
+            auto xAt = [&](ULONGLONG timeMs) {
+                return snap(std::clamp(((double)timeMs - (double)start) / wu.windowDurationMs, 0.0, 1.0) * width);
+            };
+            auto yAt = [&](double used) {
+                return snap(height - kSparkInset - (height - 2 * kSparkInset) * std::clamp(used, 0.0, 100.0) / 100);
+            };
+            auto circle = [](double x, double y, double r) {
+                return TileOutlineFigure{x, y - r, {{x, y + r, r, true}, {x, y - r, r, true}}};
+            };
+            if (timed(w)) {
+                if (display.showPaceTicks) meters.sparkPace = {{0, yAt(0), {{width, yAt(100)}}}};
+                std::vector<TileTracePoint> trace = traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
+                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
+                    TileOutlineFigure line{xAt(trace[begin].timeMs), yAt(trace[begin].used), {}};
+                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
+                        line.segments.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
+                    }
+                    if (line.segments.empty()) {
+                        meters.sparkDots.push_back(circle(line.x, line.y, kSparkDotRadius));
+                        continue;
+                    }
+                    // Up from the plot's bottom under the run's start, along it, then back down.
+                    TileOutlineFigure under{line.x, height, {{line.x, line.y}}};
+                    under.segments.insert(under.segments.end(), line.segments.begin(), line.segments.end());
+                    under.segments.push_back({line.segments.back().x, height});
+                    meters.sparkArea.push_back(std::move(under));
+                    meters.sparkLines.push_back(std::move(line));
+                }
+                if (wu.pct >= 0) {
+                    // A rolled-back clock can put now before the newest reading: the current
+                    // point and the projection take the later of the two.
+                    ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
+                    double x = xAt(now), y = yAt(wu.pct);
+                    meters.sparkNow = {circle(x, y, kSparkNowRadius)};
+                    // The average rate since the window started (fixed windows start at 0%), from
+                    // 5% of the window on, while fresh and short of the limit.
+                    double elapsed = std::clamp(((double)now - (double)start) / wu.windowDurationMs, 0.0, 1.0);
+                    if (!meters.stale && wu.pct > 0 && wu.pct < 100 && elapsed >= 0.05 && now < wu.resetUnixMs) {
+                        double atReset = wu.pct / elapsed;
+                        bool limit = atReset > 100;
+                        double endX = limit ? snap(elapsed * 100 / wu.pct * width) : width;
+                        double endY = yAt(limit ? 100 : atReset);
+                        meters.sparkProjection = {{x, y, {{endX, endY}}}};
+                        if (limit) meters.sparkLimit = {circle(endX, endY, kSparkLimitRadius)};
+                    }
+                }
+            } else if (wu.pct >= 0) {
+                meters.sparkNow = {circle(width - kSparkNowRadius, yAt(wu.pct), kSparkNowRadius)};
+            }
+        } else if (matrix) {
+            // Per the bar mode, as the bars' text: remaining clamped to 0-100%, used unclamped.
+            m.matrixRow = slotPosition % 2;
+            m.matrixColumn = slotPosition / 2;
+            m.text = L"\u2013";
+            if (wu.pct >= 0) {
+                wchar_t text[24];
+                swprintf(text, ARRAYSIZE(text), L"%.0f%%",
+                         remainingMode ? std::clamp(100.0 - wu.pct, 0.0, 100.0) : wu.pct);
+                m.text = text;
+            }
         } else {
             // Headline segments: corners a quarter of the thickness; the fill cut flat until the
             // track's end. Any usage fills at least 2 DIPs, as on the bars.
@@ -6978,8 +7161,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
     }
 
-    // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
-    if (layout == BarLayout::LogoHeadline || gauge) {
+    // Headline, gauge and sparkline: the most-used tile quota, shown per the bar mode in its usage
+    // color (a sparkline's: the key and color only).
+    if (layout == BarLayout::LogoHeadline || gauge || spark) {
         bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
         meters.headline = L"\u2013";
         if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";
@@ -6987,8 +7171,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             wchar_t text[24];
             swprintf(text, ARRAYSIZE(text), gauge ? L"%.0f" : L"%.0f%%", tileShown(usage[top]->pct));
             meters.headline = text;
-            meters.headlineKey = top == kExtraUsageBar && account.provider == L"openai" ?
-                                     L"Cr" : kQuotaKeys[top];
+            meters.headlineKey = meters.quotas[top].key;
         }
         if (countdown && top >= 0) {
             // Rounded up to the minute, like the details flyout's reset times.
@@ -7048,24 +7231,25 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 }
 
 // src/taskbar/tiles.h
-// Tile layouts: logo + headline % and the face tiles (rings, rounded square, gauge, clock pies). A
-// tile shows the account's identity (provider logo, optionally with a number badge, or short text)
-// and its tile quotas: the meters the bar layouts show, in slot order (a gauge: the most-used
-// one). BuildAccountTile creates a tile; UpdateAccountTile
+// Tile layouts: logo + headline %, the face tiles (rings, rounded square, gauge, clock pies), the
+// burn-up sparkline and the quota matrix. A tile shows the account's identity (provider logo,
+// optionally with a number badge, or short text) and its tile quotas: the meters the bar layouts
+// show, in slot order (a gauge or sparkline: the most-used one). BuildAccountTile creates a tile;
+// UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
 // columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
 // geometry come from the meter model (meter-model.h).
 
-// A ring tile shape (meter-model.h), moved `offset` DIPs right and down. PathGeometry fills
-// even-odd by default, as the outline expects.
-static Geometry TileOutlineGeometry(TileOutline const& outline, double offset) {
+// A tile shape (meter-model.h), moved `offset` DIPs right and down: closed figures to fill, or
+// open ones to stroke. PathGeometry fills even-odd by default, as the outline expects.
+static Geometry TileOutlineGeometry(TileOutline const& outline, double offset, bool closed = true) {
     PathGeometry geometry;
     for (TileOutlineFigure const& source : outline) {
         PathFigure figure;
         figure.StartPoint({(float)(source.x + offset), (float)(source.y + offset)});
-        figure.IsClosed(true);
-        figure.IsFilled(true);
+        figure.IsClosed(closed);
+        figure.IsFilled(closed);
         for (TileOutlineSegment const& segment : source.segments) {
             winrt::Windows::Foundation::Point end{(float)(segment.x + offset),
                                                   (float)(segment.y + offset)};
@@ -7318,6 +7502,71 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         return column;
     }
 
+    if (layout == BarLayout::Sparkline) {
+        // The plot beside the identity: its background, its shapes (UpdateAccountTile), then the
+        // key in its bottom-right corner.
+        Grid face;
+        face.IsHitTestVisible(false);
+        face.VerticalAlignment(VerticalAlignment::Center);
+        tile.plot = Border{};
+        tile.plot.CornerRadius({kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius});
+        face.Children().Append(tile.plot);
+        Grid meters;
+        face.Children().Append(meters);
+        tile.headlineKey = TextBlock{};
+        tile.headlineKey.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        tile.headlineKey.Opacity(0.75);
+        tile.headlineKey.TextLineBounds(TextLineBounds::Tight);
+        tile.headlineKey.HorizontalAlignment(HorizontalAlignment::Right);
+        tile.headlineKey.VerticalAlignment(VerticalAlignment::Bottom);
+        tile.headlineKey.Margin({0, 0, 3, 3});
+        face.Children().Append(tile.headlineKey);
+        tile.face = face;
+        tile.meters = meters;
+        column.Children().Append(face);
+        return column;
+    }
+
+    if (layout == BarLayout::QuotaMatrix) {
+        // Up to two rows and columns of cells beside the identity, each a quota's key and number
+        // on one baseline; UpdateAccountTile places and sizes them.
+        Grid matrix;
+        matrix.IsHitTestVisible(false);
+        matrix.VerticalAlignment(VerticalAlignment::Center);
+        for (int k = 0; k < 2; k++) {
+            RowDefinition row;
+            row.Height({0, GridUnitType::Auto});
+            matrix.RowDefinitions().Append(row);
+            ColumnDefinition cellColumn;
+            cellColumn.Width({0, GridUnitType::Auto});
+            matrix.ColumnDefinitions().Append(cellColumn);
+        }
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            StackPanel cell;
+            cell.Orientation(Orientation::Horizontal);
+            cell.Spacing(kMatrixKeyGap);
+            cell.Visibility(Visibility::Collapsed);
+            TextBlock key;
+            key.Opacity(0.6);
+            key.TextLineBounds(TextLineBounds::Tight);
+            key.VerticalAlignment(VerticalAlignment::Bottom);
+            cell.Children().Append(key);
+            TextBlock value;
+            value.FontFamily(displayFont);
+            value.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            value.TextLineBounds(TextLineBounds::Tight);
+            value.VerticalAlignment(VerticalAlignment::Bottom);
+            cell.Children().Append(value);
+            matrix.Children().Append(cell);
+            tile.matrixCells[w] = cell;
+            tile.matrixKeys[w] = key;
+            tile.matrixValues[w] = value;
+        }
+        tile.meters = matrix;
+        column.Children().Append(matrix);
+        return column;
+    }
+
     // Headline: the most-used quota's number and window key over per-quota segments at the
     // headline sizes and the bar gap, or with the countdown, a clock glyph and the time until that
     // quota resets at the key's size.
@@ -7408,28 +7657,101 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     if (!tile.identity || !tile.meters) return;
     BarLayout layout = tile.layout;
     bool face = IsFaceTile(layout);
+    bool spark = layout == BarLayout::Sparkline, matrix = layout == BarLayout::QuotaMatrix;
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
     double thickness = display.headlineBarThickness;
 
-    // Meter shapes: regenerated, and the identity resized, whenever an input changes.
-    TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
-                       light ? 1 : 0, display.showPaceTicks ? (int)display.paceTickColor : -1};
+    // Meter shapes: regenerated, and the identity resized, whenever an input changes. Sparklines
+    // key them on the plot's size, the quota matrix on its font.
+    TileShapeKey shape{(int)layout, barMask,
+                       spark ? meters.faceHeight : matrix ? meters.matrixFont : geometry.size,
+                       spark ? meters.faceWidth : geometry.stroke, geometry.gap, light ? 1 : 0,
+                       display.showPaceTicks ? (int)display.paceTickColor : -1};
     if (shape != ap.tileShape) {
         TilePalette palette = TilePaletteFor(light);
         SolidColorBrush track(ArgbColor(palette.track));
         PaceMarkColors paceColors = PaceMarkColorsFor(display.paceTickColor, light);
         SolidColorBrush paceCore(ArgbColor(paceColors.core));
         SolidColorBrush paceHalo(ArgbColor(paceColors.halo));
-        auto meterShapes = tile.meters.Children();
-        meterShapes.Clear();
-        ui.fills.fill(nullptr);
-        tile.arcs.fill(nullptr);
-        tile.paceHalos.fill(nullptr);
-        tile.paceCores.fill(nullptr);
         tile.meters.Visibility(barMask ? Visibility::Visible : Visibility::Collapsed);
+        auto meterShapes = tile.meters.Children();
+        if (!matrix) {
+            meterShapes.Clear();
+            ui.fills.fill(nullptr);
+            tile.arcs.fill(nullptr);
+            tile.paceHalos.fill(nullptr);
+            tile.paceCores.fill(nullptr);
+        }
 
-        if (face) {
+        if (matrix) {
+            // Each shown cell in its place; keys reserve the widest key and numbers "100%" at
+            // their fonts, so the tile keeps its width as numbers change. Spacing goes only
+            // between rows and columns in use.
+            TextBlock keyProbe, valueProbe;
+            keyProbe.FontSize(meters.matrixKeyFont);
+            double keyWidth = 0;
+            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+                keyProbe.Text(key);
+                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe) * meters.matrixKeyFont);
+            }
+            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+            valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            valueProbe.FontSize(meters.matrixFont);
+            valueProbe.Text(L"100%");
+            double valueWidth = TileTextWidthPerPt(valueProbe) * meters.matrixFont;
+            int rows = 1, columns = 1;
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                if (!tile.matrixCells[w]) continue;
+                bool shown = barMask & (1 << w);
+                tile.matrixCells[w].Visibility(shown ? Visibility::Visible : Visibility::Collapsed);
+                if (!shown) continue;
+                QuotaMeter const& m = meters.quotas[w];
+                Grid::SetRow(tile.matrixCells[w], m.matrixRow);
+                Grid::SetColumn(tile.matrixCells[w], m.matrixColumn);
+                rows = std::max(rows, m.matrixRow + 1);
+                columns = std::max(columns, m.matrixColumn + 1);
+                tile.matrixKeys[w].FontSize(meters.matrixKeyFont);
+                tile.matrixKeys[w].MinWidth(std::ceil(keyWidth));
+                tile.matrixKeys[w].Text(m.key);
+                tile.matrixValues[w].FontSize(meters.matrixFont);
+                tile.matrixValues[w].MinWidth(std::ceil(valueWidth));
+            }
+            if (auto grid = tile.meters.try_as<Grid>()) {
+                grid.RowSpacing(rows > 1 ? kMatrixRowGap : 0);
+                grid.ColumnSpacing(columns > 1 ? kMatrixColumnGap : 0);
+            }
+        } else if (spark) {
+            // The plot's shapes, larger than it by kTileRingOverflow on every side and pulled
+            // back by negative margins, so layout never clips marks at its edges. In drawing
+            // order (see the values below); the diagonal, runs and projection stroke.
+            tile.face.Width(meters.faceWidth);
+            tile.face.Height(meters.faceHeight);
+            tile.plot.Background(SolidColorBrush(ArgbColor(palette.plot)));
+            tile.headlineKey.FontSize(meters.sparkKeyFont);
+            auto dashes = [](std::array<double, 2> pattern) {
+                DoubleCollection collection;
+                for (double length : pattern) collection.Append(length);
+                return collection;
+            };
+            for (wuxs::Path& path : tile.spark) {
+                path = wuxs::Path{};
+                path.Width(meters.faceWidth + 2 * kTileRingOverflow);
+                path.Height(meters.faceHeight + 2 * kTileRingOverflow);
+                path.Margin({-kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow});
+                path.Visibility(Visibility::Collapsed);
+                meterShapes.Append(path);
+            }
+            tile.spark[0].Stroke(SolidColorBrush(ArgbColor((paceColors.core & 0x00FFFFFF) | kSparkGuideAlpha)));
+            tile.spark[0].StrokeThickness(kSparkGuideStroke);
+            tile.spark[0].StrokeDashArray(dashes(kSparkGuideDashes));
+            tile.spark[2].StrokeThickness(kSparkLineStroke);
+            tile.spark[2].StrokeLineJoin(PenLineJoin::Round);
+            tile.spark[2].StrokeStartLineCap(PenLineCap::Round);
+            tile.spark[2].StrokeEndLineCap(PenLineCap::Round);
+            tile.spark[4].StrokeThickness(kSparkProjectionStroke);
+            tile.spark[4].StrokeDashArray(dashes(kSparkProjectionDashes));
+        } else if (face) {
             tile.face.Width(meters.faceWidth);
             tile.face.Height(meters.faceHeight);
             // Larger than the face by kTileRingOverflow on every side, pulled back by negative
@@ -7519,11 +7841,63 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         ap.fillColor.fill(0);
         ap.pacePx.fill(-1);
         ap.paceVisible.fill(-1);
+        ap.percentTexts.fill(L"");
+        ap.spark.clear();
         ap.highlight = -1;
     }
 
     // Values, applied when their update keys change.
-    for (int w = 0; w < kQuotaBarCount; w++) {
+    if (matrix) {
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            QuotaMeter const& m = meters.quotas[w];
+            if (!(barMask & (1 << w)) || !tile.matrixValues[w] ||
+                (m.text == ap.percentTexts[w] && m.color == ap.fillColor[w])) {
+                continue;
+            }
+            tile.matrixValues[w].Text(m.text);
+            tile.matrixValues[w].Foreground(SolidColorBrush(ArgbColor(m.color)));
+            ap.percentTexts[w] = m.text;
+            ap.fillColor[w] = m.color;
+        }
+    } else if (spark && tile.spark[0]) {
+        // In drawing order: the pace diagonal, the area, runs and dots of the recorded usage,
+        // the projection, the current point and the limit mark. Redrawn when any point or color
+        // changes.
+        const std::array<const TileOutline*, 7> outlines = {
+            &meters.sparkPace,       &meters.sparkArea, &meters.sparkLines, &meters.sparkDots,
+            &meters.sparkProjection, &meters.sparkNow,  &meters.sparkLimit};
+        uint32_t color = meters.headlineColor;
+        std::vector<double> drawn{(double)color, (double)meters.sparkLimitColor};
+        for (const TileOutline* outline : outlines) {
+            drawn.push_back((double)outline->size());
+            for (TileOutlineFigure const& figure : *outline) {
+                drawn.insert(drawn.end(), {figure.x, figure.y, (double)figure.segments.size()});
+                for (TileOutlineSegment const& segment : figure.segments) {
+                    drawn.insert(drawn.end(), {segment.x, segment.y, segment.radius});
+                }
+            }
+        }
+        if (drawn != ap.spark) {
+            for (size_t k = 0; k < outlines.size(); k++) {
+                bool stroked = k == 0 || k == 2 || k == 4;
+                tile.spark[k].Visibility(outlines[k]->empty() ? Visibility::Collapsed : Visibility::Visible);
+                if (outlines[k]->empty()) continue;
+                // Filled nonzero, so overlapping dots merge instead of cancelling.
+                Geometry data = TileOutlineGeometry(*outlines[k], kTileRingOverflow, !stroked);
+                if (auto path = data.try_as<PathGeometry>()) path.FillRule(FillRule::Nonzero);
+                tile.spark[k].Data(data);
+            }
+            SolidColorBrush usage(ArgbColor(color));
+            tile.spark[1].Fill(SolidColorBrush(ArgbColor((color & 0x00FFFFFF) | kSparkAreaAlpha)));
+            tile.spark[2].Stroke(usage);
+            tile.spark[3].Fill(usage);
+            tile.spark[4].Stroke(usage);
+            tile.spark[5].Fill(usage);
+            tile.spark[6].Fill(SolidColorBrush(ArgbColor(meters.sparkLimitColor)));
+            ap.spark = std::move(drawn);
+        }
+    }
+    for (int w = 0; w < kQuotaBarCount && !matrix && !spark; w++) {
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
@@ -7558,11 +7932,13 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    if (tile.headline) {
+    if (tile.headlineKey) {
         std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
-            tile.headline.Text(meters.headline);
-            tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            if (tile.headline) {
+                tile.headline.Text(meters.headline);
+                tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            }
             tile.headlineKey.Text(meters.headlineKey);
             if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);
@@ -9871,9 +10247,22 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ui.tile.badge.Visibility(badgeShown ? Visibility::Visible : Visibility::Collapsed);
                 ap.badge = badgeShown ? 1 : 0;
             }
+            // A sparkline's recorded usage: the burn-up curve of the flyout row showing the
+            // quota's reading (the accessor takes the settings and data locks, so none may be
+            // held here), or the visual test samples.
+            TileTraceSource traceOf = [&](int slot, const WindowUsage& reading) {
+                if (visualTestMode) return VisualTestTrace(accounts[i], reading, now);
+                static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow,
+                                                              kFlyoutFableRow, kFlyoutExtraRow};
+                std::vector<TileTracePoint> trace;
+                if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(accounts[i].historyId, kRows[slot], reading)) {
+                    for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
+                }
+                return trace;
+            };
             AccountMeters meters = AccountMeterState(
                 display, state.buildBarLayout, accounts[i], d,
-                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt);
+                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
             bool accountRefreshing = !visualTestMode && refreshing &&
                 (!refreshAccountIdentity ||
                  AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
@@ -10066,34 +10455,13 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                             curves[r] = CopyBurnUpCurve(accounts[i].historyId, r, reading);
                             continue;
                         }
-                        // Visual test samples: readings from part-way into the window up to now,
-                        // ending at the reading, with a recording gap and an isolated reading.
-                        // The OpenAI sample has none, so its flyout keeps the no-history bars.
-                        if (accounts[i].provider == L"openai" || reading.pct < 0 ||
-                            !reading.windowDurationMs ||
-                            reading.resetUnixMs <= reading.windowDurationMs ||
-                            now <= reading.resetUnixMs - reading.windowDurationMs) {
-                            continue;
-                        }
-                        // Times as fractions of the window's elapsed span from its start, usage
-                        // as shares of the reading. Sample windows move with now, so the drawn
-                        // geometry stays put between ticks.
-                        static constexpr struct {
-                            double time, share;
-                            bool connect;
-                        } kSamples[] = {
-                            {0.15, 0.10, false}, {0.22, 0.18, true}, {0.30, 0.22, true},
-                            {0.38, 0.36, true}, {0.45, 0.40, true}, {0.55, 0.52, false},
-                            {0.68, 0.60, false}, {0.76, 0.66, true}, {0.84, 0.80, true},
-                            {0.92, 0.88, true}, {1.00, 1.00, true},
-                        };
-                        ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+                        // Visual test samples; the OpenAI sample keeps the no-history bars.
+                        std::vector<TileTracePoint> trace = VisualTestTrace(accounts[i], reading, now);
+                        if (trace.empty()) continue;
                         BurnUpCurve& curve = curves[r].emplace(
                             BurnUpCurve{reading.resetUnixMs, reading.windowDurationMs, {}});
-                        for (const auto& sample : kSamples) {
-                            curve.points.push_back(
-                                {start + (ULONGLONG)std::llround((now - start) * sample.time),
-                                 reading.pct * sample.share, sample.connect});
+                        for (const TileTracePoint& point : trace) {
+                            curve.points.push_back({point.timeMs, point.used, point.connect});
                         }
                     }
                     UpdateAccountFlyout(state, accounts[i], d,
@@ -15934,6 +16302,8 @@ static bool NormalizeSettings(Settings* s) {
                                       kHeadlineBarLengthMin, kHeadlineBarLengthMax);
     s->headlineBarThickness = std::clamp(s->headlineBarThickness > 0 ? s->headlineBarThickness : 4,
                                          kHeadlineBarThicknessMin, kHeadlineBarThicknessMax);
+    s->sparklineWidth = std::clamp(s->sparklineWidth > 0 ? s->sparklineWidth : 48, kSparklineWidthMin,
+                                   kSparklineWidthMax);
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -16034,6 +16404,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"headlineBarLength", s.headlineBarLength);
         setNumber(L"headlineBarThickness", s.headlineBarThickness);
         setBool(L"headlineCountdown", s.headlineCountdown);
+        setNumber(L"sparklineWidth", s.sparklineWidth);
         setNumber(L"logoScale", s.logoScale);
         setBool(L"brandClaudeLogo", s.logoBrands.claude);
         setBool(L"brandGeminiLogo", s.logoBrands.gemini);
@@ -16048,7 +16419,9 @@ static std::wstring SerializeSettings(const Settings& s) {
                                 s.barLayout == BarLayout::Gauge ? L"gauge" :
                                 s.barLayout == BarLayout::ClockPies ? L"clockPies" :
                                 s.barLayout == BarLayout::RoundedSquare ? L"roundedSquare" :
-                                                                          L"stacked");
+                                s.barLayout == BarLayout::Sparkline ? L"sparkline" :
+                                s.barLayout == BarLayout::QuotaMatrix ? L"quotaMatrix" :
+                                                                        L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setBool(L"showPaceTicks", s.showPaceTicks);
         setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
@@ -16176,6 +16549,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
             std::isfinite(headlineBarThickness) ?
                 (int)std::clamp(headlineBarThickness, 0.0, (double)kHeadlineBarThicknessMax) : 0;
         s.headlineCountdown = getBoolDefault(L"headlineCountdown", false);
+        double sparklineWidth = GetNum(root, L"sparklineWidth", 48);
+        s.sparklineWidth = std::isfinite(sparklineWidth) ?
+                               (int)std::clamp(sparklineWidth, 0.0, (double)kSparklineWidthMax) : 0;
         double logoScale = GetNum(root, L"logoScale", 100);
         double badgeSize = GetNum(root, L"badgeSize", 13);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
@@ -16198,7 +16574,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                       barLayout == L"gauge" ? BarLayout::Gauge :
                       barLayout == L"clockPies" ? BarLayout::ClockPies :
                       barLayout == L"roundedSquare" ? BarLayout::RoundedSquare :
-                                                      BarLayout::Stacked;
+                      barLayout == L"sparkline" ? BarLayout::Sparkline :
+                      barLayout == L"quotaMatrix" ? BarLayout::QuotaMatrix :
+                                                    BarLayout::Stacked;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
@@ -17135,6 +17513,7 @@ enum class SettingsField : uint8_t {
     HeadlineBarLength,
     HeadlineBarThickness,
     HeadlineCountdown,
+    SparklineWidth,
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -17214,6 +17593,7 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::HeadlineBarLength: return SettingsNumberRange{kHeadlineBarLengthMin, kHeadlineBarLengthMax};
         case SettingsField::HeadlineBarThickness:
             return SettingsNumberRange{kHeadlineBarThicknessMin, kHeadlineBarThicknessMax};
+        case SettingsField::SparklineWidth: return SettingsNumberRange{kSparklineWidthMin, kSparklineWidthMax};
         case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
         case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
         case SettingsField::BadgeOffsetX:
@@ -17247,7 +17627,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
                     SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
-                    SettingsField::HeadlineCountdown, SettingsField::LogoScale,
+                    SettingsField::HeadlineCountdown, SettingsField::SparklineWidth,
+                    SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
@@ -17292,6 +17673,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::HeadlineBarLength: return s.headlineBarLength;
         case SettingsField::HeadlineBarThickness: return s.headlineBarThickness;
         case SettingsField::HeadlineCountdown: return s.headlineCountdown;
+        case SettingsField::SparklineWidth: return s.sparklineWidth;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -17365,6 +17747,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::HeadlineBarLength: s.headlineBarLength = value; break;
         case SettingsField::HeadlineBarThickness: s.headlineBarThickness = value; break;
         case SettingsField::HeadlineCountdown: s.headlineCountdown = value != 0; break;
+        case SettingsField::SparklineWidth: s.sparklineWidth = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -17430,6 +17813,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.headlineBarLength = defaults.headlineBarLength;
             s.headlineBarThickness = defaults.headlineBarThickness;
             s.headlineCountdown = defaults.headlineCountdown;
+            s.sparklineWidth = defaults.sparklineWidth;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;
@@ -18455,7 +18839,7 @@ static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, ui
 
 // One draw operation, in strip DIPs. Colors are ARGB.
 struct SettingsPreviewOp {
-    enum class Kind : uint8_t { Rect, Shape, Polygon, Text, Logo };
+    enum class Kind : uint8_t { Rect, Shape, Stroke, Polygon, Text, Logo };
     Kind kind = Kind::Rect;
     int hover = -1;                     // Drawn only while this column is hovered; -1: always
     D2D1_RECT_F rect{};                 // Rect, Text box (aligns in its width), Logo box
@@ -18469,8 +18853,11 @@ struct SettingsPreviewOp {
     bool shadeLeft = false;
     uint32_t color = 0;                 // Fill or text color
     float opacity = 1;
-    TileOutline shape;                  // Shape: a ring tile shape, filled, moved to `origin`
-    D2D1_POINT_2F origin{};
+    TileOutline shape;                  // Shape: a tile shape, filled, moved to `origin`; Stroke: its
+    D2D1_POINT_2F origin{};             // open figures, stroked `strokeWidth` wide, dashed by
+    float strokeWidth = 0;              // `dashes` in stroke widths (none: solid, round joins and
+    std::vector<float> dashes;          // caps)
+    bool winding = false;               // Shape filled nonzero instead of even-odd
     std::vector<D2D1_POINT_2F> points;  // Polygon
     std::wstring text;
     UiTextStyle style;
@@ -18841,8 +19228,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const bool hasBadge = hasLogo && identity.badge;
             const UiTextStyle idStyle{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
             double perPt = hasLogo ? 0 : std::max(measure(identity.text, idStyle).width, 0.1f) / 10.0;
-            AccountMeters meters = AccountMeterState(display, layout, account, data[i],
-                                                     hasBadge ? int(identity.badgeText.size()) : 0, perPt);
+            // Sparklines chart the visual test samples' recorded usage.
+            AccountMeters meters = AccountMeterState(
+                display, layout, account, data[i], hasBadge ? int(identity.badgeText.size()) : 0, perPt,
+                [&](int, const WindowUsage& reading) { return VisualTestTrace(account, reading, now); });
             const float opacity = float(meters.identityOpacity);
             top = (H - T) / 2;
             height = T;
@@ -18922,6 +19311,87 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     }
                 }
                 width = padLeft + idWidth + 6 + faceWidth + padRight;
+            } else if (layout == BarLayout::Sparkline) {
+                // Sparklines: the identity, then 6 DIP after it the plot: its background, its shapes
+                // in tiles.h's drawing order, and the key 3 DIPs in from its bottom-right corner.
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
+                float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
+                rect(ops, {faceLeft, faceTop, faceLeft + faceWidth, faceTop + faceHeight}, float(kSparkPlotRadius),
+                     palette.plot);
+                auto outline = [&](const TileOutline& shape, uint32_t color, double stroke = 0,
+                                   const std::array<double, 2>* dashes = nullptr) {
+                    if (shape.empty()) return;
+                    Op op;
+                    op.kind = stroke > 0 ? Op::Kind::Stroke : Op::Kind::Shape;
+                    op.shape = shape;
+                    op.origin = {faceLeft, faceTop};
+                    op.color = color;
+                    op.strokeWidth = float(stroke);
+                    op.winding = true;
+                    if (dashes) op.dashes = {float((*dashes)[0]), float((*dashes)[1])};
+                    add(ops, std::move(op));
+                };
+                const uint32_t usage = meters.headlineColor;
+                outline(meters.sparkPace, (pace.core & 0x00FFFFFF) | kSparkGuideAlpha, kSparkGuideStroke,
+                        &kSparkGuideDashes);
+                outline(meters.sparkArea, (usage & 0x00FFFFFF) | kSparkAreaAlpha);
+                outline(meters.sparkLines, usage, kSparkLineStroke);
+                outline(meters.sparkDots, usage);
+                outline(meters.sparkProjection, usage, kSparkProjectionStroke, &kSparkProjectionDashes);
+                outline(meters.sparkNow, usage);
+                outline(meters.sparkLimit, meters.sparkLimitColor);
+                if (!meters.headlineKey.empty()) {
+                    UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.sparkKeyFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                    Measured key = measure(meters.headlineKey, keyStyle);
+                    label(ops, meters.headlineKey, keyStyle, faceLeft + faceWidth - 3 - key.width,
+                          faceTop + faceHeight - 3 - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, 0.75f, true);
+                }
+                width = padLeft + idWidth + 6 + faceWidth + padRight;
+            } else if (layout == BarLayout::QuotaMatrix) {
+                // Quota matrix: the identity, then 6 DIP after it the cells, centred on the tile:
+                // each the key (reserving the widest) 3 DIPs before the number (reserving "100%",
+                // wider for a wider number in its column), on their baseline; rows and columns
+                // their gaps apart.
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
+                float cellsLeft = x0 + padLeft + idWidth + 6;
+                UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
+                float keyReserve = 0;
+                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+                    keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
+                }
+                keyReserve = std::ceil(keyReserve);
+                float numberReserve = std::ceil(measure(L"100%", numberStyle).width);
+                std::array<float, 2> numberWidths{numberReserve, numberReserve};
+                float cap = measure(L"0", numberStyle).cap;
+                int rows = 1, columns = 1;
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    if (!(meters.barMask & (1 << w))) continue;
+                    const QuotaMeter& q = meters.quotas[w];
+                    rows = std::max(rows, q.matrixRow + 1);
+                    columns = std::max(columns, q.matrixColumn + 1);
+                    float& column = numberWidths[q.matrixColumn];
+                    column = std::max(column, measure(q.text, numberStyle).width);
+                }
+                float cellsTop = top + (T - (rows * cap + (rows - 1) * float(kMatrixRowGap))) / 2;
+                const float second = cellsLeft + keyReserve + float(kMatrixKeyGap) + numberWidths[0] + float(kMatrixColumnGap);
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    if (!(meters.barMask & (1 << w))) continue;
+                    const QuotaMeter& q = meters.quotas[w];
+                    float left = q.matrixColumn ? second : cellsLeft;
+                    float baseline = cellsTop + q.matrixRow * (cap + float(kMatrixRowGap)) + cap;
+                    Measured key = measure(q.key, keyStyle), number = measure(q.text, numberStyle);
+                    label(ops, q.key, keyStyle, left, baseline - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
+                          0.6f, true);
+                    label(ops, q.text, numberStyle, left + keyReserve + float(kMatrixKeyGap), baseline - number.cap,
+                          number.width, DWRITE_TEXT_ALIGNMENT_LEADING, q.color, 1, true);
+                }
+                float cells = !count       ? 0 :
+                              columns == 1 ? keyReserve + float(kMatrixKeyGap) + numberWidths[0] :
+                                             second - cellsLeft + keyReserve + float(kMatrixKeyGap) + numberWidths[1];
+                width = padLeft + idWidth + 6 + cells + padRight;
             } else {
                 // Headline: the identity, then 6 DIP after it the most-used quota's number and,
                 // 3 DIP after it, its window key (bottom-aligned on the baseline), in a row that
@@ -19113,19 +19583,23 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     break;
                 }
                 case Op::Kind::Shape:
+                case Op::Kind::Stroke:
                 case Op::Kind::Polygon: {
                     winrt::com_ptr<ID2D1PathGeometry> path;
                     winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
                     winrt::com_ptr<ID2D1GeometrySink> sink;
                     winrt::check_hresult(path->Open(sink.put()));
-                    if (op.kind == Op::Kind::Shape) {
+                    const bool stroke = op.kind == Op::Kind::Stroke;
+                    if (op.winding) sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+                    if (op.kind != Op::Kind::Polygon) {
                         // As XAML's PathGeometry draws it: filled even-odd (the sink's default),
-                        // not snapped.
+                        // or open to stroke; not snapped.
                         auto point = [&](double x, double y) {
                             return D2D1::Point2F(op.origin.x + float(x), op.origin.y + float(y));
                         };
                         for (const TileOutlineFigure& figure : op.shape) {
-                            sink->BeginFigure(point(figure.x, figure.y), D2D1_FIGURE_BEGIN_FILLED);
+                            sink->BeginFigure(point(figure.x, figure.y),
+                                              stroke ? D2D1_FIGURE_BEGIN_HOLLOW : D2D1_FIGURE_BEGIN_FILLED);
                             for (const TileOutlineSegment& segment : figure.segments) {
                                 if (segment.radius <= 0) {
                                     sink->AddLine(point(segment.x, segment.y));
@@ -19138,7 +19612,7 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                                                      D2D1_ARC_SIZE_SMALL};
                                 sink->AddArc(&arc);
                             }
-                            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                            sink->EndFigure(stroke ? D2D1_FIGURE_END_OPEN : D2D1_FIGURE_END_CLOSED);
                         }
                     } else if (!op.points.empty()) {
                         // On device pixels, like XAML's layout rounding of the tick and its
@@ -19151,7 +19625,21 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                     }
                     winrt::check_hresult(sink->Close());
-                    target->FillGeometry(path.get(), UiBrush(target, cache, color(op.color, op.opacity)), nullptr);
+                    ID2D1Brush* brush = UiBrush(target, cache, color(op.color, op.opacity));
+                    if (!stroke) {
+                        target->FillGeometry(path.get(), brush, nullptr);
+                        break;
+                    }
+                    // As the sparkline's XAML strokes: solid lines round, dashed ones flat.
+                    const bool dashed = !op.dashes.empty();
+                    const D2D1_CAP_STYLE cap = dashed ? D2D1_CAP_STYLE_FLAT : D2D1_CAP_STYLE_ROUND;
+                    D2D1_STROKE_STYLE_PROPERTIES properties = D2D1::StrokeStyleProperties(
+                        cap, cap, D2D1_CAP_STYLE_FLAT, D2D1_LINE_JOIN_ROUND, 10,
+                        dashed ? D2D1_DASH_STYLE_CUSTOM : D2D1_DASH_STYLE_SOLID, 0);
+                    winrt::com_ptr<ID2D1StrokeStyle> style;
+                    winrt::check_hresult(g.d2d->CreateStrokeStyle(&properties, dashed ? op.dashes.data() : nullptr,
+                                                                   UINT32(op.dashes.size()), style.put()));
+                    target->DrawGeometry(path.get(), brush, op.strokeWidth, style.get());
                     break;
                 }
                 case Op::Kind::Text: {
@@ -19713,9 +20201,10 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Headline %",
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Burn-up sparkline",
                                                  L"Segmented ring", L"Concentric rings", L"Gauge %",
-                                                 L"Clock pies",     L"Rounded square"};
+                                                 L"Clock pies",     L"Rounded square",   L"Headline %",
+                                                 L"Quota matrix"};
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
@@ -19749,8 +20238,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y += kRows * kCardHeight + (kRows - 1) * kGap;
     }
 
-    // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays on
-    // it when cards above it change.
+    // Account identity is per account: a card that goes to Accounts. Fixed ids past the gallery's
+    // (its five items' within the field's 16), so focus stays on it when cards above it change.
     auto identityCard = [&](float top) {
         UiCardSpec spec;
         spec.glyph = L"\uE716";
@@ -19759,7 +20248,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         spec.trailingGlyph = L"\uE76C";
         spec.action = {UiActionKind::Navigate, int(SettingsUiPage::Accounts)};
         spec.minHeight = 62;
-        uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 8);
+        static_assert(std::size(kSettingsTileStyles) <= 10);
+        uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 10);
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
 
@@ -19953,6 +20443,35 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
+    } else if (layout == BarLayout::Sparkline) {
+        // Sparklines: the chart's width, and its height, the rings' size.
+        y = UiAddSection(items, id, x, y + 20, width, L"Sparkline");
+        {
+            UiCardSpec spec;
+            spec.title = L"Chart width";
+            spec.description = {{L"Pixels across the quota\u2019s whole window."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineWidth);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Chart height";
+            spec.description = {{L"Pixels from 0% to 100% used."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingSize);
+        }
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
+    } else if (layout == BarLayout::QuotaMatrix) {
+        // Quota matrix: the numbers' size, the headline's.
+        y = UiAddSection(items, id, x, y + 20, width, L"Matrix");
+        {
+            UiCardSpec spec;
+            spec.title = L"Number size";
+            spec.description = {{L"Text size of each quota\u2019s percentage, in pixels; its key scales with it. Two "
+                                 L"rows shrink to fit the taskbar."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
+        }
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
     } else {
         // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
         // gap, which the countdown replaces.
@@ -20000,15 +20519,18 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = logoCards(identityCard(y) + 3, true);
     }
 
-    // Pace markers: none on headline tiles; the marker style is the bars'. Style and color
-    // need the markers on.
-    if (layout != BarLayout::LogoHeadline) {
+    // Pace markers: none on headline tiles or the quota matrix; the marker style is the bars'.
+    // Style and color need the markers on.
+    if (layout != BarLayout::LogoHeadline && layout != BarLayout::QuotaMatrix) {
         y = UiAddSection(items, id, x, y + 20, width, L"Pace markers");
         bool on = s.showPaceTicks;
         {
             UiCardSpec spec;
             spec.title = L"Pace markers";
-            spec.description = {{L"Ticks mark how much of each quota window has elapsed, to compare with its usage."}};
+            spec.description = {{layout == BarLayout::Sparkline ?
+                                     L"A diagonal marks even use of the quota across its window, to compare with "
+                                     L"its usage." :
+                                     L"Ticks mark how much of each quota window has elapsed, to compare with its usage."}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
         if (bars) {

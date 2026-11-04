@@ -42,14 +42,16 @@ enum class TaskbarMonitorMode {
 enum class BarLayout {
     Stacked,
     Vertical,
-    LogoHeadline,
+    Sparkline,      // The most-used quota's burn-up over its window, the identity beside.
     SegmentedRing,
     ConcentricRings,
     Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
     ClockPies,      // A pie per quota with an elapsed-time hand, the identity beside.
     RoundedSquare,  // Segmented-ring arcs along a rounded square around the identity.
+    LogoHeadline,
+    QuotaMatrix,    // Each quota's key and number in up to two rows and columns, the identity beside.
 };
-static constexpr BarLayout kLastBarLayout = BarLayout::RoundedSquare;
+static constexpr BarLayout kLastBarLayout = BarLayout::QuotaMatrix;
 
 // How Stacked and Vertical bars draw behind their fill.
 enum class BarStyle {
@@ -68,6 +70,9 @@ static constexpr int kHeadlineBarLengthMin = 4;
 static constexpr int kHeadlineBarLengthMax = 60;
 static constexpr int kHeadlineBarThicknessMin = 2;
 static constexpr int kHeadlineBarThicknessMax = 10;
+// Sparkline tiles' chart width, in DIPs.
+static constexpr int kSparklineWidthMin = 24;
+static constexpr int kSparklineWidthMax = 120;
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -144,17 +149,19 @@ struct Settings {
     int barLength = 100;
     int barThickness = 8;
     BarStyle barStyle = BarStyle::Track;
-    // Segmented and concentric ring diameter and stroke, in DIPs; rendering shrinks the stroke
-    // and gaps further when the meters wouldn't fit around the identity.
+    // Ring diameter and stroke, in DIPs, also the gauge's, the rounded square's and (size only)
+    // the pies' and sparkline chart's height; rendering shrinks the stroke and gaps further when
+    // the meters wouldn't fit around the identity.
     int ringSize = 32;
     int ringThickness = 3;
-    // Headline tiles: the most-used quota's number size, and the size of each quota's bar under
-    // it (the bar gap is the bars').
+    // Headline tiles: the most-used quota's number size (also the quota matrix's), and the size
+    // of each quota's bar under it (the bar gap is the bars').
     int headlineFontSize = 14;
     int headlineBarLength = 16;
     int headlineBarThickness = 4;
     // Headline tiles show the time until the quota resets under the number instead of the bars.
     bool headlineCountdown = false;
+    int sparklineWidth = 48;  // Sparkline tiles' chart width, in DIPs.
     int logoScale = 100;  // Percent; rings keep the logo inside their hole.
     LogoBrands logoBrands;
     // The number badge's text size and color, and its move right and down from its default spot.

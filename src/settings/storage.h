@@ -92,6 +92,8 @@ static bool NormalizeSettings(Settings* s) {
                                       kHeadlineBarLengthMin, kHeadlineBarLengthMax);
     s->headlineBarThickness = std::clamp(s->headlineBarThickness > 0 ? s->headlineBarThickness : 4,
                                          kHeadlineBarThicknessMin, kHeadlineBarThicknessMax);
+    s->sparklineWidth = std::clamp(s->sparklineWidth > 0 ? s->sparklineWidth : 48, kSparklineWidthMin,
+                                   kSparklineWidthMax);
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -192,6 +194,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"headlineBarLength", s.headlineBarLength);
         setNumber(L"headlineBarThickness", s.headlineBarThickness);
         setBool(L"headlineCountdown", s.headlineCountdown);
+        setNumber(L"sparklineWidth", s.sparklineWidth);
         setNumber(L"logoScale", s.logoScale);
         setBool(L"brandClaudeLogo", s.logoBrands.claude);
         setBool(L"brandGeminiLogo", s.logoBrands.gemini);
@@ -206,7 +209,9 @@ static std::wstring SerializeSettings(const Settings& s) {
                                 s.barLayout == BarLayout::Gauge ? L"gauge" :
                                 s.barLayout == BarLayout::ClockPies ? L"clockPies" :
                                 s.barLayout == BarLayout::RoundedSquare ? L"roundedSquare" :
-                                                                          L"stacked");
+                                s.barLayout == BarLayout::Sparkline ? L"sparkline" :
+                                s.barLayout == BarLayout::QuotaMatrix ? L"quotaMatrix" :
+                                                                        L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setBool(L"showPaceTicks", s.showPaceTicks);
         setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
@@ -334,6 +339,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
             std::isfinite(headlineBarThickness) ?
                 (int)std::clamp(headlineBarThickness, 0.0, (double)kHeadlineBarThicknessMax) : 0;
         s.headlineCountdown = getBoolDefault(L"headlineCountdown", false);
+        double sparklineWidth = GetNum(root, L"sparklineWidth", 48);
+        s.sparklineWidth = std::isfinite(sparklineWidth) ?
+                               (int)std::clamp(sparklineWidth, 0.0, (double)kSparklineWidthMax) : 0;
         double logoScale = GetNum(root, L"logoScale", 100);
         double badgeSize = GetNum(root, L"badgeSize", 13);
         double badgeOffsetX = GetNum(root, L"badgeOffsetX", 0);
@@ -356,7 +364,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                       barLayout == L"gauge" ? BarLayout::Gauge :
                       barLayout == L"clockPies" ? BarLayout::ClockPies :
                       barLayout == L"roundedSquare" ? BarLayout::RoundedSquare :
-                                                      BarLayout::Stacked;
+                      barLayout == L"sparkline" ? BarLayout::Sparkline :
+                      barLayout == L"quotaMatrix" ? BarLayout::QuotaMatrix :
+                                                    BarLayout::Stacked;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);

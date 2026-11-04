@@ -45,7 +45,8 @@ regenerates.
 
 ## Phases
 
-- `model`: pure fixtures (meter model with ring tile outlines, logos, toolkit palette/input/focus/
+- `model`: pure fixtures (meter model with ring tile outlines, sparkline geometry and its history
+  requests, quota matrix cells, logos, toolkit palette/input/focus/
   hit testing/scroll, controls, popup rows/placement/keys, settings shell and pages).
   `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
@@ -74,7 +75,8 @@ regenerates.
   badge's size, offsets (the logo staying centred across its bars) and color with its contrasting
   outline, the logos' brand colors per provider, pace marks,
   bar styles with their shaded fills and tick overhang, the time track, ring tiles' model shapes,
-  gauge, clock pie and rounded square faces, headline fills and the reset countdown,
+  gauge, clock pie and rounded square faces, sparkline plots (marks in drawing order, strokes, the
+key; painted strokes), quota matrix cells, headline fills and the reset countdown,
   the theme-aware pace color, overflow, extreme settings), the
   Layout page per tile style and the pinned/unpinned preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), threshold

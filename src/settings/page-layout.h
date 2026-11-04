@@ -3,9 +3,10 @@
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Headline %",
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Burn-up sparkline",
                                                  L"Segmented ring", L"Concentric rings", L"Gauge %",
-                                                 L"Clock pies",     L"Rounded square"};
+                                                 L"Clock pies",     L"Rounded square",   L"Headline %",
+                                                 L"Quota matrix"};
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
@@ -39,8 +40,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y += kRows * kCardHeight + (kRows - 1) * kGap;
     }
 
-    // Account identity is per account: a card that goes to Accounts. Fixed ids, so focus stays on
-    // it when cards above it change.
+    // Account identity is per account: a card that goes to Accounts. Fixed ids past the gallery's
+    // (its five items' within the field's 16), so focus stays on it when cards above it change.
     auto identityCard = [&](float top) {
         UiCardSpec spec;
         spec.glyph = L"\uE716";
@@ -49,7 +50,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         spec.trailingGlyph = L"\uE76C";
         spec.action = {UiActionKind::Navigate, int(SettingsUiPage::Accounts)};
         spec.minHeight = 62;
-        uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 8);
+        static_assert(std::size(kSettingsTileStyles) <= 10);
+        uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 10);
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
 
@@ -243,6 +245,35 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
+    } else if (layout == BarLayout::Sparkline) {
+        // Sparklines: the chart's width, and its height, the rings' size.
+        y = UiAddSection(items, id, x, y + 20, width, L"Sparkline");
+        {
+            UiCardSpec spec;
+            spec.title = L"Chart width";
+            spec.description = {{L"Pixels across the quota\u2019s whole window."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineWidth);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Chart height";
+            spec.description = {{L"Pixels from 0% to 100% used."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingSize);
+        }
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
+    } else if (layout == BarLayout::QuotaMatrix) {
+        // Quota matrix: the numbers' size, the headline's.
+        y = UiAddSection(items, id, x, y + 20, width, L"Matrix");
+        {
+            UiCardSpec spec;
+            spec.title = L"Number size";
+            spec.description = {{L"Text size of each quota\u2019s percentage, in pixels; its key scales with it. Two "
+                                 L"rows shrink to fit the taskbar."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
+        }
+        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = logoCards(identityCard(y) + 3, true);
     } else {
         // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
         // gap, which the countdown replaces.
@@ -290,15 +321,18 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = logoCards(identityCard(y) + 3, true);
     }
 
-    // Pace markers: none on headline tiles; the marker style is the bars'. Style and color
-    // need the markers on.
-    if (layout != BarLayout::LogoHeadline) {
+    // Pace markers: none on headline tiles or the quota matrix; the marker style is the bars'.
+    // Style and color need the markers on.
+    if (layout != BarLayout::LogoHeadline && layout != BarLayout::QuotaMatrix) {
         y = UiAddSection(items, id, x, y + 20, width, L"Pace markers");
         bool on = s.showPaceTicks;
         {
             UiCardSpec spec;
             spec.title = L"Pace markers";
-            spec.description = {{L"Ticks mark how much of each quota window has elapsed, to compare with its usage."}};
+            spec.description = {{layout == BarLayout::Sparkline ?
+                                     L"A diagonal marks even use of the quota across its window, to compare with "
+                                     L"its usage." :
+                                     L"Ticks mark how much of each quota window has elapsed, to compare with its usage."}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
         if (bars) {

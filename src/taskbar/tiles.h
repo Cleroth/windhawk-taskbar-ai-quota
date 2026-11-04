@@ -1,21 +1,22 @@
-// Tile layouts: logo + headline % and the face tiles (rings, rounded square, gauge, clock pies). A
-// tile shows the account's identity (provider logo, optionally with a number badge, or short text)
-// and its tile quotas: the meters the bar layouts show, in slot order (a gauge: the most-used
-// one). BuildAccountTile creates a tile; UpdateAccountTile
+// Tile layouts: logo + headline %, the face tiles (rings, rounded square, gauge, clock pies), the
+// burn-up sparkline and the quota matrix. A tile shows the account's identity (provider logo,
+// optionally with a number badge, or short text) and its tile quotas: the meters the bar layouts
+// show, in slot order (a gauge or sparkline: the most-used one). BuildAccountTile creates a tile;
+// UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
 // columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
 // geometry come from the meter model (meter-model.h).
 
-// A ring tile shape (meter-model.h), moved `offset` DIPs right and down. PathGeometry fills
-// even-odd by default, as the outline expects.
-static Geometry TileOutlineGeometry(TileOutline const& outline, double offset) {
+// A tile shape (meter-model.h), moved `offset` DIPs right and down: closed figures to fill, or
+// open ones to stroke. PathGeometry fills even-odd by default, as the outline expects.
+static Geometry TileOutlineGeometry(TileOutline const& outline, double offset, bool closed = true) {
     PathGeometry geometry;
     for (TileOutlineFigure const& source : outline) {
         PathFigure figure;
         figure.StartPoint({(float)(source.x + offset), (float)(source.y + offset)});
-        figure.IsClosed(true);
-        figure.IsFilled(true);
+        figure.IsClosed(closed);
+        figure.IsFilled(closed);
         for (TileOutlineSegment const& segment : source.segments) {
             winrt::Windows::Foundation::Point end{(float)(segment.x + offset),
                                                   (float)(segment.y + offset)};
@@ -268,6 +269,71 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         return column;
     }
 
+    if (layout == BarLayout::Sparkline) {
+        // The plot beside the identity: its background, its shapes (UpdateAccountTile), then the
+        // key in its bottom-right corner.
+        Grid face;
+        face.IsHitTestVisible(false);
+        face.VerticalAlignment(VerticalAlignment::Center);
+        tile.plot = Border{};
+        tile.plot.CornerRadius({kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius});
+        face.Children().Append(tile.plot);
+        Grid meters;
+        face.Children().Append(meters);
+        tile.headlineKey = TextBlock{};
+        tile.headlineKey.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        tile.headlineKey.Opacity(0.75);
+        tile.headlineKey.TextLineBounds(TextLineBounds::Tight);
+        tile.headlineKey.HorizontalAlignment(HorizontalAlignment::Right);
+        tile.headlineKey.VerticalAlignment(VerticalAlignment::Bottom);
+        tile.headlineKey.Margin({0, 0, 3, 3});
+        face.Children().Append(tile.headlineKey);
+        tile.face = face;
+        tile.meters = meters;
+        column.Children().Append(face);
+        return column;
+    }
+
+    if (layout == BarLayout::QuotaMatrix) {
+        // Up to two rows and columns of cells beside the identity, each a quota's key and number
+        // on one baseline; UpdateAccountTile places and sizes them.
+        Grid matrix;
+        matrix.IsHitTestVisible(false);
+        matrix.VerticalAlignment(VerticalAlignment::Center);
+        for (int k = 0; k < 2; k++) {
+            RowDefinition row;
+            row.Height({0, GridUnitType::Auto});
+            matrix.RowDefinitions().Append(row);
+            ColumnDefinition cellColumn;
+            cellColumn.Width({0, GridUnitType::Auto});
+            matrix.ColumnDefinitions().Append(cellColumn);
+        }
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            StackPanel cell;
+            cell.Orientation(Orientation::Horizontal);
+            cell.Spacing(kMatrixKeyGap);
+            cell.Visibility(Visibility::Collapsed);
+            TextBlock key;
+            key.Opacity(0.6);
+            key.TextLineBounds(TextLineBounds::Tight);
+            key.VerticalAlignment(VerticalAlignment::Bottom);
+            cell.Children().Append(key);
+            TextBlock value;
+            value.FontFamily(displayFont);
+            value.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            value.TextLineBounds(TextLineBounds::Tight);
+            value.VerticalAlignment(VerticalAlignment::Bottom);
+            cell.Children().Append(value);
+            matrix.Children().Append(cell);
+            tile.matrixCells[w] = cell;
+            tile.matrixKeys[w] = key;
+            tile.matrixValues[w] = value;
+        }
+        tile.meters = matrix;
+        column.Children().Append(matrix);
+        return column;
+    }
+
     // Headline: the most-used quota's number and window key over per-quota segments at the
     // headline sizes and the bar gap, or with the countdown, a clock glyph and the time until that
     // quota resets at the key's size.
@@ -358,28 +424,101 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     if (!tile.identity || !tile.meters) return;
     BarLayout layout = tile.layout;
     bool face = IsFaceTile(layout);
+    bool spark = layout == BarLayout::Sparkline, matrix = layout == BarLayout::QuotaMatrix;
     int barMask = meters.barMask;
     TileRingGeometry const& geometry = meters.ring;
     double thickness = display.headlineBarThickness;
 
-    // Meter shapes: regenerated, and the identity resized, whenever an input changes.
-    TileShapeKey shape{(int)layout, barMask, geometry.size, geometry.stroke, geometry.gap,
-                       light ? 1 : 0, display.showPaceTicks ? (int)display.paceTickColor : -1};
+    // Meter shapes: regenerated, and the identity resized, whenever an input changes. Sparklines
+    // key them on the plot's size, the quota matrix on its font.
+    TileShapeKey shape{(int)layout, barMask,
+                       spark ? meters.faceHeight : matrix ? meters.matrixFont : geometry.size,
+                       spark ? meters.faceWidth : geometry.stroke, geometry.gap, light ? 1 : 0,
+                       display.showPaceTicks ? (int)display.paceTickColor : -1};
     if (shape != ap.tileShape) {
         TilePalette palette = TilePaletteFor(light);
         SolidColorBrush track(ArgbColor(palette.track));
         PaceMarkColors paceColors = PaceMarkColorsFor(display.paceTickColor, light);
         SolidColorBrush paceCore(ArgbColor(paceColors.core));
         SolidColorBrush paceHalo(ArgbColor(paceColors.halo));
-        auto meterShapes = tile.meters.Children();
-        meterShapes.Clear();
-        ui.fills.fill(nullptr);
-        tile.arcs.fill(nullptr);
-        tile.paceHalos.fill(nullptr);
-        tile.paceCores.fill(nullptr);
         tile.meters.Visibility(barMask ? Visibility::Visible : Visibility::Collapsed);
+        auto meterShapes = tile.meters.Children();
+        if (!matrix) {
+            meterShapes.Clear();
+            ui.fills.fill(nullptr);
+            tile.arcs.fill(nullptr);
+            tile.paceHalos.fill(nullptr);
+            tile.paceCores.fill(nullptr);
+        }
 
-        if (face) {
+        if (matrix) {
+            // Each shown cell in its place; keys reserve the widest key and numbers "100%" at
+            // their fonts, so the tile keeps its width as numbers change. Spacing goes only
+            // between rows and columns in use.
+            TextBlock keyProbe, valueProbe;
+            keyProbe.FontSize(meters.matrixKeyFont);
+            double keyWidth = 0;
+            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+                keyProbe.Text(key);
+                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe) * meters.matrixKeyFont);
+            }
+            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+            valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            valueProbe.FontSize(meters.matrixFont);
+            valueProbe.Text(L"100%");
+            double valueWidth = TileTextWidthPerPt(valueProbe) * meters.matrixFont;
+            int rows = 1, columns = 1;
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                if (!tile.matrixCells[w]) continue;
+                bool shown = barMask & (1 << w);
+                tile.matrixCells[w].Visibility(shown ? Visibility::Visible : Visibility::Collapsed);
+                if (!shown) continue;
+                QuotaMeter const& m = meters.quotas[w];
+                Grid::SetRow(tile.matrixCells[w], m.matrixRow);
+                Grid::SetColumn(tile.matrixCells[w], m.matrixColumn);
+                rows = std::max(rows, m.matrixRow + 1);
+                columns = std::max(columns, m.matrixColumn + 1);
+                tile.matrixKeys[w].FontSize(meters.matrixKeyFont);
+                tile.matrixKeys[w].MinWidth(std::ceil(keyWidth));
+                tile.matrixKeys[w].Text(m.key);
+                tile.matrixValues[w].FontSize(meters.matrixFont);
+                tile.matrixValues[w].MinWidth(std::ceil(valueWidth));
+            }
+            if (auto grid = tile.meters.try_as<Grid>()) {
+                grid.RowSpacing(rows > 1 ? kMatrixRowGap : 0);
+                grid.ColumnSpacing(columns > 1 ? kMatrixColumnGap : 0);
+            }
+        } else if (spark) {
+            // The plot's shapes, larger than it by kTileRingOverflow on every side and pulled
+            // back by negative margins, so layout never clips marks at its edges. In drawing
+            // order (see the values below); the diagonal, runs and projection stroke.
+            tile.face.Width(meters.faceWidth);
+            tile.face.Height(meters.faceHeight);
+            tile.plot.Background(SolidColorBrush(ArgbColor(palette.plot)));
+            tile.headlineKey.FontSize(meters.sparkKeyFont);
+            auto dashes = [](std::array<double, 2> pattern) {
+                DoubleCollection collection;
+                for (double length : pattern) collection.Append(length);
+                return collection;
+            };
+            for (wuxs::Path& path : tile.spark) {
+                path = wuxs::Path{};
+                path.Width(meters.faceWidth + 2 * kTileRingOverflow);
+                path.Height(meters.faceHeight + 2 * kTileRingOverflow);
+                path.Margin({-kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow, -kTileRingOverflow});
+                path.Visibility(Visibility::Collapsed);
+                meterShapes.Append(path);
+            }
+            tile.spark[0].Stroke(SolidColorBrush(ArgbColor((paceColors.core & 0x00FFFFFF) | kSparkGuideAlpha)));
+            tile.spark[0].StrokeThickness(kSparkGuideStroke);
+            tile.spark[0].StrokeDashArray(dashes(kSparkGuideDashes));
+            tile.spark[2].StrokeThickness(kSparkLineStroke);
+            tile.spark[2].StrokeLineJoin(PenLineJoin::Round);
+            tile.spark[2].StrokeStartLineCap(PenLineCap::Round);
+            tile.spark[2].StrokeEndLineCap(PenLineCap::Round);
+            tile.spark[4].StrokeThickness(kSparkProjectionStroke);
+            tile.spark[4].StrokeDashArray(dashes(kSparkProjectionDashes));
+        } else if (face) {
             tile.face.Width(meters.faceWidth);
             tile.face.Height(meters.faceHeight);
             // Larger than the face by kTileRingOverflow on every side, pulled back by negative
@@ -469,11 +608,63 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         ap.fillColor.fill(0);
         ap.pacePx.fill(-1);
         ap.paceVisible.fill(-1);
+        ap.percentTexts.fill(L"");
+        ap.spark.clear();
         ap.highlight = -1;
     }
 
     // Values, applied when their update keys change.
-    for (int w = 0; w < kQuotaBarCount; w++) {
+    if (matrix) {
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            QuotaMeter const& m = meters.quotas[w];
+            if (!(barMask & (1 << w)) || !tile.matrixValues[w] ||
+                (m.text == ap.percentTexts[w] && m.color == ap.fillColor[w])) {
+                continue;
+            }
+            tile.matrixValues[w].Text(m.text);
+            tile.matrixValues[w].Foreground(SolidColorBrush(ArgbColor(m.color)));
+            ap.percentTexts[w] = m.text;
+            ap.fillColor[w] = m.color;
+        }
+    } else if (spark && tile.spark[0]) {
+        // In drawing order: the pace diagonal, the area, runs and dots of the recorded usage,
+        // the projection, the current point and the limit mark. Redrawn when any point or color
+        // changes.
+        const std::array<const TileOutline*, 7> outlines = {
+            &meters.sparkPace,       &meters.sparkArea, &meters.sparkLines, &meters.sparkDots,
+            &meters.sparkProjection, &meters.sparkNow,  &meters.sparkLimit};
+        uint32_t color = meters.headlineColor;
+        std::vector<double> drawn{(double)color, (double)meters.sparkLimitColor};
+        for (const TileOutline* outline : outlines) {
+            drawn.push_back((double)outline->size());
+            for (TileOutlineFigure const& figure : *outline) {
+                drawn.insert(drawn.end(), {figure.x, figure.y, (double)figure.segments.size()});
+                for (TileOutlineSegment const& segment : figure.segments) {
+                    drawn.insert(drawn.end(), {segment.x, segment.y, segment.radius});
+                }
+            }
+        }
+        if (drawn != ap.spark) {
+            for (size_t k = 0; k < outlines.size(); k++) {
+                bool stroked = k == 0 || k == 2 || k == 4;
+                tile.spark[k].Visibility(outlines[k]->empty() ? Visibility::Collapsed : Visibility::Visible);
+                if (outlines[k]->empty()) continue;
+                // Filled nonzero, so overlapping dots merge instead of cancelling.
+                Geometry data = TileOutlineGeometry(*outlines[k], kTileRingOverflow, !stroked);
+                if (auto path = data.try_as<PathGeometry>()) path.FillRule(FillRule::Nonzero);
+                tile.spark[k].Data(data);
+            }
+            SolidColorBrush usage(ArgbColor(color));
+            tile.spark[1].Fill(SolidColorBrush(ArgbColor((color & 0x00FFFFFF) | kSparkAreaAlpha)));
+            tile.spark[2].Stroke(usage);
+            tile.spark[3].Fill(usage);
+            tile.spark[4].Stroke(usage);
+            tile.spark[5].Fill(usage);
+            tile.spark[6].Fill(SolidColorBrush(ArgbColor(meters.sparkLimitColor)));
+            ap.spark = std::move(drawn);
+        }
+    }
+    for (int w = 0; w < kQuotaBarCount && !matrix && !spark; w++) {
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
@@ -508,11 +699,13 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    if (tile.headline) {
+    if (tile.headlineKey) {
         std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
-            tile.headline.Text(meters.headline);
-            tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            if (tile.headline) {
+                tile.headline.Text(meters.headline);
+                tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            }
             tile.headlineKey.Text(meters.headlineKey);
             if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);

@@ -37,6 +37,7 @@ enum class SettingsField : uint8_t {
     HeadlineBarLength,
     HeadlineBarThickness,
     HeadlineCountdown,
+    SparklineWidth,
     LogoScale,        // Percent
     ClaudeLogoBrand,  // 1: Anthropic's orange
     GeminiLogoBrand,  // 1: the Gemini sparkle's gradient
@@ -116,6 +117,7 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::HeadlineBarLength: return SettingsNumberRange{kHeadlineBarLengthMin, kHeadlineBarLengthMax};
         case SettingsField::HeadlineBarThickness:
             return SettingsNumberRange{kHeadlineBarThicknessMin, kHeadlineBarThicknessMax};
+        case SettingsField::SparklineWidth: return SettingsNumberRange{kSparklineWidthMin, kSparklineWidthMax};
         case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
         case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
         case SettingsField::BadgeOffsetX:
@@ -149,7 +151,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
                     SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
-                    SettingsField::HeadlineCountdown, SettingsField::LogoScale,
+                    SettingsField::HeadlineCountdown, SettingsField::SparklineWidth,
+                    SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
@@ -194,6 +197,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::HeadlineBarLength: return s.headlineBarLength;
         case SettingsField::HeadlineBarThickness: return s.headlineBarThickness;
         case SettingsField::HeadlineCountdown: return s.headlineCountdown;
+        case SettingsField::SparklineWidth: return s.sparklineWidth;
         case SettingsField::LogoScale: return s.logoScale;
         case SettingsField::ClaudeLogoBrand: return s.logoBrands.claude;
         case SettingsField::GeminiLogoBrand: return s.logoBrands.gemini;
@@ -267,6 +271,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::HeadlineBarLength: s.headlineBarLength = value; break;
         case SettingsField::HeadlineBarThickness: s.headlineBarThickness = value; break;
         case SettingsField::HeadlineCountdown: s.headlineCountdown = value != 0; break;
+        case SettingsField::SparklineWidth: s.sparklineWidth = value; break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
         case SettingsField::GeminiLogoBrand: s.logoBrands.gemini = value != 0; break;
@@ -332,6 +337,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.headlineBarLength = defaults.headlineBarLength;
             s.headlineBarThickness = defaults.headlineBarThickness;
             s.headlineCountdown = defaults.headlineCountdown;
+            s.sparklineWidth = defaults.sparklineWidth;
             s.logoScale = defaults.logoScale;
             s.logoBrands = defaults.logoBrands;
             s.badgeSize = defaults.badgeSize;

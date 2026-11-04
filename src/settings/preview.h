@@ -11,7 +11,7 @@
 
 // One draw operation, in strip DIPs. Colors are ARGB.
 struct SettingsPreviewOp {
-    enum class Kind : uint8_t { Rect, Shape, Polygon, Text, Logo };
+    enum class Kind : uint8_t { Rect, Shape, Stroke, Polygon, Text, Logo };
     Kind kind = Kind::Rect;
     int hover = -1;                     // Drawn only while this column is hovered; -1: always
     D2D1_RECT_F rect{};                 // Rect, Text box (aligns in its width), Logo box
@@ -25,8 +25,11 @@ struct SettingsPreviewOp {
     bool shadeLeft = false;
     uint32_t color = 0;                 // Fill or text color
     float opacity = 1;
-    TileOutline shape;                  // Shape: a ring tile shape, filled, moved to `origin`
-    D2D1_POINT_2F origin{};
+    TileOutline shape;                  // Shape: a tile shape, filled, moved to `origin`; Stroke: its
+    D2D1_POINT_2F origin{};             // open figures, stroked `strokeWidth` wide, dashed by
+    float strokeWidth = 0;              // `dashes` in stroke widths (none: solid, round joins and
+    std::vector<float> dashes;          // caps)
+    bool winding = false;               // Shape filled nonzero instead of even-odd
     std::vector<D2D1_POINT_2F> points;  // Polygon
     std::wstring text;
     UiTextStyle style;
@@ -397,8 +400,10 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const bool hasBadge = hasLogo && identity.badge;
             const UiTextStyle idStyle{UiFamily::Display, 10, 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
             double perPt = hasLogo ? 0 : std::max(measure(identity.text, idStyle).width, 0.1f) / 10.0;
-            AccountMeters meters = AccountMeterState(display, layout, account, data[i],
-                                                     hasBadge ? int(identity.badgeText.size()) : 0, perPt);
+            // Sparklines chart the visual test samples' recorded usage.
+            AccountMeters meters = AccountMeterState(
+                display, layout, account, data[i], hasBadge ? int(identity.badgeText.size()) : 0, perPt,
+                [&](int, const WindowUsage& reading) { return VisualTestTrace(account, reading, now); });
             const float opacity = float(meters.identityOpacity);
             top = (H - T) / 2;
             height = T;
@@ -478,6 +483,87 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     }
                 }
                 width = padLeft + idWidth + 6 + faceWidth + padRight;
+            } else if (layout == BarLayout::Sparkline) {
+                // Sparklines: the identity, then 6 DIP after it the plot: its background, its shapes
+                // in tiles.h's drawing order, and the key 3 DIPs in from its bottom-right corner.
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
+                float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
+                rect(ops, {faceLeft, faceTop, faceLeft + faceWidth, faceTop + faceHeight}, float(kSparkPlotRadius),
+                     palette.plot);
+                auto outline = [&](const TileOutline& shape, uint32_t color, double stroke = 0,
+                                   const std::array<double, 2>* dashes = nullptr) {
+                    if (shape.empty()) return;
+                    Op op;
+                    op.kind = stroke > 0 ? Op::Kind::Stroke : Op::Kind::Shape;
+                    op.shape = shape;
+                    op.origin = {faceLeft, faceTop};
+                    op.color = color;
+                    op.strokeWidth = float(stroke);
+                    op.winding = true;
+                    if (dashes) op.dashes = {float((*dashes)[0]), float((*dashes)[1])};
+                    add(ops, std::move(op));
+                };
+                const uint32_t usage = meters.headlineColor;
+                outline(meters.sparkPace, (pace.core & 0x00FFFFFF) | kSparkGuideAlpha, kSparkGuideStroke,
+                        &kSparkGuideDashes);
+                outline(meters.sparkArea, (usage & 0x00FFFFFF) | kSparkAreaAlpha);
+                outline(meters.sparkLines, usage, kSparkLineStroke);
+                outline(meters.sparkDots, usage);
+                outline(meters.sparkProjection, usage, kSparkProjectionStroke, &kSparkProjectionDashes);
+                outline(meters.sparkNow, usage);
+                outline(meters.sparkLimit, meters.sparkLimitColor);
+                if (!meters.headlineKey.empty()) {
+                    UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.sparkKeyFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                    Measured key = measure(meters.headlineKey, keyStyle);
+                    label(ops, meters.headlineKey, keyStyle, faceLeft + faceWidth - 3 - key.width,
+                          faceTop + faceHeight - 3 - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, 0.75f, true);
+                }
+                width = padLeft + idWidth + 6 + faceWidth + padRight;
+            } else if (layout == BarLayout::QuotaMatrix) {
+                // Quota matrix: the identity, then 6 DIP after it the cells, centred on the tile:
+                // each the key (reserving the widest) 3 DIPs before the number (reserving "100%",
+                // wider for a wider number in its column), on their baseline; rows and columns
+                // their gaps apart.
+                float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
+                                            top + T / 2);
+                float cellsLeft = x0 + padLeft + idWidth + 6;
+                UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
+                float keyReserve = 0;
+                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Cr"}) {
+                    keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
+                }
+                keyReserve = std::ceil(keyReserve);
+                float numberReserve = std::ceil(measure(L"100%", numberStyle).width);
+                std::array<float, 2> numberWidths{numberReserve, numberReserve};
+                float cap = measure(L"0", numberStyle).cap;
+                int rows = 1, columns = 1;
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    if (!(meters.barMask & (1 << w))) continue;
+                    const QuotaMeter& q = meters.quotas[w];
+                    rows = std::max(rows, q.matrixRow + 1);
+                    columns = std::max(columns, q.matrixColumn + 1);
+                    float& column = numberWidths[q.matrixColumn];
+                    column = std::max(column, measure(q.text, numberStyle).width);
+                }
+                float cellsTop = top + (T - (rows * cap + (rows - 1) * float(kMatrixRowGap))) / 2;
+                const float second = cellsLeft + keyReserve + float(kMatrixKeyGap) + numberWidths[0] + float(kMatrixColumnGap);
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    if (!(meters.barMask & (1 << w))) continue;
+                    const QuotaMeter& q = meters.quotas[w];
+                    float left = q.matrixColumn ? second : cellsLeft;
+                    float baseline = cellsTop + q.matrixRow * (cap + float(kMatrixRowGap)) + cap;
+                    Measured key = measure(q.key, keyStyle), number = measure(q.text, numberStyle);
+                    label(ops, q.key, keyStyle, left, baseline - key.cap, key.width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
+                          0.6f, true);
+                    label(ops, q.text, numberStyle, left + keyReserve + float(kMatrixKeyGap), baseline - number.cap,
+                          number.width, DWRITE_TEXT_ALIGNMENT_LEADING, q.color, 1, true);
+                }
+                float cells = !count       ? 0 :
+                              columns == 1 ? keyReserve + float(kMatrixKeyGap) + numberWidths[0] :
+                                             second - cellsLeft + keyReserve + float(kMatrixKeyGap) + numberWidths[1];
+                width = padLeft + idWidth + 6 + cells + padRight;
             } else {
                 // Headline: the identity, then 6 DIP after it the most-used quota's number and,
                 // 3 DIP after it, its window key (bottom-aligned on the baseline), in a row that
@@ -669,19 +755,23 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                     break;
                 }
                 case Op::Kind::Shape:
+                case Op::Kind::Stroke:
                 case Op::Kind::Polygon: {
                     winrt::com_ptr<ID2D1PathGeometry> path;
                     winrt::check_hresult(g.d2d->CreatePathGeometry(path.put()));
                     winrt::com_ptr<ID2D1GeometrySink> sink;
                     winrt::check_hresult(path->Open(sink.put()));
-                    if (op.kind == Op::Kind::Shape) {
+                    const bool stroke = op.kind == Op::Kind::Stroke;
+                    if (op.winding) sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+                    if (op.kind != Op::Kind::Polygon) {
                         // As XAML's PathGeometry draws it: filled even-odd (the sink's default),
-                        // not snapped.
+                        // or open to stroke; not snapped.
                         auto point = [&](double x, double y) {
                             return D2D1::Point2F(op.origin.x + float(x), op.origin.y + float(y));
                         };
                         for (const TileOutlineFigure& figure : op.shape) {
-                            sink->BeginFigure(point(figure.x, figure.y), D2D1_FIGURE_BEGIN_FILLED);
+                            sink->BeginFigure(point(figure.x, figure.y),
+                                              stroke ? D2D1_FIGURE_BEGIN_HOLLOW : D2D1_FIGURE_BEGIN_FILLED);
                             for (const TileOutlineSegment& segment : figure.segments) {
                                 if (segment.radius <= 0) {
                                     sink->AddLine(point(segment.x, segment.y));
@@ -694,7 +784,7 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                                                      D2D1_ARC_SIZE_SMALL};
                                 sink->AddArc(&arc);
                             }
-                            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                            sink->EndFigure(stroke ? D2D1_FIGURE_END_OPEN : D2D1_FIGURE_END_CLOSED);
                         }
                     } else if (!op.points.empty()) {
                         // On device pixels, like XAML's layout rounding of the tick and its
@@ -707,7 +797,21 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
                         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                     }
                     winrt::check_hresult(sink->Close());
-                    target->FillGeometry(path.get(), UiBrush(target, cache, color(op.color, op.opacity)), nullptr);
+                    ID2D1Brush* brush = UiBrush(target, cache, color(op.color, op.opacity));
+                    if (!stroke) {
+                        target->FillGeometry(path.get(), brush, nullptr);
+                        break;
+                    }
+                    // As the sparkline's XAML strokes: solid lines round, dashed ones flat.
+                    const bool dashed = !op.dashes.empty();
+                    const D2D1_CAP_STYLE cap = dashed ? D2D1_CAP_STYLE_FLAT : D2D1_CAP_STYLE_ROUND;
+                    D2D1_STROKE_STYLE_PROPERTIES properties = D2D1::StrokeStyleProperties(
+                        cap, cap, D2D1_CAP_STYLE_FLAT, D2D1_LINE_JOIN_ROUND, 10,
+                        dashed ? D2D1_DASH_STYLE_CUSTOM : D2D1_DASH_STYLE_SOLID, 0);
+                    winrt::com_ptr<ID2D1StrokeStyle> style;
+                    winrt::check_hresult(g.d2d->CreateStrokeStyle(&properties, dashed ? op.dashes.data() : nullptr,
+                                                                   UINT32(op.dashes.size()), style.put()));
+                    target->DrawGeometry(path.get(), brush, op.strokeWidth, style.get());
                     break;
                 }
                 case Op::Kind::Text: {
