@@ -12,6 +12,8 @@ static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
 static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 // A notification's rebuild waits for an open dropdown or menu to close (a rebuild closes it).
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
+// Copy version info's button shows whether it copied until this timer ends it.
+static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
 
 // The settings and usage history windows' backdrop for a material: Windows has none for Tinted
 // wallpaper, so they use Mica.
@@ -34,13 +36,15 @@ struct SettingsUiClient final : UiHostClient {
     // Window state. Custom poll and retention modes stick once chosen or typed into, so their
     // boxes don't disable themselves when a partial number happens to match a preset. The
     // preview's scroll belongs to the position it was built for. The last built view paints the
-    // preview; the color dialog's custom colors last for the window.
+    // preview; the color dialog's custom colors last for the window. Copy version info's result
+    // shows until kSettingsCopiedTimer.
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
     TaskbarPlacement previewPlacement = TaskbarPlacement::BeforeIcons;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
+    std::optional<bool> versionCopied;
 
     // Accounts: the expanded cards, and the card being dragged: its order meanwhile, where it
     // started, the pointer's offset from its top, where it is drawn and where the first card
@@ -163,6 +167,7 @@ struct SettingsUiClient final : UiHostClient {
         if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
+        view.versionCopied = versionCopied;
         for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
             SettingsViewAccount account;
             account.key = edits.keys[i];
@@ -293,8 +298,9 @@ struct SettingsUiClient final : UiHostClient {
                             field == SettingsField::ResetDisplay ?
                                 L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, "
                                 L"percentage text on hover with adaptive alignment, no amounts, the "
-                                L"standard palette with yellow from 50%, orange from 75% and red from "
-                                L"90%, stale data marked, additional OpenAI rate limits hidden." :
+                                L"default palette (custom colors reset too) with yellow from 50%, orange "
+                                L"from 75% and red from 90%, stale data marked, additional OpenAI rate "
+                                L"limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user, history is kept forever and the usage history window "
                                 L"opens on 7 days. Saved history stays.";
@@ -319,9 +325,12 @@ struct SettingsUiClient final : UiHostClient {
                         UiHostRequestRebuild(host, false);
                         break;
                     case SettingsField::PaceTickColorCustom:
-                    case SettingsField::BadgeColorCustom: {
-                        SettingsField target = field == SettingsField::PaceTickColorCustom ?
-                                                   SettingsField::PaceTickColor : SettingsField::BadgeColor;
+                    case SettingsField::BadgeColorCustom:
+                    case SettingsField::UsageColorCustom: {
+                        SettingsField target =
+                            field == SettingsField::PaceTickColorCustom ? SettingsField::PaceTickColor :
+                            field == SettingsField::BadgeColorCustom    ? SettingsField::BadgeColor :
+                                SettingsField(int(SettingsField::UsageColorBelowYellow) + std::clamp(action.value, 0, 3));
                         COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), target));
                         std::optional<COLORREF> chosen = Modal(host, [&] {
                             return UiChooseColor(host.main, initial, customColors, colorDialog);
@@ -333,6 +342,42 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::PreviewScroll:
                         break;
+                    case SettingsField::CopyVersionInfo: {
+                        // Windows' real build: RtlGetVersion, which compatibility shims leave
+                        // alone, with the update revision from the registry.
+                        RTL_OSVERSIONINFOW os{};
+                        os.dwOSVersionInfoSize = sizeof(os);
+                        using RtlGetVersion_t = LONG(WINAPI*)(RTL_OSVERSIONINFOW*);
+                        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+                        auto getVersion = reinterpret_cast<RtlGetVersion_t>(
+                            ntdll ? GetProcAddress(ntdll, "RtlGetVersion") : nullptr);
+                        if (!getVersion || getVersion(&os) != 0) os = {};
+                        DWORD revision = 0, size = sizeof(revision);
+                        if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                                         L"UBR", RRF_RT_REG_DWORD, nullptr, &revision, &size) != ERROR_SUCCESS) {
+                            revision = 0;
+                        }
+                        wchar_t text[128];
+                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",
+                                 WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, revision);
+                        bool copied = false;
+                        size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
+                        if (OpenClipboard(host.main)) {
+                            if (HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+                                if (void* data = GlobalLock(memory)) {
+                                    memcpy(data, text, bytes);
+                                    GlobalUnlock(memory);
+                                    copied = EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, memory);
+                                }
+                                if (!copied) GlobalFree(memory);
+                            }
+                            CloseClipboard();
+                        }
+                        versionCopied = copied;
+                        SetTimer(host.main, kSettingsCopiedTimer, 2000, nullptr);
+                        UiHostRequestRebuild(host, false);
+                        break;
+                    }
                     case SettingsField::OpenHistoryFolder: {
                         const std::wstring& folder = edits.baseline.status.historyFolder;
                         DWORD attributes = folder.empty() ? INVALID_FILE_ATTRIBUTES :
@@ -608,6 +653,12 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 return false;
             case WM_TIMER: {
+                if (wParam == kSettingsCopiedTimer) {
+                    KillTimer(host.main, kSettingsCopiedTimer);
+                    versionCopied.reset();
+                    UiHostRequestRebuild(host, false);
+                    return true;
+                }
                 if (wParam == kSettingsRefreshTimer) {
                     if (!host.popup.open) {
                         KillTimer(host.main, kSettingsRefreshTimer);

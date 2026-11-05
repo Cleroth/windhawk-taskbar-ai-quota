@@ -1,5 +1,5 @@
-// Settings > About: app card, links, credits and license (approved mockup about.png). Pure
-// builder.
+// Settings > About: app card, version info to copy, links, credits and license (approved mockup
+// about.png). Pure builder.
 
 // App icon (16 DIP view box): green, yellow and red quota bars on tracks, drawn like the
 // taskbar's stacked bars: corners a quarter of the 4-unit thickness, fills cut straight and shaded
@@ -36,7 +36,7 @@ static UiItem SettingsAppIcon(D2D1_RECT_F rect) {
 static constexpr PCWSTR kSettingsProjectUrl = L"https://github.com/Cleroth/windhawk-taskbar-ai-quota";
 
 // Lays out the page from content y; returns the bottom of the last card.
-static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
+static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                   float width) {
     // App card (mockup .aboutcard): icon, name, version line, summary.
@@ -44,8 +44,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         constexpr float kPadX = 20, kPadY = 18, kIcon = 52, kGap = 18;
         float textLeft = x + 1 + kPadX + kIcon + kGap;
         float textWidth = std::max(x + width - 1 - kPadX - textLeft, 40.0f);
-        std::wstring versionLine =
-            L"Version " + std::wstring(version) + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
+        std::wstring versionLine = L"Version " + view.version + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
         PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub "
                          L"Copilot and OpenCode Go on the Windows 11 taskbar.";
         UiTextStyle caption = UiTextStyleFor(UiFont::Caption);
@@ -83,6 +82,17 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);
         y += height;
+    }
+
+    // Version info for bug reports; the button says for a moment whether it copied.
+    {
+        UiCardSpec spec;
+        spec.glyph = L"\uE8C8";
+        spec.title = L"Copy version info";
+        spec.description = {{L"The mod\u2019s name and version and the Windows build, for bug reports."}};
+        spec.minHeight = 62;
+        PCWSTR label = !view.versionCopied ? L"Copy" : *view.versionCopied ? L"Copied" : L"Copy failed";
+        y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo, label);
     }
 
     // Links: whole cards open the page in the browser.

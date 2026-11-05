@@ -88,7 +88,8 @@ struct HistoryUiView {
     bool canEnableRecording = false;
     int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
-    bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
+    std::array<uint32_t, 4> usageColors = UsagePaletteColors(UsagePalette::Default, kDefaultUsageColors);
+    bool remaining = false;                  // Values in the Remaining bar mode
     LogoBrands logoBrands;
     Material material = Settings{}.material;
 

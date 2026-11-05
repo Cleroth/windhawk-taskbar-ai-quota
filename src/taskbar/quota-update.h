@@ -290,7 +290,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     UpdateAccountFlyout(state, accounts[i], d,
                                         {now, display.barMode, display.yellowThreshold,
                                          display.orangeThreshold, display.redThreshold,
-                                         display.colorblindMode, settings.showOpenAiExtraLimits,
+                                         display.usageColors, settings.showOpenAiExtraLimits,
                                          meters.stale, meters.warn, accountRefreshing,
                                          visualTestMode},
                                         traces);

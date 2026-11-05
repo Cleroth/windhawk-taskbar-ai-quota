@@ -64,7 +64,7 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
     {
         UiCardSpec spec;
         spec.title = L"Percentage alignment";
-        spec.description = {{L"Adaptive: right side, moving left once the bar reaches yellow."}};
+        spec.description = {{L"Adaptive: right side, moving left once the bar reaches the yellow threshold."}};
         spec.enabled = text;
         if (!text) spec.reason = bars ? textOff : barsOnly;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
@@ -85,25 +85,45 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
     }
 
-    // Usage colors. Each threshold's dot is its band's usage color (taskbar/meter-model.h) in the
-    // chosen palette, taken from thresholds 1, 2 and 3 so equal thresholds still show their own.
-    // The level threshold notifications use (Behavior) says so.
+    // Usage colors: the palette, and Custom's color per band, each offering the band's default and
+    // colorblind colors. Each threshold's dot is its band's usage color (taskbar/meter-model.h) in
+    // the chosen palette, taken from thresholds 1, 2 and 3 so equal thresholds still show their
+    // own. The level threshold notifications use (Behavior) says so.
     y = UiAddSection(items, id, x, y + 20, width, L"Usage colors");
     {
         UiCardSpec spec;
-        spec.title = L"Colorblind palette";
-        spec.description = {{L"Blue to vermilion instead of green to red."}};
-        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ColorblindMode);
+        spec.title = L"Palette";
+        spec.description = {{L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a "
+                             L"color you pick for each threshold."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::UsagePalette, 200,
+                                    {{L"Default", int(UsagePalette::Default)},
+                                     {L"Colorblind", int(UsagePalette::Colorblind)},
+                                     {L"Custom", int(UsagePalette::Custom)}},
+                                    int(s.usagePalette));
+    }
+    if (s.usagePalette == UsagePalette::Custom) {
+        const PCWSTR bands[] = {L"Below yellow", L"From yellow", L"From orange", L"From red"};
+        for (int i = 0; i < 4; i++) {
+            UiCardSpec spec;
+            spec.title = bands[i];
+            y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec,
+                                     SettingsField(int(SettingsField::UsageColorBelowYellow) + i),
+                                     SettingsField::UsageColorCustom, {kDefaultUsageColors[i], kColorblindUsageColors[i]},
+                                     s.customUsageColors[i] & 0x00FFFFFF, i);
+        }
     }
     const std::tuple<SettingsField, PCWSTR, PCWSTR> thresholds[] = {
         {SettingsField::YellowThreshold, L"Yellow from",
-         s.colorblindMode ? L"Usage below this is blue." : L"Usage below this is green."},
+         s.usagePalette == UsagePalette::Colorblind ? L"Usage below this is blue." :
+         s.usagePalette == UsagePalette::Custom     ? L"Usage below this takes the Below yellow color." :
+                                                      L"Usage below this is green."},
         {SettingsField::OrangeThreshold, L"Orange from", L"Thresholds stay in order: yellow, orange, red."},
         {SettingsField::RedThreshold, L"Red from", L""},
     };
+    const std::array<uint32_t, 4> colors = UsagePaletteColors(s.usagePalette, s.customUsageColors);
     for (int i = 0; i < 3; i++) {
         auto [field, title, description] = thresholds[i];
-        uint32_t color = UsageColor(i + 1, false, 1, 2, 3, s.colorblindMode);
+        uint32_t color = UsageColor(i + 1, false, 1, 2, 3, colors);
         UiCardSpec spec;
         spec.dot = RGB(color >> 16 & 0xFF, color >> 8 & 0xFF, color & 0xFF);
         spec.title = title;

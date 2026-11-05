@@ -114,42 +114,6 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
 
-    // A color card's swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... (`custom`)
-    // 16 DIP after them. A color picked in Custom... shows as one more swatch.
-    auto colorCard = [&](float top, UiCardSpec spec, SettingsField field, SettingsField custom,
-                         std::vector<COLORREF> colors, COLORREF current) {
-        if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
-        PCWSTR customText = L"Custom...";
-        float buttonWidth =
-            std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
-        float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
-        spec.trailing = {swatches + 16 + buttonWidth, 32};
-        if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
-        UiCardLayout card = UiAddCard(g, items, id, x, top, width, spec);
-        float center = (card.trailing.top + card.trailing.bottom) / 2;
-        for (size_t i = 0; i < colors.size(); i++) {
-            UiItem swatch;
-            swatch.id = SettingsControlId(field, uint32_t(1 + i));
-            swatch.kind = UiItemKind::Swatch;
-            float left = card.trailing.left + float(i) * 34;
-            swatch.rect = {left, center - 12, left + 24, center + 12};
-            swatch.selected = colors[i] == current;
-            swatch.enabled = spec.enabled;
-            swatch.action = SettingsCommand(field, int(colors[i]));
-            items.push_back(std::move(swatch));
-        }
-        UiItem button;
-        button.id = SettingsControlId(custom);
-        button.kind = UiItemKind::Button;
-        button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right,
-                       card.trailing.bottom};
-        button.text = customText;
-        button.enabled = spec.enabled;
-        button.action = SettingsCommand(custom);
-        items.push_back(std::move(button));
-        return card.card.bottom;
-    };
-
     // Logo identities in every style: the logo size and the colors of the logos that have brand
     // colors, the badge's size and color, then its offsets. Bars need an identity position, except
     // for the logo colors, which the flyout and the windows also show.
@@ -189,9 +153,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                   L"the color picker."}};
             spec.enabled = placed;
             if (!placed) spec.reason = L"Choose an identity position to change this.";
-            top = colorCard(top + 3, spec, SettingsField::BadgeColor, SettingsField::BadgeColorCustom,
-                            {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
-                            s.badgeColor & 0x00FFFFFF);
+            top = SettingsAddColorCard(g, view, items, id, x, top + 3, width, spec, SettingsField::BadgeColor,
+                                       SettingsField::BadgeColorCustom,
+                                       {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
+                                       s.badgeColor & 0x00FFFFFF);
         }
         top = slider(top + 3, L"Badge horizontal offset",
                      L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
@@ -496,9 +461,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.description = {{L"Light grey by default, dark on a light taskbar. Custom... opens the color picker."}};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";
-            y = colorCard(y + 3, spec, SettingsField::PaceTickColor, SettingsField::PaceTickColorCustom,
-                          {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
-                          s.paceTickColor & 0x00FFFFFF);
+            y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickColor,
+                                     SettingsField::PaceTickColorCustom,
+                                     {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
+                                     s.paceTickColor & 0x00FFFFFF);
         }
     }
 

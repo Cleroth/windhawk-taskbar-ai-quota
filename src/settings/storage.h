@@ -155,6 +155,10 @@ static bool NormalizeSettings(Settings* s) {
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
+    if (s->usagePalette < UsagePalette::Default || s->usagePalette > UsagePalette::Custom) {
+        s->usagePalette = UsagePalette::Default;
+    }
+    for (COLORREF& color : s->customUsageColors) color &= 0x00FFFFFF;
     s->paceTickColor &= 0x00FFFFFF;
     s->badgeColor &= 0x00FFFFFF;
     return historyIdsChanged;
@@ -298,7 +302,13 @@ static std::wstring SerializeSettings(const Settings& s) {
                                         s.notificationLevel == NotificationLevel::Orange ? L"orange" : L"red");
         // Builds before notification levels read only this switch, on at red.
         setBool(L"notifications", s.notificationLevel != NotificationLevel::Off);
-        setBool(L"colorblind", s.colorblindMode);
+        setString(L"usagePalette", s.usagePalette == UsagePalette::Colorblind ? L"colorblind" :
+                                   s.usagePalette == UsagePalette::Custom ? L"custom" : L"default");
+        JsonArray usageColors;
+        for (COLORREF color : s.customUsageColors) usageColors.Append(JsonValue::CreateNumberValue(color));
+        root.SetNamedValue(L"customUsageColors", usageColors.as<IJsonValue>());
+        // Builds before palettes read only this switch; they show Custom as the default palette.
+        setBool(L"colorblind", s.usagePalette == UsagePalette::Colorblind);
         setBool(L"staleWarning", s.showStaleWarning);
         setString(L"material", s.material == Material::Mica ? L"mica" :
                                s.material == Material::MicaAlt ? L"micaAlt" :
@@ -536,7 +546,22 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                               notificationLevel == L"red" ? NotificationLevel::Red :
                               getBoolDefault(L"notifications", true) ? NotificationLevel::Red :
                                                                        NotificationLevel::Off;
-        s.colorblindMode = getBoolDefault(L"colorblind", false);
+        // Settings saved before palettes, or naming an unknown one, have only the colorblind switch.
+        std::wstring usagePalette = GetStr(root, L"usagePalette");
+        s.usagePalette = usagePalette == L"default" ? UsagePalette::Default :
+                         usagePalette == L"colorblind" ? UsagePalette::Colorblind :
+                         usagePalette == L"custom" ? UsagePalette::Custom :
+                         getBoolDefault(L"colorblind", false) ? UsagePalette::Colorblind : UsagePalette::Default;
+        // Each custom color that is missing or not a color keeps its default.
+        if (root.HasKey(L"customUsageColors") &&
+            root.GetNamedValue(L"customUsageColors").ValueType() == JsonValueType::Array) {
+            JsonArray colors = root.GetNamedArray(L"customUsageColors");
+            for (uint32_t i = 0; i < colors.Size() && i < s.customUsageColors.size(); i++) {
+                IJsonValue value = colors.GetAt(i);
+                double color = value.ValueType() == JsonValueType::Number ? value.GetNumber() : -1;
+                if (std::isfinite(color) && color >= 0 && color <= 0x00FFFFFF) s.customUsageColors[i] = (COLORREF)color;
+            }
+        }
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
         // A missing or unknown material keeps the default.
         std::wstring material = GetStr(root, L"material");
@@ -732,7 +757,7 @@ static bool LoadLegacySettings(Settings* out) {
     s.orangeThreshold = getInt(L"orangeThreshold", 75);
     s.redThreshold = getInt(L"redThreshold", 90);
     s.notificationLevel = getBool(L"enableNotifications", true) ? NotificationLevel::Red : NotificationLevel::Off;
-    s.colorblindMode = getBool(L"colorblindMode", false);
+    s.usagePalette = getBool(L"colorblindMode", false) ? UsagePalette::Colorblind : UsagePalette::Default;
     s.showStaleWarning = getBool(L"showStaleWarning", true);
     int oldBarLength = s.barLength;
     int oldAccountMargin = s.accountMargin;

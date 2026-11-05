@@ -73,7 +73,12 @@ enum class SettingsField : uint8_t {
     PercentTextVisibility,  // A PercentTextVisibility
     PercentTextAlignment,   // A PercentTextAlignment
     ShowExtraBarAmounts,
-    ColorblindMode,
+    UsagePalette,           // A UsagePalette
+    // The Custom palette's colors by band, consecutive (0xBBGGRR)
+    UsageColorBelowYellow,
+    UsageColorYellow,
+    UsageColorOrange,
+    UsageColorRed,
     YellowThreshold,
     OrangeThreshold,
     RedThreshold,
@@ -103,6 +108,8 @@ enum class SettingsField : uint8_t {
     OpenHistoryFolder,
     PaceTickColorCustom,  // The color dialog
     BadgeColorCustom,     // The color dialog
+    UsageColorCustom,     // The color dialog for a band: 0 below yellow to 3 red
+    CopyVersionInfo,      // The mod's and Windows' versions to the clipboard
     ShowOnTaskbar,        // Visual test mode
     PreviewScroll,        // The preview strip's sideways scroll
     AccountAdd,           // The Add account menu: kSettingsProviders' index
@@ -190,7 +197,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
         case SettingsField::ResetDisplay:
             return {SettingsField::Material,            SettingsField::BarMode,
                     SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
-                    SettingsField::ShowExtraBarAmounts, SettingsField::ColorblindMode,
+                    SettingsField::ShowExtraBarAmounts, SettingsField::UsagePalette,
+                    SettingsField::UsageColorBelowYellow, SettingsField::UsageColorYellow,
+                    SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
                     SettingsField::ShowOpenAiExtraLimits};
@@ -258,7 +267,12 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PercentTextVisibility: return int(s.percentTextVisibility);
         case SettingsField::PercentTextAlignment: return int(s.percentTextAlignment);
         case SettingsField::ShowExtraBarAmounts: return s.showExtraBarAmounts;
-        case SettingsField::ColorblindMode: return s.colorblindMode;
+        case SettingsField::UsagePalette: return int(s.usagePalette);
+        case SettingsField::UsageColorBelowYellow:
+        case SettingsField::UsageColorYellow:
+        case SettingsField::UsageColorOrange:
+        case SettingsField::UsageColorRed:
+            return int(s.customUsageColors[size_t(field) - size_t(SettingsField::UsageColorBelowYellow)] & 0x00FFFFFF);
         case SettingsField::YellowThreshold: return s.yellowThreshold;
         case SettingsField::OrangeThreshold: return s.orangeThreshold;
         case SettingsField::RedThreshold: return s.redThreshold;
@@ -374,7 +388,16 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
                 value, int(PercentTextAlignment::Adaptive), int(PercentTextAlignment::Right)));
             break;
         case SettingsField::ShowExtraBarAmounts: s.showExtraBarAmounts = value != 0; break;
-        case SettingsField::ColorblindMode: s.colorblindMode = value != 0; break;
+        case SettingsField::UsagePalette:
+            s.usagePalette = UsagePalette(std::clamp(value, int(UsagePalette::Default), int(UsagePalette::Custom)));
+            break;
+        case SettingsField::UsageColorBelowYellow:
+        case SettingsField::UsageColorYellow:
+        case SettingsField::UsageColorOrange:
+        case SettingsField::UsageColorRed:
+            s.customUsageColors[size_t(field) - size_t(SettingsField::UsageColorBelowYellow)] =
+                COLORREF(value) & 0x00FFFFFF;
+            break;
         case SettingsField::YellowThreshold: s.yellowThreshold = value; break;
         case SettingsField::OrangeThreshold: s.orangeThreshold = value; break;
         case SettingsField::RedThreshold: s.redThreshold = value; break;
@@ -386,7 +409,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.percentTextVisibility = defaults.percentTextVisibility;
             s.percentTextAlignment = defaults.percentTextAlignment;
             s.showExtraBarAmounts = defaults.showExtraBarAmounts;
-            s.colorblindMode = defaults.colorblindMode;
+            s.usagePalette = defaults.usagePalette;
+            s.customUsageColors = defaults.customUsageColors;
             s.yellowThreshold = defaults.yellowThreshold;
             s.orangeThreshold = defaults.orangeThreshold;
             s.redThreshold = defaults.redThreshold;

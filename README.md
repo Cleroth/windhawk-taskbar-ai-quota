@@ -18,7 +18,7 @@ Hover a column to highlight it and open its details flyout: percentages, reset t
 
 On a taskbar at the left or right of the screen (Windows 11's own taskbar position setting), the accounts stack down the taskbar and each style rearranges to fit its width: identities sit above their meters (rings keep theirs inside), a usage graph's charts stack, the quota matrix takes one column, stacked bars, charts and rings shorten to the width, and an account still wider than the taskbar (long labels, large text) shrinks as a whole. Your settings stay as they are, so moving the taskbar back restores the layout across. The bars follow the taskbar when it moves between edges, and the details flyout opens beside it (below a taskbar at the top).
 
-Each column shows the account's identity beside its bars: the provider logo (with a number badge when several accounts share a provider, hidden ones included) or the account's label. Bars can show compact quota keys and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark the identity with `!` and the details flyout with a warning icon.
+Each column shows the account's identity beside its bars: the provider logo (with a number badge when several accounts share a provider, hidden ones included) or the account's label. Bars can show compact quota keys and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind or custom palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark the identity with `!` and the details flyout with a warning icon.
 
 It can also show a Windows notification when a quota selected for the taskbar first reaches the threshold chosen in **Settings > Behavior**: yellow, orange or red (the default). It re-arms once usage drops back below the threshold; changing the level or the thresholds never notifies by itself. Notifications show under the mod's own name and icon and, when usage is projected to reach the limit before the reset, say when, as the details flyout does. Clicking one opens the provider's dashboard (Antigravity has none), and a repeat for the same account and quota replaces the earlier one.
 
@@ -71,7 +71,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - bar mode: used (fills as quota is consumed) or remaining (fills with quota left and shows "X% remaining"; usage graphs and the details flyout's charts plot quota left, falling from 100%); threshold colors always represent consumed quota
   - percentage text: never show, show on hover (default), or always show, with adaptive, left, center, or right alignment
   - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI, and GitHub Copilot's AI credits rounded to whole credits) instead of a percentage, following the bar mode; from 1,000 on, taskbar amounts are shortened to three digits with `k` or `M` (`62.5k`)
-  - colorblind palette, and the yellow, orange, and red thresholds, each with its color
+  - usage color palette: **Default** (green, yellow, orange, red), **Colorblind** (blue to vermilion), or **Custom**: a color for usage below the yellow threshold and one from each threshold on, from swatches (that band's default and colorblind colors) or **Custom...**, starting from the default colors. Taskbar meters, the details flyout and its charts, the preview and the usage history window follow it; stale data stays grey. Then the yellow, orange, and red thresholds, each with its color
   - stale-data marker (`!`)
   - additional OpenAI rate limits as rows in the details flyout, one per window (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - **Behavior**:
@@ -81,7 +81,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - do not poll hidden accounts (on by default; overrides per-account history recording)
   - threshold notifications: off, or the yellow, orange or red threshold (the default), each listed with its percentage from Display; a selected taskbar quota notifies when it first reaches it
 - **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, the time span the usage history window opens on (24 hours, **7 days** by default, 30 days, 90 days, or All retained), and the storage folder
-- **About**: version, project links, credits, and license
+- **About**: version, **Copy version info** (the mod's name and version and the Windows build, with its update revision, to the clipboard for bug reports), project links, credits, and license
 
 Sizes and thresholds combine a slider with a number box; spacing, polling, retention, and credits use number boxes with step buttons. Changes save as you make them; a number or text box saves on Enter or when you leave it, and Esc reverts it. A value that can't be saved stays in its box with the error, and closing the window then asks before discarding it. Layout, Display, Behavior, and History each have a reset that restores that page's defaults without touching accounts or sign-ins.
 
@@ -220,7 +220,9 @@ label takes it over. Versions before 2.6.0 ignore Antigravity's Argon weekly
 and its recorded history, and saving settings there drops its selection (an account with only
 Argon selected falls back to its short window), so it is on again after updating back. Versions
 before 2.12.0 notify only at red: with Yellow or Orange chosen they notify at red, and saving
-settings there drops the choice, so it is Red after updating back. Downgrading to a version without
+settings there drops the choice, so it is Red after updating back. Versions before 2.13.0 show
+the Custom usage palette as the default one, and saving settings there drops the custom colors.
+Downgrading to a version without
 **Forever** keeps 3650 days but applies its size cap, permanently discarding samples beyond the
 newest 250,000.
 

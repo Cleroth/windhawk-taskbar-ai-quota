@@ -226,12 +226,32 @@ static void RunHistoryFrameTests() {
         CHECK(frame.nav[3].runs[0].text == L"112%" && UiColorKey(*frame.nav[3].runs[0].color) == 0xFFC42B1C);
         CHECK(UiColorKey(*frame.nav[4].runs[0].color) == 0xFF1D7A35);
         view.remaining = true;
-        view.colorblind = true;
+        view.usageColors = UsagePaletteColors(UsagePalette::Colorblind, kDefaultUsageColors);
         frame = TestHistoryFrame(view);
         CHECK(frame.nav[3].runs[0].text == L"0%" && UiColorKey(*frame.nav[3].runs[0].color) == 0xFFB75100);
         CHECK(frame.nav[4].runs[0].text == L"70%" && UiColorKey(*frame.nav[4].runs[0].color) == 0xFF0072B2);
         view.theme = UiThemeKind::Dark;
         CHECK(UiColorKey(*TestHistoryFrame(view).nav[3].runs[0].color) == 0xFFD55E00);
+
+        // Custom: the default colors keep their light variants; other colors show as picked in the
+        // dark theme and, in the light one, darken (same hue) until they read at 4.5:1 on white,
+        // unless they already do.
+        view.remaining = false;
+        view.usageColors = UsagePaletteColors(UsagePalette::Custom, kDefaultUsageColors);
+        view.theme = UiThemeKind::Light;
+        CHECK(UiColorKey(*TestHistoryFrame(view).nav[3].runs[0].color) == 0xFFC42B1C);
+        CHECK(UiColorKey(*TestHistoryFrame(view).nav[4].runs[0].color) == 0xFF1D7A35);
+        const uint32_t pale = 0xFFFFD0E0, deep = 0xFF203060;  // Pink above red; navy below yellow
+        view.usageColors = {deep, 0xFF000000, 0xFF000000, pale};
+        frame = TestHistoryFrame(view);
+        uint32_t pink = UiColorKey(*frame.nav[3].runs[0].color);
+        CHECK(pink != pale && 1.05 / (RelativeLuminance(pink) + 0.05) >= 4.5);
+        CHECK(1.05 / (RelativeLuminance(pink) + 0.05) < 5.5);  // Darkened only as far as needed
+        CHECK((pink >> 16 & 0xFF) > (pink & 0xFF) && (pink >> 16 & 0xFF) > (pink >> 8 & 0xFF));  // Still reddish
+        CHECK(UiColorKey(*frame.nav[4].runs[0].color) == deep);
+        view.theme = UiThemeKind::Dark;
+        frame = TestHistoryFrame(view);
+        CHECK(UiColorKey(*frame.nav[3].runs[0].color) == pale && UiColorKey(*frame.nav[4].runs[0].color) == deep);
     });
 
     Run("history frame: header title, status and pill; icon buttons; the narrow rule moves the "

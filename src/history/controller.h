@@ -780,7 +780,7 @@ struct HistoryController {
         v.yellowThreshold = display.yellowThreshold;
         v.orangeThreshold = display.orangeThreshold;
         v.redThreshold = display.redThreshold;
-        v.colorblind = s.colorblindMode;
+        v.usageColors = display.usageColors;
         v.remaining = s.barMode == BarMode::Remaining;
         v.logoBrands = s.logoBrands;
         v.material = s.material;

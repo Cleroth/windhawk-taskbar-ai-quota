@@ -9,7 +9,7 @@ static void RunDisplayTests() {
             s.barMode = BarMode::Remaining; s.barLength = 120; s.barThickness = 6;
             s.ringSize = 28; s.ringThickness = 4; s.yellowThreshold = 40;
             s.orangeThreshold = 60; s.redThreshold = 80; s.pollMinutes = 15;
-            s.colorblindMode = true; s.showPaceTicks = false; s.paceTickStyle = PaceTickStyle::Dot;
+            s.usagePalette = UsagePalette::Colorblind; s.showPaceTicks = false; s.paceTickStyle = PaceTickStyle::Dot;
             s.paceTickColor = RGB(1, 2, 3); s.percentTextAlignment = PercentTextAlignment::Center;
             s.showExtraBarAmounts = true; s.showStaleWarning = false; s.barGap = 7; s.barStyle = BarStyle::Rail;
             s.headlineFontSize = 18; s.headlineBarLength = 24; s.headlineBarThickness = 6;
@@ -21,7 +21,8 @@ static void RunDisplayTests() {
         CHECK(d.ringSize == 28); CHECK(d.ringThickness == 4);
         CHECK(d.headlineFontSize == 18); CHECK(d.headlineBarLength == 24); CHECK(d.headlineBarThickness == 6);
         CHECK(d.yellowThreshold == 40); CHECK(d.orangeThreshold == 60); CHECK(d.redThreshold == 80);
-        CHECK(d.pollMinutes == 15); CHECK(d.colorblindMode); CHECK(!d.showPaceTicks);
+        CHECK(d.pollMinutes == 15); CHECK(!d.showPaceTicks);
+        CHECK((d.usageColors == std::array<uint32_t, 4>{0xFF0072B2, 0xFF56B4E9, 0xFFE69F00, 0xFFD55E00}));
         CHECK(d.paceTickStyle == PaceTickStyle::Dot); CHECK(d.paceTickColor == RGB(1, 2, 3));
         CHECK(d.percentTextAlignment == PercentTextAlignment::Center);
         CHECK(d.showExtraBarAmounts); CHECK(!d.showStaleWarning);
@@ -110,17 +111,34 @@ static void RunDisplayTests() {
 }
 
 static void RunColorTests() {
-    Run("usage colors by band, colorblind and stale", [] {
-        auto color = [](double pct, bool stale = false, bool colorblind = false) {
-            return UsageColor(pct, stale, 50, 75, 90, colorblind);
+    Run("usage colors by band, per palette, and stale", [] {
+        // Custom colors (0xBBGGRR) that only the Custom palette shows.
+        const std::array<COLORREF, 4> custom = {RGB(0x10, 0x20, 0x30), RGB(0x40, 0x50, 0x60), RGB(0x70, 0x80, 0x90),
+                                                RGB(0xA0, 0xB0, 0xC0)};
+        auto color = [&](double pct, bool stale = false, UsagePalette palette = UsagePalette::Default) {
+            return UsageColor(pct, stale, 50, 75, 90, UsagePaletteColors(palette, custom));
         };
         CHECK(color(0) == 0xFF43A047); CHECK(color(49.99) == 0xFF43A047);
         CHECK(color(50) == 0xFFFDD835); CHECK(color(74.99) == 0xFFFDD835);
         CHECK(color(75) == 0xFFFB8C00); CHECK(color(89.99) == 0xFFFB8C00);
         CHECK(color(90) == 0xFFE53935); CHECK(color(250) == 0xFFE53935);
         CHECK(color(-1) == 0xFF9E9E9E); CHECK(color(60, true) == 0xFF9E9E9E);
-        CHECK(color(10, false, true) == 0xFF0072B2); CHECK(color(60, false, true) == 0xFF56B4E9);
-        CHECK(color(80, false, true) == 0xFFE69F00); CHECK(color(95, false, true) == 0xFFD55E00);
+        const UsagePalette colorblind = UsagePalette::Colorblind, mine = UsagePalette::Custom;
+        CHECK(color(10, false, colorblind) == 0xFF0072B2); CHECK(color(60, false, colorblind) == 0xFF56B4E9);
+        CHECK(color(80, false, colorblind) == 0xFFE69F00); CHECK(color(95, false, colorblind) == 0xFFD55E00);
+        CHECK(color(10, false, mine) == 0xFF102030); CHECK(color(50, false, mine) == 0xFF405060);
+        CHECK(color(89.99, false, mine) == 0xFF708090); CHECK(color(250, false, mine) == 0xFFA0B0C0);
+        CHECK(color(60, true, mine) == 0xFF9E9E9E && color(-1, false, mine) == 0xFF9E9E9E);
+        // Custom starts from the default colors; an unknown palette shows the default one.
+        CHECK(UsagePaletteColors(UsagePalette::Custom, Settings{}.customUsageColors) ==
+              UsagePaletteColors(UsagePalette::Default, custom));
+        CHECK(UsagePaletteColors(UsagePalette(7), custom) == UsagePaletteColors(UsagePalette::Default, custom));
+        // The display takes the chosen palette's colors.
+        MeterDisplay chosen = Display(With([&](Settings& s) {
+            s.usagePalette = UsagePalette::Custom;
+            s.customUsageColors = custom;
+        }));
+        CHECK(Bar(80, chosen).color == 0xFF708090 && Bar(20, chosen).color == 0xFF102030);
         // The fill follows the bar mode, its color the used share.
         MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
         CHECK(Bar(95, remaining).color == 0xFFE53935);
@@ -167,7 +185,7 @@ static void RunBarTests() {
         CHECK(Bar(-1, d).fillPx == 0); CHECK(Bar(-1, d).text.empty());
     });
 
-    Run("bar alignment: adaptive from shown %, dark text from the used band", [] {
+    Run("bar alignment: adaptive from shown %, dark text over the used band's light fills", [] {
         using enum PercentTextAlignment;
         auto check = [](QuotaMeter m, PercentTextAlignment alignment, bool dark) {
             CHECK(m.textAlignment == alignment); CHECK(m.darkText == dark);
@@ -183,6 +201,24 @@ static void RunBarTests() {
         check(Bar(30, remaining), Left, false);
         check(Bar(60, remaining), Right, false);
         check(Bar(50, remaining), Left, true);
+        // Colorblind: sky blue and orange dark, blue and vermilion light, as by default.
+        MeterDisplay colorblind = Display(With([](Settings& s) {
+            s.usagePalette = UsagePalette::Colorblind;
+            s.percentTextAlignment = Left;
+        }));
+        check(Bar(10, colorblind), Left, false); check(Bar(60, colorblind), Left, true);
+        check(Bar(80, colorblind), Left, true); check(Bar(95, colorblind), Left, false);
+        // Custom: by the fill's lightness, whatever its band: a white "green", a black "yellow", a
+        // pale "orange" (luminance 0.36) and a dark "red".
+        MeterDisplay custom = Display(With([](Settings& s) {
+            s.usagePalette = UsagePalette::Custom;
+            s.customUsageColors = {RGB(0xFF, 0xFF, 0xFF), RGB(0, 0, 0), RGB(0xA2, 0xA2, 0xA2), RGB(0x20, 0x20, 0x60)};
+            s.percentTextAlignment = Left;
+        }));
+        check(Bar(10, custom), Left, true); check(Bar(60, custom), Left, false);
+        check(Bar(80, custom), Left, true); check(Bar(95, custom), Left, false);
+        // Stale grey (luminance 0.34) keeps white text.
+        check(AccountMeterState(custom, BarLayout::Stacked, Account(), stale, 0, 0).quotas[0], Left, false);
     });
 
     Run("bar alignment: fixed alignments and offsets per scale", [] {
@@ -2602,7 +2638,7 @@ static void RunSparklineTests() {
         CHECK(over.sparkLimitColor == 0xFFE53935 && over.quotas[0].color == 0xFFFB8C00);
         // 60% half way reaches the limit at 83.33, drawn at 83.25.
         line(spark(Window(60, 9000000)).quotas[0].spark[kSparkProjection], 50, 10, 83.25, 2);
-        CHECK(spark(Window(80, 9000000), {}, plot([](Settings& s) { s.colorblindMode = true; })).sparkLimitColor == 0xFFD55E00);
+        CHECK(spark(Window(80, 9000000), {}, plot([](Settings& s) { s.usagePalette = UsagePalette::Colorblind; })).sparkLimitColor == 0xFFD55E00);
         // From 5% of the window on: 1% there reaches 20%.
         line(spark(Window(1, 17100000)).quotas[0].spark[kSparkProjection], 5, 21.75, 100, 18);
         // None before 5% of the window, at 0% or from 100%, at the reset, or before the window
@@ -3278,7 +3314,7 @@ static void RunSparklineTests() {
         // Colorblind: 80% is the orange band, the limit vermillion.
         MeterDisplay colorblind = plot([](Settings& s) {
             cues(s);
-            s.colorblindMode = true;
+            s.usagePalette = UsagePalette::Colorblind;
         });
         AccountMeters cb = spark(Window(80, 9000000), {}, colorblind);
         CHECK(SparkShapeColor(kSparkLines, cb, 0, colorblind, false) == 0xFFE69F00);

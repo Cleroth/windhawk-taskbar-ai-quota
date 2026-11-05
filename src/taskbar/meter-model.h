@@ -125,21 +125,33 @@ static bool IsFaceTile(BarLayout layout) {
     return IsRingTile(layout) || layout == BarLayout::Gauge || layout == BarLayout::ClockPies;
 }
 
-static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int orangeThreshold,
-                           int redThreshold, bool colorblindMode) {
-    if (stale || pct < 0) return 0xFF9E9E9E;
-
-    if (colorblindMode) {
-        if (pct >= redThreshold) return 0xFFD55E00;
-        if (pct >= orangeThreshold) return 0xFFE69F00;
-        if (pct >= yellowThreshold) return 0xFF56B4E9;
-        return 0xFF0072B2;
+// A palette's usage colors by band (core/model.h), opaque 0xAARRGGBB.
+static std::array<uint32_t, 4> UsagePaletteColors(UsagePalette palette, const std::array<COLORREF, 4>& custom) {
+    const std::array<COLORREF, 4>& colors = palette == UsagePalette::Colorblind ? kColorblindUsageColors :
+                                            palette == UsagePalette::Custom     ? custom :
+                                                                                  kDefaultUsageColors;
+    std::array<uint32_t, 4> argb;
+    for (size_t i = 0; i < argb.size(); i++) {
+        argb[i] = 0xFF000000 | uint32_t(GetRValue(colors[i])) << 16 | uint32_t(GetGValue(colors[i])) << 8 |
+                  GetBValue(colors[i]);
     }
+    return argb;
+}
 
-    if (pct >= redThreshold) return 0xFFE53935;
-    if (pct >= orangeThreshold) return 0xFFFB8C00;
-    if (pct >= yellowThreshold) return 0xFFFDD835;
-    return 0xFF43A047;
+// `colors`: UsagePaletteColors. Stale and unknown readings are grey in every palette.
+static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int orangeThreshold,
+                           int redThreshold, const std::array<uint32_t, 4>& colors) {
+    if (stale || pct < 0) return 0xFF9E9E9E;
+    return colors[pct >= redThreshold ? 3 : pct >= orangeThreshold ? 2 : pct >= yellowThreshold ? 1 : 0];
+}
+
+// WCAG relative luminance of an 0xAARRGGBB color, 0 (black) to 1 (white); alpha is ignored.
+static double RelativeLuminance(uint32_t argb) {
+    auto linear = [](uint32_t channel) {
+        double c = channel / 255.0;
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * linear(argb >> 16 & 0xFF) + 0.7152 * linear(argb >> 8 & 0xFF) + 0.0722 * linear(argb & 0xFF);
 }
 
 // An extra usage or credits amount on the taskbar: whole credits or dollars to the cent below
@@ -539,7 +551,7 @@ struct MeterDisplay {
     int orangeThreshold;
     int redThreshold;
     int pollMinutes;          // 2-1440.
-    bool colorblindMode;
+    std::array<uint32_t, 4> usageColors;  // UsagePaletteColors of the chosen palette.
     bool showPaceTicks;
     PaceTickStyle paceTickStyle;
     COLORREF paceTickColor;   // RGB only.
@@ -619,7 +631,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .orangeThreshold = orange,
         .redThreshold = std::clamp(settings.redThreshold, orange, 100),
         .pollMinutes = std::clamp(settings.pollMinutes, 2, 24 * 60),
-        .colorblindMode = settings.colorblindMode,
+        .usageColors = UsagePaletteColors(settings.usagePalette, settings.customUsageColors),
         .showPaceTicks = settings.showPaceTicks,
         .paceTickStyle = settings.paceTickStyle,
         .paceTickColor = settings.paceTickColor & 0x00FFFFFF,
@@ -1106,7 +1118,7 @@ struct QuotaMeter {
     double paceEndRadius = 0;  // The time track fill's corner radius toward 100%.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
-    bool darkText = false;     // Black percent text over a yellow or orange fill.
+    bool darkText = false;     // Black percent text over a light fill (yellow and orange by default).
     // Percent or amount; empty while unavailable. Also the quota matrix's number, "–" while
     // unavailable.
     std::wstring text;
@@ -1290,7 +1302,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
             if (!dollars) meters.sparkExtraKey = QuotaKey(account.provider, kExtraUsageBar);
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
-                UsageColor(extra.pct, meters.stale, yellow, orange, red, display.colorblindMode) : 0;
+                UsageColor(extra.pct, meters.stale, yellow, orange, red, display.usageColors) : 0;
         }
         meters.barMask = charted ? charted : top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
         count = std::popcount(unsigned(meters.barMask));
@@ -1303,7 +1315,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             meters.faceHeight = meters.sparkChartHeight;
         }
         meters.sparkKeyFont = display.sparklineTextSize;
-        meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.colorblindMode);
+        meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.usageColors);
     }
     if (matrix) {
         // Two rows' cap heights and their gap fit the tile, 2 DIPs clear above and below.
@@ -1397,7 +1409,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         const WindowUsage& wu = *usage[w];
         QuotaMeter& m = meters.quotas[w];
         // Color stays keyed to actual usage so depleting quota still reds out.
-        m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.colorblindMode);
+        m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.usageColors);
         m.key = QuotaKey(account.provider, w);
         m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
                         wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
@@ -1439,9 +1451,11 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 display.percentTextAlignment;
             m.textOffset = m.textAlignment == PercentTextAlignment::Left ? bar.textInset :
                            m.textAlignment == PercentTextAlignment::Center ? 0 : -bar.textInset;
-            bool yellowOrOrange = !meters.stale && wu.pct >= 0 &&
-                ((wu.pct >= yellow && wu.pct < orange) || (wu.pct >= orange && wu.pct < red));
-            m.darkText = m.textAlignment == PercentTextAlignment::Left && yellowOrOrange;
+            // Light fills, above a third of white's luminance, take black text: the default
+            // palette's yellow and orange, the colorblind one's sky blue and orange, and custom
+            // colors as light as those. Stale grey keeps white text.
+            m.darkText = m.textAlignment == PercentTextAlignment::Left && !meters.stale && wu.pct >= 0 &&
+                         RelativeLuminance(m.color) > 1.0 / 3;
             if (wu.pct >= 0) {
                 if (w == kExtraUsageBar && display.showExtraBarAmounts &&
                     data.extraLimitAmount >= 0) {
@@ -1860,7 +1874,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
         }
         meters.headlineColor = UsageColor(top >= 0 ? usage[top]->pct : -1, meters.stale, yellow,
-                                          orange, red, display.colorblindMode);
+                                          orange, red, display.usageColors);
     }
     return meters;
 }

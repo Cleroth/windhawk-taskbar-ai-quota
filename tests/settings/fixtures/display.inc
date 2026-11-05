@@ -19,13 +19,17 @@ static UiFrame DisplayFrame(const SettingsView& view, D2D1_SIZE_F client = {1000
     return frame;
 }
 
+// The threshold cards' dots: swatches without an action (color cards' swatches have one).
 static std::vector<const UiItem*> Dots(const UiFrame& frame) {
     std::vector<const UiItem*> dots;
     for (const UiItem& item : frame.content) {
-        if (item.kind == UiItemKind::Swatch) dots.push_back(&item);
+        if (item.kind == UiItemKind::Swatch && item.action.kind == UiActionKind::None) dots.push_back(&item);
     }
     return dots;
 }
+
+static constexpr SettingsField kUsageColors[] = {SettingsField::UsageColorBelowYellow, SettingsField::UsageColorYellow,
+                                                 SettingsField::UsageColorOrange, SettingsField::UsageColorRed};
 
 static int TextCount(const UiFrame& frame, std::wstring_view text) {
     return int(std::count_if(frame.content.begin(), frame.content.end(),
@@ -47,7 +51,8 @@ static void RunDisplayPageTests() {
         const std::pair<SettingsField, int> values[] = {
             {SettingsField::Material, 3},         {SettingsField::BarMode, 1},
             {SettingsField::PercentTextVisibility, 2}, {SettingsField::PercentTextAlignment, 3},
-            {SettingsField::ShowExtraBarAmounts, 1}, {SettingsField::ColorblindMode, 1},
+            {SettingsField::ShowExtraBarAmounts, 1}, {SettingsField::UsagePalette, 2},
+            {SettingsField::UsageColorBelowYellow, 0x102030}, {SettingsField::UsageColorRed, 0xFFFFFF},
             {kYellow, 30}, {kOrange, 60}, {kRed, 80},
             {SettingsField::ShowStaleWarning, 0}, {SettingsField::ShowOpenAiExtraLimits, 1}};
         for (auto [field, value] : values) {
@@ -56,15 +61,20 @@ static void RunDisplayPageTests() {
         }
         CHECK(s.material == Material::TintedWallpaper && s.barMode == BarMode::Remaining &&
               s.percentTextVisibility == PercentTextVisibility::Always &&
-              s.percentTextAlignment == PercentTextAlignment::Right && s.showExtraBarAmounts && s.colorblindMode &&
-              !s.showStaleWarning && s.showOpenAiExtraLimits);
+              s.percentTextAlignment == PercentTextAlignment::Right && s.showExtraBarAmounts &&
+              s.usagePalette == UsagePalette::Custom && !s.showStaleWarning && s.showOpenAiExtraLimits);
+        // Each color field sets its band's custom color only.
+        CHECK((s.customUsageColors == std::array<COLORREF, 4>{0x102030, kDefaultUsageColors[1], kDefaultUsageColors[2],
+                                                              0xFFFFFF}));
         const std::tuple<SettingsField, int, int> clamps[] = {
             {kYellow, -5, 0}, {kRed, 101, 100}, {kOrange, 99999, 100},
             {SettingsField::BarMode, 7, 1}, {SettingsField::BarMode, -1, 0},
             {SettingsField::PercentTextVisibility, 9, 2}, {SettingsField::PercentTextVisibility, -3, 0},
             {SettingsField::PercentTextAlignment, 9, 3},
             {SettingsField::Material, 5, 4}, {SettingsField::Material, INT_MAX, 4},
-            {SettingsField::Material, -1, 0}, {SettingsField::Material, INT_MIN, 0}};
+            {SettingsField::Material, -1, 0}, {SettingsField::Material, INT_MIN, 0},
+            {SettingsField::UsagePalette, 3, 2}, {SettingsField::UsagePalette, -1, 0},
+            {SettingsField::UsageColorYellow, int(0xFF123456), 0x123456}, {SettingsField::UsageColorOrange, -1, 0xFFFFFF}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == expected);
@@ -76,13 +86,20 @@ static void RunDisplayPageTests() {
             SettingsAssign(s, SettingsField::Material, value);
             CHECK(s.material == materials[value]);
         }
+        // Palette values in the dropdown's order: Default, Colorblind, Custom.
+        const UsagePalette palettes[] = {UsagePalette::Default, UsagePalette::Colorblind, UsagePalette::Custom};
+        for (int value = 0; value < 3; value++) {
+            SettingsAssign(s, SettingsField::UsagePalette, value);
+            CHECK(s.usagePalette == palettes[value]);
+        }
         for (SettingsField field : {kYellow, kOrange, kRed}) {
             CHECK(SettingsFieldRange(field)->minimum == 0 && SettingsFieldRange(field)->maximum == 100);
         }
-        CHECK(!SettingsFieldRange(SettingsField::BarMode) && !SettingsFieldRange(SettingsField::Material));
+        CHECK(!SettingsFieldRange(SettingsField::BarMode) && !SettingsFieldRange(SettingsField::Material) &&
+              !SettingsFieldRange(SettingsField::UsagePalette) && !SettingsFieldRange(SettingsField::UsageColorRed));
     });
 
-    Run("display reset: the eleven Display fields back to defaults; every scalar setting in one page reset", [] {
+    Run("display reset: the fifteen Display fields back to defaults; every scalar setting in one page reset", [] {
         const Settings defaults;
         Settings changed;
         // Any material but the default.
@@ -91,7 +108,8 @@ static void RunDisplayPageTests() {
         changed.percentTextVisibility = PercentTextVisibility::Always;
         changed.percentTextAlignment = PercentTextAlignment::Center;
         changed.showExtraBarAmounts = true;
-        changed.colorblindMode = true;
+        changed.usagePalette = UsagePalette::Custom;
+        changed.customUsageColors = {0x010203, 0x040506, 0x070809, 0x0A0B0C};
         changed.yellowThreshold = 20;
         changed.orangeThreshold = 40;
         changed.redThreshold = 60;
@@ -108,7 +126,8 @@ static void RunDisplayPageTests() {
         expected.percentTextVisibility = defaults.percentTextVisibility;
         expected.percentTextAlignment = defaults.percentTextAlignment;
         expected.showExtraBarAmounts = defaults.showExtraBarAmounts;
-        expected.colorblindMode = defaults.colorblindMode;
+        expected.usagePalette = UsagePalette::Default;
+        expected.customUsageColors = kDefaultUsageColors;
         expected.yellowThreshold = defaults.yellowThreshold;
         expected.orangeThreshold = defaults.orangeThreshold;
         expected.redThreshold = defaults.redThreshold;
@@ -118,13 +137,13 @@ static void RunDisplayPageTests() {
         SettingsAssign(reset, SettingsField::ResetDisplay, 0);
         CHECK(reset == expected);
         std::vector<SettingsField> display = SettingsGroupFields(SettingsField::ResetDisplay);
-        CHECK(display.size() == 11 && display[0] == SettingsField::Material);
+        CHECK(display.size() == 15 && display[0] == SettingsField::Material);
         for (SettingsField field : display) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 61 scalar settings changed: the four page resets restore every one, and no field
+        // All 65 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -187,7 +206,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 61 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 65 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {
@@ -272,6 +291,29 @@ static void RunDisplayPageTests() {
         CHECK(edits.drafts.empty() && store.settings.material == defaults.material);
     });
 
+    Run("controller: the palette and custom colors save at once; the Display reset restores Default", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Commit(0, SettingsField::UsagePalette, int(UsagePalette::Custom)) == 0);
+        CHECK(edits.Commit(0, SettingsField::UsageColorOrange, 0x00FF00) == 0);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(SettingsField::UsagePalette, 2),
+                                                            Op(SettingsField::UsageColorOrange, 0x00FF00)}));
+        CHECK(store.settings.usagePalette == UsagePalette::Custom && store.settings.customUsageColors[2] == 0x00FF00 &&
+              store.settings.customUsageColors[0] == kDefaultUsageColors[0] && edits.drafts.empty());
+        // Another palette keeps the custom colors for the next time Custom is chosen.
+        CHECK(edits.Commit(0, SettingsField::UsagePalette, int(UsagePalette::Colorblind)) == 0);
+        CHECK(store.settings.usagePalette == UsagePalette::Colorblind && store.settings.customUsageColors[2] == 0x00FF00);
+        // A failed color save stays a draft the projection shows; the reset drops it and restores
+        // the default palette and colors.
+        store.failNext = 1;
+        CHECK(edits.Commit(0, SettingsField::UsageColorRed, 0x0000FF) == 1);
+        CHECK(edits.Projection().customUsageColors[3] == 0x0000FF && store.settings.customUsageColors[3] == kDefaultUsageColors[3]);
+        CHECK(edits.Reset(SettingsField::ResetDisplay) == 0);
+        CHECK(edits.drafts.empty() && store.settings.usagePalette == UsagePalette::Default &&
+              store.settings.customUsageColors == kDefaultUsageColors);
+    });
+
     Run("display page: controls follow the projection; dots follow the palette", [] {
         SettingsView view = TestView(SettingsUiPage::Display);
         UiFrame frame = DisplayFrame(view);
@@ -286,7 +328,16 @@ static void RunDisplayPageTests() {
         CHECK(alignment.text == L"Adaptive" && alignment.enabled && alignment.options.size() == 4);
         const UiItem& amounts = Control(frame, SettingsField::ShowExtraBarAmounts);
         CHECK(amounts.kind == UiItemKind::Toggle && !amounts.selected && amounts.enabled && amounts.action.value == 1);
-        CHECK(!Control(frame, SettingsField::ColorblindMode).selected);
+        const UiItem& palette = Control(frame, SettingsField::UsagePalette);
+        CHECK(palette.kind == UiItemKind::Dropdown && palette.text == L"Default" && palette.enabled &&
+              palette.action.value == 0 && palette.options.size() == 3);
+        for (int i = 0; i < std::min<int>(int(palette.options.size()), 3); i++) {
+            const PCWSTR names[] = {L"Default", L"Colorblind", L"Custom"};
+            CHECK(palette.options[size_t(i)].text == names[i] && palette.options[size_t(i)].value == i);
+        }
+        // The custom colors show only with Custom chosen.
+        for (SettingsField field : kUsageColors) CHECK(!UiFindItem(frame, SettingsControlId(field, 1)));
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::UsageColorCustom)) && !HasText(frame, L"Below yellow"));
         const std::pair<SettingsField, int> thresholds[] = {{kYellow, 50}, {kOrange, 75}, {kRed, 90}};
         for (auto [field, value] : thresholds) {
             const UiItem& box = Control(frame, field);
@@ -348,19 +399,75 @@ static void RunDisplayPageTests() {
         view.settings.notificationLevel = NotificationLevel::Red;
 
         // Colorblind: the dots and the green band's wording follow the palette.
-        view.settings.colorblindMode = true;
+        view.settings.usagePalette = UsagePalette::Colorblind;
         frame = DisplayFrame(view);
         dots = Dots(frame);
         const COLORREF colorblind[] = {RGB(0x56, 0xB4, 0xE9), RGB(0xE6, 0x9F, 0x00), RGB(0xD5, 0x5E, 0x00)};
         for (size_t i = 0; i < dots.size(); i++) CHECK(COLORREF(dots[i]->action.value) == colorblind[i]);
         CHECK(HasText(frame, L"Usage below this is blue.") && !HasText(frame, L"Usage below this is green."));
-        const UiItem& toggle = Control(frame, SettingsField::ColorblindMode);
-        CHECK(toggle.selected && toggle.action.value == 0);
+        CHECK(Control(frame, SettingsField::UsagePalette).text == L"Colorblind" &&
+              Control(frame, SettingsField::UsagePalette).action.value == 1);
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::UsageColorRed, 1)));
         // Equal thresholds keep a dot each.
         view.settings.yellowThreshold = view.settings.orangeThreshold = view.settings.redThreshold = 60;
         frame = DisplayFrame(view);
         dots = Dots(frame);
         CHECK(dots.size() == 3 && COLORREF(dots[0]->action.value) == colorblind[0]);
+    });
+
+    Run("display page: Custom shows a color card per band, its swatches the band's default and colorblind "
+        "colors, then a picked one; dots and wording follow", [] {
+        SettingsView view = TestView(SettingsUiPage::Display);
+        view.settings.usagePalette = UsagePalette::Custom;
+        // Below yellow and red at a preset (colorblind blue; default red), yellow and orange picked.
+        view.settings.customUsageColors = {kColorblindUsageColors[0], 0x123456, 0x00FF00, kDefaultUsageColors[3]};
+        UiFrame frame = DisplayFrame(view);
+        CHECK(Control(frame, SettingsField::UsagePalette).text == L"Custom");
+        const PCWSTR titles[] = {L"Below yellow", L"From yellow", L"From orange", L"From red"};
+        const UiItem* previous = &Control(frame, SettingsField::UsagePalette);
+        for (int band = 0; band < 4; band++) {
+            const SettingsField field = kUsageColors[band];
+            CHECK(HasText(frame, titles[band]));
+            const COLORREF current = view.settings.customUsageColors[size_t(band)];
+            const bool picked = current != kDefaultUsageColors[size_t(band)] &&
+                                current != kColorblindUsageColors[size_t(band)];
+            std::vector<COLORREF> expected = {kDefaultUsageColors[size_t(band)], kColorblindUsageColors[size_t(band)]};
+            if (picked) expected.push_back(current);
+            for (size_t i = 0; i < expected.size(); i++) {
+                const UiItem& swatch = Control(frame, field, uint32_t(1 + i));
+                CHECK(swatch.kind == UiItemKind::Swatch && swatch.enabled && swatch.action.kind == UiActionKind::Command &&
+                      swatch.action.target == uint32_t(field) && COLORREF(swatch.action.value) == expected[i] &&
+                      swatch.selected == (expected[i] == current));
+                CHECK_NEAR(swatch.rect.right - swatch.rect.left, 24);
+            }
+            CHECK(!UiFindItem(frame, SettingsControlId(field, uint32_t(1 + expected.size()))));
+            // Custom... opens the dialog for its band; its card follows the one before.
+            const UiItem& custom = Control(frame, SettingsField::UsageColorCustom, uint32_t(band));
+            CHECK(custom.kind == UiItemKind::Button && custom.text == L"Custom..." && custom.enabled &&
+                  custom.action.target == uint32_t(SettingsField::UsageColorCustom) && custom.action.value == band);
+            CHECK(custom.rect.top > previous->rect.bottom);
+            previous = &custom;
+        }
+        CHECK(Control(frame, kYellow).rect.top > previous->rect.bottom);
+        std::vector<const UiItem*> dots = Dots(frame);
+        CHECK(dots.size() == 3);
+        const COLORREF bands[] = {0x123456, 0x00FF00, kDefaultUsageColors[3]};
+        for (size_t i = 0; i < dots.size(); i++) CHECK(COLORREF(dots[i]->action.value) == bands[i]);
+        CHECK(HasText(frame, L"Usage below this takes the Below yellow color.") &&
+              !HasText(frame, L"Usage below this is green.") && !HasText(frame, L"Usage below this is blue."));
+        // Tab order: the palette, each band's Custom..., then the thresholds.
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        auto at = [&](uint32_t id) {
+            return std::find_if(stops.begin(), stops.end(), [&](const UiFocusStop& stop) { return stop.ref.id == id; }) -
+                   stops.begin();
+        };
+        ptrdiff_t last = at(SettingsControlId(SettingsField::UsagePalette));
+        for (uint32_t band = 0; band < 4; band++) {
+            ptrdiff_t next = at(SettingsControlId(SettingsField::UsageColorCustom, band));
+            CHECK(next > last && next < ptrdiff_t(stops.size()));
+            last = next;
+        }
+        CHECK(at(SettingsControlId(kYellow)) > last);
     });
 
     Run("display page: Appearance first with the Material dropdown; transparency and Tinted wallpaper notes", [] {
@@ -439,7 +546,7 @@ static void RunDisplayPageTests() {
             std::wstring reason = L"Stacked and Vertical bars only. Current tile style: " +
                                   std::wstring(kSettingsTileStyles[style]) + L".";
             CHECK(TextCount(frame, reason) == 3);
-            CHECK(Control(frame, kYellow, 1).enabled && Control(frame, SettingsField::ColorblindMode).enabled);
+            CHECK(Control(frame, kYellow, 1).enabled && Control(frame, SettingsField::UsagePalette).enabled);
         }
         view.settings.barLayout = BarLayout::SegmentedRing;
         CHECK(TextCount(DisplayFrame(view), L"Stacked and Vertical bars only. Current tile style: Segmented ring.") == 3);
@@ -523,6 +630,16 @@ static void RunDisplayPageTests() {
         CHECK(dark(s) == 0);  // 37.5, 17.5 and 37.5 left: under yellow, on the track
         values = Values(Strip(s));
         CHECK(values[1].align == DWRITE_TEXT_ALIGNMENT_TRAILING);
+        // Colorblind: the same three. Custom, by lightness: a light first color and a dark yellow
+        // band's: dark text on the five bars below yellow and the orange one, not the two yellow.
+        s = StackedSettings();
+        s.percentTextVisibility = PercentTextVisibility::Always;
+        s.percentTextAlignment = PercentTextAlignment::Left;
+        s.usagePalette = UsagePalette::Colorblind;
+        CHECK(dark(s) == 3);
+        s.usagePalette = UsagePalette::Custom;
+        s.customUsageColors = {RGB(0xC8, 0xF0, 0xC8), RGB(0x30, 0x30, 0x80), kDefaultUsageColors[2], kDefaultUsageColors[3]};
+        CHECK(dark(s) == 5 + 1);
 
         // Tile styles have no percentage text: the strip doesn't change with it.
         Settings ring;
@@ -539,12 +656,21 @@ static void RunDisplayPageTests() {
         Settings s = StackedSettings();
         CHECK(fills(s, 0xFF43A047) == 5 && fills(s, 0xFFFDD835) == 2 && fills(s, 0xFFFB8C00) == 1 &&
               fills(s, 0xFFE53935) == 1 && fills(s, 0xFF9E9E9E) == 1);
-        s.colorblindMode = true;
+        s.usagePalette = UsagePalette::Colorblind;
         CHECK(fills(s, 0xFF0072B2) == 5 && fills(s, 0xFF56B4E9) == 2 && fills(s, 0xFFE69F00) == 1 &&
               fills(s, 0xFFD55E00) == 1 && fills(s, 0xFF9E9E9E) == 1);
         CHECK(fills(s, 0xFF43A047) == 0 && fills(s, 0xFFE53935) == 0);
         s.barLayout = BarLayout::SegmentedRing;
         CHECK(fills(s, 0xFFD55E00) == 1 && fills(s, 0xFFE53935) == 0 && fills(s, 0xFF9E9E9E) == 1);
+        // Custom: its colors in their bands; the stale account still grey. Kept custom colors
+        // show only while Custom is chosen.
+        s = StackedSettings();
+        s.customUsageColors = {RGB(0x11, 0x22, 0x33), RGB(0x44, 0x55, 0x66), RGB(0x77, 0x88, 0x99), RGB(0xAA, 0xBB, 0xCC)};
+        CHECK(fills(s, 0xFF112233) == 0 && fills(s, 0xFF43A047) == 5);
+        s.usagePalette = UsagePalette::Custom;
+        CHECK(fills(s, 0xFF112233) == 5 && fills(s, 0xFF445566) == 2 && fills(s, 0xFF778899) == 1 &&
+              fills(s, 0xFFAABBCC) == 1 && fills(s, 0xFF9E9E9E) == 1);
+        CHECK(fills(s, 0xFF43A047) == 0 && fills(s, 0xFFE53935) == 0);
         // The samples sit mid-band (red past the quota): thresholds move their values, every band
         // still shows.
         s = StackedSettings();

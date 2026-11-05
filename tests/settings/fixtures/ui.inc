@@ -298,8 +298,36 @@ static void RunUiTests() {
                 if (run.style == UiRunStyle::Link) urls.push_back(run.action.text);
             }
         }
-        CHECK(cards == 6);
+        CHECK(cards == 7);
         CHECK_NEAR(frame.contentHeight, lastBottom + 28);
+        // Copy version info: a card under the app card, 62 DIP like the links; its button says
+        // for a moment whether it copied, keeping its id.
+        const UiItem* copy = UiFindItem(frame, SettingsControlId(SettingsField::CopyVersionInfo));
+        CHECK(copy && copy->kind == UiItemKind::Button && copy->text == L"Copy" && copy->enabled &&
+              copy->action.kind == UiActionKind::Command &&
+              copy->action.target == uint32_t(SettingsField::CopyVersionInfo));
+        const UiItem* copyCard = nullptr;
+        for (const UiItem& item : frame.content) {
+            if (item.kind == UiItemKind::Card && !copyCard && item.rect.top > frame.content[0].rect.bottom) copyCard = &item;
+        }
+        CHECK(copyCard && copy && copyCard->rect.top < copy->rect.top && copy->rect.bottom < copyCard->rect.bottom);
+        if (copyCard) {
+            CHECK_NEAR(copyCard->rect.top - frame.content[0].rect.bottom, 3);
+            CHECK_NEAR(copyCard->rect.bottom - copyCard->rect.top, 62);
+        }
+        for (std::wstring_view text : {L"Copy version info",
+                                       L"The mod\u2019s name and version and the Windows build, for bug reports."}) {
+            CHECK(std::any_of(frame.content.begin(), frame.content.end(),
+                              [&](const UiItem& item) { return UiRunsText(item.runs) == text; }));
+        }
+        for (auto [copied, label] : {std::pair{true, L"Copied"}, std::pair{false, L"Copy failed"}}) {
+            SettingsView shown = view;
+            shown.versionCopied = copied;
+            UiFrame after;
+            SettingsUiBuildFrame(g, shown, {1000, 820}, after);
+            const UiItem* button = UiFindItem(after, SettingsControlId(SettingsField::CopyVersionInfo));
+            CHECK(button && button->text == label && button->action.target == uint32_t(SettingsField::CopyVersionInfo));
+        }
         std::vector<std::wstring> expected = {
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota",
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new",
@@ -334,8 +362,8 @@ static void RunUiTests() {
         });
         CHECK((marks == std::vector<PCWSTR>{kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath, kCopilotLogoPath,
                                             kOpenCodeLogoPath}));
-        // The logos' two links, then the license's.
-        CHECK(UiFocusStops(frame).size() == 6 + 3 + 3);
+        // The pages, Copy, the link cards, the logos' two links, then the license's.
+        CHECK(UiFocusStops(frame).size() == 6 + 1 + 3 + 3);
     });
 
     Run("controls: toggles, dropdowns and number boxes are tab stops; spin buttons click only", [] {

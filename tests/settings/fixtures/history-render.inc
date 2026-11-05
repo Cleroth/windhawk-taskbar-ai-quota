@@ -382,6 +382,15 @@ static void RunHistoryRenders(const std::wstring& directory) {
                                   TestLines(L"112% \u00B7 Sat 31 Oct 14:31", L"166 h (98.8%)", L"15.1 h"));
     band.chart = TestChartOf(TestMockupBand());
 
+    // The sidebar's values in a Custom usage palette: navy below yellow, teal, violet and a pale
+    // pink from red; the light theme darkens the pale ones until they read on its surface.
+    HistoryRenderPart customColors{L"Custom usage colors: navy below yellow, teal, violet, pale pink from red",
+                                   weekly(), {1100, 790}, 330};
+    customColors.view.usageColors = {0xFF203060, 0xFF40C8C0, 0xFF8040C0, 0xFFFFD0E0};
+    customColors.view.accounts[1].weeklyPct = 80;
+    customColors.view.accounts[2].weeklyPct = 112;
+    customColors.chart = week;
+
     // The chart sheets: whole views from the controllers, cropped to the header and the chart's card.
     auto real = [](std::wstring caption, std::shared_ptr<TestChartWindow> window, float crop = 520) {
         HistoryRenderPart part{std::move(caption), {}, {1100, 790}, crop};
@@ -494,6 +503,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
         {"min", {minimum}},
         {"nav", {nav}},
         {"band", {band}},
+        {"custom-colors", {customColors}},
     };
     for (const RenderTheme& theme : RenderThemes()) {
         for (UINT dpi : {96u, 144u, 192u}) {

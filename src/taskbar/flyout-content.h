@@ -14,7 +14,7 @@ struct FlyoutDisplay {
     int yellowThreshold = 0;
     int orangeThreshold = 0;
     int redThreshold = 0;
-    bool colorblindMode = false;
+    std::array<uint32_t, 4> usageColors{};  // MeterDisplay::usageColors
     bool showOpenAiExtraLimits = false;
     bool stale = false;
     bool warn = false;
@@ -767,7 +767,7 @@ static void UpdateAccountFlyout(
             row.fill.MinWidth(fillPct > 0 ? 4.0 : 0.0);
             uint32_t colorValue = UsageColor(wu.pct, display.stale, display.yellowThreshold,
                                              display.orangeThreshold, display.redThreshold,
-                                             display.colorblindMode);
+                                             display.usageColors);
             auto color = ArgbColor(colorValue);
             if (colorValue != row.fillColor) {
                 row.fill.Background(FlyoutFillBrush(color));

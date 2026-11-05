@@ -108,7 +108,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width);
             break;
         case SettingsUiPage::About:
-            bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
+            bottom = SettingsUiBuildAbout(g, view, frame.content, id, left, 2, width);
             break;
         case SettingsUiPage::Behavior:
             bottom = SettingsUiBuildBehavior(g, view, frame.content, id, left, 0, width);

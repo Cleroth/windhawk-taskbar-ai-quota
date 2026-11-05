@@ -92,7 +92,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   Layout page per tile style, its Position dropdown and fallback note, and the pinned/unpinned
   preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), the
-  Material dropdown's saves and its transparency and Tinted wallpaper notes, threshold
+  Material dropdown's saves and its transparency and Tinted wallpaper notes, the usage palette
+  and Custom's color cards (swatches, Custom... per band, dots, wording, dark text), threshold
   ordering in the projection and after a save (the test store's `normalize` hook), the Display
   page per tile style and what its settings change in the preview strip.
 - `render`: the same executable with `--render-dir` paints the settings client area (1000 x 820
@@ -106,7 +107,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   `render-accounts-states-*`, `render-accounts-drag-*` with brand-colored logos), Accounts as its mockups
   (`render-accounts-expanded-*`, `render-accounts-add-*` with the menu painted where the host
   opens it, `render-accounts-empty-*`), Display at the mockup's full height
-  (`render-display-full-*`, `render-display-bars-*`), the preview's overflow, scrolled and
+  (`render-display-full-*`, `render-display-bars-*`, `render-display-custom-*` with the Custom
+  palette's color cards), the preview's overflow, scrolled and
   unpinned (`render-layout-overflow-*`, `-unpinned-*`), every Position on the preview strip
   (`render-placement-sheet-*`), the Layout page's Position with its fallback note
   (`render-layout-placement-*`), preview strip sheets with one captioned
@@ -180,7 +182,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   failing, waiting with focus and hover, an export's progress, also at the minimum width),
   `notices` (each operation's notice), `empty` (loading, no accounts, unsupported view), `empty-readings` (no readings with brand-colored logos,
   dollars only, the No readings card beside cards), `menu`, `min` (the minimum window scrolled),
-  `nav` (the scrolled sidebar, brand-colored logos), `band` (above 100%), `chart-views` (every view, both extra axes),
+  `nav` (the scrolled sidebar, brand-colored logos), `band` (above 100%), `custom-colors` (sidebar values in a
+  Custom usage palette), `chart-views` (every view, both extra axes),
   `chart-ticks` (each range's ticks) and `chart-states` (comparing, above 100%, the Remaining bar
   mode with its cards, every line hidden, chips off, hot and focused, chart focus, a readout on the chart). `render-history-tooltips-*`
   (same themes and DPIs): the readout placed on each side of the pointer by the production

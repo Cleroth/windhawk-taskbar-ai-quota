@@ -61,15 +61,26 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                 double shown = view.remaining ? std::clamp(100 - account.weeklyPct, 0.0, 100.0) : account.weeklyPct;
                 value.text = HistoryUiNumber(shown, 0) + L"%";
                 if (!account.stale) {
-                    // Light theme: darker variants of the usage colors, readable on its surface.
+                    // Light theme: darker variants of the default and colorblind usage colors,
+                    // readable on its surface; another color darkens in OKLCH until it reads at
+                    // 4.5:1 on white.
                     static constexpr uint32_t kLightInks[][2] = {
                         {0xE53935, 0xC42B1C}, {0xFB8C00, 0xB35C00}, {0xFDD835, 0x876A00}, {0x43A047, 0x1D7A35},
                         {0xD55E00, 0xB75100}, {0xE69F00, 0x946700}, {0x56B4E9, 0x387597},
                     };
-                    uint32_t rgb = UsageColor(account.weeklyPct, false, view.yellowThreshold, view.orangeThreshold,
-                                              view.redThreshold, view.colorblind) & 0xFFFFFF;
+                    uint32_t usage = UsageColor(account.weeklyPct, false, view.yellowThreshold, view.orangeThreshold,
+                                                view.redThreshold, view.usageColors);
+                    uint32_t rgb = usage & 0xFFFFFF;
+                    bool variant = false;
                     for (const auto& ink : kLightInks) {
-                        if (light && ink[0] == rgb) rgb = ink[1];
+                        if (light && ink[0] == rgb) {
+                            rgb = ink[1];
+                            variant = true;
+                        }
+                    }
+                    for (double lift = -0.02; light && !variant && 1.05 / (RelativeLuminance(rgb) + 0.05) < 4.5;
+                         lift -= 0.02) {
+                        rgb = UsageHighlight(usage, lift) & 0xFFFFFF;
                     }
                     value.ink = UiInk::Inherit;
                     value.color = UiRgb(rgb);

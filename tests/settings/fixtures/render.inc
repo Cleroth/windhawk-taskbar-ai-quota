@@ -131,6 +131,11 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         s.orangeThreshold = orange;
         s.redThreshold = red;
     };
+    // Custom: a light mint below yellow (dark text), navy, magenta and near-black from yellow on.
+    auto custom = [](Settings& s) {
+        s.usagePalette = UsagePalette::Custom;
+        s.customUsageColors = {RGB(0xB8, 0xF0, 0xC8), RGB(0x30, 0x40, 0x90), RGB(0xC0, 0x40, 0xC0), RGB(0x20, 0x20, 0x20)};
+    };
     const std::vector<Row> displayRows = {
         {L"Defaults (hover)", [](Settings&) {}},
         {L"Hover CC 2", [](Settings&) {}, 2},
@@ -144,16 +149,18 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Amounts, used", [&](Settings& s) { always(s); s.showExtraBarAmounts = true; }},
         {L"Amounts, remaining",
          [&](Settings& s) { always(s); s.showExtraBarAmounts = true; s.barMode = BarMode::Remaining; }},
-        {L"Colorblind", [&](Settings& s) { always(s); s.colorblindMode = true; }},
+        {L"Colorblind", [&](Settings& s) { always(s); s.usagePalette = UsagePalette::Colorblind; }},
         {L"Colorblind, remaining",
-         [&](Settings& s) { always(s); s.colorblindMode = true; s.barMode = BarMode::Remaining; }},
+         [&](Settings& s) { always(s); s.usagePalette = UsagePalette::Colorblind; s.barMode = BarMode::Remaining; }},
+        {L"Custom, left (mint, navy, magenta, near-black)",
+         [&](Settings& s) { always(s); custom(s); s.percentTextAlignment = PercentTextAlignment::Left; }},
         {L"Stale marker off", [&](Settings& s) { always(s); s.showStaleWarning = false; }},
         {L"Thresholds 20 / 40 / 60", [&](Settings& s) { always(s); thresholds(s, 20, 40, 60); }},
         {L"Unordered 80 / 30 / 20", [&](Settings& s) { always(s); thresholds(s, 80, 30, 20); }},
         {L"Thresholds 0 / 0 / 0", [&](Settings& s) { always(s); thresholds(s, 0, 0, 0); }},
         {L"Thresholds 100 / 100 / 100", [&](Settings& s) { always(s); thresholds(s, 100, 100, 100); }},
         {L"Vertical, colorblind",
-         [&](Settings& s) { always(s); s.barLayout = BarLayout::Vertical; s.colorblindMode = true; }},
+         [&](Settings& s) { always(s); s.barLayout = BarLayout::Vertical; s.usagePalette = UsagePalette::Colorblind; }},
         {L"Vertical, remaining, amounts",
          [&](Settings& s) {
              always(s);
@@ -164,7 +171,9 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Ring", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; }},
         {L"Ring, stale marker off",
          [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.showStaleWarning = false; }},
-        {L"Ring, colorblind", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.colorblindMode = true; }},
+        {L"Ring, colorblind", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.usagePalette = UsagePalette::Colorblind; }},
+        {L"Ring, custom", [&](Settings& s) { s.barLayout = BarLayout::SegmentedRing; custom(s); }},
+        {L"Usage graph, custom", [&](Settings& s) { s.barLayout = BarLayout::Sparkline; custom(s); }},
         {L"Ring, remaining", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.barMode = BarMode::Remaining; }},
         {L"Concentric, 20 / 40 / 60",
          [&](Settings& s) { s.barLayout = BarLayout::ConcentricRings; thresholds(s, 20, 40, 60); }},
@@ -172,10 +181,11 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.barLayout = BarLayout::Vertical;
              s.barLength = 32;
              s.labelPosition = LabelPosition::Top;
-             s.colorblindMode = true;
+             s.usagePalette = UsagePalette::Colorblind;
          }, -1, 72},
         {L"Headline, colorblind",
-         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.colorblindMode = true; }},
+         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.usagePalette = UsagePalette::Colorblind; }},
+        {L"Headline, custom", [&](Settings& s) { s.barLayout = BarLayout::LogoHeadline; custom(s); }},
         {L"Headline, remaining", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.barMode = BarMode::Remaining; }},
     };
     const std::vector<Row> layoutRows = {
@@ -188,7 +198,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Quota keys, percent", [&](Settings& s) { always(s); s.showBarLabels = true; }},
         {L"Remaining mode", [&](Settings& s) { always(s); s.barMode = BarMode::Remaining; }},
         {L"Amounts", [&](Settings& s) { always(s); s.showExtraBarAmounts = true; }},
-        {L"Colorblind", [&](Settings& s) { always(s); s.colorblindMode = true; }},
+        {L"Colorblind", [&](Settings& s) { always(s); s.usagePalette = UsagePalette::Colorblind; }},
         {L"Pace line", [](Settings& s) { s.paceTickStyle = PaceTickStyle::Line; }},
         {L"Pace notch", [](Settings& s) { s.paceTickStyle = PaceTickStyle::Notch; }},
         {L"Pace dot", [](Settings& s) { s.paceTickStyle = PaceTickStyle::Dot; }},
@@ -465,7 +475,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
          }},
         {L"Sparkline, text 6", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 6; }},
         {L"Sparkline, text 12", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 12; }},
-        {L"Sparkline, colorblind", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.colorblindMode = true; }},
+        {L"Sparkline, colorblind", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.usagePalette = UsagePalette::Colorblind; }},
         {L"Sparkline, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }, -1, 32},
         {L"Sparkline 50%, 32 DIP taskbar",
          [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineHeight = 50; }, -1, 32},
@@ -685,11 +695,33 @@ static void RunRenders(const std::wstring& directory) {
                 view.page = SettingsUiPage::Display;
                 view.settings.percentTextVisibility = PercentTextVisibility::Always;
                 view.settings.barMode = BarMode::Remaining;
-                view.settings.colorblindMode = true;
+                view.settings.usagePalette = UsagePalette::Colorblind;
                 frame = {};
                 SettingsUiBuildFrame(g, view, tall, frame);
                 std::string bars = std::string("render-display-bars-") + theme.name + "-144.png";
                 RenderFrame(g, wic.get(), path(bars), frame, view, tall, 144, theme.input, state, 0, false);
+
+                // The Custom palette, scrolled to its colors: below yellow at its colorblind
+                // preset, a picked yellow band and orange (an extra swatch each), red at its
+                // default; the pointer on a swatch, keyboard focus on the orange band's Custom....
+                view.settings.usagePalette = UsagePalette::Custom;
+                view.settings.customUsageColors = {kColorblindUsageColors[0], RGB(0x30, 0x40, 0x90),
+                                                   RGB(0xC0, 0x40, 0xC0), kDefaultUsageColors[3]};
+                view.settings.percentTextAlignment = PercentTextAlignment::Left;
+                view.settings.barMode = BarMode::Used;
+                frame = {};
+                SettingsUiBuildFrame(g, view, tall, frame);
+                UiPaintState customState;
+                customState.focus = {SettingsControlId(SettingsField::UsageColorCustom, 2)};
+                customState.focusVisible = true;
+                customState.hot = {SettingsControlId(SettingsField::UsageColorYellow, 2)};
+                std::string customName = std::string("render-display-custom-") + theme.name + "-144.png";
+                float customScroll = std::clamp(Control(frame, SettingsField::UsagePalette).rect.top - 60, 0.0f,
+                                                std::max(frame.contentHeight - (frame.viewport.bottom - frame.viewport.top),
+                                                         0.0f));
+                RenderFrame(g, wic.get(), path(customName), frame, view, tall, 144, theme.input, customState,
+                            customScroll, false);
+                CHECK(Control(frame, SettingsField::UsageColorCustom, 2).enabled);
 
                 TestStore store;
                 store.settings.barLayout = BarLayout::Stacked;

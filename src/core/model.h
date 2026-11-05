@@ -178,6 +178,20 @@ struct LogoBrands {
     bool operator==(const LogoBrands&) const = default;
 };
 
+// The usage colors meters show, by band: green, yellow, orange and red by default; blue to
+// vermilion for color vision deficiencies; or the user's own four.
+enum class UsagePalette {
+    Default,
+    Colorblind,
+    Custom,
+};
+// A palette's colors (0xBBGGRR) below the yellow threshold, then from the yellow, orange and red
+// thresholds on.
+static constexpr std::array<COLORREF, 4> kDefaultUsageColors = {
+    RGB(0x43, 0xA0, 0x47), RGB(0xFD, 0xD8, 0x35), RGB(0xFB, 0x8C, 0x00), RGB(0xE5, 0x39, 0x35)};
+static constexpr std::array<COLORREF, 4> kColorblindUsageColors = {
+    RGB(0x00, 0x72, 0xB2), RGB(0x56, 0xB4, 0xE9), RGB(0xE6, 0x9F, 0x00), RGB(0xD5, 0x5E, 0x00)};
+
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 // The number badge's default color: white stands for the taskbar's text color, whatever the theme.
 static constexpr COLORREF kBadgeTaskbarTextColor = RGB(0xFF, 0xFF, 0xFF);
@@ -270,7 +284,9 @@ struct Settings {
     bool showExtraBarAmounts = false;
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
-    bool colorblindMode = false;
+    UsagePalette usagePalette = UsagePalette::Default;
+    // The Custom palette's colors, kept while another palette is chosen.
+    std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
     bool showStaleWarning = true;
     NotificationLevel notificationLevel = NotificationLevel::Red;
     Material material = Material::Acrylic;

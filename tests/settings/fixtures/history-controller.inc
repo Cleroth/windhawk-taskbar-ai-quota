@@ -484,7 +484,7 @@ static void RunHistoryControllerTests() {
         TestHistoryOps ops = TestControllerOps();
         Settings& s = ops.settings.settings;
         s.barMode = BarMode::Remaining;
-        s.colorblindMode = true;
+        s.usagePalette = UsagePalette::Colorblind;
         s.yellowThreshold = 40;
         s.orangeThreshold = 60;
         s.redThreshold = 80;
@@ -496,7 +496,8 @@ static void RunHistoryControllerTests() {
         c.Open();
         c.Load();
         const HistoryUiView& v = c.view;
-        CHECK(v.remaining && v.colorblind && v.yellowThreshold == 40 && v.orangeThreshold == 60 && v.redThreshold == 80);
+        CHECK(v.remaining && v.yellowThreshold == 40 && v.orangeThreshold == 60 && v.redThreshold == 80);
+        CHECK((v.usageColors == std::array<uint32_t, 4>{0xFF0072B2, 0xFF56B4E9, 0xFFE69F00, 0xFFD55E00}));
         CHECK(v.accounts[0].weeklyPct == 47 && !v.accounts[0].stale && v.accounts[0].lastPollMs == kWeekTo - 5 * kMinute);
         CHECK(v.accounts[1].weeklyPct == 62 && v.accounts[1].stale);
         CHECK(v.cards.size() == 3 && v.cards[1].title == L"OAI \u00B7 Weekly");

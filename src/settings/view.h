@@ -29,6 +29,7 @@ struct SettingsView {
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
                                         // (settings/preview.h)
     ULONGLONG now = 0;                  // The preview's sample time
+    std::optional<bool> versionCopied;  // Copy version info's feedback for a moment: whether it copied
 };
 
 // Interactive controls keep their ids across rebuilds, so focus and text boxes follow them.
@@ -123,6 +124,44 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
     items.push_back(std::move(box));
     UiAddSlider(items, SettingsControlId(field, 1), {slot.left + 74, slot.top, slot.right, slot.bottom},
                 value, range.minimum, range.maximum, spec.enabled, SettingsCommand(field));
+    return card.card.bottom;
+}
+
+// A color card's swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... (the `custom`
+// command with `customValue`, also its control part) 16 DIP after them. A color picked in
+// Custom... shows as one more swatch.
+static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
+                                  uint32_t& id, float x, float y, float width, UiCardSpec spec,
+                                  SettingsField field, SettingsField custom, std::vector<COLORREF> colors,
+                                  COLORREF current, int customValue = 0) {
+    if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
+    PCWSTR customText = L"Custom...";
+    float buttonWidth =
+        std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
+    float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
+    spec.trailing = {swatches + 16 + buttonWidth, 32};
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    float center = (card.trailing.top + card.trailing.bottom) / 2;
+    for (size_t i = 0; i < colors.size(); i++) {
+        UiItem swatch;
+        swatch.id = SettingsControlId(field, uint32_t(1 + i));
+        swatch.kind = UiItemKind::Swatch;
+        float left = card.trailing.left + float(i) * 34;
+        swatch.rect = {left, center - 12, left + 24, center + 12};
+        swatch.selected = colors[i] == current;
+        swatch.enabled = spec.enabled;
+        swatch.action = SettingsCommand(field, int(colors[i]));
+        items.push_back(std::move(swatch));
+    }
+    UiItem button;
+    button.id = SettingsControlId(custom, uint32_t(customValue));
+    button.kind = UiItemKind::Button;
+    button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right, card.trailing.bottom};
+    button.text = customText;
+    button.enabled = spec.enabled;
+    button.action = SettingsCommand(custom, customValue);
+    items.push_back(std::move(button));
     return card.card.bottom;
 }
 

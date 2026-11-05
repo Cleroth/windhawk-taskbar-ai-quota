@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.12.0
+// @version         2.13.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -65,7 +65,8 @@ signed-in local app or CLI session, which must remain running.
   position, identity position, pace markers, and spacing.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
-  remaining, percentage text, usage colors and thresholds, stale marker.
+  remaining, percentage text, usage colors (default, colorblind or your own) and thresholds,
+  stale marker.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -377,6 +378,20 @@ struct LogoBrands {
     bool operator==(const LogoBrands&) const = default;
 };
 
+// The usage colors meters show, by band: green, yellow, orange and red by default; blue to
+// vermilion for color vision deficiencies; or the user's own four.
+enum class UsagePalette {
+    Default,
+    Colorblind,
+    Custom,
+};
+// A palette's colors (0xBBGGRR) below the yellow threshold, then from the yellow, orange and red
+// thresholds on.
+static constexpr std::array<COLORREF, 4> kDefaultUsageColors = {
+    RGB(0x43, 0xA0, 0x47), RGB(0xFD, 0xD8, 0x35), RGB(0xFB, 0x8C, 0x00), RGB(0xE5, 0x39, 0x35)};
+static constexpr std::array<COLORREF, 4> kColorblindUsageColors = {
+    RGB(0x00, 0x72, 0xB2), RGB(0x56, 0xB4, 0xE9), RGB(0xE6, 0x9F, 0x00), RGB(0xD5, 0x5E, 0x00)};
+
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
 // The number badge's default color: white stands for the taskbar's text color, whatever the theme.
 static constexpr COLORREF kBadgeTaskbarTextColor = RGB(0xFF, 0xFF, 0xFF);
@@ -469,7 +484,9 @@ struct Settings {
     bool showExtraBarAmounts = false;
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
-    bool colorblindMode = false;
+    UsagePalette usagePalette = UsagePalette::Default;
+    // The Custom palette's colors, kept while another palette is chosen.
+    std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
     bool showStaleWarning = true;
     NotificationLevel notificationLevel = NotificationLevel::Red;
     Material material = Material::Acrylic;
@@ -7418,21 +7435,33 @@ static bool IsFaceTile(BarLayout layout) {
     return IsRingTile(layout) || layout == BarLayout::Gauge || layout == BarLayout::ClockPies;
 }
 
-static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int orangeThreshold,
-                           int redThreshold, bool colorblindMode) {
-    if (stale || pct < 0) return 0xFF9E9E9E;
-
-    if (colorblindMode) {
-        if (pct >= redThreshold) return 0xFFD55E00;
-        if (pct >= orangeThreshold) return 0xFFE69F00;
-        if (pct >= yellowThreshold) return 0xFF56B4E9;
-        return 0xFF0072B2;
+// A palette's usage colors by band (core/model.h), opaque 0xAARRGGBB.
+static std::array<uint32_t, 4> UsagePaletteColors(UsagePalette palette, const std::array<COLORREF, 4>& custom) {
+    const std::array<COLORREF, 4>& colors = palette == UsagePalette::Colorblind ? kColorblindUsageColors :
+                                            palette == UsagePalette::Custom     ? custom :
+                                                                                  kDefaultUsageColors;
+    std::array<uint32_t, 4> argb;
+    for (size_t i = 0; i < argb.size(); i++) {
+        argb[i] = 0xFF000000 | uint32_t(GetRValue(colors[i])) << 16 | uint32_t(GetGValue(colors[i])) << 8 |
+                  GetBValue(colors[i]);
     }
+    return argb;
+}
 
-    if (pct >= redThreshold) return 0xFFE53935;
-    if (pct >= orangeThreshold) return 0xFFFB8C00;
-    if (pct >= yellowThreshold) return 0xFFFDD835;
-    return 0xFF43A047;
+// `colors`: UsagePaletteColors. Stale and unknown readings are grey in every palette.
+static uint32_t UsageColor(double pct, bool stale, int yellowThreshold, int orangeThreshold,
+                           int redThreshold, const std::array<uint32_t, 4>& colors) {
+    if (stale || pct < 0) return 0xFF9E9E9E;
+    return colors[pct >= redThreshold ? 3 : pct >= orangeThreshold ? 2 : pct >= yellowThreshold ? 1 : 0];
+}
+
+// WCAG relative luminance of an 0xAARRGGBB color, 0 (black) to 1 (white); alpha is ignored.
+static double RelativeLuminance(uint32_t argb) {
+    auto linear = [](uint32_t channel) {
+        double c = channel / 255.0;
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * linear(argb >> 16 & 0xFF) + 0.7152 * linear(argb >> 8 & 0xFF) + 0.0722 * linear(argb & 0xFF);
 }
 
 // An extra usage or credits amount on the taskbar: whole credits or dollars to the cent below
@@ -7832,7 +7861,7 @@ struct MeterDisplay {
     int orangeThreshold;
     int redThreshold;
     int pollMinutes;          // 2-1440.
-    bool colorblindMode;
+    std::array<uint32_t, 4> usageColors;  // UsagePaletteColors of the chosen palette.
     bool showPaceTicks;
     PaceTickStyle paceTickStyle;
     COLORREF paceTickColor;   // RGB only.
@@ -7912,7 +7941,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .orangeThreshold = orange,
         .redThreshold = std::clamp(settings.redThreshold, orange, 100),
         .pollMinutes = std::clamp(settings.pollMinutes, 2, 24 * 60),
-        .colorblindMode = settings.colorblindMode,
+        .usageColors = UsagePaletteColors(settings.usagePalette, settings.customUsageColors),
         .showPaceTicks = settings.showPaceTicks,
         .paceTickStyle = settings.paceTickStyle,
         .paceTickColor = settings.paceTickColor & 0x00FFFFFF,
@@ -8399,7 +8428,7 @@ struct QuotaMeter {
     double paceEndRadius = 0;  // The time track fill's corner radius toward 100%.
     PercentTextAlignment textAlignment = PercentTextAlignment::Right;  // Never Adaptive.
     double textOffset = 0;     // Percent text shift.
-    bool darkText = false;     // Black percent text over a yellow or orange fill.
+    bool darkText = false;     // Black percent text over a light fill (yellow and orange by default).
     // Percent or amount; empty while unavailable. Also the quota matrix's number, "–" while
     // unavailable.
     std::wstring text;
@@ -8583,7 +8612,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
             if (!dollars) meters.sparkExtraKey = QuotaKey(account.provider, kExtraUsageBar);
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
-                UsageColor(extra.pct, meters.stale, yellow, orange, red, display.colorblindMode) : 0;
+                UsageColor(extra.pct, meters.stale, yellow, orange, red, display.usageColors) : 0;
         }
         meters.barMask = charted ? charted : top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
         count = std::popcount(unsigned(meters.barMask));
@@ -8596,7 +8625,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             meters.faceHeight = meters.sparkChartHeight;
         }
         meters.sparkKeyFont = display.sparklineTextSize;
-        meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.colorblindMode);
+        meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.usageColors);
     }
     if (matrix) {
         // Two rows' cap heights and their gap fit the tile, 2 DIPs clear above and below.
@@ -8690,7 +8719,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         const WindowUsage& wu = *usage[w];
         QuotaMeter& m = meters.quotas[w];
         // Color stays keyed to actual usage so depleting quota still reds out.
-        m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.colorblindMode);
+        m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.usageColors);
         m.key = QuotaKey(account.provider, w);
         m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
                         wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
@@ -8732,9 +8761,11 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 display.percentTextAlignment;
             m.textOffset = m.textAlignment == PercentTextAlignment::Left ? bar.textInset :
                            m.textAlignment == PercentTextAlignment::Center ? 0 : -bar.textInset;
-            bool yellowOrOrange = !meters.stale && wu.pct >= 0 &&
-                ((wu.pct >= yellow && wu.pct < orange) || (wu.pct >= orange && wu.pct < red));
-            m.darkText = m.textAlignment == PercentTextAlignment::Left && yellowOrOrange;
+            // Light fills, above a third of white's luminance, take black text: the default
+            // palette's yellow and orange, the colorblind one's sky blue and orange, and custom
+            // colors as light as those. Stale grey keeps white text.
+            m.darkText = m.textAlignment == PercentTextAlignment::Left && !meters.stale && wu.pct >= 0 &&
+                         RelativeLuminance(m.color) > 1.0 / 3;
             if (wu.pct >= 0) {
                 if (w == kExtraUsageBar && display.showExtraBarAmounts &&
                     data.extraLimitAmount >= 0) {
@@ -9153,7 +9184,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
         }
         meters.headlineColor = UsageColor(top >= 0 ? usage[top]->pct : -1, meters.stale, yellow,
-                                          orange, red, display.colorblindMode);
+                                          orange, red, display.usageColors);
     }
     return meters;
 }
@@ -10403,7 +10434,7 @@ struct FlyoutDisplay {
     int yellowThreshold = 0;
     int orangeThreshold = 0;
     int redThreshold = 0;
-    bool colorblindMode = false;
+    std::array<uint32_t, 4> usageColors{};  // MeterDisplay::usageColors
     bool showOpenAiExtraLimits = false;
     bool stale = false;
     bool warn = false;
@@ -11156,7 +11187,7 @@ static void UpdateAccountFlyout(
             row.fill.MinWidth(fillPct > 0 ? 4.0 : 0.0);
             uint32_t colorValue = UsageColor(wu.pct, display.stale, display.yellowThreshold,
                                              display.orangeThreshold, display.redThreshold,
-                                             display.colorblindMode);
+                                             display.usageColors);
             auto color = ArgbColor(colorValue);
             if (colorValue != row.fillColor) {
                 row.fill.Background(FlyoutFillBrush(color));
@@ -12975,7 +13006,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     UpdateAccountFlyout(state, accounts[i], d,
                                         {now, display.barMode, display.yellowThreshold,
                                          display.orangeThreshold, display.redThreshold,
-                                         display.colorblindMode, settings.showOpenAiExtraLimits,
+                                         display.usageColors, settings.showOpenAiExtraLimits,
                                          meters.stale, meters.warn, accountRefreshing,
                                          visualTestMode},
                                         traces);
@@ -19560,6 +19591,10 @@ static bool NormalizeSettings(Settings* s) {
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
+    if (s->usagePalette < UsagePalette::Default || s->usagePalette > UsagePalette::Custom) {
+        s->usagePalette = UsagePalette::Default;
+    }
+    for (COLORREF& color : s->customUsageColors) color &= 0x00FFFFFF;
     s->paceTickColor &= 0x00FFFFFF;
     s->badgeColor &= 0x00FFFFFF;
     return historyIdsChanged;
@@ -19703,7 +19738,13 @@ static std::wstring SerializeSettings(const Settings& s) {
                                         s.notificationLevel == NotificationLevel::Orange ? L"orange" : L"red");
         // Builds before notification levels read only this switch, on at red.
         setBool(L"notifications", s.notificationLevel != NotificationLevel::Off);
-        setBool(L"colorblind", s.colorblindMode);
+        setString(L"usagePalette", s.usagePalette == UsagePalette::Colorblind ? L"colorblind" :
+                                   s.usagePalette == UsagePalette::Custom ? L"custom" : L"default");
+        JsonArray usageColors;
+        for (COLORREF color : s.customUsageColors) usageColors.Append(JsonValue::CreateNumberValue(color));
+        root.SetNamedValue(L"customUsageColors", usageColors.as<IJsonValue>());
+        // Builds before palettes read only this switch; they show Custom as the default palette.
+        setBool(L"colorblind", s.usagePalette == UsagePalette::Colorblind);
         setBool(L"staleWarning", s.showStaleWarning);
         setString(L"material", s.material == Material::Mica ? L"mica" :
                                s.material == Material::MicaAlt ? L"micaAlt" :
@@ -19941,7 +19982,22 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                               notificationLevel == L"red" ? NotificationLevel::Red :
                               getBoolDefault(L"notifications", true) ? NotificationLevel::Red :
                                                                        NotificationLevel::Off;
-        s.colorblindMode = getBoolDefault(L"colorblind", false);
+        // Settings saved before palettes, or naming an unknown one, have only the colorblind switch.
+        std::wstring usagePalette = GetStr(root, L"usagePalette");
+        s.usagePalette = usagePalette == L"default" ? UsagePalette::Default :
+                         usagePalette == L"colorblind" ? UsagePalette::Colorblind :
+                         usagePalette == L"custom" ? UsagePalette::Custom :
+                         getBoolDefault(L"colorblind", false) ? UsagePalette::Colorblind : UsagePalette::Default;
+        // Each custom color that is missing or not a color keeps its default.
+        if (root.HasKey(L"customUsageColors") &&
+            root.GetNamedValue(L"customUsageColors").ValueType() == JsonValueType::Array) {
+            JsonArray colors = root.GetNamedArray(L"customUsageColors");
+            for (uint32_t i = 0; i < colors.Size() && i < s.customUsageColors.size(); i++) {
+                IJsonValue value = colors.GetAt(i);
+                double color = value.ValueType() == JsonValueType::Number ? value.GetNumber() : -1;
+                if (std::isfinite(color) && color >= 0 && color <= 0x00FFFFFF) s.customUsageColors[i] = (COLORREF)color;
+            }
+        }
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
         // A missing or unknown material keeps the default.
         std::wstring material = GetStr(root, L"material");
@@ -20137,7 +20193,7 @@ static bool LoadLegacySettings(Settings* out) {
     s.orangeThreshold = getInt(L"orangeThreshold", 75);
     s.redThreshold = getInt(L"redThreshold", 90);
     s.notificationLevel = getBool(L"enableNotifications", true) ? NotificationLevel::Red : NotificationLevel::Off;
-    s.colorblindMode = getBool(L"colorblindMode", false);
+    s.usagePalette = getBool(L"colorblindMode", false) ? UsagePalette::Colorblind : UsagePalette::Default;
     s.showStaleWarning = getBool(L"showStaleWarning", true);
     int oldBarLength = s.barLength;
     int oldAccountMargin = s.accountMargin;
@@ -20861,7 +20917,12 @@ enum class SettingsField : uint8_t {
     PercentTextVisibility,  // A PercentTextVisibility
     PercentTextAlignment,   // A PercentTextAlignment
     ShowExtraBarAmounts,
-    ColorblindMode,
+    UsagePalette,           // A UsagePalette
+    // The Custom palette's colors by band, consecutive (0xBBGGRR)
+    UsageColorBelowYellow,
+    UsageColorYellow,
+    UsageColorOrange,
+    UsageColorRed,
     YellowThreshold,
     OrangeThreshold,
     RedThreshold,
@@ -20891,6 +20952,8 @@ enum class SettingsField : uint8_t {
     OpenHistoryFolder,
     PaceTickColorCustom,  // The color dialog
     BadgeColorCustom,     // The color dialog
+    UsageColorCustom,     // The color dialog for a band: 0 below yellow to 3 red
+    CopyVersionInfo,      // The mod's and Windows' versions to the clipboard
     ShowOnTaskbar,        // Visual test mode
     PreviewScroll,        // The preview strip's sideways scroll
     AccountAdd,           // The Add account menu: kSettingsProviders' index
@@ -20978,7 +21041,9 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
         case SettingsField::ResetDisplay:
             return {SettingsField::Material,            SettingsField::BarMode,
                     SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
-                    SettingsField::ShowExtraBarAmounts, SettingsField::ColorblindMode,
+                    SettingsField::ShowExtraBarAmounts, SettingsField::UsagePalette,
+                    SettingsField::UsageColorBelowYellow, SettingsField::UsageColorYellow,
+                    SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
                     SettingsField::ShowOpenAiExtraLimits};
@@ -21046,7 +21111,12 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PercentTextVisibility: return int(s.percentTextVisibility);
         case SettingsField::PercentTextAlignment: return int(s.percentTextAlignment);
         case SettingsField::ShowExtraBarAmounts: return s.showExtraBarAmounts;
-        case SettingsField::ColorblindMode: return s.colorblindMode;
+        case SettingsField::UsagePalette: return int(s.usagePalette);
+        case SettingsField::UsageColorBelowYellow:
+        case SettingsField::UsageColorYellow:
+        case SettingsField::UsageColorOrange:
+        case SettingsField::UsageColorRed:
+            return int(s.customUsageColors[size_t(field) - size_t(SettingsField::UsageColorBelowYellow)] & 0x00FFFFFF);
         case SettingsField::YellowThreshold: return s.yellowThreshold;
         case SettingsField::OrangeThreshold: return s.orangeThreshold;
         case SettingsField::RedThreshold: return s.redThreshold;
@@ -21162,7 +21232,16 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
                 value, int(PercentTextAlignment::Adaptive), int(PercentTextAlignment::Right)));
             break;
         case SettingsField::ShowExtraBarAmounts: s.showExtraBarAmounts = value != 0; break;
-        case SettingsField::ColorblindMode: s.colorblindMode = value != 0; break;
+        case SettingsField::UsagePalette:
+            s.usagePalette = UsagePalette(std::clamp(value, int(UsagePalette::Default), int(UsagePalette::Custom)));
+            break;
+        case SettingsField::UsageColorBelowYellow:
+        case SettingsField::UsageColorYellow:
+        case SettingsField::UsageColorOrange:
+        case SettingsField::UsageColorRed:
+            s.customUsageColors[size_t(field) - size_t(SettingsField::UsageColorBelowYellow)] =
+                COLORREF(value) & 0x00FFFFFF;
+            break;
         case SettingsField::YellowThreshold: s.yellowThreshold = value; break;
         case SettingsField::OrangeThreshold: s.orangeThreshold = value; break;
         case SettingsField::RedThreshold: s.redThreshold = value; break;
@@ -21174,7 +21253,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.percentTextVisibility = defaults.percentTextVisibility;
             s.percentTextAlignment = defaults.percentTextAlignment;
             s.showExtraBarAmounts = defaults.showExtraBarAmounts;
-            s.colorblindMode = defaults.colorblindMode;
+            s.usagePalette = defaults.usagePalette;
+            s.customUsageColors = defaults.customUsageColors;
             s.yellowThreshold = defaults.yellowThreshold;
             s.orangeThreshold = defaults.orangeThreshold;
             s.redThreshold = defaults.redThreshold;
@@ -22176,6 +22256,7 @@ struct SettingsView {
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
                                         // (settings/preview.h)
     ULONGLONG now = 0;                  // The preview's sample time
+    std::optional<bool> versionCopied;  // Copy version info's feedback for a moment: whether it copied
 };
 
 // Interactive controls keep their ids across rebuilds, so focus and text boxes follow them.
@@ -22270,6 +22351,44 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
     items.push_back(std::move(box));
     UiAddSlider(items, SettingsControlId(field, 1), {slot.left + 74, slot.top, slot.right, slot.bottom},
                 value, range.minimum, range.maximum, spec.enabled, SettingsCommand(field));
+    return card.card.bottom;
+}
+
+// A color card's swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... (the `custom`
+// command with `customValue`, also its control part) 16 DIP after them. A color picked in
+// Custom... shows as one more swatch.
+static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
+                                  uint32_t& id, float x, float y, float width, UiCardSpec spec,
+                                  SettingsField field, SettingsField custom, std::vector<COLORREF> colors,
+                                  COLORREF current, int customValue = 0) {
+    if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
+    PCWSTR customText = L"Custom...";
+    float buttonWidth =
+        std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
+    float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
+    spec.trailing = {swatches + 16 + buttonWidth, 32};
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+    UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
+    float center = (card.trailing.top + card.trailing.bottom) / 2;
+    for (size_t i = 0; i < colors.size(); i++) {
+        UiItem swatch;
+        swatch.id = SettingsControlId(field, uint32_t(1 + i));
+        swatch.kind = UiItemKind::Swatch;
+        float left = card.trailing.left + float(i) * 34;
+        swatch.rect = {left, center - 12, left + 24, center + 12};
+        swatch.selected = colors[i] == current;
+        swatch.enabled = spec.enabled;
+        swatch.action = SettingsCommand(field, int(colors[i]));
+        items.push_back(std::move(swatch));
+    }
+    UiItem button;
+    button.id = SettingsControlId(custom, uint32_t(customValue));
+    button.kind = UiItemKind::Button;
+    button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right, card.trailing.bottom};
+    button.text = customText;
+    button.enabled = spec.enabled;
+    button.action = SettingsCommand(custom, customValue);
+    items.push_back(std::move(button));
     return card.card.bottom;
 }
 
@@ -23394,8 +23513,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
 }
 
 // src/settings/page-about.h
-// Settings > About: app card, links, credits and license (approved mockup about.png). Pure
-// builder.
+// Settings > About: app card, version info to copy, links, credits and license (approved mockup
+// about.png). Pure builder.
 
 // App icon (16 DIP view box): green, yellow and red quota bars on tracks, drawn like the
 // taskbar's stacked bars: corners a quarter of the 4-unit thickness, fills cut straight and shaded
@@ -23432,7 +23551,7 @@ static UiItem SettingsAppIcon(D2D1_RECT_F rect) {
 static constexpr PCWSTR kSettingsProjectUrl = L"https://github.com/Cleroth/windhawk-taskbar-ai-quota";
 
 // Lays out the page from content y; returns the bottom of the last card.
-static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
+static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                   float width) {
     // App card (mockup .aboutcard): icon, name, version line, summary.
@@ -23440,8 +23559,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         constexpr float kPadX = 20, kPadY = 18, kIcon = 52, kGap = 18;
         float textLeft = x + 1 + kPadX + kIcon + kGap;
         float textWidth = std::max(x + width - 1 - kPadX - textLeft, 40.0f);
-        std::wstring versionLine =
-            L"Version " + std::wstring(version) + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
+        std::wstring versionLine = L"Version " + view.version + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
         PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub "
                          L"Copilot and OpenCode Go on the Windows 11 taskbar.";
         UiTextStyle caption = UiTextStyleFor(UiFont::Caption);
@@ -23479,6 +23597,17 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);
         y += height;
+    }
+
+    // Version info for bug reports; the button says for a moment whether it copied.
+    {
+        UiCardSpec spec;
+        spec.glyph = L"\uE8C8";
+        spec.title = L"Copy version info";
+        spec.description = {{L"The mod\u2019s name and version and the Windows build, for bug reports."}};
+        spec.minHeight = 62;
+        PCWSTR label = !view.versionCopied ? L"Copy" : *view.versionCopied ? L"Copied" : L"Copy failed";
+        y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo, label);
     }
 
     // Links: whole cards open the page in the browser.
@@ -23906,42 +24035,6 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
 
-    // A color card's swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... (`custom`)
-    // 16 DIP after them. A color picked in Custom... shows as one more swatch.
-    auto colorCard = [&](float top, UiCardSpec spec, SettingsField field, SettingsField custom,
-                         std::vector<COLORREF> colors, COLORREF current) {
-        if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
-        PCWSTR customText = L"Custom...";
-        float buttonWidth =
-            std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
-        float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
-        spec.trailing = {swatches + 16 + buttonWidth, 32};
-        if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
-        UiCardLayout card = UiAddCard(g, items, id, x, top, width, spec);
-        float center = (card.trailing.top + card.trailing.bottom) / 2;
-        for (size_t i = 0; i < colors.size(); i++) {
-            UiItem swatch;
-            swatch.id = SettingsControlId(field, uint32_t(1 + i));
-            swatch.kind = UiItemKind::Swatch;
-            float left = card.trailing.left + float(i) * 34;
-            swatch.rect = {left, center - 12, left + 24, center + 12};
-            swatch.selected = colors[i] == current;
-            swatch.enabled = spec.enabled;
-            swatch.action = SettingsCommand(field, int(colors[i]));
-            items.push_back(std::move(swatch));
-        }
-        UiItem button;
-        button.id = SettingsControlId(custom);
-        button.kind = UiItemKind::Button;
-        button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right,
-                       card.trailing.bottom};
-        button.text = customText;
-        button.enabled = spec.enabled;
-        button.action = SettingsCommand(custom);
-        items.push_back(std::move(button));
-        return card.card.bottom;
-    };
-
     // Logo identities in every style: the logo size and the colors of the logos that have brand
     // colors, the badge's size and color, then its offsets. Bars need an identity position, except
     // for the logo colors, which the flyout and the windows also show.
@@ -23981,9 +24074,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                   L"the color picker."}};
             spec.enabled = placed;
             if (!placed) spec.reason = L"Choose an identity position to change this.";
-            top = colorCard(top + 3, spec, SettingsField::BadgeColor, SettingsField::BadgeColorCustom,
-                            {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
-                            s.badgeColor & 0x00FFFFFF);
+            top = SettingsAddColorCard(g, view, items, id, x, top + 3, width, spec, SettingsField::BadgeColor,
+                                       SettingsField::BadgeColorCustom,
+                                       {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
+                                       s.badgeColor & 0x00FFFFFF);
         }
         top = slider(top + 3, L"Badge horizontal offset",
                      L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
@@ -24288,9 +24382,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.description = {{L"Light grey by default, dark on a light taskbar. Custom... opens the color picker."}};
             spec.enabled = on;
             if (!on) spec.reason = L"Turn on Pace markers to change this.";
-            y = colorCard(y + 3, spec, SettingsField::PaceTickColor, SettingsField::PaceTickColorCustom,
-                          {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
-                          s.paceTickColor & 0x00FFFFFF);
+            y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickColor,
+                                     SettingsField::PaceTickColorCustom,
+                                     {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
+                                     s.paceTickColor & 0x00FFFFFF);
         }
     }
 
@@ -24382,7 +24477,7 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
     {
         UiCardSpec spec;
         spec.title = L"Percentage alignment";
-        spec.description = {{L"Adaptive: right side, moving left once the bar reaches yellow."}};
+        spec.description = {{L"Adaptive: right side, moving left once the bar reaches the yellow threshold."}};
         spec.enabled = text;
         if (!text) spec.reason = bars ? textOff : barsOnly;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
@@ -24403,25 +24498,45 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
     }
 
-    // Usage colors. Each threshold's dot is its band's usage color (taskbar/meter-model.h) in the
-    // chosen palette, taken from thresholds 1, 2 and 3 so equal thresholds still show their own.
-    // The level threshold notifications use (Behavior) says so.
+    // Usage colors: the palette, and Custom's color per band, each offering the band's default and
+    // colorblind colors. Each threshold's dot is its band's usage color (taskbar/meter-model.h) in
+    // the chosen palette, taken from thresholds 1, 2 and 3 so equal thresholds still show their
+    // own. The level threshold notifications use (Behavior) says so.
     y = UiAddSection(items, id, x, y + 20, width, L"Usage colors");
     {
         UiCardSpec spec;
-        spec.title = L"Colorblind palette";
-        spec.description = {{L"Blue to vermilion instead of green to red."}};
-        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ColorblindMode);
+        spec.title = L"Palette";
+        spec.description = {{L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a "
+                             L"color you pick for each threshold."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::UsagePalette, 200,
+                                    {{L"Default", int(UsagePalette::Default)},
+                                     {L"Colorblind", int(UsagePalette::Colorblind)},
+                                     {L"Custom", int(UsagePalette::Custom)}},
+                                    int(s.usagePalette));
+    }
+    if (s.usagePalette == UsagePalette::Custom) {
+        const PCWSTR bands[] = {L"Below yellow", L"From yellow", L"From orange", L"From red"};
+        for (int i = 0; i < 4; i++) {
+            UiCardSpec spec;
+            spec.title = bands[i];
+            y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec,
+                                     SettingsField(int(SettingsField::UsageColorBelowYellow) + i),
+                                     SettingsField::UsageColorCustom, {kDefaultUsageColors[i], kColorblindUsageColors[i]},
+                                     s.customUsageColors[i] & 0x00FFFFFF, i);
+        }
     }
     const std::tuple<SettingsField, PCWSTR, PCWSTR> thresholds[] = {
         {SettingsField::YellowThreshold, L"Yellow from",
-         s.colorblindMode ? L"Usage below this is blue." : L"Usage below this is green."},
+         s.usagePalette == UsagePalette::Colorblind ? L"Usage below this is blue." :
+         s.usagePalette == UsagePalette::Custom     ? L"Usage below this takes the Below yellow color." :
+                                                      L"Usage below this is green."},
         {SettingsField::OrangeThreshold, L"Orange from", L"Thresholds stay in order: yellow, orange, red."},
         {SettingsField::RedThreshold, L"Red from", L""},
     };
+    const std::array<uint32_t, 4> colors = UsagePaletteColors(s.usagePalette, s.customUsageColors);
     for (int i = 0; i < 3; i++) {
         auto [field, title, description] = thresholds[i];
-        uint32_t color = UsageColor(i + 1, false, 1, 2, 3, s.colorblindMode);
+        uint32_t color = UsageColor(i + 1, false, 1, 2, 3, colors);
         UiCardSpec spec;
         spec.dot = RGB(color >> 16 & 0xFF, color >> 8 & 0xFF, color & 0xFF);
         spec.title = title;
@@ -25051,7 +25166,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width);
             break;
         case SettingsUiPage::About:
-            bottom = SettingsUiBuildAbout(g, view.version, frame.content, id, left, 2, width);
+            bottom = SettingsUiBuildAbout(g, view, frame.content, id, left, 2, width);
             break;
         case SettingsUiPage::Behavior:
             bottom = SettingsUiBuildBehavior(g, view, frame.content, id, left, 0, width);
@@ -25086,6 +25201,8 @@ static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
 static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 // A notification's rebuild waits for an open dropdown or menu to close (a rebuild closes it).
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
+// Copy version info's button shows whether it copied until this timer ends it.
+static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
 
 // The settings and usage history windows' backdrop for a material: Windows has none for Tinted
 // wallpaper, so they use Mica.
@@ -25108,13 +25225,15 @@ struct SettingsUiClient final : UiHostClient {
     // Window state. Custom poll and retention modes stick once chosen or typed into, so their
     // boxes don't disable themselves when a partial number happens to match a preset. The
     // preview's scroll belongs to the position it was built for. The last built view paints the
-    // preview; the color dialog's custom colors last for the window.
+    // preview; the color dialog's custom colors last for the window. Copy version info's result
+    // shows until kSettingsCopiedTimer.
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
     TaskbarPlacement previewPlacement = TaskbarPlacement::BeforeIcons;
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
+    std::optional<bool> versionCopied;
 
     // Accounts: the expanded cards, and the card being dragged: its order meanwhile, where it
     // started, the pointer's offset from its top, where it is drawn and where the first card
@@ -25237,6 +25356,7 @@ struct SettingsUiClient final : UiHostClient {
         if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
+        view.versionCopied = versionCopied;
         for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
             SettingsViewAccount account;
             account.key = edits.keys[i];
@@ -25367,8 +25487,9 @@ struct SettingsUiClient final : UiHostClient {
                             field == SettingsField::ResetDisplay ?
                                 L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, "
                                 L"percentage text on hover with adaptive alignment, no amounts, the "
-                                L"standard palette with yellow from 50%, orange from 75% and red from "
-                                L"90%, stale data marked, additional OpenAI rate limits hidden." :
+                                L"default palette (custom colors reset too) with yellow from 50%, orange "
+                                L"from 75% and red from 90%, stale data marked, additional OpenAI rate "
+                                L"limits hidden." :
                                 L"Reset History to its defaults?\n\nRecording turns on for this "
                                 L"Windows user, history is kept forever and the usage history window "
                                 L"opens on 7 days. Saved history stays.";
@@ -25393,9 +25514,12 @@ struct SettingsUiClient final : UiHostClient {
                         UiHostRequestRebuild(host, false);
                         break;
                     case SettingsField::PaceTickColorCustom:
-                    case SettingsField::BadgeColorCustom: {
-                        SettingsField target = field == SettingsField::PaceTickColorCustom ?
-                                                   SettingsField::PaceTickColor : SettingsField::BadgeColor;
+                    case SettingsField::BadgeColorCustom:
+                    case SettingsField::UsageColorCustom: {
+                        SettingsField target =
+                            field == SettingsField::PaceTickColorCustom ? SettingsField::PaceTickColor :
+                            field == SettingsField::BadgeColorCustom    ? SettingsField::BadgeColor :
+                                SettingsField(int(SettingsField::UsageColorBelowYellow) + std::clamp(action.value, 0, 3));
                         COLORREF initial = COLORREF(SettingsFieldValue(edits.Projection(), target));
                         std::optional<COLORREF> chosen = Modal(host, [&] {
                             return UiChooseColor(host.main, initial, customColors, colorDialog);
@@ -25407,6 +25531,42 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::PreviewScroll:
                         break;
+                    case SettingsField::CopyVersionInfo: {
+                        // Windows' real build: RtlGetVersion, which compatibility shims leave
+                        // alone, with the update revision from the registry.
+                        RTL_OSVERSIONINFOW os{};
+                        os.dwOSVersionInfoSize = sizeof(os);
+                        using RtlGetVersion_t = LONG(WINAPI*)(RTL_OSVERSIONINFOW*);
+                        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+                        auto getVersion = reinterpret_cast<RtlGetVersion_t>(
+                            ntdll ? GetProcAddress(ntdll, "RtlGetVersion") : nullptr);
+                        if (!getVersion || getVersion(&os) != 0) os = {};
+                        DWORD revision = 0, size = sizeof(revision);
+                        if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                                         L"UBR", RRF_RT_REG_DWORD, nullptr, &revision, &size) != ERROR_SUCCESS) {
+                            revision = 0;
+                        }
+                        wchar_t text[128];
+                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",
+                                 WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, revision);
+                        bool copied = false;
+                        size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
+                        if (OpenClipboard(host.main)) {
+                            if (HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+                                if (void* data = GlobalLock(memory)) {
+                                    memcpy(data, text, bytes);
+                                    GlobalUnlock(memory);
+                                    copied = EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, memory);
+                                }
+                                if (!copied) GlobalFree(memory);
+                            }
+                            CloseClipboard();
+                        }
+                        versionCopied = copied;
+                        SetTimer(host.main, kSettingsCopiedTimer, 2000, nullptr);
+                        UiHostRequestRebuild(host, false);
+                        break;
+                    }
                     case SettingsField::OpenHistoryFolder: {
                         const std::wstring& folder = edits.baseline.status.historyFolder;
                         DWORD attributes = folder.empty() ? INVALID_FILE_ATTRIBUTES :
@@ -25682,6 +25842,12 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 return false;
             case WM_TIMER: {
+                if (wParam == kSettingsCopiedTimer) {
+                    KillTimer(host.main, kSettingsCopiedTimer);
+                    versionCopied.reset();
+                    UiHostRequestRebuild(host, false);
+                    return true;
+                }
                 if (wParam == kSettingsRefreshTimer) {
                     if (!host.popup.open) {
                         KillTimer(host.main, kSettingsRefreshTimer);
@@ -26469,7 +26635,8 @@ struct HistoryUiView {
     bool canEnableRecording = false;
     int retentionDays = 90;                  // 0: forever
     int yellowThreshold = 50, orangeThreshold = 75, redThreshold = 90;
-    bool colorblind = false, remaining = false;  // remaining: values in the Remaining bar mode
+    std::array<uint32_t, 4> usageColors = UsagePaletteColors(UsagePalette::Default, kDefaultUsageColors);
+    bool remaining = false;                  // Values in the Remaining bar mode
     LogoBrands logoBrands;
     Material material = Settings{}.material;
 
@@ -28088,7 +28255,7 @@ struct HistoryController {
         v.yellowThreshold = display.yellowThreshold;
         v.orangeThreshold = display.orangeThreshold;
         v.redThreshold = display.redThreshold;
-        v.colorblind = s.colorblindMode;
+        v.usageColors = display.usageColors;
         v.remaining = s.barMode == BarMode::Remaining;
         v.logoBrands = s.logoBrands;
         v.material = s.material;
@@ -28679,15 +28846,26 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                 double shown = view.remaining ? std::clamp(100 - account.weeklyPct, 0.0, 100.0) : account.weeklyPct;
                 value.text = HistoryUiNumber(shown, 0) + L"%";
                 if (!account.stale) {
-                    // Light theme: darker variants of the usage colors, readable on its surface.
+                    // Light theme: darker variants of the default and colorblind usage colors,
+                    // readable on its surface; another color darkens in OKLCH until it reads at
+                    // 4.5:1 on white.
                     static constexpr uint32_t kLightInks[][2] = {
                         {0xE53935, 0xC42B1C}, {0xFB8C00, 0xB35C00}, {0xFDD835, 0x876A00}, {0x43A047, 0x1D7A35},
                         {0xD55E00, 0xB75100}, {0xE69F00, 0x946700}, {0x56B4E9, 0x387597},
                     };
-                    uint32_t rgb = UsageColor(account.weeklyPct, false, view.yellowThreshold, view.orangeThreshold,
-                                              view.redThreshold, view.colorblind) & 0xFFFFFF;
+                    uint32_t usage = UsageColor(account.weeklyPct, false, view.yellowThreshold, view.orangeThreshold,
+                                                view.redThreshold, view.usageColors);
+                    uint32_t rgb = usage & 0xFFFFFF;
+                    bool variant = false;
                     for (const auto& ink : kLightInks) {
-                        if (light && ink[0] == rgb) rgb = ink[1];
+                        if (light && ink[0] == rgb) {
+                            rgb = ink[1];
+                            variant = true;
+                        }
+                    }
+                    for (double lift = -0.02; light && !variant && 1.05 / (RelativeLuminance(rgb) + 0.05) < 4.5;
+                         lift -= 0.02) {
+                        rgb = UsageHighlight(usage, lift) & 0xFFFFFF;
                     }
                     value.ink = UiInk::Inherit;
                     value.color = UiRgb(rgb);
