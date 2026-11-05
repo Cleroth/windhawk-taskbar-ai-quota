@@ -1992,12 +1992,12 @@ static void RunLayoutTests() {
         CHECK(NearDip(baseline(k7), baseline(n60)) && NearDip(baseline(kEx), baseline(n60)) && NearDip(baseline(n100), baseline(n60)));
         CHECK(NearDip(baseline(n60) - baseline(n5), cap + 5));
         CHECK(NearDip((baseline(n5) - cap + baseline(n60)) / 2, 24));
-        // The tile keeps its width as numbers change, and before the first reading (dashes).
+        // The tile keeps its width as numbers change; before the first reading it has no cells.
+        CHECK(NearDip(width(at({1, 2, 3, 4})), width(four)));
         AccountData before = Fresh();
         before.lastSuccessMs = 0;
         SettingsPreviewStrip waiting = StripOf(s, accounts, {before});
-        CHECK(NearDip(width(at({1, 2, 3, 4})), width(four)) && NearDip(width(waiting), width(four)));
-        CHECK(TextOps(waiting, L"\u2013").size() == 4);
+        CHECK(width(waiting) < width(four) && TextOps(waiting, L"5h").empty() && TextOps(waiting, L"\u2013").empty());
         // A number wider than "100%" widens its column, as XAML's auto columns do.
         SettingsPreviewStrip wide = at({1234, 60, 80, 100});
         const SettingsPreviewOp n1234 = only(wide, L"1234%");

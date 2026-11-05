@@ -1232,12 +1232,11 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     meters.labelText = meters.warn ? account.label + L"!" : account.label;
     meters.labelOpacity = meters.stale ? 0.45 : 0.8;
     meters.identityOpacity = meters.stale ? 0.45 : 1.0;
-    // Every selected quota until the first success, then the reported ones. An account that needs
-    // signing in before any success shows none.
-    bool waiting = data.lastSuccessMs == 0 && !data.needsLogin;
+    // The selected quotas with a reading; none before the first success, so a loading or signed-out
+    // account shows only its identity.
     int count = 0;
     for (int w = 0; w < kQuotaBarCount; w++) {
-        if (account.showBars[w] && (waiting || usage[w]->pct >= 0)) {
+        if (account.showBars[w] && usage[w]->pct >= 0) {
             meters.barMask |= 1 << w;
             count++;
         }
@@ -1255,25 +1254,23 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     auto timed = [&](int w) {
         return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs;
     };
-    // The most-used tile quota: the headline's, and the only one a gauge shows (until the first
-    // success, its first selected quota).
+    // The most-used tile quota: the headline's, and the only one a gauge shows.
     int top = -1;
     for (int w = 0; w < kQuotaBarCount; w++) {
-        if (!(meters.barMask & (1 << w)) || usage[w]->pct < 0) continue;
+        if (!(meters.barMask & (1 << w))) continue;
         if (top < 0 || usage[w]->pct > usage[top]->pct) top = w;
     }
     if (gauge) {
-        meters.barMask = top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
+        meters.barMask = top >= 0 ? 1 << top : 0;
         count = meters.barMask ? 1 : 0;
     }
     if (spark) {
-        // A chart per quota with a window, and per quota not read yet (until the first success);
-        // without any, the most-used quota's. Anthropic's extra usage and OpenAI's credits go in
-        // the weekly chart's corner, instead of a chart of its own, while selected and reported;
-        // credits have no window, so never get a chart.
+        // A chart per quota with a window; without any, the most-used quota's. Anthropic's extra
+        // usage and OpenAI's credits go in the weekly chart's corner, instead of a chart of its
+        // own, while selected and reported; credits have no window, so never get a chart.
         int charted = 0;
         for (int w = 0; w < kQuotaBarCount; w++) {
-            if ((meters.barMask & (1 << w)) && (timed(w) || usage[w]->pct < 0)) charted |= 1 << w;
+            if ((meters.barMask & (1 << w)) && timed(w)) charted |= 1 << w;
         }
         bool openAi = account.provider == L"openai";
         const WindowUsage& extra = data.extraUsage;
@@ -1304,7 +1301,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
                 UsageColor(extra.pct, meters.stale, yellow, orange, red, display.usageColors) : 0;
         }
-        meters.barMask = charted ? charted : top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
+        meters.barMask = charted ? charted : top >= 0 ? 1 << top : 0;
         count = std::popcount(unsigned(meters.barMask));
         meters.sparkChartHeight = std::round(display.tileHeight * display.sparklineHeight / 100.0);
         if (display.sideWidth > 0) {

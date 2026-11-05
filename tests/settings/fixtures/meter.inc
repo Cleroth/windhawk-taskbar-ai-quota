@@ -1117,7 +1117,7 @@ static void RunFaceTileTests() {
         CHECK(kLastBarLayout == QuotaMatrix);
     });
 
-    Run("gauge: only the most-used tile quota; until a reading, the first selected one", [] {
+    Run("gauge: only the most-used tile quota; none without a reading", [] {
         auto gauge = [](std::array<double, kQuotaBarCount> pct, std::array<bool, kQuotaBarCount> bars = {true, true, true, true}) {
             return AccountMeterState(Display(), BarLayout::Gauge, Account(L"anthropic", L"A", bars), Fresh(pct), 0, 0);
         };
@@ -1131,18 +1131,15 @@ static void RunFaceTileTests() {
         AccountMeters weekly = gauge({10, 80, 30, 40});
         CHECK(!weekly.quotas[1].track.empty() && !weekly.quotas[1].fill.empty());
         for (int w : {0, 2, 3}) CHECK(weekly.quotas[w].track.empty() && weekly.quotas[w].fill.empty());
-        // Before the first success: the first selected quota, empty.
+        // Nothing reported, before the first success or after one: no meter.
         AccountData before = Fresh();
         before.lastSuccessMs = 0;
-        AccountMeters first = AccountMeterState(Display(), BarLayout::Gauge,
-                                                Account(L"anthropic", L"A", {false, true, false, true}), before, 0, 0);
-        CHECK(first.barMask == 0b0010 && !first.quotas[1].track.empty() && first.quotas[1].fillUnits == 0);
-        CHECK(first.quotas[3].track.empty());
-        CHECK(first.headline == L"\u2013" && first.headlineKey.empty());
-        // Nothing reported after a success: no meter.
-        AccountMeters none = gauge({-1, -1, -1, -1});
-        CHECK(none.barMask == 0 && none.headline == L"\u2013" && none.headlineKey.empty());
-        for (const QuotaMeter& q : none.quotas) CHECK(q.track.empty());
+        for (const AccountData& data : {before, Fresh()}) {
+            AccountMeters none = AccountMeterState(Display(), BarLayout::Gauge, Account(L"anthropic", L"A", {true, true, true, true}),
+                                                   data, 0, 0);
+            CHECK(none.barMask == 0 && none.headline == L"\u2013" && none.headlineKey.empty());
+            for (const QuotaMeter& q : none.quotas) CHECK(q.track.empty());
+        }
     });
 
     Run("gauge: its number without %, the window key and color, per bar mode; no countdown", [] {
@@ -1712,29 +1709,25 @@ static void RunAccountTests() {
         }
     });
 
-    Run("quota mask before and after the first success", [] {
+    Run("quota mask: the selected quotas with a reading; none before the first success", [] {
         AccountConfig account = Account(L"anthropic", L"A", {true, true, false, true});
-        AccountData before = Fresh({10, -1, -1, -1});
-        before.lastSuccessMs = 0;
-        CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, before, 0, 0).barMask == 0b1011);
         CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, Fresh({10, -1, -1, -1}), 0, 0)
                   .barMask == 0b0001);
         CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, Fresh({10, 20, 50, -1}), 0, 0)
                   .barMask == 0b0011);
-        // Rings lay out every selected quota until then.
-        AccountMeters ring = AccountMeterState(Display(), BarLayout::SegmentedRing, account, before, 0, 0);
-        // The third arc's slot starts at 285 degrees; it grows by half its 3 DIP stroke.
-        CHECK_NEAR(ring.quotas[3].arc.start, 285 - 1.5 / 14 * 180 / std::numbers::pi);
-        CHECK(ring.quotas[3].fillUnits == 0);
-        // Needing a sign-in before any success: no quota in any layout, the identity marked.
-        AccountData signedOut = before;
-        signedOut.win5h.pct = -1;
+        // Loading, or needing a sign-in, before any success: no quota in any layout, the dimmed
+        // identity alone; marked once the poll reports why.
+        AccountData loading = Fresh();
+        loading.lastSuccessMs = 0;
+        AccountData signedOut = loading;
         signedOut.needsLogin = true;
         signedOut.error = L"not signed in - click to sign in";
         for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
-            AccountMeters m = AccountMeterState(Display(), BarLayout(layout), account, signedOut, 0, 0);
-            CHECK(m.barMask == 0 && m.warn);
-            if (BarLayout(layout) == BarLayout::Sparkline) CHECK_NEAR(m.faceWidth, 0);
+            for (const AccountData& data : {loading, signedOut}) {
+                AccountMeters m = AccountMeterState(Display(), BarLayout(layout), account, data, 0, 0);
+                CHECK(m.barMask == 0 && m.stale && m.warn == data.needsLogin);
+                if (BarLayout(layout) == BarLayout::Sparkline) CHECK_NEAR(m.faceWidth, 0);
+            }
         }
         // Needing one again after a success keeps the last readings.
         AccountData expired = Fresh({10, 20, -1, -1});
@@ -2034,21 +2027,6 @@ static void RunSparklineTests() {
         CHECK_NEAR(large.faceWidth, 368);
         lefts(large, {{0, 0}, {2, 124}, {3, 248}});
 
-        // Before the first success: a chart per shown quota not read yet (the plot lit whole, no
-        // reading); the 5-hour quota's reading without a window has none.
-        AccountData before = Fresh({42, -1, -1, -1});
-        before.lastSuccessMs = 0;
-        AccountMeters waiting = charts(before);
-        CHECK(waiting.barMask == 0b1110 && bare(waiting.quotas[0]));
-        CHECK_NEAR(waiting.faceWidth, 152);
-        lefts(waiting, {{1, 0}, {2, 52}, {3, 104}});
-        CHECK(!waiting.quotas[1].spark[kSparkLit].empty() && unmarked(waiting.quotas[1]));
-        before.win5h.pct = -1;
-        AccountMeters first = charts(before, {false, true, false, true});
-        CHECK(first.barMask == 0b1010);
-        CHECK_NEAR(first.faceWidth, 100);
-        lefts(first, {{1, 0}, {3, 52}});
-
         // Without a window: the most-used quota's chart alone; a tie to the earlier slot; shown
         // quotas only.
         AccountMeters top = charts(Fresh({30, 70, -1, 50}));
@@ -2314,17 +2292,6 @@ static void RunSparklineTests() {
         CHECK(shapes[kSparkPace].empty() && shapes[kSparkNowLine].empty() && shapes[kSparkCaret].empty() &&
               shapes[kSparkProjection].empty() && shapes[kSparkLimit].empty() && !shapes[kSparkLit].empty());
         reading(First({45, 0, 0}, Display(With(cues)), BarLayout::Sparkline).quotas[0], 44.4, 17.5);
-        // A window without a reading yet (before the first success): the diagonal and the time, no
-        // reading, projection or limit.
-        AccountData before = Fresh();
-        before.lastSuccessMs = 0;
-        before.win5h = {-1, kNow + 9000000, kFiveHours};
-        AccountMeters waiting = AccountMeterState(ringed, BarLayout::Sparkline,
-                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
-        const auto& empty = waiting.quotas[0].spark;
-        CHECK(waiting.barMask == 0b0001 && empty[kSparkPace].size() == 1 && !empty[kSparkLit].empty() &&
-              !empty[kSparkNowLine].empty() && !empty[kSparkCaret].empty());
-        CHECK(unmarked(waiting.quotas[0]) && empty[kSparkProjection].empty() && empty[kSparkLimit].empty());
 
         // The ring off: a plain 2 DIP dot at the same places, without a window its own radius in
         // from the right edge: (98, 13) on the plot, (46, 17.5) on the 48 x 32 chart.
@@ -2334,10 +2301,6 @@ static void RunSparklineTests() {
         dot(spark(Window(130, 9000000), {}, plainPlot).quotas[0], 50, 2);
         dot(spark({45, 0, 0}, {}, plainPlot).quotas[0], 98, 13);
         dot(First({45, 0, 0}, Display(With(unringed)), BarLayout::Sparkline).quotas[0], 46, 17.5);
-        // None before a reading.
-        AccountMeters plainWaiting = AccountMeterState(plainPlot, BarLayout::Sparkline,
-                                                       Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
-        CHECK(unmarked(plainWaiting.quotas[0]));
         // On by default: the ringed reading.
         CHECK(Display().sparklineRing && !plainPlot.sparklineRing);
         reading(spark(Window(45, 9000000)).quotas[0], 50, 13);
@@ -2398,15 +2361,10 @@ static void RunSparklineTests() {
         // 97% in, where the right corners start: a straight cut.
         path(spark(Window(45, 540000)).quotas[0].spark[kSparkLit], 3, 0,
              {{97, 0}, {97, 24}, {3, 24}, {0, 21, 3}, {0, 3}, {3, 0, 3}});
-        // Past the reset, and without a window (with a reading or not yet): the whole plot.
+        // Past the reset, and without a window: the whole plot.
         const std::vector<Seg> whole = {{97, 0}, {100, 3, 3}, {100, 21}, {97, 24, 3}, {3, 24}, {0, 21, 3}, {0, 3}, {3, 0, 3}};
         path(spark(Window(45, -(long long)kMinute)).quotas[0].spark[kSparkLit], 3, 0, whole);
         path(spark({45, 0, 0}).quotas[0].spark[kSparkLit], 3, 0, whole);
-        AccountData before = Fresh();
-        before.lastSuccessMs = 0;
-        AccountMeters waiting = AccountMeterState(plot(), BarLayout::Sparkline,
-                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
-        path(waiting.quotas[0].spark[kSparkLit], 3, 0, whole);
         // Elapsed time off: the whole plot with a window too, half way or before it starts.
         const MeterDisplay unlit = plot([](Settings& s) { s.sparklineElapsed = false; });
         path(spark(Window(45, 9000000), {}, unlit).quotas[0].spark[kSparkLit], 3, 0, whole);
@@ -2439,13 +2397,8 @@ static void RunSparklineTests() {
         }), 1, 32);
         path(First(Window(45, 9000000), small, BarLayout::Sparkline).quotas[0].spark[kSparkOutline], 3, 0.5,
              {{21, 0.5}, {23.5, 3, 2.5}, {23.5, 9}, {21, 11.5, 2.5}, {3, 11.5}, {0.5, 9, 2.5}, {0.5, 3}, {3, 0.5, 2.5}});
-        // Whatever the chart shows: without a window, before the first reading, the cues off.
+        // Whatever the chart shows: without a window, the cues off.
         path(spark({45, 0, 0}).quotas[0].spark[kSparkOutline], 3, 0.5, wide);
-        AccountData before = Fresh();
-        before.lastSuccessMs = 0;
-        AccountMeters waiting = AccountMeterState(plot(), BarLayout::Sparkline,
-                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
-        path(waiting.quotas[0].spark[kSparkOutline], 3, 0.5, wide);
         MeterDisplay noCues = plot([](Settings& s) { s.sparklineElapsed = s.sparklineNowLine = false; });
         path(spark(Window(45, 9000000), {}, noCues).quotas[0].spark[kSparkOutline], 3, 0.5, wide);
         // Each chart its own, from its own corner.
@@ -3075,13 +3028,6 @@ static void RunSparklineTests() {
         }));
         CHECK(!chart(17, 0.375, &narrow).sparkKeyTop);
         CHECK(chart(17, 0.385, &narrow).sparkKeyTop);
-        // No reading (a window before the first success): kept.
-        AccountData before = Fresh();
-        before.lastSuccessMs = 0;
-        before.win5h = {-1, kNow + 3600000, kFiveHours};
-        AccountMeters waiting = AccountMeterState(ringed, BarLayout::Sparkline,
-                                                  Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
-        CHECK(waiting.barMask == 0b0001 && unmarked(waiting.quotas[0]) && !waiting.quotas[0].sparkKeyTop);
 
         // The weekly chart places its key and the extra usage together, trying in order: the key at
         // the bottom and the extra usage at the top, the key moved, the extra usage moved, both moved;
@@ -3208,17 +3154,6 @@ static void RunSparklineTests() {
         CHECK(weekly(110, 0.7083).sparkExtraBottom);
         AccountMeters plainHigh = weekly(110, 0.7083, SparklineExtra::Amount, &plainDot);
         CHECK(!plainHigh.sparkExtraBottom && !plainHigh.quotas[1].sparkKeyTop);
-        // No reading (the weekly quota not read yet, before the first success): kept.
-        AccountData unread = Fresh();
-        unread.lastSuccessMs = 0;
-        unread.winWeek = {-1, kNow + kWeeklyWindowMs / 2, kWeeklyWindowMs};
-        unread.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
-        unread.extraUsedAmount = 20;
-        unread.extraLimitAmount = 50;
-        AccountMeters blank = AccountMeterState(Display(), BarLayout::Sparkline,
-                                                Account(L"anthropic", L"A", {false, true, false, true}), unread, 0, 0);
-        CHECK(blank.barMask == 0b0010 && blank.sparkExtraText == L"$20.00" && unmarked(blank.quotas[1]) &&
-              !blank.sparkExtraBottom && !blank.quotas[1].sparkKeyTop);
 
         // Remaining mode, whose line falls from the top-left: the key starts at the top-right and the
         // extra usage at the bottom-left, each moving to the other edge as above. Readings sit at
@@ -3241,11 +3176,6 @@ static void RunSparklineTests() {
         CHECK(!spent.sparkExtraBottom && spent.quotas[1].sparkKeyTop);
         AccountMeters light = weekly(10, 0.8, SparklineExtra::Amount, &falling);
         CHECK(light.sparkExtraBottom && !light.quotas[1].sparkKeyTop);
-        // No reading: as placed.
-        MeterDisplay unreadLeft = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
-        AccountMeters blankLeft = AccountMeterState(unreadLeft, BarLayout::Sparkline,
-                                                    Account(L"anthropic", L"A", {false, true, false, true}), unread, 0, 0);
-        CHECK(unmarked(blankLeft.quotas[1]) && blankLeft.sparkExtraBottom && blankLeft.quotas[1].sparkKeyTop);
     });
 
     Run("sparkline: shape colors per taskbar theme, each chart in its quota's; strokes and drawing order", [] {
@@ -3404,7 +3334,7 @@ static void RunMatrixTests() {
         cell(three.quotas[0], 0, 0); cell(three.quotas[2], 1, 0); cell(three.quotas[3], 0, 1);
         AccountMeters four = matrix({true, true, true, true});
         cell(four.quotas[0], 0, 0); cell(four.quotas[1], 1, 0); cell(four.quotas[2], 0, 1); cell(four.quotas[3], 1, 1);
-        // After the first success an unreported quota takes no cell; the next one moves up.
+        // An unreported quota takes no cell; the next one moves up.
         AccountMeters gap = matrix({true, true, true, true}, {10, -1, 30, 40});
         CHECK(gap.barMask == 0b1101);
         cell(gap.quotas[0], 0, 0); cell(gap.quotas[2], 1, 0); cell(gap.quotas[3], 0, 1);
@@ -3416,7 +3346,7 @@ static void RunMatrixTests() {
         CHECK(!paced.quotas[0].paceVisible && paced.quotas[0].paceUnits == 0 && paced.quotas[0].paceHalo.empty());
     });
 
-    Run("quota matrix: numbers per bar mode, a dash without a reading; keys on every slot in every style", [] {
+    Run("quota matrix: numbers per bar mode; keys on every slot in every style", [] {
         auto matrix = [](const AccountData& data, BarMode mode = BarMode::Used) {
             MeterDisplay d = Display(With([&](Settings& s) { s.barMode = mode; }));
             return AccountMeterState(d, BarLayout::QuotaMatrix, Account(), data, 0, 0);
@@ -3430,13 +3360,6 @@ static void RunMatrixTests() {
               left.quotas[3].text == L"1%");
         // Colors follow the used share in either mode.
         CHECK(used.quotas[1].color == 0xFFE53935 && left.quotas[1].color == 0xFFE53935 && left.quotas[0].color == 0xFF43A047);
-        // Before the first success every selected quota has a cell: a dash until it reads.
-        AccountData before = Fresh({42, -1, -1, -1});
-        before.lastSuccessMs = 0;
-        AccountMeters waiting = matrix(before);
-        CHECK(waiting.barMask == 0b1111 && waiting.quotas[0].text == L"42%" && waiting.quotas[1].text == L"\u2013" &&
-              waiting.quotas[3].text == L"\u2013");
-        CHECK(matrix(before, BarMode::Remaining).quotas[2].text == L"\u2013");
         // Keys on every slot in every style, selected or not; Antigravity's third is its Gemini
         // Argon weekly, OpenAI's fourth its credits, GitHub Copilot's its monthly AI credits, OpenCode
         // Go's its monthly.
@@ -3480,12 +3403,6 @@ static void RunMatrixTests() {
         MeterDisplay tiny = Display();
         tiny.tileHeight = 16;
         check(AccountMeterState(tiny, BarLayout::QuotaMatrix, Account(), Fresh({10, 20, 30, 40}), 0, 0), 7);
-        // Before the first success every selected quota counts: two rows.
-        AccountData before = Fresh();
-        before.lastSuccessMs = 0;
-        check(AccountMeterState(Display({}, 1, 32), BarLayout::QuotaMatrix, Account(L"anthropic", L"A", {true, true, false, false}),
-                                before, 0, 0),
-              15 / 1.4);
     });
 }
 
@@ -3606,7 +3523,7 @@ static void RunSideTests() {
         AccountMeters down = matrix(side(large));
         for (int w = 0; w < kQuotaBarCount; w++) CHECK(down.quotas[w].matrixRow == w && down.quotas[w].matrixColumn == 0);
         CHECK_NEAR(down.matrixFont, 24); CHECK_NEAR(down.matrixKeyFont, 24.0 * 9 / 14);
-        // After the first success an unreported quota takes no row; the next one moves up.
+        // An unreported quota takes no row; the next one moves up.
         AccountMeters gap = AccountMeterState(side(), BarLayout::QuotaMatrix, Account(), Fresh({10, -1, 30, 40}), 0, 0);
         CHECK(gap.quotas[0].matrixRow == 0 && gap.quotas[2].matrixRow == 1 && gap.quotas[3].matrixRow == 2);
         // Across the screen, two rows still shrink to fit the tile.
