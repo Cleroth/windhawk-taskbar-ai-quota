@@ -67,7 +67,11 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   Contributors sentence (Japanese word order, a test catalog's reversed list patterns: links by
   login and focus order), the History page in Russian (retention and time span plurals, the
   custom box's unit, the status color inside the line), the settings notices' codes (every
-  English text, a kept history's reason in German) and draft errors re-read per frame language.
+  English text, a kept history's reason in German), draft errors re-read per frame language, the
+  Layout page's per-display placement notes in German, the bar-only reason naming the current tile
+  style (Russian, Japanese) with the preview card's text, the Layout page in Russian (time span
+  plurals, the pixel unit, the quota keys' description, the usage graph's section) and the
+  threshold notifications' level as whole texts on the Display page in Chinese.
   `fixtures/i18n-taskbar.inc`: the meter model's localized text on the production catalogs: the
   quota keys and the headline countdown's forms and width reserve in zh-Hans, ru and the
   pseudo-locale, the preview strip drawing them (the matrix's localized key reserve), an account
@@ -153,7 +157,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   row per layout and option (`render-preview-sheet-*`) or per Display option
   (`render-display-preview-sheet-*`; 1:1 at 100/125/150%) and the dropdown popup's rows
   (`render-popup-*`), and the localization review's Behavior and History pages, whole, in
-  zh-Hans and the pseudo-locale (`render-i18n-<page>-<tag>-light-96/144`), with a preview strip
+  zh-Hans and the pseudo-locale (`render-i18n-<page>-<tag>-light-96/144`; Layout, with a side
+  taskbar's note, and Display at 96 only), with a preview strip
   sheet of the taskbar's localized text (keys, the headline's countdown, chart and matrix keys;
   `render-i18n-preview-sheet-<tag>-light-96/144`). `render-backdrop-*`
   (Accounts, Layout, Display) and

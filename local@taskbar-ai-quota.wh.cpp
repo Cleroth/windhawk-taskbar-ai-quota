@@ -549,34 +549,92 @@ static constexpr bool I18nCatalogSorted(std::span<const I18nEntry> catalog) {
 // German (de): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogDe[] = {
+    {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
+          L"in Used mode, left in Remaining mode.",
+     L"$ oder Guthaben statt % bei zusätzlicher Nutzung von Anthropic, Guthaben von OpenAI und KI-Guthaben von "
+     L"GitHub Copilot: ausgegeben im Modus „Verbraucht“, übrig im Modus „Verbleibend“."},
     {L"", L"1 to 3650 days.", L"1 bis 3650 Tage."},
     {L"", L"2 to 1440 minutes.", L"2 bis 1440 Minuten."},
     {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
      L"Eine Änderung konnte nicht gespeichert werden; sie wird mit ihrem Fehler angezeigt.\n\nNicht gespeicherte "
      L"Änderungen verwerfen und das Fenster schließen?"},
+    {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
+     L"Eine Diagonale markiert gleichmäßigen Verbrauch des Kontingents über sein Zeitfenster, zum Vergleich mit "
+     L"seiner Nutzung."},
+    {L"", L"A faint border around each chart.", L"Ein dezenter Rahmen um jedes Diagramm."},
+    {L"", L"A full track behind each fill, or a thin rail under it.",
+     L"Eine volle Spur hinter jeder Füllung oder eine schmale Schiene darunter."},
+    {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+     L"Ein Ring um den aktuellen Messwert, aus den Linien darunter ausgespart. Aus: ein einfacher Punkt."},
+    {L"", L"A small triangle on the chart’s bottom edge at the current time.",
+     L"Ein kleines Dreieck am unteren Rand des Diagramms zur aktuellen Zeit."},
+    {L"", L"A thin line across the chart at the current time.",
+     L"Eine dünne Linie quer über das Diagramm zur aktuellen Zeit."},
+    {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
+          L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
+          L"major outage. Off: no status pages are read.",
+     L"Ein Warndreieck an einem Konto, solange die Statusseite seines Anbieters ein Problem mit einem genutzten "
+     L"Dienst meldet: in der orangen Nutzungsfarbe bei eingeschränktem Dienst, teilweisem Ausfall oder Wartung, in "
+     L"der roten bei schwerem Ausfall. Aus: Es werden keine Statusseiten gelesen."},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"KI-Abo-Kontingente für Anthropic, OpenAI, Google Antigravity, GitHub Copilot und OpenCode Go in der "
      L"Taskleiste von Windows 11."},
+    {L"", L"Account identity is set per account in Accounts", L"Identität wird pro Konto unter „Konten“ festgelegt"},
+    {L"", L"Account margin", L"Kontoabstand"},
+    {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.",
+     L"Adaptiv: rechts, wechselt nach links, sobald der Balken den gelben Schwellenwert erreicht."},
+    {L"", L"Additional OpenAI rate limits", L"Zusätzliche OpenAI-Ratenlimits"},
+    {L"", L"Adds ! when a refresh failed or is overdue.",
+     L"Fügt ! hinzu, wenn eine Aktualisierung fehlgeschlagen oder überfällig ist."},
     {L"", L"All displays", L"Alle Bildschirme"},
     {L"", L"Also delete its usage history", L"Auch den Nutzungsverlauf löschen"},
+    {L"", L"Also the level for threshold notifications.", L"Zugleich die Stufe für Schwellenwert-Benachrichtigungen."},
+    {L"", L"Amounts on extra usage and credits", L"Beträge für zusätzliche Nutzung und Guthaben"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.",
      L"Ein Konto ist nicht mehr konfiguriert; seine nicht gespeicherten Änderungen wurden verworfen."},
     {L"", L"Another account of this provider uses this label.",
      L"Ein anderes Konto dieses Anbieters verwendet diese Bezeichnung."},
+    {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
+          L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
+          L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
+     L"Zusätzliche Nutzung von Anthropic oder Guthaben von OpenAI in der oberen linken Ecke des {key7d}-Diagramms "
+     L"(unten links im Modus „Verbleibend“), wenn für das Konto ausgewählt und gemeldet: ausgegeben im Modus "
+     L"„Verbraucht“, übrig im Modus „Verbleibend“. „Prozent“ zeigt ohne Limit den Betrag. Guthaben von OpenAI "
+     L"erhalten nie ein eigenes Diagramm."},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic, OpenAI und GitHub Copilot melden sich über Ihren Browser an, OpenCode Go mit einem API-Schlüssel. "
      L"Google Antigravity verwendet seine angemeldete App oder CLI, die weiterlaufen muss."},
+    {L"", L"Antigravity logo", L"Antigravity-Logo"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"Gilt nur für diesen Windows-Benutzer. Beim Ausschalten bleibt der gespeicherte Verlauf erhalten."},
+    {L"", L"Background of the details flyout and the settings and usage history windows.",
+     L"Hintergrund der Detailansicht sowie der Fenster Einstellungen und Nutzungsverlauf."},
+    {L"", L"Badge color", L"Badge-Farbe"},
+    {L"", L"Badge horizontal offset", L"Horizontaler Badge-Versatz"},
+    {L"", L"Badge size", L"Badge-Größe"},
+    {L"", L"Badge vertical offset", L"Vertikaler Badge-Versatz"},
+    {L"", L"Bar gap", L"Balkenabstand"},
+    {L"", L"Bar length", L"Balkenlänge"},
+    {L"", L"Bar mode", L"Balkenmodus"},
+    {L"", L"Bar style", L"Balkenstil"},
+    {L"", L"Bar text size", L"Textgröße der Balken"},
+    {L"", L"Bar thickness", L"Balkenstärke"},
+    {L"", L"Chart height", L"Diagrammhöhe"},
+    {L"", L"Chart outline", L"Diagrammrahmen"},
+    {L"", L"Chart width", L"Diagrammbreite"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Wählen Sie „Benutzerdefiniert“ unter „Cloud-Abfrageintervall“, um dies zu bearbeiten."},
     {L"", L"Choose Custom in Keep history to edit.",
      L"Wählen Sie „Benutzerdefiniert“ unter „Verlauf aufbewahren“, um dies zu bearbeiten."},
+    {L"", L"Choose an identity position to change this.", L"Wählen Sie eine Identitätsposition, um dies zu ändern."},
+    {L"", L"Claude logo", L"Claude-Logo"},
     {L"", L"Cloud poll interval", L"Cloud-Abfrageintervall"},
+    {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
+     L"Codex Spark, versteckte Modell-Limits wie gpt-reserve und den Namen des Spark-Plans in den OpenAI-Details."},
     {L"", L"Contributors", L"Mitwirkende"},
     {L"", L"Copy version info", L"Versionsinfo kopieren"},
     {L"", L"Could not remove the account.", L"Das Konto konnte nicht entfernt werden."},
@@ -598,10 +656,37 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Custom interval", L"Benutzerdefiniertes Intervall"},
     {L"", L"Custom retention", L"Benutzerdefinierte Aufbewahrung"},
     {L"", L"Default time span", L"Standardzeitraum"},
+    {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
+          L"threshold.",
+     L"Standard: Grün, Gelb, Orange und Rot. Farbenblind: Blau bis Zinnoberrot. Benutzerdefiniert: eine selbst "
+     L"gewählte Farbe pro Schwellenwert."},
+    {L"", L"Diameter in pixels.", L"Durchmesser in Pixeln."},
     {L"", L"Display {number} - unavailable", L"Bildschirm {number} – nicht verfügbar"},
     {L"", L"Display {number} - {width}x{height}", L"Bildschirm {number} – {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)",
      L"Bildschirm {number} – {width}x{height} (Hauptbildschirm)"},
+    {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
+          L"to retry.",
+     L"Bildschirm {number} zeigt die Balken im Infobereich: Ein anderer Mod steuert den Platz, den sie brauchen. "
+     L"Starten Sie den Explorer neu, um es erneut zu versuchen."},
+    {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
+     L"Bildschirm {number} zeigt die Balken im Infobereich: Seine Startschaltfläche ist ausgeblendet oder wurde "
+     L"nicht gefunden."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
+     L"Bildschirm {number} zeigt die Balken im Infobereich: Die Schaltflächen seiner Taskleiste wurden nicht "
+     L"gefunden."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
+     L"Bildschirm {number} zeigt die Balken im Infobereich: Seine Taskleiste befindet sich an einem seitlichen "
+     L"Bildschirmrand."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
+          L"fit its width. The preview shows them across a bottom taskbar.",
+     L"Die Taskleiste von Bildschirm {number} befindet sich an einem seitlichen Bildschirmrand: Die Konten werden "
+     L"untereinander gestapelt, jeder Stil wird an ihre Breite angepasst. Die Vorschau zeigt sie nebeneinander in "
+     L"einer unteren Taskleiste."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
+          L"Update Windows to show them.",
+     L"Die Taskleiste von Bildschirm {number} befindet sich an einem seitlichen Bildschirmrand: Ihr Infobereich "
+     L"nimmt in diesem Windows-Build keine Balken auf. Aktualisieren Sie Windows, um sie anzuzeigen."},
     {L"", L"Do not poll hidden accounts", L"Ausgeblendete Konten nicht abfragen"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus."},
@@ -613,9 +698,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Jedes Konto legt selbst fest, ob es aufzeichnet: <link id=\"accounts\">Konten</link> > Verlauf aufzeichnen. "
      L"Ausgeblendete Konten werden nicht aufgezeichnet, solange <link id=\"hidden\">Ausgeblendete Konten nicht "
      L"abfragen</link> unter Verhalten aktiviert ist."},
+    {L"", L"Elapsed time", L"Verstrichene Zeit"},
     {L"", L"Enter a label.", L"Geben Sie eine Bezeichnung ein."},
     {L"", L"Enter a whole number from {minimum} to {maximum}.",
      L"Geben Sie eine ganze Zahl von {minimum} bis {maximum} ein."},
+    {L"", L"Example accounts, updates as you change settings", L"Beispielkonten, aktualisiert bei jeder Änderung"},
+    {L"", L"Example accounts, wider than shown: drag to scroll", L"Beispielkonten, abgeschnitten: zum Scrollen ziehen"},
     {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -627,6 +715,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"verwendet das Gemini-Zeichen.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, "
      L"GitHub, GitHub Copilot und OpenCode sind Marken ihrer jeweiligen Inhaber. Logos zeigen nur, zu welchem Konto "
      L"eine Kachel gehört."},
+    {L"", L"Gap after accounts", L"Abstand nach den Konten"},
+    {L"", L"Gauge size", L"Größe der Bogenanzeige"},
+    {L"", L"Gauge thickness", L"Stärke der Bogenanzeige"},
+    {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
+     L"Höhe in Pixeln; ein Kreisdiagramm pro Kontingent, ab dem dritten kleiner."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Ausgeblendete Konten werden weder abgefragt noch aufgezeichnet, auch wenn „Verlauf aufzeichnen“ aktiviert ist. "
@@ -641,20 +734,36 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
      L"Sitzung jede Minute ab."},
     {L"", L"Identity", L"Identität"},
+    {L"", L"Identity gap", L"Identitätsabstand"},
+    {L"", L"Identity position", L"Identitätsposition"},
     {L"", L"Interface language", L"Sprache der Oberfläche"},
     {L"", L"Its stored sign-in will be deleted.", L"Die gespeicherte Anmeldung wird gelöscht."},
     {L"", L"Its usage history is kept.", L"Der Nutzungsverlauf bleibt erhalten."},
     {L"", L"Keep history", L"Verlauf aufbewahren"},
     {L"", L"Label", L"Bezeichnung"},
+    {L"", L"Label font size", L"Schriftgröße der Bezeichnung"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Sprache, Bildschirme, Details beim Daraufzeigen, Abfragen und Benachrichtigungen."},
     {L"", L"License", L"Lizenz"},
+    {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
+     L"Standardmäßig hellgrau, auf einer hellen Taskleiste dunkel. „Anpassen…“ öffnet die Farbauswahl."},
+    {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
+     L"Hellt den verstrichenen Teil des Kontingent-Zeitfensters auf; der Rest bleibt gedimmt."},
+    {L"", L"Logo + number badge, logo only, or label.", L"Logo + Nummern-Badge, nur Logo oder Bezeichnung."},
+    {L"", L"Logo size", L"Logogröße"},
+    {L"", L"Long windows", L"Lange Zeitfenster"},
     {L"", L"MIT License", L"MIT-Lizenz"},
+    {L"", L"Mark stale data", L"Veraltete Daten markieren"},
+    {L"", L"Marker color", L"Markierungsfarbe"},
+    {L"", L"Marker style", L"Markierungsstil"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
      L"Kennzeichnet dieses Konto neben seinen Balken und auf Kacheln. „Bezeichnung“ zeigt die Bezeichnung an den "
      L"Balken und ihren Kurztext auf Kacheln. Das Nummern-Badge erscheint, wenn sich mehrere Konten einen Anbieter "
      L"teilen, ausgeblendete eingeschlossen."},
+    {L"", L"Material", L"Material"},
+    {L"", L"Material, values, usage colors, status marks and flyout details.",
+     L"Material, Werte, Nutzungsfarben, Statusmarkierungen und Detailansicht."},
     {L"", L"New samples arrive with each poll.", L"Neue Messwerte kommen mit jeder Abfrage hinzu."},
     {L"", L"No accounts yet", L"Noch keine Konten"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
@@ -666,18 +775,52 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Benachrichtigt, wenn ein Taskleisten-Kontingent den gewählten Schwellenwert erstmals erreicht. Wird wieder "
      L"aktiv, sobald es darunter fällt."},
+    {L"", L"Now caret", L"Jetzt-Caret"},
+    {L"", L"Now line", L"Jetzt-Linie"},
+    {L"", L"Number size", L"Zahlengröße"},
+    {L"", L"On hover", L"Beim Daraufzeigen"},
     {L"", L"Open AI quota settings", L"Einstellungen für KI-Kontingente öffnen"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Einstellungen für KI-Kontingente öffnen. Die gespeicherten Einstellungen konnten nicht gelesen werden; eine "
      L"Sicherung wurde aufbewahrt."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Öffnet die Details eines Kontos, wenn der Zeiger darauf verweilt."},
+    {L"", L"Orange from", L"Orange ab"},
+    {L"", L"Pace markers", L"Tempomarkierungen"},
+    {L"", L"Palette", L"Palette"},
+    {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
+     L"Prozent der Standardgröße des aktuellen Messwerts: der Ring mit seinem Punkt oder der einfache Punkt."},
+    {L"", L"Percent of the standard size; rings keep it inside the hole.",
+     L"Prozent der Standardgröße; bei Ringen bleibt es innerhalb des Lochs."},
+    {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
+     L"Prozent der Kachelhöhe, für 0 % bis 100 % verbraucht, im Modus „Verbleibend“ übrig."},
+    {L"", L"Percentage alignment", L"Ausrichtung des Prozenttexts"},
+    {L"", L"Percentage on each bar: never, on hover, or always.",
+     L"Prozentwert auf jedem Balken: nie, beim Daraufzeigen oder immer."},
+    {L"", L"Percentage text", L"Prozenttext"},
+    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
+     L"Prozenttext und Kontingentkürzel. Der Prozenttext wird unter „Darstellung“ eingestellt."},
+    {L"", L"Pie area", L"Diagrammbereich"},
+    {L"", L"Pixels across each bar.", L"Dicke jedes Balkens in Pixeln."},
+    {L"", L"Pixels across each quota’s chart.", L"Breite des Diagramms jedes Kontingents in Pixeln."},
+    {L"", L"Pixels along each bar.", L"Länge jedes Balkens in Pixeln."},
+    {L"", L"Pixels along each quota’s bar under the number.",
+     L"Länge des Balkens jedes Kontingents unter der Zahl, in Pixeln."},
+    {L"", L"Pixels down, or up when negative.", L"Pixel nach unten, bei negativen Werten nach oben."},
+    {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
+     L"Pixel nach rechts, bei negativen Werten nach links, von der unteren rechten Ecke des Logos aus (bei Ringen "
+     L"innerhalb des Lochs)."},
+    {L"", L"Position", L"Position"},
     {L"", L"Primary display only", L"Nur Hauptbildschirm"},
     {L"", L"Primary display, all displays, or one display.",
      L"Hauptbildschirm, alle Bildschirme oder ein bestimmter Bildschirm."},
     {L"", L"Project page", L"Projektseite"},
     {L"", L"Provider logos", L"Anbieterlogos"},
+    {L"", L"Quota keys", L"Kontingentkürzel"},
+    {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
+     L"Kontingentkürzel ({key5h}, {key7d} usw.) und zusätzliche Nutzung auf den Diagrammen, in Pixeln."},
     {L"", L"Quotas on taskbar", L"Kontingente in der Taskleiste"},
+    {L"", L"Reading size", L"Größe des Messwerts"},
     {L"", L"Record history", L"Verlauf aufzeichnen"},
     {L"", L"Record usage history", L"Nutzungsverlauf aufzeichnen"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
@@ -687,6 +830,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Aufzeichnungsregeln, Speicherung, Export und Überprüfung"},
     {L"", L"Recording starts once the taskbar saves its account IDs.",
      L"Die Aufzeichnung beginnt, sobald die Taskleiste ihre Konto-IDs gespeichert hat."},
+    {L"", L"Red from", L"Rot ab"},
     {L"", L"Remove \"{label}\" ({provider})?", L"„{label}“ ({provider}) entfernen?"},
     {L"", L"Report an issue", L"Problem melden"},
     {L"", L"Reset Behavior to defaults", L"Verhalten auf Standard zurücksetzen"},
@@ -695,6 +839,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm anzeigen, "
      L"Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten nicht abfragen, "
      L"Schwellenwert-Benachrichtigungen bei Rot."},
+    {L"", L"Reset Display to defaults", L"Darstellung auf Standard zurücksetzen"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
@@ -708,12 +853,17 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Verlauf auf die Standardwerte zurücksetzen?\n\nDie Aufzeichnung wird für diesen Windows-Benutzer "
      L"eingeschaltet, der Verlauf wird unbegrenzt aufbewahrt und das Fenster „Nutzungsverlauf“ öffnet mit 7 Tagen. "
      L"Der gespeicherte Verlauf bleibt erhalten."},
+    {L"", L"Reset Layout to defaults", L"Layout auf Standard zurücksetzen"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
      L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100 x 8 px mit Beschriftungen links, Ringe "
      L"mit 32 px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, hellgraue Tempomarkierungen als Caret "
      L"und die Standardabstände. Konten werden nicht geändert."},
+    {L"", L"Reset countdown", L"Reset-Countdown"},
+    {L"", L"Ring size", L"Ringgröße"},
+    {L"", L"Ring thickness", L"Ringstärke"},
+    {L"", L"Ringed reading", L"Messwert mit Ring"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"Wählen Sie <b>{button}</b>, um ein Konto von Anthropic, OpenAI, Google Antigravity, GitHub Copilot oder "
@@ -725,13 +875,28 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ löscht nichts und hat keine Größenbeschränkung, daher wächst der "
      L"Verlauf im Speicher des Explorers und auf dem Datenträger weiter. Tageslimits bereinigen stündlich, mit einer "
      L"Obergrenze von etwa 60 MB."},
+    {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
+     L"Kürzel neben jedem Balken: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Kurztext"},
     {L"", L"Show details on hover", L"Details beim Daraufzeigen anzeigen"},
     {L"", L"Show on", L"Anzeigen auf"},
+    {L"", L"Show percentage text on hover or always to change this.",
+     L"Lassen Sie den Prozenttext beim Daraufzeigen oder immer anzeigen, um dies zu ändern."},
+    {L"", L"Show provider outages", L"Anbieterausfälle anzeigen"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
      L"Wird in den Details angezeigt und neben den Balken, wenn „Identität“ auf „Bezeichnung“ steht. Pro Anbieter "
      L"eindeutig; beim Umbenennen bleiben Anmeldung und Verlauf erhalten."},
+    {L"", L"Side in pixels.", L"Seitenlänge in Pixeln."},
+    {L"", L"Space after the last account, before whatever comes next on the taskbar.",
+     L"Abstand nach dem letzten Konto, vor dem nächsten Element in der Taskleiste."},
+    {L"", L"Space between an account’s bars.", L"Abstand zwischen den Balken eines Kontos."},
+    {L"", L"Space between the identity and the bars.", L"Abstand zwischen der Identität und den Balken."},
+    {L"", L"Space on each side of every account.", L"Abstand auf beiden Seiten jedes Kontos."},
+    {L"", L"Square size", L"Größe des Quadrats"},
+    {L"", L"Square thickness", L"Stärke des Quadrats"},
+    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
+     L"Nur „Gestapelte Balken“ und „Vertikale Balken“. Aktueller Kachelstil: {style}."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -739,10 +904,28 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Tage}} lang aufbewahrt und auf 250.000 Messwerte (etwa 60 MB) begrenzt. Ältere Messwerte und die ältesten "
      L"über diese Grenze hinaus werden dauerhaft gelöscht, für alle Windows-Benutzer."},
     {L"", L"Storage location", L"Speicherort"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
+     L"Strichstärke in Pixeln. Wird automatisch schmaler, wenn der Bogen nicht um die Zahl passt."},
+    {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
+     L"Strichstärke in Pixeln. Wird automatisch schmaler, wenn die Anzeigen nicht um das Logo oder den Text passen."},
     {L"", L"Suggestions and bug reports on GitHub", L"Vorschläge und Fehlerberichte auf GitHub"},
+    {L"", L"Text of accounts whose identity is Label, in pixels.",
+     L"Text von Konten mit der Identität „Bezeichnung“, in Pixeln."},
+    {L"", L"Text size", L"Textgröße"},
+    {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
+          L"taskbar.",
+     L"Textgröße des Prozentwerts jedes Kontingents, in Pixeln; sein Kürzel skaliert mit. Zwei Zeilen werden "
+     L"verkleinert, um in die Taskleiste zu passen."},
+    {L"", L"Text size of the most-used quota’s percentage, in pixels; its quota key scales with it.",
+     L"Textgröße des Prozentwerts des am stärksten genutzten Kontingents, in Pixeln; sein Kontingentkürzel skaliert "
+     L"mit."},
+    {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+     L"Textgröße der Nummer auf einem Logo, wenn sich mehrere Konten einen Anbieter teilen, in Pixeln."},
     {L"", L"Thanks to {names}.", L"Danke an {names}."},
     {L"", L"That provider and label are already configured.",
      L"Dieser Anbieter mit dieser Bezeichnung ist bereits konfiguriert."},
+    {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
+     L"Der Gemini-Stern in der Textfarbe der Taskleiste oder in seinem Farbverlauf von Lila zu Blau."},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
      L"Die Identität „Bezeichnung“ auf Kacheln, bis zu 4 Zeichen. Leer verwendet die Bezeichnung ohne Leerzeichen."},
     {L"", L"The account was changed from another taskbar window.",
@@ -771,6 +954,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"Applies to this Windows user only.",
      L"Die Fenster Einstellungen und Nutzungsverlauf sowie die Taskleiste. „Automatisch“ folgt Ihrer "
      L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
+    {L"", L"The settings and usage history windows use Mica for it.",
+     L"Die Fenster Einstellungen und Nutzungsverlauf verwenden dafür „Mica“."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Die gespeicherte Anmeldung konnte nicht kopiert werden. Das Konto wurde nicht geändert."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -781,10 +966,35 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"signed out.",
      L"Die gespeicherte Anmeldung wurde gelöscht, aber die Einstellungen konnten nicht gespeichert werden. Das Konto "
      L"bleibt konfiguriert, ist aber abgemeldet."},
+    {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
+     L"Die Textfarbe der Taskleiste oder Claudes Orange. Die Detailansicht, „Konten“ und der Nutzungsverlauf "
+     L"übernehmen sie."},
+    {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
+          L"fills with the elapsed time.",
+     L"Schmales Caret, Linie über die volle Breite, Randkerbe, zentrierter Punkt oder eine Zeitspur: ein kleiner "
+     L"Balken unter jedem Balken, der sich mit der verstrichenen Zeit füllt."},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"Dieses Konto ist nicht mehr konfiguriert; seine nicht gespeicherten Änderungen wurden verworfen."},
     {L"", L"This change couldn't be saved.", L"Diese Änderung konnte nicht gespeichert werden."},
     {L"", L"Threshold notifications", L"Schwellenwert-Benachrichtigungen"},
+    {L"", L"Thresholds stay in order: yellow, orange, red.",
+     L"Die Schwellenwerte bleiben in der Reihenfolge Gelb, Orange, Rot."},
+    {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
+     L"Die Schwellenwerte bleiben in der Reihenfolge Gelb, Orange, Rot. Zugleich die Stufe für "
+     L"Schwellenwert-Benachrichtigungen."},
+    {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
+     L"Markierungen zeigen, wie viel vom Zeitfenster jedes Kontingents verstrichen ist, zum Vergleich mit seiner "
+     L"Nutzung."},
+    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+          L"changed.",
+     L"Kachelstil, Balkenstil, Größen, Identität und Text, Tempomarkierungen, Position und Abstände. Konten werden "
+     L"nicht geändert."},
+    {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
+     L"Zeit bis zum Reset dieses Kontingents unter der Zahl, statt der Balken der einzelnen Kontingente."},
+    {L"", L"Turn off Reset countdown to change this.", L"Schalten Sie „Reset-Countdown“ aus, um dies zu ändern."},
+    {L"", L"Turn on Pace markers to change this.", L"Schalten Sie „Tempomarkierungen“ ein, um dies zu ändern."},
+    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
+     L"Schalten Sie „Kontingentkürzel“ oder den Prozenttext unter „Darstellung“ ein, um dies zu ändern."},
     {L"", L"Turn on Record usage history to change this.",
      L"Schalten Sie „Nutzungsverlauf aufzeichnen“ ein, um dies zu ändern."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
@@ -793,8 +1003,22 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"on the 7d chart.",
      L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt. "
      L"Nutzungsdiagramme zeigen Guthaben als Zahl im 7T-Diagramm."},
+    {L"", L"Usage below this is blue.", L"Nutzung unter diesem Wert ist blau."},
+    {L"", L"Usage below this is blue. Also the level for threshold notifications.",
+     L"Nutzung unter diesem Wert ist blau. Zugleich die Stufe für Schwellenwert-Benachrichtigungen."},
+    {L"", L"Usage below this is green.", L"Nutzung unter diesem Wert ist grün."},
+    {L"", L"Usage below this is green. Also the level for threshold notifications.",
+     L"Nutzung unter diesem Wert ist grün. Zugleich die Stufe für Schwellenwert-Benachrichtigungen."},
+    {L"", L"Usage below this takes the Below yellow color.",
+     L"Nutzung unter diesem Wert erhält die Farbe „Unter Gelb“."},
+    {L"", L"Usage below this takes the Below yellow color. Also the level for threshold notifications.",
+     L"Nutzung unter diesem Wert erhält die Farbe „Unter Gelb“. Zugleich die Stufe für "
+     L"Schwellenwert-Benachrichtigungen."},
     {L"", L"Usage history", L"Nutzungsverlauf"},
     {L"", L"Usage history guide", L"Leitfaden zum Nutzungsverlauf"},
+    {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
+     L"„Verbraucht“ füllt sich mit dem Verbrauch des Kontingents; „Verbleibend“ füllt sich mit dem Rest. Die Farben "
+     L"folgen immer der Nutzung."},
     {L"", L"Used on tiles when Identity is Label.",
      L"Wird auf Kacheln verwendet, wenn „Identität“ auf „Bezeichnung“ steht."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  von Cleroth  ·  Windhawk-Mod"},
@@ -802,6 +1026,23 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie die Identität ändern."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
      L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie Konten entfernen."},
+    {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
+          L"hours before and after now.",
+     L"Wöchentliche und monatliche Diagramme ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): das ganze Zeitfenster "
+     L"oder 12 bis 48 Stunden vor und nach dem aktuellen Zeitpunkt."},
+    {L"", L"What those charts show while the pointer rests on the account.",
+     L"Was diese Diagramme zeigen, während der Zeiger auf dem Konto verweilt."},
+    {L"", L"Where each account’s identity sits next to its bars.",
+     L"Wo die Identität jedes Kontos neben seinen Balken steht."},
+    {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
+          L"move over to make room.",
+     L"Wo die Balken in der Taskleiste erscheinen. „Ganz links“ und „Rechts von Start“ sind experimentell: Die "
+     L"Schaltflächen der Taskleiste rücken zur Seite, um Platz zu machen."},
+    {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
+     L"Weiß, der Standard, folgt der Textfarbe der Taskleiste. „Anpassen…“ öffnet die Farbauswahl."},
+    {L"", L"Windows transparency effects are off, so it shows as Solid.",
+     L"Die Transparenzeffekte von Windows sind aus, daher erscheint es als „Einfarbig“."},
+    {L"", L"Yellow from", L"Gelb ab"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity läuft nicht"},
@@ -882,6 +1123,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"add-account", L"Sign in with your browser", L"Anmeldung über Ihren Browser"},
     {L"add-account", L"Uses the signed-in Antigravity app or CLI",
      L"Verwendet die angemeldete Antigravity-App oder -CLI"},
+    {L"bar-mode", L"Remaining", L"Verbleibend"},
+    {L"bar-mode", L"Used", L"Verbraucht"},
+    {L"bar-style", L"Full track", L"Volle Spur"},
+    {L"bar-style", L"Thin rail", L"Schmale Schiene"},
     {L"button", L"Add account", L"Konto hinzufügen"},
     {L"button", L"Copied", L"Kopiert"},
     {L"button", L"Copy", L"Kopieren"},
@@ -1013,11 +1258,24 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Schreiben des Verlaufs fehlgeschlagen; das vorherige Journal wurde beibehalten."},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"Nicht unterstützte oder beschädigte Verlaufsdatei. Löschen Sie den Verlauf, um neu zu beginnen."},
+    {L"identity-position", L"Bottom", L"Unten"},
+    {L"identity-position", L"Hidden", L"Ausgeblendet"},
+    {L"identity-position", L"Left", L"Links"},
+    {L"identity-position", L"Right", L"Rechts"},
+    {L"identity-position", L"Top", L"Oben"},
     {L"language-choice", L"Automatic ({language})", L"Automatisch ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} und {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} und {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"logo-color", L"Gemini gradient", L"Gemini-Verlauf"},
+    {L"logo-color", L"Orange", L"Orange"},
+    {L"logo-color", L"Taskbar text color", L"Taskleisten-Textfarbe"},
+    {L"material", L"Acrylic", L"Acryl"},
+    {L"material", L"Mica", L"Mica"},
+    {L"material", L"Mica Alt", L"Mica Alt"},
+    {L"material", L"Solid", L"Einfarbig"},
+    {L"material", L"Tinted wallpaper", L"Getönter Hintergrund"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} – Reset {when}"},
     {L"notification-level", L"Off", L"Aus"},
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
@@ -1049,12 +1307,37 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"outage-reason", L"Slow responses", L"Langsame Antworten"},
     {L"outage-reason", L"Upstream provider issues", L"Probleme beim vorgelagerten Anbieter"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
+    {L"pace-marker", L"Caret", L"Caret"},
+    {L"pace-marker", L"Dot", L"Punkt"},
+    {L"pace-marker", L"Edge notch", L"Randkerbe"},
+    {L"pace-marker", L"Full line", L"Volle Linie"},
+    {L"pace-marker", L"Time track", L"Zeitspur"},
+    {L"palette", L"Colorblind", L"Farbenblind"},
+    {L"palette", L"Custom", L"Benutzerdefiniert"},
+    {L"palette", L"Default", L"Standard"},
+    {L"percent-alignment", L"Adaptive", L"Adaptiv"},
+    {L"percent-alignment", L"Center", L"Zentriert"},
+    {L"percent-alignment", L"Left", L"Links"},
+    {L"percent-alignment", L"Right", L"Rechts"},
+    {L"percent-text", L"Always show", L"Immer anzeigen"},
+    {L"percent-text", L"Never show", L"Nie anzeigen"},
+    {L"percent-text", L"Show on hover", L"Beim Daraufzeigen"},
+    {L"pixel-unit", L"px", L"px"},
+    {L"placement", L"After Show desktop", L"Nach „Desktop anzeigen“"},
+    {L"placement", L"After the clock", L"Nach der Uhr"},
+    {L"placement", L"Before network and volume", L"Vor Netzwerk und Lautstärke"},
+    {L"placement", L"Before notification icons", L"Vor den Infobereichssymbolen"},
+    {L"placement", L"Before the clock", L"Vor der Uhr"},
+    {L"placement", L"Left side", L"Ganz links"},
+    {L"placement", L"Right of Start", L"Rechts von Start"},
     {L"plan", L"Visual test", L"Visueller Test"},
     {L"poll-interval", L"Custom", L"Benutzerdefiniert"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# Minute} other{# Minuten}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{Minute} other{Minuten}}"},
+    {L"preview", L"Preview", L"Vorschau"},
+    {L"preview", L"Show on taskbar", L"In Taskleiste zeigen"},
     {L"quota-amount", L"Limit reached", L"Limit erreicht"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Gemeinsamer Pool ({unit}), kein Limit pro Benutzer"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
@@ -1119,14 +1402,34 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-page", L"History", L"Verlauf"},
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Warnungen"},
+    {L"settings-section", L"Appearance", L"Erscheinungsbild"},
+    {L"settings-section", L"Bars", L"Balken"},
     {L"settings-section", L"Credits and license", L"Mitwirkende und Lizenz"},
+    {L"settings-section", L"Current position", L"Aktuelle Position"},
     {L"settings-section", L"Details", L"Details"},
+    {L"settings-section", L"Details flyout", L"Detailansicht"},
+    {L"settings-section", L"Gauge", L"Bogenanzeige"},
+    {L"settings-section", L"Headline", L"Hauptwert"},
+    {L"settings-section", L"Identity", L"Identität"},
+    {L"settings-section", L"Identity and text", L"Identität und Text"},
     {L"settings-section", L"Language", L"Sprache"},
     {L"settings-section", L"Links", L"Links"},
+    {L"settings-section", L"Matrix", L"Matrix"},
+    {L"settings-section", L"Pace markers", L"Tempomarkierungen"},
+    {L"settings-section", L"Pies", L"Kreisdiagramme"},
+    {L"settings-section", L"Placement", L"Platzierung"},
     {L"settings-section", L"Recording", L"Aufzeichnung"},
+    {L"settings-section", L"Ring", L"Ring"},
+    {L"settings-section", L"Spacing", L"Abstände"},
+    {L"settings-section", L"Square", L"Quadrat"},
+    {L"settings-section", L"Status", L"Status"},
     {L"settings-section", L"Storage", L"Speicher"},
     {L"settings-section", L"Taskbar", L"Taskleiste"},
+    {L"settings-section", L"Tile style", L"Kachelstil"},
+    {L"settings-section", L"Time span", L"Zeitraum"},
     {L"settings-section", L"Updates", L"Aktualisierungen"},
+    {L"settings-section", L"Usage colors", L"Nutzungsfarben"},
+    {L"settings-section", L"Values", L"Werte"},
     {L"settings-section", L"Viewer", L"Anzeige"},
     {L"sign-in-button", L"Cancel", L"Abbrechen"},
     {L"sign-in-button", L"Close", L"Schließen"},
@@ -1177,6 +1480,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"paste the code its page shows.",
      L"Dieser Code gehört zu einem anderen Anmeldelink. Öffnen Sie den Link dieses Fensters, erlauben Sie den Zugriff "
      L"und fügen Sie dann den Code ein, den die Seite anzeigt."},
+    {L"sparkline-extra", L"Amount", L"Betrag"},
+    {L"sparkline-extra", L"Off", L"Aus"},
+    {L"sparkline-extra", L"Percent", L"Prozent"},
+    {L"sparkline-span", L"Off", L"Aus"},
+    {L"sparkline-span", L"Whole window", L"Ganzes Zeitfenster"},
+    {L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}",
+     L"{hours, plural, one{# Stunde je Seite} other{# Stunden je Seite}}"},
     {L"taskbar-action", L"Exit visual test", L"Visuellen Test beenden"},
     {L"taskbar-action", L"Hide", L"Ausblenden"},
     {L"taskbar-action", L"Open dashboard", L"Dashboard öffnen"},
@@ -1197,8 +1507,22 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"tile-identity", L"Label", L"Bezeichnung"},
     {L"tile-identity", L"Logo + number badge", L"Logo + Nummern-Badge"},
     {L"tile-identity", L"Logo only", L"Nur Logo"},
+    {L"tile-style", L"Clock pies", L"Uhr-Kreisdiagramme"},
+    {L"tile-style", L"Concentric rings", L"Konzentrische Ringe"},
+    {L"tile-style", L"Gauge %", L"Bogenanzeige %"},
+    {L"tile-style", L"Headline %", L"Hauptwert %"},
+    {L"tile-style", L"Quota matrix", L"Kontingentmatrix"},
+    {L"tile-style", L"Rounded square", L"Abgerundetes Quadrat"},
+    {L"tile-style", L"Segmented ring", L"Segmentring"},
+    {L"tile-style", L"Stacked bars", L"Gestapelte Balken"},
+    {L"tile-style", L"Usage graph", L"Nutzungsdiagramm"},
+    {L"tile-style", L"Vertical bars", L"Vertikale Balken"},
     {L"toggle", L"Off", L"Aus"},
     {L"toggle", L"On", L"Ein"},
+    {L"usage-band", L"Below yellow", L"Unter Gelb"},
+    {L"usage-band", L"From orange", L"Ab Orange"},
+    {L"usage-band", L"From red", L"Ab Rot"},
+    {L"usage-band", L"From yellow", L"Ab Gelb"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
      L"Beim Tempo der letzten 24 Std.: Limit in ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
@@ -1212,32 +1536,89 @@ static_assert(I18nCatalogSorted(kI18nCatalogDe), "sort by (context, English), no
 // Spanish (es): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogEs[] = {
+    {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
+          L"in Used mode, left in Remaining mode.",
+     L"$ o créditos en lugar de % en el uso adicional de Anthropic, los créditos de OpenAI y los créditos de IA de "
+     L"GitHub Copilot: lo gastado en modo Usado, lo que queda en modo Restante."},
     {L"", L"1 to 3650 days.", L"De 1 a 3650 días."},
     {L"", L"2 to 1440 minutes.", L"De 2 a 1440 minutos."},
     {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
      L"No se pudo guardar un cambio; se muestra con su error.\n\n¿Descartar los cambios sin guardar y cerrar la "
      L"ventana?"},
+    {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
+     L"Una diagonal marca el uso uniforme de la cuota a lo largo de su ventana, para compararlo con su uso."},
+    {L"", L"A faint border around each chart.", L"Un borde tenue alrededor de cada gráfico."},
+    {L"", L"A full track behind each fill, or a thin rail under it.",
+     L"Una pista completa detrás de cada relleno, o un riel fino debajo."},
+    {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+     L"Un anillo alrededor de la lectura actual, recortado de las líneas que tiene debajo. Desactivado: un punto "
+     L"simple."},
+    {L"", L"A small triangle on the chart’s bottom edge at the current time.",
+     L"Un pequeño triángulo en el borde inferior del gráfico en la hora actual."},
+    {L"", L"A thin line across the chart at the current time.",
+     L"Una línea fina que cruza el gráfico en la hora actual."},
+    {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
+          L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
+          L"major outage. Off: no status pages are read.",
+     L"Un triángulo de advertencia en una cuenta mientras la página de estado de su proveedor informa de un problema "
+     L"en un servicio que usa: en el color de uso naranja si hay servicio degradado, una interrupción parcial o "
+     L"mantenimiento, y en el rojo si hay una interrupción grave. Desactivado: no se lee ninguna página de estado."},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"Cuotas de suscripciones de IA de Anthropic, OpenAI, Google Antigravity, GitHub Copilot y OpenCode Go en la "
      L"barra de tareas de Windows 11."},
+    {L"", L"Account identity is set per account in Accounts", L"La identidad se configura en cada cuenta, en Cuentas"},
+    {L"", L"Account margin", L"Margen de cuenta"},
+    {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.",
+     L"Adaptable: a la derecha, y pasa a la izquierda cuando la barra alcanza el umbral amarillo."},
+    {L"", L"Additional OpenAI rate limits", L"Límites de frecuencia adicionales de OpenAI"},
+    {L"", L"Adds ! when a refresh failed or is overdue.", L"Agrega ! cuando una actualización falla o se retrasa."},
     {L"", L"All displays", L"Todas las pantallas"},
     {L"", L"Also delete its usage history", L"Eliminar también su historial de uso"},
+    {L"", L"Also the level for threshold notifications.", L"También es el nivel de las notificaciones de umbral."},
+    {L"", L"Amounts on extra usage and credits", L"Importes en uso adicional y créditos"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.",
      L"Una cuenta ya no está configurada; se descartaron sus cambios sin guardar."},
     {L"", L"Another account of this provider uses this label.", L"Otra cuenta de este proveedor ya usa esta etiqueta."},
+    {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
+          L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
+          L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
+     L"Uso adicional de Anthropic o créditos de OpenAI en la esquina superior izquierda del gráfico de {key7d} "
+     L"(inferior izquierda en modo Restante), si están seleccionados para la cuenta y se informan: lo gastado en "
+     L"modo Usado, lo que queda en modo Restante. Porcentaje muestra el importe cuando no hay límite. Los créditos "
+     L"de OpenAI nunca tienen un gráfico propio."},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic, OpenAI y GitHub Copilot inician sesión en tu navegador; OpenCode Go, con una clave de API. Google "
      L"Antigravity usa su app o CLI con la sesión iniciada, que debe seguir en ejecución."},
+    {L"", L"Antigravity logo", L"Logotipo de Antigravity"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"Solo se aplica a este usuario de Windows. Desactivarlo conserva el historial guardado."},
+    {L"", L"Background of the details flyout and the settings and usage history windows.",
+     L"Fondo del panel de detalles y de las ventanas de configuración y del historial de uso."},
+    {L"", L"Badge color", L"Color de la insignia"},
+    {L"", L"Badge horizontal offset", L"Desplazamiento horizontal de la insignia"},
+    {L"", L"Badge size", L"Tamaño de la insignia"},
+    {L"", L"Badge vertical offset", L"Desplazamiento vertical de la insignia"},
+    {L"", L"Bar gap", L"Separación entre barras"},
+    {L"", L"Bar length", L"Longitud de barra"},
+    {L"", L"Bar mode", L"Modo de barra"},
+    {L"", L"Bar style", L"Estilo de barra"},
+    {L"", L"Bar text size", L"Tamaño del texto de barra"},
+    {L"", L"Bar thickness", L"Grosor de barra"},
+    {L"", L"Chart height", L"Alto del gráfico"},
+    {L"", L"Chart outline", L"Contorno del gráfico"},
+    {L"", L"Chart width", L"Ancho del gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estadísticas y exportación CSV a partir de muestras locales, también con el registro desactivado."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Elige Personalizado en Intervalo de consulta en la nube para editarlo."},
     {L"", L"Choose Custom in Keep history to edit.", L"Elige Personalizado en Conservar historial para editarlo."},
+    {L"", L"Choose an identity position to change this.", L"Elige dónde se muestra la identidad para cambiar esto."},
+    {L"", L"Claude logo", L"Logotipo de Claude"},
     {L"", L"Cloud poll interval", L"Intervalo de consulta en la nube"},
+    {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
+     L"Codex Spark, límites ocultos por modelo como gpt-reserve y el nombre del plan Spark en los detalles de OpenAI."},
     {L"", L"Contributors", L"Colaboradores"},
     {L"", L"Copy version info", L"Copiar información de versión"},
     {L"", L"Could not remove the account.", L"No se pudo quitar la cuenta."},
@@ -1257,9 +1638,35 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Custom interval", L"Intervalo personalizado"},
     {L"", L"Custom retention", L"Conservación personalizada"},
     {L"", L"Default time span", L"Intervalo predeterminado"},
+    {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
+          L"threshold.",
+     L"Predeterminada: verde, amarillo, naranja y rojo. Para daltónicos: de azul a bermellón. Personalizada: un "
+     L"color que eliges para cada umbral."},
+    {L"", L"Diameter in pixels.", L"Diámetro en píxeles."},
     {L"", L"Display {number} - unavailable", L"Pantalla {number}: no disponible"},
     {L"", L"Display {number} - {width}x{height}", L"Pantalla {number}: {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Pantalla {number}: {width}x{height} (principal)"},
+    {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
+          L"to retry.",
+     L"La pantalla {number} muestra las barras en la bandeja del sistema: otro mod controla el espacio que "
+     L"necesitan. Reinicia el Explorador para volver a intentarlo."},
+    {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
+     L"La pantalla {number} muestra las barras en la bandeja del sistema: su botón Inicio está oculto o no se "
+     L"encontró."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
+     L"La pantalla {number} muestra las barras en la bandeja del sistema: no se encontraron los botones de su barra "
+     L"de tareas."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
+     L"La pantalla {number} muestra las barras en la bandeja del sistema: su barra de tareas está en un lateral de "
+     L"la pantalla."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
+          L"fit its width. The preview shows them across a bottom taskbar.",
+     L"La barra de tareas de la pantalla {number} está en un lateral: las cuentas se apilan hacia abajo, con cada "
+     L"estilo reorganizado para caber en su ancho. La vista previa las muestra en una barra de tareas inferior."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
+          L"Update Windows to show them.",
+     L"La barra de tareas de la pantalla {number} está en un lateral: su bandeja del sistema no admite barras en "
+     L"esta compilación de Windows. Actualiza Windows para mostrarlas."},
     {L"", L"Do not poll hidden accounts", L"No consultar las cuentas ocultas"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Arrastra para reordenar. El interruptor oculta una cuenta de la barra de tareas."},
@@ -1271,9 +1678,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Cada cuenta elige si se registra: <link id=\"accounts\">Cuentas</link> > Registrar historial. Las cuentas "
      L"ocultas no se registran mientras <link id=\"hidden\">No consultar las cuentas ocultas</link> esté activado en "
      L"Comportamiento."},
+    {L"", L"Elapsed time", L"Tiempo transcurrido"},
     {L"", L"Enter a label.", L"Introduce una etiqueta."},
     {L"", L"Enter a whole number from {minimum} to {maximum}.",
      L"Introduce un número entero de {minimum} a {maximum}."},
+    {L"", L"Example accounts, updates as you change settings", L"Cuentas de ejemplo; reflejan tus cambios"},
+    {L"", L"Example accounts, wider than shown: drag to scroll", L"Cuentas de ejemplo; arrastra para ver el resto"},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -1285,6 +1695,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"el logotipo de Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
      L"GitHub Copilot y OpenCode son marcas comerciales de sus respectivos propietarios. Los logotipos solo "
      L"identifican qué cuenta muestra un mosaico."},
+    {L"", L"Gap after accounts", L"Separación tras las cuentas"},
+    {L"", L"Gauge size", L"Tamaño del medidor"},
+    {L"", L"Gauge thickness", L"Grosor del medidor"},
+    {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
+     L"Alto en píxeles; un gráfico de sectores por cuota, más pequeño a partir del tercero."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Las cuentas ocultas no se consultan ni se registran, aunque Registrar historial esté activado. Desactívalo para "
@@ -1299,20 +1714,37 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Con qué frecuencia se consultan Anthropic, OpenAI, GitHub Copilot y OpenCode Go. Antigravity consulta su sesión "
      L"local cada minuto."},
     {L"", L"Identity", L"Identidad"},
+    {L"", L"Identity gap", L"Separación de la identidad"},
+    {L"", L"Identity position", L"Posición de la identidad"},
     {L"", L"Interface language", L"Idioma de la interfaz"},
     {L"", L"Its stored sign-in will be deleted.", L"Se eliminará su sesión guardada."},
     {L"", L"Its usage history is kept.", L"Su historial de uso se conserva."},
     {L"", L"Keep history", L"Conservar historial"},
     {L"", L"Label", L"Etiqueta"},
+    {L"", L"Label font size", L"Tamaño de fuente de la etiqueta"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Idioma, pantallas, detalles al pasar el puntero, consultas y notificaciones."},
     {L"", L"License", L"Licencia"},
+    {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
+     L"Gris claro de forma predeterminada, oscuro en una barra de tareas clara. Personalizar… abre el selector de "
+     L"color."},
+    {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
+     L"Ilumina la parte de la ventana de la cuota que ya ha pasado; el resto queda atenuado."},
+    {L"", L"Logo + number badge, logo only, or label.", L"Logotipo + insignia numérica, solo logotipo o etiqueta."},
+    {L"", L"Logo size", L"Tamaño del logotipo"},
+    {L"", L"Long windows", L"Ventanas largas"},
     {L"", L"MIT License", L"Licencia MIT"},
+    {L"", L"Mark stale data", L"Marcar datos obsoletos"},
+    {L"", L"Marker color", L"Color del marcador"},
+    {L"", L"Marker style", L"Estilo del marcador"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
      L"Identifica esta cuenta junto a sus barras y en los mosaicos. Etiqueta muestra la etiqueta en las barras y su "
      L"texto corto en los mosaicos. La insignia numérica aparece cuando varias cuentas comparten proveedor, "
      L"incluidas las ocultas."},
+    {L"", L"Material", L"Material"},
+    {L"", L"Material, values, usage colors, status marks and flyout details.",
+     L"Material, valores, colores de uso, marcas de estado y panel de detalles."},
     {L"", L"New samples arrive with each poll.", L"Llegan muestras nuevas con cada consulta."},
     {L"", L"No accounts yet", L"Aún no hay cuentas"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
@@ -1323,17 +1755,51 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Avisa cuando una cuota de la barra de tareas alcanza por primera vez el umbral elegido. Se reactiva cuando baja "
      L"de él."},
+    {L"", L"Now caret", L"Marca de hora actual"},
+    {L"", L"Now line", L"Línea de hora actual"},
+    {L"", L"Number size", L"Tamaño del número"},
+    {L"", L"On hover", L"Al pasar el puntero"},
     {L"", L"Open AI quota settings", L"Abrir la configuración de cuotas de IA"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Abrir la configuración de cuotas de IA. No se pudo leer la configuración guardada; se conservó una copia de "
      L"seguridad."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Abre los detalles de una cuenta cuando el puntero se detiene sobre ella."},
+    {L"", L"Orange from", L"Naranja desde"},
+    {L"", L"Pace markers", L"Marcadores de ritmo"},
+    {L"", L"Palette", L"Paleta"},
+    {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
+     L"Porcentaje del tamaño estándar de la lectura actual: el anillo y su punto, o el punto simple."},
+    {L"", L"Percent of the standard size; rings keep it inside the hole.",
+     L"Porcentaje del tamaño estándar; los anillos lo mantienen dentro del hueco."},
+    {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
+     L"Porcentaje del alto del mosaico, del 0 % al 100 % usado, o restante en modo Restante."},
+    {L"", L"Percentage alignment", L"Alineación del porcentaje"},
+    {L"", L"Percentage on each bar: never, on hover, or always.",
+     L"Porcentaje en cada barra: nunca, al pasar el puntero o siempre."},
+    {L"", L"Percentage text", L"Texto de porcentaje"},
+    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
+     L"Texto de porcentaje y claves de cuota. El texto de porcentaje se configura en Visualización."},
+    {L"", L"Pie area", L"Área de sectores"},
+    {L"", L"Pixels across each bar.", L"Píxeles a lo ancho de cada barra."},
+    {L"", L"Pixels across each quota’s chart.", L"Píxeles a lo ancho del gráfico de cada cuota."},
+    {L"", L"Pixels along each bar.", L"Píxeles a lo largo de cada barra."},
+    {L"", L"Pixels along each quota’s bar under the number.",
+     L"Píxeles a lo largo de la barra de cada cuota bajo el número."},
+    {L"", L"Pixels down, or up when negative.", L"Píxeles hacia abajo, o hacia arriba si es negativo."},
+    {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
+     L"Píxeles hacia la derecha, o hacia la izquierda si es negativo, desde la esquina inferior derecha del logotipo "
+     L"(dentro del hueco en los anillos)."},
+    {L"", L"Position", L"Posición"},
     {L"", L"Primary display only", L"Solo la pantalla principal"},
     {L"", L"Primary display, all displays, or one display.", L"La pantalla principal, todas las pantallas o una sola."},
     {L"", L"Project page", L"Página del proyecto"},
     {L"", L"Provider logos", L"Logotipos de proveedores"},
+    {L"", L"Quota keys", L"Claves de cuota"},
+    {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
+     L"Claves de cuota ({key5h}, {key7d}, etc.) y uso adicional en los gráficos, en píxeles."},
     {L"", L"Quotas on taskbar", L"Cuotas en la barra de tareas"},
+    {L"", L"Reading size", L"Tamaño de la lectura"},
     {L"", L"Record history", L"Registrar historial"},
     {L"", L"Record usage history", L"Registrar historial de uso"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
@@ -1343,6 +1809,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Reglas de registro, almacenamiento, exportación y verificación"},
     {L"", L"Recording starts once the taskbar saves its account IDs.",
      L"El registro empieza cuando la barra de tareas guarde los ID de sus cuentas."},
+    {L"", L"Red from", L"Rojo desde"},
     {L"", L"Remove \"{label}\" ({provider})?", L"¿Quitar «{label}» ({provider})?"},
     {L"", L"Report an issue", L"Informar de un problema"},
     {L"", L"Reset Behavior to defaults", L"Restablecer Comportamiento a los valores predeterminados"},
@@ -1351,6 +1818,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"¿Restablecer Comportamiento a sus valores predeterminados?\n\nIdioma automático, mostrar solo en la pantalla "
      L"principal, mostrar detalles al pasar el puntero, consultar cada 10 minutos, no consultar las cuentas ocultas, "
      L"notificaciones de umbral en rojo."},
+    {L"", L"Reset Display to defaults", L"Restablecer Visualización a los valores predeterminados"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
@@ -1364,6 +1832,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"¿Restablecer Historial a sus valores predeterminados?\n\nEl registro se activa para este usuario de Windows, "
      L"el historial se conserva para siempre y la ventana del historial de uso se abre en 7 días. El historial "
      L"guardado se conserva."},
+    {L"", L"Reset Layout to defaults", L"Restablecer Diseño a los valores predeterminados"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
@@ -1371,6 +1840,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"izquierda, anillos de 32 px, logotipos e insignias numéricas en el color de texto de la barra de tareas, "
      L"marcadores de ritmo en forma de signo de intercalación gris claro y el espaciado predeterminado. Las cuentas "
      L"no cambian."},
+    {L"", L"Reset countdown", L"Cuenta atrás de reinicio"},
+    {L"", L"Ring size", L"Tamaño del anillo"},
+    {L"", L"Ring thickness", L"Grosor del anillo"},
+    {L"", L"Ringed reading", L"Lectura con anillo"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"Selecciona <b>{button}</b> para mostrar una cuenta de Anthropic, OpenAI, Google Antigravity, GitHub Copilot u "
@@ -1382,13 +1855,28 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Compartido entre los usuarios de Windows. Para siempre no elimina nada y no tiene límite de tamaño, así que "
      L"el historial sigue creciendo en la memoria del Explorador y en el disco. Los límites en días depuran cada "
      L"hora, con un tope de unos 60 MB."},
+    {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
+     L"Clave corta junto a cada barra: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texto corto"},
     {L"", L"Show details on hover", L"Mostrar detalles al pasar el puntero"},
     {L"", L"Show on", L"Mostrar en"},
+    {L"", L"Show percentage text on hover or always to change this.",
+     L"Elige Al pasar el puntero o Siempre en Texto de porcentaje para cambiar esto."},
+    {L"", L"Show provider outages", L"Mostrar interrupciones del proveedor"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
      L"Se muestra en los detalles y junto a las barras cuando Identidad es Etiqueta. Única por proveedor; al cambiar "
      L"el nombre se conservan la sesión y el historial."},
+    {L"", L"Side in pixels.", L"Lado en píxeles."},
+    {L"", L"Space after the last account, before whatever comes next on the taskbar.",
+     L"Espacio tras la última cuenta, antes de lo que siga en la barra de tareas."},
+    {L"", L"Space between an account’s bars.", L"Espacio entre las barras de una cuenta."},
+    {L"", L"Space between the identity and the bars.", L"Espacio entre la identidad y las barras."},
+    {L"", L"Space on each side of every account.", L"Espacio a cada lado de cada cuenta."},
+    {L"", L"Square size", L"Tamaño del cuadrado"},
+    {L"", L"Square thickness", L"Grosor del cuadrado"},
+    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
+     L"Solo con Barras apiladas y Barras verticales. Estilo de mosaico actual: {style}."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -1397,9 +1885,27 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"antiguas, y las más antiguas por encima de ese límite, se eliminarán de forma permanente para todos los "
      L"usuarios de Windows."},
     {L"", L"Storage location", L"Ubicación de almacenamiento"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
+     L"Ancho del trazo en píxeles. Se estrecha automáticamente cuando el arco no cabe alrededor del número."},
+    {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
+     L"Ancho del trazo en píxeles. Se estrecha automáticamente cuando los indicadores no caben alrededor del "
+     L"logotipo o del texto."},
     {L"", L"Suggestions and bug reports on GitHub", L"Sugerencias e informes de errores en GitHub"},
+    {L"", L"Text of accounts whose identity is Label, in pixels.",
+     L"Texto de las cuentas cuya identidad es Etiqueta, en píxeles."},
+    {L"", L"Text size", L"Tamaño del texto"},
+    {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
+          L"taskbar.",
+     L"Tamaño del texto del porcentaje de cada cuota, en píxeles; su clave se escala con él. Dos filas se reducen "
+     L"para caber en la barra de tareas."},
+    {L"", L"Text size of the most-used quota’s percentage, in pixels; its quota key scales with it.",
+     L"Tamaño del texto del porcentaje de la cuota más usada, en píxeles; su clave de cuota se escala con él."},
+    {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+     L"Tamaño del texto del número sobre un logotipo cuando varias cuentas comparten proveedor, en píxeles."},
     {L"", L"Thanks to {names}.", L"Gracias a {names}."},
     {L"", L"That provider and label are already configured.", L"Ese proveedor y esa etiqueta ya están configurados."},
+    {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
+     L"El destello de Gemini en el color de texto de la barra de tareas o con su degradado de morado a azul."},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
      L"La identidad Etiqueta en los mosaicos, hasta 4 caracteres. Si está vacío, se usa la etiqueta sin espacios."},
     {L"", L"The account was changed from another taskbar window.",
@@ -1424,6 +1930,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"Applies to this Windows user only.",
      L"Las ventanas de configuración y del historial de uso, y la barra de tareas. Automático sigue el idioma para "
      L"mostrar de Windows. Solo se aplica a este usuario de Windows."},
+    {L"", L"The settings and usage history windows use Mica for it.",
+     L"Las ventanas de configuración y del historial de uso usan Mica con esta opción."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"No se pudo copiar la sesión guardada. La cuenta no se cambió."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -1434,10 +1942,33 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"signed out.",
      L"Se eliminó la sesión guardada, pero no se pudo guardar la configuración. La cuenta sigue configurada, pero "
      L"sin sesión iniciada."},
+    {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
+     L"El color de texto de la barra de tareas o el naranja de Claude. Los detalles, Cuentas y el historial de uso "
+     L"usan el mismo."},
+    {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
+          L"fills with the elapsed time.",
+     L"Signo de intercalación fino, línea de ancho completo, muesca en el borde, punto centrado o pista de tiempo: "
+     L"una pequeña barra bajo cada barra que se llena con el tiempo transcurrido."},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"Esta cuenta ya no está configurada; se descartaron sus cambios sin guardar."},
     {L"", L"This change couldn't be saved.", L"No se pudo guardar este cambio."},
     {L"", L"Threshold notifications", L"Notificaciones de umbral"},
+    {L"", L"Thresholds stay in order: yellow, orange, red.",
+     L"Los umbrales mantienen el orden: amarillo, naranja, rojo."},
+    {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
+     L"Los umbrales mantienen el orden: amarillo, naranja, rojo. También es el nivel de las notificaciones de umbral."},
+    {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
+     L"Unas marcas indican cuánto ha transcurrido de la ventana de cada cuota, para compararlo con su uso."},
+    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+          L"changed.",
+     L"Estilo de mosaico, estilo de barra, tamaños, identidad y texto, marcadores de ritmo, posición y espaciado. "
+     L"Las cuentas no cambian."},
+    {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
+     L"Tiempo hasta que esa cuota se reinicia, bajo el número, en lugar de la barra de cada cuota."},
+    {L"", L"Turn off Reset countdown to change this.", L"Desactiva Cuenta atrás de reinicio para cambiar esto."},
+    {L"", L"Turn on Pace markers to change this.", L"Activa Marcadores de ritmo para cambiar esto."},
+    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
+     L"Activa Claves de cuota, o el texto de porcentaje en Visualización, para cambiar esto."},
     {L"", L"Turn on Record usage history to change this.", L"Activa Registrar historial de uso para cambiar esto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
@@ -1445,8 +1976,22 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"on the 7d chart.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada. Los gráficos de uso "
      L"muestran los créditos como un número en el gráfico de 7d."},
+    {L"", L"Usage below this is blue.", L"El uso por debajo de este valor es azul."},
+    {L"", L"Usage below this is blue. Also the level for threshold notifications.",
+     L"El uso por debajo de este valor es azul. También es el nivel de las notificaciones de umbral."},
+    {L"", L"Usage below this is green.", L"El uso por debajo de este valor es verde."},
+    {L"", L"Usage below this is green. Also the level for threshold notifications.",
+     L"El uso por debajo de este valor es verde. También es el nivel de las notificaciones de umbral."},
+    {L"", L"Usage below this takes the Below yellow color.",
+     L"El uso por debajo de este valor toma el color Bajo el amarillo."},
+    {L"", L"Usage below this takes the Below yellow color. Also the level for threshold notifications.",
+     L"El uso por debajo de este valor toma el color Bajo el amarillo. También es el nivel de las notificaciones de "
+     L"umbral."},
     {L"", L"Usage history", L"Historial de uso"},
     {L"", L"Usage history guide", L"Guía del historial de uso"},
+    {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
+     L"Usado se llena a medida que se consume la cuota; Restante se llena con lo que queda. Los colores siempre "
+     L"siguen el uso."},
     {L"", L"Used on tiles when Identity is Label.", L"Se usa en los mosaicos cuando Identidad es Etiqueta."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versión {version}  ·  por Cleroth  ·  mod de Windhawk"},
@@ -1454,6 +1999,24 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Espera a que termine el inicio de sesión actual antes de cambiar la identidad."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
      L"Espera a que termine el inicio de sesión actual antes de quitar cuentas."},
+    {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
+          L"hours before and after now.",
+     L"Gráficos semanales y mensuales ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): la ventana completa, o de 12 a "
+     L"48 horas antes y después de ahora."},
+    {L"", L"What those charts show while the pointer rests on the account.",
+     L"Lo que muestran esos gráficos mientras el puntero se detiene sobre la cuenta."},
+    {L"", L"Where each account’s identity sits next to its bars.",
+     L"Dónde se sitúa la identidad de cada cuenta junto a sus barras."},
+    {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
+          L"move over to make room.",
+     L"Dónde se sitúan las barras en la barra de tareas. Lado izquierdo y A la derecha de Inicio son experimentales: "
+     L"los botones de la barra de tareas se desplazan para hacer sitio."},
+    {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
+     L"Blanco, el predeterminado, sigue el color de texto de la barra de tareas. Personalizar… abre el selector de "
+     L"color."},
+    {L"", L"Windows transparency effects are off, so it shows as Solid.",
+     L"Los efectos de transparencia de Windows están desactivados, así que se muestra como Sólido."},
+    {L"", L"Yellow from", L"Amarillo desde"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity no se está ejecutando"},
@@ -1532,6 +2095,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"add-account", L"Sign in with your browser", L"Inicia sesión en tu navegador"},
     {L"add-account", L"Uses the signed-in Antigravity app or CLI",
      L"Usa la app o CLI de Antigravity con la sesión iniciada"},
+    {L"bar-mode", L"Remaining", L"Restante"},
+    {L"bar-mode", L"Used", L"Usado"},
+    {L"bar-style", L"Full track", L"Pista completa"},
+    {L"bar-style", L"Thin rail", L"Riel fino"},
     {L"button", L"Add account", L"Agregar cuenta"},
     {L"button", L"Copied", L"Copiado"},
     {L"button", L"Copy", L"Copiar"},
@@ -1665,11 +2232,24 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Error al escribir el historial; se conservó el registro anterior."},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"Archivo de historial no compatible o dañado. Borra el historial para empezar de nuevo."},
+    {L"identity-position", L"Bottom", L"Abajo"},
+    {L"identity-position", L"Hidden", L"Oculta"},
+    {L"identity-position", L"Left", L"Izquierda"},
+    {L"identity-position", L"Right", L"Derecha"},
+    {L"identity-position", L"Top", L"Arriba"},
     {L"language-choice", L"Automatic ({language})", L"Automático ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} y {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} y {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"logo-color", L"Gemini gradient", L"Degradado de Gemini"},
+    {L"logo-color", L"Orange", L"Naranja"},
+    {L"logo-color", L"Taskbar text color", L"Color de texto de la barra de tareas"},
+    {L"material", L"Acrylic", L"Acrílico"},
+    {L"material", L"Mica", L"Mica"},
+    {L"material", L"Mica Alt", L"Mica Alt"},
+    {L"material", L"Solid", L"Sólido"},
+    {L"material", L"Tinted wallpaper", L"Fondo de pantalla teñido"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} - se restablece {when}"},
     {L"notification-level", L"Off", L"Desactivadas"},
     {L"notification-level", L"Orange ({threshold}%)", L"Naranja ({threshold}%)"},
@@ -1702,12 +2282,37 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"outage-reason", L"Slow responses", L"Respuestas lentas"},
     {L"outage-reason", L"Upstream provider issues", L"Problemas del proveedor externo"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
+    {L"pace-marker", L"Caret", L"Signo de intercalación"},
+    {L"pace-marker", L"Dot", L"Punto"},
+    {L"pace-marker", L"Edge notch", L"Muesca en el borde"},
+    {L"pace-marker", L"Full line", L"Línea completa"},
+    {L"pace-marker", L"Time track", L"Pista de tiempo"},
+    {L"palette", L"Colorblind", L"Para daltónicos"},
+    {L"palette", L"Custom", L"Personalizada"},
+    {L"palette", L"Default", L"Predeterminada"},
+    {L"percent-alignment", L"Adaptive", L"Adaptable"},
+    {L"percent-alignment", L"Center", L"Centro"},
+    {L"percent-alignment", L"Left", L"Izquierda"},
+    {L"percent-alignment", L"Right", L"Derecha"},
+    {L"percent-text", L"Always show", L"Siempre"},
+    {L"percent-text", L"Never show", L"Nunca"},
+    {L"percent-text", L"Show on hover", L"Al pasar el puntero"},
+    {L"pixel-unit", L"px", L"px"},
+    {L"placement", L"After Show desktop", L"Después de Mostrar escritorio"},
+    {L"placement", L"After the clock", L"Después del reloj"},
+    {L"placement", L"Before network and volume", L"Antes de red y volumen"},
+    {L"placement", L"Before notification icons", L"Antes de iconos de notificación"},
+    {L"placement", L"Before the clock", L"Antes del reloj"},
+    {L"placement", L"Left side", L"Lado izquierdo"},
+    {L"placement", L"Right of Start", L"A la derecha de Inicio"},
     {L"plan", L"Visual test", L"Prueba visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{minuto} many{de minutos} other{minutos}}"},
+    {L"preview", L"Preview", L"Vista previa"},
+    {L"preview", L"Show on taskbar", L"Mostrar en la barra de tareas"},
     {L"quota-amount", L"Limit reached", L"Límite alcanzado"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Grupo compartido de {unit}, sin límite por usuario"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
@@ -1772,14 +2377,34 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"settings-page", L"History", L"Historial"},
     {L"settings-page", L"Layout", L"Diseño"},
     {L"settings-section", L"Alerts", L"Alertas"},
+    {L"settings-section", L"Appearance", L"Apariencia"},
+    {L"settings-section", L"Bars", L"Barras"},
     {L"settings-section", L"Credits and license", L"Créditos y licencia"},
+    {L"settings-section", L"Current position", L"Posición actual"},
     {L"settings-section", L"Details", L"Detalles"},
+    {L"settings-section", L"Details flyout", L"Panel de detalles"},
+    {L"settings-section", L"Gauge", L"Medidor"},
+    {L"settings-section", L"Headline", L"Destacado"},
+    {L"settings-section", L"Identity", L"Identidad"},
+    {L"settings-section", L"Identity and text", L"Identidad y texto"},
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Links", L"Enlaces"},
+    {L"settings-section", L"Matrix", L"Matriz"},
+    {L"settings-section", L"Pace markers", L"Marcadores de ritmo"},
+    {L"settings-section", L"Pies", L"Sectores"},
+    {L"settings-section", L"Placement", L"Ubicación"},
     {L"settings-section", L"Recording", L"Registro"},
+    {L"settings-section", L"Ring", L"Anillo"},
+    {L"settings-section", L"Spacing", L"Espaciado"},
+    {L"settings-section", L"Square", L"Cuadrado"},
+    {L"settings-section", L"Status", L"Estado"},
     {L"settings-section", L"Storage", L"Almacenamiento"},
     {L"settings-section", L"Taskbar", L"Barra de tareas"},
+    {L"settings-section", L"Tile style", L"Estilo de mosaico"},
+    {L"settings-section", L"Time span", L"Intervalo de tiempo"},
     {L"settings-section", L"Updates", L"Actualizaciones"},
+    {L"settings-section", L"Usage colors", L"Colores de uso"},
+    {L"settings-section", L"Values", L"Valores"},
     {L"settings-section", L"Viewer", L"Visor"},
     {L"sign-in-button", L"Cancel", L"Cancelar"},
     {L"sign-in-button", L"Close", L"Cerrar"},
@@ -1830,6 +2455,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"paste the code its page shows.",
      L"Ese código pertenece a otro vínculo de inicio de sesión. Abre el vínculo de esta ventana, aprueba el acceso y "
      L"pega el código que muestre su página."},
+    {L"sparkline-extra", L"Amount", L"Importe"},
+    {L"sparkline-extra", L"Off", L"Desactivado"},
+    {L"sparkline-extra", L"Percent", L"Porcentaje"},
+    {L"sparkline-span", L"Off", L"Desactivado"},
+    {L"sparkline-span", L"Whole window", L"Ventana completa"},
+    {L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}",
+     L"{hours, plural, one{# hora a cada lado} many{# de horas a cada lado} other{# horas a cada lado}}"},
     {L"taskbar-action", L"Exit visual test", L"Salir de la prueba visual"},
     {L"taskbar-action", L"Hide", L"Ocultar"},
     {L"taskbar-action", L"Open dashboard", L"Abrir panel"},
@@ -1850,8 +2482,22 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"tile-identity", L"Label", L"Etiqueta"},
     {L"tile-identity", L"Logo + number badge", L"Logotipo + insignia numérica"},
     {L"tile-identity", L"Logo only", L"Solo logotipo"},
+    {L"tile-style", L"Clock pies", L"Sectores de reloj"},
+    {L"tile-style", L"Concentric rings", L"Anillos concéntricos"},
+    {L"tile-style", L"Gauge %", L"Medidor %"},
+    {L"tile-style", L"Headline %", L"Destacado %"},
+    {L"tile-style", L"Quota matrix", L"Matriz de cuotas"},
+    {L"tile-style", L"Rounded square", L"Cuadrado redondeado"},
+    {L"tile-style", L"Segmented ring", L"Anillo segmentado"},
+    {L"tile-style", L"Stacked bars", L"Barras apiladas"},
+    {L"tile-style", L"Usage graph", L"Gráfico de uso"},
+    {L"tile-style", L"Vertical bars", L"Barras verticales"},
     {L"toggle", L"Off", L"Desactivado"},
     {L"toggle", L"On", L"Activado"},
+    {L"usage-band", L"Below yellow", L"Bajo el amarillo"},
+    {L"usage-band", L"From orange", L"Desde el naranja"},
+    {L"usage-band", L"From red", L"Desde el rojo"},
+    {L"usage-band", L"From yellow", L"Desde el amarillo"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
      L"Al ritmo de las últimas 24 h: límite en ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
@@ -1865,27 +2511,81 @@ static_assert(I18nCatalogSorted(kI18nCatalogEs), "sort by (context, English), no
 // French (fr): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogFr[] = {
+    {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
+          L"in Used mode, left in Remaining mode.",
+     L"$ ou crédits au lieu de % pour l’utilisation supplémentaire Anthropic, les crédits OpenAI et les crédits IA "
+     L"GitHub Copilot\u00A0: dépensés en mode Utilisé, restants en mode Restant."},
     {L"", L"1 to 3650 days.", L"De 1 à 3650\u00A0jours."},
     {L"", L"2 to 1440 minutes.", L"De 2 à 1440 minutes."},
     {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
      L"Une modification n’a pas pu être enregistrée\u00A0; elle est affichée avec son erreur.\n\nIgnorer les "
      L"modifications non enregistrées et fermer la fenêtre\u00A0?"},
+    {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
+     L"Une diagonale marque le rythme régulier du quota sur sa fenêtre, à comparer avec son utilisation."},
+    {L"", L"A faint border around each chart.", L"Une bordure discrète autour de chaque graphique."},
+    {L"", L"A full track behind each fill, or a thin rail under it.",
+     L"Une piste complète derrière chaque remplissage, ou un rail fin en dessous."},
+    {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+     L"Un anneau autour du relevé actuel, découpé dans les lignes en dessous. Désactivé\u00A0: un simple point."},
+    {L"", L"A small triangle on the chart’s bottom edge at the current time.",
+     L"Un petit triangle sur le bord inférieur du graphique, à l’heure actuelle."},
+    {L"", L"A thin line across the chart at the current time.",
+     L"Une ligne fine qui traverse le graphique à l’heure actuelle."},
+    {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
+          L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
+          L"major outage. Off: no status pages are read.",
+     L"Un triangle d’avertissement sur un compte tant que la page d’état de son fournisseur signale un problème sur "
+     L"un service qu’il utilise\u00A0: dans la couleur d’utilisation orange pour un service dégradé, une panne "
+     L"partielle ou une maintenance, dans la rouge pour une panne majeure. Désactivé\u00A0: aucune page d’état n’est "
+     L"lue."},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"Les quotas d’abonnements IA d’Anthropic, OpenAI, Google Antigravity, GitHub Copilot et OpenCode Go dans la "
      L"barre des tâches de Windows 11."},
+    {L"", L"Account identity is set per account in Accounts", L"L’identité se définit pour chaque compte dans Comptes"},
+    {L"", L"Account margin", L"Marge des comptes"},
+    {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.",
+     L"Adaptatif\u00A0: à droite, puis à gauche dès que la barre atteint le seuil jaune."},
+    {L"", L"Additional OpenAI rate limits", L"Limites de débit OpenAI supplémentaires"},
+    {L"", L"Adds ! when a refresh failed or is overdue.",
+     L"Ajoute un ! quand une actualisation a échoué ou est en retard."},
     {L"", L"All displays", L"Tous les écrans"},
     {L"", L"Also delete its usage history", L"Supprimer aussi son historique d’utilisation"},
+    {L"", L"Also the level for threshold notifications.", L"C’est aussi le niveau des notifications de seuil."},
+    {L"", L"Amounts on extra usage and credits", L"Montants sur l’utilisation supplémentaire et les crédits"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.",
      L"Un compte n’est plus configuré\u00A0; ses modifications non enregistrées ont été abandonnées."},
     {L"", L"Another account of this provider uses this label.",
      L"Un autre compte de ce fournisseur utilise ce libellé."},
+    {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
+          L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
+          L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
+     L"L’utilisation supplémentaire Anthropic ou les crédits OpenAI dans le coin supérieur gauche du graphique "
+     L"{key7d} (inférieur gauche en mode Restant), s’ils sont sélectionnés pour le compte et signalés\u00A0: "
+     L"dépensés en mode Utilisé, restants en mode Restant. Pourcentage affiche le montant en l’absence de limite. "
+     L"Les crédits OpenAI n’ont jamais leur propre graphique."},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic, OpenAI et GitHub Copilot se connectent via votre navigateur, OpenCode Go avec une clé d’API. "
      L"Google Antigravity utilise son application ou sa CLI connectée, qui doit rester lancée."},
+    {L"", L"Antigravity logo", L"Logo Antigravity"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"S’applique uniquement à cet utilisateur Windows. Le désactiver conserve l’historique enregistré."},
+    {L"", L"Background of the details flyout and the settings and usage history windows.",
+     L"Arrière-plan du volet des détails et des fenêtres des paramètres et de l’historique d’utilisation."},
+    {L"", L"Badge color", L"Couleur du badge"},
+    {L"", L"Badge horizontal offset", L"Décalage horizontal du badge"},
+    {L"", L"Badge size", L"Taille du badge"},
+    {L"", L"Badge vertical offset", L"Décalage vertical du badge"},
+    {L"", L"Bar gap", L"Écart entre les barres"},
+    {L"", L"Bar length", L"Longueur des barres"},
+    {L"", L"Bar mode", L"Mode de barre"},
+    {L"", L"Bar style", L"Style de barre"},
+    {L"", L"Bar text size", L"Taille du texte des barres"},
+    {L"", L"Bar thickness", L"Épaisseur des barres"},
+    {L"", L"Chart height", L"Hauteur des graphiques"},
+    {L"", L"Chart outline", L"Contour des graphiques"},
+    {L"", L"Chart width", L"Largeur des graphiques"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Graphiques, statistiques et export CSV à partir des échantillons locaux, même quand l’enregistrement est "
      L"désactivé."},
@@ -1893,7 +2593,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Choisissez Personnalisé dans Intervalle d’interrogation cloud pour le modifier."},
     {L"", L"Choose Custom in Keep history to edit.",
      L"Choisissez Personnalisé dans Conserver l’historique pour le modifier."},
+    {L"", L"Choose an identity position to change this.",
+     L"Choisissez une position d’identité pour modifier ce réglage."},
+    {L"", L"Claude logo", L"Logo Claude"},
     {L"", L"Cloud poll interval", L"Intervalle d’interrogation cloud"},
+    {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
+     L"Codex Spark, les limites de modèles masquées comme gpt-reserve, et le nom du forfait Spark dans les détails "
+     L"OpenAI."},
     {L"", L"Contributors", L"Contributeurs"},
     {L"", L"Copy version info", L"Copier les informations de version"},
     {L"", L"Could not remove the account.", L"Impossible de supprimer le compte."},
@@ -1914,9 +2620,36 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Custom interval", L"Intervalle personnalisé"},
     {L"", L"Custom retention", L"Conservation personnalisée"},
     {L"", L"Default time span", L"Période par défaut"},
+    {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
+          L"threshold.",
+     L"Par défaut\u00A0: vert, jaune, orange et rouge. Daltonisme\u00A0: du bleu au vermillon. Personnalisée\u00A0: "
+     L"une couleur de votre choix pour chaque seuil."},
+    {L"", L"Diameter in pixels.", L"Diamètre en pixels."},
     {L"", L"Display {number} - unavailable", L"Écran {number} – indisponible"},
     {L"", L"Display {number} - {width}x{height}", L"Écran {number} – {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Écran {number} – {width}x{height} (principal)"},
+    {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
+          L"to retry.",
+     L"L’écran {number} affiche les barres dans la zone de notification\u00A0: un autre mod contrôle l’espace dont "
+     L"elles ont besoin. Redémarrez l’Explorateur pour réessayer."},
+    {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
+     L"L’écran {number} affiche les barres dans la zone de notification\u00A0: son bouton Démarrer est masqué ou "
+     L"introuvable."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
+     L"L’écran {number} affiche les barres dans la zone de notification\u00A0: les boutons de sa barre des tâches "
+     L"sont introuvables."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
+     L"L’écran {number} affiche les barres dans la zone de notification\u00A0: sa barre des tâches est sur un côté "
+     L"de l’écran."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
+          L"fit its width. The preview shows them across a bottom taskbar.",
+     L"La barre des tâches de l’écran {number} est sur un côté de l’écran\u00A0: les comptes s’y empilent de haut en "
+     L"bas, chaque style réorganisé pour tenir dans sa largeur. L’aperçu les montre côte à côte sur une barre des "
+     L"tâches en bas."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
+          L"Update Windows to show them.",
+     L"La barre des tâches de l’écran {number} est sur un côté de l’écran\u00A0: sa zone de notification n’accepte "
+     L"pas de barres sur cette build de Windows. Mettez à jour Windows pour les afficher."},
     {L"", L"Do not poll hidden accounts", L"Ne pas interroger les comptes masqués"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Faites glisser pour réorganiser. L’interrupteur masque un compte de la barre des tâches."},
@@ -1928,9 +2661,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Chaque compte choisit s’il est enregistré\u00A0: <link id=\"accounts\">Comptes</link> > Enregistrer "
      L"l’historique. Les comptes masqués ne sont pas enregistrés tant que <link id=\"hidden\">Ne pas interroger les "
      L"comptes masqués</link> est activé dans Comportement."},
+    {L"", L"Elapsed time", L"Temps écoulé"},
     {L"", L"Enter a label.", L"Saisissez un libellé."},
     {L"", L"Enter a whole number from {minimum} to {maximum}.",
      L"Saisissez un nombre entier de {minimum} à {maximum}."},
+    {L"", L"Example accounts, updates as you change settings", L"Comptes d’exemple, mis à jour selon vos réglages"},
+    {L"", L"Example accounts, wider than shown: drag to scroll",
+     L"Comptes d’exemple tronqués\u00A0: faites glisser pour défiler"},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -1942,6 +2679,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Antigravity utilise le logo Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, "
      L"GitHub, GitHub Copilot et OpenCode sont des marques de leurs propriétaires respectifs. Les logos indiquent "
      L"seulement quel compte une vignette affiche."},
+    {L"", L"Gap after accounts", L"Écart après les comptes"},
+    {L"", L"Gauge size", L"Taille de la jauge"},
+    {L"", L"Gauge thickness", L"Épaisseur de la jauge"},
+    {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
+     L"Hauteur en pixels\u00A0; un disque par quota, plus petits à partir du troisième."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Les comptes masqués ne sont ni interrogés ni enregistrés, même si Enregistrer l’historique est activé. "
@@ -1956,20 +2698,36 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Fréquence d’interrogation d’Anthropic, OpenAI, GitHub Copilot et OpenCode Go. Antigravity interroge sa session "
      L"locale chaque minute."},
     {L"", L"Identity", L"Identité"},
+    {L"", L"Identity gap", L"Écart de l’identité"},
+    {L"", L"Identity position", L"Position de l’identité"},
     {L"", L"Interface language", L"Langue de l’interface"},
     {L"", L"Its stored sign-in will be deleted.", L"Sa connexion enregistrée sera supprimée."},
     {L"", L"Its usage history is kept.", L"Son historique d’utilisation est conservé."},
     {L"", L"Keep history", L"Conserver l’historique"},
     {L"", L"Label", L"Libellé"},
+    {L"", L"Label font size", L"Taille de police du libellé"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Langue, écrans, détails au survol, interrogations et notifications."},
     {L"", L"License", L"Licence"},
+    {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
+     L"Gris clair par défaut, foncé sur une barre des tâches claire. Personnaliser… ouvre le sélecteur de couleurs."},
+    {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
+     L"Éclaire la partie écoulée de la fenêtre du quota\u00A0; le reste demeure atténué."},
+    {L"", L"Logo + number badge, logo only, or label.", L"Logo + badge numéroté, logo seul ou libellé."},
+    {L"", L"Logo size", L"Taille du logo"},
+    {L"", L"Long windows", L"Fenêtres longues"},
     {L"", L"MIT License", L"Licence MIT"},
+    {L"", L"Mark stale data", L"Signaler les données obsolètes"},
+    {L"", L"Marker color", L"Couleur des repères"},
+    {L"", L"Marker style", L"Style des repères"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
      L"Identifie ce compte à côté de ses barres et sur les vignettes. Libellé affiche le libellé sur les barres et "
      L"son texte court sur les vignettes. Le badge numéroté apparaît quand plusieurs comptes partagent un "
      L"fournisseur, comptes masqués compris."},
+    {L"", L"Material", L"Matériau"},
+    {L"", L"Material, values, usage colors, status marks and flyout details.",
+     L"Matériau, valeurs, couleurs d’utilisation, signalements d’état et détails du volet."},
     {L"", L"New samples arrive with each poll.", L"De nouveaux échantillons arrivent à chaque interrogation."},
     {L"", L"No accounts yet", L"Aucun compte pour l’instant"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
@@ -1980,17 +2738,51 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Avertit quand un quota de la barre des tâches atteint pour la première fois le seuil choisi. Se réarme quand il "
      L"repasse en dessous."},
+    {L"", L"Now caret", L"Chevron de l’instant"},
+    {L"", L"Now line", L"Ligne de l’instant"},
+    {L"", L"Number size", L"Taille des chiffres"},
+    {L"", L"On hover", L"Au survol"},
     {L"", L"Open AI quota settings", L"Ouvrir les paramètres des quotas d’IA"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Ouvrir les paramètres des quotas d’IA. Les paramètres enregistrés n’ont pas pu être lus ; une sauvegarde a "
      L"été conservée."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Ouvre les détails d’un compte quand le pointeur s’y arrête."},
+    {L"", L"Orange from", L"Orange à partir de"},
+    {L"", L"Pace markers", L"Repères de rythme"},
+    {L"", L"Palette", L"Palette"},
+    {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
+     L"Pourcentage de la taille standard du relevé actuel\u00A0: l’anneau et son point, ou le simple point."},
+    {L"", L"Percent of the standard size; rings keep it inside the hole.",
+     L"Pourcentage de la taille standard\u00A0; sur les anneaux, il reste dans le trou central."},
+    {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
+     L"Pourcentage de la hauteur de la vignette, de 0\u00A0% à 100\u00A0% utilisé, ou restant en mode Restant."},
+    {L"", L"Percentage alignment", L"Alignement du pourcentage"},
+    {L"", L"Percentage on each bar: never, on hover, or always.",
+     L"Pourcentage sur chaque barre\u00A0: jamais, au survol ou toujours."},
+    {L"", L"Percentage text", L"Texte de pourcentage"},
+    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
+     L"Texte de pourcentage et codes de quota. Le texte de pourcentage se règle dans Affichage."},
+    {L"", L"Pie area", L"Zone des secteurs"},
+    {L"", L"Pixels across each bar.", L"Pixels sur l’épaisseur de chaque barre."},
+    {L"", L"Pixels across each quota’s chart.", L"Pixels sur la largeur du graphique de chaque quota."},
+    {L"", L"Pixels along each bar.", L"Pixels sur la longueur de chaque barre."},
+    {L"", L"Pixels along each quota’s bar under the number.",
+     L"Pixels sur la longueur de la barre de chaque quota, sous le nombre."},
+    {L"", L"Pixels down, or up when negative.", L"Pixels vers le bas, ou vers le haut si négatif."},
+    {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
+     L"Pixels vers la droite, ou vers la gauche si négatif, depuis le coin inférieur droit du logo (dans le trou "
+     L"central sur les anneaux)."},
+    {L"", L"Position", L"Position"},
     {L"", L"Primary display only", L"Écran principal uniquement"},
     {L"", L"Primary display, all displays, or one display.", L"L’écran principal, tous les écrans ou un seul écran."},
     {L"", L"Project page", L"Page du projet"},
     {L"", L"Provider logos", L"Logos des fournisseurs"},
+    {L"", L"Quota keys", L"Codes de quota"},
+    {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
+     L"Codes de quota ({key5h}, {key7d}…) et utilisation supplémentaire sur les graphiques, en pixels."},
     {L"", L"Quotas on taskbar", L"Quotas dans la barre des tâches"},
+    {L"", L"Reading size", L"Taille du relevé"},
     {L"", L"Record history", L"Enregistrer l’historique"},
     {L"", L"Record usage history", L"Enregistrer l’historique d’utilisation"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
@@ -2000,6 +2792,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Règles d’enregistrement, stockage, export et vérification"},
     {L"", L"Recording starts once the taskbar saves its account IDs.",
      L"L’enregistrement commence dès que la barre des tâches a enregistré les ID de ses comptes."},
+    {L"", L"Red from", L"Rouge à partir de"},
     {L"", L"Remove \"{label}\" ({provider})?", L"Supprimer «\u00A0{label}\u00A0» ({provider})\u00A0?"},
     {L"", L"Report an issue", L"Signaler un problème"},
     {L"", L"Reset Behavior to defaults", L"Rétablir les valeurs par défaut de Comportement"},
@@ -2008,6 +2801,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Rétablir les valeurs par défaut de Comportement\u00A0?\n\nLangue automatique, affichage sur l’écran principal "
      L"uniquement, détails au survol, interrogation toutes les 10 minutes, comptes masqués non interrogés, "
      L"notifications de seuil au rouge."},
+    {L"", L"Reset Display to defaults", L"Rétablir les valeurs par défaut de Affichage"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
@@ -2021,12 +2815,17 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Rétablir les valeurs par défaut de Historique\u00A0?\n\nL’enregistrement s’active pour cet utilisateur "
      L"Windows, l’historique est conservé indéfiniment et la fenêtre de l’historique d’utilisation s’ouvre sur "
      L"7\u00A0jours. L’historique enregistré est conservé."},
+    {L"", L"Reset Layout to defaults", L"Rétablir les valeurs par défaut de Disposition"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
      L"Rétablir les valeurs par défaut de Disposition\u00A0?\n\nBarres empilées de 100 x 8\u00A0px avec libellés à "
      L"gauche, anneaux de 32\u00A0px, logos et badges numérotés dans la couleur du texte de la barre des tâches, "
      L"repères de rythme en chevron gris clair et l’espacement par défaut. Les comptes ne sont pas modifiés."},
+    {L"", L"Reset countdown", L"Compte à rebours"},
+    {L"", L"Ring size", L"Taille de l’anneau"},
+    {L"", L"Ring thickness", L"Épaisseur de l’anneau"},
+    {L"", L"Ringed reading", L"Relevé cerclé"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"Sélectionnez <b>{button}</b> pour afficher un compte Anthropic, OpenAI, Google Antigravity, GitHub Copilot ou "
@@ -2038,13 +2837,28 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Partagé entre les utilisateurs Windows. Indéfiniment ne supprime rien et n’a pas de limite de taille\u00A0: "
      L"l’historique continue de grossir dans la mémoire de l’Explorateur et sur le disque. Les limites en jours "
      L"élaguent toutes les heures, avec un plafond d’environ 60\u00A0Mo."},
+    {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
+     L"Code court à côté de chaque barre\u00A0: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texte court"},
     {L"", L"Show details on hover", L"Afficher les détails au survol"},
     {L"", L"Show on", L"Afficher sur"},
+    {L"", L"Show percentage text on hover or always to change this.",
+     L"Affichez le texte de pourcentage au survol ou toujours pour modifier ce réglage."},
+    {L"", L"Show provider outages", L"Afficher les pannes des fournisseurs"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
      L"Affiché dans les détails, et à côté des barres quand Identité vaut Libellé. Unique par fournisseur\u00A0; le "
      L"renommer conserve la connexion et l’historique."},
+    {L"", L"Side in pixels.", L"Côté en pixels."},
+    {L"", L"Space after the last account, before whatever comes next on the taskbar.",
+     L"Espace après le dernier compte, avant l’élément suivant de la barre des tâches."},
+    {L"", L"Space between an account’s bars.", L"Espace entre les barres d’un compte."},
+    {L"", L"Space between the identity and the bars.", L"Espace entre l’identité et les barres."},
+    {L"", L"Space on each side of every account.", L"Espace de part et d’autre de chaque compte."},
+    {L"", L"Square size", L"Taille du carré"},
+    {L"", L"Square thickness", L"Épaisseur du carré"},
+    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
+     L"Barres empilées et Barres verticales uniquement. Style de vignette actuel\u00A0: {style}."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -2053,9 +2867,27 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"échantillons plus anciens, et les plus anciens au-delà de cette limite, seront supprimés définitivement, pour "
      L"tous les utilisateurs Windows."},
     {L"", L"Storage location", L"Emplacement de stockage"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
+     L"Épaisseur du trait en pixels. S’affine automatiquement quand l’arc ne tient pas autour du nombre."},
+    {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
+     L"Épaisseur du trait en pixels. S’affine automatiquement quand les indicateurs ne tiennent pas autour du logo "
+     L"ou du texte."},
     {L"", L"Suggestions and bug reports on GitHub", L"Suggestions et rapports de bogues sur GitHub"},
+    {L"", L"Text of accounts whose identity is Label, in pixels.",
+     L"Texte des comptes dont l’identité vaut Libellé, en pixels."},
+    {L"", L"Text size", L"Taille du texte"},
+    {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
+          L"taskbar.",
+     L"Taille du pourcentage de chaque quota, en pixels\u00A0; son code suit cette taille. Deux lignes rétrécissent "
+     L"pour tenir dans la barre des tâches."},
+    {L"", L"Text size of the most-used quota’s percentage, in pixels; its quota key scales with it.",
+     L"Taille du pourcentage du quota le plus utilisé, en pixels\u00A0; son code de quota suit cette taille."},
+    {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+     L"Taille du numéro sur un logo quand plusieurs comptes partagent un fournisseur, en pixels."},
     {L"", L"Thanks to {names}.", L"Merci à {names}."},
     {L"", L"That provider and label are already configured.", L"Ce fournisseur et ce libellé sont déjà configurés."},
+    {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
+     L"L’étincelle Gemini dans la couleur du texte de la barre des tâches, ou son dégradé du violet au bleu."},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
      L"L’identité Libellé sur les vignettes, jusqu’à 4\u00A0caractères. Vide, c’est le libellé sans espaces."},
     {L"", L"The account was changed from another taskbar window.",
@@ -2082,6 +2914,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"Applies to this Windows user only.",
      L"Les fenêtres des paramètres et de l’historique d’utilisation, et la barre des tâches. Automatique suit la "
      L"langue d’affichage de Windows. S’applique uniquement à cet utilisateur Windows."},
+    {L"", L"The settings and usage history windows use Mica for it.",
+     L"Les fenêtres des paramètres et de l’historique d’utilisation utilisent alors Mica."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Impossible de copier la connexion enregistrée. Le compte n’a pas été modifié."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -2092,10 +2926,33 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"signed out.",
      L"La connexion enregistrée a été supprimée, mais les paramètres n’ont pas pu être enregistrés. Le compte reste "
      L"configuré mais déconnecté."},
+    {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
+     L"La couleur du texte de la barre des tâches, ou l’orange de Claude. Les détails, Comptes et l’historique "
+     L"d’utilisation suivent ce choix."},
+    {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
+          L"fills with the elapsed time.",
+     L"Chevron fin, ligne sur toute la largeur, encoche au bord, point centré ou piste de temps\u00A0: une petite "
+     L"barre sous chaque barre, qui se remplit avec le temps écoulé."},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"Ce compte n’est plus configuré\u00A0; ses modifications non enregistrées ont été abandonnées."},
     {L"", L"This change couldn't be saved.", L"Cette modification n’a pas pu être enregistrée."},
     {L"", L"Threshold notifications", L"Notifications de seuil"},
+    {L"", L"Thresholds stay in order: yellow, orange, red.",
+     L"Les seuils restent dans l’ordre\u00A0: jaune, orange, rouge."},
+    {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
+     L"Les seuils restent dans l’ordre\u00A0: jaune, orange, rouge. C’est aussi le niveau des notifications de seuil."},
+    {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
+     L"Des repères marquent la part écoulée de la fenêtre de chaque quota, à comparer avec son utilisation."},
+    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+          L"changed.",
+     L"Style de vignette, style de barre, tailles, identité et texte, repères de rythme, position et espacement. Les "
+     L"comptes ne sont pas modifiés."},
+    {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
+     L"Le temps restant avant la réinitialisation de ce quota, sous le nombre, au lieu de la barre de chaque quota."},
+    {L"", L"Turn off Reset countdown to change this.", L"Désactivez Compte à rebours pour modifier ce réglage."},
+    {L"", L"Turn on Pace markers to change this.", L"Activez Repères de rythme pour modifier ce réglage."},
+    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
+     L"Activez Codes de quota, ou le texte de pourcentage dans Affichage, pour modifier ce réglage."},
     {L"", L"Turn on Record usage history to change this.",
      L"Activez Enregistrer l’historique d’utilisation pour modifier ce réglage."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
@@ -2104,14 +2961,45 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"on the 7d chart.",
      L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné. Les graphiques "
      L"d’utilisation affichent les crédits sous forme de nombre sur le graphique 7j."},
+    {L"", L"Usage below this is blue.", L"Sous ce seuil, l’utilisation s’affiche en bleu."},
+    {L"", L"Usage below this is blue. Also the level for threshold notifications.",
+     L"Sous ce seuil, l’utilisation s’affiche en bleu. C’est aussi le niveau des notifications de seuil."},
+    {L"", L"Usage below this is green.", L"Sous ce seuil, l’utilisation s’affiche en vert."},
+    {L"", L"Usage below this is green. Also the level for threshold notifications.",
+     L"Sous ce seuil, l’utilisation s’affiche en vert. C’est aussi le niveau des notifications de seuil."},
+    {L"", L"Usage below this takes the Below yellow color.",
+     L"Sous ce seuil, l’utilisation prend la couleur Sous le jaune."},
+    {L"", L"Usage below this takes the Below yellow color. Also the level for threshold notifications.",
+     L"Sous ce seuil, l’utilisation prend la couleur Sous le jaune. C’est aussi le niveau des notifications de seuil."},
     {L"", L"Usage history", L"Historique d’utilisation"},
     {L"", L"Usage history guide", L"Guide de l’historique d’utilisation"},
+    {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
+     L"Utilisé se remplit à mesure que le quota est consommé\u00A0; Restant se remplit avec ce qui reste. Les "
+     L"couleurs suivent toujours l’utilisation."},
     {L"", L"Used on tiles when Identity is Label.", L"Utilisé sur les vignettes quand Identité vaut Libellé."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  par Cleroth  ·  mod Windhawk"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Attendez la fin de la connexion en cours avant de changer d’identité."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
      L"Attendez la fin de la connexion en cours avant de supprimer des comptes."},
+    {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
+          L"hours before and after now.",
+     L"Graphiques hebdomadaires et mensuels ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo})\u00A0: la fenêtre entière, "
+     L"ou de 12 à 48\u00A0heures avant et après l’instant présent."},
+    {L"", L"What those charts show while the pointer rests on the account.",
+     L"Ce que ces graphiques affichent quand le pointeur s’arrête sur le compte."},
+    {L"", L"Where each account’s identity sits next to its bars.",
+     L"Emplacement de l’identité de chaque compte par rapport à ses barres."},
+    {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
+          L"move over to make room.",
+     L"Emplacement des barres dans la barre des tâches. Côté gauche et À droite de Démarrer sont "
+     L"expérimentaux\u00A0: les boutons de la barre des tâches se décalent pour leur faire de la place."},
+    {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
+     L"Le blanc, par défaut, suit la couleur du texte de la barre des tâches. Personnaliser… ouvre le sélecteur de "
+     L"couleurs."},
+    {L"", L"Windows transparency effects are off, so it shows as Solid.",
+     L"Les effets de transparence de Windows sont désactivés\u00A0: le matériau s’affiche donc comme Opaque."},
+    {L"", L"Yellow from", L"Jaune à partir de"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity n’est pas lancé"},
@@ -2189,6 +3077,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"add-account", L"Sign in with your browser", L"Connexion via votre navigateur"},
     {L"add-account", L"Uses the signed-in Antigravity app or CLI",
      L"Utilise l’application ou la CLI Antigravity connectée"},
+    {L"bar-mode", L"Remaining", L"Restant"},
+    {L"bar-mode", L"Used", L"Utilisé"},
+    {L"bar-style", L"Full track", L"Piste complète"},
+    {L"bar-style", L"Thin rail", L"Rail fin"},
     {L"button", L"Add account", L"Ajouter un compte"},
     {L"button", L"Copied", L"Copié"},
     {L"button", L"Copy", L"Copier"},
@@ -2323,11 +3215,24 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Échec de l’écriture de l’historique\u00A0; le journal précédent a été conservé."},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"Fichier d’historique non pris en charge ou endommagé. Effacez l’historique pour recommencer."},
+    {L"identity-position", L"Bottom", L"Bas"},
+    {L"identity-position", L"Hidden", L"Masquée"},
+    {L"identity-position", L"Left", L"Gauche"},
+    {L"identity-position", L"Right", L"Droite"},
+    {L"identity-position", L"Top", L"Haut"},
     {L"language-choice", L"Automatic ({language})", L"Automatique ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} et {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} et {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"logo-color", L"Gemini gradient", L"Dégradé Gemini"},
+    {L"logo-color", L"Orange", L"Orange"},
+    {L"logo-color", L"Taskbar text color", L"Couleur du texte"},
+    {L"material", L"Acrylic", L"Acrylique"},
+    {L"material", L"Mica", L"Mica"},
+    {L"material", L"Mica Alt", L"Mica Alt"},
+    {L"material", L"Solid", L"Opaque"},
+    {L"material", L"Tinted wallpaper", L"Fond d’écran teinté"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} – réinitialisation {when}"},
     {L"notification-level", L"Off", L"Désactivées"},
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
@@ -2364,12 +3269,37 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"outage-reason", L"Slow responses", L"Réponses lentes"},
     {L"outage-reason", L"Upstream provider issues", L"Problèmes chez le fournisseur en amont"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}\u00A0: {models}"},
+    {L"pace-marker", L"Caret", L"Chevron"},
+    {L"pace-marker", L"Dot", L"Point"},
+    {L"pace-marker", L"Edge notch", L"Encoche au bord"},
+    {L"pace-marker", L"Full line", L"Ligne entière"},
+    {L"pace-marker", L"Time track", L"Piste de temps"},
+    {L"palette", L"Colorblind", L"Daltonisme"},
+    {L"palette", L"Custom", L"Personnalisée"},
+    {L"palette", L"Default", L"Par défaut"},
+    {L"percent-alignment", L"Adaptive", L"Adaptatif"},
+    {L"percent-alignment", L"Center", L"Centre"},
+    {L"percent-alignment", L"Left", L"Gauche"},
+    {L"percent-alignment", L"Right", L"Droite"},
+    {L"percent-text", L"Always show", L"Toujours afficher"},
+    {L"percent-text", L"Never show", L"Ne jamais afficher"},
+    {L"percent-text", L"Show on hover", L"Afficher au survol"},
+    {L"pixel-unit", L"px", L"px"},
+    {L"placement", L"After Show desktop", L"Après Afficher le Bureau"},
+    {L"placement", L"After the clock", L"Après l’horloge"},
+    {L"placement", L"Before network and volume", L"Avant réseau et volume"},
+    {L"placement", L"Before notification icons", L"Avant les icônes de notification"},
+    {L"placement", L"Before the clock", L"Avant l’horloge"},
+    {L"placement", L"Left side", L"Côté gauche"},
+    {L"placement", L"Right of Start", L"À droite de Démarrer"},
     {L"plan", L"Visual test", L"Test visuel"},
     {L"poll-interval", L"Custom", L"Personnalisé"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minute} many{# de minutes} other{# minutes}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{minute} many{de minutes} other{minutes}}"},
+    {L"preview", L"Preview", L"Aperçu"},
+    {L"preview", L"Show on taskbar", L"Dans la barre des tâches"},
     {L"quota-amount", L"Limit reached", L"Limite atteinte"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Pool partagé de {unit}, sans limite par utilisateur"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
@@ -2435,14 +3365,34 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"settings-page", L"History", L"Historique"},
     {L"settings-page", L"Layout", L"Disposition"},
     {L"settings-section", L"Alerts", L"Alertes"},
+    {L"settings-section", L"Appearance", L"Apparence"},
+    {L"settings-section", L"Bars", L"Barres"},
     {L"settings-section", L"Credits and license", L"Crédits et licence"},
+    {L"settings-section", L"Current position", L"Position actuelle"},
     {L"settings-section", L"Details", L"Détails"},
+    {L"settings-section", L"Details flyout", L"Volet des détails"},
+    {L"settings-section", L"Gauge", L"Jauge"},
+    {L"settings-section", L"Headline", L"Chiffre clé"},
+    {L"settings-section", L"Identity", L"Identité"},
+    {L"settings-section", L"Identity and text", L"Identité et texte"},
     {L"settings-section", L"Language", L"Langue"},
     {L"settings-section", L"Links", L"Liens"},
+    {L"settings-section", L"Matrix", L"Matrice"},
+    {L"settings-section", L"Pace markers", L"Repères de rythme"},
+    {L"settings-section", L"Pies", L"Secteurs"},
+    {L"settings-section", L"Placement", L"Emplacement"},
     {L"settings-section", L"Recording", L"Enregistrement"},
+    {L"settings-section", L"Ring", L"Anneau"},
+    {L"settings-section", L"Spacing", L"Espacement"},
+    {L"settings-section", L"Square", L"Carré"},
+    {L"settings-section", L"Status", L"État"},
     {L"settings-section", L"Storage", L"Stockage"},
     {L"settings-section", L"Taskbar", L"Barre des tâches"},
+    {L"settings-section", L"Tile style", L"Style de vignette"},
+    {L"settings-section", L"Time span", L"Période"},
     {L"settings-section", L"Updates", L"Mises à jour"},
+    {L"settings-section", L"Usage colors", L"Couleurs d’utilisation"},
+    {L"settings-section", L"Values", L"Valeurs"},
     {L"settings-section", L"Viewer", L"Visionneuse"},
     {L"sign-in-button", L"Cancel", L"Annuler"},
     {L"sign-in-button", L"Close", L"Fermer"},
@@ -2492,6 +3442,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"paste the code its page shows.",
      L"Ce code appartient à un autre lien de connexion. Ouvrez le lien de cette fenêtre, autorisez l’accès, puis "
      L"collez le code affiché sur sa page."},
+    {L"sparkline-extra", L"Amount", L"Montant"},
+    {L"sparkline-extra", L"Off", L"Désactivé"},
+    {L"sparkline-extra", L"Percent", L"Pourcentage"},
+    {L"sparkline-span", L"Off", L"Désactivé"},
+    {L"sparkline-span", L"Whole window", L"Fenêtre entière"},
+    {L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}",
+     L"{hours, plural, one{# heure de chaque côté} many{# d’heures de chaque côté} other{# heures de chaque côté}}"},
     {L"taskbar-action", L"Exit visual test", L"Quitter le test visuel"},
     {L"taskbar-action", L"Hide", L"Masquer"},
     {L"taskbar-action", L"Open dashboard", L"Ouvrir le tableau de bord"},
@@ -2512,8 +3469,22 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"tile-identity", L"Label", L"Libellé"},
     {L"tile-identity", L"Logo + number badge", L"Logo + badge numéroté"},
     {L"tile-identity", L"Logo only", L"Logo seul"},
+    {L"tile-style", L"Clock pies", L"Secteurs horaires"},
+    {L"tile-style", L"Concentric rings", L"Anneaux concentriques"},
+    {L"tile-style", L"Gauge %", L"Jauge\u00A0%"},
+    {L"tile-style", L"Headline %", L"Chiffre clé\u00A0%"},
+    {L"tile-style", L"Quota matrix", L"Matrice des quotas"},
+    {L"tile-style", L"Rounded square", L"Carré arrondi"},
+    {L"tile-style", L"Segmented ring", L"Anneau segmenté"},
+    {L"tile-style", L"Stacked bars", L"Barres empilées"},
+    {L"tile-style", L"Usage graph", L"Graphique d’utilisation"},
+    {L"tile-style", L"Vertical bars", L"Barres verticales"},
     {L"toggle", L"Off", L"Désactivé"},
     {L"toggle", L"On", L"Activé"},
+    {L"usage-band", L"Below yellow", L"Sous le jaune"},
+    {L"usage-band", L"From orange", L"À partir de l’orange"},
+    {L"usage-band", L"From red", L"À partir du rouge"},
+    {L"usage-band", L"From yellow", L"À partir du jaune"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
      L"Au rythme des dernières 24 h\u00A0: limite dans ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
@@ -2527,30 +3498,81 @@ static_assert(I18nCatalogSorted(kI18nCatalogFr), "sort by (context, English), no
 // Japanese (ja): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogJa[] = {
+    {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
+          L"in Used mode, left in Remaining mode.",
+     L"Anthropic の追加使用量、OpenAI のクレジット、GitHub Copilot の AI クレジットで、% の代わりに $ "
+     L"またはクレジット数を表示します。［使用量］モードでは使った分、［残量］モードでは残りの分です。"},
     {L"", L"1 to 3650 days.", L"1～3650 日。"},
     {L"", L"2 to 1440 minutes.", L"2～1440 分。"},
     {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
      L"変更を保存できませんでした。その変更はエラーと共に表示されています。\n\n保存されていない変更を破棄してウィンドウを閉じますか？"},
+    {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
+     L"クォータの期間全体での均等な使用を斜線で示し、実際の使用量と比べられるようにします。"},
+    {L"", L"A faint border around each chart.", L"各グラフの周りに薄い枠線を表示します。"},
+    {L"", L"A full track behind each fill, or a thin rail under it.", L"各バーの塗りの背後に全体のトラック、またはその下に細いレールを表示します。"},
+    {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+     L"現在の測定値をリングで囲み、その下の線を切り抜きます。オフ: 単純な点。"},
+    {L"", L"A small triangle on the chart’s bottom edge at the current time.", L"現在時刻の位置で、グラフの下端に小さな三角形を表示します。"},
+    {L"", L"A thin line across the chart at the current time.", L"現在時刻の位置で、グラフを横切る細い線を表示します。"},
+    {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
+          L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
+          L"major outage. Off: no status pages are read.",
+     L"プロバイダーのステータス "
+     L"ページが、アカウントの使うサービスの問題を報告している間、そのアカウントに警告の三角形を表示します。サービス低下、部分的な障害、メンテナンスでは使用量の色の橙、大規模な障害では赤で表示します。オフ: ステータス "
+     L"ページを読み込みません。"},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go の AI サブスクリプションのクォータを Windows 11 のタスク バーに表示します。"},
+    {L"", L"Account identity is set per account in Accounts", L"識別は［アカウント］ページでアカウントごとに設定します"},
+    {L"", L"Account margin", L"アカウントの余白"},
+    {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.",
+     L"［自動］: 右側に表示し、バーが黄のしきい値に達すると左側に移動します。"},
+    {L"", L"Additional OpenAI rate limits", L"OpenAI の追加のレート制限"},
+    {L"", L"Adds ! when a refresh failed or is overdue.", L"更新に失敗したか、更新が遅れているときに ! を付けます。"},
     {L"", L"All displays", L"すべてのディスプレイ"},
     {L"", L"Also delete its usage history", L"使用履歴も削除する"},
+    {L"", L"Also the level for threshold notifications.", L"しきい値の通知のレベルでもあります。"},
+    {L"", L"Amounts on extra usage and credits", L"追加使用量とクレジットの金額"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.",
      L"あるアカウントの構成がなくなったため、その保存されていない変更は破棄されました。"},
     {L"", L"Another account of this provider uses this label.", L"このプロバイダーの別のアカウントがこのラベルを使っています。"},
+    {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
+          L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
+          L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
+     L"アカウントで選択され、報告されている場合、Anthropic の追加使用量または OpenAI のクレジットを {key7d} のグラフの左上隅 (［残量］モードでは左下) "
+     L"に表示します。［使用量］モードでは使った分、［残量］モードでは残りの分です。上限がない場合、［パーセント］では金額を表示します。OpenAI のクレジットに専用のグラフはありません。"},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic、OpenAI、GitHub Copilot はブラウザーで、OpenCode Go は API キーでサインインします。Google Antigravity はサインイン済みのアプリまたは CLI "
      L"を使うため、それを実行したままにしてください。"},
+    {L"", L"Antigravity logo", L"Antigravity のロゴ"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"この Windows ユーザーにのみ適用されます。オフにしても保存済みの履歴は残ります。"},
+    {L"", L"Background of the details flyout and the settings and usage history windows.",
+     L"詳細フライアウト、設定ウィンドウ、使用履歴ウィンドウの背景。"},
+    {L"", L"Badge color", L"バッジの色"},
+    {L"", L"Badge horizontal offset", L"バッジの水平オフセット"},
+    {L"", L"Badge size", L"バッジのサイズ"},
+    {L"", L"Badge vertical offset", L"バッジの垂直オフセット"},
+    {L"", L"Bar gap", L"バーの間隔"},
+    {L"", L"Bar length", L"バーの長さ"},
+    {L"", L"Bar mode", L"バー モード"},
+    {L"", L"Bar style", L"バーのスタイル"},
+    {L"", L"Bar text size", L"バーの文字サイズ"},
+    {L"", L"Bar thickness", L"バーの太さ"},
+    {L"", L"Chart height", L"グラフの高さ"},
+    {L"", L"Chart outline", L"グラフの枠線"},
+    {L"", L"Chart width", L"グラフの幅"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"ローカルのサンプルからのグラフ、統計、CSV エクスポート。記録がオフでも使えます。"},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"編集するには、［クラウドのポーリング間隔］で［カスタム］を選んでください。"},
     {L"", L"Choose Custom in Keep history to edit.", L"編集するには、［履歴の保持］で［カスタム］を選んでください。"},
+    {L"", L"Choose an identity position to change this.", L"変更するには、識別の位置を選んでください。"},
+    {L"", L"Claude logo", L"Claude のロゴ"},
     {L"", L"Cloud poll interval", L"クラウドのポーリング間隔"},
+    {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
+     L"Codex Spark、gpt-reserve などの非表示のモデル レーン、OpenAI の詳細での Spark のプラン名。"},
     {L"", L"Contributors", L"コントリビューター"},
     {L"", L"Copy version info", L"バージョン情報をコピー"},
     {L"", L"Could not remove the account.", L"アカウントを削除できませんでした。"},
@@ -2568,9 +3590,28 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Custom interval", L"カスタム間隔"},
     {L"", L"Custom retention", L"カスタムの保持期間"},
     {L"", L"Default time span", L"既定の期間"},
+    {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
+          L"threshold.",
+     L"［既定］: 緑、黄、橙、赤。［色覚対応］: 青から朱色まで。［カスタム］: しきい値ごとに選んだ色。"},
+    {L"", L"Diameter in pixels.", L"直径 (ピクセル単位)。"},
     {L"", L"Display {number} - unavailable", L"ディスプレイ {number} - 使用できません"},
     {L"", L"Display {number} - {width}x{height}", L"ディスプレイ {number} - {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"ディスプレイ {number} - {width}x{height} (メイン)"},
+    {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
+          L"to retry.",
+     L"ディスプレイ {number} ではバーをシステム トレイに表示しています: 必要なスペースを別の Mod が制御しています。再試行するには、エクスプローラーを再起動してください。"},
+    {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
+     L"ディスプレイ {number} ではバーをシステム トレイに表示しています: スタート ボタンが非表示か、見つかりませんでした。"},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
+     L"ディスプレイ {number} ではバーをシステム トレイに表示しています: タスク バーのボタンが見つかりませんでした。"},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
+     L"ディスプレイ {number} ではバーをシステム トレイに表示しています: タスク バーが画面の左右の端にあります。"},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
+          L"fit its width. The preview shows them across a bottom taskbar.",
+     L"ディスプレイ {number} のタスク バーは画面の左右の端にあります: アカウントは縦に並び、各スタイルはその幅に合わせて配置し直されます。プレビューでは下部のタスク バーに横に並べて表示します。"},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
+          L"Update Windows to show them.",
+     L"ディスプレイ {number} のタスク バーは画面の左右の端にあります: この Windows のビルドではシステム トレイにバーを表示できません。表示するには Windows を更新してください。"},
     {L"", L"Do not poll hidden accounts", L"非表示のアカウントをポーリングしない"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
@@ -2579,8 +3620,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"記録するかどうかはアカウントごとに選べます: <link id=\"accounts\">アカウント</link> > 履歴を記録。［動作］の "
      L"<link id=\"hidden\">非表示のアカウントをポーリングしない</link> がオンの間、非表示のアカウントは記録されません。"},
+    {L"", L"Elapsed time", L"経過時間"},
     {L"", L"Enter a label.", L"ラベルを入力してください。"},
     {L"", L"Enter a whole number from {minimum} to {maximum}.", L"{minimum}～{maximum} の整数を入力してください。"},
+    {L"", L"Example accounts, updates as you change settings", L"サンプル アカウント (設定の変更を反映)"},
+    {L"", L"Example accounts, wider than shown: drag to scroll", L"サンプル アカウント (はみ出し分はドラッグでスクロール)"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -2591,6 +3635,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"Octicons</link> (MIT ライセンス、Copyright (c) 2026 GitHub Inc.) より。Google Antigravity には Gemini "
      L"のマークを使っています。\nClaude、Anthropic、OpenAI、ChatGPT、Codex、Google、Gemini、Antigravity、GitHub、GitHub Copilot、OpenCode "
      L"は各所有者の商標です。ロゴは、タイルがどのアカウントを示すかを表すためだけに使われます。"},
+    {L"", L"Gap after accounts", L"アカウントの後の間隔"},
+    {L"", L"Gauge size", L"ゲージのサイズ"},
+    {L"", L"Gauge thickness", L"ゲージの太さ"},
+    {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
+     L"高さ (ピクセル単位)。クォータごとに円グラフが 1 つで、3 つ目以降は小さくなります。"},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"非表示のアカウントは、［履歴を記録］がオンでもポーリングも記録もされません。記録を続けるにはオフにしてください。"
@@ -2603,18 +3652,33 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル "
      L"セッションを毎分ポーリングします。"},
     {L"", L"Identity", L"識別"},
+    {L"", L"Identity gap", L"識別との間隔"},
+    {L"", L"Identity position", L"識別の位置"},
     {L"", L"Interface language", L"表示言語"},
     {L"", L"Its stored sign-in will be deleted.", L"保存されたサインインは削除されます。"},
     {L"", L"Its usage history is kept.", L"使用履歴は保持されます。"},
     {L"", L"Keep history", L"履歴の保持"},
     {L"", L"Label", L"ラベル"},
+    {L"", L"Label font size", L"ラベルのフォント サイズ"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"言語、ディスプレイ、ホバー時の詳細、ポーリング、通知。"},
     {L"", L"License", L"ライセンス"},
+    {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
+     L"既定では薄い灰色、明るいタスク バーでは暗い色です。［カスタム…］でカラー ピッカーを開きます。"},
+    {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
+     L"クォータの期間のうち経過した部分を明るくし、残りは暗いままにします。"},
+    {L"", L"Logo + number badge, logo only, or label.", L"ロゴ + 番号バッジ、ロゴのみ、またはラベル。"},
+    {L"", L"Logo size", L"ロゴのサイズ"},
+    {L"", L"Long windows", L"長期間"},
     {L"", L"MIT License", L"MIT ライセンス"},
+    {L"", L"Mark stale data", L"古いデータを示す"},
+    {L"", L"Marker color", L"マーカーの色"},
+    {L"", L"Marker style", L"マーカーのスタイル"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
      L"このアカウントをバーの横とタイル上で示します。［ラベル］では、バーにラベルを、タイルにその短いテキストを表示します。番号バッジは、複数のアカウントが同じプロバイダーを使うとき (非表示のものも含む) に表示されます。"},
+    {L"", L"Material", L"素材"},
+    {L"", L"Material, values, usage colors, status marks and flyout details.", L"素材、値、使用量の色、ステータスの表示、詳細フライアウト。"},
     {L"", L"New samples arrive with each poll.", L"ポーリングのたびに新しいサンプルが追加されます。"},
     {L"", L"No accounts yet", L"アカウントはまだありません"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
@@ -2624,23 +3688,54 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Nothing new is recorded.", L"新しいデータは記録されません。"},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"タスク バーのクォータが選んだしきい値に初めて達したときに通知します。しきい値を下回ると再び有効になります。"},
+    {L"", L"Now caret", L"現在時刻のキャレット"},
+    {L"", L"Now line", L"現在時刻の線"},
+    {L"", L"Number size", L"数値のサイズ"},
+    {L"", L"On hover", L"ホバー時"},
     {L"", L"Open AI quota settings", L"AI クォータの設定を開く"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"AI クォータの設定を開く。保存された設定を読み込めませんでした。バックアップを保持しています。"},
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"ポインターを置いたままにすると、アカウントの詳細を開きます。"},
+    {L"", L"Orange from", L"橙のしきい値"},
+    {L"", L"Pace markers", L"ペース マーカー"},
+    {L"", L"Palette", L"パレット"},
+    {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
+     L"現在の測定値の標準サイズに対するパーセント: リングとその点、または単純な点。"},
+    {L"", L"Percent of the standard size; rings keep it inside the hole.", L"標準サイズに対するパーセント。リングでは穴の内側に収まります。"},
+    {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
+     L"タイルの高さに対するパーセント。グラフは使用量 0%～100% (［残量］モードでは残り) を表します。"},
+    {L"", L"Percentage alignment", L"パーセントの配置"},
+    {L"", L"Percentage on each bar: never, on hover, or always.", L"各バーのパーセント: 表示しない、ホバー時に表示、常に表示。"},
+    {L"", L"Percentage text", L"パーセント表示"},
+    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
+     L"パーセント表示とクォータ キー。パーセント表示は［表示］ページで設定します。"},
+    {L"", L"Pie area", L"円グラフの領域"},
+    {L"", L"Pixels across each bar.", L"各バーの太さ (ピクセル単位)。"},
+    {L"", L"Pixels across each quota’s chart.", L"各クォータのグラフの幅 (ピクセル単位)。"},
+    {L"", L"Pixels along each bar.", L"各バーの長さ (ピクセル単位)。"},
+    {L"", L"Pixels along each quota’s bar under the number.", L"数値の下にある各クォータのバーの長さ (ピクセル単位)。"},
+    {L"", L"Pixels down, or up when negative.", L"下方向へのピクセル数。負の値では上方向。"},
+    {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
+     L"ロゴの右下隅 (リングでは穴の内側) から右方向へのピクセル数。負の値では左方向。"},
+    {L"", L"Position", L"位置"},
     {L"", L"Primary display only", L"メイン ディスプレイのみ"},
     {L"", L"Primary display, all displays, or one display.",
      L"メイン ディスプレイ、すべてのディスプレイ、または 1 つのディスプレイ。"},
     {L"", L"Project page", L"プロジェクト ページ"},
     {L"", L"Provider logos", L"プロバイダーのロゴ"},
+    {L"", L"Quota keys", L"クォータ キー"},
+    {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
+     L"グラフ上のクォータ キー ({key5h}、{key7d} など) と追加使用量の文字 (ピクセル単位)。"},
     {L"", L"Quotas on taskbar", L"タスク バーのクォータ"},
+    {L"", L"Reading size", L"測定値のサイズ"},
     {L"", L"Record history", L"履歴を記録"},
     {L"", L"Record usage history", L"使用履歴を記録"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
      L"この Windows ユーザーの記録はオン、履歴は無期限に保持、7 日で開きます。保存済みの履歴は残ります。"},
     {L"", L"Recording rules, storage, export and verification", L"記録のルール、保存、エクスポート、検証"},
     {L"", L"Recording starts once the taskbar saves its account IDs.", L"タスク バーがアカウント ID を保存すると記録が始まります。"},
+    {L"", L"Red from", L"赤のしきい値"},
     {L"", L"Remove \"{label}\" ({provider})?", L"「{label}」({provider}) を削除しますか？"},
     {L"", L"Report an issue", L"問題を報告"},
     {L"", L"Reset Behavior to defaults", L"動作を既定値にリセット"},
@@ -2648,6 +3743,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 "
      L"分ごとにポーリング、非表示のアカウントはポーリングしない、しきい値の通知は赤。"},
+    {L"", L"Reset Display to defaults", L"表示を既定値にリセット"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
@@ -2657,11 +3753,16 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
      L"履歴を既定値にリセットしますか？\n\nこの Windows ユーザーの記録がオンになり、履歴は無期限に保持され、使用履歴ウィンドウは 7 日で開きます。保存済みの履歴は残ります。"},
+    {L"", L"Reset Layout to defaults", L"レイアウトを既定値にリセット"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
      L"レイアウトを既定値にリセットしますか？\n\n100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、薄い灰色のキャレット型ペース "
      L"マーカー、既定の間隔。アカウントは変更されません。"},
+    {L"", L"Reset countdown", L"リセットまでの残り時間"},
+    {L"", L"Ring size", L"リングのサイズ"},
+    {L"", L"Ring thickness", L"リングの太さ"},
+    {L"", L"Ringed reading", L"リング付きの測定値"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"<b>{button}</b> を選ぶと、Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go のアカウントをタスク バーに表示できます。"},
@@ -2670,21 +3771,49 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
      L"Windows のユーザー間で共有されます。［無期限］では何も削除されずサイズの上限もないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。日数の上限では 1 時間ごとに整理され、上限は約 60 MB "
      L"です。"},
+    {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
+     L"各バーの横の短いキー: {key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短いテキスト"},
     {L"", L"Show details on hover", L"ホバー時に詳細を表示"},
     {L"", L"Show on", L"表示先"},
+    {L"", L"Show percentage text on hover or always to change this.", L"変更するには、パーセント表示を［ホバー時に表示］か［常に表示］にしてください。"},
+    {L"", L"Show provider outages", L"プロバイダーの障害を表示"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
      L"詳細に表示され、［識別］が［ラベル］のときはバーの横にも表示されます。プロバイダーごとに一意で、名前を変えてもサインインと履歴は保持されます。"},
+    {L"", L"Side in pixels.", L"辺の長さ (ピクセル単位)。"},
+    {L"", L"Space after the last account, before whatever comes next on the taskbar.",
+     L"最後のアカウントの後、タスク バー上の次の要素までのスペース。"},
+    {L"", L"Space between an account’s bars.", L"1 つのアカウントのバー同士の間隔。"},
+    {L"", L"Space between the identity and the bars.", L"識別とバーの間のスペース。"},
+    {L"", L"Space on each side of every account.", L"各アカウントの両側のスペース。"},
+    {L"", L"Square size", L"四角形のサイズ"},
+    {L"", L"Square thickness", L"四角形の太さ"},
+    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.", L"［積み上げバー］と［縦バー］のみ。現在のタイル スタイル: {style}。"},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
      L"履歴の無期限保持をやめますか？\n\n履歴は再び {days, plural, other{# 日間}} 保持され、250,000 サンプル (約 60 MB) "
      L"に制限されます。それより古いサンプルと、上限を超えた最も古いサンプルは、すべての Windows ユーザーについて完全に削除されます。"},
     {L"", L"Storage location", L"保存場所"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
+     L"線の幅 (ピクセル単位)。円弧が数値の周りに収まらないときは自動的に細くなります。"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
+     L"線の幅 (ピクセル単位)。メーターがロゴやテキストの周りに収まらないときは自動的に細くなります。"},
     {L"", L"Suggestions and bug reports on GitHub", L"GitHub での提案とバグ報告"},
+    {L"", L"Text of accounts whose identity is Label, in pixels.", L"［識別］が［ラベル］のアカウントの文字 (ピクセル単位)。"},
+    {L"", L"Text size", L"文字サイズ"},
+    {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
+          L"taskbar.",
+     L"各クォータのパーセントの文字サイズ (ピクセル単位)。キーも合わせて拡大縮小します。2 行の場合はタスク バーに収まるよう縮小されます。"},
+    {L"", L"Text size of the most-used quota’s percentage, in pixels; its quota key scales with it.",
+     L"最も使われているクォータのパーセントの文字サイズ (ピクセル単位)。クォータ キーも合わせて拡大縮小します。"},
+    {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+     L"複数のアカウントが同じプロバイダーを使うときにロゴに付く番号の文字サイズ (ピクセル単位)。"},
     {L"", L"Thanks to {names}.", L"{names} に感謝します。"},
     {L"", L"That provider and label are already configured.", L"そのプロバイダーとラベルはすでに構成されています。"},
+    {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
+     L"Gemini のスパークルを、タスク バーの文字色、または紫から青へのグラデーションで表示します。"},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
      L"タイルでの［ラベル］識別です (最大 4 文字)。空の場合は、スペースを除いたラベルを使います。"},
     {L"", L"The account was changed from another taskbar window.", L"アカウントは別のタスク バー ウィンドウから変更されました。"},
@@ -2706,6 +3835,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"Applies to this Windows user only.",
      L"設定ウィンドウ、使用履歴ウィンドウ、タスク バー。［自動］は Windows の表示言語に従います。この Windows "
      L"ユーザーにのみ適用されます。"},
+    {L"", L"The settings and usage history windows use Mica for it.", L"設定ウィンドウと使用履歴ウィンドウでは、代わりに［マイカ］を使います。"},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"保存されたサインインをコピーできませんでした。アカウントは変更されませんでした。"},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -2715,22 +3845,64 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
           L"signed out.",
      L"保存されたサインインは削除されましたが、設定を保存できませんでした。アカウントは構成されたまま、サインアウトした状態です。"},
+    {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
+     L"タスク バーの文字色、または Claude のオレンジ。詳細フライアウト、［アカウント］ページ、使用履歴も同じ色になります。"},
+    {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
+          L"fills with the elapsed time.",
+     L"細いキャレット、全幅の線、端の切れ込み、中央の点、または時間トラック (各バーの下で経過時間に応じて伸びる小さなバー)。"},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"このアカウントの構成がなくなったため、保存されていない変更は破棄されました。"},
     {L"", L"This change couldn't be saved.", L"この変更を保存できませんでした。"},
     {L"", L"Threshold notifications", L"しきい値の通知"},
+    {L"", L"Thresholds stay in order: yellow, orange, red.", L"しきい値は黄、橙、赤の順に保たれます。"},
+    {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
+     L"しきい値は黄、橙、赤の順に保たれます。しきい値の通知のレベルでもあります。"},
+    {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
+     L"各クォータの期間がどれだけ経過したかを目盛りで示し、使用量と比べられるようにします。"},
+    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+          L"changed.",
+     L"タイル スタイル、バーのスタイル、サイズ、識別とテキスト、ペース マーカー、位置、間隔。アカウントは変更されません。"},
+    {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
+     L"各クォータのバーの代わりに、そのクォータのリセットまでの時間を数値の下に表示します。"},
+    {L"", L"Turn off Reset countdown to change this.", L"変更するには、［リセットまでの残り時間］をオフにしてください。"},
+    {L"", L"Turn on Pace markers to change this.", L"変更するには、［ペース マーカー］をオンにしてください。"},
+    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
+     L"変更するには、［クォータ キー］か、［表示］ページのパーセント表示をオンにしてください。"},
     {L"", L"Turn on Record usage history to change this.", L"変更するには、［使用履歴を記録］をオンにしてください。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the 7d chart.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。使用量グラフでは、クレジットは 7日 のグラフに数値で表示されます。"},
+    {L"", L"Usage below this is blue.", L"これ未満の使用量は青になります。"},
+    {L"", L"Usage below this is blue. Also the level for threshold notifications.",
+     L"これ未満の使用量は青になります。しきい値の通知のレベルでもあります。"},
+    {L"", L"Usage below this is green.", L"これ未満の使用量は緑になります。"},
+    {L"", L"Usage below this is green. Also the level for threshold notifications.",
+     L"これ未満の使用量は緑になります。しきい値の通知のレベルでもあります。"},
+    {L"", L"Usage below this takes the Below yellow color.", L"これ未満の使用量は［黄未満］の色になります。"},
+    {L"", L"Usage below this takes the Below yellow color. Also the level for threshold notifications.",
+     L"これ未満の使用量は［黄未満］の色になります。しきい値の通知のレベルでもあります。"},
     {L"", L"Usage history", L"使用履歴"},
     {L"", L"Usage history guide", L"使用履歴ガイド"},
+    {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
+     L"［使用量］はクォータの消費につれて満ち、［残量］は残りの分だけ満ちます。色は常に使用量に従います。"},
     {L"", L"Used on tiles when Identity is Label.", L"［識別］が［ラベル］のとき、タイルで使われます。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"バージョン {version}  ·  作者 Cleroth  ·  Windhawk Mod"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"ID を変更する前に、現在のサインインが完了するまでお待ちください。"},
     {L"", L"Wait for the current sign-in to finish before removing accounts.", L"アカウントを削除する前に、現在のサインインが完了するまでお待ちください。"},
+    {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
+          L"hours before and after now.",
+     L"週間と月間のグラフ ({key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}): 期間全体、または現在の前後 12～48 時間。"},
+    {L"", L"What those charts show while the pointer rests on the account.", L"ポインターをアカウントに置いている間、それらのグラフに表示する範囲。"},
+    {L"", L"Where each account’s identity sits next to its bars.", L"バーに対する各アカウントの識別の位置。"},
+    {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
+          L"move over to make room.",
+     L"タスク バー上のバーの位置。［左端］と［スタートの右］は試験的な機能です: タスク バーのボタンがずれて場所を空けます。"},
+    {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
+     L"既定の白は、タスク バーの文字色に従います。［カスタム…］でカラー ピッカーを開きます。"},
+    {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows の透明効果がオフのため、［単色］として表示されます。"},
+    {L"", L"Yellow from", L"黄のしきい値"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity が実行されていません"},
@@ -2799,6 +3971,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"OpenCode コンソールの API キーでサインイン"},
     {L"add-account", L"Sign in with your browser", L"ブラウザーでサインイン"},
     {L"add-account", L"Uses the signed-in Antigravity app or CLI", L"サインイン済みの Antigravity アプリまたは CLI を使用"},
+    {L"bar-mode", L"Remaining", L"残量"},
+    {L"bar-mode", L"Used", L"使用量"},
+    {L"bar-style", L"Full track", L"フル トラック"},
+    {L"bar-style", L"Thin rail", L"細いレール"},
     {L"button", L"Add account", L"アカウントを追加"},
     {L"button", L"Copied", L"コピーしました"},
     {L"button", L"Copy", L"コピー"},
@@ -2921,11 +4097,24 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-storage", L"History write failed; the previous journal was kept.", L"履歴の書き込みに失敗しました。以前のジャーナルは保持されています。"},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"履歴ファイルがサポートされていないか、破損しています。履歴を消去してやり直してください。"},
+    {L"identity-position", L"Bottom", L"下"},
+    {L"identity-position", L"Hidden", L"非表示"},
+    {L"identity-position", L"Left", L"左"},
+    {L"identity-position", L"Right", L"右"},
+    {L"identity-position", L"Top", L"上"},
     {L"language-choice", L"Automatic ({language})", L"自動 ({language})"},
     {L"list-end", L"{a} and {b}", L"{a}、{b}"},
     {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
     {L"list-pair", L"{a} and {b}", L"{a}、{b}"},
     {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+    {L"logo-color", L"Gemini gradient", L"Gemini のグラデーション"},
+    {L"logo-color", L"Orange", L"オレンジ"},
+    {L"logo-color", L"Taskbar text color", L"タスク バーの文字色"},
+    {L"material", L"Acrylic", L"アクリル"},
+    {L"material", L"Mica", L"マイカ"},
+    {L"material", L"Mica Alt", L"マイカ Alt"},
+    {L"material", L"Solid", L"単色"},
+    {L"material", L"Tinted wallpaper", L"色付きの壁紙"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} - {when}にリセット"},
     {L"notification-level", L"Off", L"オフ"},
     {L"notification-level", L"Orange ({threshold}%)", L"オレンジ ({threshold}%)"},
@@ -2957,10 +4146,35 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"outage-reason", L"Slow responses", L"応答の遅延"},
     {L"outage-reason", L"Upstream provider issues", L"上流プロバイダーの問題"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
+    {L"pace-marker", L"Caret", L"キャレット"},
+    {L"pace-marker", L"Dot", L"点"},
+    {L"pace-marker", L"Edge notch", L"端の切れ込み"},
+    {L"pace-marker", L"Full line", L"全幅の線"},
+    {L"pace-marker", L"Time track", L"時間トラック"},
+    {L"palette", L"Colorblind", L"色覚対応"},
+    {L"palette", L"Custom", L"カスタム"},
+    {L"palette", L"Default", L"既定"},
+    {L"percent-alignment", L"Adaptive", L"自動"},
+    {L"percent-alignment", L"Center", L"中央"},
+    {L"percent-alignment", L"Left", L"左"},
+    {L"percent-alignment", L"Right", L"右"},
+    {L"percent-text", L"Always show", L"常に表示"},
+    {L"percent-text", L"Never show", L"表示しない"},
+    {L"percent-text", L"Show on hover", L"ホバー時に表示"},
+    {L"pixel-unit", L"px", L"px"},
+    {L"placement", L"After Show desktop", L"［デスクトップの表示］の後"},
+    {L"placement", L"After the clock", L"時計の後"},
+    {L"placement", L"Before network and volume", L"ネットワークと音量の前"},
+    {L"placement", L"Before notification icons", L"通知アイコンの前"},
+    {L"placement", L"Before the clock", L"時計の前"},
+    {L"placement", L"Left side", L"左端"},
+    {L"placement", L"Right of Start", L"スタートの右"},
     {L"plan", L"Visual test", L"ビジュアル テスト"},
     {L"poll-interval", L"Custom", L"カスタム"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分}}"},
+    {L"preview", L"Preview", L"プレビュー"},
+    {L"preview", L"Show on taskbar", L"タスク バーに表示"},
     {L"quota-amount", L"Limit reached", L"上限に達しました"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"共有プールの{unit}、ユーザーごとの上限なし"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
@@ -3023,14 +4237,34 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"settings-page", L"History", L"履歴"},
     {L"settings-page", L"Layout", L"レイアウト"},
     {L"settings-section", L"Alerts", L"アラート"},
+    {L"settings-section", L"Appearance", L"外観"},
+    {L"settings-section", L"Bars", L"バー"},
     {L"settings-section", L"Credits and license", L"クレジットとライセンス"},
+    {L"settings-section", L"Current position", L"現在位置"},
     {L"settings-section", L"Details", L"詳細"},
+    {L"settings-section", L"Details flyout", L"詳細フライアウト"},
+    {L"settings-section", L"Gauge", L"ゲージ"},
+    {L"settings-section", L"Headline", L"ヘッドライン"},
+    {L"settings-section", L"Identity", L"識別"},
+    {L"settings-section", L"Identity and text", L"識別とテキスト"},
     {L"settings-section", L"Language", L"言語"},
     {L"settings-section", L"Links", L"リンク"},
+    {L"settings-section", L"Matrix", L"マトリックス"},
+    {L"settings-section", L"Pace markers", L"ペース マーカー"},
+    {L"settings-section", L"Pies", L"円グラフ"},
+    {L"settings-section", L"Placement", L"表示位置"},
     {L"settings-section", L"Recording", L"記録"},
+    {L"settings-section", L"Ring", L"リング"},
+    {L"settings-section", L"Spacing", L"間隔"},
+    {L"settings-section", L"Square", L"四角形"},
+    {L"settings-section", L"Status", L"ステータス"},
     {L"settings-section", L"Storage", L"ストレージ"},
     {L"settings-section", L"Taskbar", L"タスク バー"},
+    {L"settings-section", L"Tile style", L"タイル スタイル"},
+    {L"settings-section", L"Time span", L"表示期間"},
     {L"settings-section", L"Updates", L"更新"},
+    {L"settings-section", L"Usage colors", L"使用量の色"},
+    {L"settings-section", L"Values", L"値"},
     {L"settings-section", L"Viewer", L"ビューアー"},
     {L"sign-in-button", L"Cancel", L"キャンセル"},
     {L"sign-in-button", L"Close", L"閉じる"},
@@ -3073,6 +4307,13 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
           L"paste the code its page shows.",
      L"このコードは別のサインイン リンクのものです。このウィンドウのリンクを開いてアクセスを承認し、そのページに表示されたコードを貼り付けてください。"},
+    {L"sparkline-extra", L"Amount", L"金額"},
+    {L"sparkline-extra", L"Off", L"オフ"},
+    {L"sparkline-extra", L"Percent", L"パーセント"},
+    {L"sparkline-span", L"Off", L"オフ"},
+    {L"sparkline-span", L"Whole window", L"期間全体"},
+    {L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}",
+     L"{hours, plural, other{前後 # 時間}}"},
     {L"taskbar-action", L"Exit visual test", L"ビジュアル テストを終了"},
     {L"taskbar-action", L"Hide", L"非表示"},
     {L"taskbar-action", L"Open dashboard", L"ダッシュボードを開く"},
@@ -3093,8 +4334,22 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"tile-identity", L"Label", L"ラベル"},
     {L"tile-identity", L"Logo + number badge", L"ロゴ + 番号バッジ"},
     {L"tile-identity", L"Logo only", L"ロゴのみ"},
+    {L"tile-style", L"Clock pies", L"時計型円グラフ"},
+    {L"tile-style", L"Concentric rings", L"同心リング"},
+    {L"tile-style", L"Gauge %", L"ゲージ %"},
+    {L"tile-style", L"Headline %", L"ヘッドライン %"},
+    {L"tile-style", L"Quota matrix", L"クォータ マトリックス"},
+    {L"tile-style", L"Rounded square", L"角丸四角形"},
+    {L"tile-style", L"Segmented ring", L"分割リング"},
+    {L"tile-style", L"Stacked bars", L"積み上げバー"},
+    {L"tile-style", L"Usage graph", L"使用量グラフ"},
+    {L"tile-style", L"Vertical bars", L"縦バー"},
     {L"toggle", L"Off", L"オフ"},
     {L"toggle", L"On", L"オン"},
+    {L"usage-band", L"Below yellow", L"黄未満"},
+    {L"usage-band", L"From orange", L"橙以上"},
+    {L"usage-band", L"From red", L"赤以上"},
+    {L"usage-band", L"From yellow", L"黄以上"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"直近 24 時間のペースでは: 約 {duration}後に上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペースでは: 約 {duration}後に上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペースでは: 約 {duration}後に上限"},
@@ -3105,32 +4360,89 @@ static_assert(I18nCatalogSorted(kI18nCatalogJa), "sort by (context, English), no
 // Portuguese (Brazil) (pt-BR): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogPtBr[] = {
+    {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
+          L"in Used mode, left in Remaining mode.",
+     L"$ ou créditos em vez de % no uso adicional da Anthropic, nos créditos da OpenAI e nos créditos de IA do "
+     L"GitHub Copilot: o gasto no modo Usado, o restante no modo Restante."},
     {L"", L"1 to 3650 days.", L"De 1 a 3650 dias."},
     {L"", L"2 to 1440 minutes.", L"De 2 a 1440 minutos."},
     {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
      L"Não foi possível salvar uma alteração; ela é mostrada com o erro.\n\nDescartar as alterações não salvas e "
      L"fechar a janela?"},
+    {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
+     L"Uma diagonal marca o uso uniforme da cota ao longo da janela, para comparar com o uso."},
+    {L"", L"A faint border around each chart.", L"Uma borda discreta em volta de cada gráfico."},
+    {L"", L"A full track behind each fill, or a thin rail under it.",
+     L"Uma trilha completa atrás de cada preenchimento, ou um trilho fino sob ele."},
+    {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+     L"Um anel em volta da leitura atual, recortado das linhas abaixo dele. Desativado: um ponto simples."},
+    {L"", L"A small triangle on the chart’s bottom edge at the current time.",
+     L"Um pequeno triângulo na borda inferior do gráfico, na hora atual."},
+    {L"", L"A thin line across the chart at the current time.",
+     L"Uma linha fina atravessando o gráfico na hora atual."},
+    {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
+          L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
+          L"major outage. Off: no status pages are read.",
+     L"Um triângulo de aviso em uma conta enquanto a página de status do provedor dela informa um problema em um "
+     L"serviço que ela usa: na cor de uso laranja para serviço degradado, interrupção parcial ou manutenção, na "
+     L"vermelha para interrupção grave. Desativado: nenhuma página de status é lida."},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"Cotas de assinaturas de IA da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de "
      L"tarefas do Windows 11."},
+    {L"", L"Account identity is set per account in Accounts", L"A identidade é definida por conta em Contas"},
+    {L"", L"Account margin", L"Margem da conta"},
+    {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.",
+     L"Adaptável: lado direito, passando para a esquerda quando a barra atinge o limite amarelo."},
+    {L"", L"Additional OpenAI rate limits", L"Limites de taxa adicionais da OpenAI"},
+    {L"", L"Adds ! when a refresh failed or is overdue.",
+     L"Adiciona ! quando uma atualização falhou ou está atrasada."},
     {L"", L"All displays", L"Todas as telas"},
     {L"", L"Also delete its usage history", L"Excluir também o histórico de uso"},
+    {L"", L"Also the level for threshold notifications.", L"Também é o nível das notificações de limite."},
+    {L"", L"Amounts on extra usage and credits", L"Valores no uso adicional e nos créditos"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.",
      L"Uma conta não está mais configurada; as alterações não salvas dela foram descartadas."},
     {L"", L"Another account of this provider uses this label.", L"Outra conta deste provedor usa este rótulo."},
+    {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
+          L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
+          L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
+     L"Uso adicional da Anthropic ou créditos da OpenAI no canto superior esquerdo do gráfico de {key7d} (inferior "
+     L"esquerdo no modo Restante), quando selecionados para a conta e informados: o gasto no modo Usado, o restante "
+     L"no modo Restante. Porcentagem mostra o valor quando não há limite. Os créditos da OpenAI nunca têm um gráfico "
+     L"próprio."},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic, OpenAI e GitHub Copilot entram pelo navegador; o OpenCode Go, com uma chave de API. O Google "
      L"Antigravity usa o app ou a CLI conectados, que precisam continuar em execução."},
+    {L"", L"Antigravity logo", L"Logo do Antigravity"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"Vale somente para este usuário do Windows. Desativar mantém o histórico salvo."},
+    {L"", L"Background of the details flyout and the settings and usage history windows.",
+     L"Fundo do painel de detalhes e das janelas de configurações e de histórico de uso."},
+    {L"", L"Badge color", L"Cor do selo"},
+    {L"", L"Badge horizontal offset", L"Deslocamento horizontal do selo"},
+    {L"", L"Badge size", L"Tamanho do selo"},
+    {L"", L"Badge vertical offset", L"Deslocamento vertical do selo"},
+    {L"", L"Bar gap", L"Espaço entre barras"},
+    {L"", L"Bar length", L"Comprimento da barra"},
+    {L"", L"Bar mode", L"Modo de barra"},
+    {L"", L"Bar style", L"Estilo de barra"},
+    {L"", L"Bar text size", L"Tamanho do texto da barra"},
+    {L"", L"Bar thickness", L"Espessura da barra"},
+    {L"", L"Chart height", L"Altura do gráfico"},
+    {L"", L"Chart outline", L"Contorno do gráfico"},
+    {L"", L"Chart width", L"Largura do gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estatísticas e exportação CSV a partir de amostras locais, também com o registro desativado."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Escolha Personalizado em Intervalo de consulta na nuvem para editar."},
     {L"", L"Choose Custom in Keep history to edit.", L"Escolha Personalizado em Manter histórico para editar."},
+    {L"", L"Choose an identity position to change this.", L"Escolha uma posição de identidade para alterar isto."},
+    {L"", L"Claude logo", L"Logo do Claude"},
     {L"", L"Cloud poll interval", L"Intervalo de consulta na nuvem"},
+    {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
+     L"Codex Spark, faixas de modelo ocultas, como gpt-reserve, e o nome do plano Spark nos detalhes da OpenAI."},
     {L"", L"Contributors", L"Colaboradores"},
     {L"", L"Copy version info", L"Copiar informações da versão"},
     {L"", L"Could not remove the account.", L"Não foi possível remover a conta."},
@@ -3150,9 +4462,33 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Custom interval", L"Intervalo personalizado"},
     {L"", L"Custom retention", L"Retenção personalizada"},
     {L"", L"Default time span", L"Período padrão"},
+    {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
+          L"threshold.",
+     L"Padrão: verde, amarelo, laranja e vermelho. Para daltônicos: do azul ao vermelhão. Personalizada: uma cor à "
+     L"sua escolha para cada limite."},
+    {L"", L"Diameter in pixels.", L"Diâmetro em pixels."},
     {L"", L"Display {number} - unavailable", L"Tela {number} - indisponível"},
     {L"", L"Display {number} - {width}x{height}", L"Tela {number} - {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Tela {number} - {width}x{height} (principal)"},
+    {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
+          L"to retry.",
+     L"A tela {number} mostra as barras na bandeja: outro mod controla o espaço de que elas precisam. Reinicie o "
+     L"Explorador para tentar de novo."},
+    {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
+     L"A tela {number} mostra as barras na bandeja: o botão Iniciar dela está oculto ou não foi encontrado."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
+     L"A tela {number} mostra as barras na bandeja: os botões da barra de tarefas dela não foram encontrados."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
+     L"A tela {number} mostra as barras na bandeja: a barra de tarefas dela está em uma lateral da tela."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
+          L"fit its width. The preview shows them across a bottom taskbar.",
+     L"A barra de tarefas da tela {number} está em uma lateral da tela: as contas se empilham ao longo dela, com "
+     L"cada estilo reorganizado para caber na largura. A prévia as mostra lado a lado em uma barra de tarefas "
+     L"inferior."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
+          L"Update Windows to show them.",
+     L"A barra de tarefas da tela {number} está em uma lateral da tela: a bandeja dela não aceita barras neste build "
+     L"do Windows. Atualize o Windows para mostrá-las."},
     {L"", L"Do not poll hidden accounts", L"Não consultar contas ocultas"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Arraste para reordenar. A chave oculta uma conta da barra de tarefas."},
@@ -3163,8 +4499,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Cada conta escolhe se é registrada: <link id=\"accounts\">Contas</link> > Registrar histórico. Contas ocultas "
      L"não são registradas enquanto <link id=\"hidden\">Não consultar contas ocultas</link> estiver ativado em "
      L"Comportamento."},
+    {L"", L"Elapsed time", L"Tempo decorrido"},
     {L"", L"Enter a label.", L"Insira um rótulo."},
     {L"", L"Enter a whole number from {minimum} to {maximum}.", L"Insira um número inteiro de {minimum} a {maximum}."},
+    {L"", L"Example accounts, updates as you change settings",
+     L"Contas de exemplo, atualizadas ao alterar as configurações"},
+    {L"", L"Example accounts, wider than shown: drag to scroll",
+     L"Contas de exemplo, mais largas que a área visível: arraste para rolar"},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -3176,6 +4517,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"usa a marca do Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
      L"GitHub Copilot e OpenCode são marcas comerciais de seus respectivos proprietários. Os logos apenas "
      L"identificam qual conta um bloco mostra."},
+    {L"", L"Gap after accounts", L"Espaço após as contas"},
+    {L"", L"Gauge size", L"Tamanho do medidor"},
+    {L"", L"Gauge thickness", L"Espessura do medidor"},
+    {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
+     L"Altura em pixels; uma pizza por cota, menores a partir da terceira."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Contas ocultas não são consultadas nem registradas, mesmo com Registrar histórico ativado. Desative para "
@@ -3189,19 +4535,35 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Com que frequência Anthropic, OpenAI, GitHub Copilot e OpenCode Go são consultados. O Antigravity consulta sua "
      L"sessão local a cada minuto."},
     {L"", L"Identity", L"Identidade"},
+    {L"", L"Identity gap", L"Espaço da identidade"},
+    {L"", L"Identity position", L"Posição da identidade"},
     {L"", L"Interface language", L"Idioma da interface"},
     {L"", L"Its stored sign-in will be deleted.", L"O login armazenado será excluído."},
     {L"", L"Its usage history is kept.", L"O histórico de uso é mantido."},
     {L"", L"Keep history", L"Manter histórico"},
     {L"", L"Label", L"Rótulo"},
+    {L"", L"Label font size", L"Tamanho da fonte do rótulo"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Idioma, telas, detalhes ao passar o ponteiro, consultas e notificações."},
     {L"", L"License", L"Licença"},
+    {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
+     L"Cinza-claro por padrão, escuro em uma barra de tarefas clara. Personalizar… abre o seletor de cores."},
+    {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
+     L"Ilumina a parte da janela da cota que já passou; o resto fica esmaecido."},
+    {L"", L"Logo + number badge, logo only, or label.", L"Logo + selo numérico, só o logo ou rótulo."},
+    {L"", L"Logo size", L"Tamanho do logo"},
+    {L"", L"Long windows", L"Janelas longas"},
     {L"", L"MIT License", L"Licença MIT"},
+    {L"", L"Mark stale data", L"Marcar dados desatualizados"},
+    {L"", L"Marker color", L"Cor do marcador"},
+    {L"", L"Marker style", L"Estilo do marcador"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
      L"Identifica esta conta ao lado das barras e nos blocos. Rótulo mostra o rótulo nas barras e o texto curto nos "
      L"blocos. O selo numérico aparece quando várias contas compartilham um provedor, incluindo as ocultas."},
+    {L"", L"Material", L"Material"},
+    {L"", L"Material, values, usage colors, status marks and flyout details.",
+     L"Material, valores, cores de uso, marcas de status e detalhes do painel."},
     {L"", L"New samples arrive with each poll.", L"Novas amostras chegam a cada consulta."},
     {L"", L"No accounts yet", L"Nenhuma conta ainda"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
@@ -3212,16 +4574,50 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Avisa quando uma cota da barra de tarefas atinge pela primeira vez o limite escolhido. Rearma quando ela cai "
      L"abaixo dele."},
+    {L"", L"Now caret", L"Circunflexo da hora atual"},
+    {L"", L"Now line", L"Linha da hora atual"},
+    {L"", L"Number size", L"Tamanho do número"},
+    {L"", L"On hover", L"Ao passar o ponteiro"},
     {L"", L"Open AI quota settings", L"Abrir as configurações de cotas de IA"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Abrir as configurações de cotas de IA. Não foi possível ler as configurações salvas; um backup foi mantido."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Abre os detalhes de uma conta quando o ponteiro para sobre ela."},
+    {L"", L"Orange from", L"Laranja a partir de"},
+    {L"", L"Pace markers", L"Marcadores de ritmo"},
+    {L"", L"Palette", L"Paleta"},
+    {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
+     L"Porcentagem do tamanho padrão da leitura atual: o anel e seu ponto, ou o ponto simples."},
+    {L"", L"Percent of the standard size; rings keep it inside the hole.",
+     L"Porcentagem do tamanho padrão; nos anéis, ele fica dentro do furo."},
+    {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
+     L"Porcentagem da altura do bloco, de 0% a 100% usado, ou restante no modo Restante."},
+    {L"", L"Percentage alignment", L"Alinhamento da porcentagem"},
+    {L"", L"Percentage on each bar: never, on hover, or always.",
+     L"Porcentagem em cada barra: nunca, ao passar o ponteiro ou sempre."},
+    {L"", L"Percentage text", L"Texto de porcentagem"},
+    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
+     L"Texto de porcentagem e siglas das cotas. O texto de porcentagem é definido em Exibição."},
+    {L"", L"Pie area", L"Área da pizza"},
+    {L"", L"Pixels across each bar.", L"Pixels de espessura de cada barra."},
+    {L"", L"Pixels across each quota’s chart.", L"Pixels de largura do gráfico de cada cota."},
+    {L"", L"Pixels along each bar.", L"Pixels de comprimento de cada barra."},
+    {L"", L"Pixels along each quota’s bar under the number.",
+     L"Pixels de comprimento da barra de cada cota, sob o número."},
+    {L"", L"Pixels down, or up when negative.", L"Pixels para baixo, ou para cima quando negativo."},
+    {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
+     L"Pixels para a direita, ou para a esquerda quando negativo, a partir do canto inferior direito do logo (dentro "
+     L"do furo nos anéis)."},
+    {L"", L"Position", L"Posição"},
     {L"", L"Primary display only", L"Somente a tela principal"},
     {L"", L"Primary display, all displays, or one display.", L"A tela principal, todas as telas ou uma tela."},
     {L"", L"Project page", L"Página do projeto"},
     {L"", L"Provider logos", L"Logos dos provedores"},
+    {L"", L"Quota keys", L"Siglas das cotas"},
+    {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
+     L"Siglas das cotas ({key5h}, {key7d}, ...) e uso adicional nos gráficos, em pixels."},
     {L"", L"Quotas on taskbar", L"Cotas na barra de tarefas"},
+    {L"", L"Reading size", L"Tamanho da leitura"},
     {L"", L"Record history", L"Registrar histórico"},
     {L"", L"Record usage history", L"Registrar histórico de uso"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
@@ -3231,6 +4627,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Regras de registro, armazenamento, exportação e verificação"},
     {L"", L"Recording starts once the taskbar saves its account IDs.",
      L"O registro começa assim que a barra de tarefas salvar os IDs das contas."},
+    {L"", L"Red from", L"Vermelho a partir de"},
     {L"", L"Remove \"{label}\" ({provider})?", L"Remover \"{label}\" ({provider})?"},
     {L"", L"Report an issue", L"Relatar um problema"},
     {L"", L"Reset Behavior to defaults", L"Redefinir Comportamento para o padrão"},
@@ -3239,6 +4636,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Redefinir Comportamento para o padrão?\n\nIdioma automático, mostrar somente na tela principal, mostrar "
      L"detalhes ao passar o ponteiro, consultar a cada 10 minutos, não consultar contas ocultas, notificações de "
      L"limite no vermelho."},
+    {L"", L"Reset Display to defaults", L"Redefinir Exibição para o padrão"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
@@ -3251,12 +4649,17 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"the usage history window opens on 7 days. Saved history stays.",
      L"Redefinir Histórico para o padrão?\n\nO registro é ativado para este usuário do Windows, o histórico é "
      L"mantido para sempre e a janela do histórico de uso abre em 7 dias. O histórico salvo permanece."},
+    {L"", L"Reset Layout to defaults", L"Redefinir Layout para o padrão"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
      L"Redefinir Layout para o padrão?\n\nBarras empilhadas de 100 x 8 px com rótulos à esquerda, anéis de 32 px, "
      L"logos e selos numéricos na cor do texto da barra de tarefas, marcadores de ritmo em circunflexo cinza-claro e "
      L"o espaçamento padrão. As contas não são alteradas."},
+    {L"", L"Reset countdown", L"Contagem até o reinício"},
+    {L"", L"Ring size", L"Tamanho do anel"},
+    {L"", L"Ring thickness", L"Espessura do anel"},
+    {L"", L"Ringed reading", L"Leitura com anel"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"Selecione <b>{button}</b> para mostrar uma conta da Anthropic, OpenAI, Google Antigravity, GitHub Copilot ou "
@@ -3268,13 +4671,28 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Compartilhado entre os usuários do Windows. Para sempre não exclui nada e não tem limite de tamanho, então o "
      L"histórico continua crescendo na memória do Explorer e no disco. Limites em dias limpam a cada hora, com um "
      L"teto de cerca de 60 MB."},
+    {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
+     L"Sigla curta ao lado de cada barra: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texto curto"},
     {L"", L"Show details on hover", L"Mostrar detalhes ao passar o ponteiro"},
     {L"", L"Show on", L"Mostrar em"},
+    {L"", L"Show percentage text on hover or always to change this.",
+     L"Mostre o texto de porcentagem ao passar o ponteiro ou sempre para alterar isto."},
+    {L"", L"Show provider outages", L"Mostrar interrupções dos provedores"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
      L"Mostrado nos detalhes e ao lado das barras quando Identidade é Rótulo. Único por provedor; renomear mantém o "
      L"login e o histórico."},
+    {L"", L"Side in pixels.", L"Lado em pixels."},
+    {L"", L"Space after the last account, before whatever comes next on the taskbar.",
+     L"Espaço após a última conta, antes do que vier em seguida na barra de tarefas."},
+    {L"", L"Space between an account’s bars.", L"Espaço entre as barras de uma conta."},
+    {L"", L"Space between the identity and the bars.", L"Espaço entre a identidade e as barras."},
+    {L"", L"Space on each side of every account.", L"Espaço em cada lado de cada conta."},
+    {L"", L"Square size", L"Tamanho do quadrado"},
+    {L"", L"Square thickness", L"Espessura do quadrado"},
+    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
+     L"Somente Barras empilhadas e Barras verticais. Estilo de bloco atual: {style}."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -3282,9 +4700,27 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"many{# de dias} other{# dias}} e limitado a 250.000 amostras (cerca de 60 MB). As amostras mais antigas, e as "
      L"mais antigas além desse limite, serão excluídas permanentemente, para todos os usuários do Windows."},
     {L"", L"Storage location", L"Local de armazenamento"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
+     L"Largura do traço em pixels. Diminui automaticamente quando o arco não cabe em volta do número."},
+    {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
+     L"Largura do traço em pixels. Diminui automaticamente quando os medidores não cabem em volta do logo ou do "
+     L"texto."},
     {L"", L"Suggestions and bug reports on GitHub", L"Sugestões e relatórios de bugs no GitHub"},
+    {L"", L"Text of accounts whose identity is Label, in pixels.",
+     L"Texto das contas cuja identidade é Rótulo, em pixels."},
+    {L"", L"Text size", L"Tamanho do texto"},
+    {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
+          L"taskbar.",
+     L"Tamanho do texto da porcentagem de cada cota, em pixels; a sigla acompanha a escala. Duas linhas encolhem "
+     L"para caber na barra de tarefas."},
+    {L"", L"Text size of the most-used quota’s percentage, in pixels; its quota key scales with it.",
+     L"Tamanho do texto da porcentagem da cota mais usada, em pixels; a sigla da cota acompanha a escala."},
+    {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+     L"Tamanho do texto do número em um logo quando várias contas compartilham um provedor, em pixels."},
     {L"", L"Thanks to {names}.", L"Agradecimentos a {names}."},
     {L"", L"That provider and label are already configured.", L"Esse provedor e esse rótulo já estão configurados."},
+    {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
+     L"O brilho do Gemini na cor do texto da barra de tarefas, ou em seu gradiente do roxo ao azul."},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
      L"A identidade Rótulo nos blocos, até 4 caracteres. Vazio usa o rótulo sem espaços."},
     {L"", L"The account was changed from another taskbar window.",
@@ -3309,6 +4745,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"Applies to this Windows user only.",
      L"As janelas de configurações e de histórico de uso, e a barra de tarefas. Automático segue o idioma de exibição "
      L"do Windows. Aplica-se somente a este usuário do Windows."},
+    {L"", L"The settings and usage history windows use Mica for it.",
+     L"As janelas de configurações e de histórico de uso usam Mica nesse caso."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Não foi possível copiar o login armazenado. A conta não foi alterada."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -3319,10 +4757,32 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"signed out.",
      L"O login armazenado foi excluído, mas não foi possível salvar as configurações. A conta continua configurada, "
      L"mas desconectada."},
+    {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
+     L"A cor do texto da barra de tarefas, ou o laranja do Claude. Os detalhes, Contas e o histórico de uso seguem "
+     L"essa escolha."},
+    {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
+          L"fills with the elapsed time.",
+     L"Circunflexo fino, linha de largura total, entalhe na borda, ponto centralizado ou trilha de tempo: uma "
+     L"pequena barra sob cada barra que se preenche com o tempo decorrido."},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"Esta conta não está mais configurada; as alterações não salvas dela foram descartadas."},
     {L"", L"This change couldn't be saved.", L"Não foi possível salvar esta alteração."},
     {L"", L"Threshold notifications", L"Notificações de limite"},
+    {L"", L"Thresholds stay in order: yellow, orange, red.", L"Os limites ficam em ordem: amarelo, laranja, vermelho."},
+    {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
+     L"Os limites ficam em ordem: amarelo, laranja, vermelho. Também é o nível das notificações de limite."},
+    {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
+     L"Marcas indicam quanto da janela de cada cota já passou, para comparar com o uso."},
+    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+          L"changed.",
+     L"Estilo de bloco, estilo de barra, tamanhos, identidade e texto, marcadores de ritmo, posição e espaçamento. "
+     L"As contas não são alteradas."},
+    {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
+     L"Tempo até o reinício dessa cota sob o número, em vez da barra de cada cota."},
+    {L"", L"Turn off Reset countdown to change this.", L"Desative Contagem até o reinício para alterar isto."},
+    {L"", L"Turn on Pace markers to change this.", L"Ative Marcadores de ritmo para alterar isto."},
+    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
+     L"Ative Siglas das cotas, ou o texto de porcentagem em Exibição, para alterar isto."},
     {L"", L"Turn on Record usage history to change this.", L"Ative Registrar histórico de uso para alterar isto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada."},
@@ -3330,8 +4790,20 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"on the 7d chart.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada. Os gráficos de uso "
      L"mostram os créditos como um número no gráfico de 7d."},
+    {L"", L"Usage below this is blue.", L"O uso abaixo deste valor fica azul."},
+    {L"", L"Usage below this is blue. Also the level for threshold notifications.",
+     L"O uso abaixo deste valor fica azul. Também é o nível das notificações de limite."},
+    {L"", L"Usage below this is green.", L"O uso abaixo deste valor fica verde."},
+    {L"", L"Usage below this is green. Also the level for threshold notifications.",
+     L"O uso abaixo deste valor fica verde. Também é o nível das notificações de limite."},
+    {L"", L"Usage below this takes the Below yellow color.",
+     L"O uso abaixo deste valor recebe a cor Abaixo do amarelo."},
+    {L"", L"Usage below this takes the Below yellow color. Also the level for threshold notifications.",
+     L"O uso abaixo deste valor recebe a cor Abaixo do amarelo. Também é o nível das notificações de limite."},
     {L"", L"Usage history", L"Histórico de uso"},
     {L"", L"Usage history guide", L"Guia do histórico de uso"},
+    {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
+     L"Usado preenche conforme a cota é consumida; Restante preenche com o que sobra. As cores sempre seguem o uso."},
     {L"", L"Used on tiles when Identity is Label.", L"Usado nos blocos quando Identidade é Rótulo."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versão {version}  ·  por Cleroth  ·  mod do Windhawk"},
@@ -3339,6 +4811,23 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Aguarde o login atual terminar antes de alterar a identidade."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
      L"Aguarde o login atual terminar antes de remover contas."},
+    {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
+          L"hours before and after now.",
+     L"Gráficos semanais e mensais ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): a janela inteira, ou de 12 a 48 "
+     L"horas antes e depois de agora."},
+    {L"", L"What those charts show while the pointer rests on the account.",
+     L"O que esses gráficos mostram enquanto o ponteiro para sobre a conta."},
+    {L"", L"Where each account’s identity sits next to its bars.",
+     L"Onde a identidade de cada conta fica em relação às barras."},
+    {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
+          L"move over to make room.",
+     L"Onde as barras ficam na barra de tarefas. Lado esquerdo e À direita do Iniciar são experimentais: os botões "
+     L"da barra de tarefas se deslocam para abrir espaço."},
+    {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
+     L"Branco, o padrão, segue a cor do texto da barra de tarefas. Personalizar… abre o seletor de cores."},
+    {L"", L"Windows transparency effects are off, so it shows as Solid.",
+     L"Os efeitos de transparência do Windows estão desativados, então ele aparece como Sólido."},
+    {L"", L"Yellow from", L"Amarelo a partir de"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity não está em execução"},
@@ -3412,6 +4901,10 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Entre com uma chave de API do console do OpenCode"},
     {L"add-account", L"Sign in with your browser", L"Entre pelo navegador"},
     {L"add-account", L"Uses the signed-in Antigravity app or CLI", L"Usa o app ou a CLI do Antigravity conectados"},
+    {L"bar-mode", L"Remaining", L"Restante"},
+    {L"bar-mode", L"Used", L"Usado"},
+    {L"bar-style", L"Full track", L"Trilha completa"},
+    {L"bar-style", L"Thin rail", L"Trilho fino"},
     {L"button", L"Add account", L"Adicionar conta"},
     {L"button", L"Copied", L"Copiado"},
     {L"button", L"Copy", L"Copiar"},
@@ -3545,11 +5038,24 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Falha ao gravar o histórico; o registro anterior foi mantido."},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"Arquivo de histórico incompatível ou danificado. Limpe o histórico para começar de novo."},
+    {L"identity-position", L"Bottom", L"Abaixo"},
+    {L"identity-position", L"Hidden", L"Oculta"},
+    {L"identity-position", L"Left", L"Esquerda"},
+    {L"identity-position", L"Right", L"Direita"},
+    {L"identity-position", L"Top", L"Acima"},
     {L"language-choice", L"Automatic ({language})", L"Automático ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} e {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} e {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"logo-color", L"Gemini gradient", L"Gradiente do Gemini"},
+    {L"logo-color", L"Orange", L"Laranja"},
+    {L"logo-color", L"Taskbar text color", L"Cor do texto da barra"},
+    {L"material", L"Acrylic", L"Acrílico"},
+    {L"material", L"Mica", L"Mica"},
+    {L"material", L"Mica Alt", L"Mica Alt"},
+    {L"material", L"Solid", L"Sólido"},
+    {L"material", L"Tinted wallpaper", L"Papel de parede tingido"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} - redefine {when}"},
     {L"notification-level", L"Off", L"Desativadas"},
     {L"notification-level", L"Orange ({threshold}%)", L"Laranja ({threshold}%)"},
@@ -3582,12 +5088,37 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"outage-reason", L"Slow responses", L"Respostas lentas"},
     {L"outage-reason", L"Upstream provider issues", L"Problemas no provedor upstream"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
+    {L"pace-marker", L"Caret", L"Circunflexo"},
+    {L"pace-marker", L"Dot", L"Ponto"},
+    {L"pace-marker", L"Edge notch", L"Entalhe na borda"},
+    {L"pace-marker", L"Full line", L"Linha inteira"},
+    {L"pace-marker", L"Time track", L"Trilha de tempo"},
+    {L"palette", L"Colorblind", L"Para daltônicos"},
+    {L"palette", L"Custom", L"Personalizada"},
+    {L"palette", L"Default", L"Padrão"},
+    {L"percent-alignment", L"Adaptive", L"Adaptável"},
+    {L"percent-alignment", L"Center", L"Centro"},
+    {L"percent-alignment", L"Left", L"Esquerda"},
+    {L"percent-alignment", L"Right", L"Direita"},
+    {L"percent-text", L"Always show", L"Sempre mostrar"},
+    {L"percent-text", L"Never show", L"Nunca mostrar"},
+    {L"percent-text", L"Show on hover", L"Ao passar o ponteiro"},
+    {L"pixel-unit", L"px", L"px"},
+    {L"placement", L"After Show desktop", L"Após Mostrar área de trabalho"},
+    {L"placement", L"After the clock", L"Após o relógio"},
+    {L"placement", L"Before network and volume", L"Antes de rede e volume"},
+    {L"placement", L"Before notification icons", L"Antes dos ícones de notificação"},
+    {L"placement", L"Before the clock", L"Antes do relógio"},
+    {L"placement", L"Left side", L"Lado esquerdo"},
+    {L"placement", L"Right of Start", L"À direita do Iniciar"},
     {L"plan", L"Visual test", L"Teste visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{minuto} many{de minutos} other{minutos}}"},
+    {L"preview", L"Preview", L"Prévia"},
+    {L"preview", L"Show on taskbar", L"Na barra de tarefas"},
     {L"quota-amount", L"Limit reached", L"Limite atingido"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Pool compartilhado de {unit}, sem limite por usuário"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
@@ -3652,14 +5183,34 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-page", L"History", L"Histórico"},
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Alertas"},
+    {L"settings-section", L"Appearance", L"Aparência"},
+    {L"settings-section", L"Bars", L"Barras"},
     {L"settings-section", L"Credits and license", L"Créditos e licença"},
+    {L"settings-section", L"Current position", L"Posição atual"},
     {L"settings-section", L"Details", L"Detalhes"},
+    {L"settings-section", L"Details flyout", L"Painel de detalhes"},
+    {L"settings-section", L"Gauge", L"Medidor"},
+    {L"settings-section", L"Headline", L"Destaque"},
+    {L"settings-section", L"Identity", L"Identidade"},
+    {L"settings-section", L"Identity and text", L"Identidade e texto"},
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Links", L"Links"},
+    {L"settings-section", L"Matrix", L"Matriz"},
+    {L"settings-section", L"Pace markers", L"Marcadores de ritmo"},
+    {L"settings-section", L"Pies", L"Pizzas"},
+    {L"settings-section", L"Placement", L"Posicionamento"},
     {L"settings-section", L"Recording", L"Registro"},
+    {L"settings-section", L"Ring", L"Anel"},
+    {L"settings-section", L"Spacing", L"Espaçamento"},
+    {L"settings-section", L"Square", L"Quadrado"},
+    {L"settings-section", L"Status", L"Status"},
     {L"settings-section", L"Storage", L"Armazenamento"},
     {L"settings-section", L"Taskbar", L"Barra de tarefas"},
+    {L"settings-section", L"Tile style", L"Estilo de bloco"},
+    {L"settings-section", L"Time span", L"Período"},
     {L"settings-section", L"Updates", L"Atualizações"},
+    {L"settings-section", L"Usage colors", L"Cores de uso"},
+    {L"settings-section", L"Values", L"Valores"},
     {L"settings-section", L"Viewer", L"Visualizador"},
     {L"sign-in-button", L"Cancel", L"Cancelar"},
     {L"sign-in-button", L"Close", L"Fechar"},
@@ -3709,6 +5260,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"paste the code its page shows.",
      L"Esse código pertence a outro link de entrada. Abra o link desta janela, aprove o acesso e cole o código que a "
      L"página mostrar."},
+    {L"sparkline-extra", L"Amount", L"Valor"},
+    {L"sparkline-extra", L"Off", L"Desativado"},
+    {L"sparkline-extra", L"Percent", L"Porcentagem"},
+    {L"sparkline-span", L"Off", L"Desativado"},
+    {L"sparkline-span", L"Whole window", L"Janela inteira"},
+    {L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}",
+     L"{hours, plural, one{# hora de cada lado} many{# de horas de cada lado} other{# horas de cada lado}}"},
     {L"taskbar-action", L"Exit visual test", L"Sair do teste visual"},
     {L"taskbar-action", L"Hide", L"Ocultar"},
     {L"taskbar-action", L"Open dashboard", L"Abrir painel"},
@@ -3729,8 +5287,22 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"tile-identity", L"Label", L"Rótulo"},
     {L"tile-identity", L"Logo + number badge", L"Logo + selo numérico"},
     {L"tile-identity", L"Logo only", L"Só o logo"},
+    {L"tile-style", L"Clock pies", L"Pizzas-relógio"},
+    {L"tile-style", L"Concentric rings", L"Anéis concêntricos"},
+    {L"tile-style", L"Gauge %", L"Medidor %"},
+    {L"tile-style", L"Headline %", L"Destaque %"},
+    {L"tile-style", L"Quota matrix", L"Matriz de cotas"},
+    {L"tile-style", L"Rounded square", L"Quadrado arredondado"},
+    {L"tile-style", L"Segmented ring", L"Anel segmentado"},
+    {L"tile-style", L"Stacked bars", L"Barras empilhadas"},
+    {L"tile-style", L"Usage graph", L"Gráfico de uso"},
+    {L"tile-style", L"Vertical bars", L"Barras verticais"},
     {L"toggle", L"Off", L"Desativado"},
     {L"toggle", L"On", L"Ativado"},
+    {L"usage-band", L"Below yellow", L"Abaixo do amarelo"},
+    {L"usage-band", L"From orange", L"A partir do laranja"},
+    {L"usage-band", L"From red", L"A partir do vermelho"},
+    {L"usage-band", L"From yellow", L"A partir do amarelo"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
      L"No ritmo das últimas 24 h: limite em ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
@@ -3744,33 +5316,89 @@ static_assert(I18nCatalogSorted(kI18nCatalogPtBr), "sort by (context, English), 
 // Russian (ru): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogRu[] = {
+    {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
+          L"in Used mode, left in Remaining mode.",
+     L"$ или кредиты вместо % для доп. использования Anthropic, кредитов OpenAI и ИИ-кредитов GitHub Copilot: "
+     L"потраченное в режиме «Использовано», оставшееся в режиме «Осталось»."},
     {L"", L"1 to 3650 days.", L"От 1 до 3650 дней."},
     {L"", L"2 to 1440 minutes.", L"От 2 до 1440 минут."},
     {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
      L"Не удалось сохранить изменение; оно показано вместе с ошибкой.\n\nОтменить несохранённые изменения и закрыть "
      L"окно?"},
+    {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
+     L"Диагональ показывает равномерный расход квоты за её окно — для сравнения с её использованием."},
+    {L"", L"A faint border around each chart.", L"Едва заметная рамка вокруг каждого графика."},
+    {L"", L"A full track behind each fill, or a thin rail under it.",
+     L"Полная дорожка за каждым заполнением или тонкая линия под ним."},
+    {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+     L"Кольцо вокруг текущего значения, вырезанное из линий под ним. Если выключено: простая точка."},
+    {L"", L"A small triangle on the chart’s bottom edge at the current time.",
+     L"Маленький треугольник у нижнего края графика в точке текущего времени."},
+    {L"", L"A thin line across the chart at the current time.",
+     L"Тонкая линия поперёк графика в точке текущего времени."},
+    {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
+          L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
+          L"major outage. Off: no status pages are read.",
+     L"Предупреждающий треугольник на аккаунте, пока страница статуса его поставщика сообщает о проблеме с "
+     L"используемой им службой: оранжевого цвета использования при снижении производительности, частичном сбое или "
+     L"техобслуживании, красного — при серьёзном сбое. Если выключено, страницы статуса не читаются."},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"Квоты подписок на ИИ Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач "
      L"Windows 11."},
+    {L"", L"Account identity is set per account in Accounts",
+     L"Идентификация задаётся для каждого аккаунта в разделе «Аккаунты»"},
+    {L"", L"Account margin", L"Отступ аккаунта"},
+    {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.",
+     L"«Адаптивное»: справа, с переходом влево, когда полоса достигает жёлтого порога."},
+    {L"", L"Additional OpenAI rate limits", L"Дополнительные лимиты запросов OpenAI"},
+    {L"", L"Adds ! when a refresh failed or is overdue.", L"Добавляет «!», если обновление не удалось или просрочено."},
     {L"", L"All displays", L"Все дисплеи"},
     {L"", L"Also delete its usage history", L"Также удалить историю использования"},
+    {L"", L"Also the level for threshold notifications.", L"Это также уровень уведомлений о пороге."},
+    {L"", L"Amounts on extra usage and credits", L"Суммы для доп. использования и кредитов"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.",
      L"Аккаунт больше не настроен; его несохранённые изменения отменены."},
     {L"", L"Another account of this provider uses this label.",
      L"Эту метку уже использует другой аккаунт этого поставщика."},
+    {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
+          L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
+          L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
+     L"Доп. использование Anthropic или кредиты OpenAI в левом верхнем углу графика {key7d} (в режиме «Осталось» — в "
+     L"левом нижнем), если они выбраны для аккаунта и сообщаются: потраченное в режиме «Использовано», оставшееся в "
+     L"режиме «Осталось». «Процент» показывает сумму, если лимита нет. Своего графика у кредитов OpenAI нет."},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic, OpenAI и GitHub Copilot входят через браузер, OpenCode Go — с ключом API. Google Antigravity "
      L"использует своё приложение или CLI с выполненным входом; они должны оставаться запущенными."},
+    {L"", L"Antigravity logo", L"Логотип Antigravity"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"Действует только для этого пользователя Windows. При выключении сохранённая история остаётся."},
+    {L"", L"Background of the details flyout and the settings and usage history windows.",
+     L"Фон всплывающих сведений, а также окон настроек и истории использования."},
+    {L"", L"Badge color", L"Цвет значка"},
+    {L"", L"Badge horizontal offset", L"Смещение значка по горизонтали"},
+    {L"", L"Badge size", L"Размер значка"},
+    {L"", L"Badge vertical offset", L"Смещение значка по вертикали"},
+    {L"", L"Bar gap", L"Зазор между полосами"},
+    {L"", L"Bar length", L"Длина полосы"},
+    {L"", L"Bar mode", L"Режим полос"},
+    {L"", L"Bar style", L"Стиль полос"},
+    {L"", L"Bar text size", L"Размер текста на полосах"},
+    {L"", L"Bar thickness", L"Толщина полосы"},
+    {L"", L"Chart height", L"Высота графика"},
+    {L"", L"Chart outline", L"Контур графика"},
+    {L"", L"Chart width", L"Ширина графика"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Чтобы изменить, выберите «Другой» в списке «Интервал опроса облака»."},
     {L"", L"Choose Custom in Keep history to edit.", L"Чтобы изменить, выберите «Другой» в списке «Хранить историю»."},
+    {L"", L"Choose an identity position to change this.", L"Чтобы изменить, выберите положение идентификации."},
+    {L"", L"Claude logo", L"Логотип Claude"},
     {L"", L"Cloud poll interval", L"Интервал опроса облака"},
+    {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
+     L"Codex Spark, скрытые лимиты моделей (например, gpt-reserve) и название тарифа Spark в сведениях OpenAI."},
     {L"", L"Contributors", L"Участники"},
     {L"", L"Copy version info", L"Копировать сведения о версии"},
     {L"", L"Could not remove the account.", L"Не удалось удалить аккаунт."},
@@ -3791,9 +5419,32 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Custom interval", L"Свой интервал"},
     {L"", L"Custom retention", L"Свой срок хранения"},
     {L"", L"Default time span", L"Период по умолчанию"},
+    {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
+          L"threshold.",
+     L"«По умолчанию»: зелёный, жёлтый, оранжевый и красный. «Для дальтоников»: от синего до киноварного. «Свои "
+     L"цвета»: цвет, который вы выбираете для каждого порога."},
+    {L"", L"Diameter in pixels.", L"Диаметр в пикселях."},
     {L"", L"Display {number} - unavailable", L"Дисплей {number} — недоступен"},
     {L"", L"Display {number} - {width}x{height}", L"Дисплей {number} — {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Дисплей {number} — {width}x{height} (основной)"},
+    {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
+          L"to retry.",
+     L"Дисплей {number} показывает полосы в области уведомлений: нужным им местом управляет другой мод. "
+     L"Перезапустите Проводник, чтобы повторить попытку."},
+    {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
+     L"Дисплей {number} показывает полосы в области уведомлений: кнопка «Пуск» на нём скрыта или не найдена."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
+     L"Дисплей {number} показывает полосы в области уведомлений: кнопки его панели задач не найдены."},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
+     L"Дисплей {number} показывает полосы в области уведомлений: его панель задач находится сбоку экрана."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
+          L"fit its width. The preview shows them across a bottom taskbar.",
+     L"Панель задач дисплея {number} находится сбоку экрана: аккаунты располагаются на ней сверху вниз, каждый стиль "
+     L"перестраивается под её ширину. Предпросмотр показывает их в ряд на нижней панели задач."},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
+          L"Update Windows to show them.",
+     L"Панель задач дисплея {number} находится сбоку экрана: в этой сборке Windows её область уведомлений не может "
+     L"разместить полосы. Обновите Windows, чтобы показать их."},
     {L"", L"Do not poll hidden accounts", L"Не опрашивать скрытые аккаунты"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач."},
@@ -3805,8 +5456,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Каждый аккаунт сам решает, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать историю. "
      L"Скрытые аккаунты не записываются, пока в разделе «Поведение» включено <link id=\"hidden\">Не опрашивать скрытые "
      L"аккаунты</link>."},
+    {L"", L"Elapsed time", L"Прошедшее время"},
     {L"", L"Enter a label.", L"Введите метку."},
     {L"", L"Enter a whole number from {minimum} to {maximum}.", L"Введите целое число от {minimum} до {maximum}."},
+    {L"", L"Example accounts, updates as you change settings", L"Примеры аккаунтов, обновляются вместе с настройками"},
+    {L"", L"Example accounts, wider than shown: drag to scroll",
+     L"Примеры аккаунтов шире видимого: перетащите для прокрутки"},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -3818,6 +5473,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"используется знак Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
      L"GitHub Copilot и OpenCode — товарные знаки соответствующих владельцев. Логотипы лишь показывают, какой "
      L"аккаунт отображает плитка."},
+    {L"", L"Gap after accounts", L"Отступ после аккаунтов"},
+    {L"", L"Gauge size", L"Размер шкалы"},
+    {L"", L"Gauge thickness", L"Толщина шкалы"},
+    {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
+     L"Высота в пикселях; по одной диаграмме на квоту, начиная с третьей — меньше."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Скрытые аккаунты не опрашиваются и не записываются, даже если включено «Записывать историю». Выключите, чтобы "
@@ -3831,19 +5491,35 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Antigravity опрашивает свой локальный "
      L"сеанс каждую минуту."},
     {L"", L"Identity", L"Идентификация"},
+    {L"", L"Identity gap", L"Отступ идентификации"},
+    {L"", L"Identity position", L"Положение идентификации"},
     {L"", L"Interface language", L"Язык интерфейса"},
     {L"", L"Its stored sign-in will be deleted.", L"Сохранённый вход будет удалён."},
     {L"", L"Its usage history is kept.", L"История использования сохраняется."},
     {L"", L"Keep history", L"Хранить историю"},
     {L"", L"Label", L"Метка"},
+    {L"", L"Label font size", L"Размер шрифта метки"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Язык, дисплеи, сведения при наведении, опрос и уведомления."},
     {L"", L"License", L"Лицензия"},
+    {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
+     L"По умолчанию светло-серый, тёмный на светлой панели задач. «Другой…» открывает выбор цвета."},
+    {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
+     L"Подсвечивает прошедшую часть окна квоты; остальное остаётся затемнённым."},
+    {L"", L"Logo + number badge, logo only, or label.", L"Логотип + номер, только логотип или метка."},
+    {L"", L"Logo size", L"Размер логотипа"},
+    {L"", L"Long windows", L"Длинные окна"},
     {L"", L"MIT License", L"Лицензия MIT"},
+    {L"", L"Mark stale data", L"Помечать устаревшие данные"},
+    {L"", L"Marker color", L"Цвет меток"},
+    {L"", L"Marker style", L"Стиль меток"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
      L"Обозначает этот аккаунт рядом с его полосами и на плитках. «Метка» показывает метку у полос и её короткий "
      L"текст на плитках. Значок с номером появляется, когда у нескольких аккаунтов один поставщик, включая скрытые."},
+    {L"", L"Material", L"Материал"},
+    {L"", L"Material, values, usage colors, status marks and flyout details.",
+     L"Материал, значения, цвета использования, отметки состояния и всплывающие сведения."},
     {L"", L"New samples arrive with each poll.", L"Новые замеры поступают при каждом опросе."},
     {L"", L"No accounts yet", L"Аккаунтов пока нет"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
@@ -3854,16 +5530,49 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Уведомляет, когда квота на панели задач впервые достигает выбранного порога. Срабатывает снова, когда она "
      L"опустится ниже."},
+    {L"", L"Now caret", L"Метка «сейчас»"},
+    {L"", L"Now line", L"Линия «сейчас»"},
+    {L"", L"Number size", L"Размер числа"},
+    {L"", L"On hover", L"При наведении"},
     {L"", L"Open AI quota settings", L"Открыть настройки квот ИИ"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Открыть настройки квот ИИ. Не удалось прочитать сохранённые настройки; резервная копия сохранена."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
+    {L"", L"Orange from", L"Оранжевый от"},
+    {L"", L"Pace markers", L"Метки темпа"},
+    {L"", L"Palette", L"Палитра"},
+    {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
+     L"Процент от стандартного размера отметки текущего значения: кольцо с точкой или простая точка."},
+    {L"", L"Percent of the standard size; rings keep it inside the hole.",
+     L"Процент от стандартного размера; у колец логотип остаётся внутри отверстия."},
+    {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
+     L"Процент высоты плитки, охватывающий от 0 до 100 % использованного (в режиме «Осталось» — оставшегося)."},
+    {L"", L"Percentage alignment", L"Выравнивание процентов"},
+    {L"", L"Percentage on each bar: never, on hover, or always.",
+     L"Процент на каждой полосе: никогда, при наведении или всегда."},
+    {L"", L"Percentage text", L"Текст процентов"},
+    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
+     L"Текст процентов и обозначения квот. Текст процентов настраивается в разделе «Отображение»."},
+    {L"", L"Pie area", L"Область диаграмм"},
+    {L"", L"Pixels across each bar.", L"Пикселей поперёк каждой полосы."},
+    {L"", L"Pixels across each quota’s chart.", L"Пикселей по ширине графика каждой квоты."},
+    {L"", L"Pixels along each bar.", L"Пикселей вдоль каждой полосы."},
+    {L"", L"Pixels along each quota’s bar under the number.", L"Пикселей вдоль полосы каждой квоты под числом."},
+    {L"", L"Pixels down, or up when negative.", L"Пиксели вниз (вверх при отрицательном значении)."},
+    {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
+     L"Пиксели вправо (влево при отрицательном значении) от правого нижнего угла логотипа (у колец — внутри "
+     L"отверстия)."},
+    {L"", L"Position", L"Положение"},
     {L"", L"Primary display only", L"Только основной дисплей"},
     {L"", L"Primary display, all displays, or one display.", L"Основной дисплей, все дисплеи или один дисплей."},
     {L"", L"Project page", L"Страница проекта"},
     {L"", L"Provider logos", L"Логотипы поставщиков"},
+    {L"", L"Quota keys", L"Обозначения квот"},
+    {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
+     L"Обозначения квот ({key5h}, {key7d} и т. д.) и доп. использование на графиках, в пикселях."},
     {L"", L"Quotas on taskbar", L"Квоты на панели задач"},
+    {L"", L"Reading size", L"Размер отметки"},
     {L"", L"Record history", L"Записывать историю"},
     {L"", L"Record usage history", L"Записывать историю использования"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
@@ -3872,6 +5581,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Recording rules, storage, export and verification", L"Правила записи, хранение, экспорт и проверка"},
     {L"", L"Recording starts once the taskbar saves its account IDs.",
      L"Запись начнётся, когда панель задач сохранит идентификаторы аккаунтов."},
+    {L"", L"Red from", L"Красный от"},
     {L"", L"Remove \"{label}\" ({provider})?", L"Удалить «{label}» ({provider})?"},
     {L"", L"Report an issue", L"Сообщить о проблеме"},
     {L"", L"Reset Behavior to defaults", L"Сбросить «Поведение» к значениям по умолчанию"},
@@ -3880,6 +5590,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Сбросить «Поведение» к значениям по умолчанию?\n\nАвтоматический язык, показ только на основном дисплее, "
      L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты не опрашиваются, уведомления о пороге на "
      L"красном уровне."},
+    {L"", L"Reset Display to defaults", L"Сбросить «Отображение» к значениям по умолчанию"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
@@ -3892,12 +5603,17 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"the usage history window opens on 7 days. Saved history stays.",
      L"Сбросить «История» к значениям по умолчанию?\n\nЗапись включается для этого пользователя Windows, история "
      L"хранится бессрочно, а окно истории использования открывается на 7 днях. Сохранённая история остаётся."},
+    {L"", L"Reset Layout to defaults", L"Сбросить «Макет» к значениям по умолчанию"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
      L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100 x 8 пикс. с подписями слева, кольца 32 "
      L"пикс., логотипы и значки с номером цветом текста панели задач, светло-серые метки темпа в виде галочки и "
      L"интервалы по умолчанию. Аккаунты не изменяются."},
+    {L"", L"Reset countdown", L"Отсчёт до сброса"},
+    {L"", L"Ring size", L"Размер кольца"},
+    {L"", L"Ring thickness", L"Толщина кольца"},
+    {L"", L"Ringed reading", L"Отметка в кольце"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"Нажмите <b>{button}</b>, чтобы показать на панели задач аккаунт Anthropic, OpenAI, Google Antigravity, GitHub "
@@ -3908,13 +5624,28 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, "
      L"поэтому история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый "
      L"час, с пределом около 60 МБ."},
+    {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
+     L"Короткое обозначение рядом с каждой полосой: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Короткий текст"},
     {L"", L"Show details on hover", L"Показывать сведения при наведении"},
     {L"", L"Show on", L"Показывать на"},
+    {L"", L"Show percentage text on hover or always to change this.",
+     L"Чтобы изменить, показывайте текст процентов при наведении или всегда."},
+    {L"", L"Show provider outages", L"Показывать сбои поставщиков"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
      L"Показывается в сведениях и рядом с полосами, если для «Идентификация» выбрано «Метка». Уникальна для "
      L"поставщика; при переименовании вход и история сохраняются."},
+    {L"", L"Side in pixels.", L"Сторона в пикселях."},
+    {L"", L"Space after the last account, before whatever comes next on the taskbar.",
+     L"Расстояние после последнего аккаунта до следующего элемента панели задач."},
+    {L"", L"Space between an account’s bars.", L"Расстояние между полосами аккаунта."},
+    {L"", L"Space between the identity and the bars.", L"Расстояние между идентификацией и полосами."},
+    {L"", L"Space on each side of every account.", L"Отступ с каждой стороны каждого аккаунта."},
+    {L"", L"Square size", L"Размер квадрата"},
+    {L"", L"Square thickness", L"Толщина квадрата"},
+    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
+     L"Только для стилей «Полосы стопкой» и «Вертикальные полосы». Текущий стиль плитки: «{style}»."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -3922,9 +5653,26 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"дня} many{# дней} other{# дня}} и ограничиваться 250 000 замеров (около 60 МБ). Более старые замеры и самые "
      L"старые сверх этого предела будут удалены безвозвратно для всех пользователей Windows."},
     {L"", L"Storage location", L"Расположение хранилища"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
+     L"Толщина линии в пикселях. Автоматически уменьшается, если дуга не помещается вокруг числа."},
+    {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
+     L"Толщина линии в пикселях. Автоматически уменьшается, если индикаторы не помещаются вокруг логотипа или текста."},
     {L"", L"Suggestions and bug reports on GitHub", L"Предложения и отчёты об ошибках на GitHub"},
+    {L"", L"Text of accounts whose identity is Label, in pixels.",
+     L"Текст аккаунтов с идентификацией «Метка», в пикселях."},
+    {L"", L"Text size", L"Размер текста"},
+    {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
+          L"taskbar.",
+     L"Размер текста процента каждой квоты в пикселях; обозначение масштабируется вместе с ним. Две строки "
+     L"уменьшаются, чтобы поместиться на панели задач."},
+    {L"", L"Text size of the most-used quota’s percentage, in pixels; its quota key scales with it.",
+     L"Размер текста процента самой использованной квоты в пикселях; обозначение квоты масштабируется вместе с ним."},
+    {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+     L"Размер текста номера на логотипе, когда у нескольких аккаунтов один поставщик, в пикселях."},
     {L"", L"Thanks to {names}.", L"Благодарим {names}."},
     {L"", L"That provider and label are already configured.", L"Такой поставщик с такой меткой уже настроен."},
+    {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
+     L"Звёздочка Gemini цветом текста панели задач или с её градиентом от фиолетового к синему."},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
      L"Идентификация «Метка» на плитках, до 4 символов. Если пусто, используется метка без пробелов."},
     {L"", L"The account was changed from another taskbar window.",
@@ -3949,6 +5697,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"Applies to this Windows user only.",
      L"Окна настроек и истории использования, а также панель задач. «Автоматически» следует языку интерфейса Windows. "
      L"Действует только для этого пользователя Windows."},
+    {L"", L"The settings and usage history windows use Mica for it.",
+     L"Для окон настроек и истории использования вместо него применяется «Мика»."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Не удалось скопировать сохранённый вход. Аккаунт не изменён."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -3958,10 +5708,33 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
           L"signed out.",
      L"Сохранённый вход удалён, но сохранить настройки не удалось. Аккаунт остаётся настроенным, но вход не выполнен."},
+    {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
+     L"Цвет текста панели задач или оранжевый Claude. Сведения, «Аккаунты» и история использования следуют этому "
+     L"выбору."},
+    {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
+          L"fills with the elapsed time.",
+     L"Тонкая галочка, линия на всю ширину, засечка у края, точка по центру или шкала времени: небольшая полоса под "
+     L"каждой полосой, заполняемая прошедшим временем."},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"Этот аккаунт больше не настроен; его несохранённые изменения отменены."},
     {L"", L"This change couldn't be saved.", L"Не удалось сохранить это изменение."},
     {L"", L"Threshold notifications", L"Уведомления о пороге"},
+    {L"", L"Thresholds stay in order: yellow, orange, red.",
+     L"Пороги всегда идут по порядку: жёлтый, оранжевый, красный."},
+    {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
+     L"Пороги всегда идут по порядку: жёлтый, оранжевый, красный. Это также уровень уведомлений о пороге."},
+    {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
+     L"Метки показывают, какая часть окна каждой квоты прошла, — для сравнения с её использованием."},
+    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+          L"changed.",
+     L"Стиль плитки, стиль полос, размеры, идентификация и текст, метки темпа, положение и интервалы. Аккаунты не "
+     L"изменяются."},
+    {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
+     L"Время до сброса этой квоты под числом вместо полос каждой квоты."},
+    {L"", L"Turn off Reset countdown to change this.", L"Чтобы изменить, выключите «Отсчёт до сброса»."},
+    {L"", L"Turn on Pace markers to change this.", L"Чтобы изменить, включите «Метки темпа»."},
+    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
+     L"Чтобы изменить, включите «Обозначения квот» или текст процентов в разделе «Отображение»."},
     {L"", L"Turn on Record usage history to change this.",
      L"Чтобы изменить, включите «Записывать историю использования»."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
@@ -3970,8 +5743,21 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"on the 7d chart.",
      L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной. На графиках использования "
      L"кредиты показываются числом на графике 7д."},
+    {L"", L"Usage below this is blue.", L"Ниже этого уровня использование отображается синим."},
+    {L"", L"Usage below this is blue. Also the level for threshold notifications.",
+     L"Ниже этого уровня использование отображается синим. Это также уровень уведомлений о пороге."},
+    {L"", L"Usage below this is green.", L"Ниже этого уровня использование отображается зелёным."},
+    {L"", L"Usage below this is green. Also the level for threshold notifications.",
+     L"Ниже этого уровня использование отображается зелёным. Это также уровень уведомлений о пороге."},
+    {L"", L"Usage below this takes the Below yellow color.",
+     L"Ниже этого уровня использование получает цвет «Ниже жёлтого»."},
+    {L"", L"Usage below this takes the Below yellow color. Also the level for threshold notifications.",
+     L"Ниже этого уровня использование получает цвет «Ниже жёлтого». Это также уровень уведомлений о пороге."},
     {L"", L"Usage history", L"История использования"},
     {L"", L"Usage history guide", L"Руководство по истории использования"},
+    {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
+     L"«Использовано» заполняется по мере расхода квоты, «Осталось» показывает остаток. Цвета всегда следуют "
+     L"использованию."},
     {L"", L"Used on tiles when Identity is Label.",
      L"Используется на плитках, если для «Идентификация» выбрано «Метка»."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
@@ -3979,6 +5765,23 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Дождитесь завершения текущего входа, прежде чем менять идентификацию."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
      L"Дождитесь завершения текущего входа, прежде чем удалять аккаунты."},
+    {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
+          L"hours before and after now.",
+     L"Недельные и месячные графики ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): всё окно или от 12 до 48 часов до "
+     L"и после текущего момента."},
+    {L"", L"What those charts show while the pointer rests on the account.",
+     L"Что эти графики показывают, пока указатель задерживается на аккаунте."},
+    {L"", L"Where each account’s identity sits next to its bars.",
+     L"Где идентификация каждого аккаунта располагается относительно его полос."},
+    {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
+          L"move over to make room.",
+     L"Где полосы располагаются на панели задач. «Левый край» и «Справа от кнопки „Пуск“» — экспериментальные: "
+     L"кнопки панели задач сдвигаются, освобождая место."},
+    {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
+     L"Белый (по умолчанию) следует цвету текста панели задач. «Другой…» открывает выбор цвета."},
+    {L"", L"Windows transparency effects are off, so it shows as Solid.",
+     L"Эффекты прозрачности Windows выключены, поэтому он отображается как «Сплошной»."},
+    {L"", L"Yellow from", L"Жёлтый от"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity не запущен"},
@@ -4050,6 +5853,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"add-account", L"Sign in with your browser", L"Вход через браузер"},
     {L"add-account", L"Uses the signed-in Antigravity app or CLI",
      L"Использует приложение или CLI Antigravity с выполненным входом"},
+    {L"bar-mode", L"Remaining", L"Осталось"},
+    {L"bar-mode", L"Used", L"Использовано"},
+    {L"bar-style", L"Full track", L"Полная дорожка"},
+    {L"bar-style", L"Thin rail", L"Тонкая линия"},
     {L"button", L"Add account", L"Добавить аккаунт"},
     {L"button", L"Copied", L"Скопировано"},
     {L"button", L"Copy", L"Копировать"},
@@ -4180,11 +5987,24 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Не удалось записать историю; предыдущий журнал сохранён."},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"Файл истории не поддерживается или повреждён. Очистите историю, чтобы начать заново."},
+    {L"identity-position", L"Bottom", L"Снизу"},
+    {L"identity-position", L"Hidden", L"Скрыта"},
+    {L"identity-position", L"Left", L"Слева"},
+    {L"identity-position", L"Right", L"Справа"},
+    {L"identity-position", L"Top", L"Сверху"},
     {L"language-choice", L"Automatic ({language})", L"Автоматически ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} и {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} и {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"logo-color", L"Gemini gradient", L"Градиент Gemini"},
+    {L"logo-color", L"Orange", L"Оранжевый"},
+    {L"logo-color", L"Taskbar text color", L"Как текст панели задач"},
+    {L"material", L"Acrylic", L"Акрил"},
+    {L"material", L"Mica", L"Мика"},
+    {L"material", L"Mica Alt", L"Мика Alt"},
+    {L"material", L"Solid", L"Сплошной"},
+    {L"material", L"Tinted wallpaper", L"Тонированные обои"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} — сброс {when}"},
     {L"notification-level", L"Off", L"Откл."},
     {L"notification-level", L"Orange ({threshold}%)", L"Оранжевый ({threshold}%)"},
@@ -4217,12 +6037,37 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"outage-reason", L"Slow responses", L"Медленные ответы"},
     {L"outage-reason", L"Upstream provider issues", L"Проблемы у вышестоящего провайдера"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
+    {L"pace-marker", L"Caret", L"Галочка"},
+    {L"pace-marker", L"Dot", L"Точка"},
+    {L"pace-marker", L"Edge notch", L"Засечка у края"},
+    {L"pace-marker", L"Full line", L"Полная линия"},
+    {L"pace-marker", L"Time track", L"Шкала времени"},
+    {L"palette", L"Colorblind", L"Для дальтоников"},
+    {L"palette", L"Custom", L"Свои цвета"},
+    {L"palette", L"Default", L"По умолчанию"},
+    {L"percent-alignment", L"Adaptive", L"Адаптивное"},
+    {L"percent-alignment", L"Center", L"По центру"},
+    {L"percent-alignment", L"Left", L"Слева"},
+    {L"percent-alignment", L"Right", L"Справа"},
+    {L"percent-text", L"Always show", L"Всегда показывать"},
+    {L"percent-text", L"Never show", L"Не показывать"},
+    {L"percent-text", L"Show on hover", L"При наведении"},
+    {L"pixel-unit", L"px", L"пикс."},
+    {L"placement", L"After Show desktop", L"После «Свернуть все окна»"},
+    {L"placement", L"After the clock", L"После часов"},
+    {L"placement", L"Before network and volume", L"Перед сетью и громкостью"},
+    {L"placement", L"Before notification icons", L"Перед значками уведомлений"},
+    {L"placement", L"Before the clock", L"Перед часами"},
+    {L"placement", L"Left side", L"Левый край"},
+    {L"placement", L"Right of Start", L"Справа от кнопки «Пуск»"},
     {L"plan", L"Visual test", L"Визуальный тест"},
     {L"poll-interval", L"Custom", L"Другой"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# минута} few{# минуты} many{# минут} other{# минуты}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{минута} few{минуты} many{минут} other{минуты}}"},
+    {L"preview", L"Preview", L"Предпросмотр"},
+    {L"preview", L"Show on taskbar", L"На панели задач"},
     {L"quota-amount", L"Limit reached", L"Лимит исчерпан"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Общий пул ({unit}), без лимита на пользователя"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
@@ -4289,14 +6134,34 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-page", L"History", L"История"},
     {L"settings-page", L"Layout", L"Макет"},
     {L"settings-section", L"Alerts", L"Оповещения"},
+    {L"settings-section", L"Appearance", L"Внешний вид"},
+    {L"settings-section", L"Bars", L"Полосы"},
     {L"settings-section", L"Credits and license", L"Благодарности и лицензия"},
+    {L"settings-section", L"Current position", L"Текущий момент"},
     {L"settings-section", L"Details", L"Подробности"},
+    {L"settings-section", L"Details flyout", L"Всплывающие сведения"},
+    {L"settings-section", L"Gauge", L"Шкала"},
+    {L"settings-section", L"Headline", L"Главный процент"},
+    {L"settings-section", L"Identity", L"Идентификация"},
+    {L"settings-section", L"Identity and text", L"Идентификация и текст"},
     {L"settings-section", L"Language", L"Язык"},
     {L"settings-section", L"Links", L"Ссылки"},
+    {L"settings-section", L"Matrix", L"Матрица"},
+    {L"settings-section", L"Pace markers", L"Метки темпа"},
+    {L"settings-section", L"Pies", L"Диаграммы"},
+    {L"settings-section", L"Placement", L"Размещение"},
     {L"settings-section", L"Recording", L"Запись"},
+    {L"settings-section", L"Ring", L"Кольцо"},
+    {L"settings-section", L"Spacing", L"Интервалы"},
+    {L"settings-section", L"Square", L"Квадрат"},
+    {L"settings-section", L"Status", L"Состояние"},
     {L"settings-section", L"Storage", L"Хранилище"},
     {L"settings-section", L"Taskbar", L"Панель задач"},
+    {L"settings-section", L"Tile style", L"Стиль плитки"},
+    {L"settings-section", L"Time span", L"Период"},
     {L"settings-section", L"Updates", L"Обновления"},
+    {L"settings-section", L"Usage colors", L"Цвета использования"},
+    {L"settings-section", L"Values", L"Значения"},
     {L"settings-section", L"Viewer", L"Просмотр"},
     {L"sign-in-button", L"Cancel", L"Отмена"},
     {L"sign-in-button", L"Close", L"Закрыть"},
@@ -4345,6 +6210,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"paste the code its page shows.",
      L"Этот код относится к другой ссылке для входа. Откройте ссылку этого окна, разрешите доступ и вставьте код, "
      L"показанный на её странице."},
+    {L"sparkline-extra", L"Amount", L"Сумма"},
+    {L"sparkline-extra", L"Off", L"Откл."},
+    {L"sparkline-extra", L"Percent", L"Процент"},
+    {L"sparkline-span", L"Off", L"Откл."},
+    {L"sparkline-span", L"Whole window", L"Всё окно"},
+    {L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}",
+     L"{hours, plural, one{# час в обе стороны} few{# часа в обе стороны} many{# часов в обе стороны} other{# часа в "
+     L"обе стороны}}"},
     {L"taskbar-action", L"Exit visual test", L"Выйти из визуального теста"},
     {L"taskbar-action", L"Hide", L"Скрыть"},
     {L"taskbar-action", L"Open dashboard", L"Открыть панель управления"},
@@ -4365,8 +6238,22 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"tile-identity", L"Label", L"Метка"},
     {L"tile-identity", L"Logo + number badge", L"Логотип + номер"},
     {L"tile-identity", L"Logo only", L"Только логотип"},
+    {L"tile-style", L"Clock pies", L"Круговые часы"},
+    {L"tile-style", L"Concentric rings", L"Вложенные кольца"},
+    {L"tile-style", L"Gauge %", L"Шкала %"},
+    {L"tile-style", L"Headline %", L"Главный %"},
+    {L"tile-style", L"Quota matrix", L"Матрица квот"},
+    {L"tile-style", L"Rounded square", L"Скруглённый квадрат"},
+    {L"tile-style", L"Segmented ring", L"Сегментное кольцо"},
+    {L"tile-style", L"Stacked bars", L"Полосы стопкой"},
+    {L"tile-style", L"Usage graph", L"График использования"},
+    {L"tile-style", L"Vertical bars", L"Вертикальные полосы"},
     {L"toggle", L"Off", L"Откл."},
     {L"toggle", L"On", L"Вкл."},
+    {L"usage-band", L"Below yellow", L"Ниже жёлтого"},
+    {L"usage-band", L"From orange", L"От оранжевого"},
+    {L"usage-band", L"From red", L"От красного"},
+    {L"usage-band", L"From yellow", L"От жёлтого"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
      L"При темпе за последние 24 ч: лимит через ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
@@ -4380,26 +6267,72 @@ static_assert(I18nCatalogSorted(kI18nCatalogRu), "sort by (context, English), no
 // Simplified Chinese (zh-Hans): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogZhHans[] = {
+    {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
+          L"in Used mode, left in Remaining mode.",
+     L"在 Anthropic 额外用量、OpenAI 积分和 GitHub Copilot AI 积分上显示 $ 或积分数，而非 %：“已用量”模式下为已花费，“剩余量”模式下为剩余。"},
     {L"", L"1 to 3650 days.", L"1 至 3650 天。"},
     {L"", L"2 to 1440 minutes.", L"2 至 1440 分钟。"},
     {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
      L"有一项更改无法保存，已连同错误一起显示。\n\n要放弃未保存的更改并关闭窗口吗？"},
+    {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
+     L"一条对角线标示配额在其时段内的匀速用量，便于与实际用量对比。"},
+    {L"", L"A faint border around each chart.", L"每个图表周围的淡色边框。"},
+    {L"", L"A full track behind each fill, or a thin rail under it.", L"在每段填充后方衬一条完整轨道，或在其下方显示细导轨。"},
+    {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+     L"在当前读数周围加一圈圆环，并挖空其下方的线条。关：普通圆点。"},
+    {L"", L"A small triangle on the chart’s bottom edge at the current time.", L"图表底边上指示当前时间的小三角形。"},
+    {L"", L"A thin line across the chart at the current time.", L"在当前时间处贯穿图表的细线。"},
+    {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
+          L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
+          L"major outage. Off: no status pages are read.",
+     L"当提供商的状态页面报告账户所用服务出现问题时，在该账户上显示警告三角形：性能下降、部分故障或维护时使用橙色用量颜色，重大故障时使用红色。关：不读取任何状态页面。"},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"在 Windows 11 任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 订阅配额。"},
+    {L"", L"Account identity is set per account in Accounts", L"账户标识需在“账户”中逐个设置"},
+    {L"", L"Account margin", L"账户边距"},
+    {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.", L"自适应：位于右侧，条形达到黄色阈值后移到左侧。"},
+    {L"", L"Additional OpenAI rate limits", L"OpenAI 的其他速率限制"},
+    {L"", L"Adds ! when a refresh failed or is overdue.", L"刷新失败或逾期未刷新时添加 ! 标记。"},
     {L"", L"All displays", L"所有显示器"},
     {L"", L"Also delete its usage history", L"同时删除其使用历史"},
+    {L"", L"Also the level for threshold notifications.", L"也是阈值通知的触发级别。"},
+    {L"", L"Amounts on extra usage and credits", L"额外用量和积分的金额"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.", L"某个账户已不再配置；其未保存的更改已被丢弃。"},
     {L"", L"Another account of this provider uses this label.", L"此提供商的另一个账户正在使用此标签。"},
+    {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
+          L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
+          L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
+     L"在 {key7d} 图表左上角（“剩余量”模式下为左下角）显示 Anthropic 额外用量或 OpenAI "
+     L"积分，前提是已为该账户选择且有报告数据：“已用量”模式下为已花费，“剩余量”模式下为剩余。无上限时，“百分比”显示金额。OpenAI 积分从不单独显示图表。"},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic、OpenAI 和 GitHub Copilot 通过浏览器登录，OpenCode Go 使用 API 密钥登录。Google Antigravity 使用已登录的应用或 CLI，需保持其运行。"},
+    {L"", L"Antigravity logo", L"Antigravity 徽标"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.", L"仅适用于此 Windows 用户。关闭后会保留已保存的历史。"},
+    {L"", L"Background of the details flyout and the settings and usage history windows.", L"详情浮窗以及设置窗口和使用历史窗口的背景。"},
+    {L"", L"Badge color", L"徽章颜色"},
+    {L"", L"Badge horizontal offset", L"徽章水平偏移"},
+    {L"", L"Badge size", L"徽章大小"},
+    {L"", L"Badge vertical offset", L"徽章垂直偏移"},
+    {L"", L"Bar gap", L"条形间距"},
+    {L"", L"Bar length", L"条形长度"},
+    {L"", L"Bar mode", L"条形模式"},
+    {L"", L"Bar style", L"条形样式"},
+    {L"", L"Bar text size", L"条形文字大小"},
+    {L"", L"Bar thickness", L"条形粗细"},
+    {L"", L"Chart height", L"图表高度"},
+    {L"", L"Chart outline", L"图表轮廓"},
+    {L"", L"Chart width", L"图表宽度"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
     {L"", L"Choose Custom in Cloud poll interval to edit.", L"在“云端轮询间隔”中选择“自定义”后即可编辑。"},
     {L"", L"Choose Custom in Keep history to edit.", L"在“保留历史”中选择“自定义”后即可编辑。"},
+    {L"", L"Choose an identity position to change this.", L"选择一个标识位置后即可更改。"},
+    {L"", L"Claude logo", L"Claude 徽标"},
     {L"", L"Cloud poll interval", L"云端轮询间隔"},
+    {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
+     L"Codex Spark、gpt-reserve 等隐藏的模型通道，以及 OpenAI 详情中的 Spark 计划名称。"},
     {L"", L"Contributors", L"贡献者"},
     {L"", L"Copy version info", L"复制版本信息"},
     {L"", L"Could not remove the account.", L"无法移除账户。"},
@@ -4417,9 +6350,28 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Custom interval", L"自定义间隔"},
     {L"", L"Custom retention", L"自定义保留期"},
     {L"", L"Default time span", L"默认时间范围"},
+    {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
+          L"threshold.",
+     L"默认：绿色、黄色、橙色和红色。色盲友好：从蓝色到朱红色。自定义：为每个阈值自选一种颜色。"},
+    {L"", L"Diameter in pixels.", L"直径（像素）。"},
     {L"", L"Display {number} - unavailable", L"显示器 {number} - 不可用"},
     {L"", L"Display {number} - {width}x{height}", L"显示器 {number} - {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"显示器 {number} - {width}x{height}（主显示器）"},
+    {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
+          L"to retry.",
+     L"显示器 {number} 在托盘区显示条形：另一个模组控制着条形所需的空间。重启资源管理器即可重试。"},
+    {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
+     L"显示器 {number} 在托盘区显示条形：其“开始”按钮已隐藏或未找到。"},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
+     L"显示器 {number} 在托盘区显示条形：未找到其任务栏按钮。"},
+    {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
+     L"显示器 {number} 在托盘区显示条形：其任务栏位于屏幕侧边。"},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
+          L"fit its width. The preview shows them across a bottom taskbar.",
+     L"显示器 {number} 的任务栏位于屏幕侧边：账户沿任务栏纵向排列，每种样式都会重新排布以适应其宽度。预览按底部任务栏横向显示它们。"},
+    {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
+          L"Update Windows to show them.",
+     L"显示器 {number} 的任务栏位于屏幕侧边：在此 Windows 版本上，其托盘区无法放置条形。请更新 Windows 以显示条形。"},
     {L"", L"Do not poll hidden accounts", L"不轮询隐藏的账户"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"拖动可重新排序。开关可在任务栏上隐藏账户。"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
@@ -4428,8 +6380,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。在“行为”中开启<link "
      L"id=\"hidden\">不轮询隐藏的账户</link>时，隐藏的账户不会被记录。"},
+    {L"", L"Elapsed time", L"已过时间"},
     {L"", L"Enter a label.", L"请输入标签。"},
     {L"", L"Enter a whole number from {minimum} to {maximum}.", L"请输入 {minimum} 至 {maximum} 之间的整数。"},
+    {L"", L"Example accounts, updates as you change settings", L"示例账户，随设置更改即时更新"},
+    {L"", L"Example accounts, wider than shown: drag to scroll", L"示例账户，超出显示范围：拖动以滚动"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -4440,6 +6395,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"Octicons</link> (MIT 许可证，Copyright (c) 2026 GitHub Inc.)。Google Antigravity 使用 Gemini "
      L"标志。\nClaude、Anthropic、OpenAI、ChatGPT、Codex、Google、Gemini、Antigravity、GitHub、GitHub Copilot 和 OpenCode "
      L"是其各自所有者的商标。徽标仅用于标识磁贴显示的是哪个账户。"},
+    {L"", L"Gap after accounts", L"账户后间距"},
+    {L"", L"Gauge size", L"仪表大小"},
+    {L"", L"Gauge thickness", L"仪表粗细"},
+    {L"", L"Height in pixels; one pie per quota, smaller from the third on.", L"高度（像素）；每个配额一个饼图，从第三个起变小。"},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"即使开启了“记录历史”，隐藏的账户也不会被轮询或记录。关闭此项可继续记录它们。所有 Windows 用户共享此设置。"},
@@ -4450,17 +6409,31 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"session every minute.",
      L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
     {L"", L"Identity", L"标识"},
+    {L"", L"Identity gap", L"标识间距"},
+    {L"", L"Identity position", L"标识位置"},
     {L"", L"Interface language", L"界面语言"},
     {L"", L"Its stored sign-in will be deleted.", L"其已存储的登录信息将被删除。"},
     {L"", L"Its usage history is kept.", L"其使用历史会保留。"},
     {L"", L"Keep history", L"保留历史"},
     {L"", L"Label", L"标签"},
+    {L"", L"Label font size", L"标签字号"},
     {L"", L"Language, displays, hover details, polling and notifications.", L"语言、显示器、悬停详情、轮询和通知。"},
     {L"", L"License", L"许可证"},
+    {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
+     L"默认为浅灰色，在浅色任务栏上为深色。“自定义…”会打开颜色选择器。"},
+    {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.", L"点亮配额时段中已过去的部分；其余部分保持暗淡。"},
+    {L"", L"Logo + number badge, logo only, or label.", L"徽标 + 编号徽章、仅徽标或标签。"},
+    {L"", L"Logo size", L"徽标大小"},
+    {L"", L"Long windows", L"长时段"},
     {L"", L"MIT License", L"MIT 许可证"},
+    {L"", L"Mark stale data", L"标记过时数据"},
+    {L"", L"Marker color", L"标记颜色"},
+    {L"", L"Marker style", L"标记样式"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
      L"在条形旁和磁贴上标识此账户。“标签”会在条形上显示标签，在磁贴上显示其短文本。多个账户使用同一提供商时（包括隐藏的账户）会显示编号徽章。"},
+    {L"", L"Material", L"材质"},
+    {L"", L"Material, values, usage colors, status marks and flyout details.", L"材质、数值、用量颜色、状态标记和浮窗详情。"},
     {L"", L"New samples arrive with each poll.", L"每次轮询都会加入新样本。"},
     {L"", L"No accounts yet", L"还没有账户"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
@@ -4470,21 +6443,51 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Nothing new is recorded.", L"不会记录新数据。"},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"任务栏配额首次达到所选阈值时通知。降到阈值以下后重新生效。"},
+    {L"", L"Now caret", L"当前时间三角标"},
+    {L"", L"Now line", L"当前时间线"},
+    {L"", L"Number size", L"数字大小"},
+    {L"", L"On hover", L"悬停时"},
     {L"", L"Open AI quota settings", L"打开 AI 配额设置"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"打开 AI 配额设置。无法读取已保存的设置；已保留备份。"},
     {L"", L"Opens an account’s details after the pointer rests on it.", L"指针停留在账户上时打开其详情。"},
+    {L"", L"Orange from", L"橙色起点"},
+    {L"", L"Pace markers", L"节奏标记"},
+    {L"", L"Palette", L"调色板"},
+    {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
+     L"相对当前读数标准大小的百分比：圆环及其圆点，或普通圆点。"},
+    {L"", L"Percent of the standard size; rings keep it inside the hole.", L"相对标准大小的百分比；圆环样式会将其限制在中心孔内。"},
+    {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
+     L"占磁贴高度的百分比，对应已用 0% 至 100%（“剩余量”模式下为剩余）。"},
+    {L"", L"Percentage alignment", L"百分比对齐"},
+    {L"", L"Percentage on each bar: never, on hover, or always.", L"每个条形上的百分比：从不、悬停时或始终显示。"},
+    {L"", L"Percentage text", L"百分比文本"},
+    {L"", L"Percentage text and quota keys. Percentage text is set in Display.", L"百分比文本和配额简称。百分比文本在“显示”中设置。"},
+    {L"", L"Pie area", L"饼图区域"},
+    {L"", L"Pixels across each bar.", L"每个条形的粗细（像素）。"},
+    {L"", L"Pixels across each quota’s chart.", L"每个配额图表的宽度（像素）。"},
+    {L"", L"Pixels along each bar.", L"每个条形的长度（像素）。"},
+    {L"", L"Pixels along each quota’s bar under the number.", L"数字下方每个配额条形的长度（像素）。"},
+    {L"", L"Pixels down, or up when negative.", L"向下偏移的像素，负值时向上。"},
+    {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
+     L"相对徽标右下角（圆环样式下为中心孔内）向右偏移的像素，负值时向左。"},
+    {L"", L"Position", L"位置"},
     {L"", L"Primary display only", L"仅主显示器"},
     {L"", L"Primary display, all displays, or one display.", L"主显示器、所有显示器或某一个显示器。"},
     {L"", L"Project page", L"项目主页"},
     {L"", L"Provider logos", L"提供商徽标"},
+    {L"", L"Quota keys", L"配额简称"},
+    {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
+     L"图表上配额简称（{key5h}、{key7d} 等）和额外用量的大小（像素）。"},
     {L"", L"Quotas on taskbar", L"任务栏上的配额"},
+    {L"", L"Reading size", L"读数大小"},
     {L"", L"Record history", L"记录历史"},
     {L"", L"Record usage history", L"记录使用历史"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
      L"为此 Windows 用户开启记录、永久保留历史、以 7 天打开。已保存的历史会保留。"},
     {L"", L"Recording rules, storage, export and verification", L"记录规则、存储、导出和验证"},
     {L"", L"Recording starts once the taskbar saves its account IDs.", L"任务栏保存其账户 ID 后即开始记录。"},
+    {L"", L"Red from", L"红色起点"},
     {L"", L"Remove \"{label}\" ({provider})?", L"移除“{label}”（{provider}）？"},
     {L"", L"Report an issue", L"报告问题"},
     {L"", L"Reset Behavior to defaults", L"将“行为”重置为默认值"},
@@ -4492,6 +6495,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"将“行为”重置为默认值？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
      L"分钟轮询一次、不轮询隐藏的账户、在红色阈值时通知。"},
+    {L"", L"Reset Display to defaults", L"将“显示”重置为默认值"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
@@ -4501,10 +6505,15 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
      L"将“历史”重置为默认值？\n\n将为此 Windows 用户开启记录，永久保留历史，使用历史窗口以 7 天打开。已保存的历史会保留。"},
+    {L"", L"Reset Layout to defaults", L"将“布局”重置为默认值"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
      L"将“布局”重置为默认值？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
+    {L"", L"Reset countdown", L"重置倒计时"},
+    {L"", L"Ring size", L"圆环大小"},
+    {L"", L"Ring thickness", L"圆环粗细"},
+    {L"", L"Ringed reading", L"带环读数"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
@@ -4512,21 +6521,48 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
           L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
      L"所有 Windows 用户共享此设置。“永久”不会删除任何数据，也没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长。按天数限制时每小时清理一次，上限约 60 MB。"},
+    {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
+     L"每个条形旁的简称：{key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短文本"},
     {L"", L"Show details on hover", L"悬停时显示详情"},
     {L"", L"Show on", L"显示位置"},
+    {L"", L"Show percentage text on hover or always to change this.", L"将“百分比文本”设为“悬停时显示”或“始终显示”后即可更改。"},
+    {L"", L"Show provider outages", L"显示提供商故障"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
      L"显示在详情中；“标识”为“标签”时也显示在条形旁。每个提供商内唯一；重命名会保留登录和历史。"},
+    {L"", L"Side in pixels.", L"边长（像素）。"},
+    {L"", L"Space after the last account, before whatever comes next on the taskbar.", L"最后一个账户之后、任务栏上下一个元素之前的间距。"},
+    {L"", L"Space between an account’s bars.", L"同一账户的条形之间的间距。"},
+    {L"", L"Space between the identity and the bars.", L"标识与条形之间的间距。"},
+    {L"", L"Space on each side of every account.", L"每个账户两侧的间距。"},
+    {L"", L"Square size", L"方块大小"},
+    {L"", L"Square thickness", L"方块粗细"},
+    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.", L"仅适用于“堆叠条形”和“垂直条形”。当前磁贴样式：{style}。"},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
      L"停止永久保留历史？\n\n历史将重新保留 {days, plural, other{# 天}}，并限制为 250,000 个样本（约 60 MB）。更早的样本以及超出该上限的最旧样本将被永久删除，对所有 Windows "
      L"用户生效。"},
     {L"", L"Storage location", L"存储位置"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
+     L"描边宽度（像素）。圆弧无法围住数字时会自动变细。"},
+    {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
+     L"描边宽度（像素）。计量条无法围住徽标或文字时会自动变细。"},
     {L"", L"Suggestions and bug reports on GitHub", L"在 GitHub 上提交建议和错误报告"},
+    {L"", L"Text of accounts whose identity is Label, in pixels.", L"标识为“标签”的账户的文字大小（像素）。"},
+    {L"", L"Text size", L"文字大小"},
+    {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
+          L"taskbar.",
+     L"每个配额百分比的文字大小（像素）；其简称随之缩放。两行时会缩小以适应任务栏。"},
+    {L"", L"Text size of the most-used quota’s percentage, in pixels; its quota key scales with it.",
+     L"用量最高的配额百分比的文字大小（像素）；其配额简称随之缩放。"},
+    {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+     L"多个账户使用同一提供商时，徽标上编号的文字大小（像素）。"},
     {L"", L"Thanks to {names}.", L"感谢 {names}。"},
     {L"", L"That provider and label are already configured.", L"该提供商和标签已配置。"},
+    {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
+     L"Gemini 星芒标志采用任务栏文字颜色，或其紫到蓝的渐变。"},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
      L"磁贴上的“标签”标识，最多 4 个字符。留空则使用去掉空格的标签。"},
     {L"", L"The account was changed from another taskbar window.", L"该账户已在另一个任务栏窗口中更改。"},
@@ -4546,6 +6582,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"设置窗口、使用历史窗口和任务栏。“自动”跟随 Windows 显示语言。仅适用于当前 Windows 用户。"},
+    {L"", L"The settings and usage history windows use Mica for it.", L"设置窗口和使用历史窗口对此改用“云母”。"},
     {L"", L"The stored sign-in could not be copied. The account was not changed.", L"无法复制已存储的登录信息。账户未更改。"},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
      L"无法删除已存储的登录信息，该信息仍为此账户保留。"},
@@ -4553,20 +6590,59 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
           L"signed out.",
      L"已删除存储的登录信息，但无法保存设置。该账户仍处于已配置但已退出登录的状态。"},
+    {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
+     L"任务栏文字颜色，或 Claude 的橙色。详情、“账户”和使用历史中也会保持一致。"},
+    {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
+          L"fills with the elapsed time.",
+     L"细插入符号、全宽线条、边缘缺口、居中圆点或时间轨道：每个条形下方随已过时间填充的小条。"},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.", L"此账户已不再配置；其未保存的更改已被丢弃。"},
     {L"", L"This change couldn't be saved.", L"无法保存此更改。"},
     {L"", L"Threshold notifications", L"阈值通知"},
+    {L"", L"Thresholds stay in order: yellow, orange, red.", L"阈值始终保持顺序：黄色、橙色、红色。"},
+    {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
+     L"阈值始终保持顺序：黄色、橙色、红色。也是阈值通知的触发级别。"},
+    {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
+     L"刻度标示每个配额时段已过去的比例，便于与其用量对比。"},
+    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+          L"changed.",
+     L"磁贴样式、条形样式、尺寸、标识和文字、节奏标记、位置和间距。账户不会更改。"},
+    {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
+     L"在数字下方显示该配额距重置的剩余时间，取代各配额的条形。"},
+    {L"", L"Turn off Reset countdown to change this.", L"关闭“重置倒计时”后即可更改。"},
+    {L"", L"Turn on Pace markers to change this.", L"开启“节奏标记”后即可更改。"},
+    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.", L"开启“配额简称”或“显示”中的百分比文本后即可更改。"},
     {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the 7d chart.",
      L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在 7天 图表上以数字显示积分。"},
+    {L"", L"Usage below this is blue.", L"低于此值的用量显示为蓝色。"},
+    {L"", L"Usage below this is blue. Also the level for threshold notifications.", L"低于此值的用量显示为蓝色。也是阈值通知的触发级别。"},
+    {L"", L"Usage below this is green.", L"低于此值的用量显示为绿色。"},
+    {L"", L"Usage below this is green. Also the level for threshold notifications.", L"低于此值的用量显示为绿色。也是阈值通知的触发级别。"},
+    {L"", L"Usage below this takes the Below yellow color.", L"低于此值的用量使用“低于黄色”的颜色。"},
+    {L"", L"Usage below this takes the Below yellow color. Also the level for threshold notifications.",
+     L"低于此值的用量使用“低于黄色”的颜色。也是阈值通知的触发级别。"},
     {L"", L"Usage history", L"使用历史"},
     {L"", L"Usage history guide", L"使用历史指南"},
+    {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
+     L"“已用量”随配额消耗而填充；“剩余量”以剩余部分填充。颜色始终跟随用量。"},
     {L"", L"Used on tiles when Identity is Label.", L"“标识”为“标签”时在磁贴上使用。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"版本 {version}  ·  作者 Cleroth  ·  Windhawk 模组"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"请等待当前登录完成后再更改标识。"},
     {L"", L"Wait for the current sign-in to finish before removing accounts.", L"请等待当前登录完成后再移除账户。"},
+    {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
+          L"hours before and after now.",
+     L"每周和每月图表（{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}）：显示整个时段，或当前时刻前后 12 至 48 小时。"},
+    {L"", L"What those charts show while the pointer rests on the account.", L"指针停留在账户上时，这些图表显示的范围。"},
+    {L"", L"Where each account’s identity sits next to its bars.", L"每个账户的标识相对其条形的位置。"},
+    {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
+          L"move over to make room.",
+     L"条形在任务栏上的位置。“左侧”和“‘开始’右侧”为实验性功能：任务栏按钮会移开以腾出空间。"},
+    {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
+     L"默认的白色跟随任务栏文字颜色。“自定义…”会打开颜色选择器。"},
+    {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows 透明效果已关闭，因此显示为“纯色”。"},
+    {L"", L"Yellow from", L"黄色起点"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity 未运行"},
@@ -4634,6 +6710,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"使用 OpenCode 控制台中的 API 密钥登录"},
     {L"add-account", L"Sign in with your browser", L"通过浏览器登录"},
     {L"add-account", L"Uses the signed-in Antigravity app or CLI", L"使用已登录的 Antigravity 应用或 CLI"},
+    {L"bar-mode", L"Remaining", L"剩余量"},
+    {L"bar-mode", L"Used", L"已用量"},
+    {L"bar-style", L"Full track", L"完整轨道"},
+    {L"bar-style", L"Thin rail", L"细导轨"},
     {L"button", L"Add account", L"添加账户"},
     {L"button", L"Copied", L"已复制"},
     {L"button", L"Copy", L"复制"},
@@ -4752,11 +6832,24 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-storage", L"History write failed; the previous journal was kept.", L"写入历史记录失败；已保留之前的日志。"},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"历史记录文件不受支持或已损坏。请清除历史记录以重新开始。"},
+    {L"identity-position", L"Bottom", L"下方"},
+    {L"identity-position", L"Hidden", L"隐藏"},
+    {L"identity-position", L"Left", L"左侧"},
+    {L"identity-position", L"Right", L"右侧"},
+    {L"identity-position", L"Top", L"上方"},
     {L"language-choice", L"Automatic ({language})", L"自动（{language}）"},
     {L"list-end", L"{a} and {b}", L"{a}和{b}"},
     {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
     {L"list-pair", L"{a} and {b}", L"{a}和{b}"},
     {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+    {L"logo-color", L"Gemini gradient", L"Gemini 渐变"},
+    {L"logo-color", L"Orange", L"橙色"},
+    {L"logo-color", L"Taskbar text color", L"任务栏文字颜色"},
+    {L"material", L"Acrylic", L"亚克力"},
+    {L"material", L"Mica", L"云母"},
+    {L"material", L"Mica Alt", L"云母 Alt"},
+    {L"material", L"Solid", L"纯色"},
+    {L"material", L"Tinted wallpaper", L"着色壁纸"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} - {when}重置"},
     {L"notification-level", L"Off", L"关闭"},
     {L"notification-level", L"Orange ({threshold}%)", L"橙色（{threshold}%）"},
@@ -4788,10 +6881,35 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"outage-reason", L"Slow responses", L"响应缓慢"},
     {L"outage-reason", L"Upstream provider issues", L"上游提供商问题"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}：{models}"},
+    {L"pace-marker", L"Caret", L"插入符号"},
+    {L"pace-marker", L"Dot", L"圆点"},
+    {L"pace-marker", L"Edge notch", L"边缘缺口"},
+    {L"pace-marker", L"Full line", L"全宽线"},
+    {L"pace-marker", L"Time track", L"时间轨道"},
+    {L"palette", L"Colorblind", L"色盲友好"},
+    {L"palette", L"Custom", L"自定义"},
+    {L"palette", L"Default", L"默认"},
+    {L"percent-alignment", L"Adaptive", L"自适应"},
+    {L"percent-alignment", L"Center", L"居中"},
+    {L"percent-alignment", L"Left", L"左对齐"},
+    {L"percent-alignment", L"Right", L"右对齐"},
+    {L"percent-text", L"Always show", L"始终显示"},
+    {L"percent-text", L"Never show", L"从不显示"},
+    {L"percent-text", L"Show on hover", L"悬停时显示"},
+    {L"pixel-unit", L"px", L"px"},
+    {L"placement", L"After Show desktop", L"“显示桌面”后"},
+    {L"placement", L"After the clock", L"时钟后"},
+    {L"placement", L"Before network and volume", L"网络和音量前"},
+    {L"placement", L"Before notification icons", L"通知图标前"},
+    {L"placement", L"Before the clock", L"时钟前"},
+    {L"placement", L"Left side", L"左侧"},
+    {L"placement", L"Right of Start", L"“开始”右侧"},
     {L"plan", L"Visual test", L"视觉测试"},
     {L"poll-interval", L"Custom", L"自定义"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分钟}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分钟}}"},
+    {L"preview", L"Preview", L"预览"},
+    {L"preview", L"Show on taskbar", L"在任务栏上显示"},
     {L"quota-amount", L"Limit reached", L"已达上限"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"共享{unit}，无单个用户限额"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
@@ -4854,14 +6972,34 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"settings-page", L"History", L"历史"},
     {L"settings-page", L"Layout", L"布局"},
     {L"settings-section", L"Alerts", L"提醒"},
+    {L"settings-section", L"Appearance", L"外观"},
+    {L"settings-section", L"Bars", L"条形"},
     {L"settings-section", L"Credits and license", L"致谢与许可证"},
+    {L"settings-section", L"Current position", L"当前位置"},
     {L"settings-section", L"Details", L"详情"},
+    {L"settings-section", L"Details flyout", L"详情浮窗"},
+    {L"settings-section", L"Gauge", L"仪表"},
+    {L"settings-section", L"Headline", L"主数字"},
+    {L"settings-section", L"Identity", L"标识"},
+    {L"settings-section", L"Identity and text", L"标识和文字"},
     {L"settings-section", L"Language", L"语言"},
     {L"settings-section", L"Links", L"链接"},
+    {L"settings-section", L"Matrix", L"矩阵"},
+    {L"settings-section", L"Pace markers", L"节奏标记"},
+    {L"settings-section", L"Pies", L"饼图"},
+    {L"settings-section", L"Placement", L"放置位置"},
     {L"settings-section", L"Recording", L"记录"},
+    {L"settings-section", L"Ring", L"圆环"},
+    {L"settings-section", L"Spacing", L"间距"},
+    {L"settings-section", L"Square", L"方块"},
+    {L"settings-section", L"Status", L"状态"},
     {L"settings-section", L"Storage", L"存储"},
     {L"settings-section", L"Taskbar", L"任务栏"},
+    {L"settings-section", L"Tile style", L"磁贴样式"},
+    {L"settings-section", L"Time span", L"时间范围"},
     {L"settings-section", L"Updates", L"更新"},
+    {L"settings-section", L"Usage colors", L"用量颜色"},
+    {L"settings-section", L"Values", L"数值"},
     {L"settings-section", L"Viewer", L"查看器"},
     {L"sign-in-button", L"Cancel", L"取消"},
     {L"sign-in-button", L"Close", L"关闭"},
@@ -4901,6 +7039,13 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
           L"paste the code its page shows.",
      L"该代码属于另一个登录链接。请打开此窗口的链接，批准访问，然后粘贴其页面显示的代码。"},
+    {L"sparkline-extra", L"Amount", L"金额"},
+    {L"sparkline-extra", L"Off", L"关闭"},
+    {L"sparkline-extra", L"Percent", L"百分比"},
+    {L"sparkline-span", L"Off", L"关闭"},
+    {L"sparkline-span", L"Whole window", L"整个时段"},
+    {L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}",
+     L"{hours, plural, other{前后各 # 小时}}"},
     {L"taskbar-action", L"Exit visual test", L"退出视觉测试"},
     {L"taskbar-action", L"Hide", L"隐藏"},
     {L"taskbar-action", L"Open dashboard", L"打开仪表板"},
@@ -4921,8 +7066,22 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"tile-identity", L"Label", L"标签"},
     {L"tile-identity", L"Logo + number badge", L"徽标 + 编号徽章"},
     {L"tile-identity", L"Logo only", L"仅徽标"},
+    {L"tile-style", L"Clock pies", L"时钟饼图"},
+    {L"tile-style", L"Concentric rings", L"同心圆环"},
+    {L"tile-style", L"Gauge %", L"仪表 %"},
+    {L"tile-style", L"Headline %", L"主数字 %"},
+    {L"tile-style", L"Quota matrix", L"配额矩阵"},
+    {L"tile-style", L"Rounded square", L"圆角方块"},
+    {L"tile-style", L"Segmented ring", L"分段圆环"},
+    {L"tile-style", L"Stacked bars", L"堆叠条形"},
+    {L"tile-style", L"Usage graph", L"用量图表"},
+    {L"tile-style", L"Vertical bars", L"垂直条形"},
     {L"toggle", L"Off", L"关"},
     {L"toggle", L"On", L"开"},
+    {L"usage-band", L"Below yellow", L"低于黄色"},
+    {L"usage-band", L"From orange", L"自橙色起"},
+    {L"usage-band", L"From red", L"自红色起"},
+    {L"usage-band", L"From yellow", L"自黄色起"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"按过去 24 小时的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
@@ -29426,15 +31585,15 @@ struct SettingsPreviewStrip {
 // The mock taskbar's Start and app icons (24 DIP view box: the Windows logo, a folder, a globe, a
 // terminal; holes wound the other way) and their colors outside high contrast.
 static constexpr PCWSTR kPreviewStartPath =
-    L"M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z";
+    L"M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z";  // i18n-en: path data
 static constexpr PCWSTR kPreviewAppPaths[] = {
     L"M2 6.5A2.5 2.5 0 0 1 4.5 4H9.6l2.2 2.2h7.7A2.5 2.5 0 0 1 22 8.7v9.8a2.5 2.5 0 0 1-2.5 2.5h-15"
     L"A2.5 2.5 0 0 1 2 18.5z",
     L"M12 2.5a9.5 9.5 0 1 1 0 19a9.5 9.5 0 1 1 0-19zM12 4.4a7.6 7.6 0 1 0 0 15.2a7.6 7.6 0 1 0 0-15.2z"
     L"M12 4.4a4.2 7.6 0 1 1 0 15.2a4.2 7.6 0 1 1 0-15.2zM12 4.4a2.4 7.6 0 1 0 0 15.2a2.4 7.6 0 1 0 0-15.2z"
-    L"M4.4 11.1h15.2v1.8H4.4z",
+    L"M4.4 11.1h15.2v1.8H4.4z",  // i18n-en: path data
     L"M4.5 4.5h15A2.5 2.5 0 0 1 22 7v10a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 17V7a2.5 2.5 0 0 1 2.5-2.5z"
-    L"M6 8.3V10.4L8.2 12L6 13.6V15.7L10.9 12zM11.5 14.3V15.9H17.5V14.3z",
+    L"M6 8.3V10.4L8.2 12L6 13.6V15.7L10.9 12zM11.5 14.3V15.9H17.5V14.3z",  // i18n-en: path data
 };
 static constexpr LogoBrand kPreviewStartBrand{0xFF4CC2FF, 0xFF0067C0, 3, 3, 21, 21};
 static constexpr LogoBrand kPreviewAppBrands[] = {
@@ -30162,6 +32321,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         glyph(icons.ops, L"\uE70E", 11, 0, 24);
         const PCWSTR status[] = {L"\uE701", L"\uE767", L"\uE83F"};
         for (int k = 0; k < 3; k++) glyph(network.ops, status[k], 14, 26.0f * float(k), 26);
+        // A fixed sample time and ISO date in every language: it stands in for Windows' own clock,
+        // whose format follows the regional settings, not the mod's language.
         UiTextStyle clockStyle{UiFamily::Taskbar, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
         float clockWidth = std::max(measure(L"14:32", clockStyle).width, measure(L"2026-10-31", clockStyle).width);
         label(clock.ops, L"14:32", clockStyle, 6, H / 2 - 16, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
@@ -30448,8 +32609,9 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     // fit on one line.
     float row = y + kPadTop, center = row + kRow / 2;
     UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
-    float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, L"Preview", body, 1000, false)).width);
-    PCWSTR switchLabel = L"Show on taskbar";
+    const std::wstring title = I18nText(view.locale, TrCtx(L"preview", L"Preview"));
+    const std::wstring switchLabel = I18nText(view.locale, TrCtx(L"preview", L"Show on taskbar"));
+    float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, body, 1000, false)).width);
     float labelWidth = std::ceil(UiLayoutSize(UiLayout(g, switchLabel, caption, 1000, false)).width);
     float switchRight = x + width - kPadX, labelLeft = switchRight - 40 - 12 - labelWidth;
     if (labelLeft < x + kPadX + titleWidth + 12) {
@@ -30466,9 +32628,9 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
         line.runs.push_back({std::move(s)});
         items.push_back(std::move(line));
     };
-    text(L"Preview", UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
-    std::wstring note = cut ? L"Example accounts, wider than shown: drag to scroll" :
-                              L"Example accounts, updates as you change settings";
+    text(title, UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
+    std::wstring note = I18nText(view.locale, cut ? Tr(L"Example accounts, wider than shown: drag to scroll") :
+                                                    Tr(L"Example accounts, updates as you change settings"));
     float noteLeft = x + kPadX + titleWidth + 12;
     if (UiLayoutSize(UiLayout(g, note, caption, 10000, false)).width <= labelLeft - 12 - noteLeft) {
         text(std::move(note), UiFont::Caption, UiInk::Muted, {noteLeft, center - 8, labelLeft - 12, center + 8});
@@ -30989,11 +33151,13 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 // and text, pace markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview
 // card is in the shell's pinned header (settings/preview.h). Pure builder.
 
-// By BarLayout.
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Usage graph",    L"Stacked bars",     L"Vertical bars",
-                                                 L"Segmented ring", L"Concentric rings", L"Gauge %",
-                                                 L"Clock pies",     L"Rounded square",   L"Headline %",
-                                                 L"Quota matrix"};
+// By BarLayout; also the Display page's name for the current style.
+static constexpr I18nKey kSettingsTileStyles[] = {
+    TrCtx(L"tile-style", L"Usage graph"),      TrCtx(L"tile-style", L"Stacked bars"),
+    TrCtx(L"tile-style", L"Vertical bars"),    TrCtx(L"tile-style", L"Segmented ring"),
+    TrCtx(L"tile-style", L"Concentric rings"), TrCtx(L"tile-style", L"Gauge %"),
+    TrCtx(L"tile-style", L"Clock pies"),       TrCtx(L"tile-style", L"Rounded square"),
+    TrCtx(L"tile-style", L"Headline %"),       TrCtx(L"tile-style", L"Quota matrix")};
 static constexpr COLORREF kSettingsPaceColors[] = {kDefaultPaceTickColor, RGB(0xFF, 0xFF, 0xFF),
                                                    RGB(0x1C, 0x1C, 0x1C), RGB(0x4C, 0xC2, 0xFF),
                                                    RGB(0xFF, 0x6E, 0xC7)};
@@ -31004,11 +33168,17 @@ static constexpr COLORREF kSettingsBadgeColors[] = {kBadgeTaskbarTextColor, RGB(
 static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                    uint32_t& id, float x, float y, float width) {
     const Settings& s = view.settings;
+    const I18nLocale& locale = view.locale;
     const BarLayout layout = s.barLayout;
     const bool bars = !IsTileLayout(layout);
+    auto text = [&](I18nKey k) { return I18nText(locale, k); };
+    auto section = [&](float top, I18nKey k) { return UiAddSection(items, id, x, top, width, text(k)); };
+    // The quota keys the descriptions name, as the taskbar shows them (kQuotaKeys' order).
+    auto key = [&](size_t index) { return text(kQuotaKeys[index]); };
+    const std::wstring pixels = text(TrCtx(L"pixel-unit", L"px"));
 
     // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined.
-    y = UiAddSection(items, id, x, y + 16, width, L"Tile style");
+    y = section(y + 16, TrCtx(L"settings-section", L"Tile style"));
     {
         constexpr float kCardHeight = 1 + 8 + 72 + 8 + 17 + 2 + 8 + 1, kGap = 8;
         constexpr int kRows = int(std::size(kSettingsTileStyles) + 2) / 3;
@@ -31019,7 +33189,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             card.id = SettingsControlId(SettingsField::BarLayout, uint32_t(i));
             card.kind = UiItemKind::Gallery;
             card.rect = {left, top, left + cardWidth, top + kCardHeight};
-            card.text = kSettingsTileStyles[i];
+            card.text = text(kSettingsTileStyles[i]);
             card.selected = i == int(layout);
             card.action = SettingsCommand(SettingsField::BarLayout, i);
             items.push_back(std::move(card));
@@ -31029,29 +33199,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
     // Placement: the position, then the taskbars that show the bars in the tray instead of beside
     // Start (one line each).
-    y = UiAddSection(items, id, x, y + 20, width, L"Placement");
+    y = section(y + 20, TrCtx(L"settings-section", L"Placement"));
     {
         UiCardSpec spec;
-        spec.title = L"Position";
-        spec.description = {{L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: "
-                             L"the taskbar\u2019s buttons move over to make room."}};
+        spec.title = text(Tr(L"Position"));
+        spec.description = {{text(Tr(L"Where the bars sit on the taskbar. Left side and Right of Start are "
+                                     L"experimental: the taskbar\u2019s buttons move over to make room."))}};
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Placement, 260,
-                                    {{L"Before notification icons", int(TaskbarPlacement::BeforeIcons)},
-                                     {L"Before network and volume", int(TaskbarPlacement::BeforeNetwork)},
-                                     {L"Before the clock", int(TaskbarPlacement::BeforeClock)},
-                                     {L"After the clock", int(TaskbarPlacement::AfterClock)},
-                                     {L"After Show desktop", int(TaskbarPlacement::AfterShowDesktop)},
-                                     {L"Left side", int(TaskbarPlacement::LeftSide)},
-                                     {L"Right of Start", int(TaskbarPlacement::RightOfStart)}},
+                                    {{text(TrCtx(L"placement", L"Before notification icons")),
+                                      int(TaskbarPlacement::BeforeIcons)},
+                                     {text(TrCtx(L"placement", L"Before network and volume")),
+                                      int(TaskbarPlacement::BeforeNetwork)},
+                                     {text(TrCtx(L"placement", L"Before the clock")), int(TaskbarPlacement::BeforeClock)},
+                                     {text(TrCtx(L"placement", L"After the clock")), int(TaskbarPlacement::AfterClock)},
+                                     {text(TrCtx(L"placement", L"After Show desktop")),
+                                      int(TaskbarPlacement::AfterShowDesktop)},
+                                     {text(TrCtx(L"placement", L"Left side")), int(TaskbarPlacement::LeftSide)},
+                                     {text(TrCtx(L"placement", L"Right of Start")), int(TaskbarPlacement::RightOfStart)}},
                                     int(s.placement));
     }
     if (IsStartAreaPlacement(s.placement)) {
         // Left side needs the taskbar's buttons; Right of Start also a shown Start. A side taskbar
         // whose tray takes no bars shows none: the note below says so instead.
-        PCWSTR unavailable = s.placement == TaskbarPlacement::RightOfStart ?
-                                 L"its Start button is hidden or wasn\u2019t found." :
-                                 L"its taskbar buttons weren\u2019t found.";
-        std::wstring text;
+        const I18nKey unavailable =
+            s.placement == TaskbarPlacement::RightOfStart ?
+                Tr(L"Display {number} shows the bars in the tray: its Start button is hidden or wasn\u2019t found.") :
+                Tr(L"Display {number} shows the bars in the tray: its taskbar buttons weren\u2019t found.");
+        std::wstring note;
         for (const SettingsPlacementFallback& fallback : view.status.placementFallbacks) {
             const auto& sides = view.status.sideTaskbars;
             if (std::any_of(sides.begin(), sides.end(), [&](const SettingsSideTaskbar& taskbar) {
@@ -31059,30 +33233,39 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                 })) {
                 continue;
             }
-            if (!text.empty()) text += L"\n";
-            text += L"Display " + std::to_wstring(fallback.display) + L" shows the bars in the tray: " +
-                    (fallback.side     ? L"its taskbar is on a side of the screen." :
-                     fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
-                                         unavailable);
+            if (!note.empty()) note += L"\n";
+            note += I18nText(locale,
+                             fallback.side ?
+                                 Tr(L"Display {number} shows the bars in the tray: its taskbar is on a side of the "
+                                    L"screen.") :
+                             fallback.conflict ?
+                                 Tr(L"Display {number} shows the bars in the tray: another mod controls the space they "
+                                    L"need. Restart Explorer to retry.") :
+                                 unavailable,
+                             {{L"number", fallback.display}});
         }
-        if (!text.empty()) {
-            y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
+        if (!note.empty()) {
+            y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{note}},
                              UiSeverity::Caution);
         }
     }
     // Taskbars on a left or right edge: what changes there, a line per display.
     if (!view.status.sideTaskbars.empty()) {
-        std::wstring text;
+        std::wstring note;
         bool unsupported = false;
         for (const SettingsSideTaskbar& taskbar : view.status.sideTaskbars) {
-            if (!text.empty()) text += L"\n";
-            text += L"Display " + std::to_wstring(taskbar.display) + L"\u2019s taskbar is on a side of the screen: " +
-                    (taskbar.unsupported ? L"its tray takes no bars on this Windows build. Update Windows to show them." :
-                                           L"accounts stack down it, each style rearranged to fit its width. The "
-                                           L"preview shows them across a bottom taskbar.");
+            if (!note.empty()) note += L"\n";
+            note += I18nText(locale,
+                             taskbar.unsupported ?
+                                 Tr(L"Display {number}\u2019s taskbar is on a side of the screen: its tray takes no "
+                                    L"bars on this Windows build. Update Windows to show them.") :
+                                 Tr(L"Display {number}\u2019s taskbar is on a side of the screen: accounts stack down "
+                                    L"it, each style rearranged to fit its width. The preview shows them across a "
+                                    L"bottom taskbar."),
+                             {{L"number", taskbar.display}});
             unsupported = unsupported || taskbar.unsupported;
         }
-        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 9), x, y + 3, width, {{text}},
+        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 9), x, y + 3, width, {{note}},
                          unsupported ? UiSeverity::Caution : UiSeverity::Info);
     }
 
@@ -31091,8 +33274,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     auto identityCard = [&](float top) {
         UiCardSpec spec;
         spec.glyph = L"\uE716";
-        spec.title = L"Account identity is set per account in Accounts";
-        spec.description = {{L"Logo + number badge, logo only, or label."}};
+        spec.title = text(Tr(L"Account identity is set per account in Accounts"));
+        spec.description = {{text(Tr(L"Logo + number badge, logo only, or label."))}};
         spec.trailingGlyph = L"\uE76C";
         spec.action = {UiActionKind::Navigate, int(SettingsUiPage::Accounts)};
         spec.minHeight = 62;
@@ -31100,354 +33283,384 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 10);
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
+    const std::wstring unplaced = text(Tr(L"Choose an identity position to change this."));
 
     // Logo identities in every style: the logo size and the colors of the logos that have brand
     // colors, the badge's size and color, then its offsets. Bars need an identity position, except
     // for the logo colors, which the flyout and the windows also show.
     auto logoCards = [&](float top, bool placed) {
-        auto slider = [&](float at, PCWSTR title, PCWSTR description, SettingsField field) {
+        auto slider = [&](float at, I18nKey title, I18nKey description, SettingsField field) {
             UiCardSpec spec;
-            spec.title = title;
-            spec.description = {{description}};
+            spec.title = text(title);
+            spec.description = {{text(description)}};
             spec.enabled = placed;
-            if (!placed) spec.reason = L"Choose an identity position to change this.";
+            if (!placed) spec.reason = unplaced;
             return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
         };
-        auto brand = [&](float at, PCWSTR title, PCWSTR description, SettingsField field, PCWSTR colors) {
+        auto brand = [&](float at, I18nKey title, I18nKey description, SettingsField field, I18nKey colors) {
             UiCardSpec spec;
-            spec.title = title;
-            spec.description = {{description}};
+            spec.title = text(title);
+            spec.description = {{text(description)}};
             return SettingsAddDropdownCard(g, view, items, id, x, at, width, spec, field, 200,
-                                           {{L"Taskbar text color", 0}, {colors, 1}},
+                                           {{text(TrCtx(L"logo-color", L"Taskbar text color")), 0}, {text(colors), 1}},
                                            SettingsFieldValue(s, field));
         };
-        top = slider(top, L"Logo size", L"Percent of the standard size; rings keep it inside the hole.",
+        top = slider(top, Tr(L"Logo size"), Tr(L"Percent of the standard size; rings keep it inside the hole."),
                      SettingsField::LogoScale);
-        top = brand(top + 3, L"Claude logo",
-                    L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history "
-                    L"match.",
-                    SettingsField::ClaudeLogoBrand, L"Orange");
-        top = brand(top + 3, L"Antigravity logo",
-                    L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient.",
-                    SettingsField::GeminiLogoBrand, L"Gemini gradient");
-        top = slider(top + 3, L"Badge size",
-                     L"Text size of the number on a logo when several accounts share a provider, in pixels.",
+        top = brand(top + 3, Tr(L"Claude logo"),
+                    Tr(L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history "
+                       L"match."),
+                    SettingsField::ClaudeLogoBrand, TrCtx(L"logo-color", L"Orange"));
+        top = brand(top + 3, Tr(L"Antigravity logo"),
+                    Tr(L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient."),
+                    SettingsField::GeminiLogoBrand, TrCtx(L"logo-color", L"Gemini gradient"));
+        top = slider(top + 3, Tr(L"Badge size"),
+                     Tr(L"Text size of the number on a logo when several accounts share a provider, in pixels."),
                      SettingsField::BadgeSize);
         {
             UiCardSpec spec;
-            spec.title = L"Badge color";
-            spec.description = {{L"White, the default, follows the taskbar\u2019s text color. Custom... opens "
-                                  L"the color picker."}};
+            spec.title = text(Tr(L"Badge color"));
+            spec.description = {{text(Tr(L"White, the default, follows the taskbar\u2019s text color. Custom... "
+                                         L"opens the color picker."))}};
             spec.enabled = placed;
-            if (!placed) spec.reason = L"Choose an identity position to change this.";
+            if (!placed) spec.reason = unplaced;
             top = SettingsAddColorCard(g, view, items, id, x, top + 3, width, spec, SettingsField::BadgeColor,
                                        SettingsField::BadgeColorCustom,
                                        {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
                                        s.badgeColor & 0x00FFFFFF);
         }
-        top = slider(top + 3, L"Badge horizontal offset",
-                     L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
-                     L"hole on rings).",
+        top = slider(top + 3, Tr(L"Badge horizontal offset"),
+                     Tr(L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
+                        L"hole on rings)."),
                      SettingsField::BadgeOffsetX);
-        return slider(top + 3, L"Badge vertical offset", L"Pixels down, or up when negative.",
+        return slider(top + 3, Tr(L"Badge vertical offset"), Tr(L"Pixels down, or up when negative."),
                       SettingsField::BadgeOffsetY);
     };
 
     if (bars) {
-        y = UiAddSection(items, id, x, y + 20, width, L"Bars");
+        y = section(y + 20, TrCtx(L"settings-section", L"Bars"));
         {
             UiCardSpec spec;
-            spec.title = L"Bar style";
-            spec.description = {{L"A full track behind each fill, or a thin rail under it."}};
+            spec.title = text(Tr(L"Bar style"));
+            spec.description = {{text(Tr(L"A full track behind each fill, or a thin rail under it."))}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::BarStyle, 200,
-                                        {{L"Full track", int(BarStyle::Track)}, {L"Thin rail", int(BarStyle::Rail)}},
+                                        {{text(TrCtx(L"bar-style", L"Full track")), int(BarStyle::Track)},
+                                         {text(TrCtx(L"bar-style", L"Thin rail")), int(BarStyle::Rail)}},
                                         int(s.barStyle));
         }
         {
             UiCardSpec spec;
-            spec.title = L"Bar length";
-            spec.description = {{L"Pixels along each bar."}};
+            spec.title = text(Tr(L"Bar length"));
+            spec.description = {{text(Tr(L"Pixels along each bar."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarLength);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Bar thickness";
-            spec.description = {{L"Pixels across each bar."}};
+            spec.title = text(Tr(L"Bar thickness"));
+            spec.description = {{text(Tr(L"Pixels across each bar."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarThickness);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Bar gap";
-            spec.description = {{L"Space between an account\u2019s bars."}};
-            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
+            spec.title = text(Tr(L"Bar gap"));
+            spec.description = {{text(Tr(L"Space between an account\u2019s bars."))}};
+            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, pixels);
         }
 
         // Identity and text: the link to each account's identity, where it sits; the Label form's
         // size, the gap and the logo cards need a position. Then quota keys, and the bar text size
         // for them or percentage text.
-        y = UiAddSection(items, id, x, y + 20, width, L"Identity and text");
+        y = section(y + 20, TrCtx(L"settings-section", L"Identity and text"));
         bool placed = s.labelPosition != LabelPosition::Hidden;
         y = identityCard(y);
         {
             UiCardSpec spec;
-            spec.title = L"Identity position";
-            spec.description = {{L"Where each account\u2019s identity sits next to its bars."}};
+            spec.title = text(Tr(L"Identity position"));
+            spec.description = {{text(Tr(L"Where each account\u2019s identity sits next to its bars."))}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelPosition, 200,
-                                        {{L"Left", int(LabelPosition::Left)},
-                                         {L"Right", int(LabelPosition::Right)},
-                                         {L"Top", int(LabelPosition::Top)},
-                                         {L"Bottom", int(LabelPosition::Bottom)},
-                                         {L"Hidden", int(LabelPosition::Hidden)}},
+                                        {{text(TrCtx(L"identity-position", L"Left")), int(LabelPosition::Left)},
+                                         {text(TrCtx(L"identity-position", L"Right")), int(LabelPosition::Right)},
+                                         {text(TrCtx(L"identity-position", L"Top")), int(LabelPosition::Top)},
+                                         {text(TrCtx(L"identity-position", L"Bottom")), int(LabelPosition::Bottom)},
+                                         {text(TrCtx(L"identity-position", L"Hidden")), int(LabelPosition::Hidden)}},
                                         int(s.labelPosition));
         }
         {
             UiCardSpec spec;
-            spec.title = L"Label font size";
-            spec.description = {{L"Text of accounts whose identity is Label, in pixels."}};
+            spec.title = text(Tr(L"Label font size"));
+            spec.description = {{text(Tr(L"Text of accounts whose identity is Label, in pixels."))}};
             spec.enabled = placed;
-            if (!placed) spec.reason = L"Choose an identity position to change this.";
+            if (!placed) spec.reason = unplaced;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelFontSize);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Identity gap";
-            spec.description = {{L"Space between the identity and the bars."}};
+            spec.title = text(Tr(L"Identity gap"));
+            spec.description = {{text(Tr(L"Space between the identity and the bars."))}};
             spec.enabled = placed;
-            if (!placed) spec.reason = L"Choose an identity position to change this.";
-            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, L"px");
+            if (!placed) spec.reason = unplaced;
+            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, pixels);
         }
         y = logoCards(y + 3, placed);
         {
             UiCardSpec spec;
-            spec.title = L"Quota keys";
-            spec.description = {{L"Short key beside each bar: 5h, 7d, Fa, Ar, Ex, Cr, Mo."}};
+            spec.title = text(Tr(L"Quota keys"));
+            spec.description = {{I18nText(locale, Tr(L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, "
+                                                     L"{keyEx}, {keyCr}, {keyMo}."),
+                                          {{L"key5h", key(0)}, {L"key7d", key(1)}, {L"keyFa", key(2)}, {L"keyAr", key(4)},
+                                           {L"keyEx", key(3)}, {L"keyCr", key(5)}, {L"keyMo", key(6)}})}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
         }
         {
-            bool text = s.showBarLabels || s.percentTextVisibility != PercentTextVisibility::Never;
+            bool shown = s.showBarLabels || s.percentTextVisibility != PercentTextVisibility::Never;
             UiCardSpec spec;
-            spec.title = L"Bar text size";
-            spec.description = {{L"Percentage text and quota keys. Percentage text is set in Display."}};
-            spec.enabled = text;
-            if (!text) spec.reason = L"Turn on Quota keys, or percentage text in Display, to change this.";
+            spec.title = text(Tr(L"Bar text size"));
+            spec.description = {{text(Tr(L"Percentage text and quota keys. Percentage text is set in Display."))}};
+            spec.enabled = shown;
+            if (!shown) spec.reason = text(Tr(L"Turn on Quota keys, or percentage text in Display, to change this."));
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
         }
     } else if (IsFaceTile(layout)) {
         // Face tiles share the ring size and thickness; pies are solid.
         const bool gauge = layout == BarLayout::Gauge, pies = layout == BarLayout::ClockPies;
         const bool square = layout == BarLayout::RoundedSquare;
-        y = UiAddSection(items, id, x, y + 20, width, gauge ? L"Gauge" : pies ? L"Pies" : square ? L"Square" : L"Ring");
+        y = section(y + 20, gauge  ? TrCtx(L"settings-section", L"Gauge") :
+                            pies   ? TrCtx(L"settings-section", L"Pies") :
+                            square ? TrCtx(L"settings-section", L"Square") :
+                                     TrCtx(L"settings-section", L"Ring"));
         {
             UiCardSpec spec;
-            spec.title = gauge ? L"Gauge size" : pies ? L"Pie area" : square ? L"Square size" : L"Ring size";
-            spec.description = {{pies   ? L"Height in pixels; one pie per quota, smaller from the third on." :
-                                 square ? L"Side in pixels." :
-                                          L"Diameter in pixels."}};
+            spec.title = text(gauge ? Tr(L"Gauge size") : pies ? Tr(L"Pie area") : square ? Tr(L"Square size") :
+                                                                                            Tr(L"Ring size"));
+            spec.description = {{text(pies   ? Tr(L"Height in pixels; one pie per quota, smaller from the third on.") :
+                                      square ? Tr(L"Side in pixels.") :
+                                               Tr(L"Diameter in pixels."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::RingSize);
         }
         if (!pies) {
             UiCardSpec spec;
-            spec.title = gauge ? L"Gauge thickness" : square ? L"Square thickness" : L"Ring thickness";
-            spec.description = {{gauge ? L"Stroke width in pixels. Narrows automatically when the arc doesn\u2019t fit "
-                                         L"around the number." :
-                                         L"Stroke width in pixels. Narrows automatically when the meters don\u2019t fit "
-                                         L"around the logo or text."}};
+            spec.title = text(gauge ? Tr(L"Gauge thickness") : square ? Tr(L"Square thickness") : Tr(L"Ring thickness"));
+            spec.description = {{text(gauge ? Tr(L"Stroke width in pixels. Narrows automatically when the arc "
+                                                 L"doesn\u2019t fit around the number.") :
+                                              Tr(L"Stroke width in pixels. Narrows automatically when the meters "
+                                                 L"don\u2019t fit around the logo or text."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
-        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
         // chart, the long windows' span and its swap on hover, then the current position cues and
         // the reading's size.
-        y = UiAddSection(items, id, x, y + 20, width, L"Usage graph");
+        y = section(y + 20, kSettingsTileStyles[int(BarLayout::Sparkline)]);
         {
             UiCardSpec spec;
-            spec.title = L"Chart width";
-            spec.description = {{L"Pixels across each quota\u2019s chart."}};
+            spec.title = text(Tr(L"Chart width"));
+            spec.description = {{text(Tr(L"Pixels across each quota\u2019s chart."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineWidth);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Chart height";
-            spec.description = {{L"Percent of the tile\u2019s height, from 0% to 100% used, or left in Remaining mode."}};
+            spec.title = text(Tr(L"Chart height"));
+            spec.description = {{text(Tr(L"Percent of the tile\u2019s height, from 0% to 100% used, or left in "
+                                         L"Remaining mode."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHeight);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Text size";
-            spec.description = {{L"Quota keys (5h, 7d, ...) and extra usage on the charts, in pixels."}};
+            spec.title = text(Tr(L"Text size"));
+            spec.description = {{I18nText(locale, Tr(L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the "
+                                                     L"charts, in pixels."),
+                                          {{L"key5h", key(0)}, {L"key7d", key(1)}})}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineTextSize);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Chart outline";
-            spec.description = {{L"A faint border around each chart."}};
+            spec.title = text(Tr(L"Chart outline"));
+            spec.description = {{text(Tr(L"A faint border around each chart."))}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineOutline);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Extra usage";
-            spec.description = {{L"Anthropic extra usage or OpenAI credits in the 7d chart\u2019s top-left corner "
-                                 L"(bottom-left in Remaining mode), when selected for the account and reported: spent "
-                                 L"in Used mode, left in Remaining mode. Percent shows the amount without a limit. "
-                                 L"OpenAI credits never get a chart of their own."}};
+            spec.title = text(TrCtx(L"quota-name", L"Extra usage"));
+            spec.description = {{I18nText(locale,
+                                          Tr(L"Anthropic extra usage or OpenAI credits in the {key7d} chart\u2019s "
+                                             L"top-left corner (bottom-left in Remaining mode), when selected for the "
+                                             L"account and reported: spent in Used mode, left in Remaining mode. "
+                                             L"Percent shows the amount without a limit. OpenAI credits never get a "
+                                             L"chart of their own."),
+                                          {{L"key7d", key(1)}})}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineExtra, 200,
-                                        {{L"Off", int(SparklineExtra::Off)},
-                                         {L"Amount", int(SparklineExtra::Amount)},
-                                         {L"Percent", int(SparklineExtra::Percent)}},
+                                        {{text(TrCtx(L"sparkline-extra", L"Off")), int(SparklineExtra::Off)},
+                                         {text(TrCtx(L"sparkline-extra", L"Amount")), int(SparklineExtra::Amount)},
+                                         {text(TrCtx(L"sparkline-extra", L"Percent")), int(SparklineExtra::Percent)}},
                                         int(s.sparklineExtra));
         }
-        y = UiAddSection(items, id, x, y + 20, width, L"Time span");
+        // The long windows' spans, after Off on hover.
+        auto spans = [&](bool off) {
+            std::vector<UiOption> options;
+            if (off) options.push_back({text(TrCtx(L"sparkline-span", L"Off")), -1});
+            options.push_back({text(TrCtx(L"sparkline-span", L"Whole window")), int(SparklineSpan::Window)});
+            const std::pair<int, SparklineSpan> hours[] = {{12, SparklineSpan::Hours12},
+                                                           {24, SparklineSpan::Hours24},
+                                                           {36, SparklineSpan::Hours36},
+                                                           {48, SparklineSpan::Hours48}};
+            for (auto [count, span] : hours) {
+                options.push_back(
+                    {I18nText(locale,
+                              TrCtx(L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}"),
+                              {{L"hours", count}}),
+                     int(span)});
+            }
+            return options;
+        };
+        y = section(y + 20, TrCtx(L"settings-section", L"Time span"));
         {
             UiCardSpec spec;
-            spec.title = L"Long windows";
-            spec.description = {{L"Weekly and monthly charts (7d, Fa, Ar, Ex, Mo): the whole window, or 12 to 48 "
-                                 L"hours before and after now."}};
+            spec.title = text(Tr(L"Long windows"));
+            spec.description = {{I18nText(locale,
+                                          Tr(L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): "
+                                             L"the whole window, or 12 to 48 hours before and after now."),
+                                          {{L"key7d", key(1)}, {L"keyFa", key(2)}, {L"keyAr", key(4)},
+                                           {L"keyEx", key(3)}, {L"keyMo", key(6)}})}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
-                                        {{L"Whole window", int(SparklineSpan::Window)},
-                                         {L"12 hours each side", int(SparklineSpan::Hours12)},
-                                         {L"24 hours each side", int(SparklineSpan::Hours24)},
-                                         {L"36 hours each side", int(SparklineSpan::Hours36)},
-                                         {L"48 hours each side", int(SparklineSpan::Hours48)}},
-                                        int(s.sparklineSpan));
+                                        spans(false), int(s.sparklineSpan));
         }
         {
             UiCardSpec spec;
-            spec.title = L"On hover";
-            spec.description = {{L"What those charts show while the pointer rests on the account."}};
+            spec.title = text(Tr(L"On hover"));
+            spec.description = {{text(Tr(L"What those charts show while the pointer rests on the account."))}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHoverSpan, 200,
-                                        {{L"Off", -1},
-                                         {L"Whole window", int(SparklineSpan::Window)},
-                                         {L"12 hours each side", int(SparklineSpan::Hours12)},
-                                         {L"24 hours each side", int(SparklineSpan::Hours24)},
-                                         {L"36 hours each side", int(SparklineSpan::Hours36)},
-                                         {L"48 hours each side", int(SparklineSpan::Hours48)}},
-                                        SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
+                                        spans(true), SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
         }
-        y = UiAddSection(items, id, x, y + 20, width, L"Current position");
+        y = section(y + 20, TrCtx(L"settings-section", L"Current position"));
         struct Cue {
-            PCWSTR title, description;
+            I18nKey title, description;
             SettingsField field;
         };
         static constexpr Cue kCues[] = {
-            {L"Elapsed time", L"Lights the part of the quota\u2019s window that has passed; the rest stays dim.",
+            {Tr(L"Elapsed time"), Tr(L"Lights the part of the quota\u2019s window that has passed; the rest stays dim."),
              SettingsField::SparklineElapsed},
-            {L"Now line", L"A thin line across the chart at the current time.", SettingsField::SparklineNowLine},
-            {L"Now caret", L"A small triangle on the chart\u2019s bottom edge at the current time.",
+            {Tr(L"Now line"), Tr(L"A thin line across the chart at the current time."), SettingsField::SparklineNowLine},
+            {Tr(L"Now caret"), Tr(L"A small triangle on the chart\u2019s bottom edge at the current time."),
              SettingsField::SparklineNowCaret},
-            {L"Ringed reading", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
+            {Tr(L"Ringed reading"),
+             Tr(L"A ring around the current reading, cut out of the lines under it. Off: a plain dot."),
              SettingsField::SparklineRing},
         };
         for (size_t k = 0; k < std::size(kCues); k++) {
             UiCardSpec spec;
-            spec.title = kCues[k].title;
-            spec.description = {{kCues[k].description}};
+            spec.title = text(kCues[k].title);
+            spec.description = {{text(kCues[k].description)}};
             y = SettingsAddToggleCard(g, view, items, id, x, k ? y + 3 : y, width, spec, kCues[k].field);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Reading size";
-            spec.description = {{L"Percent of the current reading\u2019s standard size: the ring and its dot, or the "
-                                 L"plain dot."}};
+            spec.title = text(Tr(L"Reading size"));
+            spec.description = {{text(Tr(L"Percent of the current reading\u2019s standard size: the ring and its dot, "
+                                         L"or the plain dot."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineReadingScale);
         }
-        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::QuotaMatrix) {
         // Quota matrix: the numbers' size, the headline's.
-        y = UiAddSection(items, id, x, y + 20, width, L"Matrix");
+        y = section(y + 20, TrCtx(L"settings-section", L"Matrix"));
         {
             UiCardSpec spec;
-            spec.title = L"Number size";
-            spec.description = {{L"Text size of each quota\u2019s percentage, in pixels; its key scales with it. Two "
-                                 L"rows shrink to fit the taskbar."}};
+            spec.title = text(Tr(L"Number size"));
+            spec.description = {{text(Tr(L"Text size of each quota\u2019s percentage, in pixels; its key scales with "
+                                         L"it. Two rows shrink to fit the taskbar."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
         }
-        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         y = logoCards(identityCard(y) + 3, true);
     } else {
         // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
         // gap, which the countdown replaces.
-        y = UiAddSection(items, id, x, y + 20, width, L"Headline");
+        y = section(y + 20, TrCtx(L"settings-section", L"Headline"));
         {
             UiCardSpec spec;
-            spec.title = L"Number size";
-            spec.description = {{L"Text size of the most-used quota\u2019s percentage, in pixels; its quota key "
-                                 L"scales with it."}};
+            spec.title = text(Tr(L"Number size"));
+            spec.description = {{text(Tr(L"Text size of the most-used quota\u2019s percentage, in pixels; its quota "
+                                         L"key scales with it."))}};
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Reset countdown";
-            spec.description = {{L"Time until that quota resets under the number, instead of each quota\u2019s bar."}};
+            spec.title = text(Tr(L"Reset countdown"));
+            spec.description = {{text(Tr(L"Time until that quota resets under the number, instead of each "
+                                         L"quota\u2019s bar."))}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineCountdown);
         }
         const bool segments = !s.headlineCountdown;
-        PCWSTR countdownOn = L"Turn off Reset countdown to change this.";
+        const std::wstring countdownOn = text(Tr(L"Turn off Reset countdown to change this."));
         {
             UiCardSpec spec;
-            spec.title = L"Bar length";
-            spec.description = {{L"Pixels along each quota\u2019s bar under the number."}};
+            spec.title = text(Tr(L"Bar length"));
+            spec.description = {{text(Tr(L"Pixels along each quota\u2019s bar under the number."))}};
             spec.enabled = segments;
             if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Bar thickness";
-            spec.description = {{L"Pixels across each bar."}};
+            spec.title = text(Tr(L"Bar thickness"));
+            spec.description = {{text(Tr(L"Pixels across each bar."))}};
             spec.enabled = segments;
             if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
         }
         {
             UiCardSpec spec;
-            spec.title = L"Bar gap";
-            spec.description = {{L"Space between an account\u2019s bars."}};
+            spec.title = text(Tr(L"Bar gap"));
+            spec.description = {{text(Tr(L"Space between an account\u2019s bars."))}};
             spec.enabled = segments;
             if (!segments) spec.reason = countdownOn;
-            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, L"px");
+            y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, pixels);
         }
-        y = UiAddSection(items, id, x, y + 20, width, L"Identity");
+        y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         y = logoCards(identityCard(y) + 3, true);
     }
 
     // Pace markers: none on headline tiles or the quota matrix; the marker style is the bars'.
     // Style and color need the markers on.
     if (layout != BarLayout::LogoHeadline && layout != BarLayout::QuotaMatrix) {
-        y = UiAddSection(items, id, x, y + 20, width, L"Pace markers");
+        y = section(y + 20, TrCtx(L"settings-section", L"Pace markers"));
         bool on = s.showPaceTicks;
+        const std::wstring off = text(Tr(L"Turn on Pace markers to change this."));
         {
             UiCardSpec spec;
-            spec.title = L"Pace markers";
-            spec.description = {{layout == BarLayout::Sparkline ?
-                                     L"A diagonal marks even use of the quota across its window, to compare with "
-                                     L"its usage." :
-                                     L"Ticks mark how much of each quota window has elapsed, to compare with its usage."}};
+            spec.title = text(Tr(L"Pace markers"));
+            spec.description = {{text(layout == BarLayout::Sparkline ?
+                                          Tr(L"A diagonal marks even use of the quota across its window, to compare "
+                                             L"with its usage.") :
+                                          Tr(L"Ticks mark how much of each quota window has elapsed, to compare with "
+                                             L"its usage."))}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
         if (bars) {
             UiCardSpec spec;
-            spec.title = L"Marker style";
-            spec.description = {{L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small "
-                                 L"bar under each bar that fills with the elapsed time."}};
+            spec.title = text(Tr(L"Marker style"));
+            spec.description = {{text(Tr(L"Thin caret, full-width line, edge notch, centered dot, or a time track: a "
+                                         L"small bar under each bar that fills with the elapsed time."))}};
             spec.enabled = on;
-            if (!on) spec.reason = L"Turn on Pace markers to change this.";
+            if (!on) spec.reason = off;
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickStyle, 200,
-                                        {{L"Caret", int(PaceTickStyle::Caret)},
-                                         {L"Full line", int(PaceTickStyle::Line)},
-                                         {L"Edge notch", int(PaceTickStyle::Notch)},
-                                         {L"Dot", int(PaceTickStyle::Dot)},
-                                         {L"Time track", int(PaceTickStyle::TimeTrack)}},
+                                        {{text(TrCtx(L"pace-marker", L"Caret")), int(PaceTickStyle::Caret)},
+                                         {text(TrCtx(L"pace-marker", L"Full line")), int(PaceTickStyle::Line)},
+                                         {text(TrCtx(L"pace-marker", L"Edge notch")), int(PaceTickStyle::Notch)},
+                                         {text(TrCtx(L"pace-marker", L"Dot")), int(PaceTickStyle::Dot)},
+                                         {text(TrCtx(L"pace-marker", L"Time track")), int(PaceTickStyle::TimeTrack)}},
                                         int(s.paceTickStyle));
         }
         {
             UiCardSpec spec;
-            spec.title = L"Marker color";
-            spec.description = {{L"Light grey by default, dark on a light taskbar. Custom... opens the color picker."}};
+            spec.title = text(Tr(L"Marker color"));
+            spec.description = {{text(Tr(L"Light grey by default, dark on a light taskbar. Custom... opens the color "
+                                         L"picker."))}};
             spec.enabled = on;
-            if (!on) spec.reason = L"Turn on Pace markers to change this.";
+            if (!on) spec.reason = off;
             y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickColor,
                                      SettingsField::PaceTickColorCustom,
                                      {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
@@ -31455,25 +33668,26 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
     }
 
-    y = UiAddSection(items, id, x, y + 20, width, L"Spacing");
+    y = section(y + 20, TrCtx(L"settings-section", L"Spacing"));
     {
         UiCardSpec spec;
-        spec.title = L"Account margin";
-        spec.description = {{L"Space on each side of every account."}};
-        y = SettingsAddNumberCard(g, view, items, id, x, y, width, spec, SettingsField::AccountMargin, L"px");
+        spec.title = text(Tr(L"Account margin"));
+        spec.description = {{text(Tr(L"Space on each side of every account."))}};
+        y = SettingsAddNumberCard(g, view, items, id, x, y, width, spec, SettingsField::AccountMargin, pixels);
     }
     {
         UiCardSpec spec;
-        spec.title = L"Gap after accounts";
-        spec.description = {{L"Space after the last account, before whatever comes next on the taskbar."}};
-        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RightMargin, L"px");
+        spec.title = text(Tr(L"Gap after accounts"));
+        spec.description = {{text(Tr(L"Space after the last account, before whatever comes next on the taskbar."))}};
+        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RightMargin, pixels);
     }
 
     UiCardSpec reset;
-    reset.title = L"Reset Layout to defaults";
-    reset.description = {{L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. "
-                           L"Accounts are not changed."}};
-    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout, L"Reset");
+    reset.title = text(Tr(L"Reset Layout to defaults"));
+    reset.description = {{text(Tr(L"Tile style, bar style, sizes, identity and text, pace markers, position and "
+                                  L"spacing. Accounts are not changed."))}};
+    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout,
+                                 text(TrCtx(L"button", L"Reset")));
 }
 
 // src/settings/page-display.h
@@ -31486,163 +33700,182 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                     uint32_t& id, float x, float y, float width) {
     const Settings& s = view.settings;
+    const I18nLocale& locale = view.locale;
     const int style = std::clamp(int(s.barLayout), 0, int(std::size(kSettingsTileStyles)) - 1);
+    auto text = [&](I18nKey k) { return I18nText(locale, k); };
+    auto section = [&](float top, I18nKey k) { return UiAddSection(items, id, x, top, width, text(k)); };
 
     // Appearance: the material stays choosable without transparency effects; its notes say how
-    // it shows then, and what the windows use for Tinted wallpaper.
-    y = UiAddSection(items, id, x, y + 16, width, L"Appearance");
+    // it shows then, and what the windows use for Tinted wallpaper, each on its own line.
+    y = section(y + 16, TrCtx(L"settings-section", L"Appearance"));
     {
         UiCardSpec spec;
-        spec.title = L"Material";
-        spec.description = {{L"Background of the details flyout and the settings and usage history windows."}};
+        spec.title = text(Tr(L"Material"));
+        spec.description = {{text(Tr(L"Background of the details flyout and the settings and usage history windows."))}};
         if (!view.transparencyEffects) {
-            spec.description[0].text += L"\nWindows transparency effects are off, so it shows as Solid.";
+            spec.description[0].text += L"\n" + text(Tr(L"Windows transparency effects are off, so it shows as Solid."));
         }
         if (s.material == Material::TintedWallpaper) {
-            spec.description[0].text += L"\nThe settings and usage history windows use Mica for it.";
+            spec.description[0].text += L"\n" + text(Tr(L"The settings and usage history windows use Mica for it."));
         }
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Material, 200,
-                                    {{L"Acrylic", int(Material::Acrylic)},
-                                     {L"Mica", int(Material::Mica)},
-                                     {L"Mica Alt", int(Material::MicaAlt)},
-                                     {L"Tinted wallpaper", int(Material::TintedWallpaper)},
-                                     {L"Solid", int(Material::Solid)}},
+                                    {{text(TrCtx(L"material", L"Acrylic")), int(Material::Acrylic)},
+                                     {text(TrCtx(L"material", L"Mica")), int(Material::Mica)},
+                                     {text(TrCtx(L"material", L"Mica Alt")), int(Material::MicaAlt)},
+                                     {text(TrCtx(L"material", L"Tinted wallpaper")), int(Material::TintedWallpaper)},
+                                     {text(TrCtx(L"material", L"Solid")), int(Material::Solid)}},
                                     int(s.material));
     }
 
     // Values: the bar mode applies to every style. Percentage text is the bars' own; its
     // alignment and the amounts that replace it need it shown.
-    y = UiAddSection(items, id, x, y + 20, width, L"Values");
+    y = section(y + 20, TrCtx(L"settings-section", L"Values"));
     {
         UiCardSpec spec;
-        spec.title = L"Bar mode";
-        spec.description = {{L"Used fills as quota is consumed; Remaining fills with what is left. Colors "
-                             L"always follow usage."}};
+        spec.title = text(Tr(L"Bar mode"));
+        spec.description = {{text(Tr(L"Used fills as quota is consumed; Remaining fills with what is left. Colors "
+                                     L"always follow usage."))}};
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::BarMode, 200,
-                                    {{L"Used", int(BarMode::Used)}, {L"Remaining", int(BarMode::Remaining)}},
+                                    {{text(TrCtx(L"bar-mode", L"Used")), int(BarMode::Used)},
+                                     {text(TrCtx(L"bar-mode", L"Remaining")), int(BarMode::Remaining)}},
                                     int(s.barMode));
     }
     const bool bars = !IsTileLayout(BarLayout(style));
-    const bool text = bars && s.percentTextVisibility != PercentTextVisibility::Never;
-    const std::wstring barsOnly =
-        L"Stacked and Vertical bars only. Current tile style: " + std::wstring(kSettingsTileStyles[style]) + L".";
+    const bool shown = bars && s.percentTextVisibility != PercentTextVisibility::Never;
+    const std::wstring barsOnly = I18nText(locale, Tr(L"Stacked and Vertical bars only. Current tile style: {style}."),
+                                           {{L"style", text(kSettingsTileStyles[style])}});
     {
         UiCardSpec spec;
-        spec.title = L"Percentage text";
-        spec.description = {{L"Percentage on each bar: never, on hover, or always."}};
+        spec.title = text(Tr(L"Percentage text"));
+        spec.description = {{text(Tr(L"Percentage on each bar: never, on hover, or always."))}};
         spec.enabled = bars;
         if (!bars) spec.reason = barsOnly;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextVisibility,
                                     200,
-                                    {{L"Never show", int(PercentTextVisibility::Never)},
-                                     {L"Show on hover", int(PercentTextVisibility::Hover)},
-                                     {L"Always show", int(PercentTextVisibility::Always)}},
+                                    {{text(TrCtx(L"percent-text", L"Never show")), int(PercentTextVisibility::Never)},
+                                     {text(TrCtx(L"percent-text", L"Show on hover")), int(PercentTextVisibility::Hover)},
+                                     {text(TrCtx(L"percent-text", L"Always show")), int(PercentTextVisibility::Always)}},
                                     int(s.percentTextVisibility));
     }
-    PCWSTR textOff = L"Show percentage text on hover or always to change this.";
+    const std::wstring textOff = text(Tr(L"Show percentage text on hover or always to change this."));
     {
         UiCardSpec spec;
-        spec.title = L"Percentage alignment";
-        spec.description = {{L"Adaptive: right side, moving left once the bar reaches the yellow threshold."}};
-        spec.enabled = text;
-        if (!text) spec.reason = bars ? textOff : barsOnly;
+        spec.title = text(Tr(L"Percentage alignment"));
+        spec.description = {{text(Tr(L"Adaptive: right side, moving left once the bar reaches the yellow threshold."))}};
+        spec.enabled = shown;
+        if (!shown) spec.reason = bars ? textOff : barsOnly;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
                                     200,
-                                    {{L"Adaptive", int(PercentTextAlignment::Adaptive)},
-                                     {L"Left", int(PercentTextAlignment::Left)},
-                                     {L"Center", int(PercentTextAlignment::Center)},
-                                     {L"Right", int(PercentTextAlignment::Right)}},
+                                    {{text(TrCtx(L"percent-alignment", L"Adaptive")), int(PercentTextAlignment::Adaptive)},
+                                     {text(TrCtx(L"percent-alignment", L"Left")), int(PercentTextAlignment::Left)},
+                                     {text(TrCtx(L"percent-alignment", L"Center")), int(PercentTextAlignment::Center)},
+                                     {text(TrCtx(L"percent-alignment", L"Right")), int(PercentTextAlignment::Right)}},
                                     int(s.percentTextAlignment));
     }
     {
         UiCardSpec spec;
-        spec.title = L"Amounts on extra usage and credits";
-        spec.description = {{L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
-                             L"Copilot AI credits: spent in Used mode, left in Remaining mode."}};
-        spec.enabled = text;
-        if (!text) spec.reason = bars ? textOff : barsOnly;
+        spec.title = text(Tr(L"Amounts on extra usage and credits"));
+        spec.description = {{text(Tr(L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
+                                     L"Copilot AI credits: spent in Used mode, left in Remaining mode."))}};
+        spec.enabled = shown;
+        if (!shown) spec.reason = bars ? textOff : barsOnly;
         y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
     }
 
     // Usage colors: the palette, and Custom's color per band, each offering the band's default and
     // colorblind colors. Each threshold's dot is its band's usage color (taskbar/meter-model.h) in
     // the chosen palette, taken from thresholds 1, 2 and 3 so equal thresholds still show their
-    // own. The level threshold notifications use (Behavior) says so.
-    y = UiAddSection(items, id, x, y + 20, width, L"Usage colors");
+    // own. The level threshold notifications use (Behavior) says so in its card's own text.
+    y = section(y + 20, TrCtx(L"settings-section", L"Usage colors"));
     {
         UiCardSpec spec;
-        spec.title = L"Palette";
-        spec.description = {{L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a "
-                             L"color you pick for each threshold."}};
+        spec.title = text(Tr(L"Palette"));
+        spec.description = {{text(Tr(L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: "
+                                     L"a color you pick for each threshold."))}};
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::UsagePalette, 200,
-                                    {{L"Default", int(UsagePalette::Default)},
-                                     {L"Colorblind", int(UsagePalette::Colorblind)},
-                                     {L"Custom", int(UsagePalette::Custom)}},
+                                    {{text(TrCtx(L"palette", L"Default")), int(UsagePalette::Default)},
+                                     {text(TrCtx(L"palette", L"Colorblind")), int(UsagePalette::Colorblind)},
+                                     {text(TrCtx(L"palette", L"Custom")), int(UsagePalette::Custom)}},
                                     int(s.usagePalette));
     }
     if (s.usagePalette == UsagePalette::Custom) {
-        const PCWSTR bands[] = {L"Below yellow", L"From yellow", L"From orange", L"From red"};
+        const I18nKey bands[] = {TrCtx(L"usage-band", L"Below yellow"), TrCtx(L"usage-band", L"From yellow"),
+                                 TrCtx(L"usage-band", L"From orange"), TrCtx(L"usage-band", L"From red")};
         for (int i = 0; i < 4; i++) {
             UiCardSpec spec;
-            spec.title = bands[i];
+            spec.title = text(bands[i]);
             y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec,
                                      SettingsField(int(SettingsField::UsageColorBelowYellow) + i),
                                      SettingsField::UsageColorCustom, {kDefaultUsageColors[i], kColorblindUsageColors[i]},
                                      s.customUsageColors[i] & 0x00FFFFFF, i);
         }
     }
-    const std::tuple<SettingsField, PCWSTR, PCWSTR> thresholds[] = {
-        {SettingsField::YellowThreshold, L"Yellow from",
-         s.usagePalette == UsagePalette::Colorblind ? L"Usage below this is blue." :
-         s.usagePalette == UsagePalette::Custom     ? L"Usage below this takes the Below yellow color." :
-                                                      L"Usage below this is green."},
-        {SettingsField::OrangeThreshold, L"Orange from", L"Thresholds stay in order: yellow, orange, red."},
-        {SettingsField::RedThreshold, L"Red from", L""},
+    // Each threshold's text alone, and as a whole with the notifications' level.
+    struct Threshold {
+        SettingsField field;
+        I18nKey title;
+        std::optional<I18nKey> description;
+        I18nKey notifying;
+    };
+    const Threshold yellow =
+        s.usagePalette == UsagePalette::Colorblind ?
+            Threshold{SettingsField::YellowThreshold, Tr(L"Yellow from"), Tr(L"Usage below this is blue."),
+                      Tr(L"Usage below this is blue. Also the level for threshold notifications.")} :
+        s.usagePalette == UsagePalette::Custom ?
+            Threshold{SettingsField::YellowThreshold, Tr(L"Yellow from"),
+                      Tr(L"Usage below this takes the Below yellow color."),
+                      Tr(L"Usage below this takes the Below yellow color. Also the level for threshold notifications.")} :
+            Threshold{SettingsField::YellowThreshold, Tr(L"Yellow from"), Tr(L"Usage below this is green."),
+                      Tr(L"Usage below this is green. Also the level for threshold notifications.")};
+    const Threshold thresholds[] = {
+        yellow,
+        {SettingsField::OrangeThreshold, Tr(L"Orange from"), Tr(L"Thresholds stay in order: yellow, orange, red."),
+         Tr(L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.")},
+        {SettingsField::RedThreshold, Tr(L"Red from"), std::nullopt, Tr(L"Also the level for threshold notifications.")},
     };
     const std::array<uint32_t, 4> colors = UsagePaletteColors(s.usagePalette, s.customUsageColors);
     for (int i = 0; i < 3; i++) {
-        auto [field, title, description] = thresholds[i];
+        const Threshold& threshold = thresholds[i];
         uint32_t color = UsageColor(i + 1, false, 1, 2, 3, colors);
         UiCardSpec spec;
         spec.dot = RGB(color >> 16 & 0xFF, color >> 8 & 0xFF, color & 0xFF);
-        spec.title = title;
-        std::wstring text = description;
-        if (int(s.notificationLevel) == i + 1) {
-            text += std::wstring(text.empty() ? L"" : L" ") + L"Also the level for threshold notifications.";
-        }
-        if (!text.empty()) spec.description = {{text}};
-        y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, field);
+        spec.title = text(threshold.title);
+        if (int(s.notificationLevel) == i + 1) spec.description = {{text(threshold.notifying)}};
+        else if (threshold.description) spec.description = {{text(*threshold.description)}};
+        y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, threshold.field);
     }
 
-    y = UiAddSection(items, id, x, y + 20, width, L"Status");
+    y = section(y + 20, TrCtx(L"settings-section", L"Status"));
     {
         UiCardSpec spec;
-        spec.title = L"Mark stale data";
-        spec.description = {{L"Adds ! when a refresh failed or is overdue."}};
+        spec.title = text(Tr(L"Mark stale data"));
+        spec.description = {{text(Tr(L"Adds ! when a refresh failed or is overdue."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowStaleWarning);
     }
     {
         UiCardSpec spec;
-        spec.title = L"Show provider outages";
-        spec.description = {{L"A warning triangle on an account while its provider's status page reports a problem "
-                             L"with a service it uses: in the orange usage color for degraded service, a partial "
-                             L"outage or maintenance, the red one for a major outage. Off: no status pages are read."}};
+        spec.title = text(Tr(L"Show provider outages"));
+        spec.description = {{text(Tr(L"A warning triangle on an account while its provider's status page reports a "
+                                     L"problem with a service it uses: in the orange usage color for degraded "
+                                     L"service, a partial outage or maintenance, the red one for a major outage. Off: "
+                                     L"no status pages are read."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowProviderOutages);
     }
 
-    y = UiAddSection(items, id, x, y + 20, width, L"Details flyout");
+    y = section(y + 20, TrCtx(L"settings-section", L"Details flyout"));
     {
         UiCardSpec spec;
-        spec.title = L"Additional OpenAI rate limits";
-        spec.description = {{L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in "
-                             L"OpenAI details."}};
+        spec.title = text(Tr(L"Additional OpenAI rate limits"));
+        spec.description = {{text(Tr(L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in "
+                                     L"OpenAI details."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowOpenAiExtraLimits);
     }
 
     UiCardSpec reset;
-    reset.title = L"Reset Display to defaults";
-    reset.description = {{L"Material, values, usage colors, status marks and flyout details."}};
-    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay, L"Reset");
+    reset.title = text(Tr(L"Reset Display to defaults"));
+    reset.description = {{text(Tr(L"Material, values, usage colors, status marks and flyout details."))}};
+    return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay,
+                                 text(TrCtx(L"button", L"Reset")));
 }
 
 // src/settings/page-accounts.h

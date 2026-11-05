@@ -62,15 +62,15 @@ struct SettingsPreviewStrip {
 // The mock taskbar's Start and app icons (24 DIP view box: the Windows logo, a folder, a globe, a
 // terminal; holes wound the other way) and their colors outside high contrast.
 static constexpr PCWSTR kPreviewStartPath =
-    L"M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z";
+    L"M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z";  // i18n-en: path data
 static constexpr PCWSTR kPreviewAppPaths[] = {
     L"M2 6.5A2.5 2.5 0 0 1 4.5 4H9.6l2.2 2.2h7.7A2.5 2.5 0 0 1 22 8.7v9.8a2.5 2.5 0 0 1-2.5 2.5h-15"
     L"A2.5 2.5 0 0 1 2 18.5z",
     L"M12 2.5a9.5 9.5 0 1 1 0 19a9.5 9.5 0 1 1 0-19zM12 4.4a7.6 7.6 0 1 0 0 15.2a7.6 7.6 0 1 0 0-15.2z"
     L"M12 4.4a4.2 7.6 0 1 1 0 15.2a4.2 7.6 0 1 1 0-15.2zM12 4.4a2.4 7.6 0 1 0 0 15.2a2.4 7.6 0 1 0 0-15.2z"
-    L"M4.4 11.1h15.2v1.8H4.4z",
+    L"M4.4 11.1h15.2v1.8H4.4z",  // i18n-en: path data
     L"M4.5 4.5h15A2.5 2.5 0 0 1 22 7v10a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 17V7a2.5 2.5 0 0 1 2.5-2.5z"
-    L"M6 8.3V10.4L8.2 12L6 13.6V15.7L10.9 12zM11.5 14.3V15.9H17.5V14.3z",
+    L"M6 8.3V10.4L8.2 12L6 13.6V15.7L10.9 12zM11.5 14.3V15.9H17.5V14.3z",  // i18n-en: path data
 };
 static constexpr LogoBrand kPreviewStartBrand{0xFF4CC2FF, 0xFF0067C0, 3, 3, 21, 21};
 static constexpr LogoBrand kPreviewAppBrands[] = {
@@ -798,6 +798,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         glyph(icons.ops, L"\uE70E", 11, 0, 24);
         const PCWSTR status[] = {L"\uE701", L"\uE767", L"\uE83F"};
         for (int k = 0; k < 3; k++) glyph(network.ops, status[k], 14, 26.0f * float(k), 26);
+        // A fixed sample time and ISO date in every language: it stands in for Windows' own clock,
+        // whose format follows the regional settings, not the mod's language.
         UiTextStyle clockStyle{UiFamily::Taskbar, 12, 16, DWRITE_FONT_WEIGHT_NORMAL};
         float clockWidth = std::max(measure(L"14:32", clockStyle).width, measure(L"2026-10-31", clockStyle).width);
         label(clock.ops, L"14:32", clockStyle, 6, H / 2 - 16, clockWidth, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 1);
@@ -1084,8 +1086,9 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     // fit on one line.
     float row = y + kPadTop, center = row + kRow / 2;
     UiTextStyle body = UiTextStyleFor(UiFont::Body), caption = UiTextStyleFor(UiFont::Caption);
-    float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, L"Preview", body, 1000, false)).width);
-    PCWSTR switchLabel = L"Show on taskbar";
+    const std::wstring title = I18nText(view.locale, TrCtx(L"preview", L"Preview"));
+    const std::wstring switchLabel = I18nText(view.locale, TrCtx(L"preview", L"Show on taskbar"));
+    float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, body, 1000, false)).width);
     float labelWidth = std::ceil(UiLayoutSize(UiLayout(g, switchLabel, caption, 1000, false)).width);
     float switchRight = x + width - kPadX, labelLeft = switchRight - 40 - 12 - labelWidth;
     if (labelLeft < x + kPadX + titleWidth + 12) {
@@ -1102,9 +1105,9 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
         line.runs.push_back({std::move(s)});
         items.push_back(std::move(line));
     };
-    text(L"Preview", UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
-    std::wstring note = cut ? L"Example accounts, wider than shown: drag to scroll" :
-                              L"Example accounts, updates as you change settings";
+    text(title, UiFont::Body, UiInk::Primary, {x + kPadX, row, x + kPadX + titleWidth, row + kRow});
+    std::wstring note = I18nText(view.locale, cut ? Tr(L"Example accounts, wider than shown: drag to scroll") :
+                                                    Tr(L"Example accounts, updates as you change settings"));
     float noteLeft = x + kPadX + titleWidth + 12;
     if (UiLayoutSize(UiLayout(g, note, caption, 10000, false)).width <= labelLeft - 12 - noteLeft) {
         text(std::move(note), UiFont::Caption, UiInk::Muted, {noteLeft, center - 8, labelLeft - 12, center + 8});

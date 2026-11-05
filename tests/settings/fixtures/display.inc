@@ -551,7 +551,7 @@ static void RunDisplayPageTests() {
                 CHECK(!Control(frame, field).enabled);
             }
             std::wstring reason = L"Stacked and Vertical bars only. Current tile style: " +
-                                  std::wstring(kSettingsTileStyles[style]) + L".";
+                                  std::wstring(kSettingsTileStyles[style].English()) + L".";
             CHECK(TextCount(frame, reason) == 3);
             CHECK(Control(frame, kYellow, 1).enabled && Control(frame, SettingsField::UsagePalette).enabled);
         }

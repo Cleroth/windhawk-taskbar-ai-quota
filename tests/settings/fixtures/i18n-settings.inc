@@ -1,8 +1,10 @@
 // Localization in the settings window and the toolkit: localized runs bound to actions
 // (i18n/ui-runs.h) and the History page's two-link sentence with its links reordered by a test
 // catalog, the language field and its edits, the Behavior page in other languages and with the
-// pseudo-locale stored, the toggles' state text, and the locale in the toolkit's text caches.
-// Expected text is written out by hand from the production catalogs.
+// pseudo-locale stored, the toggles' state text, the locale in the toolkit's text caches, and the
+// Layout and Display pages' templates (placement notes, the current tile style, time span plurals,
+// units, quota keys, the threshold notifications' level). Expected text is written out by hand from
+// the production catalogs.
 
 // A test language whose History page sentence names the hidden accounts' link first.
 static constexpr I18nEntry kTestCatalogLinks[] = {
@@ -477,5 +479,143 @@ static void RunI18nSettingsTests() {
         CHECK(HasText(russian, L"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043C\u0435\u0442\u043A\u0443.") &&
               !HasText(russian, L"Enter a label."));
         CHECK(HasText(frameFor(SettingsUiPage::Accounts, TestLocale(L"de")), L"Geben Sie eine Bezeichnung ein."));
+    });
+
+    Run("layout page in German: each display's placement note a whole sentence with its number in place, a line "
+        "per display; the side taskbar's note names the display mid-sentence", [] {
+        auto build = [](const SettingsView& view) {
+            UiFrame frame;
+            SettingsUiBuildFrame(TestGraphics(), view, {1000, 820}, frame);
+            return frame;
+        };
+        auto note = [](const UiFrame& frame, uint32_t part) {
+            const UiItem* item = UiFindItem(frame, SettingsControlId(SettingsField::Placement, part));
+            return item ? UiRunsText(item->runs) : std::wstring();
+        };
+        SettingsView view = TestView(SettingsUiPage::Layout);
+        view.locale = TestLocale(L"de");
+        view.settings.placement = TaskbarPlacement::LeftSide;
+        view.status.placementFallbacks = {{1, false}, {2, true}};
+        CHECK_TEXT(note(build(view), 8),
+                   L"Bildschirm 1 zeigt die Balken im Infobereich: Die Schaltfl\u00E4chen seiner Taskleiste wurden "
+                   L"nicht gefunden.\nBildschirm 2 zeigt die Balken im Infobereich: Ein anderer Mod steuert den "
+                   L"Platz, den sie brauchen. Starten Sie den Explorer neu, um es erneut zu versuchen.");
+        // Right of Start, its option's name; a two-digit display number.
+        view.settings.placement = TaskbarPlacement::RightOfStart;
+        view.status.placementFallbacks = {{12, false}};
+        UiFrame frame = build(view);
+        CHECK(Control(frame, SettingsField::Placement).text == L"Rechts von Start");
+        CHECK_TEXT(note(frame, 8), L"Bildschirm 12 zeigt die Balken im Infobereich: Seine Startschaltfl\u00E4che ist "
+                                   L"ausgeblendet oder wurde nicht gefunden.");
+        // Side taskbars: the one that takes no bars gets no tray line, the other one its side's line.
+        view.status.placementFallbacks = {{1, false, true}, {2, false, true}};
+        view.status.sideTaskbars = {{1, true}, {2, false}};
+        frame = build(view);
+        CHECK_TEXT(note(frame, 8), L"Bildschirm 2 zeigt die Balken im Infobereich: Seine Taskleiste befindet sich an "
+                                   L"einem seitlichen Bildschirmrand.");
+        CHECK_TEXT(note(frame, 9),
+                   L"Die Taskleiste von Bildschirm 1 befindet sich an einem seitlichen Bildschirmrand: Ihr "
+                   L"Infobereich nimmt in diesem Windows-Build keine Balken auf. Aktualisieren Sie Windows, um sie "
+                   L"anzuzeigen.\nDie Taskleiste von Bildschirm 2 befindet sich an einem seitlichen Bildschirmrand: "
+                   L"Die Konten werden untereinander gestapelt, jeder Stil wird an ihre Breite angepasst. Die Vorschau "
+                   L"zeigt sie nebeneinander in einer unteren Taskleiste.");
+    });
+
+    Run("display page: the bar-only reason names the current tile style by its gallery caption, in Russian and "
+        "Japanese; the preview card's title, switch label and note in Japanese", [] {
+        SettingsView view = TestView(SettingsUiPage::Display);
+        view.locale = TestLocale(L"ru");
+        view.settings.barLayout = BarLayout::SegmentedRing;
+        // Только для стилей «Полосы стопкой» и «Вертикальные полосы». Текущий стиль плитки: «Сегментное кольцо».
+        CHECK(TextCount(DisplayFrame(view),
+                        L"\u0422\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u0441\u0442\u0438\u043B\u0435\u0439 "
+                        L"\u00AB\u041F\u043E\u043B\u043E\u0441\u044B \u0441\u0442\u043E\u043F\u043A\u043E\u0439\u00BB "
+                        L"\u0438 \u00AB\u0412\u0435\u0440\u0442\u0438\u043A\u0430\u043B\u044C\u043D\u044B\u0435 "
+                        L"\u043F\u043E\u043B\u043E\u0441\u044B\u00BB. \u0422\u0435\u043A\u0443\u0449\u0438\u0439 "
+                        L"\u0441\u0442\u0438\u043B\u044C \u043F\u043B\u0438\u0442\u043A\u0438: \u00AB\u0421\u0435\u0433"
+                        L"\u043C\u0435\u043D\u0442\u043D\u043E\u0435 \u043A\u043E\u043B\u044C\u0446\u043E\u00BB.") == 3);
+        view.page = SettingsUiPage::Layout;
+        CHECK(Control(DisplayFrame(view), SettingsField::BarLayout, int(BarLayout::SegmentedRing)).text ==
+              L"\u0421\u0435\u0433\u043C\u0435\u043D\u0442\u043D\u043E\u0435 \u043A\u043E\u043B\u044C\u0446\u043E");
+        view.page = SettingsUiPage::Display;
+        view.locale = TestLocale(L"ja");
+        view.settings.barLayout = BarLayout::Sparkline;
+        UiFrame frame = DisplayFrame(view);
+        // ［積み上げバー］と［縦バー］のみ。現在のタイル スタイル: 使用量グラフ。
+        CHECK(TextCount(frame, L"\uFF3B\u7A4D\u307F\u4E0A\u3052\u30D0\u30FC\uFF3D\u3068\uFF3B\u7E26\u30D0\u30FC\uFF3D"
+                               L"\u306E\u307F\u3002\u73FE\u5728\u306E\u30BF\u30A4\u30EB \u30B9\u30BF\u30A4\u30EB: "
+                               L"\u4F7F\u7528\u91CF\u30B0\u30E9\u30D5\u3002") == 3);
+        // プレビュー, タスク バーに表示, サンプル アカウント (設定の変更を反映)
+        const UiItem* title = nullptr;
+        for (const UiItem& item : frame.main) {
+            if (!item.runs.empty() && item.runs[0].text == L"\u30D7\u30EC\u30D3\u30E5\u30FC") title = &item;
+        }
+        CHECK(title && HasTextIn(frame.main, L"\u30BF\u30B9\u30AF \u30D0\u30FC\u306B\u8868\u793A") &&
+              HasTextIn(frame.main, L"\u30B5\u30F3\u30D7\u30EB \u30A2\u30AB\u30A6\u30F3\u30C8 (\u8A2D\u5B9A\u306E"
+                                    L"\u5909\u66F4\u3092\u53CD\u6620)"));
+        CHECK(!HasTextIn(frame.main, L"Preview") && !HasTextIn(frame.main, L"Example accounts"));
+    });
+
+    Run("layout page in Russian: the time spans' plurals agree with their hours, the number boxes' pixel unit, the "
+        "quota keys' description listing Russian keys; the usage graph's section named as its tile style", [] {
+        SettingsView view = TestView(SettingsUiPage::Layout);
+        view.locale = TestLocale(L"ru");
+        UiFrame frame = DisplayFrame(view);
+        // пикс.
+        for (SettingsField field : {SettingsField::BarGap, SettingsField::LabelGap, SettingsField::AccountMargin,
+                                    SettingsField::RightMargin}) {
+            CHECK(Control(frame, field, 3).runs[0].text == L"\u043F\u0438\u043A\u0441.");
+        }
+        // Короткое обозначение рядом с каждой полосой: 5ч, 7д, Fa, Ar, Ex, Кр, Мс.
+        CHECK(HasText(frame, L"\u041A\u043E\u0440\u043E\u0442\u043A\u043E\u0435 \u043E\u0431\u043E\u0437\u043D\u0430"
+                             L"\u0447\u0435\u043D\u0438\u0435 \u0440\u044F\u0434\u043E\u043C \u0441 \u043A\u0430\u0436"
+                             L"\u0434\u043E\u0439 \u043F\u043E\u043B\u043E\u0441\u043E\u0439: 5\u0447, 7\u0434, Fa, Ar, "
+                             L"Ex, \u041A\u0440, \u041C\u0441."));
+        view.settings.barLayout = BarLayout::Sparkline;
+        frame = DisplayFrame(view);
+        // Всё окно; 12 часов, 24 часа, 36 часов, 48 часов в обе стороны (few for 24 only).
+        const std::vector<std::wstring> spans = {
+            L"\u0412\u0441\u0451 \u043E\u043A\u043D\u043E",
+            L"12 \u0447\u0430\u0441\u043E\u0432 \u0432 \u043E\u0431\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B",
+            L"24 \u0447\u0430\u0441\u0430 \u0432 \u043E\u0431\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B",
+            L"36 \u0447\u0430\u0441\u043E\u0432 \u0432 \u043E\u0431\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B",
+            L"48 \u0447\u0430\u0441\u043E\u0432 \u0432 \u043E\u0431\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B"};
+        CHECK(TestOptionTexts(Control(frame, SettingsField::SparklineSpan)) == spans);
+        std::vector<std::wstring> hover = {L"\u041E\u0442\u043A\u043B."};  // Откл.
+        hover.insert(hover.end(), spans.begin(), spans.end());
+        const UiItem& onHover = Control(frame, SettingsField::SparklineHoverSpan);
+        CHECK(TestOptionTexts(onHover) == hover && onHover.options[0].value == -1);
+        // График использования, as on its gallery card.
+        const std::wstring graph = L"\u0413\u0440\u0430\u0444\u0438\u043A \u0438\u0441\u043F\u043E\u043B\u044C\u0437"
+                                   L"\u043E\u0432\u0430\u043D\u0438\u044F";
+        CHECK(Control(frame, SettingsField::BarLayout, int(BarLayout::Sparkline)).text == graph);
+        CHECK(std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+            return item.kind == UiItemKind::Text && item.font == UiFont::BodyStrong && UiRunsText(item.runs) == graph;
+        }));
+    });
+
+    Run("display page in Chinese: the threshold that threshold notifications use reads as one whole text with its "
+        "own description, alone where it has none; the other cards keep theirs", [] {
+        SettingsView view = TestView(SettingsUiPage::Display);
+        view.locale = TestLocale(L"zh-Hans");
+        view.settings.notificationLevel = NotificationLevel::Yellow;
+        UiFrame frame = DisplayFrame(view);
+        // 低于此值的用量显示为绿色。也是阈值通知的触发级别。 / 阈值始终保持顺序：黄色、橙色、红色。
+        const std::wstring also = L"\u4E5F\u662F\u9608\u503C\u901A\u77E5\u7684\u89E6\u53D1\u7EA7\u522B\u3002";
+        const std::wstring order = L"\u9608\u503C\u59CB\u7EC8\u4FDD\u6301\u987A\u5E8F\uFF1A\u9EC4\u8272\u3001\u6A59"
+                                   L"\u8272\u3001\u7EA2\u8272\u3002";
+        CHECK(TextCount(frame, L"\u4F4E\u4E8E\u6B64\u503C\u7684\u7528\u91CF\u663E\u793A\u4E3A\u7EFF\u8272\u3002" + also) == 1);
+        CHECK(TextCount(frame, order) == 1 && TextCount(frame, also) == 0);
+        view.settings.notificationLevel = NotificationLevel::Orange;
+        frame = DisplayFrame(view);
+        CHECK(TextCount(frame, order + also) == 1 && TextCount(frame, order) == 0);
+        view.settings.notificationLevel = NotificationLevel::Red;
+        view.settings.usagePalette = UsagePalette::Colorblind;
+        frame = DisplayFrame(view);
+        CHECK(TextCount(frame, also) == 1 &&
+              TextCount(frame, L"\u4F4E\u4E8E\u6B64\u503C\u7684\u7528\u91CF\u663E\u793A\u4E3A\u84DD\u8272\u3002") == 1);
+        CHECK(HasText(frame, L"\u9EC4\u8272\u8D77\u70B9"));  // 黄色起点
+        view.settings.notificationLevel = NotificationLevel::Off;
+        CHECK(!HasText(DisplayFrame(view), also));
     });
 }

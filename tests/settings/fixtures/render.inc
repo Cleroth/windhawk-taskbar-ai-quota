@@ -1111,19 +1111,24 @@ static void RunRenders(const std::wstring& directory) {
         }
         // The localization review's languages, light at 96 and 144 DPI: Behavior and History whole
         // (the client as tall as the page), each language stored as the choice, the toolkit in its
-        // locale as the settings client sets it.
+        // locale as the settings client sets it; Layout (with a side taskbar's note) and Display at
+        // 96 DPI only.
         for (std::string_view tag : {"zh-Hans", "qps-ploc"}) {
             std::wstring wide(tag.begin(), tag.end());
             I18nLocale locale(*I18nLanguageByTag(wide));
             for (UINT dpi : {96u, 144u}) {
                 for (auto [page, pageName] : {std::pair{SettingsUiPage::Behavior, "behavior"},
-                                              std::pair{SettingsUiPage::History, "history"}}) {
+                                              std::pair{SettingsUiPage::History, "history"},
+                                              std::pair{SettingsUiPage::Layout, "layout"},
+                                              std::pair{SettingsUiPage::Display, "display"}}) {
+                    if (dpi != 96 && (page == SettingsUiPage::Layout || page == SettingsUiPage::Display)) continue;
                     std::string name = "render-i18n-" + std::string(pageName) + "-" + std::string(tag) + "-light-" +
                                        std::to_string(dpi) + ".png";
                     Run(name, [&] {
                         SettingsView view = TestView(page);
                         view.locale = locale;
                         view.settings.language = wide;
+                        if (page == SettingsUiPage::Layout) view.status.sideTaskbars = {{2, false}};
                         g.locale = locale.LocaleName();
                         UiFrame frame;
                         SettingsUiBuildFrame(g, view, client, frame);
