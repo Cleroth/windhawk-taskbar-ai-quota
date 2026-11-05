@@ -174,10 +174,11 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
         SetWindowPos(GetDlgItem(hWnd, kLoginStatus), nullptr, sc(12), sc(100), sc(424), sc(20), flags);
     }
     // The device flow's one button spans the link flows' two.
-    SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(12), sc(buttonsTop), sc(state.poll ? 246 : 120),
-                 sc(30), flags);
-    if (!state.poll) {
-        SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
+    if (state.poll) {
+        SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(12), sc(buttonsTop), sc(246), sc(30), flags);
+    } else {
+        SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(12), sc(buttonsTop), sc(120), sc(30), flags);
+        SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
     }
     if (state.alternate) {
         SetWindowPos(GetDlgItem(hWnd, kLoginAlternate), nullptr, sc(264), sc(buttonsTop), sc(82), sc(30), flags);
@@ -247,8 +248,8 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             if (st->poll) {
                 create(0, L"BUTTON", L"Copy code and open GitHub", WS_TABSTOP | BS_DEFPUSHBUTTON, kLoginCopyLink);
             } else {
-                create(0, L"BUTTON", L"Copy link", WS_TABSTOP | BS_PUSHBUTTON, kLoginCopyLink);
                 create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
+                create(0, L"BUTTON", L"Copy link", WS_TABSTOP | BS_PUSHBUTTON, kLoginCopyLink);
             }
             if (st->alternate) create(0, L"BUTTON", st->alternate, WS_TABSTOP | BS_PUSHBUTTON, kLoginAlternate);
             if (st->listener == INVALID_SOCKET && !st->poll) {
@@ -407,7 +408,7 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     if (st.poll) SetWindowTextW(GetDlgItem(wnd, kLoginStatus), st.status);
     ShowWindow(wnd, SW_SHOW);
     SetForegroundWindow(wnd);
-    SetFocus(st.edit ? st.edit : GetDlgItem(wnd, kLoginCopyLink));
+    SetFocus(st.edit ? st.edit : GetDlgItem(wnd, st.poll ? kLoginCopyLink : kLoginOpenLink));
 
     MSG msg;
     if (st.poll) {
