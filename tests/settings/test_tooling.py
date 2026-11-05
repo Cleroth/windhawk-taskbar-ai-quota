@@ -15,10 +15,12 @@ import run
 class ToolingTests(unittest.TestCase):
     PASSING = "RESULT 3 passed, 0 failed; 9 assertions\n"
 
-    def invoke_runner(self, arguments=(), freshness_exit=0, model_output="no summary\n", child=None, reads=None):
+    def invoke_runner(self, arguments=(), freshness_exit=0, model_output="no summary\n", mod_check_output="",
+                      child=None, reads=None):
         """Exercise real orchestration with no filesystem writes; child execution only through `child`.
 
-        `reads` collects the names of the files read as text (extraction manifests)."""
+        Returns the exit code, the saved results and the phases run, in results order. `reads` collects
+        the names of the files read as text (extraction manifests)."""
         def read_text(path, **_):
             if reads is not None:
                 reads.append(path.name)
@@ -26,7 +28,8 @@ class ToolingTests(unittest.TestCase):
 
         def fake_phase(root, name, command):
             code = freshness_exit if name == "freshness" else 0
-            text = model_output if name == "model" else self.PASSING if name in run.SUMMARY_PHASES else ""
+            text = (model_output if name == "model" else mod_check_output if name == "mod-check" else
+                    self.PASSING if name in run.SUMMARY_PHASES else "")
             return {"name": name, "command": command, "log": f"{name}.log",
                     "exit_code": code, "ok": code == 0}, text
 
@@ -39,22 +42,23 @@ class ToolingTests(unittest.TestCase):
               patch.object(Path, "write_text") as saved,
               patch.object(run, "hashes", return_value={"fixture": "stable"}),
               patch.object(run, "renders", return_value=["render-a.png"]),
-              patch.object(run, "phase", side_effect=fake_phase) as phases,
+              patch.object(run, "phase", side_effect=fake_phase),
               patch.object(run.subprocess, "run",
                            side_effect=child or AssertionError("Child execution forbidden in tooling tests")),
               redirect_stdout(output)):
             code = run.main()
-        return code, json.loads(saved.call_args.args[0]), [call.args[1] for call in phases.call_args_list]
+        results = json.loads(saved.call_args.args[0])
+        return code, results, [step["name"] for step in results["phases"]]
 
-    PHASES = ["extract", "extract-history", "extract-host", "model-compile", "model", "render",
-              "history-compile", "history", "history-render", "host-compile", "probe-compile", "host-probe",
-              "extract-popup", "popup-compile", "popup-probe"]
+    EXTRACTS = ["extract", "extract-history", "extract-host", "extract-popup"]
+    BUILDS = ["model-compile", "history-compile", "host-compile", "probe-compile", "popup-compile"]
+    TESTS = ["model", "render", "history", "history-render", "host-probe", "popup-probe"]
 
     def test_default_phases_and_summary_required(self):
         reads = []
         code, results, names = self.invoke_runner(model_output=self.PASSING, reads=reads)
         self.assertEqual(code, 0)
-        self.assertEqual(names, ["tooling", "freshness", *self.PHASES])
+        self.assertEqual(names, ["tooling", "freshness", *self.EXTRACTS, *self.BUILDS, "mod-check", *self.TESTS])
         self.assertEqual(reads, ["settings.manifest.json", "history.manifest.json", "ui-host.manifest.json",
                                  "popup.manifest.json"])
         self.assertEqual(results["phases"][-1]["tests"], {"passed": 3, "failed": 0, "assertions": 9})
@@ -109,9 +113,16 @@ class ToolingTests(unittest.TestCase):
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             self.invoke_runner(["--tooltip-interactive", "--popup-interactive"])
 
-    def test_explicit_other_source_skips_freshness(self):
+    def test_mod_check_diagnostics_stop_before_tests(self):
+        code, results, names = self.invoke_runner(
+            model_output=self.PASSING, mod_check_output="x.cpp:1:2: warning: unused [-Wunused]\n1 warning generated.\n")
+        self.assertEqual(code, 1)
+        self.assertEqual(names, ["tooling", "freshness", *self.EXTRACTS, *self.BUILDS, "mod-check"])
+        self.assertEqual(results["phases"][-1]["evidence_error"], "mod-check: 1 compiler diagnostic(s)")
+
+    def test_explicit_other_source_skips_freshness_and_mod_check(self):
         _, _, names = self.invoke_runner(["--source", "other.wh.cpp"], model_output=self.PASSING)
-        self.assertEqual(names, ["tooling", *self.PHASES])
+        self.assertEqual(names, ["tooling", *self.EXTRACTS, *self.BUILDS, *self.TESTS])
 
     def test_renders_require_reported_png_files(self):
         with self.assertRaises(ValueError):

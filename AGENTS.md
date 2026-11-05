@@ -64,7 +64,7 @@ Build files go to `.out/icon/`. Nothing references the two files.
   taskbar preview) offscreen, probes the toolkit's native
   window host (popup, tooltip, text boxes, sliders and the color dialog included) and the dropdown
   popup's capture/activation (`--popup-interactive` and the tooltip's pointer routing,
-  `--tooltip-interactive`: by hand); guide:
+  `--tooltip-interactive`: by hand); its full run includes `check-mod.ps1`'s check; guide:
   [tests/settings/AGENTS.md](tests/settings/AGENTS.md).
 - A full integration check still requires Windhawk loading the mod into `explorer.exe`.
 - When changed native-control behavior is hidden by stubs, verify the assumed API/message contract

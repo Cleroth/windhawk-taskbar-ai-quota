@@ -1,5 +1,6 @@
-"""Run source-extracted settings tests, offscreen renders and native-host and popup probes."""
+"""Run source-extracted settings tests, offscreen renders and native-host and popup probes, plus the mod check."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -28,10 +29,8 @@ def hashes():
 
 
 def phase(root, name, command, timeout=120):
-    print(f"\n=== {name} ===", flush=True)
     step = {"name": name, "command": command, "log": f"{name}.log"}
     try:
-        # Always wait for exit before executing a binary or starting another compile.
         process = subprocess.run(command, cwd=root, stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT, timeout=timeout)
         output = process.stdout
@@ -44,8 +43,6 @@ def phase(root, name, command, timeout=120):
         step.update(exit_code=1, error=str(error))
     (root / step["log"]).write_bytes(output)
     text = output.decode("utf-8", errors="replace").replace("\r\n", "\n")
-    print(text.encode(sys.stdout.encoding or "utf-8", errors="replace")
-          .decode(sys.stdout.encoding or "utf-8"), end="", flush=True)
     step["ok"] = step["exit_code"] == 0
     return step, text
 
@@ -111,12 +108,12 @@ def main():
                      "-luser32", "-lgdi32", "-ladvapi32", "-lcomctl32", "-lcomdlg32", "-lshell32", "-luuid"]
         extract = [sys.executable, "-B", str(HERE / "extract.py"), "--source", str(source),
                    "--expected-hash", results["source_sha256_before"]]
+        default_source = source == DEFAULT_SOURCE.resolve()
         setup = [
             ("tooling", [sys.executable, "-B", str(HERE / "test_tooling.py")]),
             # A stale generated file would test code that src/ no longer contains.
             *([("freshness", ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                              str(REPO / "generate-mod.ps1"), "-Check"])]
-              if source == DEFAULT_SOURCE.resolve() else []),
+                              str(REPO / "generate-mod.ps1"), "-Check"])] if default_source else []),
         ]
         popup_build = [
             ("extract-popup", extract + ["--output", str(popup_cpp), "--target", "popup"]),
@@ -130,44 +127,68 @@ def main():
             ("probe-compile", native + ["-municode", str(HERE / "host-probe.cpp"), "-o", str(probe),
                                         "-lole32", "-luser32", "-lgdi32"]),
         ]
-        commands = [*setup, *popup_build] if args.popup_interactive else [*setup, *host_build] if args.tooltip_interactive else [
-            *setup,
-            ("extract", extract + ["--output", str(cpp)]),
-            ("extract-history", extract + ["--output", str(history_cpp), "--target", "history"]),
-            host_build[0],
-            ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), *render_libs]),
-            ("model", [str(exe)]),
-            ("render", [str(exe), "--render-dir", str(root)]),
-            ("history-compile", flags + ["-I", str(HERE), str(history_cpp), "-o", str(history_exe), *render_libs]),
-            ("history", [str(history_exe)]),
-            ("history-render", [str(history_exe), "--render-dir", str(root)]),
-            *host_build[1:],
-            ("host-probe", [str(probe), str(host_dll)]),
-            *popup_build,
-            ("popup-probe", [str(popup_exe)]),
-        ]
-        for name, command in commands:
-            step, text = phase(root, name, command)
-            results["phases"].append(step)
-            if name in SUMMARY_PHASES:
-                try:
-                    step["tests"] = summary(name, text)
-                    if name in RENDER_PHASES:
-                        results.setdefault("renders", []).extend(renders(root, text))
-                    if name.endswith("-probe"):
-                        step["observations"] = re.findall(r"^(?:HANDLES|LOSS|LOG|CONTEXT|OBSERVE|NOTE) [^\n]+",
-                                                          text, re.M)
-                except ValueError as error:
-                    step.update(ok=False, evidence_error=str(error))
-                    print(error, flush=True)
-            if name.startswith("extract") and step["ok"]:
-                extracted = {"extract": cpp, "extract-history": history_cpp, "extract-host": host_cpp,
-                             "extract-popup": popup_cpp}[name]
-                manifest = extracted.with_suffix(".manifest.json")
-                results.setdefault("extraction", {})[name] = json.loads(manifest.read_text(encoding="utf-8"))
-            if not step["ok"]:
+        # Groups run in order and a group's phases concurrently: builds share a group, while tests run
+        # one at a time, only after every build has exited.
+        groups = [[step] for step in setup]
+        if args.popup_interactive:
+            groups += [popup_build[:1], popup_build[1:]]
+        elif args.tooltip_interactive:
+            groups += [host_build[:1], host_build[1:]]
+        else:
+            groups += [
+                [("extract", extract + ["--output", str(cpp)]),
+                 ("extract-history", extract + ["--output", str(history_cpp), "--target", "history"]),
+                 host_build[0], popup_build[0]],
+                [("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), *render_libs]),
+                 ("history-compile", flags + ["-I", str(HERE), str(history_cpp), "-o", str(history_exe), *render_libs]),
+                 *host_build[1:], popup_build[1],
+                 # The mod's own syntax and metadata check rides along with the builds.
+                 *([("mod-check", ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                                   str(REPO / "check-mod.ps1")])] if default_source else [])],
+                *([test] for test in [
+                    ("model", [str(exe)]),
+                    ("render", [str(exe), "--render-dir", str(root)]),
+                    ("history", [str(history_exe)]),
+                    ("history-render", [str(history_exe), "--render-dir", str(root)]),
+                    ("host-probe", [str(probe), str(host_dll)]),
+                    ("popup-probe", [str(popup_exe)]),
+                ]),
+            ]
+        for group in groups:
+            with ThreadPoolExecutor(len(group)) as pool:
+                outcomes = list(pool.map(lambda job: phase(root, *job), group))
+            for step, text in outcomes:
+                name = step["name"]
+                print(f"\n=== {name} ===", flush=True)
+                print(text.encode(sys.stdout.encoding or "utf-8", errors="replace")
+                      .decode(sys.stdout.encoding or "utf-8"), end="", flush=True)
+                results["phases"].append(step)
+                if name == "mod-check" and step["ok"]:
+                    # check-mod.ps1 is clean only with no diagnostics; warnings alone don't fail it.
+                    diagnostics = len(re.findall(r":\d+:\d+: (?:warning|error|fatal error): ", text))
+                    if diagnostics:
+                        step.update(ok=False, evidence_error=f"mod-check: {diagnostics} compiler diagnostic(s)")
+                        print(step["evidence_error"], flush=True)
+                if name in SUMMARY_PHASES:
+                    try:
+                        step["tests"] = summary(name, text)
+                        if name in RENDER_PHASES:
+                            results.setdefault("renders", []).extend(renders(root, text))
+                        if name.endswith("-probe"):
+                            step["observations"] = re.findall(r"^(?:HANDLES|LOSS|LOG|CONTEXT|OBSERVE|NOTE) [^\n]+",
+                                                              text, re.M)
+                    except ValueError as error:
+                        step.update(ok=False, evidence_error=str(error))
+                        print(error, flush=True)
+                if name.startswith("extract") and step["ok"]:
+                    extracted = {"extract": cpp, "extract-history": history_cpp, "extract-host": host_cpp,
+                                 "extract-popup": popup_cpp}[name]
+                    manifest = extracted.with_suffix(".manifest.json")
+                    results.setdefault("extraction", {})[name] = json.loads(manifest.read_text(encoding="utf-8"))
+            if not all(step["ok"] for step, _ in outcomes):
                 break
-        results["ok"] = len(results["phases"]) == len(commands) and all(step["ok"] for step in results["phases"])
+        results["ok"] = (len(results["phases"]) == sum(map(len, groups)) and
+                         all(step["ok"] for step in results["phases"]))
         if (args.popup_interactive or args.tooltip_interactive) and results["ok"]:
             # By hand, attached to this console, no timeout; the log is the evidence.
             name = "popup-interactive" if args.popup_interactive else "tooltip-interactive"

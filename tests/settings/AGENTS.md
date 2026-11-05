@@ -41,7 +41,11 @@ Options: `--source PATH` (default: the repo-root generated file), `--compiler PA
 `C:\Program Files\Windhawk\Compiler\bin\clang++.exe`), `--output DIRECTORY` (default:
 `tests/settings/.out/`; the parent for a new run directory). With the default source, a
 `freshness` phase runs `pwsh generate-mod.ps1 -Check` first and fails on a stale file; it never
-regenerates.
+regenerates. The default source also gets a `mod-check` phase (`check-mod.ps1`, failing on any
+compiler diagnostic), so a full run replaces a separate `check-mod.ps1`.
+
+Order: setup, then all extractions together, then all builds (and `mod-check`) together, then
+the tests one at a time; a failed group stops the run. No build overlaps a test.
 
 ## Phases
 
@@ -257,8 +261,8 @@ credential or Explorer access.
 
 ## Success and evidence limits
 
-Exit 0 requires every phase to pass: tooling self-tests, freshness (default source), the
-extractions, compiles, exactly one successful `RESULT` summary from `model`, `render`, `history`,
+Exit 0 requires every phase to pass: tooling self-tests, freshness and the mod check (default
+source), the extractions, compiles, exactly one successful `RESULT` summary from `model`, `render`, `history`,
 `history-render`, `host-probe` and `popup-probe`, every reported render present as a PNG, and
 source and harness unchanged during the run. A pass covers extracted logic, offscreen rendering and the host's
 window/thread/teardown contract in a test process (the controller against a test store, the
