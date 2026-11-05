@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota
-// @name            Taskbar AI Quota Bars
+// @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
 // @version         2.10.0
 // @author          Cleroth
@@ -16,7 +16,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar AI Quota Bars
+# Taskbar AI Quota
 
 A Windows 11 taskbar mod that shows subscription quota bars next to the system tray, or
 elsewhere in the tray or beside Start. On a taskbar at the left or right of the screen (Windows
@@ -22863,7 +22863,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
             items.push_back(std::move(line));
             lineTop += height;
         };
-        addLine(L"Taskbar AI Quota Bars", UiFont::Subtitle, UiInk::Primary, 26);
+        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);
         lineTop += 2;
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);
@@ -24542,7 +24542,7 @@ struct SettingsUiClient final : UiHostClient {
         if (failures > explained) {
             Ask(host, L"Could not save settings. The change is kept here with its error; "
                       L"change it again to retry.",
-                L"Taskbar AI Quota Bars", MB_OK | MB_ICONERROR);
+                L"Taskbar AI Quota", MB_OK | MB_ICONERROR);
         }
         for (const SettingsNotice& notice : notices) {
             if (Unloading() || host.closing) break;
@@ -25119,7 +25119,7 @@ struct SettingsUiClient final : UiHostClient {
             close = Ask(host,
                         L"A change couldn't be saved; it is shown with its error.\n\n"
                         L"Discard unsaved changes and close the window?",
-                        L"Taskbar AI Quota Bars", MB_YESNO | MB_ICONWARNING) == IDYES ||
+                        L"Taskbar AI Quota", MB_YESNO | MB_ICONWARNING) == IDYES ||
                     Unloading();
             if (close) edits.Discard();
         }
@@ -25175,7 +25175,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         config.mainClass = kSettingsUiClass;
         config.viewportClass = kSettingsUiViewportClass;
         config.popupClass = kSettingsUiPopupClass;
-        config.title = L"Taskbar AI Quota Bars \u2014 Settings";
+        config.title = L"Taskbar AI Quota \u2014 Settings";
         config.activateMessage = GetSettingsActivateMessage();
         config.icon = SettingsAppIcon({});
         config.appId = kWindowAppId;
@@ -28668,7 +28668,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
             config.viewportClass = kHistoryUiViewportClass;
             config.popupClass = kHistoryUiPopupClass;
             config.tooltipClass = kHistoryUiTooltipClass;
-            config.title = L"Taskbar AI Quota Bars \u2014 Usage history";
+            config.title = L"Taskbar AI Quota \u2014 Usage history";
             config.activateMessage = kHistoryActivateMessage;
             config.size = {1100, 830};
             config.minSize = {800, 590};

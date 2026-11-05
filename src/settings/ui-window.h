@@ -92,7 +92,7 @@ struct SettingsUiClient final : UiHostClient {
         if (failures > explained) {
             Ask(host, L"Could not save settings. The change is kept here with its error; "
                       L"change it again to retry.",
-                L"Taskbar AI Quota Bars", MB_OK | MB_ICONERROR);
+                L"Taskbar AI Quota", MB_OK | MB_ICONERROR);
         }
         for (const SettingsNotice& notice : notices) {
             if (Unloading() || host.closing) break;
@@ -669,7 +669,7 @@ struct SettingsUiClient final : UiHostClient {
             close = Ask(host,
                         L"A change couldn't be saved; it is shown with its error.\n\n"
                         L"Discard unsaved changes and close the window?",
-                        L"Taskbar AI Quota Bars", MB_YESNO | MB_ICONWARNING) == IDYES ||
+                        L"Taskbar AI Quota", MB_YESNO | MB_ICONWARNING) == IDYES ||
                     Unloading();
             if (close) edits.Discard();
         }

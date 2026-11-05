@@ -78,7 +78,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
             items.push_back(std::move(line));
             lineTop += height;
         };
-        addLine(L"Taskbar AI Quota Bars", UiFont::Subtitle, UiInk::Primary, 26);
+        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);
         lineTop += 2;
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);

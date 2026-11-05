@@ -40,7 +40,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         config.mainClass = kSettingsUiClass;
         config.viewportClass = kSettingsUiViewportClass;
         config.popupClass = kSettingsUiPopupClass;
-        config.title = L"Taskbar AI Quota Bars \u2014 Settings";
+        config.title = L"Taskbar AI Quota \u2014 Settings";
         config.activateMessage = GetSettingsActivateMessage();
         config.icon = SettingsAppIcon({});
         config.appId = kWindowAppId;

@@ -21,7 +21,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
             config.viewportClass = kHistoryUiViewportClass;
             config.popupClass = kHistoryUiPopupClass;
             config.tooltipClass = kHistoryUiTooltipClass;
-            config.title = L"Taskbar AI Quota Bars \u2014 Usage history";
+            config.title = L"Taskbar AI Quota \u2014 Usage history";
             config.activateMessage = kHistoryActivateMessage;
             config.size = {1100, 830};
             config.minSize = {800, 590};
