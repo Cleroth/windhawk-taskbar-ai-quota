@@ -247,7 +247,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
-        // chart, the long windows' span and its swap on hover, then the current position cues.
+        // chart, the long windows' span and its swap on hover, then the current position cues and
+        // the reading's size.
         y = UiAddSection(items, id, x, y + 20, width, L"Usage graph");
         {
             UiCardSpec spec;
@@ -332,6 +333,13 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.title = kCues[k].title;
             spec.description = {{kCues[k].description}};
             y = SettingsAddToggleCard(g, view, items, id, x, k ? y + 3 : y, width, spec, kCues[k].field);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Reading size";
+            spec.description = {{L"Percent of the current reading\u2019s standard size: the ring and its dot, or the "
+                                 L"plain dot."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineReadingScale);
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);

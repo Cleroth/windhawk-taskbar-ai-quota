@@ -46,6 +46,7 @@ enum class SettingsField : uint8_t {
     SparklineNowLine,
     SparklineNowCaret,
     SparklineRing,
+    SparklineReadingScale,  // Percent
     SparklineSpan,    // A SparklineSpan
     SparklineHoverSpan,  // A SparklineSpan, or -1: none
     LogoScale,        // Percent
@@ -133,6 +134,8 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::SparklineHeight: return SettingsNumberRange{kSparklineHeightMin, kSparklineHeightMax};
         case SettingsField::SparklineTextSize:
             return SettingsNumberRange{kSparklineTextSizeMin, kSparklineTextSizeMax};
+        case SettingsField::SparklineReadingScale:
+            return SettingsNumberRange{kSparklineReadingScaleMin, kSparklineReadingScaleMax};
         case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
         case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
         case SettingsField::BadgeOffsetX:
@@ -171,8 +174,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::SparklineOutline,
                     SettingsField::SparklineExtra,  SettingsField::SparklineElapsed,
                     SettingsField::SparklineNowLine, SettingsField::SparklineNowCaret,
-                    SettingsField::SparklineRing,   SettingsField::SparklineSpan,
-                    SettingsField::SparklineHoverSpan,
+                    SettingsField::SparklineRing,   SettingsField::SparklineReadingScale,
+                    SettingsField::SparklineSpan,   SettingsField::SparklineHoverSpan,
                     SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
@@ -228,6 +231,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::SparklineNowLine: return s.sparklineNowLine;
         case SettingsField::SparklineNowCaret: return s.sparklineNowCaret;
         case SettingsField::SparklineRing: return s.sparklineRing;
+        case SettingsField::SparklineReadingScale: return s.sparklineReadingScale;
         case SettingsField::SparklineSpan: return int(s.sparklineSpan);
         case SettingsField::SparklineHoverSpan: return s.sparklineHoverSpan ? int(*s.sparklineHoverSpan) : -1;
         case SettingsField::LogoScale: return s.logoScale;
@@ -316,6 +320,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SparklineNowLine: s.sparklineNowLine = value != 0; break;
         case SettingsField::SparklineNowCaret: s.sparklineNowCaret = value != 0; break;
         case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
+        case SettingsField::SparklineReadingScale: s.sparklineReadingScale = value; break;
         case SettingsField::SparklineSpan:
             s.sparklineSpan = SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
             break;
@@ -405,6 +410,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.sparklineNowLine = defaults.sparklineNowLine;
             s.sparklineNowCaret = defaults.sparklineNowCaret;
             s.sparklineRing = defaults.sparklineRing;
+            s.sparklineReadingScale = defaults.sparklineReadingScale;
             s.sparklineSpan = defaults.sparklineSpan;
             s.sparklineHoverSpan = defaults.sparklineHoverSpan;
             s.logoScale = defaults.logoScale;

@@ -78,6 +78,9 @@ static constexpr int kSparklineHeightMax = 100;
 // Their keys' and extra usage's text size, in DIPs.
 static constexpr int kSparklineTextSizeMin = 6;
 static constexpr int kSparklineTextSizeMax = 16;
+// Their current reading's size, in percent of its standard size.
+static constexpr int kSparklineReadingScaleMin = 50;
+static constexpr int kSparklineReadingScaleMax = 200;
 
 // What a sparkline's weekly chart shows in its top-left corner of the account's extra usage
 // (Anthropic extra usage, OpenAI credits) while the provider reports it.
@@ -225,7 +228,8 @@ struct Settings {
     bool sparklineElapsed = true;
     bool sparklineNowLine = true;
     bool sparklineNowCaret = false;
-    bool sparklineRing = false;
+    bool sparklineRing = true;
+    int sparklineReadingScale = 100;  // Percent; the ring and its dot, or the plain dot.
     // Sparklines' charts of long windows, and theirs while the pointer rests on the account (none:
     // as without it).
     SparklineSpan sparklineSpan = SparklineSpan::Window;

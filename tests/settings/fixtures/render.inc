@@ -430,11 +430,19 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.sparklineRing = true;
          }},
         {L"Sparkline, caret on", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineNowCaret = true; }},
-        {L"Sparkline, ring on", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineRing = true; }},
+        {L"Sparkline, ring off", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineRing = false; }},
+        {L"Sparkline, ring at 50%", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineReadingScale = 50; }},
+        {L"Sparkline, ring at 200%", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineReadingScale = 200; }},
+        {L"Sparkline, dot at 200%", [](Settings& s) {
+             s.barLayout = BarLayout::Sparkline;
+             s.sparklineRing = false;
+             s.sparklineReadingScale = 200;
+         }},
         {L"Sparkline, no cues", [](Settings& s) {
              s.barLayout = BarLayout::Sparkline;
              s.sparklineElapsed = false;
              s.sparklineNowLine = false;
+             s.sparklineRing = false;
          }},
         {L"Sparkline, 12 hours each side",
          [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineSpan = SparklineSpan::Hours12; }},
@@ -453,6 +461,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.sparklineOutline = false;
              s.sparklineElapsed = false;
              s.sparklineNowLine = false;
+             s.sparklineRing = false;
          }},
         {L"Sparkline, text 6", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 6; }},
         {L"Sparkline, text 12", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 12; }},

@@ -1891,25 +1891,27 @@ static void RunSparklineTests() {
     static constexpr auto line = [](const TileOutline& outline, double x0, double y0, double x1, double y1) {
         path(outline, x0, y0, {{x1, y1}});
     };
-    // The current reading at (x, y): the 4.1 DIP cut-out, the ring from 3 to 4.1 DIPs (its inner
-    // circle counterclockwise: the hole) and the 2.2 DIP dot.
-    static constexpr auto reading = [](const QuotaMeter& q, double x, double y) {
-        circle(q.spark[kSparkNowCut], x, y, 4.1);
+    // The current reading at (x, y), at a 100% reading size unless scaled: the 3.6 DIP cut-out, the
+    // ring from 2.6 to 3.6 DIPs (its inner circle counterclockwise: the hole) and the 1.9 DIP dot.
+    static constexpr auto reading = [](const QuotaMeter& q, double x, double y, double scale = 1) {
+        circle(q.spark[kSparkNowCut], x, y, 3.6 * scale);
         CHECK(q.spark[kSparkNowRing].size() == 2);
-        disc(q.spark[kSparkNowRing][0], x, y, 4.1);
-        disc(q.spark[kSparkNowRing][1], x, y, 3, false);
-        circle(q.spark[kSparkNow], x, y, 2.2);
+        disc(q.spark[kSparkNowRing][0], x, y, 3.6 * scale);
+        disc(q.spark[kSparkNowRing][1], x, y, 2.6 * scale, false);
+        circle(q.spark[kSparkNow], x, y, 1.9 * scale);
     };
-    // The plain current reading (the ring off, its default): a 2 DIP dot, no cut-out or ring.
-    static constexpr auto dot = [](const QuotaMeter& q, double x, double y) {
+    // The plain current reading (the ring off): a 2 DIP dot, no cut-out or ring.
+    static constexpr auto dot = [](const QuotaMeter& q, double x, double y, double scale = 1) {
         CHECK(q.spark[kSparkNowCut].empty() && q.spark[kSparkNowRing].empty());
-        circle(q.spark[kSparkNow], x, y, 2);
+        circle(q.spark[kSparkNow], x, y, 2 * scale);
     };
-    // The ringed reading and the caret on, both off by default.
+    // The ringed reading and the caret on; the ring is on by default, the caret off.
     static constexpr auto cues = [](Settings& s) {
         s.sparklineRing = true;
         s.sparklineNowCaret = true;
     };
+    // The plain dot in place of the ring.
+    static constexpr auto unringed = [](Settings& s) { s.sparklineRing = false; };
     static constexpr auto unmarked = [](const QuotaMeter& q) {
         return q.spark[kSparkNowCut].empty() && q.spark[kSparkNowRing].empty() && q.spark[kSparkNow].empty();
     };
@@ -1967,8 +1969,8 @@ static void RunSparklineTests() {
         CHECK(!bare(two.quotas[0]) && !bare(two.quotas[1]) && bare(two.quotas[2]) && bare(two.quotas[3]));
         // Each its own reading at its own window's place: the 5-hour quota half way at 90%, the
         // weekly one at its end (a minute left) at 40%.
-        dot(two.quotas[0], 24, 4.75);
-        dot(two.quotas[1], 48, 18.75);
+        reading(two.quotas[0], 24, 4.75);
+        reading(two.quotas[1], 48, 18.75);
         // Windows on the 5-hour, Fable and extra usage quotas, not the weekly one: three charts,
         // Fable's second, extra usage's third.
         data.winWeek = {40, 0, 0};
@@ -2057,7 +2059,7 @@ static void RunSparklineTests() {
         // at (24, 9.5).
         AccountMeters low = chart(80, 32);
         line(low.quotas[0].spark[kSparkPace], 0, 17, 48, 2);
-        dot(low.quotas[0], 24, 9.5);
+        reading(low.quotas[0], 24, 9.5);
         // The height clamps at the display entry: 80 by default, 50 to 100.
         CHECK(Display().sparklineHeight == 80);
         CHECK(Display(With([](Settings& s) { s.sparklineHeight = 65; })).sparklineHeight == 65);
@@ -2094,23 +2096,23 @@ static void RunSparklineTests() {
         CHECK_NEAR(tiny.faceHeight, 12); CHECK_NEAR(tiny.sparkKeyFont, 14);
         // The key's box on the 48 x 32 chart: 8 DIPs: x 35.4 to 45, at the bottom y 23.4 to 29; 12
         // DIPs (0.6 of it per character, a 0.7 cap height): x 30.6 to 45, y 20.6 to 29, at the top
-        // 3 to 11.4. 20% at 60% of the window, the dot at (28.75, 24.5) reaching x 30.75: clear of
-        // the 8 DIP key (kept), on the 12 DIP one (moved to the top).
+        // 3 to 11.4. 20% at 60% of the window, the reading at (28.75, 24.5), its ring reaching x 32.35:
+        // clear of the 8 DIP key (kept), on the 12 DIP one (moved to the top).
         auto first = [](double pct, double share, const MeterDisplay& d) {
             return spark(Window(pct, std::llround((1 - share) * kFiveHours)), {}, d).quotas[0];
         };
-        dot(first(20, 0.6, sized(8)), 28.75, 24.5);
+        reading(first(20, 0.6, sized(8)), 28.75, 24.5);
         CHECK(!first(20, 0.6, sized(8)).sparkKeyTop);
         CHECK(first(20, 0.6, sized(12)).sparkKeyTop);
-        // The now line stops a DIP short of the larger box: 90% at 80% of the window, x 38.5, the dot
-        // clear of the key at the bottom: down to 19.6 at 12 DIPs (22.4 at 8).
+        // The now line stops a DIP short of the larger box: 90% at 80% of the window, x 38.5, the
+        // reading clear of the key at the bottom: down to 19.6 at 12 DIPs (22.4 at 8).
         QuotaMeter large = first(90, 0.8, sized(12));
         CHECK(!large.sparkKeyTop);
         path(large.spark[kSparkNowLine], 38, 1, {{39, 1}, {39, 19.6}, {38, 19.6}});
         path(first(90, 0.8, sized(8)).spark[kSparkNowLine], 38, 1, {{39, 1}, {39, 22.4}, {38, 22.4}});
         // The extra usage's box: "$20.00" from x 3 to 3 + 6 x 0.6 of the size: 24.6 at 6 DIPs, 31.8
         // at 8, 46.2 at 12 (across the 12 DIP key's box: the two never share an edge). The weekly
-        // dot at 110% at 60% of the week, (28.75, 2), from x 26.75: clear of it at 6 DIPs (kept);
+        // reading at 110% at 60% of the week, (28.75, 2), its ring from x 25.15: clear of it at 6 DIPs (kept);
         // on it at 8 (moved to the bottom); at 12 on it, and with both moved on the key at the top:
         // one hit either way (kept).
         auto weekly = [](const MeterDisplay& d) {
@@ -2264,15 +2266,15 @@ static void RunSparklineTests() {
         reading(spark(Window(130, 9000000), {}, ringed).quotas[0], 50, 2);
         reading(spark(Window(45, 9000000), {}, left).quotas[0], 50, 11);
         reading(spark(Window(130, 9000000), {}, left).quotas[0], 50, 22);
-        reading(spark({45, 0, 0}, {}, left).quotas[0], 95.9, 11);
+        reading(spark({45, 0, 0}, {}, left).quotas[0], 96.4, 11);
         // Without a window: alone, the ring's radius in from the plot's right edge; no diagonal,
         // time, projection or limit.
         AccountMeters alone = spark({45, 0, 0}, {}, ringed);
         const auto& shapes = alone.quotas[0].spark;
-        reading(alone.quotas[0], 95.9, 13);
+        reading(alone.quotas[0], 96.4, 13);
         CHECK(shapes[kSparkPace].empty() && shapes[kSparkNowLine].empty() && shapes[kSparkCaret].empty() &&
               shapes[kSparkProjection].empty() && shapes[kSparkLimit].empty() && !shapes[kSparkLit].empty());
-        reading(First({45, 0, 0}, Display(With(cues)), BarLayout::Sparkline).quotas[0], 43.9, 17.5);
+        reading(First({45, 0, 0}, Display(With(cues)), BarLayout::Sparkline).quotas[0], 44.4, 17.5);
         // A window without a reading yet (before the first success): the diagonal and the time, no
         // reading, projection or limit.
         AccountData before = Fresh();
@@ -2285,17 +2287,56 @@ static void RunSparklineTests() {
               !empty[kSparkNowLine].empty() && !empty[kSparkCaret].empty());
         CHECK(unmarked(waiting.quotas[0]) && empty[kSparkProjection].empty() && empty[kSparkLimit].empty());
 
-        // The ring off, the default: a plain 2 DIP dot at the same places, without a window its own
-        // radius in from the right edge: (98, 13) on the plot, (46, 17.5) on the 48 x 32 chart.
-        dot(spark(Window(45, 9000000)).quotas[0], 50, 13);
-        dot(spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.6), 45, true}}).quotas[0], 60, 13);
-        dot(spark(Window(130, 9000000)).quotas[0], 50, 2);
-        dot(spark({45, 0, 0}).quotas[0], 98, 13);
-        dot(First({45, 0, 0}, Display(), BarLayout::Sparkline).quotas[0], 46, 17.5);
+        // The ring off: a plain 2 DIP dot at the same places, without a window its own radius in
+        // from the right edge: (98, 13) on the plot, (46, 17.5) on the 48 x 32 chart.
+        const MeterDisplay plainPlot = plot(unringed);
+        dot(spark(Window(45, 9000000), {}, plainPlot).quotas[0], 50, 13);
+        dot(spark(Window(45, 9000000), {{at(0.2), 20, false}, {at(0.6), 45, true}}, plainPlot).quotas[0], 60, 13);
+        dot(spark(Window(130, 9000000), {}, plainPlot).quotas[0], 50, 2);
+        dot(spark({45, 0, 0}, {}, plainPlot).quotas[0], 98, 13);
+        dot(First({45, 0, 0}, Display(With(unringed)), BarLayout::Sparkline).quotas[0], 46, 17.5);
         // None before a reading.
-        AccountMeters plainWaiting = AccountMeterState(plot(), BarLayout::Sparkline,
+        AccountMeters plainWaiting = AccountMeterState(plainPlot, BarLayout::Sparkline,
                                                        Account(L"anthropic", L"A", {true, false, false, false}), before, 0, 0);
         CHECK(unmarked(plainWaiting.quotas[0]));
+        // On by default: the ringed reading.
+        CHECK(Display().sparklineRing && !plainPlot.sparklineRing);
+        reading(spark(Window(45, 9000000)).quotas[0], 50, 13);
+    });
+
+    Run("sparkline: the reading size scales the ring and its dot, or the plain dot, and the box text keeps clear of", [] {
+        static constexpr auto sized = [](int scale, bool ring) {
+            return [=](Settings& s) {
+                s.sparklineReadingScale = scale;
+                s.sparklineRing = ring;
+            };
+        };
+        // 100% by default, 50% to 200%, as a fraction.
+        CHECK_NEAR(Display().sparklineReadingScale, 1);
+        CHECK_NEAR(Display(With(sized(150, true))).sparklineReadingScale, 1.5);
+        CHECK_NEAR(Display(With(sized(10, true))).sparklineReadingScale, 0.5);
+        CHECK_NEAR(Display(With(sized(999, false))).sparklineReadingScale, 2);
+        // Half way at 45%, (50, 13), and without a window the mark's radius in from the plot's right
+        // edge: the ring at 200% (7.2 DIPs) and 50% (1.8), the plain dot at 200% (4) and 50% (1).
+        const std::tuple<int, bool, double> cases[] = {{200, true, 92.8}, {50, true, 98.2}, {200, false, 96}, {50, false, 99}};
+        for (auto [scale, ring, edge] : cases) {
+            const MeterDisplay d = plot(sized(scale, ring));
+            AccountMeters timed = spark(Window(45, 9000000), {}, d), alone = spark({45, 0, 0}, {}, d);
+            if (ring) {
+                reading(timed.quotas[0], 50, 13, scale / 100.0);
+                reading(alone.quotas[0], edge, 13, scale / 100.0);
+            } else {
+                dot(timed.quotas[0], 50, 13, scale / 100.0);
+                dot(alone.quotas[0], edge, 13, scale / 100.0);
+            }
+        }
+        // The key keeps clear of the scaled mark: on the 48 x 32 chart, 35% at 80% of the window is at
+        // (38.5, 20.25), the key's bottom box from y 23.4. The ring reaches 23.85 at 100% (moved) and
+        // 22.05 at 50% (kept); the plain dot 22.25 at 100% (kept) and 24.25 at 200% (moved).
+        auto keyTop = [](int scale, bool ring) {
+            return spark(Window(35, 3600000), {}, Display(With(sized(scale, ring)))).quotas[0].sparkKeyTop;
+        };
+        CHECK(keyTop(100, true) && !keyTop(50, true) && !keyTop(100, false) && keyTop(200, false));
     });
 
     Run("sparkline: the plot lit up to now, clockwise from its top edge, cut through its rounded corners", [] {
@@ -2433,7 +2474,7 @@ static void RunSparklineTests() {
         path(caretOnly.quotas[0].spark[kSparkCaret], 47.6, 24, {{50, 20.8}, {52.4, 24}});
         AccountMeters neither = spark(Window(45, 9000000), {}, plot([](Settings& s) { s.sparklineNowLine = false; }));
         CHECK(neither.quotas[0].spark[kSparkNowLine].empty() && neither.quotas[0].spark[kSparkCaret].empty());
-        dot(neither.quotas[0], 50, 13);
+        reading(neither.quotas[0], 50, 13);
         CHECK(!neither.quotas[0].spark[kSparkLit].empty());
     });
 
@@ -2676,7 +2717,7 @@ static void RunSparklineTests() {
         CHECK(shapes[kSparkLines].size() == 1 && shapes[kSparkArea].size() == 1 && shapes[kSparkDots].empty());
         path(shapes[kSparkLines], 0, 17, {{25, 16}, {50, 13}});
         path(shapes[kSparkArea], 0, 24, {{0, 17}, {25, 16}, {50, 13}, {50, 24}});
-        dot(mid.quotas[0], 50, 13);
+        reading(mid.quotas[0], 50, 13);
         // The lit part and the now line at kNow.
         point(shapes[kSparkLit][0].segments[0], 50, 0);
         point(shapes[kSparkNowLine][0], 49.5, 1);
@@ -2689,7 +2730,7 @@ static void RunSparklineTests() {
         CHECK(shapes[kSparkLimit].empty());
         // Off, the default: the whole week, kNow 3/7 across at 42.75, the lone reading drawn.
         AccountMeters whole = spark(week(45, 96), trace);
-        dot(whole.quotas[0], 42.75, 13);
+        reading(whole.quotas[0], 42.75, 13);
         circle(whole.quotas[0].spark[kSparkDots], 14.25, 20, 1.5);
         line(whole.quotas[0].spark[kSparkPace], 0, 22, 100, 2);
         // 48 hours each side: from kNow - 48 h to kNow + 48 h, 1.04 DIPs an hour. The lone reading at
@@ -2700,7 +2741,7 @@ static void RunSparklineTests() {
         const auto& two = wide.quotas[0].spark;
         circle(two[kSparkDots], 0, 20, 1.5);
         path(two[kSparkLines], 12.5, 18, {{37.5, 16}, {50, 13}});
-        dot(wide.quotas[0], 50, 13);
+        reading(wide.quotas[0], 50, 13);
         line(two[kSparkPace], 0, 19.25, 100, 7.75);
         line(two[kSparkProjection], 50, 13, 100, 5);
         CHECK(two[kSparkLimit].empty());
@@ -2725,7 +2766,7 @@ static void RunSparklineTests() {
         // the diagonal from 0% to 28.57% (y 16.29, at 16.25). Its average rate, 1% an hour, cut at the
         // span's end 38 hours on: 48% (y 12.4, at 12.5).
         AccountMeters first = spark(week(10, 158), {{ago(8), 2, false}, {ago(4), 6, true}}, around);
-        dot(first.quotas[0], 20.75, 20);
+        reading(first.quotas[0], 20.75, 20);
         path(first.quotas[0].spark[kSparkLines], 4.25, 21.5, {{12.5, 20.75}});
         line(first.quotas[0].spark[kSparkPace], 0, 22, 100, 16.25);
         line(first.quotas[0].spark[kSparkProjection], 20.75, 20, 100, 12.5);
@@ -2733,18 +2774,18 @@ static void RunSparklineTests() {
         // Its last day, 2 hours left: the last 48, kNow at 95.83 (95.75); the diagonal from 71.43% (y
         // 7.71, at 7.75) to 100% at the reset; the projection to the reset, 50.6% (y 11.88, at 12).
         AccountMeters last = spark(week(50, 2), {}, around);
-        dot(last.quotas[0], 95.75, 12);
+        reading(last.quotas[0], 95.75, 12);
         line(last.quotas[0].spark[kSparkPace], 0, 7.75, 100, 2);
         line(last.quotas[0].spark[kSparkProjection], 95.75, 12, 100, 12);
 
         // Remaining mode: 55% left at (50, 11).
-        dot(spark(week(45, 96), trace, plot([](Settings& s) {
+        reading(spark(week(45, 96), trace, plot([](Settings& s) {
                 s.sparklineSpan = SparklineSpan::Hours24;
                 s.barMode = BarMode::Remaining;
             })).quotas[0], 50, 11);
         // Windows up to 48 hours stay whole: the five-hour one half way, as with it off.
         AccountMeters hours = spark(Window(45, 9000000), {}, around);
-        dot(hours.quotas[0], 50, 13);
+        reading(hours.quotas[0], 50, 13);
         line(hours.quotas[0].spark[kSparkPace], 0, 22, 100, 2);
         line(hours.quotas[0].spark[kSparkProjection], 50, 13, 100, 4);
         // Every long window: the weekly chart and a monthly extra usage chart (20% ten days before its
@@ -2759,8 +2800,8 @@ static void RunSparklineTests() {
                                                BarLayout::Sparkline, Account(L"anthropic", L"A", {false, true, false, true}),
                                                data, 0, 0);
         CHECK(both.barMask == 0b1010);
-        dot(both.quotas[kWeeklyBar], 50, 13);
-        dot(both.quotas[kExtraUsageBar], 50, 18);
+        reading(both.quotas[kWeeklyBar], 50, 13);
+        reading(both.quotas[kExtraUsageBar], 50, 18);
     });
 
     Run("sparkline: remaining mode plots what is left, its runs over areas from the bottom, down to the limit", [] {
@@ -2780,7 +2821,7 @@ static void RunSparklineTests() {
         point(under, 10, 24); point(under.segments[0], 10, 4); point(under.segments[1], 20, 8);
         point(under.segments[2], 40, 22); point(under.segments[3], 40, 24);
         circle(shapes[kSparkDots], 45, 11, 1.5);
-        dot(m.quotas[0], 50, 11);
+        reading(m.quotas[0], 50, 11);
         // The projection at the average rate: 45% used half way leaves 10% at the reset, no mark.
         line(shapes[kSparkProjection], 50, 11, 100, 20);
         CHECK(shapes[kSparkLimit].empty());
@@ -2946,7 +2987,7 @@ static void RunSparklineTests() {
     Run("sparkline: the key and the extra usage move to the plot's other edge, clear of the current reading", [] {
         // Text boxes 3 DIPs in from the plot's edges, a cap height (0.7 of the key's font) tall and
         // 0.6 of the font wide per character (plus 2 DIPs after the extra usage's key); the
-        // reading's box its ring's, 4.1 DIPs around it (the ring on, as below unless noted; a plain
+        // reading's box its ring's, 3.6 DIPs around it (the ring on, as below unless noted; a plain
         // dot's 2 DIPs). On the 48 x 32 chart (8 DIP text, 5.6 cap height): the 2-letter key from x
         // 35.4 to 45, at the bottom from y 23.4 to 29, at the top from 3 to 8.6.
         const MeterDisplay ringed = Display(With(cues));
@@ -2958,7 +2999,7 @@ static void RunSparklineTests() {
         // Clear of the bottom box: half way (24, 27.25), or at 90% (38.5, 4.75): kept.
         CHECK(!chart(10, 0.5).sparkKeyTop);
         CHECK(!chart(90, 0.8).sparkKeyTop);
-        // Without a window, 10% at (43.9, 27.25): moved.
+        // Without a window, 10% at (44.4, 27.25): moved.
         CHECK(spark({10, 0, 0}, {}, ringed).quotas[0].sparkKeyTop);
         // A 12 DIP chart (50% of a 32 DIP taskbar's tile; 7 DIP text, 4.9 cap height): both boxes,
         // y 4.1 to 9 and 3 to 7.9, under the ring at (38.5, 9.25): kept.
@@ -2969,16 +3010,16 @@ static void RunSparklineTests() {
         }), 1, 32);
         CHECK(!chart(10, 0.8, &low).sparkKeyTop);
         // Touching counts as clear: on a 24 x 28 chart (7 DIP text) the key from x 12.6 to 21, at the
-        // bottom from y 20.1 to 25; 17% at (8.5, 22) has its ring end at x 12.6: kept; a quarter DIP
-        // later, at 8.75: moved.
+        // bottom from y 20.1 to 25; 17% at (9, 22) has its ring end at x 12.6: kept; a quarter DIP
+        // later, at 9.25: moved.
         const MeterDisplay narrow = Display(With([](Settings& s) {
             cues(s);
             s.sparklineWidth = 24;
             s.sparklineHeight = 70;
             s.sparklineTextSize = 7;
         }));
-        CHECK(!chart(17, 0.355, &narrow).sparkKeyTop);
-        CHECK(chart(17, 0.365, &narrow).sparkKeyTop);
+        CHECK(!chart(17, 0.375, &narrow).sparkKeyTop);
+        CHECK(chart(17, 0.385, &narrow).sparkKeyTop);
         // No reading (a window before the first success): kept.
         AccountData before = Fresh();
         before.lastSuccessMs = 0;
@@ -3016,9 +3057,9 @@ static void RunSparklineTests() {
         // usage stays at the top (moving both is as clear, no improvement).
         AccountMeters late = weekly(10, 0.8);
         CHECK(late.quotas[1].sparkKeyTop && !late.sparkExtraBottom);
-        // The box's width per its text: at (33.25, 2) the ring starts at x 29.15, inside "$20.00"
+        // The box's width per its text: at (33.25, 2) the ring starts at x 29.65, inside "$20.00"
         // (moved) but past "Ex" and "40%" (5 characters and the 2 DIP gap: x 3 to 29; kept); at
-        // (31.5, 2), from 27.4, inside that too (moved).
+        // (31.5, 2), from 27.9, inside that too (moved).
         CHECK(weekly(110, 0.6925).sparkExtraBottom);
         AccountMeters keyed = weekly(110, 0.6925, SparklineExtra::Percent);
         CHECK(keyed.sparkExtraKey == L"Ex" && keyed.sparkExtraText == L"40%" && !keyed.sparkExtraBottom);
@@ -3058,8 +3099,8 @@ static void RunSparklineTests() {
         // OpenAI credits, 875 of a 1000 credit max left: "Cr" and "125" (5 characters and the gap:
         // x 3 to 26), on a 24 x 20 chart (50% of a 40 DIP tile; 7 DIP text, 4.9 cap height: the key
         // from x 12.6 to 21; boxes y 3 to 7.9 and 12.1 to 17). 62.5% half way, (12, 8): the ring hits
-        // the extra usage at the top, and with both moved the key at the top (it ends at y 12.1,
-        // touching the bottom boxes): one hit either way, neither moves.
+        // the extra usage at the top, and with both moved the key at the top (it ends at y 11.6,
+        // clear of the bottom boxes): one hit either way, neither moves.
         AccountData credits = Fresh();
         credits.winWeek = weekReading(62.5, 0.5);
         credits.creditsBalance = 875;
@@ -3101,13 +3142,13 @@ static void RunSparklineTests() {
         plain.winWeek = weekReading(10, 0.8);
         CHECK(placed(plain, L"anthropic", &short24).quotas[1].sparkKeyTop);
 
-        // The ring off, the default: the dot's box, 2 DIPs around it. 35% at 80% of the window,
-        // (38.5, 20.25): the ring reaches y 24.35, into the key's bottom box (moved); the dot only
-        // 22.25 (kept). Without a window the dot at (46, 27.25), in that box: moved.
-        const MeterDisplay plainDot = Display();
+        // The ring off: the dot's box, 2 DIPs around it. 35% at 80% of the window, (38.5, 20.25): the
+        // ring reaches y 23.85, into the key's bottom box (moved); the dot only 22.25 (kept). Without
+        // a window the dot at (46, 27.25), in that box: moved.
+        const MeterDisplay plainDot = Display(With(unringed));
         CHECK(chart(35, 0.8).sparkKeyTop && !chart(35, 0.8, &plainDot).sparkKeyTop);
         CHECK(spark({10, 0, 0}, {}, plainDot).quotas[0].sparkKeyTop);
-        // 110% at (34, 2): the ring from x 29.9, into "$20.00" (moved); the dot from 32, past its
+        // 110% at (34, 2): the ring from x 30.4, into "$20.00" (moved); the dot from 32, past its
         // 31.8 (kept).
         CHECK(weekly(110, 0.7083).sparkExtraBottom);
         AccountMeters plainHigh = weekly(110, 0.7083, SparklineExtra::Amount, &plainDot);
@@ -3197,10 +3238,11 @@ static void RunSparklineTests() {
             CHECK(SparkShapeColor(kSparkArea, each, slot, ringed, true) == ((usage & 0xFFFFFF) | 0x47000000));
             nearColor(SparkShapeColor(kSparkNow, each, slot, ringed, false), lifted);
             // The ring off: the dot in the plain usage color.
-            CHECK(SparkShapeColor(kSparkNow, each, slot, Display(), false) == usage);
+            CHECK(SparkShapeColor(kSparkNow, each, slot, Display(With(unringed)), false) == usage);
         }
-        // The ring off, the default: no cut-out or ring, no caret, the dot unlifted on either taskbar.
-        const MeterDisplay plain = plot();
+        // The ring off (and the caret, by default): no cut-out or ring, no caret, the dot unlifted on
+        // either taskbar.
+        const MeterDisplay plain = plot(unringed);
         AccountMeters flat = spark(Window(80, 9000000), {}, plain);
         CHECK(flat.quotas[0].spark[kSparkNowCut].empty() && flat.quotas[0].spark[kSparkNowRing].empty() &&
               flat.quotas[0].spark[kSparkCaret].empty() && !flat.quotas[0].spark[kSparkNow].empty());
@@ -3273,7 +3315,7 @@ static void RunSparklineTests() {
         const auto& shapes = m.quotas[0].spark;
         CHECK(shapes[kSparkLines].size() == 2 && shapes[kSparkArea].size() == 2 && shapes[kSparkDots].size() == 1);
         point(shapes[kSparkLines][1].segments.back(), 24, 13.25);
-        dot(m.quotas[0], 24, 13.25);
+        reading(m.quotas[0], 24, 13.25);
         // A tick later, its window moved with it: the same readings, a tick later.
         std::vector<TileTracePoint> later =
             VisualTestTrace(claude, {60, reading60.resetUnixMs + kMinute, kFiveHours}, kNow + kMinute);

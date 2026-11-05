@@ -132,6 +132,7 @@ static void RunLayoutTests() {
             {SettingsField::SparklineWidth, 64}, {SettingsField::SparklineHeight, 65}, {SettingsField::SparklineExtra, 2},
             {SettingsField::SparklineTextSize, 12}, {SettingsField::SparklineElapsed, 0},
             {SettingsField::SparklineNowLine, 0}, {SettingsField::SparklineNowCaret, 1}, {SettingsField::SparklineRing, 1},
+            {SettingsField::SparklineReadingScale, 150},
             {SettingsField::SparklineOutline, 0}, {SettingsField::SparklineSpan, 4}, {SettingsField::SparklineHoverSpan, -1},
             {SettingsField::LogoScale, 150},   {SettingsField::ClaudeLogoBrand, 1}, {SettingsField::GeminiLogoBrand, 1},
             {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
@@ -151,10 +152,12 @@ static void RunLayoutTests() {
               s.placement == TaskbarPlacement::LeftSide &&
               s.logoBrands.claude && s.logoBrands.gemini && s.sparklineHeight == 65 &&
               s.sparklineExtra == SparklineExtra::Percent && s.sparklineTextSize == 12 && !s.sparklineElapsed &&
-              !s.sparklineNowLine && s.sparklineNowCaret && s.sparklineRing && !s.sparklineOutline &&
-              s.sparklineSpan == SparklineSpan::Hours48 && !s.sparklineHoverSpan);
+              !s.sparklineNowLine && s.sparklineNowCaret && s.sparklineRing && s.sparklineReadingScale == 150 &&
+              !s.sparklineOutline && s.sparklineSpan == SparklineSpan::Hours48 && !s.sparklineHoverSpan);
         CHECK(SettingsFieldRange(SettingsField::SparklineTextSize)->minimum == 6 &&
               SettingsFieldRange(SettingsField::SparklineTextSize)->maximum == 16);
+        CHECK(SettingsFieldRange(SettingsField::SparklineReadingScale)->minimum == 50 &&
+              SettingsFieldRange(SettingsField::SparklineReadingScale)->maximum == 200);
         for (SettingsField toggle : {SettingsField::SparklineElapsed, SettingsField::SparklineNowLine,
                                      SettingsField::SparklineNowCaret, SettingsField::SparklineRing,
                                      SettingsField::SparklineOutline, SettingsField::SparklineSpan,
@@ -178,6 +181,7 @@ static void RunLayoutTests() {
             {SettingsField::SparklineHeight, 999, 100}, {SettingsField::SparklineExtra, 7, 2},
             {SettingsField::SparklineExtra, -1, 0},   {SettingsField::SparklineTextSize, 2, 6},
             {SettingsField::SparklineTextSize, 99, 16}, {SettingsField::SparklineRing, 5, 1},
+            {SettingsField::SparklineReadingScale, 10, 50}, {SettingsField::SparklineReadingScale, 999, 200},
             {SettingsField::SparklineElapsed, 7, 1},   {SettingsField::SparklineOutline, -4, 1},
             {SettingsField::SparklineSpan, 7, 4},     {SettingsField::SparklineSpan, -1, 0},
             {SettingsField::SparklineSpan, 1, 1},     {SettingsField::SparklineSpan, 3, 3},
@@ -199,7 +203,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the forty Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the forty-one Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -219,7 +223,8 @@ static void RunLayoutTests() {
         changed.sparklineElapsed = false;
         changed.sparklineNowLine = false;
         changed.sparklineNowCaret = true;
-        changed.sparklineRing = true;
+        changed.sparklineRing = false;
+        changed.sparklineReadingScale = 150;
         changed.sparklineOutline = false;
         changed.sparklineSpan = SparklineSpan::Hours48;
         changed.sparklineHoverSpan = std::nullopt;
@@ -271,6 +276,7 @@ static void RunLayoutTests() {
         expected.sparklineNowLine = defaults.sparklineNowLine;
         expected.sparklineNowCaret = defaults.sparklineNowCaret;
         expected.sparklineRing = defaults.sparklineRing;
+        expected.sparklineReadingScale = defaults.sparklineReadingScale;
         expected.sparklineOutline = defaults.sparklineOutline;
         expected.sparklineSpan = defaults.sparklineSpan;
         expected.sparklineHoverSpan = defaults.sparklineHoverSpan;
@@ -296,10 +302,10 @@ static void RunLayoutTests() {
         CHECK(reset == expected);
         CHECK(reset.barLayout == BarLayout::Sparkline && reset.placement == TaskbarPlacement::BeforeIcons);
         CHECK(reset.sparklineHeight == 80 && reset.sparklineExtra == SparklineExtra::Amount && reset.sparklineTextSize == 8 &&
-              reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && !reset.sparklineRing &&
-              reset.sparklineOutline && reset.sparklineSpan == SparklineSpan::Window &&
+              reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && reset.sparklineRing &&
+              reset.sparklineReadingScale == 100 && reset.sparklineOutline && reset.sparklineSpan == SparklineSpan::Window &&
               reset.sparklineHoverSpan == SparklineSpan::Hours24);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 40);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 41);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -1623,6 +1629,8 @@ static void RunLayoutTests() {
         Settings s = StackedSettings();
         s.barLayout = BarLayout::Sparkline;
         s.accountMargin = 10;
+        // The plain dot unless noted; the ring (on by default) with every cue on below.
+        s.sparklineRing = false;
         const uint32_t plotColor = 0x59000000;
         const Mark lit{Kind::Shape, 0x1FFFFFFF, 0, {}}, outline{Kind::Stroke, 0x2EFFFFFF, 1, {}},
             diagonal{Kind::Stroke, 0x80DEDEDE, 1, {2, 2}},
@@ -1638,10 +1646,10 @@ static void RunLayoutTests() {
         CHECK(plot.size() == 1 && plot[0].kind == Kind::Rect && NearDip(plot[0].radius, 3));
         CHECK(NearDip(plot[0].rect.left, 32) && NearDip(plot[0].rect.top, 8) && NearDip(plot[0].rect.right, 80) &&
               NearDip(plot[0].rect.bottom, 40));
-        // By default its shapes, one operation each from the plot's corner: the lit part, the solid
-        // 1 DIP outline, the dashed diagonal at half the pace color's alpha, the areas at 0x47 alpha,
-        // the runs and the lone reading in the usage color (25%: green), the now line, the dashed
-        // projection and the plain dot in the usage color; then the key.
+        // The other cues at their defaults: its shapes, one operation each from the plot's corner: the
+        // lit part, the solid 1 DIP outline, the dashed diagonal at half the pace color's alpha, the
+        // areas at 0x47 alpha, the runs and the lone reading in the usage color (25%: green), the now
+        // line, the dashed projection and the plain dot in the usage color; then the key.
         std::vector<SettingsPreviewOp> marks = after(strip, plotColor);
         CHECK(marks.size() == 10);
         expect(marks, {lit, outline, diagonal, area, runs, dots, nowLine, projection, plainDot});
@@ -1668,7 +1676,7 @@ static void RunLayoutTests() {
 
         // Every cue on: the caret after the projection, then the cut-out in the taskbar's color, the
         // ring, and the dot lifted from green; the caret's tip 3.2 DIPs up from the bottom, the
-        // cut-out's top 4.1 DIPs above the reading, the ring's two circles, the dot's top 2.2 above it.
+        // cut-out's top 3.6 DIPs above the reading, the ring's two circles, the dot's top 1.9 above it.
         Settings cued = s;
         cued.sparklineNowCaret = cued.sparklineRing = true;
         marks = after(at(cued, Window(25, 9000000)), plotColor);
@@ -1677,8 +1685,8 @@ static void RunLayoutTests() {
                        {Kind::Shape, 0xFF1C1C1C, 0, {}}, {Kind::Shape, 0xF0FFFFFF, 0, {}}});
         CHECK(marks[11].kind == Kind::Shape && nearColor(marks[11].color, 0xFF4DA950) && marks[12].text == L"5h");
         CHECK(NearDip(marks[8].shape[0].segments[0].x, 24) && NearDip(marks[8].shape[0].segments[0].y, 28.8));
-        CHECK(NearDip(marks[9].shape[0].x, 24) && NearDip(marks[9].shape[0].y, 18.9) && marks[10].shape.size() == 2);
-        CHECK(NearDip(marks[11].shape[0].x, 24) && NearDip(marks[11].shape[0].y, 20.8));
+        CHECK(NearDip(marks[9].shape[0].x, 24) && NearDip(marks[9].shape[0].y, 19.4) && marks[10].shape.size() == 2);
+        CHECK(NearDip(marks[11].shape[0].x, 24) && NearDip(marks[11].shape[0].y, 21.1));
         // Every cue off: the whole plot lit, no now line or caret, the plain dot; the outline stays.
         Settings bare = s;
         bare.sparklineElapsed = bare.sparklineNowLine = false;
@@ -1691,7 +1699,7 @@ static void RunLayoutTests() {
         marks = after(at(bare, Window(25, 9000000)), plotColor);
         CHECK(marks.size() == 8);
         expect(marks, {lit, diagonal, area, runs, dots, projection, plainDot});
-        // The outline alone off, every other default kept: no outline operation, the rest as by default.
+        // The outline alone off, every other setting kept: no outline operation, the rest as above.
         Settings unframed = s;
         unframed.sparklineOutline = false;
         strip = at(unframed, Window(25, 9000000));
@@ -2866,7 +2874,7 @@ static void RunLayoutTests() {
         const UiItem& outline = Control(frame, SettingsField::SparklineOutline);
         CHECK(outline.kind == UiItemKind::Toggle && outline.enabled && outline.selected && outline.action.value == 0);
         CHECK(HasText(frame, L"Chart outline") && HasText(frame, L"A faint border around each chart."));
-        // The cues: elapsed time and the now line on, the caret and the ring off by default; each a
+        // The cues: elapsed time, the now line and the ring on, the caret off by default; each a
         // toggle whose action flips it, in that order after the extra usage card.
         const std::tuple<SettingsField, PCWSTR, PCWSTR, bool> cueCards[] = {
             {SettingsField::SparklineElapsed, L"Elapsed time",
@@ -2875,7 +2883,7 @@ static void RunLayoutTests() {
             {SettingsField::SparklineNowCaret, L"Now caret",
              L"A small triangle on the chart\u2019s bottom edge at the current time.", false},
             {SettingsField::SparklineRing, L"Ringed reading",
-             L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.", false}};
+             L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.", true}};
         float cueTop = extra.rect.bottom;
         for (auto [field, title, description, on] : cueCards) {
             const UiItem& toggle = Control(frame, field);
@@ -2885,6 +2893,16 @@ static void RunLayoutTests() {
             CHECK(toggle.rect.top > cueTop);
             cueTop = toggle.rect.bottom;
         }
+        // The reading's size after the cues: a slider from 50% to 200%, 100% by default.
+        const UiItem& readingSize = Control(frame, SettingsField::SparklineReadingScale, 1);
+        CHECK(readingSize.kind == UiItemKind::Slider && readingSize.minimum == 50 && readingSize.maximum == 200 &&
+              readingSize.action.value == 100 && readingSize.enabled &&
+              Control(frame, SettingsField::SparklineReadingScale).text == L"100");
+        CHECK(HasText(frame, L"Reading size") &&
+              HasText(frame, L"Percent of the current reading\u2019s standard size: the ring and its dot, or the "
+                             L"plain dot."));
+        CHECK(readingSize.rect.top > cueTop);
+        cueTop = readingSize.rect.bottom;
         // Their own section between the extra usage and the cues: the long windows' span, on the
         // whole window by default, or 12 to 48 hours each side, then theirs on hover, 24 hours each
         // side by default, or off.
@@ -2952,7 +2970,9 @@ static void RunLayoutTests() {
         view.settings.sparklineTextSize = 12;
         view.settings.sparklineExtra = SparklineExtra::Percent;
         view.settings.sparklineElapsed = view.settings.sparklineNowLine = false;
-        view.settings.sparklineNowCaret = view.settings.sparklineRing = true;
+        view.settings.sparklineNowCaret = true;
+        view.settings.sparklineRing = false;
+        view.settings.sparklineReadingScale = 150;
         view.settings.sparklineOutline = false;
         view.settings.sparklineSpan = SparklineSpan::Hours48;
         view.settings.sparklineHoverSpan = std::nullopt;
@@ -2968,8 +2988,10 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::SparklineTextSize, 1).action.value == 12 &&
               Control(frame, SettingsField::SparklineTextSize).text == L"12");
         CHECK(!Control(frame, SettingsField::SparklineElapsed).selected && !Control(frame, SettingsField::SparklineNowLine).selected &&
-              Control(frame, SettingsField::SparklineNowCaret).selected && Control(frame, SettingsField::SparklineRing).selected &&
-              Control(frame, SettingsField::SparklineRing).action.value == 0);
+              Control(frame, SettingsField::SparklineNowCaret).selected && !Control(frame, SettingsField::SparklineRing).selected &&
+              Control(frame, SettingsField::SparklineRing).action.value == 1);
+        CHECK(Control(frame, SettingsField::SparklineReadingScale, 1).action.value == 150 &&
+              Control(frame, SettingsField::SparklineReadingScale).text == L"150");
         CHECK(!Control(frame, SettingsField::SparklineOutline).selected &&
               Control(frame, SettingsField::SparklineOutline).action.value == 1);
 
@@ -2994,6 +3016,7 @@ static void RunLayoutTests() {
                        {SettingsField::SparklineWidth, 1}, {SettingsField::SparklineHeight, 1}, {SettingsField::SparklineExtra, 0},
                        {SettingsField::SparklineTextSize, 1}, {SettingsField::SparklineElapsed, 0},
                        {SettingsField::SparklineNowLine, 0}, {SettingsField::SparklineNowCaret, 0}, {SettingsField::SparklineRing, 0},
+                       {SettingsField::SparklineReadingScale, 1},
                        {SettingsField::SparklineOutline, 0}, {SettingsField::SparklineSpan, 0},
                        {SettingsField::SparklineHoverSpan, 0}, {SettingsField::RingSize, 1}, {SettingsField::RingThickness, 1},
                        {SettingsField::HeadlineBarLength, 1}, {SettingsField::HeadlineCountdown, 0}, {SettingsField::BarGap, 0}});
@@ -3009,6 +3032,7 @@ static void RunLayoutTests() {
                            {SettingsField::SparklineTextSize, 1}, {SettingsField::SparklineExtra, 0},
                            {SettingsField::SparklineElapsed, 0}, {SettingsField::SparklineNowLine, 0},
                            {SettingsField::SparklineNowCaret, 0}, {SettingsField::SparklineRing, 0},
+                           {SettingsField::SparklineReadingScale, 1},
                            {SettingsField::SparklineOutline, 0}, {SettingsField::SparklineSpan, 0},
                            {SettingsField::SparklineHoverSpan, 0}});
             CHECK(!HasText(frame, L"Current position") && !HasText(frame, L"Time span"));

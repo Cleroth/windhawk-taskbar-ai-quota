@@ -43,14 +43,14 @@ static constexpr double kSparkProjectionStroke = 1.2;
 static constexpr std::array<double, 2> kSparkProjectionDashes = {1, 1.5};
 static constexpr double kSparkDotRadius = 1.5, kSparkLimitRadius = 1.75;
 // The current reading: a dot (its usage color lifted by kSparkNowLift) inside a ring, cut out of
-// the marks under them in the taskbar's color; without the ring, a plain dot. The current time: a
-// line across the plot, and a caret on its bottom edge.
-static constexpr double kSparkNowRadius = 2.2, kSparkRingInner = 3, kSparkRingOuter = 4.1, kSparkNowLift = 0.03;
+// the marks under them in the taskbar's color; without the ring, a plain dot; both at a 100%
+// reading size. The current time: a line across the plot, and a caret on its bottom edge.
+static constexpr double kSparkNowRadius = 1.9, kSparkRingInner = 2.6, kSparkRingOuter = 3.6, kSparkNowLift = 0.03;
 static constexpr double kSparkPlainNowRadius = 2;
 static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSparkCaretHeight = 3.2;
 static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
-// Room for sparkline shapes past the plot: a ring around a point on its edge.
-static constexpr double kSparkOverflow = 4.5;
+// Room for sparkline shapes past the plot: the largest ring around a point on its edge.
+static constexpr double kSparkOverflow = kSparkRingOuter * kSparklineReadingScaleMax / 100 + 0.4;
 // How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs); 0:
 // the whole window.
 static ULONGLONG SparklineAroundMs(SparklineSpan span) {
@@ -523,6 +523,7 @@ struct MeterDisplay {
     bool sparklineNowLine;
     bool sparklineNowCaret;
     bool sparklineRing;
+    double sparklineReadingScale;  // kSparklineReadingScaleMin-kSparklineReadingScaleMax percent, as a fraction.
     // Long windows' charts span this before and after now (AccountMeters); 0: the whole window.
     ULONGLONG sparklineAroundMs;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
@@ -578,6 +579,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .sparklineNowLine = settings.sparklineNowLine,
         .sparklineNowCaret = settings.sparklineNowCaret,
         .sparklineRing = settings.sparklineRing,
+        .sparklineReadingScale =
+            std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0,
         .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
@@ -1545,18 +1548,19 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                                      {o, o + r}, {o + r, o, r}}}};
             }
             // The current reading: the dot in its ring, both cut out of the marks under them, or a
-            // plain dot; `mark` DIPs around its centre.
+            // plain dot, at the reading size; `mark` DIPs around its centre.
             const bool ring = display.sparklineRing;
-            const double mark = ring ? kSparkRingOuter : kSparkPlainNowRadius;
+            const double scale = display.sparklineReadingScale;
+            const double mark = (ring ? kSparkRingOuter : kSparkPlainNowRadius) * scale;
             std::optional<std::pair<double, double>> readingAt;
             std::optional<double> nowX;
             auto reading = [&](double x, double y) {
                 readingAt = {x, y};
                 if (ring) {
-                    shapes[kSparkNowCut] = {circle(x, y, kSparkRingOuter)};
-                    shapes[kSparkNowRing] = {circle(x, y, kSparkRingOuter), circle(x, y, kSparkRingInner, false)};
+                    shapes[kSparkNowCut] = {circle(x, y, mark)};
+                    shapes[kSparkNowRing] = {circle(x, y, mark), circle(x, y, kSparkRingInner * scale, false)};
                 }
-                shapes[kSparkNow] = {circle(x, y, ring ? kSparkNowRadius : kSparkPlainNowRadius)};
+                shapes[kSparkNow] = {circle(x, y, (ring ? kSparkNowRadius : kSparkPlainNowRadius) * scale)};
             };
             // The plot's rounded rectangle up to `lit` DIPs across, clockwise from its top edge;
             // a cut through a corner meets its arc.

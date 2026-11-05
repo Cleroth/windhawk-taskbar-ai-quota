@@ -101,6 +101,8 @@ static bool NormalizeSettings(Settings* s) {
                                     kSparklineHeightMax);
     s->sparklineTextSize = std::clamp(s->sparklineTextSize > 0 ? s->sparklineTextSize : 8, kSparklineTextSizeMin,
                                       kSparklineTextSizeMax);
+    s->sparklineReadingScale = std::clamp(s->sparklineReadingScale > 0 ? s->sparklineReadingScale : 100,
+                                          kSparklineReadingScaleMin, kSparklineReadingScaleMax);
     if (s->sparklineExtra < SparklineExtra::Off || s->sparklineExtra > SparklineExtra::Percent) {
         s->sparklineExtra = SparklineExtra::Amount;
     }
@@ -225,6 +227,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"sparklineNowLine", s.sparklineNowLine);
         setBool(L"sparklineNowCaret", s.sparklineNowCaret);
         setBool(L"sparklineRing", s.sparklineRing);
+        setNumber(L"sparklineReadingScale", s.sparklineReadingScale);
         auto spanName = [](SparklineSpan span) {
             return span == SparklineSpan::Hours12 ? L"12h" : span == SparklineSpan::Hours24 ? L"24h" :
                    span == SparklineSpan::Hours36 ? L"36h" : span == SparklineSpan::Hours48 ? L"48h" : L"window";
@@ -401,7 +404,11 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.sparklineElapsed = getBoolDefault(L"sparklineElapsed", true);
         s.sparklineNowLine = getBoolDefault(L"sparklineNowLine", true);
         s.sparklineNowCaret = getBoolDefault(L"sparklineNowCaret", false);
-        s.sparklineRing = getBoolDefault(L"sparklineRing", false);
+        s.sparklineRing = getBoolDefault(L"sparklineRing", true);
+        double sparklineReadingScale = GetNum(root, L"sparklineReadingScale", 100);
+        s.sparklineReadingScale =
+            std::isfinite(sparklineReadingScale) ?
+                (int)std::clamp(sparklineReadingScale, 0.0, (double)kSparklineReadingScaleMax) : 0;
         // A span by name; `missing` for none or an unknown one.
         auto spanOf = [&](PCWSTR key, SparklineSpan missing) {
             std::wstring name = GetStr(root, key);

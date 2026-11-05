@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
-// @version         2.6.1
+// @version         2.7.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -269,6 +269,9 @@ static constexpr int kSparklineHeightMax = 100;
 // Their keys' and extra usage's text size, in DIPs.
 static constexpr int kSparklineTextSizeMin = 6;
 static constexpr int kSparklineTextSizeMax = 16;
+// Their current reading's size, in percent of its standard size.
+static constexpr int kSparklineReadingScaleMin = 50;
+static constexpr int kSparklineReadingScaleMax = 200;
 
 // What a sparkline's weekly chart shows in its top-left corner of the account's extra usage
 // (Anthropic extra usage, OpenAI credits) while the provider reports it.
@@ -416,7 +419,8 @@ struct Settings {
     bool sparklineElapsed = true;
     bool sparklineNowLine = true;
     bool sparklineNowCaret = false;
-    bool sparklineRing = false;
+    bool sparklineRing = true;
+    int sparklineReadingScale = 100;  // Percent; the ring and its dot, or the plain dot.
     // Sparklines' charts of long windows, and theirs while the pointer rests on the account (none:
     // as without it).
     SparklineSpan sparklineSpan = SparklineSpan::Window;
@@ -6581,14 +6585,14 @@ static constexpr double kSparkProjectionStroke = 1.2;
 static constexpr std::array<double, 2> kSparkProjectionDashes = {1, 1.5};
 static constexpr double kSparkDotRadius = 1.5, kSparkLimitRadius = 1.75;
 // The current reading: a dot (its usage color lifted by kSparkNowLift) inside a ring, cut out of
-// the marks under them in the taskbar's color; without the ring, a plain dot. The current time: a
-// line across the plot, and a caret on its bottom edge.
-static constexpr double kSparkNowRadius = 2.2, kSparkRingInner = 3, kSparkRingOuter = 4.1, kSparkNowLift = 0.03;
+// the marks under them in the taskbar's color; without the ring, a plain dot; both at a 100%
+// reading size. The current time: a line across the plot, and a caret on its bottom edge.
+static constexpr double kSparkNowRadius = 1.9, kSparkRingInner = 2.6, kSparkRingOuter = 3.6, kSparkNowLift = 0.03;
 static constexpr double kSparkPlainNowRadius = 2;
 static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSparkCaretHeight = 3.2;
 static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
-// Room for sparkline shapes past the plot: a ring around a point on its edge.
-static constexpr double kSparkOverflow = 4.5;
+// Room for sparkline shapes past the plot: the largest ring around a point on its edge.
+static constexpr double kSparkOverflow = kSparkRingOuter * kSparklineReadingScaleMax / 100 + 0.4;
 // How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs); 0:
 // the whole window.
 static ULONGLONG SparklineAroundMs(SparklineSpan span) {
@@ -7061,6 +7065,7 @@ struct MeterDisplay {
     bool sparklineNowLine;
     bool sparklineNowCaret;
     bool sparklineRing;
+    double sparklineReadingScale;  // kSparklineReadingScaleMin-kSparklineReadingScaleMax percent, as a fraction.
     // Long windows' charts span this before and after now (AccountMeters); 0: the whole window.
     ULONGLONG sparklineAroundMs;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
@@ -7116,6 +7121,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .sparklineNowLine = settings.sparklineNowLine,
         .sparklineNowCaret = settings.sparklineNowCaret,
         .sparklineRing = settings.sparklineRing,
+        .sparklineReadingScale =
+            std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0,
         .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
@@ -8083,18 +8090,19 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                                      {o, o + r}, {o + r, o, r}}}};
             }
             // The current reading: the dot in its ring, both cut out of the marks under them, or a
-            // plain dot; `mark` DIPs around its centre.
+            // plain dot, at the reading size; `mark` DIPs around its centre.
             const bool ring = display.sparklineRing;
-            const double mark = ring ? kSparkRingOuter : kSparkPlainNowRadius;
+            const double scale = display.sparklineReadingScale;
+            const double mark = (ring ? kSparkRingOuter : kSparkPlainNowRadius) * scale;
             std::optional<std::pair<double, double>> readingAt;
             std::optional<double> nowX;
             auto reading = [&](double x, double y) {
                 readingAt = {x, y};
                 if (ring) {
-                    shapes[kSparkNowCut] = {circle(x, y, kSparkRingOuter)};
-                    shapes[kSparkNowRing] = {circle(x, y, kSparkRingOuter), circle(x, y, kSparkRingInner, false)};
+                    shapes[kSparkNowCut] = {circle(x, y, mark)};
+                    shapes[kSparkNowRing] = {circle(x, y, mark), circle(x, y, kSparkRingInner * scale, false)};
                 }
-                shapes[kSparkNow] = {circle(x, y, ring ? kSparkNowRadius : kSparkPlainNowRadius)};
+                shapes[kSparkNow] = {circle(x, y, (ring ? kSparkNowRadius : kSparkPlainNowRadius) * scale)};
             };
             // The plot's rounded rectangle up to `lit` DIPs across, clockwise from its top edge;
             // a cut through a corner meets its arc.
@@ -18351,6 +18359,8 @@ static bool NormalizeSettings(Settings* s) {
                                     kSparklineHeightMax);
     s->sparklineTextSize = std::clamp(s->sparklineTextSize > 0 ? s->sparklineTextSize : 8, kSparklineTextSizeMin,
                                       kSparklineTextSizeMax);
+    s->sparklineReadingScale = std::clamp(s->sparklineReadingScale > 0 ? s->sparklineReadingScale : 100,
+                                          kSparklineReadingScaleMin, kSparklineReadingScaleMax);
     if (s->sparklineExtra < SparklineExtra::Off || s->sparklineExtra > SparklineExtra::Percent) {
         s->sparklineExtra = SparklineExtra::Amount;
     }
@@ -18475,6 +18485,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"sparklineNowLine", s.sparklineNowLine);
         setBool(L"sparklineNowCaret", s.sparklineNowCaret);
         setBool(L"sparklineRing", s.sparklineRing);
+        setNumber(L"sparklineReadingScale", s.sparklineReadingScale);
         auto spanName = [](SparklineSpan span) {
             return span == SparklineSpan::Hours12 ? L"12h" : span == SparklineSpan::Hours24 ? L"24h" :
                    span == SparklineSpan::Hours36 ? L"36h" : span == SparklineSpan::Hours48 ? L"48h" : L"window";
@@ -18651,7 +18662,11 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.sparklineElapsed = getBoolDefault(L"sparklineElapsed", true);
         s.sparklineNowLine = getBoolDefault(L"sparklineNowLine", true);
         s.sparklineNowCaret = getBoolDefault(L"sparklineNowCaret", false);
-        s.sparklineRing = getBoolDefault(L"sparklineRing", false);
+        s.sparklineRing = getBoolDefault(L"sparklineRing", true);
+        double sparklineReadingScale = GetNum(root, L"sparklineReadingScale", 100);
+        s.sparklineReadingScale =
+            std::isfinite(sparklineReadingScale) ?
+                (int)std::clamp(sparklineReadingScale, 0.0, (double)kSparklineReadingScaleMax) : 0;
         // A span by name; `missing` for none or an unknown one.
         auto spanOf = [&](PCWSTR key, SparklineSpan missing) {
             std::wstring name = GetStr(root, key);
@@ -19655,6 +19670,7 @@ enum class SettingsField : uint8_t {
     SparklineNowLine,
     SparklineNowCaret,
     SparklineRing,
+    SparklineReadingScale,  // Percent
     SparklineSpan,    // A SparklineSpan
     SparklineHoverSpan,  // A SparklineSpan, or -1: none
     LogoScale,        // Percent
@@ -19742,6 +19758,8 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::SparklineHeight: return SettingsNumberRange{kSparklineHeightMin, kSparklineHeightMax};
         case SettingsField::SparklineTextSize:
             return SettingsNumberRange{kSparklineTextSizeMin, kSparklineTextSizeMax};
+        case SettingsField::SparklineReadingScale:
+            return SettingsNumberRange{kSparklineReadingScaleMin, kSparklineReadingScaleMax};
         case SettingsField::LogoScale: return SettingsNumberRange{kLogoScaleMin, kLogoScaleMax};
         case SettingsField::BadgeSize: return SettingsNumberRange{kBadgeSizeMin, kBadgeSizeMax};
         case SettingsField::BadgeOffsetX:
@@ -19780,8 +19798,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::SparklineOutline,
                     SettingsField::SparklineExtra,  SettingsField::SparklineElapsed,
                     SettingsField::SparklineNowLine, SettingsField::SparklineNowCaret,
-                    SettingsField::SparklineRing,   SettingsField::SparklineSpan,
-                    SettingsField::SparklineHoverSpan,
+                    SettingsField::SparklineRing,   SettingsField::SparklineReadingScale,
+                    SettingsField::SparklineSpan,   SettingsField::SparklineHoverSpan,
                     SettingsField::LogoScale,
                     SettingsField::ClaudeLogoBrand, SettingsField::GeminiLogoBrand,
                     SettingsField::BadgeSize,       SettingsField::BadgeColor,
@@ -19837,6 +19855,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::SparklineNowLine: return s.sparklineNowLine;
         case SettingsField::SparklineNowCaret: return s.sparklineNowCaret;
         case SettingsField::SparklineRing: return s.sparklineRing;
+        case SettingsField::SparklineReadingScale: return s.sparklineReadingScale;
         case SettingsField::SparklineSpan: return int(s.sparklineSpan);
         case SettingsField::SparklineHoverSpan: return s.sparklineHoverSpan ? int(*s.sparklineHoverSpan) : -1;
         case SettingsField::LogoScale: return s.logoScale;
@@ -19925,6 +19944,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SparklineNowLine: s.sparklineNowLine = value != 0; break;
         case SettingsField::SparklineNowCaret: s.sparklineNowCaret = value != 0; break;
         case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
+        case SettingsField::SparklineReadingScale: s.sparklineReadingScale = value; break;
         case SettingsField::SparklineSpan:
             s.sparklineSpan = SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
             break;
@@ -20014,6 +20034,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.sparklineNowLine = defaults.sparklineNowLine;
             s.sparklineNowCaret = defaults.sparklineNowCaret;
             s.sparklineRing = defaults.sparklineRing;
+            s.sparklineReadingScale = defaults.sparklineReadingScale;
             s.sparklineSpan = defaults.sparklineSpan;
             s.sparklineHoverSpan = defaults.sparklineHoverSpan;
             s.logoScale = defaults.logoScale;
@@ -22792,7 +22813,8 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         y = logoCards(identityCard(y) + 3, true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
-        // chart, the long windows' span and its swap on hover, then the current position cues.
+        // chart, the long windows' span and its swap on hover, then the current position cues and
+        // the reading's size.
         y = UiAddSection(items, id, x, y + 20, width, L"Usage graph");
         {
             UiCardSpec spec;
@@ -22877,6 +22899,13 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             spec.title = kCues[k].title;
             spec.description = {{kCues[k].description}};
             y = SettingsAddToggleCard(g, view, items, id, x, k ? y + 3 : y, width, spec, kCues[k].field);
+        }
+        {
+            UiCardSpec spec;
+            spec.title = L"Reading size";
+            spec.description = {{L"Percent of the current reading\u2019s standard size: the ring and its dot, or the "
+                                 L"plain dot."}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineReadingScale);
         }
         y = UiAddSection(items, id, x, y + 20, width, L"Identity");
         y = logoCards(identityCard(y) + 3, true);
