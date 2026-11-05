@@ -5,10 +5,10 @@
 // window thread once it settles) and an unload close during a message box. Windows are
 // off-screen and never activated; the message box shows briefly. The dropdown popup, text box,
 // segmented control, key forwarding, activation request, navigation pane, chart and tooltip
-// cases run on a hidden desktop this probe creates and never switches to, so their focus,
-// capture, foreground, tooltips and message box stay off the user's screen.
-// The history window's dialog scope (history/modal.h, extracted into the DLL) runs on the hidden
-// desktop too: message boxes ended by unload's close from this thread and by a close, a nested
+// cases each run on a new hidden desktop this probe creates and never switches to, so their
+// focus, capture, foreground, tooltips and message box stay off the user's screen.
+// The history window's dialog scope (history/modal.h, extracted into the DLL) runs on hidden
+// desktops too: message boxes ended by unload's close from this thread and by a close, a nested
 // Yes/No box, one activated after the close latch, and the save dialog as an observation, last.
 // Usage: host-probe.exe <ui-host.dll>
 //        host-probe.exe <ui-host.dll> --tooltip-interactive --log <file>  (by hand, on the user's
@@ -43,7 +43,7 @@ static constexpr UINT kProbeCommand = WM_APP + 73;
 static constexpr UINT kProbeColor = WM_APP + 74;
 static constexpr UINT kProbeHistoryDialog = WM_APP + 75;
 static constexpr UINT kProbeNested = WM_APP + 76;
-enum ProbeDialogKind { kAskBox, kNestedBox, kInfoBox, kSaveDialog, kTwoScopes };
+enum ProbeDialogKind { kAskBox, kInfoBox, kSaveDialog, kTwoScopes };
 static constexpr LRESULT kProbeMagic = 0x51A7E;
 enum ProbeCommand { kOpenPopup, kPopupState, kFieldKey, kPopupMouse, kSendMain, kAction, kFocus,
                     kEditState, kEditWindow, kEditChar, kEditKey, kEditText, kRebuild, kScroll,
@@ -180,6 +180,25 @@ static HWND ThreadDialog(HWND window) {
     }, reinterpret_cast<LPARAM>(&found));
     return found;
 }
+
+// A new hidden desktop this probe never switches to, one per case: once a few threads have taken
+// focus on a desktop without the session's text input service, text services start an in-process
+// loader there, and every later thread's first focus change on it waits 2 s.
+struct HiddenDesktop {
+    HDESK handle = nullptr;
+    HiddenDesktop() {
+        static int serial = 0;
+        wchar_t name[64];
+        swprintf(name, 64, L"AiQuotaHostProbe-%lu-%d", GetCurrentProcessId(), ++serial);
+        handle = CreateDesktopW(name, nullptr, nullptr, 0, GENERIC_ALL, nullptr);
+    }
+    ~HiddenDesktop() {
+        if (handle) CloseDesktop(handle);
+    }
+    HiddenDesktop(const HiddenDesktop&) = delete;
+    HiddenDesktop& operator=(const HiddenDesktop&) = delete;
+    operator HDESK() const { return handle; }
+};
 
 // Interactive tooltip routing (--tooltip-interactive): the probe window on the user's desktop,
 // activated, in tooltip mode (a chart, an icon button with a tooltip). The user does each step
@@ -551,13 +570,9 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(!probe.modal());
     });
 
-    // Dropdown popup and text boxes, on a hidden desktop.
-    wchar_t desktopName[64];
-    swprintf(desktopName, 64, L"AiQuotaHostProbe-%lu", GetCurrentProcessId());
-    HDESK desktop = CreateDesktopW(desktopName, nullptr, nullptr, 0, GENERIC_ALL, nullptr);
-    std::printf("CONTEXT popup and text box cases on a hidden desktop: %s\n", desktop ? "yes" : "no");
-
+    // Dropdown popup and text boxes, each on its own hidden desktop.
     Run("popup: owned, never active, holds capture; WM_CANCELMODE to main closes it", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -575,6 +590,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("popup: the field's keys move and choose; Esc, Alt, deactivation, a system command and "
         "wheels elsewhere close it without a choice", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -605,6 +621,7 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("popup: an outside press hides it and keeps capture until its release; an inside click chooses", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -627,6 +644,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("text box: kept across rebuilds; typing, Esc, Enter, arrows and Tab reach the client; "
         "focus leaving the window reports nothing", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -661,6 +679,7 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("unload with the popup open and capture held, then with a focused text box", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         for (bool popup : {true, false}) {
             Probe probe;
@@ -680,6 +699,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("slider: a press jumps and focuses, a drag reports values, the release ends it; a thumb grab "
         "doesn't jump, also at the track's end; losing capture or WM_CANCELMODE ends a drag", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -723,6 +743,7 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("slider keys step; a preview pans by drag and sideways wheel without taking focus", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -748,6 +769,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("drag handle: a press focuses its owner; past 4 DIP the move reports drags, the release a drop; "
         "a click does nothing; Esc and capture loss cancel; Alt+Up/Down on the owner step it", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -791,6 +813,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("drag handle: later drags move the built items in place without a rebuild, repainting only the "
         "viewport, whose paint brings the text box along; the drop rebuilds", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         HWND hwnd = probe.Open(desktop);
@@ -817,6 +840,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("drag handle: a close cancels the drag first (capture released, content back), then asks; kept "
         "open, Alt+Down steps the card", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         HWND hwnd = probe.Open(desktop);
@@ -838,6 +862,7 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("drag handle: the auto-scroll timer keeps ticking while the pointer moves within the edge zone", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         HWND hwnd = probe.Open(desktop);
@@ -859,6 +884,7 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("drag handle: with the auto-scroll timer starved, moves within the edge zone still scroll on time", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         HWND hwnd = probe.Open(desktop);
@@ -882,6 +908,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("slider drags rebuild once per frame, at the paint, repainting the main window only when named; "
         "values repeat against the last report; the main window's paint brings the viewport's", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         HWND hwnd = probe.Open(desktop);
@@ -908,6 +935,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("free text box: its limit; typing and Esc reach the client, Up/Down stay native; a menu button "
         "opens its menu with nothing chosen, keys choose", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -935,6 +963,7 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("color dialog: a user close and unload's close cancel it, then the window closes", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         for (bool unload : {false, true}) {
             Probe probe;
@@ -954,6 +983,7 @@ int wmain(int argc, wchar_t** argv) {
     Run("segmented control: one tab stop; its keys select through the host and stay with it; a click "
         "selects the segment under the pointer and focuses the control; the selected segment, a press "
         "released elsewhere and a disabled control do nothing", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -997,6 +1027,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("keys neither surface uses reach the client from the main window and the viewport; keys the "
         "popup, the focus order or a control uses don't", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -1027,6 +1058,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("activation request: the popup closes and the window comes back, then the client sees it; "
         "theme changes rebuild", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         HWND hwnd = probe.Open(desktop);
@@ -1050,6 +1082,7 @@ int wmain(int argc, wchar_t** argv) {
     Run("navigation pane: the wheel scrolls it over it and the content over the page; the pointer hits "
         "entries at its scroll; keyboard focus and a new selection scroll entries into view; its "
         "scrollbar widens under the pointer and its thumb drags it", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -1097,7 +1130,7 @@ int wmain(int argc, wchar_t** argv) {
 
     // Chart and tooltip cases: the window moved on screen (of the hidden desktop), so the readout
     // sits on the pointer's monitor beside it.
-    auto tipWindow = [&](Probe& probe) {
+    auto tipWindow = [](Probe& probe, HDESK desktop) {
         probe.Open(desktop);
         probe.Call(kMoveMain, 100);
         probe.Call(kTipMode, 1);
@@ -1108,9 +1141,10 @@ int wmain(int argc, wchar_t** argv) {
         "never active, without capture, clear of the pointer, passing the pointer through; the same pick moves "
         "it without a repaint, a new one repaints only the chart's surface; a press ends the hover and focuses "
         "the chart, the release activates nothing; its arrows scroll; target loss recreates", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
-        tipWindow(probe);
+        tipWindow(probe, desktop);
         CHECK(probe.Call(kFocus, kDropdown) == 1);
         probe.Call(kChartMouse, ChartAt(0, 10, 50));
         CHECK(probe.Call(kTipState) == (kTipShown | kTipReadout));
@@ -1158,9 +1192,10 @@ int wmain(int argc, wchar_t** argv) {
     Run("readout: every hide trigger hides it (leave, press, key, wheel, scroll, rebuild, popup, cancel mode, "
         "deactivation, a disabled owner, focus loss, move, size, minimize, hide, system command, Alt, the "
         "activation request, DPI, theme, a declined close, a modal); none shows with the owner disabled", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
-        tipWindow(probe);
+        tipWindow(probe, desktop);
         int x = 10;
         auto show = [&] {
             x = x == 10 ? 14 : 10;
@@ -1245,9 +1280,10 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("item tooltip: after the hover delay while the pointer stays on its item in the same frame; a new "
         "element hides it; nothing shows after a rebuild, a press, a move away, or with the popup open", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
-        tipWindow(probe);
+        tipWindow(probe, desktop);
         DWORD delay = GetDoubleClickTime() + 300;
         auto arm = [&] {
             probe.Call(kTipButton, 3);
@@ -1287,9 +1323,10 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("tooltip: repeated show and hide without USER or GDI handle growth", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
-        tipWindow(probe);
+        tipWindow(probe, desktop);
         // Read on the window thread once its messages and paints are handled (the tooltip paints
         // after it shows): USER << 16 | GDI.
         int warm = 0;
@@ -1309,9 +1346,10 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("tooltip: unload with the readout showing; the tooltip is gone before the main window's NCDESTROY", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
-        tipWindow(probe);
+        tipWindow(probe, desktop);
         probe.Call(kChartMouse, ChartAt(0, 10, 60));
         CHECK(visible(probe));
         probe.unload();
@@ -1322,10 +1360,11 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("tooltip: a creation failure leaves the window working without tooltips, hover still reported; the "
         "next show retries; a conflicting class registration is replaced", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         {
             Probe probe;
-            tipWindow(probe);
+            tipWindow(probe, desktop);
             CHECK(probe.Call(kTipUnregister) == 1);
             probe.Call(kChartMouse, ChartAt(0, 10, 60));
             CHECK(!(probe.Call(kTipState) & kTipWindow) && probe.count(kChartHovers) == 1);
@@ -1343,7 +1382,7 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(RegisterClassExW(&conflicting));
         {
             Probe probe;
-            tipWindow(probe);
+            tipWindow(probe, desktop);
             probe.Call(kChartMouse, ChartAt(0, 10, 60));
             CHECK(probe.Call(kTipState) == (kTipShown | kTipReadout) && probe.Call(kTipNcHit) == HTTRANSPARENT);
             PostMessageW(probe.hwnd_, WM_CLOSE, 0, 0);
@@ -1353,6 +1392,7 @@ int wmain(int argc, wchar_t** argv) {
     });
 
     Run("unload during a message box opened over the popup", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -1371,6 +1411,7 @@ int wmain(int argc, wchar_t** argv) {
     Run("nested progress repaint: a client-drawn main item repainted ten times from inside a handler through "
         "UiHostPaintNow, found by id each time (a moved item paints where it is now), no rebuild meanwhile; a "
         "lost target is recreated by the next repaint; once the host faults the rest are skipped", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         for (int variant = 0; variant < 4; variant++) {
             Probe probe;
@@ -1419,6 +1460,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("history dialogs: unload's close from another thread (as CloseHistoryWindow) ends an OK/Cancel message "
         "box; the hook and the published dialog are gone, no dialog left", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -1434,14 +1476,18 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("history dialogs: a Yes/No box opened inside the first (as the save dialog's overwrite prompt) and the "
         "box under it both end from unload's close: No, then Cancel", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
         HistoryDialogs dialogs(probe);
-        PostMessageW(probe.hwnd_, kProbeHistoryDialog, kNestedBox, 0);
+        PostMessageW(probe.hwnd_, kProbeHistoryDialog, kAskBox, 0);
         HWND outer = dialogs.Await();
+        CHECK(outer);
+        // Posted once the first is published, so its modal loop opens the second over it.
+        PostMessageW(probe.hwnd_, kProbeNested, 0, 0);
         HWND nested = dialogs.Await(outer);
-        CHECK(outer && nested && GetWindow(nested, GW_OWNER) == outer);
+        CHECK(nested && GetWindow(nested, GW_OWNER) == outer);
         // Cancel alone, as unload posts it to the published dialog: observed, not relied on.
         PostMessageW(nested, WM_COMMAND, IDCANCEL, 0);
         Sleep(300);
@@ -1457,6 +1503,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("history dialogs: a box activated after the close latch ends at once, and the box under it follows; the "
         "window stays until it is closed", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -1479,6 +1526,7 @@ int wmain(int argc, wchar_t** argv) {
 
     Run("history dialogs: a user close during an OK box (About) latches, ends it as OK and closes once it has "
         "unwound; a scope refuses to show once cancelled and while another runs on the thread", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         {
             Probe probe;
@@ -1506,6 +1554,7 @@ int wmain(int argc, wchar_t** argv) {
     // Last: the save dialog may not come up on a hidden desktop, or not end; an observation only.
     Run("history dialogs (observation): the save dialog in the scope under a WinRT STA on the hidden desktop, "
         "ended by unload's close", [&] {
+        HiddenDesktop desktop;
         CHECK(desktop);
         Probe probe;
         probe.Open(desktop);
@@ -1523,8 +1572,6 @@ int wmain(int argc, wchar_t** argv) {
                     probe.count(kScopeLeft));
         CHECK(true);
     });
-    if (desktop) CloseDesktop(desktop);
-
     std::printf("RESULT %d passed, %d failed; %d assertions\n", passed, failed, assertions);
     CoDecrementMTAUsage(mta);
     return failed ? 1 : 0;

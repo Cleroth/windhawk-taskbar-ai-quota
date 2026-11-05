@@ -249,7 +249,7 @@ Each run creates a retained `.out/run-.../` with the extracted `settings.cpp`, `
 `render-*.png`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe
 shows off-screen, never-activated windows and briefly a message box, and reads the user's theme
 (registry, `UISettings`); its popup, text box, slider, preview, chart, tooltip and color dialog
-cases, like the popup probe, run on a hidden desktop it creates and never switches to, so their
+cases (each on its own) and the popup probe run on hidden desktops they create and never switch to, so their
 windows, focus, capture, tooltips and dialogs never reach the user's screen, focus or pointer. The
 interactive modes are the exception: an activated window on the user's desktop, and F8/F9 (the
 popup probe also F10) registered as global hotkeys until it exits. No storage, network,

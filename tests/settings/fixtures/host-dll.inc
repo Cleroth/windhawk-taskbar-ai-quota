@@ -19,11 +19,11 @@ static constexpr uint32_t kProbeDropdown = 500, kProbeNumberBox = 600, kProbeSli
                           kProbePreview = 800, kProbeCard = 900, kProbeHandle = 901, kProbeTextBox = 910,
                           kProbeMenu = 920, kProbeSegments = 1000, kProbeSegmentsOff = 1001, kProbeNav = 2000,
                           kProbeChart = 1100, kProbeTipButton = 1101, kProbeProgress = 1200;
-// The history window's dialogs (history/modal.h) as its ops run them: an OK/Cancel message box,
-// the same with a Yes/No box opened over it from inside (as the save dialog's overwrite prompt),
+// The history window's dialogs (history/modal.h) as its ops run them: an OK/Cancel message box
+// (kProbeNested opens a Yes/No box over it from inside, as the save dialog's overwrite prompt),
 // an OK box (About), the save dialog, and two scopes at once (kTwoScopes: the outer one hooked,
 // the inner one refused, the outer one still current after the inner one's end).
-enum ProbeDialogKind { kAskBox, kNestedBox, kInfoBox, kSaveDialog, kTwoScopes };
+enum ProbeDialogKind { kAskBox, kInfoBox, kSaveDialog, kTwoScopes };
 // The activation request (UiHostConfig::activateMessage), registered by name in both processes.
 static UINT ProbeActivateMessage() {
     static const UINT message = RegisterWindowMessageW(L"AiQuotaProbeUiActivate");
@@ -969,7 +969,6 @@ struct ProbeClient final : UiHostClient {
                     g_counters[kOuterAnswer] = -1;
                     return true;
                 }
-                if (wParam == kNestedBox) PostMessageW(host.main, kProbeNested, 0, 0);
                 if (wParam == kSaveDialog) {
                     std::wstring path = L"probe.csv";
                     path.resize(32768);
