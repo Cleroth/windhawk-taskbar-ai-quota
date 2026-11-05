@@ -2,22 +2,27 @@
 
 static void RunLogoTests() {
     Run("logo paths are SVG path data", [] {
-        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath, kCopilotLogoPath}) {
+        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath, kCopilotLogoPath, kOpenCodeLogoPath}) {
             std::wstring text = path;
-            CHECK(text.size() > 100);
             CHECK(text.front() == L'M' || text.front() == L'm');
             CHECK(text.find_first_not_of(L"0123456789.,- MmLlHhVvCcSsQqTtAaZz") == std::wstring::npos);
         }
+        // The traced marks are long; OpenCode's is a frame of two rectangles (ui.inc: its extent and hole).
+        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath, kCopilotLogoPath}) {
+            CHECK(std::wstring(path).size() > 100);
+        }
         // Each provider's own mark; Antigravity uses Gemini's.
         CHECK(ProviderLogoPath(L"anthropic") == kClaudeLogoPath && ProviderLogoPath(L"openai") == kOpenAiLogoPath &&
-              ProviderLogoPath(L"antigravity") == kGeminiLogoPath && ProviderLogoPath(L"copilot") == kCopilotLogoPath);
+              ProviderLogoPath(L"antigravity") == kGeminiLogoPath && ProviderLogoPath(L"copilot") == kCopilotLogoPath &&
+              ProviderLogoPath(L"opencode") == kOpenCodeLogoPath);
     });
 
     Run("logo brand colors: Claude's orange and the Gemini gradient, each only when chosen", [] {
         CHECK(!ProviderLogoBrand({}, L"anthropic") && !ProviderLogoBrand({}, L"antigravity"));
-        // OpenAI's and GitHub Copilot's marks have none.
+        // OpenAI's, GitHub Copilot's and OpenCode's marks have none.
         const LogoBrands both{true, true};
-        CHECK(!ProviderLogoBrand(both, L"openai") && !ProviderLogoBrand(both, L"copilot") && !ProviderLogoBrand(both, L""));
+        CHECK(!ProviderLogoBrand(both, L"openai") && !ProviderLogoBrand(both, L"copilot") &&
+              !ProviderLogoBrand(both, L"opencode") && !ProviderLogoBrand(both, L""));
         // Claude: flat #D97757 (hsl(14.8, 63.1%, 59.6%), the Claude symbol's fill).
         const LogoBrand* claude = ProviderLogoBrand({true, false}, L"anthropic");
         CHECK(claude && claude->from == 0xFFD97757 && claude->to == 0xFFD97757);

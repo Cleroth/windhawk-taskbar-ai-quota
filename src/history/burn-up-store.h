@@ -105,8 +105,8 @@ static void InvalidateBurnUpCurves() {
 // reading's. Takes g_settingsMutex then g_dataMutex; call it holding neither.
 static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyoutRow,
                                                   const WindowUsage& reading) {
-    // The extra row's curve is Anthropic extra usage or GitHub Copilot's AI credits; OpenAI
-    // credits are not a windowed meter.
+    // The extra row's curve is Anthropic extra usage, GitHub Copilot's AI credits or OpenCode Go's
+    // monthly; OpenAI credits are not a windowed meter.
     int meter = flyoutRow == kFlyoutFiveHourRow ? 0 : flyoutRow == kFlyoutWeeklyRow ? 1 :
                 flyoutRow == kFlyoutFableRow ? 2 : flyoutRow == kFlyoutExtraRow ? 3 :
                 flyoutRow == kFlyoutPoolShortRow ? 4 : flyoutRow == kFlyoutPoolWeeklyRow ? 5 : -1;

@@ -41,7 +41,7 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
             sample.timeMs < scope.from || sample.timeMs >= scope.to) continue;
         const char* provider = sample.provider == 1 ? "anthropic" : sample.provider == 2 ? "openai" :
                                sample.provider == 3 ? "antigravity" : sample.provider == 4 ? "copilot" :
-                                                                                            "unknown";
+                               sample.provider == 5 ? "opencode" : "unknown";
         // Nonnumeric, non-formula text survives Excel's 15-digit number coercion.
         std::string id = HistoryCsvId("account_", sample.accountId);
         std::string session = HistoryCsvId("session_", sample.session);
@@ -51,11 +51,14 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
             if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
                 (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
                 (sample.provider == 3 && meter != 0 && meter != 1 && meter != 2 && meter != 4 && meter != 5) ||
-                (sample.provider == 4 && meter != 3)) continue;
+                (sample.provider == 4 && meter != 3) ||
+                (sample.provider == 5 && meter != 0 && meter != 1 && meter != 3)) continue;
             const auto& value = sample.meters[meter];
             bool present = HistoryHasValue(sample, int(meter));
-            // Antigravity's Fable weekly lane holds its Gemini Argon weekly.
-            const char* meterId = sample.provider == 3 && meter == 2 ? "argon_weekly" : kHistoryMeterIds[meter];
+            // Antigravity's Fable weekly lane holds its Gemini Argon weekly, OpenCode Go's extra
+            // percentage lane its monthly.
+            const char* meterId = sample.provider == 3 && meter == 2 ? "argon_weekly" :
+                                  sample.provider == 5 && meter == 3 ? "monthly" : kHistoryMeterIds[meter];
             buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
                 id + "," + provider + "," + std::to_string(sample.provider) + "," +
                 meterId + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +

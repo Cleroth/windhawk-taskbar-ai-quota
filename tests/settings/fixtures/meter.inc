@@ -224,6 +224,9 @@ static void RunBarTests() {
         CHECK(amount(L"copilot", 100, 300, 300, BarMode::Remaining).quotas[3].text == L"0");
         CHECK(amount(L"copilot", 25, 1500.5, 6000).quotas[3].text == L"1.5k");
         CHECK(amount(L"copilot", 25, 75, 300, BarMode::Used, false).quotas[3].text == L"25%");
+        // OpenCode Go reports no amounts behind its monthly: a percentage with amounts on.
+        CHECK(amount(L"opencode", 40, -1, -1).quotas[3].text == L"40%");
+        CHECK(amount(L"opencode", 40, -1, -1, BarMode::Remaining).quotas[3].text == L"60%");
         // From 1,000 on: three significant digits with k or M; amounts that round into the next
         // suffix read as 1 of it.
         auto spent = [&](std::wstring provider, double used) {
@@ -2964,6 +2967,22 @@ static void RunSparklineTests() {
         CHECK(unselected.barMask == 0b0011);
         shows(corner(credits, Amount, kUsed, L"openai", {true, true, false, false}), L"", L"", 0);
         shows(corner(balance, Amount, kUsed, L"openai", {true, true, false, false}), L"", L"", 0);
+        // OpenCode Go's monthly (40% of a 30-day window, no amounts) is a quota of its own, never the
+        // corner: charted third, 104 DIPs in, keyed Mo, in every corner setting and bar mode. The
+        // Anthropic account's extra usage beside it keeps its corner.
+        AccountData opencode = Fresh();
+        opencode.win5h = Window(30, 9000000);
+        opencode.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
+        opencode.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, kMonth};
+        for (SparklineExtra extra : {Amount, Percent, Off}) {
+            for (BarMode mode : {kUsed, kLeft}) {
+                AccountMeters m = corner(opencode, extra, mode, L"opencode");
+                shows(m, L"", L"", 0);
+                CHECK(m.barMask == 0b1011 && !bare(m.quotas[3]) && m.quotas[3].key == L"Mo");
+                CHECK_NEAR(m.faceWidth, 152); CHECK_NEAR(m.quotas[3].sparkLeft, 104);
+            }
+        }
+        shows(corner(anthropic(20, 50)), L"", L"$20.00", green);
         // Amounts from 1,000 on: three significant digits with k or M. 110616 of a 250000 credit max
         // left (55.8% used: yellow): 139384 spent, 111k left; a 62500 balance without a max; $1500
         // spent past a $1200 limit.
@@ -3383,16 +3402,21 @@ static void RunMatrixTests() {
               waiting.quotas[3].text == L"\u2013");
         CHECK(matrix(before, BarMode::Remaining).quotas[2].text == L"\u2013");
         // Keys on every slot in every style, selected or not; Antigravity's third is its Gemini
-        // Argon weekly, OpenAI's fourth its credits, GitHub Copilot's its monthly AI credits.
+        // Argon weekly, OpenAI's fourth its credits, GitHub Copilot's its monthly AI credits, OpenCode
+        // Go's its monthly.
         for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
-            for (std::wstring provider : {L"anthropic", L"openai", L"antigravity", L"copilot"}) {
+            for (std::wstring provider : {L"anthropic", L"openai", L"antigravity", L"copilot", L"opencode"}) {
                 AccountMeters m = AccountMeterState(Display(), BarLayout(layout), Account(provider, L"A", {true, false, false, false}),
                                                     Fresh({10, -1, -1, -1}), 0, 0);
                 CHECK(m.quotas[0].key == L"5h" && m.quotas[1].key == L"7d" &&
                       m.quotas[2].key == (provider == L"antigravity" ? L"Ar" : L"Fa"));
-                CHECK(m.quotas[3].key == (provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : L"Ex"));
+                CHECK(m.quotas[3].key == (provider == L"openai" ? L"Cr" :
+                                          provider == L"copilot" || provider == L"opencode" ? L"Mo" : L"Ex"));
             }
         }
+        CHECK(QuotaKey(L"opencode", kFiveHourBar) == std::wstring_view(L"5h") &&
+              QuotaKey(L"opencode", kWeeklyBar) == std::wstring_view(L"7d") &&
+              QuotaKey(L"opencode", kExtraUsageBar) == std::wstring_view(L"Mo"));
     });
 
     Run("quota matrix: the number size, two rows shrunk to fit the tile, at least 7 DIPs; keys at 9/14 of it", [] {

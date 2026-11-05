@@ -17,7 +17,7 @@ enum class TileIdentity {
 };
 
 struct AccountConfig {
-    std::wstring provider;  // "anthropic", "openai", "antigravity", or "copilot".
+    std::wstring provider;  // "anthropic", "openai", "antigravity", "copilot", or "opencode".
     std::wstring label;
     TileIdentity tileIdentity = TileIdentity::LogoBadge;
     std::wstring tileText;  // Optional short text for TileIdentity::Text on tiles.
@@ -314,6 +314,9 @@ struct AccountData {
     bool copilotExhausted = false;
     double copilotOverage = 0;
     CopilotUnit copilotUnit = CopilotUnit::AiCredits;
+    // OpenCode Go's windows (5-hour, weekly, monthly in the extra-usage slot) that reached their
+    // limit, by QuotaBarIndex.
+    std::array<bool, kQuotaBarCount> opencodeLimited{};
     std::wstring error;
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;

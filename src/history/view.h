@@ -145,14 +145,16 @@ static UiAction HistoryUiAction(HistoryUiCommand command, int value = 0, uint64_
 
 static PCWSTR HistoryUiProviderName(uint32_t provider) {
     return provider == 1 ? L"Anthropic" : provider == 2 ? L"OpenAI" :
-           provider == 3 ? L"Google Antigravity" : provider == 4 ? L"GitHub Copilot" : L"Unknown provider";
+           provider == 3 ? L"Google Antigravity" : provider == 4 ? L"GitHub Copilot" :
+           provider == 5 ? L"OpenCode Go" : L"Unknown provider";
 }
 
 // A provider's logo (taskbar/logo-paths.h, 24 DIP view box) in the primary ink, or in its brand
 // colors when chosen and `brand`; none for an unknown provider.
 static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_t provider, bool brand) {
     PCWSTR path = provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
-                  provider == 3 ? kGeminiLogoPath : provider == 4 ? kCopilotLogoPath : nullptr;
+                  provider == 3 ? kGeminiLogoPath : provider == 4 ? kCopilotLogoPath :
+                  provider == 5 ? kOpenCodeLogoPath : nullptr;
     if (!path) return {};
     UiShapePart part{path, {}, UiInk::Primary};
     const LogoBrand* colors =

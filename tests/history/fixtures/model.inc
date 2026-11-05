@@ -1,13 +1,14 @@
 // The history model (history/series.h) through its explicit inputs: grouping, accounts without
 // readings, styles, labels, reduction, statistics, account collection, selection and
 // cancellation.
-    const std::array<std::array<std::set<int>, 4>, 4> expected{{
+    const std::array<std::array<std::set<int>, 4>, 5> expected{{
         {{{0}, {1, 2}, {3, 6}, {0, 1, 2, 3, 6}}},
         {{{0}, {1}, {7}, {0, 1, 7}}},
         {{{0, 4}, {1, 2, 5}, {}, {0, 1, 2, 4, 5}}},
         {{{}, {}, {3}, {3}}},
+        {{{0}, {1}, {3}, {0, 1, 3}}},
     }};
-    for (int selected : {-1, 0}) for (uint32_t provider = 1; provider <= 4; ++provider) {
+    for (int selected : {-1, 0}) for (uint32_t provider = 1; provider <= 5; ++provider) {
         for (int view = 0; view < 4; ++view) {
             std::string key = "p" + std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected);
             Run("provider/view inclusion " + key, [&, provider, view, selected] {
@@ -35,6 +36,18 @@
                 }
                 if (provider == 1 && (view == 2 || view == 3)) {
                     CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · Extra budget used (%)");
+                }
+                // OpenCode Go: its 5-hour window, weekly, and its monthly in the extra percentage lane.
+                if (provider == 5 && (view == 0 || view == 3)) {
+                    CHECK(Series(built, 0, 0).hoverTitle == L"account-100 · 5h used (%)");
+                    CHECK(Series(built, 0, 0).legendTitle == (selected < 0 ? L"account-100 · 5h" : L"5h"));
+                }
+                if (provider == 5 && (view == 1 || view == 3)) {
+                    CHECK(Series(built, 0, 1).hoverTitle == L"account-100 · Weekly used (%)");
+                }
+                if (provider == 5 && (view == 2 || view == 3)) {
+                    CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · Monthly used (%)");
+                    CHECK(Series(built, 0, 3).legendTitle == (selected < 0 ? L"account-100 · Monthly" : L"Monthly"));
                 }
             });
             Run("no readings " + key, [&, provider, view, selected] {
@@ -72,7 +85,7 @@
     // A later version's provider: every lane it recorded in range, in each view's lanes, under
     // the lanes' generic names.
     const std::array<std::set<int>, 4> viewLanes{{{0, 4}, {1, 2, 5}, {3, 6, 7}, {0, 1, 2, 3, 4, 5, 6, 7}}};
-    for (int selected : {-1, 0}) for (uint32_t provider : {5U, UINT_MAX}) for (int view = 0; view < 4; ++view) {
+    for (int selected : {-1, 0}) for (uint32_t provider : {6U, UINT_MAX}) for (int view = 0; view < 4; ++view) {
         std::string key = std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected);
         Run("later provider, every lane " + key, [&, provider, view, selected] {
             auto state = Model({provider}); AllLanes(state);
@@ -446,6 +459,16 @@
         CHECK(HistoryResolveSelection(accounts, 0x10, 0xab) == 4);
         CHECK(HistoryResolveSelection(accounts, 0x10, 0xcd) == 1);
         CHECK(HistoryCollectAccounts({}, samples, to, from, Never).empty());
+    });
+
+    Run("provider codes: one journal code per provider, OpenCode Go's 5; configured accounts collect with theirs", [] {
+        CHECK(HistoryProviderCode(L"anthropic") == 1 && HistoryProviderCode(L"openai") == 2 &&
+              HistoryProviderCode(L"antigravity") == 3 && HistoryProviderCode(L"copilot") == 4 &&
+              HistoryProviderCode(L"opencode") == 5);
+        CHECK(HistoryProviderCode(L"") == 0 && HistoryProviderCode(L"OpenCode") == 0);
+        AccountConfig account; account.provider = L"opencode"; account.label = L"OC"; account.historyId = 0x50;
+        auto accounts = HistoryCollectAccounts({account}, {}, baseTime, baseTime + hour, Never);
+        CHECK(accounts.size() == 1 && accounts[0].provider == 5 && accounts[0].label == L"OC" && accounts[0].configured);
     });
 
     Run("selection resolution: kept, listed request wins, unlisted or zero request keeps, vanished selects All", [] {

@@ -25,10 +25,11 @@ The mod is injected into `explorer.exe`. Execution domains:
 - **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff, token refresh;
   owns the tray notify icon. It must NEVER touch XAML.
 - **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`; spawned from
-  a taskbar UI thread by `StartLogin`): runs an OAuth sign-in in the sign-in window (`g_loginWnd`,
+  a taskbar UI thread by `StartLogin`): runs a sign-in in the sign-in window (`g_loginWnd`,
   own message loop), which offers the authorize link to copy or open; never launch a browser
-  unprompted. Anthropic codes are pasted there; the OpenAI loopback listener (`g_loginSocket`)
-  notifies that window via `WSAAsyncSelect`; GitHub Copilot's device flow shows its code there
+  unprompted. Anthropic codes and OpenCode Go API keys (masked) are pasted there; the OpenAI
+  loopback listener (`g_loginSocket`) notifies that window via `WSAAsyncSelect`; GitHub
+  Copilot's device flow shows its code there
   and polls the token endpoint from that message loop between pumps, never from the window
   procedure, discarding a result once the window closed; the loop also sets its status line, and
   a sign-in that ends without a token keeps the window open, not polling, until closed. Network
@@ -130,7 +131,8 @@ first, then reads/updates XAML.
 
 The mod owns its OAuth credentials: it signs in (PKCE with the public Claude Code / Codex clients;
 GitHub's device flow with copilot.vim's public client), stores access+refresh tokens, and
-refreshes/rotates them itself.
+refreshes/rotates them itself. OpenCode Go has no OAuth: the user pastes an API key, stored as an
+access token without refresh or expiry and sent only to its usage endpoint.
 
 - Never read or write the OpenCode/Claude Code/Codex credential files, or any other app's GitHub
   or Copilot credentials (Visual Studio, GitHub CLI, Credential Manager). Tokens live only in the

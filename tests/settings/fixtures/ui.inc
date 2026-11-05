@@ -53,6 +53,22 @@ static void RunUiTests() {
             CHECK(bounds.left > -0.5f && bounds.top > -0.5f && bounds.right < 24.5f &&
                   bounds.bottom < 24.5f && bounds.right - bounds.left > 20);
         }
+        // OpenCode's frame: 20 x 24 from x 2, with a 10 x 14.4 hole from (7, 4.8) wound the other
+        // way, so the nonzero fill leaves it empty.
+        ID2D1PathGeometry* opencode = UiPathGeometry(g, kOpenCodeLogoPath);
+        CHECK(SUCCEEDED(opencode->GetBounds(nullptr, &bounds)));
+        CHECK_NEAR(bounds.left, 2);
+        CHECK_NEAR(bounds.top, 0);
+        CHECK_NEAR(bounds.right, 22);
+        CHECK_NEAR(bounds.bottom, 24);
+        auto filled = [&](float x, float y) {
+            BOOL inside = FALSE;
+            opencode->FillContainsPoint({x, y}, nullptr, &inside);
+            return bool(inside);
+        };
+        CHECK(filled(4.5f, 12) && filled(19.5f, 12) && filled(12, 2.4f) && filled(12, 21.6f));
+        CHECK(!filled(12, 12) && !filled(7.5f, 5.3f) && !filled(16.5f, 18.7f));
+        CHECK(!filled(1, 12) && !filled(23, 12));
         // An arc from 190 to 260 degrees around (26, 26), radius 23.25, clockwise. Its midpoint
         // (225 degrees) is at 26 - 23.25 / sqrt(2); the opposite sweep's isn't.
         ID2D1PathGeometry* arc = UiPathGeometry(g, L"M3.103,21.963 A23.25,23.25 0 0 1 21.963,3.103");
@@ -307,6 +323,17 @@ static void RunUiTests() {
             }
         }
         CHECK(linkCards == 3);
+        // The logos card shows each provider's mark once, OpenCode's last.
+        std::vector<PCWSTR> marks;
+        for (const UiItem& item : frame.content) {
+            if (item.kind == UiItemKind::Shape && item.parts.size() == 1) marks.push_back(item.parts[0].path);
+        }
+        std::erase_if(marks, [](PCWSTR path) {
+            return path != kClaudeLogoPath && path != kOpenAiLogoPath && path != kGeminiLogoPath &&
+                   path != kCopilotLogoPath && path != kOpenCodeLogoPath;
+        });
+        CHECK((marks == std::vector<PCWSTR>{kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath, kCopilotLogoPath,
+                                            kOpenCodeLogoPath}));
         // The logos' two links, then the license's.
         CHECK(UiFocusStops(frame).size() == 6 + 3 + 3);
     });

@@ -413,4 +413,48 @@ static void RunHistoryViewTests() {
         std::vector<UiShapePart> logo = HistoryUiLogo(branded, 4, true);
         CHECK(logo.size() == 1 && logo[0].path == kCopilotLogoPath && !logo[0].fill);
     });
+
+    Run("history cards: an OpenCode Go account's 5-hour, weekly and monthly readings in their views, the monthly "
+        "named so; its provider name and mark, without brand colors", [] {
+        // Go (OpenCode Go, 0x0C) at hours 1-3: 5-hour 10, 20 and 30% (a 5-hour window), weekly 40,
+        // 45 and 50%, monthly 60, 65 and 70%, and values in lanes no OpenCode Go meter holds.
+        TestHistory h;
+        h.configured = {TestHistoryAccount(L"opencode", L"Go", 0x0C)};
+        for (int i = 0; i < 3; i++) {
+            HistorySample sample = TestReading(0x0C, 5, kWeekFrom + ULONGLONG(i + 1) * kHourMs,
+                                               {{0, 10.0 + 10 * i}, {1, 40.0 + 5 * i}, {3, 60.0 + 5 * i}, {2, 9},
+                                                {4, 9}, {5, 9}, {6, 9}, {7, 9}});
+            sample.meters[0].durationMs = 5 * kHourMs;
+            h.samples.push_back(sample);
+        }
+        h.selected = 0;
+        const std::pair<HistoryView, std::vector<std::wstring>> views[] = {
+            {HistoryView::ShortTerm, {L"5h"}},
+            {HistoryView::Weekly, {L"Weekly"}},
+            {HistoryView::ExtraUsage, {L"Monthly"}},
+            {HistoryView::AllMeters, {L"5h", L"Weekly", L"Monthly"}},
+        };
+        for (const auto& [v, titles] : views) {
+            h.view = v;
+            HistoryUiView view = TestCards(h);
+            std::vector<std::wstring> shown;
+            for (const HistoryUiCard& card : view.cards) shown.push_back(card.title);
+            CHECK(shown == titles && view.noReadings.empty());
+        }
+        h.view = HistoryView::ExtraUsage;
+        CHECK(TestCards(h).cards.at(0).value == L"70%");
+        h.selected = -1;
+        CHECK(TestCards(h).cards.at(0).title == L"Go \u00B7 Monthly");
+        // Without readings it is listed by its provider's name.
+        h.samples.clear();
+        HistoryUiView empty = TestCards(h);
+        CHECK(empty.cards.empty() && empty.noReadings.size() == 1 && empty.noReadings[0].detail == L"OpenCode Go");
+        CHECK(HistoryUiProviderName(5) == std::wstring_view(L"OpenCode Go"));
+        CHECK(HistoryUiProviderName(6) == std::wstring_view(L"Unknown provider"));
+        HistoryUiView branded;
+        branded.logoBrands = {true, true};
+        std::vector<UiShapePart> logo = HistoryUiLogo(branded, 5, true);
+        CHECK(logo.size() == 1 && logo[0].path == kOpenCodeLogoPath && !logo[0].fill);
+        CHECK(HistoryUiLogo(branded, 6, true).empty());
+    });
 }

@@ -130,6 +130,36 @@ static void RunHistoryOperationsTests() {
         CHECK(ops.log.empty());
     });
 
+    Run("history export: an OpenCode Go reading counts three rows toward the large-export warning", [] {
+        // OC (OpenCode Go, 0x0C): 166,667 readings in the week, three seconds apart (no values),
+        // about 500,001 rows, past the warning's 500,000; one fewer, 499,998, exports without asking.
+        static const std::vector<HistorySample> readings = [] {
+            std::vector<HistorySample> samples;
+            for (ULONGLONG i = 0; i < 166667; i++) samples.push_back(TestReading(0x0C, 5, kWeekFrom + i * 3000, {}));
+            return samples;
+        }();
+        for (size_t count : {readings.size(), readings.size() - 1}) {
+            TestHistoryOps ops = TestControllerOps();
+            ops.settings.settings.accounts.push_back(TestHistoryAccount(L"opencode", L"OC", 0x0C));
+            ops.journal.insert(ops.journal.end(), readings.begin(), readings.begin() + ptrdiff_t(count));
+            ops.stamp.appended = ops.journal.size();
+            ops.answers = {IDCANCEL};
+            HistoryController c(ops);
+            TestLoaded(c, ops, 0x0C);
+            CHECK(c.selectedId == 0x0C);
+            c.Command(HistoryUiCommand::Export);
+            TestSettled(c, ops);
+            if (count == readings.size()) {
+                CHECK(ops.log == TestLog{L"ask Large history export"} && ops.asked.size() == 1 &&
+                      ops.asked[0].first.starts_with(L"This export contains about 500001 rows. "));
+                CHECK(c.operation == HistoryOperation::None && !c.exportScope);
+            } else {
+                CHECK((ops.log == TestLog{kTestExportOne, L"post write"}) && ops.asked.empty());
+                CHECK(c.operation == HistoryOperation::Writing && c.exportScope->accountId == 0x0C);
+            }
+        }
+    });
+
     Run("history export: cancelled at the warning or in the save dialog, nothing is written or shown; a failed save "
         "dialog, dialogs that can't be tracked and a write that can't be posted say so; each ends the operation", [] {
         struct Case {

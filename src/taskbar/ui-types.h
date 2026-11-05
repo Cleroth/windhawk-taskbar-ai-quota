@@ -198,7 +198,8 @@ enum FlyoutRowIndex {
     kFlyoutFableRow,      // Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
     kFlyoutPoolShortRow,  // Antigravity Claude/GPT pools.
     kFlyoutPoolWeeklyRow,
-    kFlyoutExtraRow,      // Anthropic extra usage, OpenAI credits or GitHub Copilot's AI credits.
+    kFlyoutExtraRow,      // Anthropic extra usage, OpenAI credits, GitHub Copilot's AI credits or
+                          // OpenCode Go's monthly.
     kFlyoutRowCount,
 };
 

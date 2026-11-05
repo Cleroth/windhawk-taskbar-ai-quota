@@ -262,6 +262,12 @@ static void RunAccountEditTests() {
         CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"copilot")))].label == L"C");
         store.signIns.push_back(Identity(L"copilot", L"C2"));
         CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"copilot")))].label == L"C3");
+        // OpenCode Go: OC, OC2, ...; a stored sign-in of another provider's label doesn't count.
+        store.signIns.push_back(Identity(L"copilot", L"OC"));
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"opencode")))].label == L"OC");
+        store.signIns.push_back(Identity(L"opencode", L"OC2"));
+        CHECK(edits.baseline.settings.accounts[size_t(*edits.IndexOf(edits.AddAccount(L"opencode")))].label == L"OC3");
+        CHECK(AccountOps(store).back() == L"add opencode OC3");
         store.failNext = 1;
         CHECK(edits.AddAccount(L"openai") == 0);
         CHECK(edits.notices.size() == 1 && edits.notices[0].failure);
@@ -382,15 +388,25 @@ static void RunAccountEditTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         // Pinned header: title, Add account (right-aligned in the column), the note.
         const UiItem* add = UiFindItem(frame, SettingsControlId(SettingsField::AccountAdd));
-        CHECK(add && add->kind == UiItemKind::Button && add->button == UiButtonStyle::Accent && add->options.size() == 4);
+        CHECK(add && add->kind == UiItemKind::Button && add->button == UiButtonStyle::Accent && add->options.size() == 5);
         CHECK_NEAR(add->rect.right, 260 + 20 + 680);
         CHECK_NEAR(add->rect.top, 14);
         CHECK(add->options[2].detail == L"Uses the signed-in Antigravity app or CLI" && add->action.value == -1);
-        // GitHub Copilot last, by its value the controller's fourth provider.
+        // GitHub Copilot, by its value the controller's fourth provider; OpenCode Go last, its fifth.
         CHECK(add->options[3].text == L"GitHub Copilot" && add->options[3].value == 3 &&
               add->options[3].detail == L"Sign in with a code on github.com" &&
               add->options[3].parts.size() == 1 && add->options[3].parts[0].path == kCopilotLogoPath);
-        CHECK(std::size(kSettingsProviders) == 4 && kSettingsProviders[3] == std::wstring_view(L"copilot"));
+        CHECK(add->options[4].text == L"OpenCode Go" && add->options[4].value == 4 &&
+              add->options[4].detail == L"Sign in with an API key from the OpenCode console" &&
+              add->options[4].parts.size() == 1 && add->options[4].parts[0].path == kOpenCodeLogoPath &&
+              add->options[4].parts[0].ink == UiInk::Primary && !add->options[4].parts[0].fill);
+        CHECK(std::size(kSettingsProviders) == 5 && kSettingsProviders[3] == std::wstring_view(L"copilot") &&
+              kSettingsProviders[4] == std::wstring_view(L"opencode"));
+        // Each option's value names the provider whose mark it shows.
+        for (const UiOption& option : add->options) {
+            CHECK(option.value >= 0 && size_t(option.value) < std::size(kSettingsProviders) &&
+                  option.parts.at(0).path == ProviderLogoPath(kSettingsProviders[option.value]));
+        }
         CHECK_NEAR(frame.viewport.top, 69);
         // Cards: 68 DIP collapsed, 4 DIP apart from 14 DIP down.
         for (uint32_t slot = 1; slot <= 4; slot++) {
@@ -606,6 +622,71 @@ static void RunAccountEditTests() {
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)) && HasText(frame, L"Sign-in needed"));
     });
 
+    Run("accounts page: an OpenCode Go card: its mark without brand colors, its 5-hour, weekly and monthly quotas "
+        "(the monthly keyed Mo), sign-in and dashboard", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = TestView(SettingsUiPage::Accounts);
+        view.settings.accounts = {TestAccount(L"opencode", L"OC", 32, {true, true, false, true})};
+        view.settings.logoBrands = {true, true};
+        SettingsViewAccount card;
+        card.key = 32;
+        card.slot = 1;
+        card.status = {L"", L"", true, true, false, false};
+        card.expanded = true;
+        view.accounts.push_back(card);
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        // Header: the OpenCode mark in the primary ink, the provider without a plan (it reports
+        // none), a key chip per selected quota.
+        CHECK(std::any_of(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+            return item.kind == UiItemKind::Shape && item.parts.size() == 1 && item.parts[0].path == kOpenCodeLogoPath &&
+                   item.parts[0].ink == UiInk::Primary && !item.parts[0].fill;
+        }));
+        CHECK(HasText(frame, L"OpenCode Go \u00B7 Signed in"));
+        std::vector<std::wstring> keys;
+        for (const UiItem& item : frame.content) {
+            if (item.kind == UiItemKind::Chip && item.rect.top < 14 + 68) keys.push_back(item.text);
+        }
+        CHECK((keys == std::vector<std::wstring>{L"5h", L"7d", L"Mo"}));
+        // Quotas on taskbar: 5-hour, Weekly and Monthly, each the mask with itself flipped; no third
+        // slot, no credits max.
+        const UiItem* five = UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kFiveHourBar));
+        const UiItem* weekly = UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kWeeklyBar));
+        const UiItem* monthly = UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kExtraUsageBar));
+        CHECK(five && five->text == L"5-hour" && five->selected && five->enabled && five->action.value == 0b1010);
+        CHECK(weekly && weekly->text == L"Weekly" && weekly->selected && weekly->enabled && weekly->action.value == 0b1001);
+        CHECK(monthly && monthly->text == L"Monthly" && monthly->selected && monthly->enabled &&
+              monthly->action.value == 0b0011);
+        CHECK(five->rect.right < weekly->rect.left && weekly->rect.right < monthly->rect.left);
+        CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kFableWeeklyBar)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountCreditsMax)));
+        CHECK(!HasText(frame, L"Set Credits max"));
+        // Footer: dashboard, Sign in again, Sign out; no Sign in in the header.
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountDashboard, 1)) &&
+              UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn, 1))->text == L"Sign in again" &&
+              UiFindItem(frame, AccountId(1, SettingsField::AccountSignOut, 1)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)));
+        // Monthly alone: its chip stays selected; the header keys only it.
+        view.settings.accounts[0].showBars = {false, false, false, true};
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kExtraUsageBar))->action.value == 0b1000);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kWeeklyBar))->action.value == 0b1010);
+        keys.clear();
+        for (const UiItem& item : frame.content) {
+            if (item.kind == UiItemKind::Chip && item.rect.top < 14 + 68) keys.push_back(item.text);
+        }
+        CHECK((keys == std::vector<std::wstring>{L"Mo"}));
+        // Without a sign-in: Sign in in its header; the footer keeps only the dashboard.
+        view.accounts[0].status = {L"", L"not signed in - click to sign in", false, false, true, false};
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)) && HasText(frame, L"Sign-in needed"));
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountDashboard, 1)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn, 1)) &&
+              !UiFindItem(frame, AccountId(1, SettingsField::AccountSignOut, 1)));
+    });
+
     Run("accounts page: empty state; a dragged card is lifted and drawn last", [] {
         UiGraphics& g = TestGraphics();
         SettingsView view = TestView(SettingsUiPage::Accounts);
@@ -613,6 +694,9 @@ static void RunAccountEditTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK_NEAR(frame.viewport.top, 56);
         CHECK(HasText(frame, L"No accounts yet") && HasText(frame, L"Add account"));
+        // Every provider named, with how each signs in.
+        CHECK(HasText(frame, L"Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go account"));
+        CHECK(HasText(frame, L"OpenCode Go with an API key") && HasText(frame, L"Google Antigravity uses its signed-in app"));
         CHECK(frame.content.front().kind == UiItemKind::Card);
         CHECK_NEAR(frame.content.front().rect.top, 14);
         CHECK(UiFindItem(frame, SettingsControlId(SettingsField::AccountAdd)));

@@ -12,6 +12,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     }
 
     bool copilot = acc.provider == L"copilot";
+    bool opencode = acc.provider == L"opencode";  // An API key: never expires, never refreshes.
     uint64_t idHash = AccountIdentityHash(acc);
     ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
     StoredToken tok;
@@ -76,6 +77,11 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                                    L"\r\nX-GitHub-Api-Version: 2025-04-01\r\n";
             return HttpRequest(L"GET", L"api.github.com", L"/copilot_internal/user", kOAuthUserAgent,
                                headers);
+        }
+        if (opencode) {
+            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+                                   L"\r\nAccept: application/json\r\n";
+            return HttpRequest(L"GET", L"opencode.ai", L"/zen/go/v1/usage", kOAuthUserAgent, headers);
         }
         std::wstring headers = L"Authorization: Bearer " + t.accessToken +
                                L"\r\nOrigin: https://chatgpt.com"
@@ -149,6 +155,20 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->error = L"no Copilot access on this GitHub account";
         return;
     }
+    // OpenCode's EntitlementError: the key's workspace has no Go subscription. Other 403s (an edge
+    // block, say) stay plain HTTP errors.
+    if (opencode && r.status == 403) {
+        bool entitlement = false;
+        try {
+            entitlement = GetStr(GetObj(JsonObject::Parse(Utf8ToWide(r.body)), L"error"), L"type") ==
+                          L"EntitlementError";
+        } catch (...) {}
+        if (entitlement) {
+            d->stale = true;
+            d->error = L"no OpenCode Go subscription on this key";
+            return;
+        }
+    }
     if (r.status != 200) {
         d->stale = true;
         d->error = L"HTTP " + std::to_wstring(r.status);
@@ -159,7 +179,8 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     std::wstring parseError;
     bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
                   copilot ? ParseCopilotUsage(r.body, &fresh, &parseError) :
-                            ParseOpenAiUsage(r.body, &fresh, &parseError);
+                  opencode ? ParseOpenCodeUsage(r.body, &fresh, &parseError) :
+                             ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
         d->error = parseError.empty() ? L"unexpected response format" : parseError;
@@ -369,9 +390,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         &results[i].extraUsage, &results[i].antigravityThirdParty5h,
                         &results[i].antigravityThirdPartyWeek};
                     for (size_t m = 0; m < windows.size(); ++m) {
-                        // Anthropic's extra budget and Copilot's AI credits; OpenAI's
-                        // user-chosen credit ceiling is not a historical quota.
-                        if (m == 3 && sample.provider != 1 && sample.provider != 4) continue;
+                        // Anthropic's extra budget, Copilot's AI credits and OpenCode Go's
+                        // monthly; OpenAI's user-chosen credit ceiling is not a historical quota.
+                        if (m == 3 && sample.provider != 1 && sample.provider != 4 && sample.provider != 5) {
+                            continue;
+                        }
                         sample.meters[m] = {windows[m]->pct, windows[m]->resetUnixMs,
                                             windows[m]->windowDurationMs};
                     }
@@ -571,6 +594,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             quotaName = L"credits";
                         } else if (publishedAccounts[i].provider == L"copilot") {
                             quotaName = CopilotUnitName(publishedResults[i].copilotUnit);
+                        } else if (publishedAccounts[i].provider == L"opencode" &&
+                                   w == kExtraUsageBar) {
+                            quotaName = L"monthly";
                         }
                         swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
                                  quotaName, wu.pct);

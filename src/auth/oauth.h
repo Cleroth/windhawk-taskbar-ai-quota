@@ -19,6 +19,9 @@ static constexpr PCWSTR kCopilotScope = L"read:user";
 static constexpr PCWSTR kCopilotTokenHost = L"github.com";
 static constexpr PCWSTR kCopilotTokenPath = L"/login/oauth/access_token";
 static constexpr PCWSTR kCopilotVerificationUrl = L"https://github.com/login/device";
+// OpenCode Go has no OAuth client: its sign-in takes an API key copied from the console, which
+// also shows the usage.
+static constexpr PCWSTR kOpenCodeConsoleUrl = L"https://opencode.ai/console";
 static constexpr PCWSTR kOAuthUserAgent = L"taskbar-ai-quota/0.1";
 
 static std::string UrlEncode(const std::string& s) {

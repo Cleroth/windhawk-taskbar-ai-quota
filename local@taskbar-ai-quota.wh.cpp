@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
-// @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
-// @version         2.7.1
+// @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
+// @version         2.8.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -29,6 +29,7 @@ Supported providers and quotas:
   pool limits in the details flyout
 - **GitHub Copilot:** the monthly AI credits allowance (Copilot Free's included); the additional
   usage GitHub reports past it and an organization's pooled credits in the details flyout
+- **OpenCode Go:** 5-hour, weekly, and monthly usage limits
 
 Optional notifications warn when usage crosses the configured red threshold.
 
@@ -42,9 +43,9 @@ Optional notifications warn when usage crosses the configured red threshold.
 
 Click the **AI +** taskbar tile (later: right-click a quota column, **Settings**) and choose
 **Add account**. A new account is polled right away; Anthropic and OpenAI use browser
-sign-in and GitHub Copilot a code you enter on github.com, with tokens encrypted locally with
-Windows DPAPI. Antigravity uses its signed-in local app or CLI session, which must remain
-running.
+sign-in, GitHub Copilot a code you enter on github.com and OpenCode Go an API key you paste from
+its console, with tokens and keys encrypted locally with Windows DPAPI. Antigravity uses its
+signed-in local app or CLI session, which must remain running.
 
 ## Settings
 
@@ -208,7 +209,7 @@ enum class TileIdentity {
 };
 
 struct AccountConfig {
-    std::wstring provider;  // "anthropic", "openai", "antigravity", or "copilot".
+    std::wstring provider;  // "anthropic", "openai", "antigravity", "copilot", or "opencode".
     std::wstring label;
     TileIdentity tileIdentity = TileIdentity::LogoBadge;
     std::wstring tileText;  // Optional short text for TileIdentity::Text on tiles.
@@ -505,6 +506,9 @@ struct AccountData {
     bool copilotExhausted = false;
     double copilotOverage = 0;
     CopilotUnit copilotUnit = CopilotUnit::AiCredits;
+    // OpenCode Go's windows (5-hour, weekly, monthly in the extra-usage slot) that reached their
+    // limit, by QuotaBarIndex.
+    std::array<bool, kQuotaBarCount> opencodeLimited{};
     std::wstring error;
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
@@ -550,16 +554,17 @@ struct HistorySample {
     uint64_t session = 0;
     uint32_t provider = 0;  // HistoryProviderCode.
     uint32_t failed = 0;
-    // Short, weekly, Fable weekly (Antigravity: Argon weekly), extra %, 3p short, 3p weekly,
-    // extra $, credits.
+    // Short, weekly, Fable weekly (Antigravity: Argon weekly), extra % (OpenCode Go: monthly),
+    // 3p short, 3p weekly, extra $, credits.
     std::array<HistoryValue, kHistoryMeterCount> meters{};
     uint64_t checksum = 0;
 };
 static_assert(sizeof(HistorySample) == 240);
-// A provider's journal code: 1 Anthropic, 2 OpenAI, 3 Antigravity, 4 GitHub Copilot; 0 unknown.
+// A provider's journal code: 1 Anthropic, 2 OpenAI, 3 Antigravity, 4 GitHub Copilot, 5 OpenCode
+// Go; 0 unknown.
 static uint32_t HistoryProviderCode(const std::wstring& provider) {
     return provider == L"anthropic" ? 1 : provider == L"openai" ? 2 : provider == L"antigravity" ? 3 :
-           provider == L"copilot" ? 4 : 0;
+           provider == L"copilot" ? 4 : provider == L"opencode" ? 5 : 0;
 }
 // The journal's state when it was read: loaded (a damaged or unreadable journal stays loaded with
 // an error status), then its epoch (Clear), revision (load, cap eviction, retention pruning) and
@@ -801,7 +806,8 @@ enum FlyoutRowIndex {
     kFlyoutFableRow,      // Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
     kFlyoutPoolShortRow,  // Antigravity Claude/GPT pools.
     kFlyoutPoolWeeklyRow,
-    kFlyoutExtraRow,      // Anthropic extra usage, OpenAI credits or GitHub Copilot's AI credits.
+    kFlyoutExtraRow,      // Anthropic extra usage, OpenAI credits, GitHub Copilot's AI credits or
+                          // OpenCode Go's monthly.
     kFlyoutRowCount,
 };
 
@@ -1317,6 +1323,7 @@ static PCWSTR ProviderDisplayName(const std::wstring& provider) {
     if (provider == L"anthropic") return L"Anthropic";
     if (provider == L"openai") return L"OpenAI";
     if (provider == L"copilot") return L"GitHub Copilot";
+    if (provider == L"opencode") return L"OpenCode Go";
     return L"Google Antigravity";
 }
 
@@ -1829,6 +1836,9 @@ static constexpr PCWSTR kCopilotScope = L"read:user";
 static constexpr PCWSTR kCopilotTokenHost = L"github.com";
 static constexpr PCWSTR kCopilotTokenPath = L"/login/oauth/access_token";
 static constexpr PCWSTR kCopilotVerificationUrl = L"https://github.com/login/device";
+// OpenCode Go has no OAuth client: its sign-in takes an API key copied from the console, which
+// also shows the usage.
+static constexpr PCWSTR kOpenCodeConsoleUrl = L"https://opencode.ai/console";
 static constexpr PCWSTR kOAuthUserAgent = L"taskbar-ai-quota/0.1";
 
 static std::string UrlEncode(const std::string& s) {
@@ -2012,8 +2022,8 @@ static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToke
 }
 
 // src/auth/login.h
-// Sign-in thread: the sign-in window, OpenAI loopback listener, GitHub device flow, and code
-// exchange.
+// Sign-in thread: the sign-in window, OpenAI loopback listener, GitHub device flow, code
+// exchange, and OpenCode Go's pasted API key.
 
 struct LoginRequest {
     std::wstring provider;
@@ -2118,10 +2128,11 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedSta
 }
 
 // Sign-in window: offers the authorize link to copy or open, then either collects the pasted
-// Anthropic code#state or waits for the OpenAI loopback callback; for GitHub's device flow it
-// shows the code to enter and a status line while its message loop polls for the token. Runs its
-// own message loop on the login thread; closed on cancel, submit, callback, a granted device
-// sign-in, or unload. A device sign-in that ends otherwise stays open with the reason until closed.
+// Anthropic code#state or OpenCode Go API key (masked) or waits for the OpenAI loopback callback;
+// for GitHub's device flow it shows the code to enter and a status line while its message loop
+// polls for the token. Runs its own message loop on the login thread; closed on cancel, submit,
+// callback, a granted device sign-in, or unload. A device sign-in that ends otherwise stays open
+// with the reason until closed.
 enum {
     kLoginInstructions = 100,
     kLoginCode,
@@ -2134,8 +2145,10 @@ constexpr UINT kLoginAccept = WM_APP + 1;  // FD_ACCEPT notification for the loo
 struct LoginDialogState {
     // Inputs
     std::wstring url;  // The authorize link, or the device flow's verification page.
-    // Loopback flow when set; device flow with `poll`; otherwise a code is pasted.
+    // Loopback flow when set; device flow with `poll`; otherwise a code is pasted, masked when
+    // `secret`.
     SOCKET listener = INVALID_SOCKET;
+    bool secret = false;
     std::string expectedState;
     // Device flow: the code to enter on the verification page, and the token poll the message
     // loop runs, never the window procedure, once GetTickCount64 reaches nextPollMs. It catches
@@ -2239,8 +2252,8 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                    kLoginCopyLink);
             create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
             if (st->listener == INVALID_SOCKET && !st->poll) {
-                st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL,
-                                  kLoginCode);
+                st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"",
+                                  WS_TABSTOP | ES_AUTOHSCROLL | (st->secret ? ES_PASSWORD : 0), kLoginCode);
                 create(0, L"BUTTON", L"Sign in", WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK);
             }
             create(0, L"BUTTON", L"Cancel", WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
@@ -2741,6 +2754,47 @@ static void DoCopilotLogin(const LoginRequest& req) {
     Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
 }
 
+// OpenCode Go: an API key pasted from the console, stored as the access token without a refresh
+// token or expiry; saving it requests a poll, whose answer is its only check.
+static void DoOpenCodeLogin(const LoginRequest& req) {
+    LoginDialogState dialog;
+    dialog.url = kOpenCodeConsoleUrl;
+    dialog.secret = true;
+    std::wstring title = L"Sign in: " + req.label + L" (OpenCode Go)";
+    std::wstring instructions =
+        L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+        L"subscription, and paste it below.";
+    if (!ShowLoginDialog(title, instructions, dialog) || g_unloading) return;
+
+    const std::wstring& pasted = dialog.pastedCode;
+    size_t b = pasted.find_first_not_of(L" \t\r\n");
+    size_t e = pasted.find_last_not_of(L" \t\r\n");
+    StoredToken tok;
+    if (b != std::wstring::npos) tok.accessToken = pasted.substr(b, e - b + 1);
+    if (tok.accessToken.empty()) {
+        Wh_Log(L"Sign-in [%s]: no key entered", req.label.c_str());
+        return;
+    }
+    // A key is one printable token, far shorter than the token store's 16K characters.
+    if (tok.accessToken.size() > 1024 ||
+        std::any_of(tok.accessToken.begin(), tok.accessToken.end(),
+                    [](wchar_t c) { return c <= L' ' || c == 0x7F; })) {
+        Wh_Log(L"Sign-in [%s] failed: that is not an API key", req.label.c_str());
+        return;
+    }
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    if (saved == TokenSaveResult::Stale) {
+        Wh_Log(L"Sign-in [%s]: cancelled before saving key", req.label.c_str());
+        return;
+    }
+    if (saved != TokenSaveResult::Saved) {
+        Wh_Log(L"Sign-in [%s] failed: could not save key", req.label.c_str());
+        return;
+    }
+    RefreshQuotaByIdentity(req.idHash);
+    Wh_Log(L"Sign-in [%s]: key saved", req.label.c_str());
+}
+
 static DWORD WINAPI LoginThreadProc(LPVOID param) {
     std::unique_ptr<LoginRequest> req(reinterpret_cast<LoginRequest*>(param));
     using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
@@ -2759,6 +2813,7 @@ static DWORD WINAPI LoginThreadProc(LPVOID param) {
             if (req->provider == L"anthropic") DoAnthropicLogin(*req);
             else if (req->provider == L"openai") DoOpenAiLogin(*req);
             else if (req->provider == L"copilot") DoCopilotLogin(*req);
+            else if (req->provider == L"opencode") DoOpenCodeLogin(*req);
         }
     } catch (...) {
         Wh_Log(L"Sign-in: exception");
@@ -2783,7 +2838,8 @@ static void StartLoginByIdentity(uint64_t identityHash) {
                 return AccountIdentityHash(candidate) == identityHash;
             });
         if (it == g_settings.accounts.end() ||
-            (it->provider != L"anthropic" && it->provider != L"openai" && it->provider != L"copilot")) {
+            (it->provider != L"anthropic" && it->provider != L"openai" && it->provider != L"copilot" &&
+             it->provider != L"opencode")) {
             return;
         }
         account = *it;
@@ -4082,6 +4138,53 @@ static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* e
     }
 }
 
+// src/providers/opencode.h
+// OpenCode Go usage response parsing: its 5-hour, weekly and monthly windows.
+
+// The usage object's rolling (5-hour), weekly and monthly windows, each a used percentage, its
+// reset and its status, "rate-limited" once the limit is reached. The rolling window runs 5 hours
+// from its first use (unused, its reset rolls a full window ahead), the weekly a calendar week and
+// the monthly a month from the subscription's day; monthly goes in the extra-usage slot. Its
+// start is estimated as the calendar month before its reset: up to three days early when the
+// reset falls in a month without the subscription's day (the 29th to 31st). A window the
+// response lacks isn't shown; one that isn't an object or lacks a valid percentage is an error,
+// never 0 or 100%.
+static bool ParseOpenCodeUsage(const std::string& body, AccountData* d, std::wstring* error) {
+    auto fail = [&] {
+        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        return false;
+    };
+    try {
+        auto usage = GetObj(JsonObject::Parse(Utf8ToWide(body)), L"usage");
+        const struct {
+            PCWSTR name;
+            int slot;
+            WindowUsage* usage;
+        } windows[] = {
+            {L"rolling", kFiveHourBar, &d->win5h},
+            {L"weekly", kWeeklyBar, &d->winWeek},
+            {L"monthly", kExtraUsageBar, &d->extraUsage},
+        };
+        bool any = false;
+        for (const auto& window : windows) {
+            if (!usage || !usage.HasKey(window.name)) continue;
+            auto o = GetObj(usage, window.name);
+            double pct = GetNum(o, L"percent", NAN);
+            if (!o || !(pct >= 0 && pct <= 1e6)) return fail();
+            WindowUsage& wu = *window.usage;
+            wu.pct = pct;
+            wu.resetUnixMs = ParseIso8601Ms(GetStr(o, L"resetsAt"));
+            wu.windowDurationMs = window.slot == kFiveHourBar ? kFiveHourWindowMs :
+                                  window.slot == kWeeklyBar ? kWeeklyWindowMs : MonthBeforeMs(wu.resetUnixMs);
+            d->opencodeLimited[window.slot] = GetStr(o, L"status") == L"rate-limited";
+            any = true;
+        }
+        return any ? true : fail();
+    } catch (...) {
+        return fail();
+    }
+}
+
 // src/history/journal.h
 // Local usage-history journal and its recording consent. Takes no UI or auth locks.
 
@@ -4585,10 +4688,12 @@ static HistoryBreak HistoryWindowConnection(const HistorySample& a, const Histor
         if ((av.resetMs >= lower && av.resetMs <= upper) ||
             (bv.resetMs >= lower && bv.resetMs <= upper)) return HistoryBreak::Reset;
         if (shift > tolerance) {
-            // OpenAI's unused window rolls a full duration ahead until first use anchors it.
-            // This is not a reset: the old deadline is still beyond this sampled interval.
-            // Keep real boundaries, other providers, backward shifts, and partial windows conservative.
-            if (a.provider == 2 && av.value == 0 && bv.value >= 0 && av.durationMs &&
+            // OpenAI's unused windows and OpenCode Go's unused 5-hour window roll a full duration
+            // ahead until first use anchors them. This is not a reset: the old deadline is still
+            // beyond this sampled interval. Keep real boundaries, other providers and lanes,
+            // backward shifts, and partial windows conservative.
+            if ((a.provider == 2 || (a.provider == 5 && meter == 0)) && av.value == 0 &&
+                bv.value >= 0 && av.durationMs &&
                 av.resetMs > upper && bv.resetMs > upper && bv.resetMs > av.resetMs &&
                 (shift <= gap || shift - gap <= tolerance)) {
                 ULONGLONG remaining = av.resetMs - a.timeMs;
@@ -4626,7 +4731,8 @@ static constexpr int kBurnUpMeterCount = 6;  // History meters 0-5: percentages 
 static constexpr int kBurnUpColumns = 250;
 static constexpr size_t kBurnUpMaxPoints = 4 * kBurnUpColumns;
 // Longest charted window; it bounds the fetch thread's journal scan. Monthly windows (Anthropic
-// extra usage, GitHub Copilot's AI credits) are the longest provider windows.
+// extra usage, GitHub Copilot's AI credits, OpenCode Go's monthly) are the longest provider
+// windows.
 static constexpr ULONGLONG kBurnUpMaxWindowMs = 32 * kHistoryDayMs;
 
 struct BurnUpPoint {
@@ -4967,8 +5073,8 @@ static void InvalidateBurnUpCurves() {
 // reading's. Takes g_settingsMutex then g_dataMutex; call it holding neither.
 static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyoutRow,
                                                   const WindowUsage& reading) {
-    // The extra row's curve is Anthropic extra usage or GitHub Copilot's AI credits; OpenAI
-    // credits are not a windowed meter.
+    // The extra row's curve is Anthropic extra usage, GitHub Copilot's AI credits or OpenCode Go's
+    // monthly; OpenAI credits are not a windowed meter.
     int meter = flyoutRow == kFlyoutFiveHourRow ? 0 : flyoutRow == kFlyoutWeeklyRow ? 1 :
                 flyoutRow == kFlyoutFableRow ? 2 : flyoutRow == kFlyoutExtraRow ? 3 :
                 flyoutRow == kFlyoutPoolShortRow ? 4 : flyoutRow == kFlyoutPoolWeeklyRow ? 5 : -1;
@@ -5088,6 +5194,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     }
 
     bool copilot = acc.provider == L"copilot";
+    bool opencode = acc.provider == L"opencode";  // An API key: never expires, never refreshes.
     uint64_t idHash = AccountIdentityHash(acc);
     ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
     StoredToken tok;
@@ -5152,6 +5259,11 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                                    L"\r\nX-GitHub-Api-Version: 2025-04-01\r\n";
             return HttpRequest(L"GET", L"api.github.com", L"/copilot_internal/user", kOAuthUserAgent,
                                headers);
+        }
+        if (opencode) {
+            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+                                   L"\r\nAccept: application/json\r\n";
+            return HttpRequest(L"GET", L"opencode.ai", L"/zen/go/v1/usage", kOAuthUserAgent, headers);
         }
         std::wstring headers = L"Authorization: Bearer " + t.accessToken +
                                L"\r\nOrigin: https://chatgpt.com"
@@ -5225,6 +5337,20 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->error = L"no Copilot access on this GitHub account";
         return;
     }
+    // OpenCode's EntitlementError: the key's workspace has no Go subscription. Other 403s (an edge
+    // block, say) stay plain HTTP errors.
+    if (opencode && r.status == 403) {
+        bool entitlement = false;
+        try {
+            entitlement = GetStr(GetObj(JsonObject::Parse(Utf8ToWide(r.body)), L"error"), L"type") ==
+                          L"EntitlementError";
+        } catch (...) {}
+        if (entitlement) {
+            d->stale = true;
+            d->error = L"no OpenCode Go subscription on this key";
+            return;
+        }
+    }
     if (r.status != 200) {
         d->stale = true;
         d->error = L"HTTP " + std::to_wstring(r.status);
@@ -5235,7 +5361,8 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     std::wstring parseError;
     bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
                   copilot ? ParseCopilotUsage(r.body, &fresh, &parseError) :
-                            ParseOpenAiUsage(r.body, &fresh, &parseError);
+                  opencode ? ParseOpenCodeUsage(r.body, &fresh, &parseError) :
+                             ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
         d->error = parseError.empty() ? L"unexpected response format" : parseError;
@@ -5445,9 +5572,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         &results[i].extraUsage, &results[i].antigravityThirdParty5h,
                         &results[i].antigravityThirdPartyWeek};
                     for (size_t m = 0; m < windows.size(); ++m) {
-                        // Anthropic's extra budget and Copilot's AI credits; OpenAI's
-                        // user-chosen credit ceiling is not a historical quota.
-                        if (m == 3 && sample.provider != 1 && sample.provider != 4) continue;
+                        // Anthropic's extra budget, Copilot's AI credits and OpenCode Go's
+                        // monthly; OpenAI's user-chosen credit ceiling is not a historical quota.
+                        if (m == 3 && sample.provider != 1 && sample.provider != 4 && sample.provider != 5) {
+                            continue;
+                        }
                         sample.meters[m] = {windows[m]->pct, windows[m]->resetUnixMs,
                                             windows[m]->windowDurationMs};
                     }
@@ -5647,6 +5776,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             quotaName = L"credits";
                         } else if (publishedAccounts[i].provider == L"copilot") {
                             quotaName = CopilotUnitName(publishedResults[i].copilotUnit);
+                        } else if (publishedAccounts[i].provider == L"opencode" &&
+                                   w == kExtraUsageBar) {
+                            quotaName = L"monthly";
                         }
                         swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
                                  quotaName, wu.pct);
@@ -6243,10 +6375,14 @@ static constexpr PCWSTR kCopilotLogoPath =
     L"163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.41"
     L"4 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z";
 
+// opencode.svg.
+static constexpr PCWSTR kOpenCodeLogoPath = L"M22 24H2V0h20zM17 4.8H7v14.4h10z";
+
 // The provider's logo.
 static PCWSTR ProviderLogoPath(std::wstring_view provider) {
     return provider == L"openai" ? kOpenAiLogoPath : provider == L"anthropic" ? kClaudeLogoPath :
-           provider == L"copilot" ? kCopilotLogoPath : kGeminiLogoPath;
+           provider == L"copilot" ? kCopilotLogoPath : provider == L"opencode" ? kOpenCodeLogoPath :
+                                    kGeminiLogoPath;
 }
 
 // A logo's brand colors (ARGB): `from` at (x0, y0) of the 24x24 viewBox shading linearly to `to`
@@ -6566,11 +6702,12 @@ static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
 // A slot's key: Antigravity's Gemini Argon weekly shows "Ar" instead of "Fa", OpenAI credits "Cr"
-// instead of "Ex", GitHub Copilot's monthly AI credits "Mo".
+// instead of "Ex", GitHub Copilot's monthly AI credits and OpenCode Go's monthly "Mo".
 static PCWSTR QuotaKey(std::wstring_view provider, int slot) {
     if (slot == kFableWeeklyBar) return provider == L"antigravity" ? L"Ar" : kQuotaKeys[slot];
     if (slot != kExtraUsageBar) return kQuotaKeys[slot];
-    return provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : kQuotaKeys[slot];
+    return provider == L"openai" ? L"Cr" : provider == L"copilot" || provider == L"opencode" ? L"Mo" :
+                                                                                              kQuotaKeys[slot];
 }
 // Tile text's cap height, as a share of its font size (Segoe UI Variable).
 static constexpr double kTileCapShare = 0.7;
@@ -7741,9 +7878,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     }
     if (spark) {
         // A chart per quota with a window, and per quota not read yet (until the first success);
-        // without any, the most-used quota's. The extra usage goes in the weekly chart's corner,
-        // instead of a chart of its own, while selected and reported; credits have no window, so
-        // never get a chart.
+        // without any, the most-used quota's. Anthropic's extra usage and OpenAI's credits go in
+        // the weekly chart's corner, instead of a chart of its own, while selected and reported;
+        // credits have no window, so never get a chart.
         int charted = 0;
         for (int w = 0; w < kQuotaBarCount; w++) {
             if ((meters.barMask & (1 << w)) && (timed(w) || usage[w]->pct < 0)) charted |= 1 << w;
@@ -7752,7 +7889,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         const WindowUsage& extra = data.extraUsage;
         bool extraReported = extra.pct >= 0 || data.extraUsedAmount >= 0 || (openAi && data.creditsBalance >= 0);
         if (display.sparklineExtra != SparklineExtra::Off && account.showBars[kExtraUsageBar] &&
-            (charted & (1 << kWeeklyBar)) && extraReported) {
+            (openAi || account.provider == L"anthropic") && (charted & (1 << kWeeklyBar)) && extraReported) {
             charted &= ~(1 << kExtraUsageBar);
             // Percent of the limit, else the amount: dollars, or credits spent against the max or
             // the balance left; a percentage when it's all there is. Spent in used mode, left in
@@ -8176,8 +8313,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 if (wu.pct >= 0) {
                     double y = yAt(wu.pct);
                     reading(x, y);
+                    // None for a window its provider reports at its limit, whatever its percentage.
                     std::optional<UsageProjection> projection;
-                    if (!meters.stale) {
+                    if (!meters.stale && !data.opencodeLimited[w]) {
                         projection = ProjectUsage(wu, trace, display.now,
                                                   w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
                     }
@@ -9189,6 +9327,7 @@ static void OpenDashboardForIdentity(uint64_t identityHash) {
     } else {
         OpenUrl(provider == L"anthropic" ? L"https://claude.ai/settings/usage" :
                 provider == L"copilot"   ? L"https://github.com/settings/copilot" :
+                provider == L"opencode"  ? kOpenCodeConsoleUrl :
                                            L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
     }
 }
@@ -10117,6 +10256,7 @@ static void UpdateAccountFlyout(
     bool openAi = account.provider == L"openai";
     bool antigravity = account.provider == L"antigravity";
     bool copilot = account.provider == L"copilot";
+    bool opencode = account.provider == L"opencode";
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
@@ -10167,7 +10307,7 @@ static void UpdateAccountFlyout(
             {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
              antigravity && d.antigravityThirdParty5h.pct >= 0},
             {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {openAi ? L"Credits" : copilot ? copilotRow : L"Extra usage",
+            {openAi ? L"Credits" : copilot ? copilotRow : opencode ? L"Monthly" : L"Extra usage",
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
         const auto readings = FlyoutRowReadings(d);
@@ -10228,6 +10368,11 @@ static void UpdateAccountFlyout(
             swprintf(text, ARRAYSIZE(text), L"%.0f%%", shownPct);
             row.number.Text(text);
             row.unit.Text(remainingMode ? L"left" : L"used");
+            // An OpenCode Go window at its limit: the number in the warning color, and a note.
+            int slot = r == kFlyoutFiveHourRow ? kFiveHourBar : r == kFlyoutWeeklyRow ? kWeeklyBar :
+                       r == kFlyoutExtraRow ? kExtraUsageBar : -1;
+            bool limited = opencode && slot >= 0 && d.opencodeLimited[slot];
+            if (opencode) row.number.Foreground(limited ? theme.warning : theme.text);
 
             // The bar follows the bar mode like the taskbar; its color tracks consumption.
             double fillPct = std::clamp(shownPct, 0.0, 100.0);
@@ -10263,10 +10408,10 @@ static void UpdateAccountFlyout(
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
 
             // The usage graph tiles' projection; the text, naming the rate's span, when it
-            // reaches the limit before the reset.
+            // reaches the limit before the reset. None once the limit is reached.
             const std::vector<TileTracePoint>& trace = traces[r];
             std::optional<UsageProjection> projected;
-            if (!display.stale) {
+            if (!display.stale && !limited) {
                 projected = ProjectUsage(wu, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
@@ -10390,7 +10535,9 @@ static void UpdateAccountFlyout(
             }
 
             std::wstring amount;
-            if (r == kFlyoutExtraRow && copilot) {
+            if (limited) {
+                amount = L"Limit reached";
+            } else if (r == kFlyoutExtraRow && copilot) {
                 // Past the allowance the bar stays full; the additional usage gets its own line.
                 amount = copilotAmount(d.extraUsedAmount) + L" of " + copilotAmount(d.extraLimitAmount) + L" " +
                          copilotUnit + L" used" + copilotOverage;
@@ -18269,20 +18416,20 @@ static bool NormalizeSettings(Settings* s) {
     std::vector<AccountConfig> accounts;
     for (auto& a : s->accounts) {
         if (a.provider != L"anthropic" && a.provider != L"openai" &&
-            a.provider != L"antigravity" && a.provider != L"copilot") {
+            a.provider != L"antigravity" && a.provider != L"copilot" && a.provider != L"opencode") {
             continue;
         }
         // Labels are stable identities; only the native editor trims deliberate edits.
         if (a.label.empty()) {
             a.label = a.provider == L"anthropic" ? L"A" : a.provider == L"openai" ? L"O" :
-                      a.provider == L"copilot" ? L"C" : L"G";
+                      a.provider == L"copilot" ? L"C" : a.provider == L"opencode" ? L"OC" : L"G";
         }
         // The third slot is Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
         if (a.provider != L"anthropic" && a.provider != L"antigravity") a.showBars[kFableWeeklyBar] = false;
         if (a.provider != L"openai") a.creditsMax = 0;
         a.creditsMax = std::max(a.creditsMax, 0);
-        // The extra-usage slot is Anthropic monthly extra usage, OpenAI credits vs. max, or
-        // GitHub Copilot's monthly AI credits, its only quota.
+        // The extra-usage slot is Anthropic monthly extra usage, OpenAI credits vs. max, GitHub
+        // Copilot's monthly AI credits, its only quota, or OpenCode Go's monthly.
         if (a.provider == L"antigravity" || (a.provider == L"openai" && a.creditsMax == 0)) {
             a.showBars[kExtraUsageBar] = false;
         }
@@ -19731,14 +19878,15 @@ enum class SettingsField : uint8_t {
     BadgeColorCustom,     // The color dialog
     ShowOnTaskbar,        // Visual test mode
     PreviewScroll,        // The preview strip's sideways scroll
-    AccountAdd,           // The Add account menu: 0 Anthropic, 1 OpenAI, 2 Antigravity, 3 GitHub Copilot
+    AccountAdd,           // The Add account menu: kSettingsProviders' index
     AccountExpand,        // Desired: 1 expanded
 };
 
 static constexpr int kSettingsLabelLimit = 64;
 static constexpr int kSettingsTileTextLimit = 4;
 static constexpr int kSettingsCreditsLimit = 999999999;
-static constexpr PCWSTR kSettingsProviders[] = {L"anthropic", L"openai", L"antigravity", L"copilot"};
+static constexpr PCWSTR kSettingsProviders[] = {L"anthropic", L"openai", L"antigravity", L"copilot",
+                                                 L"opencode"};
 
 struct SettingsNumberRange {
     int minimum = 0, maximum = 0;
@@ -20601,13 +20749,13 @@ struct SettingsEdits {
     }
 
     // The Add account menu: an account of `provider`, created at once. Its label is the first
-    // default (A, A2, A3, ...; O, G and C for the others) whose identity has no stored sign-in, so
-    // it never adopts an old one; the store takes the first of those no account of the provider
+    // default (A, A2, A3, ...; O, G, C and OC for the others) whose identity has no stored sign-in,
+    // so it never adopts an old one; the store takes the first of those no account of the provider
     // uses. Returns its key; 0 when none was added.
     uint64_t AddAccount(const std::wstring& provider) {
         if (store->Unloading()) return 0;
         std::wstring base = provider == L"openai" ? L"O" : provider == L"antigravity" ? L"G" :
-                            provider == L"copilot" ? L"C" : L"A";
+                            provider == L"copilot" ? L"C" : provider == L"opencode" ? L"OC" : L"A";
         std::vector<std::wstring> labels;
         size_t wanted = baseline.settings.accounts.size() + 8;
         for (int n = 1; labels.size() < wanted && n <= 10000; n++) {
@@ -20906,6 +21054,7 @@ struct SettingsProductionStore final : SettingsStore {
         AccountConfig account;
         account.provider = provider;
         account.showBars[kFableWeeklyBar] = provider == L"antigravity";  // Argon weekly starts on.
+        account.showBars[kExtraUsageBar] = provider == L"opencode";     // So does OpenCode Go's monthly.
         return Result(AddAccountCommand(std::move(account), labels));
     }
 
@@ -22227,8 +22376,8 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
         float textWidth = std::max(x + width - 1 - kPadX - textLeft, 40.0f);
         std::wstring versionLine =
             L"Version " + std::wstring(version) + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
-        PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity and GitHub "
-                         L"Copilot on the Windows 11 taskbar.";
+        PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub "
+                         L"Copilot and OpenCode Go on the Windows 11 taskbar.";
         UiTextStyle caption = UiTextStyleFor(UiFont::Caption);
         float versionHeight = UiLayoutSize(UiLayout(g, versionLine, caption, textWidth)).height;
         float summaryHeight = UiLayoutSize(UiLayout(g, summary, caption, textWidth)).height;
@@ -22306,14 +22455,15 @@ static float SettingsUiBuildAbout(UiGraphics& g, std::wstring_view version,
             {L"Primer Octicons", UiRunStyle::Link, UiInk::Inherit,
              {UiActionKind::OpenUrl, 0, L"https://github.com/primer/octicons"}},
             {L" (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity uses the Gemini mark.\n"
-             L"Claude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub and "
-             L"GitHub Copilot are trademarks of their respective owners. Logos only identify which "
-             L"account a tile shows."},
+             L"Claude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+             L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only "
+             L"identify which account a tile shows."},
         };
-        spec.trailing = {4 * kLogo + 3 * kLogoGap, kLogo};
+        spec.trailing = {5 * kLogo + 4 * kLogoGap, kLogo};
         UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
         float logoLeft = card.trailing.left;
-        for (PCWSTR path : {kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath, kCopilotLogoPath}) {
+        for (PCWSTR path :
+             {kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath, kCopilotLogoPath, kOpenCodeLogoPath}) {
             UiItem logo;
             logo.id = id++;
             logo.kind = UiItemKind::Shape;
@@ -22408,8 +22558,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         options.push_back({L"Custom", 0});
         UiCardSpec spec;
         spec.title = L"Cloud poll interval";
-        spec.description = {{L"How often Anthropic, OpenAI and GitHub Copilot are polled. Antigravity "
-                             L"polls its local session every minute."}};
+        spec.description = {{L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. "
+                             L"Antigravity polls its local session every minute."}};
         // It edits the same field as the custom box: a distinct control id.
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::PollMinutes,
                                     200, std::move(options), custom ? 0 : s.pollMinutes, 8);
@@ -23259,10 +23409,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         float top = y + 14, center = x + width / 2;
         float lines = std::clamp(width - 120, 40.0f, 440.0f);
         std::vector<UiRun> first = {{L"Select "}, {L"Add account", UiRunStyle::Strong},
-                                    {L" to show an Anthropic, OpenAI, Google Antigravity or GitHub Copilot "
-                                     L"account on the taskbar."}};
-        std::vector<UiRun> second = {{L"Anthropic, OpenAI and GitHub Copilot sign in through your browser. "
-                                      L"Google Antigravity uses its signed-in app or CLI, which must keep running."}};
+                                    {L" to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or "
+                                     L"OpenCode Go account on the taskbar."}};
+        std::vector<UiRun> second = {{L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, "
+                                      L"OpenCode Go with an API key. Google Antigravity uses its signed-in app or "
+                                      L"CLI, which must keep running."}};
         float firstHeight = UiLayoutSize(UiRichLayout(g, first, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float secondHeight = UiLayoutSize(UiRichLayout(g, second, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float bottom = top + 1 + kPadTop + kIcon + 6 + kGap + 26 + kGap + firstHeight + kGap + secondHeight +
@@ -23330,10 +23481,10 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             return nullptr;
         };
         const bool anthropic = account.provider == L"anthropic", openai = account.provider == L"openai";
-        const bool copilot = account.provider == L"copilot";
-        const bool oauth = anthropic || openai || copilot;
+        const bool copilot = account.provider == L"copilot", opencode = account.provider == L"opencode";
+        const bool signsIn = anthropic || openai || copilot || opencode;
         const bool notPolled = account.hidden && (s.skipHiddenPolling || !s.historyEnabled || !account.recordHistory);
-        const bool signInNeeded = oauth && !status.signingIn && (!status.signedIn || status.needsSignIn);
+        const bool signInNeeded = signsIn && !status.signingIn && (!status.signedIn || status.needsSignIn);
         const int bars = SettingsAccountValue(account, SettingsField::AccountBars);
         std::vector<UiItem> cardItems;
         auto push = [&](UiItem item) { cardItems.push_back(std::move(item)); };
@@ -23439,16 +23590,17 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             stateText = L"Hidden, not polled";
             stateInk = UiInk::Secondary;
         } else if (!error.empty()) {
-            stateText = !oauth && status.error == L"Antigravity not running" ? L"Local app not running" : error;
+            stateText = !signsIn && status.error == L"Antigravity not running" ? L"Local app not running" : error;
             stateInk = UiInk::Caution;
-        } else if (!oauth) {
+        } else if (!signsIn) {
             stateText = status.polled ? L"Local app running" : L"Waiting for the local app";
             stateInk = status.polled ? UiInk::Success : UiInk::Secondary;
         } else {
             stateText = L"Signed in";
         }
         std::wstring details = anthropic ? L"Anthropic \u00B7 " : openai ? L"OpenAI \u00B7 " :
-                               copilot ? L"GitHub Copilot \u00B7 " : L"Antigravity \u00B7 ";
+                               copilot ? L"GitHub Copilot \u00B7 " : opencode ? L"OpenCode Go \u00B7 " :
+                                         L"Antigravity \u00B7 ";
         if (!status.plan.empty()) details += status.plan + L" \u00B7 ";
         float textRight = std::max(right, x + 77 + 40);
         UiItem title;
@@ -23500,7 +23652,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     int bar;
                     PCWSTR name;
                 };
-                std::vector<Quota> quotas = {{kFiveHourBar, oauth ? L"5-hour" : L"Short window"},
+                std::vector<Quota> quotas = {{kFiveHourBar, signsIn ? L"5-hour" : L"Short window"},
                                              {kWeeklyBar, L"Weekly"}};
                 if (anthropic) {
                     quotas.push_back({kFableWeeklyBar, L"Fable weekly"});
@@ -23510,6 +23662,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 } else if (copilot) {
                     // The monthly allowance is its only quota.
                     quotas = {{kExtraUsageBar, L"AI credits"}};
+                } else if (opencode) {
+                    quotas.push_back({kExtraUsageBar, L"Monthly"});
                 } else {
                     quotas.push_back({kFableWeeklyBar, L"Argon weekly"});
                 }
@@ -23650,7 +23804,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 push(button);
                 if (!trailing) left += buttonWidth + 8;
             };
-            if (oauth) {
+            if (signsIn) {
                 addButton(SettingsField::AccountDashboard, L"Open dashboard", L"\uE8A7", UiButtonStyle::Standard, true,
                           false);
                 if (status.signedIn && !signInNeeded) {
@@ -23753,6 +23907,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             {L"Google Antigravity", 2, L"Uses the signed-in Antigravity app or CLI",
              {{kGeminiLogoPath, {}, UiInk::Primary}}},
             {L"GitHub Copilot", 3, L"Sign in with a code on github.com", {{kCopilotLogoPath, {}, UiInk::Primary}}},
+            {L"OpenCode Go", 4, L"Sign in with an API key from the OpenCode console",
+             {{kOpenCodeLogoPath, {}, UiInk::Primary}}},
         };
         frame.main.push_back(std::move(add));
         if (!view.settings.accounts.empty()) {
@@ -24591,10 +24747,11 @@ static constexpr unsigned kHistoryViewMeters[] = {
     (1U << 3) | (1U << 6) | (1U << 7), (1U << kHistoryMeterCount) - 1,
 };
 // By HistoryProviderCode; Antigravity records its Gemini Argon weekly in the Fable weekly lane,
-// GitHub Copilot only its AI credits used (%).
+// GitHub Copilot only its AI credits used (%), OpenCode Go its monthly in the extra % lane.
 static constexpr unsigned kHistoryProviderMeters[] = {
     0, (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3) | (1U << 6),
     (1U << 0) | (1U << 1) | (1U << 7), (1U << 0) | (1U << 1) | (1U << 2) | (1U << 4) | (1U << 5), 1U << 3,
+    (1U << 0) | (1U << 1) | (1U << 3),
 };
 static constexpr COLORREF kHistoryColors[] = {
     RGB(0, 80, 230), RGB(220, 100, 0), RGB(0, 140, 40), RGB(200, 0, 160),
@@ -24851,6 +25008,7 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             if (account.provider == 3 && meter == 1) label = L"Gemini weekly";
             if (account.provider == 3 && meter == 2) label = L"Argon weekly";
             if (account.provider == 4 && meter == 3) label = L"AI credits";
+            if (account.provider == 5 && meter == 3) label = L"Monthly";
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;
             for (size_t row : account.rows) {
@@ -24985,7 +25143,7 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
             sample.timeMs < scope.from || sample.timeMs >= scope.to) continue;
         const char* provider = sample.provider == 1 ? "anthropic" : sample.provider == 2 ? "openai" :
                                sample.provider == 3 ? "antigravity" : sample.provider == 4 ? "copilot" :
-                                                                                            "unknown";
+                               sample.provider == 5 ? "opencode" : "unknown";
         // Nonnumeric, non-formula text survives Excel's 15-digit number coercion.
         std::string id = HistoryCsvId("account_", sample.accountId);
         std::string session = HistoryCsvId("session_", sample.session);
@@ -24995,11 +25153,14 @@ static HistoryCsvEnd HistoryCsvWrite(const HistoryExportScope& scope, size_t& ex
             if ((sample.provider == 1 && (meter == 4 || meter == 5 || meter == 7)) ||
                 (sample.provider == 2 && meter != 0 && meter != 1 && meter != 7) ||
                 (sample.provider == 3 && meter != 0 && meter != 1 && meter != 2 && meter != 4 && meter != 5) ||
-                (sample.provider == 4 && meter != 3)) continue;
+                (sample.provider == 4 && meter != 3) ||
+                (sample.provider == 5 && meter != 0 && meter != 1 && meter != 3)) continue;
             const auto& value = sample.meters[meter];
             bool present = HistoryHasValue(sample, int(meter));
-            // Antigravity's Fable weekly lane holds its Gemini Argon weekly.
-            const char* meterId = sample.provider == 3 && meter == 2 ? "argon_weekly" : kHistoryMeterIds[meter];
+            // Antigravity's Fable weekly lane holds its Gemini Argon weekly, OpenCode Go's extra
+            // percentage lane its monthly.
+            const char* meterId = sample.provider == 3 && meter == 2 ? "argon_weekly" :
+                                  sample.provider == 5 && meter == 3 ? "monthly" : kHistoryMeterIds[meter];
             buffer += HistoryUtcDate(sample.timeMs) + "," + std::to_string(sample.timeMs) + "," +
                 id + "," + provider + "," + std::to_string(sample.provider) + "," +
                 meterId + "," + (meter == 6 ? "USD" : meter == 7 ? "credits" : "percent") + "," +
@@ -25184,14 +25345,16 @@ static UiAction HistoryUiAction(HistoryUiCommand command, int value = 0, uint64_
 
 static PCWSTR HistoryUiProviderName(uint32_t provider) {
     return provider == 1 ? L"Anthropic" : provider == 2 ? L"OpenAI" :
-           provider == 3 ? L"Google Antigravity" : provider == 4 ? L"GitHub Copilot" : L"Unknown provider";
+           provider == 3 ? L"Google Antigravity" : provider == 4 ? L"GitHub Copilot" :
+           provider == 5 ? L"OpenCode Go" : L"Unknown provider";
 }
 
 // A provider's logo (taskbar/logo-paths.h, 24 DIP view box) in the primary ink, or in its brand
 // colors when chosen and `brand`; none for an unknown provider.
 static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_t provider, bool brand) {
     PCWSTR path = provider == 1 ? kClaudeLogoPath : provider == 2 ? kOpenAiLogoPath :
-                  provider == 3 ? kGeminiLogoPath : provider == 4 ? kCopilotLogoPath : nullptr;
+                  provider == 3 ? kGeminiLogoPath : provider == 4 ? kCopilotLogoPath :
+                  provider == 5 ? kOpenCodeLogoPath : nullptr;
     if (!path) return {};
     UiShapePart part{path, {}, UiInk::Primary};
     const LogoBrand* colors =
@@ -26311,7 +26474,8 @@ struct HistoryController {
         for (const HistorySample& sample : snapshot->samples) {
             if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
                 sample.timeMs < scope.to) {
-                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : sample.provider <= 3 ? 5 : 8;
+                estimate += sample.provider == 2 || sample.provider == 5 ? 3 : sample.provider == 4 ? 1 :
+                            sample.provider <= 3 ? 5 : 8;
             }
         }
         operation = HistoryOperation::Export;
@@ -26446,9 +26610,9 @@ struct HistoryController {
             L"Axes and units\r\n"
             L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
             L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
-            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used and GitHub Copilot AI "
-            L"credits used (%) (left, in the Remaining mode) and OpenAI credits "
-            L"remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
+            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI "
+            L"credits used and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI "
+            L"credits remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
             L"also plots it on its own axis. Accounts without readings in the range are listed under No "
             L"readings.\r\n\r\n"
             L"Lines and markers\r\n"

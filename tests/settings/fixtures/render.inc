@@ -822,7 +822,7 @@ static void RunRenders(const std::wstring& directory) {
                 state.focusVisible = true;
                 std::string dragged = std::string("render-accounts-drag-") + theme.name + "-144.png";
                 RenderFrame(g, wic.get(), path(dragged), frame, view, client, 144, theme.input, state, 0, false);
-                CHECK(rows.size() == 4 && UiFindItem(frame, AccountId(4, SettingsField::AccountExpand, 1))->selected);
+                CHECK(rows.size() == 5 && UiFindItem(frame, AccountId(4, SettingsField::AccountExpand, 1))->selected);
             });
 
             // Layout states at 144 DPI. Ring: the taskbar showing the sample (switch on), the

@@ -579,6 +579,7 @@ static void UpdateAccountFlyout(
     bool openAi = account.provider == L"openai";
     bool antigravity = account.provider == L"antigravity";
     bool copilot = account.provider == L"copilot";
+    bool opencode = account.provider == L"opencode";
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
@@ -629,7 +630,7 @@ static void UpdateAccountFlyout(
             {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
              antigravity && d.antigravityThirdParty5h.pct >= 0},
             {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {openAi ? L"Credits" : copilot ? copilotRow : L"Extra usage",
+            {openAi ? L"Credits" : copilot ? copilotRow : opencode ? L"Monthly" : L"Extra usage",
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
         const auto readings = FlyoutRowReadings(d);
@@ -690,6 +691,11 @@ static void UpdateAccountFlyout(
             swprintf(text, ARRAYSIZE(text), L"%.0f%%", shownPct);
             row.number.Text(text);
             row.unit.Text(remainingMode ? L"left" : L"used");
+            // An OpenCode Go window at its limit: the number in the warning color, and a note.
+            int slot = r == kFlyoutFiveHourRow ? kFiveHourBar : r == kFlyoutWeeklyRow ? kWeeklyBar :
+                       r == kFlyoutExtraRow ? kExtraUsageBar : -1;
+            bool limited = opencode && slot >= 0 && d.opencodeLimited[slot];
+            if (opencode) row.number.Foreground(limited ? theme.warning : theme.text);
 
             // The bar follows the bar mode like the taskbar; its color tracks consumption.
             double fillPct = std::clamp(shownPct, 0.0, 100.0);
@@ -725,10 +731,10 @@ static void UpdateAccountFlyout(
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
 
             // The usage graph tiles' projection; the text, naming the rate's span, when it
-            // reaches the limit before the reset.
+            // reaches the limit before the reset. None once the limit is reached.
             const std::vector<TileTracePoint>& trace = traces[r];
             std::optional<UsageProjection> projected;
-            if (!display.stale) {
+            if (!display.stale && !limited) {
                 projected = ProjectUsage(wu, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
@@ -852,7 +858,9 @@ static void UpdateAccountFlyout(
             }
 
             std::wstring amount;
-            if (r == kFlyoutExtraRow && copilot) {
+            if (limited) {
+                amount = L"Limit reached";
+            } else if (r == kFlyoutExtraRow && copilot) {
                 // Past the allowance the bar stays full; the additional usage gets its own line.
                 amount = copilotAmount(d.extraUsedAmount) + L" of " + copilotAmount(d.extraLimitAmount) + L" " +
                          copilotUnit + L" used" + copilotOverage;

@@ -22,11 +22,12 @@ static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
 static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
 // A slot's key: Antigravity's Gemini Argon weekly shows "Ar" instead of "Fa", OpenAI credits "Cr"
-// instead of "Ex", GitHub Copilot's monthly AI credits "Mo".
+// instead of "Ex", GitHub Copilot's monthly AI credits and OpenCode Go's monthly "Mo".
 static PCWSTR QuotaKey(std::wstring_view provider, int slot) {
     if (slot == kFableWeeklyBar) return provider == L"antigravity" ? L"Ar" : kQuotaKeys[slot];
     if (slot != kExtraUsageBar) return kQuotaKeys[slot];
-    return provider == L"openai" ? L"Cr" : provider == L"copilot" ? L"Mo" : kQuotaKeys[slot];
+    return provider == L"openai" ? L"Cr" : provider == L"copilot" || provider == L"opencode" ? L"Mo" :
+                                                                                              kQuotaKeys[slot];
 }
 // Tile text's cap height, as a share of its font size (Segoe UI Variable).
 static constexpr double kTileCapShare = 0.7;
@@ -1197,9 +1198,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     }
     if (spark) {
         // A chart per quota with a window, and per quota not read yet (until the first success);
-        // without any, the most-used quota's. The extra usage goes in the weekly chart's corner,
-        // instead of a chart of its own, while selected and reported; credits have no window, so
-        // never get a chart.
+        // without any, the most-used quota's. Anthropic's extra usage and OpenAI's credits go in
+        // the weekly chart's corner, instead of a chart of its own, while selected and reported;
+        // credits have no window, so never get a chart.
         int charted = 0;
         for (int w = 0; w < kQuotaBarCount; w++) {
             if ((meters.barMask & (1 << w)) && (timed(w) || usage[w]->pct < 0)) charted |= 1 << w;
@@ -1208,7 +1209,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         const WindowUsage& extra = data.extraUsage;
         bool extraReported = extra.pct >= 0 || data.extraUsedAmount >= 0 || (openAi && data.creditsBalance >= 0);
         if (display.sparklineExtra != SparklineExtra::Off && account.showBars[kExtraUsageBar] &&
-            (charted & (1 << kWeeklyBar)) && extraReported) {
+            (openAi || account.provider == L"anthropic") && (charted & (1 << kWeeklyBar)) && extraReported) {
             charted &= ~(1 << kExtraUsageBar);
             // Percent of the limit, else the amount: dollars, or credits spent against the max or
             // the balance left; a percentage when it's all there is. Spent in used mode, left in
@@ -1632,8 +1633,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 if (wu.pct >= 0) {
                     double y = yAt(wu.pct);
                     reading(x, y);
+                    // None for a window its provider reports at its limit, whatever its percentage.
                     std::optional<UsageProjection> projection;
-                    if (!meters.stale) {
+                    if (!meters.stale && !data.opencodeLimited[w]) {
                         projection = ProjectUsage(wu, trace, display.now,
                                                   w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
                     }

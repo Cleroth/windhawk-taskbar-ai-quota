@@ -9,20 +9,20 @@ static bool NormalizeSettings(Settings* s) {
     std::vector<AccountConfig> accounts;
     for (auto& a : s->accounts) {
         if (a.provider != L"anthropic" && a.provider != L"openai" &&
-            a.provider != L"antigravity" && a.provider != L"copilot") {
+            a.provider != L"antigravity" && a.provider != L"copilot" && a.provider != L"opencode") {
             continue;
         }
         // Labels are stable identities; only the native editor trims deliberate edits.
         if (a.label.empty()) {
             a.label = a.provider == L"anthropic" ? L"A" : a.provider == L"openai" ? L"O" :
-                      a.provider == L"copilot" ? L"C" : L"G";
+                      a.provider == L"copilot" ? L"C" : a.provider == L"opencode" ? L"OC" : L"G";
         }
         // The third slot is Anthropic Fable weekly or Antigravity's Gemini Argon weekly.
         if (a.provider != L"anthropic" && a.provider != L"antigravity") a.showBars[kFableWeeklyBar] = false;
         if (a.provider != L"openai") a.creditsMax = 0;
         a.creditsMax = std::max(a.creditsMax, 0);
-        // The extra-usage slot is Anthropic monthly extra usage, OpenAI credits vs. max, or
-        // GitHub Copilot's monthly AI credits, its only quota.
+        // The extra-usage slot is Anthropic monthly extra usage, OpenAI credits vs. max, GitHub
+        // Copilot's monthly AI credits, its only quota, or OpenCode Go's monthly.
         if (a.provider == L"antigravity" || (a.provider == L"openai" && a.creditsMax == 0)) {
             a.showBars[kExtraUsageBar] = false;
         }

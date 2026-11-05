@@ -105,14 +105,15 @@ enum class SettingsField : uint8_t {
     BadgeColorCustom,     // The color dialog
     ShowOnTaskbar,        // Visual test mode
     PreviewScroll,        // The preview strip's sideways scroll
-    AccountAdd,           // The Add account menu: 0 Anthropic, 1 OpenAI, 2 Antigravity, 3 GitHub Copilot
+    AccountAdd,           // The Add account menu: kSettingsProviders' index
     AccountExpand,        // Desired: 1 expanded
 };
 
 static constexpr int kSettingsLabelLimit = 64;
 static constexpr int kSettingsTileTextLimit = 4;
 static constexpr int kSettingsCreditsLimit = 999999999;
-static constexpr PCWSTR kSettingsProviders[] = {L"anthropic", L"openai", L"antigravity", L"copilot"};
+static constexpr PCWSTR kSettingsProviders[] = {L"anthropic", L"openai", L"antigravity", L"copilot",
+                                                 L"opencode"};
 
 struct SettingsNumberRange {
     int minimum = 0, maximum = 0;
@@ -975,13 +976,13 @@ struct SettingsEdits {
     }
 
     // The Add account menu: an account of `provider`, created at once. Its label is the first
-    // default (A, A2, A3, ...; O, G and C for the others) whose identity has no stored sign-in, so
-    // it never adopts an old one; the store takes the first of those no account of the provider
+    // default (A, A2, A3, ...; O, G, C and OC for the others) whose identity has no stored sign-in,
+    // so it never adopts an old one; the store takes the first of those no account of the provider
     // uses. Returns its key; 0 when none was added.
     uint64_t AddAccount(const std::wstring& provider) {
         if (store->Unloading()) return 0;
         std::wstring base = provider == L"openai" ? L"O" : provider == L"antigravity" ? L"G" :
-                            provider == L"copilot" ? L"C" : L"A";
+                            provider == L"copilot" ? L"C" : provider == L"opencode" ? L"OC" : L"A";
         std::vector<std::wstring> labels;
         size_t wanted = baseline.settings.accounts.size() + 8;
         for (int n = 1; labels.size() < wanted && n <= 10000; n++) {

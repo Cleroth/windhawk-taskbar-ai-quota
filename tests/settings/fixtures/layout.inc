@@ -3275,7 +3275,7 @@ static void RunLayoutTests() {
 
     Run("logos: winding and even-odd fills agree (XAML path data fills even-odd)", [] {
         UiGraphics& g = TestGraphics();
-        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath, kCopilotLogoPath}) {
+        for (PCWSTR path : {kOpenAiLogoPath, kClaudeLogoPath, kGeminiLogoPath, kCopilotLogoPath, kOpenCodeLogoPath}) {
             winrt::com_ptr<ID2D1PathGeometry> evenOdd;
             winrt::check_hresult(g.d2d->CreatePathGeometry(evenOdd.put()));
             winrt::com_ptr<ID2D1GeometrySink> sink;

@@ -29,10 +29,12 @@ static HistoryBreak HistoryWindowConnection(const HistorySample& a, const Histor
         if ((av.resetMs >= lower && av.resetMs <= upper) ||
             (bv.resetMs >= lower && bv.resetMs <= upper)) return HistoryBreak::Reset;
         if (shift > tolerance) {
-            // OpenAI's unused window rolls a full duration ahead until first use anchors it.
-            // This is not a reset: the old deadline is still beyond this sampled interval.
-            // Keep real boundaries, other providers, backward shifts, and partial windows conservative.
-            if (a.provider == 2 && av.value == 0 && bv.value >= 0 && av.durationMs &&
+            // OpenAI's unused windows and OpenCode Go's unused 5-hour window roll a full duration
+            // ahead until first use anchors them. This is not a reset: the old deadline is still
+            // beyond this sampled interval. Keep real boundaries, other providers and lanes,
+            // backward shifts, and partial windows conservative.
+            if ((a.provider == 2 || (a.provider == 5 && meter == 0)) && av.value == 0 &&
+                bv.value >= 0 && av.durationMs &&
                 av.resetMs > upper && bv.resetMs > upper && bv.resetMs > av.resetMs &&
                 (shift <= gap || shift - gap <= tolerance)) {
                 ULONGLONG remaining = av.resetMs - a.timeMs;

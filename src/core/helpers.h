@@ -222,6 +222,7 @@ static PCWSTR ProviderDisplayName(const std::wstring& provider) {
     if (provider == L"anthropic") return L"Anthropic";
     if (provider == L"openai") return L"OpenAI";
     if (provider == L"copilot") return L"GitHub Copilot";
+    if (provider == L"opencode") return L"OpenCode Go";
     return L"Google Antigravity";
 }
 

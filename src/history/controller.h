@@ -347,7 +347,8 @@ struct HistoryController {
         for (const HistorySample& sample : snapshot->samples) {
             if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
                 sample.timeMs < scope.to) {
-                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : sample.provider <= 3 ? 5 : 8;
+                estimate += sample.provider == 2 || sample.provider == 5 ? 3 : sample.provider == 4 ? 1 :
+                            sample.provider <= 3 ? 5 : 8;
             }
         }
         operation = HistoryOperation::Export;
@@ -482,9 +483,9 @@ struct HistoryController {
             L"Axes and units\r\n"
             L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
             L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
-            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used and GitHub Copilot AI "
-            L"credits used (%) (left, in the Remaining mode) and OpenAI credits "
-            L"remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
+            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI "
+            L"credits used and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI "
+            L"credits remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
             L"also plots it on its own axis. Accounts without readings in the range are listed under No "
             L"readings.\r\n\r\n"
             L"Lines and markers\r\n"

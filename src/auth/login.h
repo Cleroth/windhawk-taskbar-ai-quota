@@ -1,5 +1,5 @@
-// Sign-in thread: the sign-in window, OpenAI loopback listener, GitHub device flow, and code
-// exchange.
+// Sign-in thread: the sign-in window, OpenAI loopback listener, GitHub device flow, code
+// exchange, and OpenCode Go's pasted API key.
 
 struct LoginRequest {
     std::wstring provider;
@@ -104,10 +104,11 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedSta
 }
 
 // Sign-in window: offers the authorize link to copy or open, then either collects the pasted
-// Anthropic code#state or waits for the OpenAI loopback callback; for GitHub's device flow it
-// shows the code to enter and a status line while its message loop polls for the token. Runs its
-// own message loop on the login thread; closed on cancel, submit, callback, a granted device
-// sign-in, or unload. A device sign-in that ends otherwise stays open with the reason until closed.
+// Anthropic code#state or OpenCode Go API key (masked) or waits for the OpenAI loopback callback;
+// for GitHub's device flow it shows the code to enter and a status line while its message loop
+// polls for the token. Runs its own message loop on the login thread; closed on cancel, submit,
+// callback, a granted device sign-in, or unload. A device sign-in that ends otherwise stays open
+// with the reason until closed.
 enum {
     kLoginInstructions = 100,
     kLoginCode,
@@ -120,8 +121,10 @@ constexpr UINT kLoginAccept = WM_APP + 1;  // FD_ACCEPT notification for the loo
 struct LoginDialogState {
     // Inputs
     std::wstring url;  // The authorize link, or the device flow's verification page.
-    // Loopback flow when set; device flow with `poll`; otherwise a code is pasted.
+    // Loopback flow when set; device flow with `poll`; otherwise a code is pasted, masked when
+    // `secret`.
     SOCKET listener = INVALID_SOCKET;
+    bool secret = false;
     std::string expectedState;
     // Device flow: the code to enter on the verification page, and the token poll the message
     // loop runs, never the window procedure, once GetTickCount64 reaches nextPollMs. It catches
@@ -225,8 +228,8 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                    kLoginCopyLink);
             create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
             if (st->listener == INVALID_SOCKET && !st->poll) {
-                st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL,
-                                  kLoginCode);
+                st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"",
+                                  WS_TABSTOP | ES_AUTOHSCROLL | (st->secret ? ES_PASSWORD : 0), kLoginCode);
                 create(0, L"BUTTON", L"Sign in", WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK);
             }
             create(0, L"BUTTON", L"Cancel", WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
@@ -727,6 +730,47 @@ static void DoCopilotLogin(const LoginRequest& req) {
     Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
 }
 
+// OpenCode Go: an API key pasted from the console, stored as the access token without a refresh
+// token or expiry; saving it requests a poll, whose answer is its only check.
+static void DoOpenCodeLogin(const LoginRequest& req) {
+    LoginDialogState dialog;
+    dialog.url = kOpenCodeConsoleUrl;
+    dialog.secret = true;
+    std::wstring title = L"Sign in: " + req.label + L" (OpenCode Go)";
+    std::wstring instructions =
+        L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+        L"subscription, and paste it below.";
+    if (!ShowLoginDialog(title, instructions, dialog) || g_unloading) return;
+
+    const std::wstring& pasted = dialog.pastedCode;
+    size_t b = pasted.find_first_not_of(L" \t\r\n");
+    size_t e = pasted.find_last_not_of(L" \t\r\n");
+    StoredToken tok;
+    if (b != std::wstring::npos) tok.accessToken = pasted.substr(b, e - b + 1);
+    if (tok.accessToken.empty()) {
+        Wh_Log(L"Sign-in [%s]: no key entered", req.label.c_str());
+        return;
+    }
+    // A key is one printable token, far shorter than the token store's 16K characters.
+    if (tok.accessToken.size() > 1024 ||
+        std::any_of(tok.accessToken.begin(), tok.accessToken.end(),
+                    [](wchar_t c) { return c <= L' ' || c == 0x7F; })) {
+        Wh_Log(L"Sign-in [%s] failed: that is not an API key", req.label.c_str());
+        return;
+    }
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    if (saved == TokenSaveResult::Stale) {
+        Wh_Log(L"Sign-in [%s]: cancelled before saving key", req.label.c_str());
+        return;
+    }
+    if (saved != TokenSaveResult::Saved) {
+        Wh_Log(L"Sign-in [%s] failed: could not save key", req.label.c_str());
+        return;
+    }
+    RefreshQuotaByIdentity(req.idHash);
+    Wh_Log(L"Sign-in [%s]: key saved", req.label.c_str());
+}
+
 static DWORD WINAPI LoginThreadProc(LPVOID param) {
     std::unique_ptr<LoginRequest> req(reinterpret_cast<LoginRequest*>(param));
     using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
@@ -745,6 +789,7 @@ static DWORD WINAPI LoginThreadProc(LPVOID param) {
             if (req->provider == L"anthropic") DoAnthropicLogin(*req);
             else if (req->provider == L"openai") DoOpenAiLogin(*req);
             else if (req->provider == L"copilot") DoCopilotLogin(*req);
+            else if (req->provider == L"opencode") DoOpenCodeLogin(*req);
         }
     } catch (...) {
         Wh_Log(L"Sign-in: exception");
@@ -769,7 +814,8 @@ static void StartLoginByIdentity(uint64_t identityHash) {
                 return AccountIdentityHash(candidate) == identityHash;
             });
         if (it == g_settings.accounts.end() ||
-            (it->provider != L"anthropic" && it->provider != L"openai" && it->provider != L"copilot")) {
+            (it->provider != L"anthropic" && it->provider != L"openai" && it->provider != L"copilot" &&
+             it->provider != L"opencode")) {
             return;
         }
         account = *it;

@@ -142,6 +142,7 @@ struct SettingsProductionStore final : SettingsStore {
         AccountConfig account;
         account.provider = provider;
         account.showBars[kFableWeeklyBar] = provider == L"antigravity";  // Argon weekly starts on.
+        account.showBars[kExtraUsageBar] = provider == L"opencode";     // So does OpenCode Go's monthly.
         return Result(AddAccountCommand(std::move(account), labels));
     }
 

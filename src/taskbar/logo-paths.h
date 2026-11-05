@@ -74,10 +74,14 @@ static constexpr PCWSTR kCopilotLogoPath =
     L"163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.41"
     L"4 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z";
 
+// opencode.svg.
+static constexpr PCWSTR kOpenCodeLogoPath = L"M22 24H2V0h20zM17 4.8H7v14.4h10z";
+
 // The provider's logo.
 static PCWSTR ProviderLogoPath(std::wstring_view provider) {
     return provider == L"openai" ? kOpenAiLogoPath : provider == L"anthropic" ? kClaudeLogoPath :
-           provider == L"copilot" ? kCopilotLogoPath : kGeminiLogoPath;
+           provider == L"copilot" ? kCopilotLogoPath : provider == L"opencode" ? kOpenCodeLogoPath :
+                                    kGeminiLogoPath;
 }
 
 // A logo's brand colors (ARGB): `from` at (x0, y0) of the 24x24 viewBox shading linearly to `to`

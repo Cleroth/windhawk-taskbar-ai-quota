@@ -54,10 +54,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         float top = y + 14, center = x + width / 2;
         float lines = std::clamp(width - 120, 40.0f, 440.0f);
         std::vector<UiRun> first = {{L"Select "}, {L"Add account", UiRunStyle::Strong},
-                                    {L" to show an Anthropic, OpenAI, Google Antigravity or GitHub Copilot "
-                                     L"account on the taskbar."}};
-        std::vector<UiRun> second = {{L"Anthropic, OpenAI and GitHub Copilot sign in through your browser. "
-                                      L"Google Antigravity uses its signed-in app or CLI, which must keep running."}};
+                                    {L" to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or "
+                                     L"OpenCode Go account on the taskbar."}};
+        std::vector<UiRun> second = {{L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, "
+                                      L"OpenCode Go with an API key. Google Antigravity uses its signed-in app or "
+                                      L"CLI, which must keep running."}};
         float firstHeight = UiLayoutSize(UiRichLayout(g, first, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float secondHeight = UiLayoutSize(UiRichLayout(g, second, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float bottom = top + 1 + kPadTop + kIcon + 6 + kGap + 26 + kGap + firstHeight + kGap + secondHeight +
@@ -125,10 +126,10 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             return nullptr;
         };
         const bool anthropic = account.provider == L"anthropic", openai = account.provider == L"openai";
-        const bool copilot = account.provider == L"copilot";
-        const bool oauth = anthropic || openai || copilot;
+        const bool copilot = account.provider == L"copilot", opencode = account.provider == L"opencode";
+        const bool signsIn = anthropic || openai || copilot || opencode;
         const bool notPolled = account.hidden && (s.skipHiddenPolling || !s.historyEnabled || !account.recordHistory);
-        const bool signInNeeded = oauth && !status.signingIn && (!status.signedIn || status.needsSignIn);
+        const bool signInNeeded = signsIn && !status.signingIn && (!status.signedIn || status.needsSignIn);
         const int bars = SettingsAccountValue(account, SettingsField::AccountBars);
         std::vector<UiItem> cardItems;
         auto push = [&](UiItem item) { cardItems.push_back(std::move(item)); };
@@ -234,16 +235,17 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             stateText = L"Hidden, not polled";
             stateInk = UiInk::Secondary;
         } else if (!error.empty()) {
-            stateText = !oauth && status.error == L"Antigravity not running" ? L"Local app not running" : error;
+            stateText = !signsIn && status.error == L"Antigravity not running" ? L"Local app not running" : error;
             stateInk = UiInk::Caution;
-        } else if (!oauth) {
+        } else if (!signsIn) {
             stateText = status.polled ? L"Local app running" : L"Waiting for the local app";
             stateInk = status.polled ? UiInk::Success : UiInk::Secondary;
         } else {
             stateText = L"Signed in";
         }
         std::wstring details = anthropic ? L"Anthropic \u00B7 " : openai ? L"OpenAI \u00B7 " :
-                               copilot ? L"GitHub Copilot \u00B7 " : L"Antigravity \u00B7 ";
+                               copilot ? L"GitHub Copilot \u00B7 " : opencode ? L"OpenCode Go \u00B7 " :
+                                         L"Antigravity \u00B7 ";
         if (!status.plan.empty()) details += status.plan + L" \u00B7 ";
         float textRight = std::max(right, x + 77 + 40);
         UiItem title;
@@ -295,7 +297,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     int bar;
                     PCWSTR name;
                 };
-                std::vector<Quota> quotas = {{kFiveHourBar, oauth ? L"5-hour" : L"Short window"},
+                std::vector<Quota> quotas = {{kFiveHourBar, signsIn ? L"5-hour" : L"Short window"},
                                              {kWeeklyBar, L"Weekly"}};
                 if (anthropic) {
                     quotas.push_back({kFableWeeklyBar, L"Fable weekly"});
@@ -305,6 +307,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 } else if (copilot) {
                     // The monthly allowance is its only quota.
                     quotas = {{kExtraUsageBar, L"AI credits"}};
+                } else if (opencode) {
+                    quotas.push_back({kExtraUsageBar, L"Monthly"});
                 } else {
                     quotas.push_back({kFableWeeklyBar, L"Argon weekly"});
                 }
@@ -445,7 +449,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 push(button);
                 if (!trailing) left += buttonWidth + 8;
             };
-            if (oauth) {
+            if (signsIn) {
                 addButton(SettingsField::AccountDashboard, L"Open dashboard", L"\uE8A7", UiButtonStyle::Standard, true,
                           false);
                 if (status.signedIn && !signInNeeded) {
