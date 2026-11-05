@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.14.0
+// @version         2.14.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1123,9 +1123,11 @@ static std::vector<AccountData> g_data;
 static std::mutex g_dataMutex;
 
 static std::atomic<bool> g_unloading{false};
-static std::atomic<bool> g_refreshing{false};
-static std::atomic<uint64_t> g_refreshAccountIdentity{0};
-static std::atomic<ULONGLONG> g_refreshGeneration{0};
+// Manual refreshes the fetch thread hasn't served, under g_refreshMutex: an account identity (0:
+// every account) with the g_refreshGeneration that last asked for it. A round serves the requests
+// it started with; one made meanwhile waits for the next round.
+static std::vector<std::pair<uint64_t, ULONGLONG>> g_refreshRequests;
+static ULONGLONG g_refreshGeneration = 0;
 static std::mutex g_refreshMutex;
 static std::atomic<bool> g_uiInjected{false};
 static std::atomic<bool> g_visualTestMode{false};
@@ -1161,8 +1163,7 @@ static void QueueRefresh(uint64_t identityHash) {
     if (!g_fetchThreadStarted.load(std::memory_order_acquire)) {
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-            g_refreshing = false;
-            g_refreshAccountIdentity = 0;
+            g_refreshRequests.clear();
         }
         PostUiUpdate();
         return;
@@ -1170,9 +1171,14 @@ static void QueueRefresh(uint64_t identityHash) {
 
     {
         std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-        g_refreshing = true;
-        g_refreshAccountIdentity = identityHash;
-        g_refreshGeneration++;
+        ULONGLONG generation = ++g_refreshGeneration;
+        auto request = std::find_if(g_refreshRequests.begin(), g_refreshRequests.end(),
+                                    [&](const auto& pending) { return pending.first == identityHash; });
+        if (request != g_refreshRequests.end()) {
+            request->second = generation;
+        } else {
+            g_refreshRequests.push_back({identityHash, generation});
+        }
     }
     PostUiUpdate();
     if (g_refreshEvent) SetEvent(g_refreshEvent);
@@ -5714,56 +5720,56 @@ static constexpr ULONGLONG kPlanCacheMs = 6ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kResetsExpiryCacheMs = 3ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a 429 says when.
 
-// `signInChanged`: polling again after a refreshed token's save went stale.
-static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
-                         AccountDetailsCache* details, bool signInChanged = false) {
+// Returns the sign-in generation the result was read through. Once that sign-in is replaced,
+// removed or moved, the result is that login's, whatever it says (a rejected refresh included):
+// the fetch thread polls again rather than publish it. A refreshed token's stale save means just
+// that.
+static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
+                             AccountDetailsCache* details) {
     d->error.clear();
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
+    uint64_t idHash = AccountIdentityHash(acc);
 
     // Antigravity uses local language server discovery, not OAuth.
     if (acc.provider == L"antigravity") {
         FetchAntigravityAccount(d);
-        return;
+        return CurrentSignInGeneration(idHash);
     }
 
     bool anthropic = acc.provider == L"anthropic";
     bool openAi = acc.provider == L"openai";
     bool copilot = acc.provider == L"copilot";
     bool opencode = acc.provider == L"opencode";  // An API key: never expires, never refreshes.
-    uint64_t idHash = AccountIdentityHash(acc);
     ULONGLONG authEpoch = 0;
     uint64_t signInGeneration = 0;
     StoredToken tok;
     bool signedIn = false;
     {
-        // The token belongs to the epoch and sign-in generation read with it.
+        // The token belongs to the epoch and sign-in generation read with it. An account renamed
+        // or removed since the round began reads none: a rename's failed delete leaves a copy of
+        // the moved sign-in, whose single-use refresh token must not be spent.
         std::lock_guard<std::mutex> lk(g_authEpochMutex);
         authEpoch = AuthEpochLocked(idHash);
         signInGeneration = SignInGenerationLocked(idHash);
-        signedIn = LoadStoredToken(idHash, &tok) && !tok.accessToken.empty();
+        bool configured;
+        {
+            std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+            configured = std::any_of(g_settings.accounts.begin(), g_settings.accounts.end(),
+                [&](const AccountConfig& account) { return AccountIdentityHash(account) == idHash; });
+        }
+        signedIn = configured && LoadStoredToken(idHash, &tok) && !tok.accessToken.empty();
     }
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
         d->error = L"not signed in - click to sign in";
-        return;
+        return signInGeneration;
     }
     // GitHub refreshes through its own form-encoded endpoint.
     auto refresh = [&](std::wstring* err, int* retryAfterSec) {
         return copilot ? RefreshCopilotToken(&tok, err, retryAfterSec) :
                          RefreshToken(acc.provider, &tok, err, retryAfterSec);
-    };
-    // A refreshed token's save is stale once its sign-in was replaced, deleted or moved again:
-    // poll once more with the current one (none after a sign-out). Should it change again
-    // meanwhile, poll again soon.
-    auto staleSave = [&] {
-        if (!signInChanged) {
-            FetchAccount(acc, d, retryAfterSec, details, true);
-            return;
-        }
-        d->stale = true;
-        d->error = L"token refresh failed";
     };
 
     // Refresh just before expiry so a request rarely races the token going stale.
@@ -5775,14 +5781,11 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
             uint64_t savedIdentity = 0;
             TokenSaveResult saved =
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
-            if (saved == TokenSaveResult::Stale) {
-                staleSave();
-                return;
-            }
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = L"could not save refreshed token";
-                return;
+                d->error = saved == TokenSaveResult::Stale ? L"token refresh failed" :
+                                                             L"could not save refreshed token";
+                return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
         } else {
@@ -5795,7 +5798,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                 if (!refreshErr.empty()) d->error += L": " + refreshErr;
                 *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             }
-            return;
+            return signInGeneration;
         }
     }
 
@@ -5845,36 +5848,33 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
             uint64_t savedIdentity = 0;
             TokenSaveResult saved =
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
-            if (saved == TokenSaveResult::Saved) {
-                if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
-                r = requestUsage(tok);
-            } else if (saved == TokenSaveResult::Stale) {
-                staleSave();
-                return;
-            } else {
+            if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = L"could not save refreshed token";
-                return;
+                d->error = saved == TokenSaveResult::Stale ? L"token refresh failed" :
+                                                             L"could not save refreshed token";
+                return signInGeneration;
             }
+            if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
+            r = requestUsage(tok);
         } else if (refreshResult == TokenEndpointResult::TransientFailure) {
             d->stale = true;
             d->error = L"token refresh failed";
             if (!refreshErr.empty()) d->error += L": " + refreshErr;
             *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
-            return;
+            return signInGeneration;
         }
     }
 
     if (!r.ok) {
         d->stale = true;
         d->error = L"network error";
-        return;
+        return signInGeneration;
     }
     if (r.status == 401) {
         d->stale = true;
         d->needsLogin = true;
         d->error = L"unauthorized - click to sign in";
-        return;
+        return signInGeneration;
     }
     // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
     // other 403 means the signed-in GitHub account has no Copilot seat or plan.
@@ -5889,12 +5889,12 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->stale = true;
         d->error = L"rate limited by API";
         *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
-        return;
+        return signInGeneration;
     }
     if (copilot && r.status == 403) {
         d->stale = true;
         d->error = L"no Copilot access on this GitHub account";
-        return;
+        return signInGeneration;
     }
     // OpenCode's EntitlementError: the key's workspace has no Go subscription. Other 403s (an edge
     // block, say) stay plain HTTP errors.
@@ -5907,13 +5907,13 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         if (entitlement) {
             d->stale = true;
             d->error = L"no OpenCode Go subscription on this key";
-            return;
+            return signInGeneration;
         }
     }
     if (r.status != 200) {
         d->stale = true;
         d->error = L"HTTP " + std::to_wstring(r.status);
-        return;
+        return signInGeneration;
     }
 
     AccountData fresh;
@@ -5925,7 +5925,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     if (!parsed) {
         d->stale = true;
         d->error = parseError.empty() ? L"unexpected response format" : parseError;
-        return;
+        return signInGeneration;
     }
 
     // Account details through the same token: the Anthropic plan, re-read after kPlanCacheMs,
@@ -5983,6 +5983,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     fresh.stale = false;
     fresh.lastSuccessMs = NowUnixMs();
     *d = std::move(fresh);
+    return signInGeneration;
 }
 
 static DWORD WINAPI FetchThreadProc(LPVOID) {
@@ -5996,6 +5997,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<uint64_t> retryIdentityHashes;
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
+    // The sign-in generation each account's last poll read its token with.
+    std::vector<uint64_t> pollSignInGeneration;
     std::vector<AccountDetailsCache> accountDetails;
     // Per-account notification arm state at the chosen threshold, indexed by QuotaBarIndex:
     // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
@@ -6047,15 +6050,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
         }
         ULONGLONG refreshGeneration;
-        uint64_t refreshAccountIdentity;
-        bool refreshRequested;
+        std::vector<std::pair<uint64_t, ULONGLONG>> refreshRequests;
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-            refreshGeneration = g_refreshGeneration.load();
-            refreshAccountIdentity = g_refreshAccountIdentity.load();
-            refreshRequested = g_refreshing.load();
+            refreshGeneration = g_refreshGeneration;
+            refreshRequests = g_refreshRequests;
         }
         std::vector<AccountConfig> accounts;
+        std::vector<AccountData> results;
         int intervalMin, notificationThreshold;
         bool notificationsOn, historyEnabled, skipHiddenPolling;
         int historyRetentionDays;
@@ -6076,6 +6078,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
+            // The published data, of these accounts.
+            std::lock_guard<std::mutex> dataLock(g_dataMutex);
+            results = g_data.size() == accounts.size() ? g_data :
+                                                         std::vector<AccountData>(accounts.size());
         }
         if (!notificationsOn) {
             if (g_notifyWnd) RemoveNotifyIcon();
@@ -6087,17 +6093,19 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         if (settingsChanged) {
             lastLoggedErrorStates.assign(accounts.size(), {});
 
-            // Remap provider-directed Retry-After, normal poll deadlines and account details by
-            // stable account identity so settings changes don't cause another request for
-            // unchanged accounts.
+            // Remap provider-directed Retry-After, normal poll deadlines, the sign-in they were
+            // read through and account details by stable account identity so settings changes
+            // don't cause another request for unchanged accounts.
             auto oldIdentityHashes = std::move(retryIdentityHashes);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
+            auto oldPollSignInGeneration = std::move(pollSignInGeneration);
             auto oldAccountDetails = std::move(accountDetails);
             std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
             retryIdentityHashes.resize(accounts.size());
             retryDeadlineMs.assign(accounts.size(), 0);
             nextPollDeadlineMs.assign(accounts.size(), 0);
+            pollSignInGeneration.assign(accounts.size(), 0);
             accountDetails.assign(accounts.size(), {});
             for (size_t i = 0; i < accounts.size(); ++i) {
                 retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
@@ -6106,6 +6114,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     if (!oldDeadlineUsed[j] &&
                         oldIdentityHashes[j] == retryIdentityHashes[i]) {
                         retryDeadlineMs[i] = oldRetryDeadlineMs[j];
+                        if (j < oldPollSignInGeneration.size()) {
+                            pollSignInGeneration[i] = oldPollSignInGeneration[j];
+                        }
                         if (j < oldAccountDetails.size()) {
                             accountDetails[i] = std::move(oldAccountDetails[j]);
                         }
@@ -6126,11 +6137,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             lastLoggedSettingsGeneration = settingsGeneration;
         }
 
-        std::vector<AccountData> results(accounts.size());
-        {
-            std::lock_guard<std::mutex> lk(g_dataMutex);
-            if (g_data.size() == results.size()) results = g_data;
-        }
         if (settingsChanged || armState.size() != accounts.size()) {
             armState.assign(accounts.size(),
                             std::array<int, kQuotaBarCount>{-1, -1, -1, -1});
@@ -6146,19 +6152,21 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
         }
 
-        int refreshAccountIndex = -1;
-        if (refreshRequested && refreshAccountIdentity) {
-            for (size_t i = 0; i < accounts.size(); i++) {
-                if (AccountIdentityHash(accounts[i]) == refreshAccountIdentity) {
-                    refreshAccountIndex = (int)i;
-                    break;
-                }
+        // Manual refreshes poll every account, or only the requested ones while the others wait.
+        bool refreshAll = std::any_of(refreshRequests.begin(), refreshRequests.end(),
+                                      [](const auto& request) { return !request.first; });
+        std::vector<bool> refreshRequested(accounts.size(), refreshAll);
+        for (size_t i = 0; i < accounts.size(); i++) {
+            for (const auto& request : refreshRequests) {
+                if (request.first == retryIdentityHashes[i]) refreshRequested[i] = true;
             }
         }
-        bool manualRefresh = refreshRequested &&
-                             (!refreshAccountIdentity || refreshAccountIndex >= 0);
-        bool refreshSingleAccount = manualRefresh && refreshAccountIndex >= 0 &&
-                                    refreshAccountIndex < (int)accounts.size();
+        bool refreshSelected = !refreshAll && std::find(refreshRequested.begin(),
+                                                        refreshRequested.end(), true) !=
+                                                  refreshRequested.end();
+        // What the round started with, for polls whose sign-in changed (see FetchAccount).
+        const std::vector<AccountData> startResults = results;
+        std::vector<bool> polled(accounts.size(), false);
         std::vector<bool> fetchedOk(accounts.size(), false);
         std::vector<HistorySample> historyBatch;
         ULONGLONG nextRetryMs = 0;
@@ -6170,7 +6178,13 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             // polls an unrecorded hidden account, including during Refresh all.
             if (accounts[i].hidden && (skipHiddenPolling || !historyEnabled ||
                                         !accounts[i].recordHistory)) continue;
-            if (refreshSingleAccount && (int)i != refreshAccountIndex) {
+            // A poll through an earlier sign-in (replaced, removed or moved since) set that
+            // login's deadlines: the current one polls now.
+            if (pollSignInGeneration[i] != CurrentSignInGeneration(retryIdentityHashes[i])) {
+                retryDeadlineMs[i] = 0;
+                nextPollDeadlineMs[i] = 0;
+            }
+            if (refreshSelected && !refreshRequested[i]) {
                 if (retryDeadlineMs[i] > nowMs &&
                     (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs)) {
                     nextRetryMs = retryDeadlineMs[i];
@@ -6189,7 +6203,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
                 continue;
             }
-            if (!manualRefresh && nextPollDeadlineMs[i] > nowMs) {
+            if (!refreshRequested[i] && nextPollDeadlineMs[i] > nowMs) {
                 if (nextPollMs == 0 || nextPollDeadlineMs[i] < nextPollMs) {
                     nextPollMs = nextPollDeadlineMs[i];
                 }
@@ -6203,7 +6217,17 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 break;
             }
             int retryAfter = 0;
-            FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
+            polled[i] = true;
+            pollSignInGeneration[i] =
+                FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
+            // Its sign-in changed meanwhile: poll once more with the current one (none after a
+            // sign-out). Should it change again, publication drops the result.
+            if (pollSignInGeneration[i] != CurrentSignInGeneration(retryIdentityHashes[i])) {
+                results[i] = startResults[i];
+                retryAfter = 0;
+                pollSignInGeneration[i] =
+                    FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
+            }
             // The journal rejects samples without a known provider code.
             uint32_t providerCode = HistoryProviderCode(accounts[i].provider);
             if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId && providerCode) {
@@ -6290,16 +6314,23 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         int publishedThreshold = notificationThreshold;
         bool notificationsEnabled = notificationsOn;
         {
-            // Account details read through a sign-in replaced, removed or moved since (this round
-            // or an earlier one, the usage request failing since) aren't published. The lock keeps
-            // a sign-in change from falling between this check and the publication.
+            // What this round read through a sign-in replaced, removed or moved since isn't
+            // published, recorded or notified: the account polls again at once. Nor are account
+            // details read so (this round or an earlier one, the usage request failing since). The
+            // lock keeps a sign-in change from falling between these checks and the publication.
             std::lock_guard<std::mutex> authLock(g_authEpochMutex);
             for (size_t i = 0; i < accounts.size() && i < results.size() &&
                                i < accountDetails.size(); i++) {
-                if (accountDetails[i].signInGeneration ==
-                    SignInGenerationLocked(AccountIdentityHash(accounts[i]))) {
-                    continue;
+                uint64_t signInGeneration = SignInGenerationLocked(AccountIdentityHash(accounts[i]));
+                if (polled[i] && pollSignInGeneration[i] != signInGeneration) {
+                    results[i] = startResults[i];
+                    fetchedOk[i] = false;
+                    std::erase_if(historyBatch, [&](const HistorySample& sample) {
+                        return sample.accountId == accounts[i].historyId;
+                    });
+                    nextPollMs = NowUnixMs();
                 }
+                if (accountDetails[i].signInGeneration == signInGeneration) continue;
                 if (accounts[i].provider == L"anthropic") results[i].plan.clear();
                 if (accounts[i].provider == L"openai") results[i].freeResetsExpiryMs = 0;
             }
@@ -6382,10 +6413,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         curvesRecording = historyEnabled;
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-            if (refreshGeneration == g_refreshGeneration.load()) {
-                g_refreshing = false;
-                g_refreshAccountIdentity = 0;
-            }
+            std::erase_if(g_refreshRequests, [&](const auto& request) {
+                return request.second <= refreshGeneration;
+            });
         }
         if (published) {
             // Notify once per upward crossing of the chosen threshold; re-arm when usage
@@ -12811,12 +12841,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (state.accountRefs.size() != data.size()) return;
     if (state.applied.size() != data.size()) state.applied.assign(data.size(), {});
 
-    bool refreshing;
-    uint64_t refreshAccountIdentity;
+    std::vector<std::pair<uint64_t, ULONGLONG>> refreshRequests;
     {
         std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-        refreshing = g_refreshing.load();
-        refreshAccountIdentity = g_refreshAccountIdentity.load();
+        refreshRequests = g_refreshRequests;
     }
     bool verticalBars = settings.barLayout == BarLayout::Vertical;
     // Tiles follow the layout the grid was built with.
@@ -12886,9 +12914,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             AccountMeters meters = AccountMeterState(
                 (int)i == state.sparkSwapIndex ? swappedDisplay : display, state.buildBarLayout, accounts[i], d,
                 ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
-            bool accountRefreshing = !visualTestMode && refreshing &&
-                (!refreshAccountIdentity ||
-                 AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
+            bool accountRefreshing = !visualTestMode &&
+                std::any_of(refreshRequests.begin(), refreshRequests.end(), [&](const auto& request) {
+                    return !request.first || request.first == AccountIdentityHash(accounts[i]);
+                });
 
             int barMask = meters.barMask;
             if (tileLayout) {
@@ -29685,8 +29714,7 @@ static bool g_winsockStarted = false;
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     g_unloading = false;
-    g_refreshing = false;
-    g_refreshAccountIdentity = 0;
+    g_refreshRequests.clear();
     g_refreshGeneration = 0;
     g_uiInjected.store(false, std::memory_order_release);
     g_fetchThreadStarted.store(false, std::memory_order_release);
@@ -29760,7 +29788,10 @@ void Wh_ModAfterInit() {
     } else {
         DWORD err = GetLastError();
         Wh_Log(L"CreateThread FetchThreadProc failed: %lu", err);
-        g_refreshing = false;
+        {
+            std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
+            g_refreshRequests.clear();
+        }
         g_fetchThreadStarted.store(false, std::memory_order_release);
         {
             std::lock_guard<std::mutex> lk(g_dataMutex);

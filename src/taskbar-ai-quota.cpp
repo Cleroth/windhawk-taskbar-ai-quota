@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.14.0
+// @version         2.14.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -370,8 +370,7 @@ static bool g_winsockStarted = false;
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     g_unloading = false;
-    g_refreshing = false;
-    g_refreshAccountIdentity = 0;
+    g_refreshRequests.clear();
     g_refreshGeneration = 0;
     g_uiInjected.store(false, std::memory_order_release);
     g_fetchThreadStarted.store(false, std::memory_order_release);
@@ -445,7 +444,10 @@ void Wh_ModAfterInit() {
     } else {
         DWORD err = GetLastError();
         Wh_Log(L"CreateThread FetchThreadProc failed: %lu", err);
-        g_refreshing = false;
+        {
+            std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
+            g_refreshRequests.clear();
+        }
         g_fetchThreadStarted.store(false, std::memory_order_release);
         {
             std::lock_guard<std::mutex> lk(g_dataMutex);

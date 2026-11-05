@@ -9,9 +9,11 @@ static std::vector<AccountData> g_data;
 static std::mutex g_dataMutex;
 
 static std::atomic<bool> g_unloading{false};
-static std::atomic<bool> g_refreshing{false};
-static std::atomic<uint64_t> g_refreshAccountIdentity{0};
-static std::atomic<ULONGLONG> g_refreshGeneration{0};
+// Manual refreshes the fetch thread hasn't served, under g_refreshMutex: an account identity (0:
+// every account) with the g_refreshGeneration that last asked for it. A round serves the requests
+// it started with; one made meanwhile waits for the next round.
+static std::vector<std::pair<uint64_t, ULONGLONG>> g_refreshRequests;
+static ULONGLONG g_refreshGeneration = 0;
 static std::mutex g_refreshMutex;
 static std::atomic<bool> g_uiInjected{false};
 static std::atomic<bool> g_visualTestMode{false};
@@ -47,8 +49,7 @@ static void QueueRefresh(uint64_t identityHash) {
     if (!g_fetchThreadStarted.load(std::memory_order_acquire)) {
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-            g_refreshing = false;
-            g_refreshAccountIdentity = 0;
+            g_refreshRequests.clear();
         }
         PostUiUpdate();
         return;
@@ -56,9 +57,14 @@ static void QueueRefresh(uint64_t identityHash) {
 
     {
         std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-        g_refreshing = true;
-        g_refreshAccountIdentity = identityHash;
-        g_refreshGeneration++;
+        ULONGLONG generation = ++g_refreshGeneration;
+        auto request = std::find_if(g_refreshRequests.begin(), g_refreshRequests.end(),
+                                    [&](const auto& pending) { return pending.first == identityHash; });
+        if (request != g_refreshRequests.end()) {
+            request->second = generation;
+        } else {
+            g_refreshRequests.push_back({identityHash, generation});
+        }
     }
     PostUiUpdate();
     if (g_refreshEvent) SetEvent(g_refreshEvent);

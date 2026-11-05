@@ -26,12 +26,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     if (state.accountRefs.size() != data.size()) return;
     if (state.applied.size() != data.size()) state.applied.assign(data.size(), {});
 
-    bool refreshing;
-    uint64_t refreshAccountIdentity;
+    std::vector<std::pair<uint64_t, ULONGLONG>> refreshRequests;
     {
         std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
-        refreshing = g_refreshing.load();
-        refreshAccountIdentity = g_refreshAccountIdentity.load();
+        refreshRequests = g_refreshRequests;
     }
     bool verticalBars = settings.barLayout == BarLayout::Vertical;
     // Tiles follow the layout the grid was built with.
@@ -101,9 +99,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             AccountMeters meters = AccountMeterState(
                 (int)i == state.sparkSwapIndex ? swappedDisplay : display, state.buildBarLayout, accounts[i], d,
                 ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
-            bool accountRefreshing = !visualTestMode && refreshing &&
-                (!refreshAccountIdentity ||
-                 AccountIdentityHash(accounts[i]) == refreshAccountIdentity);
+            bool accountRefreshing = !visualTestMode &&
+                std::any_of(refreshRequests.begin(), refreshRequests.end(), [&](const auto& request) {
+                    return !request.first || request.first == AccountIdentityHash(accounts[i]);
+                });
 
             int barMask = meters.barMask;
             if (tileLayout) {

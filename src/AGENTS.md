@@ -94,9 +94,11 @@ first, then reads/updates XAML.
   `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning, an
   account's deletion). An account's deletion also notifies the windows
   (`NotifySettingsWindowChanged`).
-- `g_settingsGeneration` gates published data; `g_refreshGeneration` drives manual
-  single-account refresh. Code that publishes to `g_data` must re-check the generation under
-  lock (see the existing publish block).
+- `g_settingsGeneration` gates published data. Code that publishes to `g_data` must re-check the
+  generation under lock (see the existing publish block).
+- Manual refreshes queue in `g_refreshRequests` (under the leaf `g_refreshMutex`): one entry per
+  identity (0: every account), stamped with `g_refreshGeneration`. A round removes only the
+  entries it started with; never replace or drop another account's request.
 - Track in-flight WinHTTP handles with `TrackHttpHandle` so `Wh_ModUninit` can cancel them via
   `CloseActiveHttpHandles`; untracked network code can hang unload.
 - A sign-in blocks on the sign-in window's message loop with no timeout. Unload unblocks it by
@@ -160,6 +162,10 @@ access token without refresh or expiry and sent only to its usage endpoint.
 - Details read through a sign-in (Anthropic plan, Codex free resets' expiry) are cached under its
   sign-in generation. Any new path that replaces, deletes or moves a sign-in must call
   `BumpSignInGenerationLocked` in the same `g_authEpochMutex` section, after the token write.
+- A poll's result belongs to the sign-in generation `FetchAccount` read (and returns) with its
+  token, which it reads only for a configured identity. If that changed, the fetch thread polls
+  once more; publication (under `g_authEpochMutex`) drops a polled result whose generation changed,
+  with its history sample and notifications; deadlines set under an earlier generation don't apply.
 - Auth epochs make saves of an earlier sign-in's token stale: the same section must also
   `BumpAuthEpochLocked` the identity whose sign-in it replaces or deletes (a rename: the source,
   plus a redirect). Save tokens only through `SaveStoredTokenIfCurrent`: a refresh with the epoch
