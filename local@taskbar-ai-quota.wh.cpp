@@ -612,6 +612,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"chart-tick-day", L"{month} {day}", L"{day}. {month}"},
     {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}."},
+    {L"copilot-unit", L"AI credits", L"KI-Guthaben"},
+    {L"copilot-unit", L"chat requests", L"Chat-Anfragen"},
+    {L"copilot-unit", L"premium requests", L"Premium-Anfragen"},
     {L"date-month", L"Apr", L"Apr"},
     {L"date-month", L"Aug", L"Aug"},
     {L"date-month", L"Dec", L"Dez"},
@@ -645,6 +648,32 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"date-weekday", L"Thu", L"Do"},
     {L"date-weekday", L"Tue", L"Di"},
     {L"date-weekday", L"Wed", L"Mi"},
+    {L"duration", L"{days}d", L"{days} T."},
+    {L"duration", L"{days}d {hours}h", L"{days} T. {hours} Std."},
+    {L"duration", L"{hours}h", L"{hours} Std."},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} Std. {minutes} Min."},
+    {L"duration", L"{minutes}m", L"{minutes} Min."},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} Min. {seconds} Sek."},
+    {L"duration", L"{seconds}s", L"{seconds} Sek."},
+    {L"flyout-footer", L"No data yet", L"Noch keine Daten"},
+    {L"flyout-footer", L"Updated {time}", L"Aktualisiert {time}"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"Aktualisiert {time} (veraltet)"},
+    {L"flyout-footer", L"Visual test data", L"Daten des visuellen Tests"},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} – wird aktualisiert…"},
+    {L"flyout-legend", L"even pace", L"gleichmäßiges Tempo"},
+    {L"flyout-legend", L"from local history", L"aus dem lokalen Verlauf"},
+    {L"flyout-legend", L"projection", L"Prognose"},
+    {L"flyout-note", L"Error: {error}", L"Fehler: {error}"},
+    {L"flyout-note", L"Error: {error} - retry in {duration}", L"Fehler: {error} – neuer Versuch in {duration}"},
+    {L"flyout-note", L"No quotas reported.", L"Keine Kontingente gemeldet."},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
+     L"Anmeldung erforderlich. Klicken Sie auf die Balken, um sich anzumelden."},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
+     L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}}"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
+                     L"{when}",
+     L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}} · nächster läuft "
+     L"{when} ab"},
     {L"history-pill", L"Not saving", L"Speichert nicht"},
     {L"history-pill", L"Off", L"Aus"},
     {L"history-pill", L"Recording · forever", L"Aufzeichnung · unbegrenzt"},
@@ -661,11 +690,31 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rot ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Gelb ({threshold}%)"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nStatusseite von {provider} öffnen"},
+    {L"outage-level", L"degraded performance", L"eingeschränkte Leistung"},
+    {L"outage-level", L"major outage", L"schwerer Ausfall"},
+    {L"outage-level", L"partial outage", L"teilweiser Ausfall"},
+    {L"outage-level", L"under maintenance", L"in Wartung"},
+    {L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}",
+     L"{component} und {count, plural, one{# weitere} other{# weitere}}: {level}"},
+    {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
+    {L"outage-line", L"{status} · since {time}", L"{status} · seit {time}"},
+    {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"plan", L"Visual test", L"Visueller Test"},
     {L"poll-interval", L"Custom", L"Benutzerdefiniert"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# Minute} other{# Minuten}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{Minute} other{Minuten}}"},
+    {L"quota-amount", L"Limit reached", L"Limit erreicht"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Gemeinsamer Pool ({unit}), kein Limit pro Benutzer"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
+     L"Gemeinsamer Pool ({unit}), kein Limit pro Benutzer\nZusätzliche Nutzung: {overage} {unit}"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"{left} von {limit} Guthaben übrig"},
+    {L"quota-amount", L"{used} of {limit} spent", L"{used} von {limit} ausgegeben"},
+    {L"quota-amount", L"{used} of {limit} {unit} used", L"{used} von {limit} {unit} verbraucht"},
+    {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
+     L"{used} von {limit} {unit} verbraucht\nZusätzliche Nutzung: {overage} {unit}"},
     {L"quota-key-2-chars", L"5h", L"5h"},
     {L"quota-key-2-chars", L"7d", L"7T"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
@@ -673,6 +722,31 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"quota-key-2-chars", L"Ex", L"Ex"},
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"Mo"},
+    {L"quota-name", L"5-hour", L"5 Stunden"},
+    {L"quota-name", L"AI credits", L"KI-Guthaben"},
+    {L"quota-name", L"Chat requests", L"Chat-Anfragen"},
+    {L"quota-name", L"Credits", L"Guthaben"},
+    {L"quota-name", L"Extra usage", L"Zusätzliche Nutzung"},
+    {L"quota-name", L"Monthly", L"Monatlich"},
+    {L"quota-name", L"Premium requests", L"Premium-Anfragen"},
+    {L"quota-name", L"Weekly", L"Wöchentlich"},
+    {L"quota-name", L"{name} current limit", L"{name} aktuelles Limit"},
+    {L"quota-name", L"{name} weekly", L"{name} wöchentlich"},
+    {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}",
+     L"{name} ({days, plural, one{# Tag} other{# Tage}})"},
+    {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
+     L"{name} ({hours, plural, one{# Stunde} other{# Stunden}})"},
+    {L"quota-name", L"{name} {hours}h", L"{name} {hours} Std."},
+    {L"quota-reset", L"Not yet started", L"Noch nicht begonnen"},
+    {L"quota-reset", L"Resets {when}", L"Reset {when}"},
+    {L"quota-unit", L"left", L"übrig"},
+    {L"quota-unit", L"used", L"verbraucht"},
+    {L"quota-value", L"Available", L"Verfügbar"},
+    {L"quota-value", L"Unlimited", L"Unbegrenzt"},
+    {L"quota-value", L"Used up", L"Aufgebraucht"},
+    {L"reset-when", L"in {duration}", L"in {duration}"},
+    {L"reset-when", L"in {duration} ({time})", L"in {duration} ({time})"},
+    {L"reset-when", L"now", L"jetzt"},
     {L"settings-page", L"About", L"Info"},
     {L"settings-page", L"Accounts", L"Konten"},
     {L"settings-page", L"Behavior", L"Verhalten"},
@@ -703,6 +777,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"taskbar-setup", L"AI +", L"KI +"},
     {L"toggle", L"Off", L"Aus"},
     {L"toggle", L"On", L"Ein"},
+    {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
+     L"Beim Tempo der letzten 24 Std.: Limit in ~{duration}"},
+    {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
+     L"Beim Tempo seit {time}: Limit in ~{duration}"},
+    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
+     L"Beim Durchschnittstempo dieses Zeitfensters: Limit in ~{duration}"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogDe), "sort by (context, English), no duplicates");
 // src/i18n/lang-es.h
@@ -769,6 +849,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
     {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"copilot-unit", L"AI credits", L"créditos de IA"},
+    {L"copilot-unit", L"chat requests", L"solicitudes de chat"},
+    {L"copilot-unit", L"premium requests", L"solicitudes premium"},
     {L"date-month", L"Apr", L"abr"},
     {L"date-month", L"Aug", L"ago"},
     {L"date-month", L"Dec", L"dic"},
@@ -802,6 +885,33 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"date-weekday", L"Thu", L"jue"},
     {L"date-weekday", L"Tue", L"mar"},
     {L"date-weekday", L"Wed", L"mié"},
+    {L"duration", L"{days}d", L"{days} d"},
+    {L"duration", L"{days}d {hours}h", L"{days} d {hours} h"},
+    {L"duration", L"{hours}h", L"{hours} h"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} h {minutes} min"},
+    {L"duration", L"{minutes}m", L"{minutes} min"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} min {seconds} s"},
+    {L"duration", L"{seconds}s", L"{seconds} s"},
+    {L"flyout-footer", L"No data yet", L"Aún no hay datos"},
+    {L"flyout-footer", L"Updated {time}", L"Actualizado {time}"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"Actualizado {time} (desactualizado)"},
+    {L"flyout-footer", L"Visual test data", L"Datos de la prueba visual"},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} - actualizando..."},
+    {L"flyout-legend", L"even pace", L"ritmo uniforme"},
+    {L"flyout-legend", L"from local history", L"del historial local"},
+    {L"flyout-legend", L"projection", L"proyección"},
+    {L"flyout-note", L"Error: {error}", L"Error: {error}"},
+    {L"flyout-note", L"Error: {error} - retry in {duration}", L"Error: {error} - reintento en {duration}"},
+    {L"flyout-note", L"No quotas reported.", L"No se informó ninguna cuota."},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
+     L"Debes iniciar sesión. Haz clic en las barras para iniciar sesión."},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
+     L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
+     L"gratuitos disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
+                     L"{when}",
+     L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
+     L"gratuitos disponibles}} · el próximo caduca {when}"},
     {L"history-pill", L"Not saving", L"Sin guardar"},
     {L"history-pill", L"Off", L"Desactivado"},
     {L"history-pill", L"Recording · forever", L"Registrando · siempre"},
@@ -818,11 +928,32 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Naranja ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rojo ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Amarillo ({threshold}%)"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page",
+     L"{status}\nAbrir la página de estado de {provider}"},
+    {L"outage-level", L"degraded performance", L"rendimiento degradado"},
+    {L"outage-level", L"major outage", L"interrupción grave"},
+    {L"outage-level", L"partial outage", L"interrupción parcial"},
+    {L"outage-level", L"under maintenance", L"en mantenimiento"},
+    {L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}",
+     L"{component} y {count, plural, one{# más} many{# más} other{# más}}: {level}"},
+    {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
+    {L"outage-line", L"{status} · since {time}", L"{status} · desde {time}"},
+    {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"plan", L"Visual test", L"Prueba visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{minuto} many{de minutos} other{minutos}}"},
+    {L"quota-amount", L"Limit reached", L"Límite alcanzado"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Grupo compartido de {unit}, sin límite por usuario"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
+     L"Grupo compartido de {unit}, sin límite por usuario\nUso adicional: {overage} {unit}"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"Quedan {left} de {limit} créditos"},
+    {L"quota-amount", L"{used} of {limit} spent", L"{used} de {limit} gastados"},
+    {L"quota-amount", L"{used} of {limit} {unit} used", L"Usado: {used} de {limit} {unit}"},
+    {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
+     L"Usado: {used} de {limit} {unit}\nUso adicional: {overage} {unit}"},
     {L"quota-key-2-chars", L"5h", L"5h"},
     {L"quota-key-2-chars", L"7d", L"7d"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
@@ -830,6 +961,31 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"quota-key-2-chars", L"Ex", L"Ex"},
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"Me"},
+    {L"quota-name", L"5-hour", L"5 horas"},
+    {L"quota-name", L"AI credits", L"Créditos de IA"},
+    {L"quota-name", L"Chat requests", L"Solicitudes de chat"},
+    {L"quota-name", L"Credits", L"Créditos"},
+    {L"quota-name", L"Extra usage", L"Uso adicional"},
+    {L"quota-name", L"Monthly", L"Mensual"},
+    {L"quota-name", L"Premium requests", L"Solicitudes premium"},
+    {L"quota-name", L"Weekly", L"Semanal"},
+    {L"quota-name", L"{name} current limit", L"{name}: límite actual"},
+    {L"quota-name", L"{name} weekly", L"{name} semanal"},
+    {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}",
+     L"{name} ({days, plural, one{# día} many{# días} other{# días}})"},
+    {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
+     L"{name} ({hours, plural, one{# hora} many{# horas} other{# horas}})"},
+    {L"quota-name", L"{name} {hours}h", L"{name} {hours} h"},
+    {L"quota-reset", L"Not yet started", L"Aún no ha comenzado"},
+    {L"quota-reset", L"Resets {when}", L"Se reinicia {when}"},
+    {L"quota-unit", L"left", L"restante"},
+    {L"quota-unit", L"used", L"usado"},
+    {L"quota-value", L"Available", L"Disponible"},
+    {L"quota-value", L"Unlimited", L"Ilimitado"},
+    {L"quota-value", L"Used up", L"Agotado"},
+    {L"reset-when", L"in {duration}", L"en {duration}"},
+    {L"reset-when", L"in {duration} ({time})", L"en {duration} ({time})"},
+    {L"reset-when", L"now", L"ahora"},
     {L"settings-page", L"About", L"Acerca de"},
     {L"settings-page", L"Accounts", L"Cuentas"},
     {L"settings-page", L"Behavior", L"Comportamiento"},
@@ -860,6 +1016,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"taskbar-setup", L"AI +", L"IA +"},
     {L"toggle", L"Off", L"Desactivado"},
     {L"toggle", L"On", L"Activado"},
+    {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
+     L"Al ritmo de las últimas 24 h: límite en ~{duration}"},
+    {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
+     L"Al ritmo desde {time}: límite en ~{duration}"},
+    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
+     L"Al ritmo medio de esta ventana: límite en ~{duration}"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogEs), "sort by (context, English), no duplicates");
 // src/i18n/lang-fr.h
@@ -927,6 +1089,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
     {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"copilot-unit", L"AI credits", L"crédits IA"},
+    {L"copilot-unit", L"chat requests", L"requêtes de chat"},
+    {L"copilot-unit", L"premium requests", L"requêtes premium"},
     {L"date-month", L"Apr", L"avr."},
     {L"date-month", L"Aug", L"août"},
     {L"date-month", L"Dec", L"déc."},
@@ -960,6 +1125,33 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"date-weekday", L"Thu", L"jeu."},
     {L"date-weekday", L"Tue", L"mar."},
     {L"date-weekday", L"Wed", L"mer."},
+    {L"duration", L"{days}d", L"{days} j"},
+    {L"duration", L"{days}d {hours}h", L"{days} j {hours} h"},
+    {L"duration", L"{hours}h", L"{hours} h"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} h {minutes} min"},
+    {L"duration", L"{minutes}m", L"{minutes} min"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} min {seconds} s"},
+    {L"duration", L"{seconds}s", L"{seconds} s"},
+    {L"flyout-footer", L"No data yet", L"Pas encore de données"},
+    {L"flyout-footer", L"Updated {time}", L"Mis à jour {time}"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"Mis à jour {time} (obsolète)"},
+    {L"flyout-footer", L"Visual test data", L"Données du test visuel"},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} – actualisation…"},
+    {L"flyout-legend", L"even pace", L"rythme régulier"},
+    {L"flyout-legend", L"from local history", L"d’après l’historique local"},
+    {L"flyout-legend", L"projection", L"projection"},
+    {L"flyout-note", L"Error: {error}", L"Erreur\u00A0: {error}"},
+    {L"flyout-note", L"Error: {error} - retry in {duration}", L"Erreur\u00A0: {error} – nouvel essai dans {duration}"},
+    {L"flyout-note", L"No quotas reported.", L"Aucun quota signalé."},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
+     L"Connexion requise. Cliquez sur les barres pour vous connecter."},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
+     L"{count, plural, one{# réinitialisation gratuite disponible} many{# réinitialisations gratuites disponibles} "
+     L"other{# réinitialisations gratuites disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
+                     L"{when}",
+     L"{count, plural, one{# réinitialisation gratuite disponible} many{# réinitialisations gratuites disponibles} "
+     L"other{# réinitialisations gratuites disponibles}} · la prochaine expire {when}"},
     {L"history-pill", L"Not saving", L"Non enregistré"},
     {L"history-pill", L"Off", L"Désactivé"},
     {L"history-pill", L"Recording · forever", L"Enregistrement · illimité"},
@@ -976,11 +1168,31 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rouge ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Jaune ({threshold}%)"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nOuvrir la page d’état de {provider}"},
+    {L"outage-level", L"degraded performance", L"performances dégradées"},
+    {L"outage-level", L"major outage", L"panne majeure"},
+    {L"outage-level", L"partial outage", L"panne partielle"},
+    {L"outage-level", L"under maintenance", L"en maintenance"},
+    {L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}",
+     L"{component} et {count, plural, one{# autre} many{# autres} other{# autres}}\u00A0: {level}"},
+    {L"outage-line", L"{component}: {level}", L"{component}\u00A0: {level}"},
+    {L"outage-line", L"{status} · since {time}", L"{status} · depuis {time}"},
+    {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"plan", L"Visual test", L"Test visuel"},
     {L"poll-interval", L"Custom", L"Personnalisé"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minute} many{# de minutes} other{# minutes}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{minute} many{de minutes} other{minutes}}"},
+    {L"quota-amount", L"Limit reached", L"Limite atteinte"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Pool partagé de {unit}, sans limite par utilisateur"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
+     L"Pool partagé de {unit}, sans limite par utilisateur\nUtilisation supplémentaire\u00A0: {overage} {unit}"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"{left} crédits restants sur {limit}"},
+    {L"quota-amount", L"{used} of {limit} spent", L"{used} dépensés sur {limit}"},
+    {L"quota-amount", L"{used} of {limit} {unit} used", L"Utilisé\u00A0: {used} sur {limit} {unit}"},
+    {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
+     L"Utilisé\u00A0: {used} sur {limit} {unit}\nUtilisation supplémentaire\u00A0: {overage} {unit}"},
     {L"quota-key-2-chars", L"5h", L"5h"},
     {L"quota-key-2-chars", L"7d", L"7j"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
@@ -988,6 +1200,31 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"quota-key-2-chars", L"Ex", L"Ex"},
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"Mo"},
+    {L"quota-name", L"5-hour", L"5 heures"},
+    {L"quota-name", L"AI credits", L"Crédits IA"},
+    {L"quota-name", L"Chat requests", L"Requêtes de chat"},
+    {L"quota-name", L"Credits", L"Crédits"},
+    {L"quota-name", L"Extra usage", L"Utilisation supplémentaire"},
+    {L"quota-name", L"Monthly", L"Mensuel"},
+    {L"quota-name", L"Premium requests", L"Requêtes premium"},
+    {L"quota-name", L"Weekly", L"Hebdomadaire"},
+    {L"quota-name", L"{name} current limit", L"{name}\u00A0: limite actuelle"},
+    {L"quota-name", L"{name} weekly", L"{name} hebdomadaire"},
+    {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}",
+     L"{name} ({days, plural, one{# jour} many{# jours} other{# jours}})"},
+    {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
+     L"{name} ({hours, plural, one{# heure} many{# heures} other{# heures}})"},
+    {L"quota-name", L"{name} {hours}h", L"{name} {hours} h"},
+    {L"quota-reset", L"Not yet started", L"Pas encore commencé"},
+    {L"quota-reset", L"Resets {when}", L"Réinitialisation {when}"},
+    {L"quota-unit", L"left", L"restant"},
+    {L"quota-unit", L"used", L"utilisé"},
+    {L"quota-value", L"Available", L"Disponible"},
+    {L"quota-value", L"Unlimited", L"Illimité"},
+    {L"quota-value", L"Used up", L"Épuisé"},
+    {L"reset-when", L"in {duration}", L"dans {duration}"},
+    {L"reset-when", L"in {duration} ({time})", L"dans {duration} ({time})"},
+    {L"reset-when", L"now", L"maintenant"},
     {L"settings-page", L"About", L"À propos"},
     {L"settings-page", L"Accounts", L"Comptes"},
     {L"settings-page", L"Behavior", L"Comportement"},
@@ -1018,6 +1255,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"taskbar-setup", L"AI +", L"IA +"},
     {L"toggle", L"Off", L"Désactivé"},
     {L"toggle", L"On", L"Activé"},
+    {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
+     L"Au rythme des dernières 24 h\u00A0: limite dans ~{duration}"},
+    {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
+     L"Au rythme depuis {time}\u00A0: limite dans ~{duration}"},
+    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
+     L"Au rythme moyen de cette fenêtre\u00A0: limite dans ~{duration}"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogFr), "sort by (context, English), no duplicates");
 // src/i18n/lang-ja.h
@@ -1082,6 +1325,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"chart-tick-day", L"{month} {day}", L"{month}{day}日"},
     {L"chart-tick-month", L"{month} {year}", L"{year}年{month}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{day}日({weekday})"},
+    {L"copilot-unit", L"AI credits", L"AI クレジット"},
+    {L"copilot-unit", L"chat requests", L"チャット リクエスト"},
+    {L"copilot-unit", L"premium requests", L"プレミアム リクエスト"},
     {L"date-month", L"Apr", L"4月"},
     {L"date-month", L"Aug", L"8月"},
     {L"date-month", L"Dec", L"12月"},
@@ -1115,6 +1361,30 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"date-weekday", L"Thu", L"木"},
     {L"date-weekday", L"Tue", L"火"},
     {L"date-weekday", L"Wed", L"水"},
+    {L"duration", L"{days}d", L"{days}日"},
+    {L"duration", L"{days}d {hours}h", L"{days}日{hours}時間"},
+    {L"duration", L"{hours}h", L"{hours}時間"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours}時間{minutes}分"},
+    {L"duration", L"{minutes}m", L"{minutes}分"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
+    {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"flyout-footer", L"No data yet", L"データはまだありません"},
+    {L"flyout-footer", L"Updated {time}", L"{time} に更新"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"{time} に更新 (古いデータ)"},
+    {L"flyout-footer", L"Visual test data", L"ビジュアル テストのデータ"},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} - 更新中..."},
+    {L"flyout-legend", L"even pace", L"均等ペース"},
+    {L"flyout-legend", L"from local history", L"ローカル履歴から"},
+    {L"flyout-legend", L"projection", L"予測"},
+    {L"flyout-note", L"Error: {error}", L"エラー: {error}"},
+    {L"flyout-note", L"Error: {error} - retry in {duration}", L"エラー: {error} - {duration}後に再試行"},
+    {L"flyout-note", L"No quotas reported.", L"報告されたクォータはありません。"},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"サインインが必要です。バーをクリックしてサインインしてください。"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
+     L"{count, plural, other{無料リセットが # 回利用可能}}"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
+                     L"{when}",
+     L"{count, plural, other{無料リセットが # 回利用可能}} · 次回の期限: {when}"},
     {L"history-pill", L"Not saving", L"保存できません"},
     {L"history-pill", L"Off", L"オフ"},
     {L"history-pill", L"Recording · forever", L"記録中 · 無期限"},
@@ -1130,9 +1400,29 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"オレンジ ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"赤 ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"黄 ({threshold}%)"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\n{provider} のステータス ページを開く"},
+    {L"outage-level", L"degraded performance", L"パフォーマンス低下"},
+    {L"outage-level", L"major outage", L"大規模な障害"},
+    {L"outage-level", L"partial outage", L"部分的な障害"},
+    {L"outage-level", L"under maintenance", L"メンテナンス中"},
+    {L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}",
+     L"{component} ほか {count, plural, other{# 件}}: {level}"},
+    {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
+    {L"outage-line", L"{status} · since {time}", L"{status} · {time} から"},
+    {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"plan", L"Visual test", L"ビジュアル テスト"},
     {L"poll-interval", L"Custom", L"カスタム"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分}}"},
+    {L"quota-amount", L"Limit reached", L"上限に達しました"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"共有プールの{unit}、ユーザーごとの上限なし"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
+     L"共有プールの{unit}、ユーザーごとの上限なし\n追加使用量: {overage} {unit}"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"残り {left} / {limit} クレジット"},
+    {L"quota-amount", L"{used} of {limit} spent", L"{used} / {limit} 使用済み"},
+    {L"quota-amount", L"{used} of {limit} {unit} used", L"{unit}: {used} / {limit} 使用済み"},
+    {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
+     L"{unit}: {used} / {limit} 使用済み\n追加使用量: {overage} {unit}"},
     {L"quota-key-2-chars", L"5h", L"5h"},
     {L"quota-key-2-chars", L"7d", L"7日"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
@@ -1140,6 +1430,29 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"quota-key-2-chars", L"Ex", L"追加"},
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"月"},
+    {L"quota-name", L"5-hour", L"5 時間"},
+    {L"quota-name", L"AI credits", L"AI クレジット"},
+    {L"quota-name", L"Chat requests", L"チャット リクエスト"},
+    {L"quota-name", L"Credits", L"クレジット"},
+    {L"quota-name", L"Extra usage", L"追加使用量"},
+    {L"quota-name", L"Monthly", L"月間"},
+    {L"quota-name", L"Premium requests", L"プレミアム リクエスト"},
+    {L"quota-name", L"Weekly", L"週間"},
+    {L"quota-name", L"{name} current limit", L"{name} 現在の上限"},
+    {L"quota-name", L"{name} weekly", L"{name} 週間"},
+    {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}", L"{name} {days, plural, other{# 日間}}"},
+    {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}", L"{name} {hours, plural, other{# 時間}}"},
+    {L"quota-name", L"{name} {hours}h", L"{name} {hours} 時間"},
+    {L"quota-reset", L"Not yet started", L"未開始"},
+    {L"quota-reset", L"Resets {when}", L"リセット: {when}"},
+    {L"quota-unit", L"left", L"残り"},
+    {L"quota-unit", L"used", L"使用済み"},
+    {L"quota-value", L"Available", L"利用可能"},
+    {L"quota-value", L"Unlimited", L"無制限"},
+    {L"quota-value", L"Used up", L"使い切り"},
+    {L"reset-when", L"in {duration}", L"{duration}後"},
+    {L"reset-when", L"in {duration} ({time})", L"{duration}後 ({time})"},
+    {L"reset-when", L"now", L"今"},
     {L"settings-page", L"About", L"バージョン情報"},
     {L"settings-page", L"Accounts", L"アカウント"},
     {L"settings-page", L"Behavior", L"動作"},
@@ -1170,6 +1483,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"taskbar-setup", L"AI +", L"AI +"},
     {L"toggle", L"Off", L"オフ"},
     {L"toggle", L"On", L"オン"},
+    {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"直近 24 時間のペースでは: 約 {duration}後に上限"},
+    {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペースでは: 約 {duration}後に上限"},
+    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペースでは: 約 {duration}後に上限"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogJa), "sort by (context, English), no duplicates");
 // src/i18n/lang-pt-BR.h
@@ -1235,6 +1551,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
     {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"copilot-unit", L"AI credits", L"créditos de IA"},
+    {L"copilot-unit", L"chat requests", L"solicitações de chat"},
+    {L"copilot-unit", L"premium requests", L"solicitações premium"},
     {L"date-month", L"Apr", L"abr"},
     {L"date-month", L"Aug", L"ago"},
     {L"date-month", L"Dec", L"dez"},
@@ -1268,6 +1587,33 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"date-weekday", L"Thu", L"qui"},
     {L"date-weekday", L"Tue", L"ter"},
     {L"date-weekday", L"Wed", L"qua"},
+    {L"duration", L"{days}d", L"{days} d"},
+    {L"duration", L"{days}d {hours}h", L"{days} d {hours} h"},
+    {L"duration", L"{hours}h", L"{hours} h"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} h {minutes} min"},
+    {L"duration", L"{minutes}m", L"{minutes} min"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} min {seconds} s"},
+    {L"duration", L"{seconds}s", L"{seconds} s"},
+    {L"flyout-footer", L"No data yet", L"Ainda sem dados"},
+    {L"flyout-footer", L"Updated {time}", L"Atualizado {time}"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"Atualizado {time} (desatualizado)"},
+    {L"flyout-footer", L"Visual test data", L"Dados do teste visual"},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} - atualizando..."},
+    {L"flyout-legend", L"even pace", L"ritmo uniforme"},
+    {L"flyout-legend", L"from local history", L"do histórico local"},
+    {L"flyout-legend", L"projection", L"projeção"},
+    {L"flyout-note", L"Error: {error}", L"Erro: {error}"},
+    {L"flyout-note", L"Error: {error} - retry in {duration}", L"Erro: {error} - nova tentativa em {duration}"},
+    {L"flyout-note", L"No quotas reported.", L"Nenhuma cota informada."},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
+     L"É necessário entrar. Clique nas barras para entrar."},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
+     L"{count, plural, one{# reinício gratuito disponível} many{# reinícios gratuitos disponíveis} other{# reinícios "
+     L"gratuitos disponíveis}}"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
+                     L"{when}",
+     L"{count, plural, one{# reinício gratuito disponível} many{# reinícios gratuitos disponíveis} other{# reinícios "
+     L"gratuitos disponíveis}} · o próximo expira {when}"},
     {L"history-pill", L"Not saving", L"Sem salvar"},
     {L"history-pill", L"Off", L"Desativado"},
     {L"history-pill", L"Recording · forever", L"Registrando · para sempre"},
@@ -1284,11 +1630,32 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Laranja ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Vermelho ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Amarelo ({threshold}%)"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page",
+     L"{status}\nAbrir a página de status de {provider}"},
+    {L"outage-level", L"degraded performance", L"desempenho degradado"},
+    {L"outage-level", L"major outage", L"interrupção grave"},
+    {L"outage-level", L"partial outage", L"interrupção parcial"},
+    {L"outage-level", L"under maintenance", L"em manutenção"},
+    {L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}",
+     L"{component} e mais {count, plural, one{#} many{#} other{#}}: {level}"},
+    {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
+    {L"outage-line", L"{status} · since {time}", L"{status} · desde {time}"},
+    {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"plan", L"Visual test", L"Teste visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{minuto} many{de minutos} other{minutos}}"},
+    {L"quota-amount", L"Limit reached", L"Limite atingido"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Pool compartilhado de {unit}, sem limite por usuário"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
+     L"Pool compartilhado de {unit}, sem limite por usuário\nUso adicional: {overage} {unit}"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"Restam {left} de {limit} créditos"},
+    {L"quota-amount", L"{used} of {limit} spent", L"{used} de {limit} gastos"},
+    {L"quota-amount", L"{used} of {limit} {unit} used", L"Usado: {used} de {limit} {unit}"},
+    {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
+     L"Usado: {used} de {limit} {unit}\nUso adicional: {overage} {unit}"},
     {L"quota-key-2-chars", L"5h", L"5h"},
     {L"quota-key-2-chars", L"7d", L"7d"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
@@ -1296,6 +1663,31 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"quota-key-2-chars", L"Ex", L"Ex"},
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"Me"},
+    {L"quota-name", L"5-hour", L"5 horas"},
+    {L"quota-name", L"AI credits", L"Créditos de IA"},
+    {L"quota-name", L"Chat requests", L"Solicitações de chat"},
+    {L"quota-name", L"Credits", L"Créditos"},
+    {L"quota-name", L"Extra usage", L"Uso adicional"},
+    {L"quota-name", L"Monthly", L"Mensal"},
+    {L"quota-name", L"Premium requests", L"Solicitações premium"},
+    {L"quota-name", L"Weekly", L"Semanal"},
+    {L"quota-name", L"{name} current limit", L"{name}: limite atual"},
+    {L"quota-name", L"{name} weekly", L"{name} semanal"},
+    {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}",
+     L"{name} ({days, plural, one{# dia} many{# dias} other{# dias}})"},
+    {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
+     L"{name} ({hours, plural, one{# hora} many{# horas} other{# horas}})"},
+    {L"quota-name", L"{name} {hours}h", L"{name} {hours} h"},
+    {L"quota-reset", L"Not yet started", L"Ainda não iniciado"},
+    {L"quota-reset", L"Resets {when}", L"Reinicia {when}"},
+    {L"quota-unit", L"left", L"restante"},
+    {L"quota-unit", L"used", L"usado"},
+    {L"quota-value", L"Available", L"Disponível"},
+    {L"quota-value", L"Unlimited", L"Ilimitado"},
+    {L"quota-value", L"Used up", L"Esgotado"},
+    {L"reset-when", L"in {duration}", L"em {duration}"},
+    {L"reset-when", L"in {duration} ({time})", L"em {duration} ({time})"},
+    {L"reset-when", L"now", L"agora"},
     {L"settings-page", L"About", L"Sobre"},
     {L"settings-page", L"Accounts", L"Contas"},
     {L"settings-page", L"Behavior", L"Comportamento"},
@@ -1326,6 +1718,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"taskbar-setup", L"AI +", L"IA +"},
     {L"toggle", L"Off", L"Desativado"},
     {L"toggle", L"On", L"Ativado"},
+    {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
+     L"No ritmo das últimas 24 h: limite em ~{duration}"},
+    {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
+     L"No ritmo desde {time}: limite em ~{duration}"},
+    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
+     L"No ritmo médio desta janela: limite em ~{duration}"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogPtBr), "sort by (context, English), no duplicates");
 // src/i18n/lang-ru.h
@@ -1391,6 +1789,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
     {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"copilot-unit", L"AI credits", L"ИИ-кредиты"},
+    {L"copilot-unit", L"chat requests", L"запросы в чате"},
+    {L"copilot-unit", L"premium requests", L"премиум-запросы"},
     {L"date-month", L"Apr", L"апр"},
     {L"date-month", L"Aug", L"авг"},
     {L"date-month", L"Dec", L"дек"},
@@ -1424,6 +1825,32 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"date-weekday", L"Thu", L"чт"},
     {L"date-weekday", L"Tue", L"вт"},
     {L"date-weekday", L"Wed", L"ср"},
+    {L"duration", L"{days}d", L"{days} д"},
+    {L"duration", L"{days}d {hours}h", L"{days} д {hours} ч"},
+    {L"duration", L"{hours}h", L"{hours} ч"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} ч {minutes} мин"},
+    {L"duration", L"{minutes}m", L"{minutes} мин"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} мин {seconds} с"},
+    {L"duration", L"{seconds}s", L"{seconds} с"},
+    {L"flyout-footer", L"No data yet", L"Данных пока нет"},
+    {L"flyout-footer", L"Updated {time}", L"Обновлено {time}"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"Обновлено {time} (устарело)"},
+    {L"flyout-footer", L"Visual test data", L"Данные визуального теста"},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} — обновление…"},
+    {L"flyout-legend", L"even pace", L"равномерный темп"},
+    {L"flyout-legend", L"from local history", L"по локальной истории"},
+    {L"flyout-legend", L"projection", L"прогноз"},
+    {L"flyout-note", L"Error: {error}", L"Ошибка: {error}"},
+    {L"flyout-note", L"Error: {error} - retry in {duration}", L"Ошибка: {error} — повтор через {duration}"},
+    {L"flyout-note", L"No quotas reported.", L"Квоты не сообщены."},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
+     L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
+     L"сбросов} other{Доступно # бесплатного сброса}}"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
+                     L"{when}",
+     L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
+     L"сбросов} other{Доступно # бесплатного сброса}} · ближайший истекает {when}"},
     {L"history-pill", L"Not saving", L"Не сохраняется"},
     {L"history-pill", L"Off", L"Откл."},
     {L"history-pill", L"Recording · forever", L"Запись · бессрочно"},
@@ -1440,11 +1867,31 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Оранжевый ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Красный ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Жёлтый ({threshold}%)"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nОткрыть страницу статуса {provider}"},
+    {L"outage-level", L"degraded performance", L"снижение производительности"},
+    {L"outage-level", L"major outage", L"серьёзный сбой"},
+    {L"outage-level", L"partial outage", L"частичный сбой"},
+    {L"outage-level", L"under maintenance", L"техобслуживание"},
+    {L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}",
+     L"{component} и ещё {count, plural, one{#} few{#} many{#} other{#}}: {level}"},
+    {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
+    {L"outage-line", L"{status} · since {time}", L"{status} · с {time}"},
+    {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"plan", L"Visual test", L"Визуальный тест"},
     {L"poll-interval", L"Custom", L"Другой"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# минута} few{# минуты} many{# минут} other{# минуты}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{минута} few{минуты} many{минут} other{минуты}}"},
+    {L"quota-amount", L"Limit reached", L"Лимит исчерпан"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Общий пул ({unit}), без лимита на пользователя"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
+     L"Общий пул ({unit}), без лимита на пользователя\nДополнительно: {overage} ({unit})"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"Осталось {left} из {limit} кредитов"},
+    {L"quota-amount", L"{used} of {limit} spent", L"Потрачено {used} из {limit}"},
+    {L"quota-amount", L"{used} of {limit} {unit} used", L"Использовано {used} из {limit} ({unit})"},
+    {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
+     L"Использовано {used} из {limit} ({unit})\nДополнительно: {overage} ({unit})"},
     {L"quota-key-2-chars", L"5h", L"5ч"},
     {L"quota-key-2-chars", L"7d", L"7д"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
@@ -1452,6 +1899,31 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-key-2-chars", L"Ex", L"Ex"},
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"Мс"},
+    {L"quota-name", L"5-hour", L"5 часов"},
+    {L"quota-name", L"AI credits", L"ИИ-кредиты"},
+    {L"quota-name", L"Chat requests", L"Запросы в чате"},
+    {L"quota-name", L"Credits", L"Кредиты"},
+    {L"quota-name", L"Extra usage", L"Доп. использование"},
+    {L"quota-name", L"Monthly", L"Месяц"},
+    {L"quota-name", L"Premium requests", L"Премиум-запросы"},
+    {L"quota-name", L"Weekly", L"Неделя"},
+    {L"quota-name", L"{name} current limit", L"{name}: текущий лимит"},
+    {L"quota-name", L"{name} weekly", L"{name}: неделя"},
+    {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}",
+     L"{name}: {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
+    {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
+     L"{name}: {hours, plural, one{# час} few{# часа} many{# часов} other{# часа}}"},
+    {L"quota-name", L"{name} {hours}h", L"{name}: {hours} ч"},
+    {L"quota-reset", L"Not yet started", L"Ещё не начато"},
+    {L"quota-reset", L"Resets {when}", L"Сброс {when}"},
+    {L"quota-unit", L"left", L"осталось"},
+    {L"quota-unit", L"used", L"использовано"},
+    {L"quota-value", L"Available", L"Доступно"},
+    {L"quota-value", L"Unlimited", L"Без лимита"},
+    {L"quota-value", L"Used up", L"Исчерпано"},
+    {L"reset-when", L"in {duration}", L"через {duration}"},
+    {L"reset-when", L"in {duration} ({time})", L"через {duration} ({time})"},
+    {L"reset-when", L"now", L"сейчас"},
     {L"settings-page", L"About", L"О программе"},
     {L"settings-page", L"Accounts", L"Аккаунты"},
     {L"settings-page", L"Behavior", L"Поведение"},
@@ -1482,6 +1954,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"taskbar-setup", L"AI +", L"ИИ +"},
     {L"toggle", L"Off", L"Откл."},
     {L"toggle", L"On", L"Вкл."},
+    {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
+     L"При темпе за последние 24 ч: лимит через ~{duration}"},
+    {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
+     L"При темпе с {time}: лимит через ~{duration}"},
+    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
+     L"При среднем темпе этого окна: лимит через ~{duration}"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogRu), "sort by (context, English), no duplicates");
 // src/i18n/lang-zh-Hans.h
@@ -1538,6 +2016,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"chart-tick-day", L"{month} {day}", L"{month}{day}日"},
     {L"chart-tick-month", L"{month} {year}", L"{year}年{month}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{day}日 {weekday}"},
+    {L"copilot-unit", L"AI credits", L"AI 积分"},
+    {L"copilot-unit", L"chat requests", L"聊天请求"},
+    {L"copilot-unit", L"premium requests", L"高级请求"},
     {L"date-month", L"Apr", L"4月"},
     {L"date-month", L"Aug", L"8月"},
     {L"date-month", L"Dec", L"12月"},
@@ -1571,6 +2052,30 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"date-weekday", L"Thu", L"周四"},
     {L"date-weekday", L"Tue", L"周二"},
     {L"date-weekday", L"Wed", L"周三"},
+    {L"duration", L"{days}d", L"{days}天"},
+    {L"duration", L"{days}d {hours}h", L"{days}天{hours}小时"},
+    {L"duration", L"{hours}h", L"{hours}小时"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours}小时{minutes}分钟"},
+    {L"duration", L"{minutes}m", L"{minutes}分钟"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
+    {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"flyout-footer", L"No data yet", L"暂无数据"},
+    {L"flyout-footer", L"Updated {time}", L"更新于 {time}"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"更新于 {time} (已过时)"},
+    {L"flyout-footer", L"Visual test data", L"视觉测试数据"},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} - 正在刷新..."},
+    {L"flyout-legend", L"even pace", L"匀速"},
+    {L"flyout-legend", L"from local history", L"来自本地历史"},
+    {L"flyout-legend", L"projection", L"预测"},
+    {L"flyout-note", L"Error: {error}", L"错误：{error}"},
+    {L"flyout-note", L"Error: {error} - retry in {duration}", L"错误：{error} - {duration}后重试"},
+    {L"flyout-note", L"No quotas reported.", L"未报告任何配额。"},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击进度条以登录。"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
+     L"{count, plural, other{可用免费重置 # 次}}"},
+    {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
+                     L"{when}",
+     L"{count, plural, other{可用免费重置 # 次}} · 下一次{when}过期"},
     {L"history-pill", L"Not saving", L"未保存"},
     {L"history-pill", L"Off", L"关闭"},
     {L"history-pill", L"Recording · forever", L"记录中 · 永久"},
@@ -1586,9 +2091,29 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"橙色（{threshold}%）"},
     {L"notification-level", L"Red ({threshold}%)", L"红色（{threshold}%）"},
     {L"notification-level", L"Yellow ({threshold}%)", L"黄色（{threshold}%）"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\n打开 {provider} 状态页面"},
+    {L"outage-level", L"degraded performance", L"性能下降"},
+    {L"outage-level", L"major outage", L"重大故障"},
+    {L"outage-level", L"partial outage", L"部分故障"},
+    {L"outage-level", L"under maintenance", L"维护中"},
+    {L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}",
+     L"{component} 及另外 {count, plural, other{# 项}}：{level}"},
+    {L"outage-line", L"{component}: {level}", L"{component}：{level}"},
+    {L"outage-line", L"{status} · since {time}", L"{status} · 自 {time} 起"},
+    {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"plan", L"Visual test", L"视觉测试"},
     {L"poll-interval", L"Custom", L"自定义"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分钟}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分钟}}"},
+    {L"quota-amount", L"Limit reached", L"已达上限"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"共享{unit}，无单个用户限额"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
+     L"共享{unit}，无单个用户限额\n额外用量：{overage} {unit}"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"剩余 {left} / {limit} 积分"},
+    {L"quota-amount", L"{used} of {limit} spent", L"已花费 {used} / {limit}"},
+    {L"quota-amount", L"{used} of {limit} {unit} used", L"已使用 {used} / {limit} {unit}"},
+    {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
+     L"已使用 {used} / {limit} {unit}\n额外用量：{overage} {unit}"},
     {L"quota-key-2-chars", L"5h", L"5h"},
     {L"quota-key-2-chars", L"7d", L"7天"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
@@ -1596,6 +2121,29 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"quota-key-2-chars", L"Ex", L"额外"},
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"月"},
+    {L"quota-name", L"5-hour", L"5 小时"},
+    {L"quota-name", L"AI credits", L"AI 积分"},
+    {L"quota-name", L"Chat requests", L"聊天请求"},
+    {L"quota-name", L"Credits", L"积分"},
+    {L"quota-name", L"Extra usage", L"额外用量"},
+    {L"quota-name", L"Monthly", L"每月"},
+    {L"quota-name", L"Premium requests", L"高级请求"},
+    {L"quota-name", L"Weekly", L"每周"},
+    {L"quota-name", L"{name} current limit", L"{name} 当前限额"},
+    {L"quota-name", L"{name} weekly", L"{name} 每周"},
+    {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}", L"{name} {days, plural, other{# 天}}"},
+    {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}", L"{name} {hours, plural, other{# 小时}}"},
+    {L"quota-name", L"{name} {hours}h", L"{name} {hours} 小时"},
+    {L"quota-reset", L"Not yet started", L"尚未开始"},
+    {L"quota-reset", L"Resets {when}", L"{when}重置"},
+    {L"quota-unit", L"left", L"剩余"},
+    {L"quota-unit", L"used", L"已用"},
+    {L"quota-value", L"Available", L"可用"},
+    {L"quota-value", L"Unlimited", L"无限制"},
+    {L"quota-value", L"Used up", L"已用完"},
+    {L"reset-when", L"in {duration}", L"{duration}后"},
+    {L"reset-when", L"in {duration} ({time})", L"{duration}后 ({time})"},
+    {L"reset-when", L"now", L"现在"},
     {L"settings-page", L"About", L"关于"},
     {L"settings-page", L"Accounts", L"账户"},
     {L"settings-page", L"Behavior", L"行为"},
@@ -1626,6 +2174,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"taskbar-setup", L"AI +", L"AI +"},
     {L"toggle", L"Off", L"关"},
     {L"toggle", L"On", L"开"},
+    {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"按过去 24 小时的速率：约 {duration}后达到上限"},
+    {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
+    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogZhHans), "sort by (context, English), no duplicates");
 
@@ -2318,8 +2869,11 @@ struct WindowUsage {
 // Anthropic's per-model and per-surface limits, OpenAI's additional rate limits, Antigravity's
 // other reported quotas.
 struct NamedQuota {
-    std::wstring name;
+    std::wstring name;  // As reported
     WindowUsage usage;
+    // The window whose length the flyout adds to the name (ExtraQuotaName): the one it was first
+    // listed with, kept when a later reading replaces `usage`.
+    ULONGLONG nameWindowMs = 0;
 };
 static constexpr size_t kMaxExtraQuotas = 8;
 
@@ -2411,28 +2965,33 @@ struct ProviderOutage {
     bool operator==(const ProviderOutage&) const = default;
 };
 
-// Adds a reported quota to the account's extra quotas, its name followed by its window's length
-// when known ("Sonnet weekly", "Spark 5-hour"). A quota under a name already listed replaces it
-// when more used; past kMaxExtraQuotas quotas are dropped.
+// Adds a reported quota to the account's extra quotas. One whose name reads as a listed one's in
+// English, its window's length included ("Sonnet weekly", "Spark 5-hour"), replaces that one's
+// reading when more used; past kMaxExtraQuotas quotas are dropped.
 static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage) {
     if (name.empty() || !std::isfinite(usage.pct) || usage.pct < 0) return;
     name.resize(std::min<size_t>(name.size(), 64));
-    constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000;
-    constexpr ULONGLONG kDayMs = 24 * kHourMs;
-    ULONGLONG durationMs = usage.windowDurationMs;
-    if (durationMs == kWeeklyWindowMs) {
-        name += L" weekly";
-    } else if (durationMs && durationMs % kDayMs == 0) {
-        name += L" " + std::to_wstring(durationMs / kDayMs) + L"-day";
-    } else if (durationMs && durationMs % kHourMs == 0) {
-        name += L" " + std::to_wstring(durationMs / kHourMs) + L"-hour";
-    }
+    // ExtraQuotaName's English, which the model can't format: the merge key.
+    auto english = [](const std::wstring& name, ULONGLONG durationMs) {
+        constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+        if (durationMs == kWeeklyWindowMs) return name + L" weekly";  // i18n-en
+        if (durationMs && durationMs % kDayMs == 0) {
+            return name + L" " + std::to_wstring(durationMs / kDayMs) + L"-day";  // i18n-en
+        }
+        if (durationMs && durationMs % kHourMs == 0) {
+            return name + L" " + std::to_wstring(durationMs / kHourMs) + L"-hour";  // i18n-en
+        }
+        return name;
+    };
+    std::wstring key = english(name, usage.windowDurationMs);
     for (NamedQuota& listed : d->extraQuotas) {
-        if (listed.name != name) continue;
+        if (english(listed.name, listed.nameWindowMs) != key) continue;
         if (usage.pct > listed.usage.pct) listed.usage = usage;
         return;
     }
-    if (d->extraQuotas.size() < kMaxExtraQuotas) d->extraQuotas.push_back({std::move(name), usage});
+    if (d->extraQuotas.size() < kMaxExtraQuotas) {
+        d->extraQuotas.push_back({std::move(name), usage, usage.windowDurationMs});
+    }
 }
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide
@@ -2982,7 +3541,8 @@ static void OpenHistoryWindow(uint64_t historyId = 0);
 static void UiSetWindowAppId(HWND window, PCWSTR appId);
 static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons);
 static bool SaveAppIconPng(const std::wstring& path);
-static std::wstring NotificationProjectionText(uint64_t historyId, int slot, const WindowUsage& reading);
+static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
+                                               const WindowUsage& reading);
 static bool SaveOwnedSettings(const Settings& settings);
 static void PublishSettings(Settings settings, uint64_t oldIdentity = 0,
                             uint64_t newIdentity = 0);
@@ -3276,44 +3836,57 @@ static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
     return std::wstring(day) + L" " + FormatLocalTime(local);
 }
 
-static std::wstring FormatReset(ULONGLONG unixMs) {
-    if (!unixMs) return L"?";
-    LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
-    if (delta <= 0) return L"now";
-
-    ULONGLONG totalMin = ((ULONGLONG)delta + 59999) / 60000;
-    ULONGLONG days = totalMin / (24 * 60);
-    ULONGLONG hours = (totalMin / 60) % 24;
-    ULONGLONG mins = totalMin % 60;
-
-    wchar_t rel[64];
+// A duration in its two largest units, dropping a zero second one: "1d 3h", "2h 15m", "4m 12s" or
+// "45s".
+static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seconds) {
+    ULONGLONG days = seconds / (24 * 60 * 60);
+    ULONGLONG hours = seconds / (60 * 60) % 24;
+    ULONGLONG minutes = seconds / 60 % 60;
+    ULONGLONG secs = seconds % 60;
     if (days > 0) {
-        if (hours > 0) swprintf(rel, ARRAYSIZE(rel), L"in %llud %lluh", days, hours);
-        else swprintf(rel, ARRAYSIZE(rel), L"in %llud", days);
-    } else if (hours > 0) {
-        if (mins > 0) swprintf(rel, ARRAYSIZE(rel), L"in %lluh %llum", hours, mins);
-        else swprintf(rel, ARRAYSIZE(rel), L"in %lluh", hours);
-    } else {
-        swprintf(rel, ARRAYSIZE(rel), L"in %llum", mins);
+        return hours ? I18nText(locale, TrCtx(L"duration", L"{days}d {hours}h"), {{L"days", days}, {L"hours", hours}}) :
+                       I18nText(locale, TrCtx(L"duration", L"{days}d"), {{L"days", days}});
     }
-
-    SYSTEMTIME local;
-    if (!UnixMsToLocalSystemTime(unixMs, &local)) {
-        return rel;
+    if (hours > 0) {
+        return minutes ? I18nText(locale, TrCtx(L"duration", L"{hours}h {minutes}m"),
+                                  {{L"hours", hours}, {L"minutes", minutes}}) :
+                         I18nText(locale, TrCtx(L"duration", L"{hours}h"), {{L"hours", hours}});
     }
-
-    std::wstring localTime =
-        delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local);
-    return std::wstring(rel) + L" (" + localTime + L")";
+    if (minutes > 0) {
+        return secs ? I18nText(locale, TrCtx(L"duration", L"{minutes}m {seconds}s"),
+                               {{L"minutes", minutes}, {L"seconds", secs}}) :
+                      I18nText(locale, TrCtx(L"duration", L"{minutes}m"), {{L"minutes", minutes}});
+    }
+    return I18nText(locale, TrCtx(L"duration", L"{seconds}s"), {{L"seconds", secs}});
 }
 
-static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
-    if (!unixMs) return L"No data yet";
+// When a reset comes, as running text continues it: "in 3d 4h (Fri 04:59)" (rounded up to the
+// minute; the local time, with its weekday from a day ahead), "now" once due, "?" without one.
+static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
+    if (!unixMs) return L"?";
+    LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
+    if (delta <= 0) return I18nText(locale, TrCtx(L"reset-when", L"now"));
+
+    std::wstring duration = FormatShortDuration(locale, ((ULONGLONG)delta + 59999) / 60000 * 60);
     SYSTEMTIME local;
     if (!UnixMsToLocalSystemTime(unixMs, &local)) {
-        return L"Updated ?";
+        return I18nText(locale, TrCtx(L"reset-when", L"in {duration}"), {{L"duration", duration}});
     }
-    return std::wstring(L"Updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
+    return I18nText(locale, TrCtx(L"reset-when", L"in {duration} ({time})"),
+                    {{L"duration", duration},
+                     {L"time", delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local)}});
+}
+
+// The details flyout's last update; an unreadable time shows as "?".
+static std::wstring FormatUpdated(const I18nLocale& locale, ULONGLONG unixMs, bool stale) {
+    if (!unixMs) return I18nText(locale, TrCtx(L"flyout-footer", L"No data yet"));
+    SYSTEMTIME local;
+    if (!UnixMsToLocalSystemTime(unixMs, &local)) {
+        return I18nText(locale, TrCtx(L"flyout-footer", L"Updated {time}"), {{L"time", L"?"}});
+    }
+    return I18nText(locale, stale ? TrCtx(L"flyout-footer", L"Updated {time} (stale)") :
+                                    TrCtx(L"flyout-footer", L"Updated {time}"),
+                    {{L"time", FormatLocalTime(local)}});
 }
 
 // The shell's Explorer, the only one that polls and records history. Windhawk also loads the mod
@@ -3379,12 +3952,13 @@ static void OpenUrl(PCWSTR url) {
     g_urlLaunchThreads.push_back(thread);
 }
 
+// Brand names, the same in every language.
 static PCWSTR ProviderDisplayName(const std::wstring& provider) {
-    if (provider == L"anthropic") return L"Anthropic";
-    if (provider == L"openai") return L"OpenAI";
-    if (provider == L"copilot") return L"GitHub Copilot";
-    if (provider == L"opencode") return L"OpenCode Go";
-    return L"Google Antigravity";
+    if (provider == L"anthropic") return L"Anthropic";  // i18n-en
+    if (provider == L"openai") return L"OpenAI";  // i18n-en
+    if (provider == L"copilot") return L"GitHub Copilot";  // i18n-en
+    if (provider == L"opencode") return L"OpenCode Go";  // i18n-en
+    return L"Google Antigravity";  // i18n-en
 }
 
 // OpenCode Go has no OAuth client: its sign-in takes an API key copied from the console, which
@@ -3401,10 +3975,12 @@ static PCWSTR ProviderDashboardUrl(const std::wstring& provider) {
     return nullptr;
 }
 
-// A GitHub Copilot allowance's unit, as running text names it.
-static PCWSTR CopilotUnitName(CopilotUnit unit) {
-    return unit == CopilotUnit::PremiumRequests ? L"premium requests" :
-           unit == CopilotUnit::ChatRequests ? L"chat requests" : L"AI credits";
+// A GitHub Copilot allowance's unit, as running text names it (the details flyout's row has its
+// own name).
+static std::wstring CopilotUnitName(const I18nLocale& locale, CopilotUnit unit) {
+    return I18nText(locale, unit == CopilotUnit::PremiumRequests ? TrCtx(L"copilot-unit", L"premium requests") :
+                            unit == CopilotUnit::ChatRequests    ? TrCtx(L"copilot-unit", L"chat requests") :
+                                                                   TrCtx(L"copilot-unit", L"AI credits"));
 }
 
 // src/core/json.h
@@ -3436,8 +4012,9 @@ static bool GetBool(JsonObject const& o, PCWSTR name) {
     return v.ValueType() == JsonValueType::Boolean && v.GetBoolean();
 }
 
+// A response body's shape, for an error's detail.
 static std::wstring DescribeJsonBody(const std::string& body) {
-    if (body.empty()) return L"empty body";
+    if (body.empty()) return L"empty body";  // i18n-en
 
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
@@ -3453,9 +4030,9 @@ static std::wstring DescribeJsonBody(const std::string& body) {
             keys += std::wstring(key.c_str(), key.size());
             count++;
         }
-        return keys.empty() ? L"JSON object with no keys" : L"keys: " + keys;
+        return keys.empty() ? L"JSON object with no keys" : L"keys: " + keys;  // i18n-en
     } catch (...) {
-        return L"non-object or invalid JSON body";
+        return L"non-object or invalid JSON body";  // i18n-en
     }
 }
 
@@ -9029,8 +9606,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         shouldNotify = g_settings.notificationLevel != NotificationLevel::Off;
                     }
                     if (shouldNotify && !g_unloading) {
+                        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
                         std::wstring providerName =
                             ProviderDisplayName(publishedAccounts[i].provider);
+                        std::wstring copilotUnit;
                         wchar_t title[96];
                         PCWSTR quotaName =
                             w == kFiveHourBar ? L"5h" :
@@ -9052,7 +9631,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                    w == kExtraUsageBar) {
                             quotaName = L"credits";
                         } else if (publishedAccounts[i].provider == L"copilot") {
-                            quotaName = CopilotUnitName(publishedResults[i].copilotUnit);
+                            copilotUnit = CopilotUnitName(locale, publishedResults[i].copilotUnit);
+                            quotaName = copilotUnit.c_str();
                         } else if (publishedAccounts[i].provider == L"opencode" &&
                                    w == kExtraUsageBar) {
                             quotaName = L"monthly";
@@ -9061,12 +9641,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                  quotaName, wu.pct);
                         std::wstring body = providerName;
                         if ((w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs) {
-                            body += L" - resets " + FormatReset(wu.resetUnixMs);
+                            body += L" - resets " + FormatReset(locale, wu.resetUnixMs);
                         }
                         // The flyout's projection to the limit; none for an OpenCode Go window at
                         // its limit, as there.
                         std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
-                            NotificationProjectionText(publishedAccounts[i].historyId, w, wu);
+                            NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
                         FireThresholdNotification(title, body, projection,
                                                   ProviderDashboardUrl(publishedAccounts[i].provider),
                                                   AccountIdentityHash(publishedAccounts[i]), w);
@@ -9611,7 +10191,7 @@ static FrameworkElement FindChildByName(FrameworkElement const& root, std::wstri
 
 // openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
 static constexpr PCWSTR kOpenAiLogoPath =
-    L"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6"
+    L"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6"  // i18n-en: path data
     L".0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.096"
     L"6 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.259"
     L"9 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0"
@@ -9662,7 +10242,7 @@ static constexpr PCWSTR kGeminiLogoPath =
 
 // githubcopilot.svg, from Primer Octicons: Copyright (c) 2026 GitHub Inc., MIT License.
 static constexpr PCWSTR kCopilotLogoPath =
-    L"M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.6"
+    L"M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.6"  // i18n-en: path data
     L"41 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429"
     L".414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406."
     L"89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235"
@@ -9682,7 +10262,7 @@ static constexpr PCWSTR kCopilotLogoPath =
     L"4 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z";
 
 // opencode.svg.
-static constexpr PCWSTR kOpenCodeLogoPath = L"M22 24H2V0h20zM17 4.8H7v14.4h10z";
+static constexpr PCWSTR kOpenCodeLogoPath = L"M22 24H2V0h20zM17 4.8H7v14.4h10z";  // i18n-en: path data
 
 // The provider's logo.
 static PCWSTR ProviderLogoPath(std::wstring_view provider) {
@@ -9945,10 +10525,10 @@ static FlyoutTheme LoadFlyoutTheme() {
     auto brushSetter = [](PCWSTR target, Color c) {
         wchar_t color[16];
         swprintf(color, ARRAYSIZE(color), L"#%02X%02X%02X%02X", c.A, c.R, c.G, c.B);
-        return std::wstring(L"<Setter Target=\"") + target +
-               L"\"><Setter.Value><LinearGradientBrush><GradientStop Color=\"" + color +
-               L"\" Offset=\"0\"/><GradientStop Color=\"" + color +
-               L"\" Offset=\"1\"/></LinearGradientBrush></Setter.Value></Setter>";
+        return std::wstring(L"<Setter Target=\"") + target +  // i18n-en: XAML
+               L"\"><Setter.Value><LinearGradientBrush><GradientStop Color=\"" + color +  // i18n-en: XAML
+               L"\" Offset=\"0\"/><GradientStop Color=\"" + color +  // i18n-en: XAML
+               L"\" Offset=\"1\"/></LinearGradientBrush></Setter.Value></Setter>";  // i18n-en: XAML
     };
     std::wstring style =
         L"<Style xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
@@ -9962,11 +10542,11 @@ static FlyoutTheme LoadFlyoutTheme() {
         L"<VisualState x:Name=\"PointerOver\"><VisualState.Setters>" +
         brushSetter(L"Root.Background", p.hover) +
         brushSetter(L"Root.BorderBrush", p.hoverBorder) +
-        L"</VisualState.Setters></VisualState>"
+        L"</VisualState.Setters></VisualState>"  // i18n-en: XAML
         L"<VisualState x:Name=\"Pressed\"><VisualState.Setters>" +
         brushSetter(L"Root.Background", p.pressed) +
         brushSetter(L"Root.BorderBrush", p.hoverBorder) +
-        L"</VisualState.Setters></VisualState>"
+        L"</VisualState.Setters></VisualState>"  // i18n-en: XAML
         L"<VisualState x:Name=\"Disabled\"><VisualState.Setters>"
         L"<Setter Target=\"Root.Opacity\" Value=\"0.4\"/>"
         L"</VisualState.Setters></VisualState>"
@@ -10030,6 +10610,27 @@ static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provide
     if (slot == kExtraUsageBar && (provider == L"copilot" || provider == L"opencode")) key = 6;
     return I18nText(locale, kQuotaKeys[key]);
 }
+
+// An extra quota's name in the details flyout: as reported, then the length of the window it was
+// listed with in whole hours, when known ("Sonnet weekly", "Spark 5-hour", "Gemini 2-day").
+// AddExtraQuota merges by its English.
+static std::wstring ExtraQuotaName(const I18nLocale& locale, const NamedQuota& quota) {
+    constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+    ULONGLONG durationMs = quota.nameWindowMs;
+    if (durationMs == kWeeklyWindowMs) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", quota.name}});
+    }
+    if (durationMs && durationMs % kDayMs == 0) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}"),
+                        {{L"name", quota.name}, {L"days", durationMs / kDayMs}});
+    }
+    if (durationMs && durationMs % kHourMs == 0) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}"),
+                        {{L"name", quota.name}, {L"hours", durationMs / kHourMs}});
+    }
+    return quota.name;
+}
+
 // Tile text's cap height, as a share of its font size (Segoe UI Variable).
 static constexpr double kTileCapShare = 0.7;
 // Quota matrix cells: the key, kMatrixKeyGap DIPs, then the number; columns and rows apart by
@@ -10154,10 +10755,11 @@ static double RelativeLuminance(uint32_t argb) {
 }
 
 // An extra usage or credits amount on the taskbar: whole credits or dollars to the cent below
-// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k).
+// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k). The same in every
+// language, like percentages.
 static std::wstring TaskbarAmountText(double amount, bool dollars) {
     wchar_t text[32];
-    PCWSTR sign = dollars ? L"$" : L"";
+    PCWSTR sign = dollars ? L"$" : L"";  // i18n-en
     if (amount < (dollars ? 999.995 : 999.5)) {
         swprintf(text, ARRAYSIZE(text), dollars ? L"$%.2f" : L"%.0f", amount);
     } else {
@@ -10165,7 +10767,7 @@ static std::wstring TaskbarAmountText(double amount, bool dollars) {
         bool millions = amount >= 999.5e3;
         double scaled = std::max(amount / (millions ? 1e6 : 1e3), 1.0);
         swprintf(text, ARRAYSIZE(text), scaled < 999.5 ? L"%s%.3g%s" : L"%s%.0f%s", sign, scaled,
-                 millions ? L"M" : L"k");
+                 millions ? L"M" : L"k");  // i18n-en
     }
     return text;
 }
@@ -10662,6 +11264,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     // share a provider so tiles show number badges. A negative value is a quota not reported.
     // Antigravity is stale, with an error. Identities mix: OAI shows its label (with VisualTestOutage's
     // mark), the Anthropic pair their logo and number badge, Go its logo alone, with the stale mark.
+    // Labels and model names stay as written in every language, as users' and providers' do.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
@@ -10671,9 +11274,9 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     };
     const std::array<Sample, 4> samples = {{
         {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, TileIdentity::Text},
-        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},
-        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},
-        {L"antigravity", L"Go", {green, green * 1.5, orange, -1}, {true, false, false, false}, TileIdentity::Logo},
+        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},  // i18n-en
+        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},  // i18n-en
+        {L"antigravity", L"Go", {green, green * 1.5, orange, -1}, {true, false, false, false}, TileIdentity::Logo},  // i18n-en
     }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
@@ -10725,24 +11328,24 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
             accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
             accountData.extraLimitAmount = 50.0;
         }
-        accountData.plan = L"Visual test";
+        accountData.plan = I18nText(display.locale, TrCtx(L"plan", L"Visual test"));
         accountData.lastSuccessMs = now;
         accountData.stale = false;
         // Extra quotas (OpenAI's with their Display setting) and free resets: details flyout only.
-        if (account.label == L"CC 2") {
+        if (account.label == L"CC 2") {  // i18n-en
             accountData.extraQuotas = {
-                {L"Sonnet weekly",
-                 {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}},
-                {L"Opus weekly", {0, 0, kWeeklyWindowMs, true}},
+                {L"Sonnet",  // i18n-en
+                 {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}, kWeeklyWindowMs},
+                {L"Opus", {0, 0, kWeeklyWindowMs, true}, kWeeklyWindowMs},  // i18n-en
             };
             accountData.freeResets = 2;
             accountData.freeResetsExpiryMs = now + 3 * 24 * 60 * 60000ULL;
         } else if (openAi) {
             accountData.extraQuotas = {
-                {L"Spark 5-hour",
-                 {orange, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.3), kFiveHourWindowMs}},
-                {L"Spark weekly",
-                 {green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.7), kWeeklyWindowMs}},
+                {L"Spark",  // i18n-en
+                 {orange, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.3), kFiveHourWindowMs}, kFiveHourWindowMs},
+                {L"Spark",  // i18n-en
+                 {green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.7), kWeeklyWindowMs}, kWeeklyWindowMs},
             };
             accountData.freeResets = 1;
         }
@@ -10763,10 +11366,11 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
 }
 
 // The visual test accounts' provider status, while outage marks are on: OpenAI's (the OAI sample's
-// provider) degraded since 25 minutes before `now`; the others operational.
+// provider) degraded since 25 minutes before `now`; the others operational. Its component and
+// incident stand for the status page's, which stay as the page writes them.
 static ProviderOutage VisualTestOutage(std::wstring_view provider, ULONGLONG now) {
     if (provider != L"openai") return {};
-    return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};
+    return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};  // i18n-en
 }
 
 // A recorded reading of a quota in its current window (the burn-up curve's), oldest first.
@@ -11875,7 +12479,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             bool column = display.sideWidth > 0;
             m.matrixRow = column ? slotPosition : slotPosition % 2;
             m.matrixColumn = column ? 0 : slotPosition / 2;
-            m.text = L"\u2013";
+            m.text = L"\u2013";  // i18n-en: no reading
             if (wu.pct >= 0) {
                 wchar_t text[24];
                 swprintf(text, ARRAYSIZE(text), L"%.0f%%",
@@ -11894,8 +12498,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
     if (layout == BarLayout::LogoHeadline || gauge) {
         bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
-        meters.headline = L"\u2013";
-        if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";
+        meters.headline = L"\u2013";  // i18n-en: no reading
+        if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";  // i18n-en: no reading
         if (top >= 0) {
             wchar_t text[24];
             swprintf(text, ARRAYSIZE(text), gauge ? L"%.0f" : L"%.0f%%", tileShown(usage[top]->pct));
@@ -11967,7 +12571,7 @@ static uint32_t SparkShapeColor(int shape, const AccountMeters& meters, int slot
 // a PathIcon, which inherits the surrounding text color like a TextBlock. Throws if it fails to
 // load.
 static FrameworkElement LoadProviderLogoShape(std::wstring const& provider, Brush const& fill) {
-    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";
+    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";  // i18n-en: XAML
     xaml += L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
     xaml += ProviderLogoPath(provider);
     xaml += L"\"/>";
@@ -11998,7 +12602,7 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 // geometry come from the meter model (meter-model.h).
 
 // The icon font of the outage mark, as the details flyout's glyphs use it.
-static constexpr PCWSTR kTaskbarIconFont = L"Segoe Fluent Icons, Segoe MDL2 Assets";
+static constexpr PCWSTR kTaskbarIconFont = L"Segoe Fluent Icons, Segoe MDL2 Assets";  // i18n-en
 
 // A tile shape (meter-model.h), moved `offset` DIPs right and down: closed figures to fill, or
 // open ones to stroke. PathGeometry fills even-odd by default, as the outline expects.
@@ -12165,7 +12769,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         for (int k = 0; k <= 8; k++) {
             TextBlock text;
             text.Text(identityText.badgeText);
-            text.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
+            text.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));  // i18n-en
             text.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
             text.FontSize(size);
             text.TextLineBounds(TextLineBounds::Tight);
@@ -12202,7 +12806,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     if (!tile.logo) {
         tile.text = TextBlock{};
         tile.text.Text(identityText.text);
-        tile.text.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+        tile.text.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
         tile.text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         tile.text.FontSize(10);
         tile.text.TextWrapping(TextWrapping::NoWrap);
@@ -12288,7 +12892,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         return column;
     }
     append(identity);
-    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
 
     if (IsFaceTile(layout)) {
         // Gauges and pies: the face beside the identity. A gauge's number and key are centred
@@ -12573,7 +13177,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 keyProbe.Text(I18nText(display.locale, key));
                 keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe, display.locale) * meters.matrixKeyFont);
             }
-            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
             valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
             valueProbe.FontSize(meters.matrixFont);
             valueProbe.Text(L"100%");
@@ -13121,7 +13725,7 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
         wuc::Compositor compositor = hostVisual.Compositor();
         wuc::CompositionBrush wallpaper = compositor.TryCreateBlurredWallpaperBackdropBrush();
         if (!wallpaper) {
-            LogFlyoutMaterialFailure(L"no blurred wallpaper brush", S_OK);
+            LogFlyoutMaterialFailure(L"no blurred wallpaper brush", S_OK);  // i18n-en: log text
             return;
         }
 
@@ -13143,7 +13747,7 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
                     float rgba[] = {c.R / 255.f, c.G / 255.f, c.B / 255.f, opacity * c.A / 255.f};
                     return node(kFlood, {PropertyValue::CreateSingleArray(rgba)}, {});
                 };
-                wuc::CompositionEffectSourceParameter backdrop(L"Wallpaper");
+                wuc::CompositionEffectSourceParameter backdrop(L"Wallpaper");  // i18n-en: effect parameter
                 IGraphicsEffect graph{nullptr};
                 if (theme.material == Material::TintedWallpaper) {
                     graph = node(kComposite, {PropertyValue::CreateUInt32(kSourceOver)},
@@ -13163,7 +13767,7 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
             }
             if (*live != 0) {
                 nodesRetained = true;
-                LogFlyoutMaterialFailure(L"effect graph retained", S_OK);
+                LogFlyoutMaterialFailure(L"effect graph retained", S_OK);  // i18n-en: log text
                 return;
             }
             fo.materialFactory = factory;
@@ -13173,25 +13777,25 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
         auto status = fo.materialFactory.LoadStatus();
         if (status != wuc::CompositionEffectFactoryLoadStatus::Success &&
             status != wuc::CompositionEffectFactoryLoadStatus::Pending) {
-            LogFlyoutMaterialFailure(L"effect failed to load",
+            LogFlyoutMaterialFailure(L"effect failed to load",  // i18n-en: log text
                                      fo.materialFactory.ExtendedError().value);
             fo.materialFactory = nullptr;
             return;
         }
 
         wuc::CompositionEffectBrush brush = fo.materialFactory.CreateBrush();
-        brush.SetSourceParameter(L"Wallpaper", wallpaper);
+        brush.SetSourceParameter(L"Wallpaper", wallpaper);  // i18n-en: effect parameter
         wuc::SpriteVisual sprite = compositor.CreateSpriteVisual();
         sprite.Brush(brush);
         sprite.IsVisible(false);
         // The host's layout size, for the sprite and its rounded clip.
         wuc::ExpressionAnimation size = compositor.CreateExpressionAnimation(L"host.Size");
         size.SetReferenceParameter(L"host", hostVisual);
-        sprite.StartAnimation(L"Size", size);
+        sprite.StartAnimation(L"Size", size);  // i18n-en: property name
         wuc::CompositionRoundedRectangleGeometry outline =
             compositor.CreateRoundedRectangleGeometry();
         outline.CornerRadius({cornerRadius, cornerRadius});
-        outline.StartAnimation(L"Size", size);
+        outline.StartAnimation(L"Size", size);  // i18n-en: property name
         sprite.Clip(compositor.CreateGeometricClip(outline));
         ElementCompositionPreview::SetElementChildVisual(host, sprite);
         popup.materialVisual = sprite;
@@ -13225,7 +13829,7 @@ static void SettleFlyoutMaterial(FlyoutUi& fo) {
             popup.materialVisual.IsVisible(true);
             if (card) card.Background(transparent);
         } else if (fo.materialFactory) {
-            LogFlyoutMaterialFailure(L"effect failed to compile",
+            LogFlyoutMaterialFailure(L"effect failed to compile",  // i18n-en: log text
                                      fo.materialFactory.ExtendedError().value);
             fo.materialFactory = nullptr;
         }
@@ -13284,46 +13888,32 @@ static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(Account
             &d.antigravityThirdPartyWeek, &d.extraUsage};
 }
 
-// "1d 3h", "2h 15m", "4m 12s" or "45s".
-static std::wstring FormatShortDuration(ULONGLONG seconds) {
-    ULONGLONG days = seconds / (24 * 60 * 60);
-    ULONGLONG hours = seconds / (60 * 60) % 24;
-    ULONGLONG minutes = seconds / 60 % 60;
-    ULONGLONG secs = seconds % 60;
-    wchar_t text[48];
-    if (days > 0) {
-        swprintf(text, ARRAYSIZE(text), hours ? L"%llud %lluh" : L"%llud", days, hours);
-    } else if (hours > 0) {
-        swprintf(text, ARRAYSIZE(text), minutes ? L"%lluh %llum" : L"%lluh", hours, minutes);
-    } else if (minutes > 0) {
-        swprintf(text, ARRAYSIZE(text), secs ? L"%llum %llus" : L"%llum", minutes, secs);
-    } else {
-        swprintf(text, ARRAYSIZE(text), L"%llus", secs);
-    }
-    return text;
-}
-
 // A projection's text when it reaches the limit before the reset, naming its rate's span, as the
 // details flyout and threshold notifications show it; empty otherwise.
-static std::wstring LimitProjectionText(const std::optional<UsageProjection>& projected,
+static std::wstring LimitProjectionText(const I18nLocale& locale, const std::optional<UsageProjection>& projected,
                                         const WindowUsage& reading) {
     if (!projected || !projected->limit) return {};
-    std::wstring rate = L"this window's average rate";
+    ULONGLONG minutes = std::max<ULONGLONG>(1, (projected->toMs - projected->fromMs + 59999) / 60000);
+    std::wstring duration = FormatShortDuration(locale, minutes * 60);
     SYSTEMTIME since;
     if (projected->sinceMs + kProjectionLookbackMs == projected->fromMs) {
-        rate = L"the last 24h's rate";
-    } else if (projected->sinceMs != reading.resetUnixMs - reading.windowDurationMs &&
-               UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
-        rate = L"the rate since " + FormatLocalDayTime(since);
+        return I18nText(locale, TrCtx(L"usage-projection", L"At the last 24h's rate: limit in ~{duration}"),
+                        {{L"duration", duration}});
     }
-    ULONGLONG minutes = std::max<ULONGLONG>(1, (projected->toMs - projected->fromMs + 59999) / 60000);
-    return L"At " + rate + L": limit in ~" + FormatShortDuration(minutes * 60);
+    if (projected->sinceMs != reading.resetUnixMs - reading.windowDurationMs &&
+        UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
+        return I18nText(locale, TrCtx(L"usage-projection", L"At the rate since {time}: limit in ~{duration}"),
+                        {{L"time", FormatLocalDayTime(since)}, {L"duration", duration}});
+    }
+    return I18nText(locale, TrCtx(L"usage-projection", L"At this window's average rate: limit in ~{duration}"),
+                    {{L"duration", duration}});
 }
 
 // Fetch thread: the flyout's projection text for a fresh reading of a taskbar slot, from the
-// account's published curve (the flyout row's) and its lookback. Takes the settings and data
-// locks; call holding neither.
-static std::wstring NotificationProjectionText(uint64_t historyId, int slot, const WindowUsage& reading) {
+// account's published curve (the flyout row's) and its lookback, in the notification's language.
+// Takes the settings and data locks; call holding neither.
+static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
+                                               const WindowUsage& reading) {
     static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow, kFlyoutFableRow,
                                                   kFlyoutExtraRow};
     std::vector<TileTracePoint> trace;
@@ -13331,7 +13921,8 @@ static std::wstring NotificationProjectionText(uint64_t historyId, int slot, con
         for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
     }
     return LimitProjectionText(
-        ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs), reading);
+        locale, ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
+        reading);
 }
 
 // Builds the card for `provider` into state.flyout.popup, registering its button delegates there
@@ -13341,8 +13932,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     FlyoutPopup& popup = state.flyout.popup;
     FlyoutTheme const& theme = popup.theme;
     const I18nLocale& locale = state.buildLocale;
-    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
-    FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
+    FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");  // i18n-en
     auto makeText = [](double size, Brush const& brush) {
         TextBlock text;
         text.FontSize(size);
@@ -13772,8 +14363,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     wuxs::Line projectionKey;
     projectionStroke(projectionKey);
     projectionKey.Stroke(theme.chartKey);
-    for (auto [key, name] : {std::pair{paceKey, L"even pace"},
-                             std::pair{projectionKey, L"projection"}}) {
+    for (auto [key, name] : {std::pair{paceKey, I18nText(locale, TrCtx(L"flyout-legend", L"even pace"))},
+                             std::pair{projectionKey, I18nText(locale, TrCtx(L"flyout-legend", L"projection"))}}) {
         key.X1(1);
         key.X2(15);
         key.Y1(1);
@@ -13792,7 +14383,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     legendGrid.Children().Append(keys);
     TextBlock source = makeText(11, theme.mutedText);
     singleLine(source);
-    source.Text(L"from local history");
+    source.Text(I18nText(locale, TrCtx(L"flyout-legend", L"from local history")));
     source.TextAlignment(TextAlignment::Right);
     source.VerticalAlignment(VerticalAlignment::Center);
     Grid::SetColumn(source, 1);
@@ -13935,11 +14526,12 @@ static void UpdateAccountFlyout(
     bool antigravity = account.provider == L"antigravity";
     bool copilot = account.provider == L"copilot";
     bool opencode = account.provider == L"opencode";
+    const I18nLocale& locale = display.locale;
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
         show(popup.staleMarker, display.warn);
-        bool sparkPlan = d.plan.find(L"Spark") != std::wstring::npos ||
+        bool sparkPlan = d.plan.find(L"Spark") != std::wstring::npos ||  // i18n-en: the plan's name
                          d.plan.find(L"spark") != std::wstring::npos;
         std::wstring plan = openAi && sparkPlan && !display.showOpenAiExtraLimits ? L"" : d.plan;
         popup.plan.Text(plan);
@@ -13951,21 +14543,33 @@ static void UpdateAccountFlyout(
         const ProviderOutage& outage = display.outage;
         show(popup.outage, outage.level != OutageLevel::None);
         if (popup.outageText && popup.outageButton && outage.level != OutageLevel::None) {
-            std::wstring line = outage.component;
-            if (outage.others > 0) line += L" and " + std::to_wstring(outage.others) + L" more";
-            line += outage.level == OutageLevel::Major   ? L": major outage" :
-                    outage.level == OutageLevel::Partial ? L": partial outage" :
-                    outage.level == OutageLevel::Degraded ? L": degraded performance" : L": under maintenance";
+            std::wstring level = I18nText(
+                locale, outage.level == OutageLevel::Major    ? TrCtx(L"outage-level", L"major outage") :
+                        outage.level == OutageLevel::Partial  ? TrCtx(L"outage-level", L"partial outage") :
+                        outage.level == OutageLevel::Degraded ? TrCtx(L"outage-level", L"degraded performance") :
+                                                                TrCtx(L"outage-level", L"under maintenance"));
+            std::wstring line =
+                outage.others > 0 ?
+                    I18nText(locale,
+                             TrCtx(L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}"),
+                             {{L"component", outage.component}, {L"count", outage.others}, {L"level", level}}) :
+                    I18nText(locale, TrCtx(L"outage-line", L"{component}: {level}"),
+                             {{L"component", outage.component}, {L"level", level}});
             SYSTEMTIME since;
             if (outage.sinceMs && UnixMsToLocalSystemTime(outage.sinceMs, &since)) {
                 bool today = outage.sinceMs + 24ULL * 60 * 60 * 1000 > display.now;
-                line += L" \u00B7 since " + (today ? FormatLocalTime(since) : FormatLocalDayTime(since));
+                line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 since {time}"),
+                                {{L"status", line}, {L"time", today ? FormatLocalTime(since) : FormatLocalDayTime(since)}});
             }
-            if (!outage.title.empty()) line += L" \u00B7 " + outage.title;
+            if (!outage.title.empty()) {
+                line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 {incident}"),
+                                {{L"status", line}, {L"incident", outage.title}});
+            }
             if (std::wstring_view(popup.outageText.Text()) != line) {
                 popup.outageText.Text(line);
-                std::wstring tip = line + L"\nOpen the " + ProviderDisplayName(account.provider) + L" status page";
-                ToolTipService::SetToolTip(popup.outageButton, winrt::box_value(tip));
+                std::wstring tip = I18nText(locale, TrCtx(L"outage-action", L"{status}\nOpen the {provider} status page"),
+                                            {{L"status", line}, {L"provider", ProviderDisplayName(account.provider)}});
+                SetXamlToolTip(popup.outageButton, tip, locale);
                 winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(popup.outageButton, tip);
             }
             if (theme.highContrast || !display.outageColor) {
@@ -13975,12 +14579,15 @@ static void UpdateAccountFlyout(
             }
         }
 
-        // Antigravity pools are named by their reported window.
-        auto poolName = [](PCWSTR pool, ULONGLONG durationMs) {
-            return std::wstring(pool) +
-                   (durationMs == 3ULL * 60 * 60 * 1000 ? L" 3h" :
-                    durationMs == 60ULL * 60 * 1000 ? L" 1h" :
-                    durationMs == 0 ? L" current limit" : L" 5h");
+        // Antigravity pools are named by their reported window; the pools' and models' names stay
+        // as written.
+        auto poolName = [&](PCWSTR pool, ULONGLONG durationMs) {
+            if (!durationMs) return I18nText(locale, TrCtx(L"quota-name", L"{name} current limit"), {{L"name", pool}});
+            int hours = durationMs == 3ULL * 60 * 60 * 1000 ? 3 : durationMs == 60ULL * 60 * 1000 ? 1 : 5;
+            return I18nText(locale, TrCtx(L"quota-name", L"{name} {hours}h"), {{L"name", pool}, {L"hours", hours}});
+        };
+        auto weekly = [&](PCWSTR name) {
+            return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", name}});
         };
         // OpenAI credits form a percentage only against the user's max and its selected bar;
         // otherwise the balance is shown as an amount.
@@ -13990,9 +14597,7 @@ static void UpdateAccountFlyout(
         // GitHub Copilot's monthly allowance, in its unit, which also names its row: a percentage
         // of a finite allowance, else an unlimited pooled one without. Credits are fractional:
         // two decimals at most, trailing zeros trimmed.
-        PCWSTR copilotUnit = CopilotUnitName(d.copilotUnit);
-        std::wstring copilotRow = copilotUnit;
-        copilotRow[0] = wchar_t(towupper(copilotRow[0]));
+        std::wstring copilotUnit = CopilotUnitName(locale, d.copilotUnit);
         auto copilotAmount = [](double amount) {
             wchar_t number[64];
             swprintf(number, ARRAYSIZE(number), L"%.2f", amount);
@@ -14001,21 +14606,31 @@ static void UpdateAccountFlyout(
             if (trimmed.ends_with(L'.')) trimmed.pop_back();
             return trimmed;
         };
-        std::wstring copilotOverage = copilot && d.copilotOverage > 0 ?
-            L"\nAdditional usage: " + copilotAmount(d.copilotOverage) + L" " + copilotUnit : L"";
+        // Past a finite allowance, or beside a pooled one, the additional usage on a line of its own.
+        bool overage = copilot && d.copilotOverage > 0;
+        std::wstring overageAmount = overage ? copilotAmount(d.copilotOverage) : L"";
         struct RowSource {
             std::wstring name;
             bool available;
         };
         const std::array<RowSource, kFlyoutRowCount> sources = {{
-            {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
+            {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) :  // i18n-en
+                           I18nText(locale, TrCtx(L"quota-name", L"5-hour")),
              d.win5h.pct >= 0},
-            {antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
-            {antigravity ? L"Argon weekly" : L"Fable weekly", d.fableWeek.pct >= 0},
-            {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
+            {antigravity ? weekly(L"Gemini") : I18nText(locale, TrCtx(L"quota-name", L"Weekly")),  // i18n-en
+             d.winWeek.pct >= 0},
+            {weekly(antigravity ? L"Argon" : L"Fable"), d.fableWeek.pct >= 0},  // i18n-en
+            {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),  // i18n-en
              antigravity && d.antigravityThirdParty5h.pct >= 0},
-            {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {openAi ? L"Credits" : copilot ? copilotRow : opencode ? L"Monthly" : L"Extra usage",
+            {weekly(L"Claude/GPT"), antigravity && d.antigravityThirdPartyWeek.pct >= 0},  // i18n-en
+            {I18nText(locale, openAi   ? TrCtx(L"quota-name", L"Credits") :
+                              copilot  ? d.copilotUnit == CopilotUnit::PremiumRequests ?
+                                             TrCtx(L"quota-name", L"Premium requests") :
+                                         d.copilotUnit == CopilotUnit::ChatRequests ?
+                                             TrCtx(L"quota-name", L"Chat requests") :
+                                             TrCtx(L"quota-name", L"AI credits") :
+                              opencode ? TrCtx(L"quota-name", L"Monthly") :
+                                         TrCtx(L"quota-name", L"Extra usage")),
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
         const auto readings = FlyoutRowReadings(d);
@@ -14038,14 +14653,15 @@ static void UpdateAccountFlyout(
             if (!available) continue;
             visibleRows++;
             const WindowUsage& wu = r >= 0 ? *readings[r] : d.extraQuotas[extra].usage;
-            row.name.Text(r >= 0 ? sources[r].name : d.extraQuotas[extra].name);
+            row.name.Text(r >= 0 ? sources[r].name : ExtraQuotaName(locale, d.extraQuotas[extra]));
 
             if (r == kFlyoutExtraRow && creditsAmount) {
                 bool balance = !d.creditsUnlimited && d.creditsBalance >= 0;
                 if (balance) swprintf(text, ARRAYSIZE(text), L"%.0f", d.creditsBalance);
-                row.number.Text(d.creditsUnlimited ? L"Unlimited" :
-                                balance ? text : L"Available");
-                row.unit.Text(balance ? L"left" : L"");
+                row.number.Text(d.creditsUnlimited ? I18nText(locale, TrCtx(L"quota-value", L"Unlimited")) :
+                                balance            ? std::wstring(text) :
+                                                     I18nText(locale, TrCtx(L"quota-value", L"Available")));
+                row.unit.Text(balance ? I18nText(locale, TrCtx(L"quota-unit", L"left")) : L"");
                 row.unit.Foreground(theme.mutedText);
                 show(row.trend, false);
                 show(row.visual, false);
@@ -14063,17 +14679,25 @@ static void UpdateAccountFlyout(
                 // No percentage: the pool's credits used when reported, else that it's unlimited,
                 // or used up.
                 bool used = !d.copilotExhausted && d.extraUsedAmount >= 0;
-                row.number.Text(d.copilotExhausted ? L"Used up" : used ? copilotAmount(d.extraUsedAmount) :
-                                                                         L"Unlimited");
-                row.unit.Text(used ? L"used" : L"");
+                row.number.Text(d.copilotExhausted ? I18nText(locale, TrCtx(L"quota-value", L"Used up")) :
+                                used               ? copilotAmount(d.extraUsedAmount) :
+                                                     I18nText(locale, TrCtx(L"quota-value", L"Unlimited")));
+                row.unit.Text(used ? I18nText(locale, TrCtx(L"quota-unit", L"used")) : L"");
                 row.unit.Foreground(theme.mutedText);
                 show(row.trend, false);
                 show(row.visual, false);
                 show(row.chart, false);
                 show(row.projection, false);
-                row.amount.Text(L"Pooled " + std::wstring(copilotUnit) + L", no per-user limit" + copilotOverage);
+                row.amount.Text(overage ? I18nText(locale,
+                                                   TrCtx(L"quota-amount", L"Pooled {unit}, no per-user limit\n"
+                                                                          L"Additional usage: {overage} {unit}"),
+                                                   {{L"unit", copilotUnit}, {L"overage", overageAmount}}) :
+                                          I18nText(locale, TrCtx(L"quota-amount", L"Pooled {unit}, no per-user limit"),
+                                                   {{L"unit", copilotUnit}}));
                 show(row.amount, true);
-                std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+                std::wstring reset = wu.resetUnixMs ? I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"),
+                                                               {{L"when", FormatReset(locale, wu.resetUnixMs)}}) :
+                                                      L"";
                 row.reset.Text(reset);
                 show(row.reset, !reset.empty());
                 continue;
@@ -14083,7 +14707,7 @@ static void UpdateAccountFlyout(
             double shownPct = remainingMode ? std::clamp(100.0 - wu.pct, 0.0, 100.0) : wu.pct;
             swprintf(text, ARRAYSIZE(text), L"%.0f%%", shownPct);
             row.number.Text(text);
-            row.unit.Text(remainingMode ? L"left" : L"used");
+            row.unit.Text(I18nText(locale, remainingMode ? TrCtx(L"quota-unit", L"left") : TrCtx(L"quota-unit", L"used")));
             // An OpenCode Go window at its limit: the number in the warning color, and a note.
             int slot = r == kFlyoutFiveHourRow ? kFiveHourBar : r == kFlyoutWeeklyRow ? kWeeklyBar :
                        r == kFlyoutExtraRow ? kExtraUsageBar : -1;
@@ -14132,7 +14756,7 @@ static void UpdateAccountFlyout(
                 projected = ProjectUsage(wu, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
-            std::wstring projection = LimitProjectionText(projected, wu);
+            std::wstring projection = LimitProjectionText(locale, projected, wu);
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
 
@@ -14240,27 +14864,40 @@ static void UpdateAccountFlyout(
 
             std::wstring amount;
             if (limited) {
-                amount = L"Limit reached";
+                amount = I18nText(locale, TrCtx(L"quota-amount", L"Limit reached"));
             } else if (r == kFlyoutExtraRow && copilot) {
                 // Past the allowance the bar stays full; the additional usage gets its own line.
-                amount = copilotAmount(d.extraUsedAmount) + L" of " + copilotAmount(d.extraLimitAmount) + L" " +
-                         copilotUnit + L" used" + copilotOverage;
+                amount = I18nText(locale,
+                                  overage ? TrCtx(L"quota-amount", L"{used} of {limit} {unit} used\n"
+                                                                   L"Additional usage: {overage} {unit}") :
+                                            TrCtx(L"quota-amount", L"{used} of {limit} {unit} used"),
+                                  {{L"used", copilotAmount(d.extraUsedAmount)},
+                                   {L"limit", copilotAmount(d.extraLimitAmount)},
+                                   {L"unit", copilotUnit},
+                                   {L"overage", overageAmount}});
             } else if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
-                // Credits state the balance so the text reads the same in both bar modes.
+                // Credits state the balance so the text reads the same in both bar modes. Amounts are
+                // whole credits, or US dollars to the cent, in every language.
+                wchar_t limit[ARRAYSIZE(text)];
                 if (openAi) {
-                    swprintf(text, ARRAYSIZE(text), L"%.0f left of %.0f credits",
-                             d.extraLimitAmount - d.extraUsedAmount, d.extraLimitAmount);
+                    swprintf(text, ARRAYSIZE(text), L"%.0f", d.extraLimitAmount - d.extraUsedAmount);
+                    swprintf(limit, ARRAYSIZE(limit), L"%.0f", d.extraLimitAmount);
+                    amount = I18nText(locale, TrCtx(L"quota-amount", L"{left} left of {limit} credits"),
+                                      {{L"left", text}, {L"limit", limit}});
                 } else {
-                    swprintf(text, ARRAYSIZE(text), L"$%.2f of $%.2f spent",
-                             d.extraUsedAmount, d.extraLimitAmount);
+                    swprintf(text, ARRAYSIZE(text), L"$%.2f", d.extraUsedAmount);
+                    swprintf(limit, ARRAYSIZE(limit), L"$%.2f", d.extraLimitAmount);
+                    amount = I18nText(locale, TrCtx(L"quota-amount", L"{used} of {limit} spent"),
+                                      {{L"used", text}, {L"limit", limit}});
                 }
-                amount = text;
             }
             row.amount.Text(amount);
             show(row.amount, !amount.empty());
 
-            std::wstring reset = wu.notYetStarted ? L"Not yet started" :
-                                 wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+            std::wstring reset = wu.notYetStarted ? I18nText(locale, TrCtx(L"quota-reset", L"Not yet started")) :
+                                 wu.resetUnixMs   ? I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"),
+                                                             {{L"when", FormatReset(locale, wu.resetUnixMs)}}) :
+                                                    L"";
             row.reset.Text(reset);
             show(row.reset, !reset.empty());
         }
@@ -14280,11 +14917,16 @@ static void UpdateAccountFlyout(
 
         std::wstring freeResets;
         if (d.freeResets > 0) {
-            freeResets = std::to_wstring(d.freeResets) +
-                         (d.freeResets == 1 ? L" free reset available" : L" free resets available");
-            if (d.freeResetsExpiryMs > display.now) {
-                freeResets += L" \u00B7 next expires " + FormatReset(d.freeResetsExpiryMs);
-            }
+            freeResets =
+                d.freeResetsExpiryMs > display.now ?
+                    I18nText(locale,
+                             TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
+                                                   L"available}} \u00B7 next expires {when}"),
+                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs)}}) :
+                    I18nText(locale,
+                             TrCtx(L"free-resets",
+                                   L"{count, plural, one{# free reset available} other{# free resets available}}"),
+                             {{L"count", d.freeResets}});
         }
         popup.freeResets.Text(freeResets);
         show(popup.freeResets, !freeResets.empty());
@@ -14292,28 +14934,32 @@ static void UpdateAccountFlyout(
         show(popup.extraLines, !d.extraLines.empty());
         std::wstring error;
         if (d.error) {
-            error = L"Error: " + AccountErrorText(display.locale, d.error);
-            if (d.retryDeadlineMs > display.now) {
-                error += L" - retry in " +
-                         FormatShortDuration((d.retryDeadlineMs - display.now + 999) / 1000);
-            }
+            std::wstring message = AccountErrorText(locale, d.error);
+            error = d.retryDeadlineMs > display.now ?
+                        I18nText(locale, TrCtx(L"flyout-note", L"Error: {error} - retry in {duration}"),
+                                 {{L"error", message},
+                                  {L"duration",
+                                   FormatShortDuration(locale, (d.retryDeadlineMs - display.now + 999) / 1000)}}) :
+                        I18nText(locale, TrCtx(L"flyout-note", L"Error: {error}"), {{L"error", message}});
         }
         popup.error.Text(error);
         show(popup.error, !error.empty());
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
-            status = L"Sign-in required. Click the bars to sign in.";
+            status = I18nText(locale, TrCtx(L"flyout-note", L"Sign-in required. Click the bars to sign in."));
         } else if (!visibleRows && d.lastSuccessMs && error.empty() && d.extraLines.empty()) {
-            status = L"No quotas reported.";
+            status = I18nText(locale, TrCtx(L"flyout-note", L"No quotas reported."));
         }
         popup.status.Text(status);
         show(popup.status, !status.empty());
         show(popup.notes, !freeResets.empty() || !d.extraLines.empty() || !error.empty() ||
                               !status.empty());
 
-        std::wstring updated = display.visualTestMode ? L"Visual test data" :
-                                                        FormatUpdated(d.lastSuccessMs, display.stale);
-        if (display.refreshing) updated += L" - refreshing...";
+        std::wstring updated = display.visualTestMode ? I18nText(locale, TrCtx(L"flyout-footer", L"Visual test data")) :
+                                                        FormatUpdated(locale, d.lastSuccessMs, display.stale);
+        if (display.refreshing) {
+            updated = I18nText(locale, TrCtx(L"flyout-footer", L"{status} - refreshing..."), {{L"status", updated}});
+        }
         popup.updated.Text(updated);
     } catch (...) {
         Wh_Log(L"UpdateAccountFlyout: exception");
@@ -14575,7 +15221,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         setters.Append(Setter(Control::CornerRadiusProperty(),
                               winrt::box_value(CornerRadius{8, 8, 8, 8})));
         setters.Append(Setter(Control::FontFamilyProperty(),
-                              FontFamily(L"Segoe UI Variable Text, Segoe UI")));
+                              FontFamily(L"Segoe UI Variable Text, Segoe UI")));  // i18n-en
         setters.Append(Setter(FrameworkElement::MarginProperty(), winrt::box_value(Thickness{})));
         setters.Append(Setter(FrameworkElement::MinWidthProperty(), winrt::box_value(0.0)));
         setters.Append(Setter(FrameworkElement::MaxWidthProperty(), winrt::box_value(10000.0)));
@@ -14846,7 +15492,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
         // Context menu items with a Fluent icon; ClearQuotaEventState revokes their Click handlers.
         // Menus show outside the tree, so each item takes the language itself.
-        FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
+        FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");  // i18n-en
         auto menuIcon = [&](PCWSTR glyph) {
             FontIcon icon;
             icon.FontFamily(iconFont);
@@ -15540,7 +16186,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         // As in the details flyout, OpenAI's Spark plan name needs its extra
                         // limits shown.
                         if (provider == L"openai" && !showSparkPlan &&
-                            (plan.find(L"Spark") != std::wstring::npos ||
+                            (plan.find(L"Spark") != std::wstring::npos ||  // i18n-en: the plan's name
                              plan.find(L"spark") != std::wstring::npos)) {
                             plan.clear();
                         }
@@ -16457,9 +17103,9 @@ static bool InjectQuotaGrid(HWND hWnd) {
     QuotaUiInstance* state = nullptr;
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
-        if (!xamlRoot) return fail(L"no XamlRoot");
+        if (!xamlRoot) return fail(L"no XamlRoot");  // i18n-en: log text
         auto root = xamlRoot.Content().try_as<FrameworkElement>();
-        if (!root) return fail(L"no XamlRoot content");
+        if (!root) return fail(L"no XamlRoot content");  // i18n-en: log text
 
         // An earlier build gives its place back first: its tray column, or its room beside Start.
         state = FindUiState(hWnd);
@@ -16565,13 +17211,13 @@ static bool InjectQuotaGrid(HWND hWnd) {
             // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
             // Bail and let the retry loop poll until it appears; never inject elsewhere, which
             // would render the bars on top of the clock/tray.
-            if (!trayFrame) return fail(L"no SystemTrayFrameGrid");
+            if (!trayFrame) return fail(L"no SystemTrayFrameGrid");  // i18n-en: log text
             parent = trayFrame.try_as<Panel>();
             trayGrid = trayFrame.try_as<Grid>();
             // Newer Windows taskbars keep the name but use a StackPanel. Don't assume other
             // panel types share its child-order layout semantics.
             if (!parent || (!trayGrid && !trayFrame.try_as<StackPanel>())) {
-                std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";
+                std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";  // i18n-en: log text
                 reason += winrt::get_class_name(trayFrame);
                 return fail(reason.c_str());
             }
@@ -16608,12 +17254,12 @@ static bool InjectQuotaGrid(HWND hWnd) {
                     state = g_uiInstances->back().get();
                 }
             }
-            if (!state) return fail(L"UI state registry unavailable");
+            if (!state) return fail(L"UI state registry unavailable");  // i18n-en: log text
             if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
                     hWnd, TaskbarWindowSubclassProc, 0)) {
                 EraseUiState(hWnd);
                 state = nullptr;
-                return fail(L"window subclass failed");
+                return fail(L"window subclass failed");  // i18n-en: log text
             }
             state->windowSubclassed = true;
             // Remove a visual left by an earlier failed teardown, but don't guess which column
@@ -16629,7 +17275,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
             if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
                 ClearQuotaEventState(*state);
                 EraseUiState(hWnd);
-                return fail(L"side taskbar watch failed");
+                return fail(L"side taskbar watch failed");  // i18n-en: log text
             }
             Wh_Log(L"Side taskbar on hwnd=%p has a grid tray; no bars until it moves", hWnd);
             return true;
@@ -16642,7 +17288,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!quota) {
             RemoveQuotaGridFromState(*state);
             EraseUiState(hWnd);
-            return fail(L"BuildQuotaGrid failed");
+            return fail(L"BuildQuotaGrid failed");  // i18n-en: log text
         }
 
         // A tray slot without a neighbour is the tray's start for Before notification icons (and
@@ -16721,7 +17367,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
             RemoveQuotaGridFromState(*state);
             EraseUiState(hWnd);
-            return fail(L"taskbar edge watch failed");
+            return fail(L"taskbar edge watch failed");  // i18n-en: log text
         }
         if (reserved) {
             // Every layout pass anywhere in the taskbar raises it; on the bars' own root, the
@@ -17081,13 +17727,13 @@ static bool HookTaskbarDllSymbols() {
     if (!h) return false;
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},
-        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CSecondaryTaskBand_ITaskListWndSite_vftable},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &CTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"}, &CSecondaryTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},
-        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},
-        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},  // i18n-en: symbol names
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CSecondaryTaskBand_ITaskListWndSite_vftable},  // i18n-en: symbol names
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &CTaskBand_GetTaskbarHost_Original},  // i18n-en: symbol names
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"}, &CSecondaryTaskBand_GetTaskbarHost_Original},  // i18n-en: symbol names
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},  // i18n-en: symbol names
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},  // i18n-en: symbol names
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},  // i18n-en: symbol names
     };
     return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
@@ -17308,11 +17954,11 @@ static D2D1_COLOR_F UiInkColor(const UiPalette& p, UiInk ink) {
 // family with automatic optical size (ui/draw.h).
 enum class UiFamily : uint8_t { Text, Display, Icons, Small, Taskbar };
 static constexpr PCWSTR kUiFamilyNames[5][2] = {
-    {L"Segoe UI Variable Text", L"Segoe UI"},
-    {L"Segoe UI Variable Display", L"Segoe UI"},
-    {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},
-    {L"Segoe UI Variable Small", L"Segoe UI"},
-    {L"Segoe UI Variable", L"Segoe UI"},
+    {L"Segoe UI Variable Text", L"Segoe UI"},  // i18n-en
+    {L"Segoe UI Variable Display", L"Segoe UI"},  // i18n-en
+    {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},  // i18n-en
+    {L"Segoe UI Variable Small", L"Segoe UI"},  // i18n-en
+    {L"Segoe UI Variable", L"Segoe UI"},  // i18n-en
 };
 
 // Note: info bar text (mockup .infobar).

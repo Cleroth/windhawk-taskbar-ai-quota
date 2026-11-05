@@ -314,8 +314,11 @@ struct WindowUsage {
 // Anthropic's per-model and per-surface limits, OpenAI's additional rate limits, Antigravity's
 // other reported quotas.
 struct NamedQuota {
-    std::wstring name;
+    std::wstring name;  // As reported
     WindowUsage usage;
+    // The window whose length the flyout adds to the name (ExtraQuotaName): the one it was first
+    // listed with, kept when a later reading replaces `usage`.
+    ULONGLONG nameWindowMs = 0;
 };
 static constexpr size_t kMaxExtraQuotas = 8;
 
@@ -407,28 +410,33 @@ struct ProviderOutage {
     bool operator==(const ProviderOutage&) const = default;
 };
 
-// Adds a reported quota to the account's extra quotas, its name followed by its window's length
-// when known ("Sonnet weekly", "Spark 5-hour"). A quota under a name already listed replaces it
-// when more used; past kMaxExtraQuotas quotas are dropped.
+// Adds a reported quota to the account's extra quotas. One whose name reads as a listed one's in
+// English, its window's length included ("Sonnet weekly", "Spark 5-hour"), replaces that one's
+// reading when more used; past kMaxExtraQuotas quotas are dropped.
 static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage) {
     if (name.empty() || !std::isfinite(usage.pct) || usage.pct < 0) return;
     name.resize(std::min<size_t>(name.size(), 64));
-    constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000;
-    constexpr ULONGLONG kDayMs = 24 * kHourMs;
-    ULONGLONG durationMs = usage.windowDurationMs;
-    if (durationMs == kWeeklyWindowMs) {
-        name += L" weekly";
-    } else if (durationMs && durationMs % kDayMs == 0) {
-        name += L" " + std::to_wstring(durationMs / kDayMs) + L"-day";
-    } else if (durationMs && durationMs % kHourMs == 0) {
-        name += L" " + std::to_wstring(durationMs / kHourMs) + L"-hour";
-    }
+    // ExtraQuotaName's English, which the model can't format: the merge key.
+    auto english = [](const std::wstring& name, ULONGLONG durationMs) {
+        constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+        if (durationMs == kWeeklyWindowMs) return name + L" weekly";  // i18n-en
+        if (durationMs && durationMs % kDayMs == 0) {
+            return name + L" " + std::to_wstring(durationMs / kDayMs) + L"-day";  // i18n-en
+        }
+        if (durationMs && durationMs % kHourMs == 0) {
+            return name + L" " + std::to_wstring(durationMs / kHourMs) + L"-hour";  // i18n-en
+        }
+        return name;
+    };
+    std::wstring key = english(name, usage.windowDurationMs);
     for (NamedQuota& listed : d->extraQuotas) {
-        if (listed.name != name) continue;
+        if (english(listed.name, listed.nameWindowMs) != key) continue;
         if (usage.pct > listed.usage.pct) listed.usage = usage;
         return;
     }
-    if (d->extraQuotas.size() < kMaxExtraQuotas) d->extraQuotas.push_back({std::move(name), usage});
+    if (d->extraQuotas.size() < kMaxExtraQuotas) {
+        d->extraQuotas.push_back({std::move(name), usage, usage.windowDurationMs});
+    }
 }
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide

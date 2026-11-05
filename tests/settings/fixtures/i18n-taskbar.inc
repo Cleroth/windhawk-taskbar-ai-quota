@@ -2,8 +2,10 @@
 // quota keys and the headline countdown (its forms and its width reserve) in Simplified Chinese,
 // Russian and the pseudo-locale, the settings preview strip drawing them, an account error's
 // text per language with its English log rendering, and the Accounts page's state for the coded
-// error. Expected text is written out by hand from the production catalogs and the pseudo-locale's
-// rules.
+// error; the details flyout's extra quota names (plural forms around the reported name) with the
+// extra quotas' merging, the visual test samples' text, and the flyout's plural and nested
+// templates (free resets, the outage line, a reset line, a retry, a Copilot amount). Expected text
+// is written out by hand from the production catalogs and the pseudo-locale's rules.
 
 // Every account's keys, slot by slot: an Anthropic account's four, then Antigravity's Argon weekly,
 // OpenAI's credits, GitHub Copilot's and OpenCode Go's monthly.
@@ -239,5 +241,187 @@ static void RunI18nTaskbarTests() {
         }
         CHECK(std::find(chips.begin(), chips.end(), L"7\u5929") != chips.end() &&
               std::find(chips.begin(), chips.end(), L"7d") == chips.end());
+    });
+
+    Run("extra quota names: the reported name as is, then its window's length in whole hours with the "
+        "language's plural forms; English as before", [&] {
+        auto name = [](const I18nLocale& locale, std::wstring reported, ULONGLONG durationMs) {
+            return ExtraQuotaName(locale, {std::move(reported), {50, kNow + 60 * kMinute, durationMs}, durationMs});
+        };
+        CHECK(name({}, L"Sonnet", kWeeklyWindowMs) == L"Sonnet weekly");
+        CHECK(name({}, L"Spark", kFiveHourWindowMs) == L"Spark 5-hour");
+        CHECK(name({}, L"Gemini", 2 * day) == L"Gemini 2-day" && name({}, L"Gemini", day) == L"Gemini 1-day");
+        CHECK(name({}, L"Flash", 36 * hour) == L"Flash 36-hour" && name({}, L"Flash", hour) == L"Flash 1-hour");
+        CHECK(name({}, L"Raw bucket", 90 * kMinute) == L"Raw bucket");
+        CHECK(name({}, L"Argon current limit", 0) == L"Argon current limit");
+        // Russian: Gemini: 2 дня, 5 дней, 21 день, 11 дней; Flash: 1 час, 3 часа, 36 часов; Spark: 5 часов;
+        // Sonnet: неделя.
+        const I18nLocale ru = TestLocale(L"ru");
+        CHECK(name(ru, L"Gemini", 2 * day) == L"Gemini: 2 \u0434\u043D\u044F");
+        CHECK(name(ru, L"Gemini", 5 * day) == L"Gemini: 5 \u0434\u043D\u0435\u0439");
+        CHECK(name(ru, L"Gemini", 21 * day) == L"Gemini: 21 \u0434\u0435\u043D\u044C");
+        CHECK(name(ru, L"Gemini", 11 * day) == L"Gemini: 11 \u0434\u043D\u0435\u0439");
+        CHECK(name(ru, L"Flash", hour) == L"Flash: 1 \u0447\u0430\u0441");
+        CHECK(name(ru, L"Flash", 3 * hour) == L"Flash: 3 \u0447\u0430\u0441\u0430");
+        CHECK(name(ru, L"Flash", 36 * hour) == L"Flash: 36 \u0447\u0430\u0441\u043E\u0432");
+        CHECK(name(ru, L"Spark", kFiveHourWindowMs) == L"Spark: 5 \u0447\u0430\u0441\u043E\u0432");
+        CHECK(name(ru, L"Sonnet", kWeeklyWindowMs) == L"Sonnet: \u043D\u0435\u0434\u0435\u043B\u044F");
+        CHECK(name(ru, L"Raw bucket", 90 * kMinute) == L"Raw bucket");
+        // German: one and other; Japanese: 2 日間; Chinese: 每周.
+        const I18nLocale de = TestLocale(L"de");
+        CHECK(name(de, L"Spark", kFiveHourWindowMs) == L"Spark (5 Stunden)" && name(de, L"Spark", hour) == L"Spark (1 Stunde)");
+        CHECK(name(de, L"Gemini", 2 * day) == L"Gemini (2 Tage)" && name(de, L"Gemini", day) == L"Gemini (1 Tag)");
+        CHECK(name(de, L"Sonnet", kWeeklyWindowMs) == L"Sonnet w\u00F6chentlich");
+        CHECK(name(TestLocale(L"ja"), L"Gemini", 2 * day) == L"Gemini 2 \u65E5\u9593");
+        CHECK(name(TestLocale(L"zh-Hans"), L"Sonnet", kWeeklyWindowMs) == L"Sonnet \u6BCF\u5468");
+
+        // Quotas whose names read alike in English, the window's length included, merge: the more used
+        // reading stays under the first one's name. A repeated window, windows without a length in
+        // whole hours, and a name that spells out another's length; another window lists apart.
+        AccountData data;
+        AddExtraQuota(&data, L"Spark", {30, kNow + hour, kFiveHourWindowMs});
+        AddExtraQuota(&data, L"Spark", {60, kNow + hour, kWeeklyWindowMs});
+        AddExtraQuota(&data, L"Spark", {40, kNow + hour, kFiveHourWindowMs});
+        AddExtraQuota(&data, L"Spark", {20, kNow + hour, kFiveHourWindowMs});
+        AddExtraQuota(&data, L"Raw", {10, 0, 0});
+        AddExtraQuota(&data, L"Raw", {15, 0, 90 * kMinute});
+        AddExtraQuota(&data, L"Other", {10, 0, day});
+        AddExtraQuota(&data, L"Other 1-day", {25, 0, 0});
+        AddExtraQuota(&data, L"Pro weekly", {5, 0, 0});
+        AddExtraQuota(&data, L"Pro", {35, 0, kWeeklyWindowMs});
+        std::vector<std::wstring> names;
+        std::vector<double> used;
+        for (const NamedQuota& quota : data.extraQuotas) {
+            names.push_back(ExtraQuotaName({}, quota));
+            used.push_back(quota.usage.pct);
+        }
+        CHECK((names == std::vector<std::wstring>{L"Spark 5-hour", L"Spark weekly", L"Raw", L"Other 1-day",
+                                                  L"Pro weekly"}));
+        CHECK((used == std::vector<double>{40, 60, 15, 25, 35}));
+        // The merged readings keep their own windows: the Other row's has none now, the Pro row's a week.
+        CHECK(data.extraQuotas[3].usage.windowDurationMs == 0 && data.extraQuotas[4].usage.windowDurationMs == kWeeklyWindowMs);
+    });
+
+    Run("visual test samples: the plan chip in the display's language; labels, model names and the sample "
+        "incident as written", [] {
+        auto build = [](const I18nLocale& locale) {
+            std::vector<AccountConfig> accounts;
+            std::vector<AccountData> data;
+            BuildVisualTestSnapshot(MeterDisplayFor(Settings{}, locale, kNow, 1, 48), &accounts, &data);
+            return std::pair{accounts, data};
+        };
+        auto names = [](const AccountData& data, const I18nLocale& locale) {
+            std::vector<std::wstring> found;
+            for (const NamedQuota& quota : data.extraQuotas) found.push_back(ExtraQuotaName(locale, quota));
+            return found;
+        };
+        const I18nLocale zh = TestLocale(L"zh-Hans");
+        auto [accounts, data] = build(zh);
+        // 视觉测试
+        CHECK(data.size() == 4 && data[0].plan == L"\u89C6\u89C9\u6D4B\u8BD5" && data[3].plan == data[0].plan);
+        CHECK(accounts[0].label == L"OAI" && accounts[1].label == L"CC 1" && accounts[2].label == L"CC 2" &&
+              accounts[3].label == L"Go");
+        // The OAI sample's Spark limits and CC 2's model weeklies: English as before; Chinese around the names.
+        CHECK((names(data[0], {}) == std::vector<std::wstring>{L"Spark 5-hour", L"Spark weekly"}));
+        CHECK((names(data[2], {}) == std::vector<std::wstring>{L"Sonnet weekly", L"Opus weekly"}));
+        CHECK((names(data[2], zh) == std::vector<std::wstring>{L"Sonnet \u6BCF\u5468", L"Opus \u6BCF\u5468"}));
+        // Визуальный тест
+        CHECK(build(TestLocale(L"ru")).second[1].plan ==
+              L"\u0412\u0438\u0437\u0443\u0430\u043B\u044C\u043D\u044B\u0439 \u0442\u0435\u0441\u0442");
+        CHECK(build({}).second[1].plan == L"Visual test");
+        ProviderOutage outage = VisualTestOutage(L"openai", kNow);
+        CHECK(outage.component == L"Codex API" && outage.title == L"Elevated error rates");
+    });
+
+    Run("details flyout templates on the production catalogs: Russian free resets by plural form and with "
+        "the next expiry; the French outage line's others (one for 0 and 1) and a Russian one through its "
+        "start and incident; a German reset line and retry; a Russian Copilot amount; English as before", [] {
+        const I18nLocale ru = TestLocale(L"ru"), fr = TestLocale(L"fr"), de = TestLocale(L"de");
+        auto freeResets = [](const I18nLocale& locale, int count) {
+            return I18nText(locale, TrCtx(L"free-resets",
+                                          L"{count, plural, one{# free reset available} other{# free resets available}}"),
+                            {{L"count", count}});
+        };
+        CHECK(freeResets({}, 1) == L"1 free reset available" && freeResets({}, 2) == L"2 free resets available");
+        // Доступен 1 бесплатный сброс; Доступно 2 бесплатных сброса; Доступно 5 бесплатных сбросов; Доступен 21
+        // бесплатный сброс.
+        CHECK(freeResets(ru, 1) == L"\u0414\u043E\u0441\u0442\u0443\u043F\u0435\u043D 1 \u0431\u0435\u0441\u043F"
+                                   L"\u043B\u0430\u0442\u043D\u044B\u0439 \u0441\u0431\u0440\u043E\u0441");
+        CHECK(freeResets(ru, 2) == L"\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E 2 \u0431\u0435\u0441\u043F"
+                                   L"\u043B\u0430\u0442\u043D\u044B\u0445 \u0441\u0431\u0440\u043E\u0441\u0430");
+        CHECK(freeResets(ru, 5) == L"\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E 5 \u0431\u0435\u0441\u043F"
+                                   L"\u043B\u0430\u0442\u043D\u044B\u0445 \u0441\u0431\u0440\u043E\u0441\u043E\u0432");
+        CHECK(freeResets(ru, 21) == L"\u0414\u043E\u0441\u0442\u0443\u043F\u0435\u043D 21 \u0431\u0435\u0441\u043F"
+                                    L"\u043B\u0430\u0442\u043D\u044B\u0439 \u0441\u0431\u0440\u043E\u0441");
+        // через 2 д, then: Доступно 3 бесплатных сброса · ближайший истекает через 2 д.
+        std::wstring when = I18nText(ru, TrCtx(L"reset-when", L"in {duration}"),
+                                     {{L"duration", I18nText(ru, TrCtx(L"duration", L"{days}d"), {{L"days", 2}})}});
+        CHECK(when == L"\u0447\u0435\u0440\u0435\u0437 2 \u0434");
+        CHECK(I18nText(ru, TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
+                                                 L"available}} \u00B7 next expires {when}"),
+                       {{L"count", 3}, {L"when", when}}) ==
+              L"\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E 3 \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D"
+              L"\u044B\u0445 \u0441\u0431\u0440\u043E\u0441\u0430 \u00B7 \u0431\u043B\u0438\u0436\u0430\u0439\u0448"
+              L"\u0438\u0439 \u0438\u0441\u0442\u0435\u043A\u0430\u0435\u0442 \u0447\u0435\u0440\u0435\u0437 2 "
+              L"\u0434");
+
+        auto others = [](const I18nLocale& locale, int count) {
+            return I18nText(locale, TrCtx(L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: "
+                                                          L"{level}"),
+                            {{L"component", L"Codex API"},
+                             {L"count", count},
+                             {L"level", I18nText(locale, TrCtx(L"outage-level", L"partial outage"))}});
+        };
+        CHECK(others({}, 1) == L"Codex API and 1 more: partial outage");
+        CHECK(others(fr, 1) == L"Codex API et 1 autre\u00A0: panne partielle");
+        CHECK(others(fr, 0) == L"Codex API et 0 autre\u00A0: panne partielle");
+        CHECK(others(fr, 2) == L"Codex API et 2 autres\u00A0: panne partielle");
+        // Codex API: снижение производительности · с 14:05 · Elevated error rates (the incident as written).
+        std::wstring line = I18nText(ru, TrCtx(L"outage-line", L"{component}: {level}"),
+                                     {{L"component", L"Codex API"},
+                                      {L"level", I18nText(ru, TrCtx(L"outage-level", L"degraded performance"))}});
+        line = I18nText(ru, TrCtx(L"outage-line", L"{status} \u00B7 since {time}"), {{L"status", line}, {L"time", L"14:05"}});
+        line = I18nText(ru, TrCtx(L"outage-line", L"{status} \u00B7 {incident}"),
+                        {{L"status", line}, {L"incident", L"Elevated error rates"}});
+        CHECK(line == L"Codex API: \u0441\u043D\u0438\u0436\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0438\u0437"
+                      L"\u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u0438 \u00B7 \u0441 "
+                      L"14:05 \u00B7 Elevated error rates");
+
+        // Reset in 3 T. 4 Std. (Fr 04:59): the duration in the reset phrase in the line; English before.
+        auto resets = [](const I18nLocale& locale) {
+            std::wstring duration =
+                I18nText(locale, TrCtx(L"duration", L"{days}d {hours}h"), {{L"days", 3}, {L"hours", 4}});
+            std::wstring when = I18nText(locale, TrCtx(L"reset-when", L"in {duration} ({time})"),
+                                         {{L"duration", duration}, {L"time", L"Fr 04:59"}});
+            return I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"), {{L"when", when}});
+        };
+        CHECK(resets({}) == L"Resets in 3d 4h (Fr 04:59)");
+        CHECK(resets(de) == L"Reset in 3 T. 4 Std. (Fr 04:59)");
+        // Fehler: Antigravity läuft nicht – neuer Versuch in 4 Min. 12 Sek.
+        auto retry = [](const I18nLocale& locale) {
+            return I18nText(locale, TrCtx(L"flyout-note", L"Error: {error} - retry in {duration}"),
+                            {{L"error", AccountErrorText(locale, {AccountErrorCode::AntigravityNotRunning})},
+                             {L"duration", I18nText(locale, TrCtx(L"duration", L"{minutes}m {seconds}s"),
+                                                    {{L"minutes", 4}, {L"seconds", 12}})}});
+        };
+        CHECK(retry({}) == L"Error: Antigravity not running - retry in 4m 12s");
+        CHECK(retry(de) == L"Fehler: Antigravity l\u00E4uft nicht \u2013 neuer Versuch in 4 Min. 12 Sek.");
+
+        // Использовано 12.5 из 300 (премиум-запросы), then Дополнительно: 4 (премиум-запросы): the unit's
+        // running-text name as an argument, twice on two lines.
+        auto copilot = [](const I18nLocale& locale) {
+            return I18nText(locale, TrCtx(L"quota-amount", L"{used} of {limit} {unit} used\n"
+                                                           L"Additional usage: {overage} {unit}"),
+                            {{L"used", L"12.5"},
+                             {L"limit", L"300"},
+                             {L"unit", I18nText(locale, TrCtx(L"copilot-unit", L"premium requests"))},
+                             {L"overage", L"4"}});
+        };
+        CHECK(copilot({}) == L"12.5 of 300 premium requests used\nAdditional usage: 4 premium requests");
+        CHECK(copilot(ru) == L"\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u043E 12.5 \u0438"
+                             L"\u0437 300 (\u043F\u0440\u0435\u043C\u0438\u0443\u043C-\u0437\u0430\u043F\u0440\u043E"
+                             L"\u0441\u044B)\n\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C"
+                             L"\u043D\u043E: 4 (\u043F\u0440\u0435\u043C\u0438\u0443\u043C-\u0437\u0430\u043F\u0440"
+                             L"\u043E\u0441\u044B)");
     });
 }

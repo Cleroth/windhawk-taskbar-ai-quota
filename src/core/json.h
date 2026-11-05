@@ -26,8 +26,9 @@ static bool GetBool(JsonObject const& o, PCWSTR name) {
     return v.ValueType() == JsonValueType::Boolean && v.GetBoolean();
 }
 
+// A response body's shape, for an error's detail.
 static std::wstring DescribeJsonBody(const std::string& body) {
-    if (body.empty()) return L"empty body";
+    if (body.empty()) return L"empty body";  // i18n-en
 
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
@@ -43,8 +44,8 @@ static std::wstring DescribeJsonBody(const std::string& body) {
             keys += std::wstring(key.c_str(), key.size());
             count++;
         }
-        return keys.empty() ? L"JSON object with no keys" : L"keys: " + keys;
+        return keys.empty() ? L"JSON object with no keys" : L"keys: " + keys;  // i18n-en
     } catch (...) {
-        return L"non-object or invalid JSON body";
+        return L"non-object or invalid JSON body";  // i18n-en
     }
 }

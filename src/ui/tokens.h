@@ -213,11 +213,11 @@ static D2D1_COLOR_F UiInkColor(const UiPalette& p, UiInk ink) {
 // family with automatic optical size (ui/draw.h).
 enum class UiFamily : uint8_t { Text, Display, Icons, Small, Taskbar };
 static constexpr PCWSTR kUiFamilyNames[5][2] = {
-    {L"Segoe UI Variable Text", L"Segoe UI"},
-    {L"Segoe UI Variable Display", L"Segoe UI"},
-    {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},
-    {L"Segoe UI Variable Small", L"Segoe UI"},
-    {L"Segoe UI Variable", L"Segoe UI"},
+    {L"Segoe UI Variable Text", L"Segoe UI"},  // i18n-en
+    {L"Segoe UI Variable Display", L"Segoe UI"},  // i18n-en
+    {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"},  // i18n-en
+    {L"Segoe UI Variable Small", L"Segoe UI"},  // i18n-en
+    {L"Segoe UI Variable", L"Segoe UI"},  // i18n-en
 };
 
 // Note: info bar text (mockup .infobar).

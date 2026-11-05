@@ -4,7 +4,7 @@
 // a PathIcon, which inherits the surrounding text color like a TextBlock. Throws if it fails to
 // load.
 static FrameworkElement LoadProviderLogoShape(std::wstring const& provider, Brush const& fill) {
-    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";
+    std::wstring xaml = fill ? L"<Path" : L"<PathIcon";  // i18n-en: XAML
     xaml += L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"";
     xaml += ProviderLogoPath(provider);
     xaml += L"\"/>";

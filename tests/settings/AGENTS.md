@@ -67,8 +67,10 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   `fixtures/i18n-taskbar.inc`: the meter model's localized text on the production catalogs: the
   quota keys and the headline countdown's forms and width reserve in zh-Hans, ru and the
   pseudo-locale, the preview strip drawing them (the matrix's localized key reserve), an account
-  error's text per language with its English log rendering, and the Accounts page's state for
-  the coded error.
+  error's text per language with its English log rendering, the Accounts page's state for the
+  coded error, the details flyout's extra quota names (plural forms around the reported name)
+  and the extra quotas' merging, the visual test samples' text, and the flyout's plural and
+  nested templates (free resets, the outage line, a reset line, a retry, a Copilot amount).
   `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,

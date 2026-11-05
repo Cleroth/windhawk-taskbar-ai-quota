@@ -42,46 +42,32 @@ static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(Account
             &d.antigravityThirdPartyWeek, &d.extraUsage};
 }
 
-// "1d 3h", "2h 15m", "4m 12s" or "45s".
-static std::wstring FormatShortDuration(ULONGLONG seconds) {
-    ULONGLONG days = seconds / (24 * 60 * 60);
-    ULONGLONG hours = seconds / (60 * 60) % 24;
-    ULONGLONG minutes = seconds / 60 % 60;
-    ULONGLONG secs = seconds % 60;
-    wchar_t text[48];
-    if (days > 0) {
-        swprintf(text, ARRAYSIZE(text), hours ? L"%llud %lluh" : L"%llud", days, hours);
-    } else if (hours > 0) {
-        swprintf(text, ARRAYSIZE(text), minutes ? L"%lluh %llum" : L"%lluh", hours, minutes);
-    } else if (minutes > 0) {
-        swprintf(text, ARRAYSIZE(text), secs ? L"%llum %llus" : L"%llum", minutes, secs);
-    } else {
-        swprintf(text, ARRAYSIZE(text), L"%llus", secs);
-    }
-    return text;
-}
-
 // A projection's text when it reaches the limit before the reset, naming its rate's span, as the
 // details flyout and threshold notifications show it; empty otherwise.
-static std::wstring LimitProjectionText(const std::optional<UsageProjection>& projected,
+static std::wstring LimitProjectionText(const I18nLocale& locale, const std::optional<UsageProjection>& projected,
                                         const WindowUsage& reading) {
     if (!projected || !projected->limit) return {};
-    std::wstring rate = L"this window's average rate";
+    ULONGLONG minutes = std::max<ULONGLONG>(1, (projected->toMs - projected->fromMs + 59999) / 60000);
+    std::wstring duration = FormatShortDuration(locale, minutes * 60);
     SYSTEMTIME since;
     if (projected->sinceMs + kProjectionLookbackMs == projected->fromMs) {
-        rate = L"the last 24h's rate";
-    } else if (projected->sinceMs != reading.resetUnixMs - reading.windowDurationMs &&
-               UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
-        rate = L"the rate since " + FormatLocalDayTime(since);
+        return I18nText(locale, TrCtx(L"usage-projection", L"At the last 24h's rate: limit in ~{duration}"),
+                        {{L"duration", duration}});
     }
-    ULONGLONG minutes = std::max<ULONGLONG>(1, (projected->toMs - projected->fromMs + 59999) / 60000);
-    return L"At " + rate + L": limit in ~" + FormatShortDuration(minutes * 60);
+    if (projected->sinceMs != reading.resetUnixMs - reading.windowDurationMs &&
+        UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
+        return I18nText(locale, TrCtx(L"usage-projection", L"At the rate since {time}: limit in ~{duration}"),
+                        {{L"time", FormatLocalDayTime(since)}, {L"duration", duration}});
+    }
+    return I18nText(locale, TrCtx(L"usage-projection", L"At this window's average rate: limit in ~{duration}"),
+                    {{L"duration", duration}});
 }
 
 // Fetch thread: the flyout's projection text for a fresh reading of a taskbar slot, from the
-// account's published curve (the flyout row's) and its lookback. Takes the settings and data
-// locks; call holding neither.
-static std::wstring NotificationProjectionText(uint64_t historyId, int slot, const WindowUsage& reading) {
+// account's published curve (the flyout row's) and its lookback, in the notification's language.
+// Takes the settings and data locks; call holding neither.
+static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
+                                               const WindowUsage& reading) {
     static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow, kFlyoutFableRow,
                                                   kFlyoutExtraRow};
     std::vector<TileTracePoint> trace;
@@ -89,7 +75,8 @@ static std::wstring NotificationProjectionText(uint64_t historyId, int slot, con
         for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
     }
     return LimitProjectionText(
-        ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs), reading);
+        locale, ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
+        reading);
 }
 
 // Builds the card for `provider` into state.flyout.popup, registering its button delegates there
@@ -99,8 +86,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     FlyoutPopup& popup = state.flyout.popup;
     FlyoutTheme const& theme = popup.theme;
     const I18nLocale& locale = state.buildLocale;
-    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
-    FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
+    FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");  // i18n-en
     auto makeText = [](double size, Brush const& brush) {
         TextBlock text;
         text.FontSize(size);
@@ -530,8 +517,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     wuxs::Line projectionKey;
     projectionStroke(projectionKey);
     projectionKey.Stroke(theme.chartKey);
-    for (auto [key, name] : {std::pair{paceKey, L"even pace"},
-                             std::pair{projectionKey, L"projection"}}) {
+    for (auto [key, name] : {std::pair{paceKey, I18nText(locale, TrCtx(L"flyout-legend", L"even pace"))},
+                             std::pair{projectionKey, I18nText(locale, TrCtx(L"flyout-legend", L"projection"))}}) {
         key.X1(1);
         key.X2(15);
         key.Y1(1);
@@ -550,7 +537,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     legendGrid.Children().Append(keys);
     TextBlock source = makeText(11, theme.mutedText);
     singleLine(source);
-    source.Text(L"from local history");
+    source.Text(I18nText(locale, TrCtx(L"flyout-legend", L"from local history")));
     source.TextAlignment(TextAlignment::Right);
     source.VerticalAlignment(VerticalAlignment::Center);
     Grid::SetColumn(source, 1);
@@ -693,11 +680,12 @@ static void UpdateAccountFlyout(
     bool antigravity = account.provider == L"antigravity";
     bool copilot = account.provider == L"copilot";
     bool opencode = account.provider == L"opencode";
+    const I18nLocale& locale = display.locale;
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
         show(popup.staleMarker, display.warn);
-        bool sparkPlan = d.plan.find(L"Spark") != std::wstring::npos ||
+        bool sparkPlan = d.plan.find(L"Spark") != std::wstring::npos ||  // i18n-en: the plan's name
                          d.plan.find(L"spark") != std::wstring::npos;
         std::wstring plan = openAi && sparkPlan && !display.showOpenAiExtraLimits ? L"" : d.plan;
         popup.plan.Text(plan);
@@ -709,21 +697,33 @@ static void UpdateAccountFlyout(
         const ProviderOutage& outage = display.outage;
         show(popup.outage, outage.level != OutageLevel::None);
         if (popup.outageText && popup.outageButton && outage.level != OutageLevel::None) {
-            std::wstring line = outage.component;
-            if (outage.others > 0) line += L" and " + std::to_wstring(outage.others) + L" more";
-            line += outage.level == OutageLevel::Major   ? L": major outage" :
-                    outage.level == OutageLevel::Partial ? L": partial outage" :
-                    outage.level == OutageLevel::Degraded ? L": degraded performance" : L": under maintenance";
+            std::wstring level = I18nText(
+                locale, outage.level == OutageLevel::Major    ? TrCtx(L"outage-level", L"major outage") :
+                        outage.level == OutageLevel::Partial  ? TrCtx(L"outage-level", L"partial outage") :
+                        outage.level == OutageLevel::Degraded ? TrCtx(L"outage-level", L"degraded performance") :
+                                                                TrCtx(L"outage-level", L"under maintenance"));
+            std::wstring line =
+                outage.others > 0 ?
+                    I18nText(locale,
+                             TrCtx(L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: {level}"),
+                             {{L"component", outage.component}, {L"count", outage.others}, {L"level", level}}) :
+                    I18nText(locale, TrCtx(L"outage-line", L"{component}: {level}"),
+                             {{L"component", outage.component}, {L"level", level}});
             SYSTEMTIME since;
             if (outage.sinceMs && UnixMsToLocalSystemTime(outage.sinceMs, &since)) {
                 bool today = outage.sinceMs + 24ULL * 60 * 60 * 1000 > display.now;
-                line += L" \u00B7 since " + (today ? FormatLocalTime(since) : FormatLocalDayTime(since));
+                line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 since {time}"),
+                                {{L"status", line}, {L"time", today ? FormatLocalTime(since) : FormatLocalDayTime(since)}});
             }
-            if (!outage.title.empty()) line += L" \u00B7 " + outage.title;
+            if (!outage.title.empty()) {
+                line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 {incident}"),
+                                {{L"status", line}, {L"incident", outage.title}});
+            }
             if (std::wstring_view(popup.outageText.Text()) != line) {
                 popup.outageText.Text(line);
-                std::wstring tip = line + L"\nOpen the " + ProviderDisplayName(account.provider) + L" status page";
-                ToolTipService::SetToolTip(popup.outageButton, winrt::box_value(tip));
+                std::wstring tip = I18nText(locale, TrCtx(L"outage-action", L"{status}\nOpen the {provider} status page"),
+                                            {{L"status", line}, {L"provider", ProviderDisplayName(account.provider)}});
+                SetXamlToolTip(popup.outageButton, tip, locale);
                 winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(popup.outageButton, tip);
             }
             if (theme.highContrast || !display.outageColor) {
@@ -733,12 +733,15 @@ static void UpdateAccountFlyout(
             }
         }
 
-        // Antigravity pools are named by their reported window.
-        auto poolName = [](PCWSTR pool, ULONGLONG durationMs) {
-            return std::wstring(pool) +
-                   (durationMs == 3ULL * 60 * 60 * 1000 ? L" 3h" :
-                    durationMs == 60ULL * 60 * 1000 ? L" 1h" :
-                    durationMs == 0 ? L" current limit" : L" 5h");
+        // Antigravity pools are named by their reported window; the pools' and models' names stay
+        // as written.
+        auto poolName = [&](PCWSTR pool, ULONGLONG durationMs) {
+            if (!durationMs) return I18nText(locale, TrCtx(L"quota-name", L"{name} current limit"), {{L"name", pool}});
+            int hours = durationMs == 3ULL * 60 * 60 * 1000 ? 3 : durationMs == 60ULL * 60 * 1000 ? 1 : 5;
+            return I18nText(locale, TrCtx(L"quota-name", L"{name} {hours}h"), {{L"name", pool}, {L"hours", hours}});
+        };
+        auto weekly = [&](PCWSTR name) {
+            return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", name}});
         };
         // OpenAI credits form a percentage only against the user's max and its selected bar;
         // otherwise the balance is shown as an amount.
@@ -748,9 +751,7 @@ static void UpdateAccountFlyout(
         // GitHub Copilot's monthly allowance, in its unit, which also names its row: a percentage
         // of a finite allowance, else an unlimited pooled one without. Credits are fractional:
         // two decimals at most, trailing zeros trimmed.
-        PCWSTR copilotUnit = CopilotUnitName(d.copilotUnit);
-        std::wstring copilotRow = copilotUnit;
-        copilotRow[0] = wchar_t(towupper(copilotRow[0]));
+        std::wstring copilotUnit = CopilotUnitName(locale, d.copilotUnit);
         auto copilotAmount = [](double amount) {
             wchar_t number[64];
             swprintf(number, ARRAYSIZE(number), L"%.2f", amount);
@@ -759,21 +760,31 @@ static void UpdateAccountFlyout(
             if (trimmed.ends_with(L'.')) trimmed.pop_back();
             return trimmed;
         };
-        std::wstring copilotOverage = copilot && d.copilotOverage > 0 ?
-            L"\nAdditional usage: " + copilotAmount(d.copilotOverage) + L" " + copilotUnit : L"";
+        // Past a finite allowance, or beside a pooled one, the additional usage on a line of its own.
+        bool overage = copilot && d.copilotOverage > 0;
+        std::wstring overageAmount = overage ? copilotAmount(d.copilotOverage) : L"";
         struct RowSource {
             std::wstring name;
             bool available;
         };
         const std::array<RowSource, kFlyoutRowCount> sources = {{
-            {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) : L"5-hour",
+            {antigravity ? poolName(L"Gemini", d.win5h.windowDurationMs) :  // i18n-en
+                           I18nText(locale, TrCtx(L"quota-name", L"5-hour")),
              d.win5h.pct >= 0},
-            {antigravity ? L"Gemini weekly" : L"Weekly", d.winWeek.pct >= 0},
-            {antigravity ? L"Argon weekly" : L"Fable weekly", d.fableWeek.pct >= 0},
-            {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),
+            {antigravity ? weekly(L"Gemini") : I18nText(locale, TrCtx(L"quota-name", L"Weekly")),  // i18n-en
+             d.winWeek.pct >= 0},
+            {weekly(antigravity ? L"Argon" : L"Fable"), d.fableWeek.pct >= 0},  // i18n-en
+            {poolName(L"Claude/GPT", d.antigravityThirdParty5h.windowDurationMs),  // i18n-en
              antigravity && d.antigravityThirdParty5h.pct >= 0},
-            {L"Claude/GPT weekly", antigravity && d.antigravityThirdPartyWeek.pct >= 0},
-            {openAi ? L"Credits" : copilot ? copilotRow : opencode ? L"Monthly" : L"Extra usage",
+            {weekly(L"Claude/GPT"), antigravity && d.antigravityThirdPartyWeek.pct >= 0},  // i18n-en
+            {I18nText(locale, openAi   ? TrCtx(L"quota-name", L"Credits") :
+                              copilot  ? d.copilotUnit == CopilotUnit::PremiumRequests ?
+                                             TrCtx(L"quota-name", L"Premium requests") :
+                                         d.copilotUnit == CopilotUnit::ChatRequests ?
+                                             TrCtx(L"quota-name", L"Chat requests") :
+                                             TrCtx(L"quota-name", L"AI credits") :
+                              opencode ? TrCtx(L"quota-name", L"Monthly") :
+                                         TrCtx(L"quota-name", L"Extra usage")),
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
         const auto readings = FlyoutRowReadings(d);
@@ -796,14 +807,15 @@ static void UpdateAccountFlyout(
             if (!available) continue;
             visibleRows++;
             const WindowUsage& wu = r >= 0 ? *readings[r] : d.extraQuotas[extra].usage;
-            row.name.Text(r >= 0 ? sources[r].name : d.extraQuotas[extra].name);
+            row.name.Text(r >= 0 ? sources[r].name : ExtraQuotaName(locale, d.extraQuotas[extra]));
 
             if (r == kFlyoutExtraRow && creditsAmount) {
                 bool balance = !d.creditsUnlimited && d.creditsBalance >= 0;
                 if (balance) swprintf(text, ARRAYSIZE(text), L"%.0f", d.creditsBalance);
-                row.number.Text(d.creditsUnlimited ? L"Unlimited" :
-                                balance ? text : L"Available");
-                row.unit.Text(balance ? L"left" : L"");
+                row.number.Text(d.creditsUnlimited ? I18nText(locale, TrCtx(L"quota-value", L"Unlimited")) :
+                                balance            ? std::wstring(text) :
+                                                     I18nText(locale, TrCtx(L"quota-value", L"Available")));
+                row.unit.Text(balance ? I18nText(locale, TrCtx(L"quota-unit", L"left")) : L"");
                 row.unit.Foreground(theme.mutedText);
                 show(row.trend, false);
                 show(row.visual, false);
@@ -821,17 +833,25 @@ static void UpdateAccountFlyout(
                 // No percentage: the pool's credits used when reported, else that it's unlimited,
                 // or used up.
                 bool used = !d.copilotExhausted && d.extraUsedAmount >= 0;
-                row.number.Text(d.copilotExhausted ? L"Used up" : used ? copilotAmount(d.extraUsedAmount) :
-                                                                         L"Unlimited");
-                row.unit.Text(used ? L"used" : L"");
+                row.number.Text(d.copilotExhausted ? I18nText(locale, TrCtx(L"quota-value", L"Used up")) :
+                                used               ? copilotAmount(d.extraUsedAmount) :
+                                                     I18nText(locale, TrCtx(L"quota-value", L"Unlimited")));
+                row.unit.Text(used ? I18nText(locale, TrCtx(L"quota-unit", L"used")) : L"");
                 row.unit.Foreground(theme.mutedText);
                 show(row.trend, false);
                 show(row.visual, false);
                 show(row.chart, false);
                 show(row.projection, false);
-                row.amount.Text(L"Pooled " + std::wstring(copilotUnit) + L", no per-user limit" + copilotOverage);
+                row.amount.Text(overage ? I18nText(locale,
+                                                   TrCtx(L"quota-amount", L"Pooled {unit}, no per-user limit\n"
+                                                                          L"Additional usage: {overage} {unit}"),
+                                                   {{L"unit", copilotUnit}, {L"overage", overageAmount}}) :
+                                          I18nText(locale, TrCtx(L"quota-amount", L"Pooled {unit}, no per-user limit"),
+                                                   {{L"unit", copilotUnit}}));
                 show(row.amount, true);
-                std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+                std::wstring reset = wu.resetUnixMs ? I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"),
+                                                               {{L"when", FormatReset(locale, wu.resetUnixMs)}}) :
+                                                      L"";
                 row.reset.Text(reset);
                 show(row.reset, !reset.empty());
                 continue;
@@ -841,7 +861,7 @@ static void UpdateAccountFlyout(
             double shownPct = remainingMode ? std::clamp(100.0 - wu.pct, 0.0, 100.0) : wu.pct;
             swprintf(text, ARRAYSIZE(text), L"%.0f%%", shownPct);
             row.number.Text(text);
-            row.unit.Text(remainingMode ? L"left" : L"used");
+            row.unit.Text(I18nText(locale, remainingMode ? TrCtx(L"quota-unit", L"left") : TrCtx(L"quota-unit", L"used")));
             // An OpenCode Go window at its limit: the number in the warning color, and a note.
             int slot = r == kFlyoutFiveHourRow ? kFiveHourBar : r == kFlyoutWeeklyRow ? kWeeklyBar :
                        r == kFlyoutExtraRow ? kExtraUsageBar : -1;
@@ -890,7 +910,7 @@ static void UpdateAccountFlyout(
                 projected = ProjectUsage(wu, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
-            std::wstring projection = LimitProjectionText(projected, wu);
+            std::wstring projection = LimitProjectionText(locale, projected, wu);
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
 
@@ -998,27 +1018,40 @@ static void UpdateAccountFlyout(
 
             std::wstring amount;
             if (limited) {
-                amount = L"Limit reached";
+                amount = I18nText(locale, TrCtx(L"quota-amount", L"Limit reached"));
             } else if (r == kFlyoutExtraRow && copilot) {
                 // Past the allowance the bar stays full; the additional usage gets its own line.
-                amount = copilotAmount(d.extraUsedAmount) + L" of " + copilotAmount(d.extraLimitAmount) + L" " +
-                         copilotUnit + L" used" + copilotOverage;
+                amount = I18nText(locale,
+                                  overage ? TrCtx(L"quota-amount", L"{used} of {limit} {unit} used\n"
+                                                                   L"Additional usage: {overage} {unit}") :
+                                            TrCtx(L"quota-amount", L"{used} of {limit} {unit} used"),
+                                  {{L"used", copilotAmount(d.extraUsedAmount)},
+                                   {L"limit", copilotAmount(d.extraLimitAmount)},
+                                   {L"unit", copilotUnit},
+                                   {L"overage", overageAmount}});
             } else if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
-                // Credits state the balance so the text reads the same in both bar modes.
+                // Credits state the balance so the text reads the same in both bar modes. Amounts are
+                // whole credits, or US dollars to the cent, in every language.
+                wchar_t limit[ARRAYSIZE(text)];
                 if (openAi) {
-                    swprintf(text, ARRAYSIZE(text), L"%.0f left of %.0f credits",
-                             d.extraLimitAmount - d.extraUsedAmount, d.extraLimitAmount);
+                    swprintf(text, ARRAYSIZE(text), L"%.0f", d.extraLimitAmount - d.extraUsedAmount);
+                    swprintf(limit, ARRAYSIZE(limit), L"%.0f", d.extraLimitAmount);
+                    amount = I18nText(locale, TrCtx(L"quota-amount", L"{left} left of {limit} credits"),
+                                      {{L"left", text}, {L"limit", limit}});
                 } else {
-                    swprintf(text, ARRAYSIZE(text), L"$%.2f of $%.2f spent",
-                             d.extraUsedAmount, d.extraLimitAmount);
+                    swprintf(text, ARRAYSIZE(text), L"$%.2f", d.extraUsedAmount);
+                    swprintf(limit, ARRAYSIZE(limit), L"$%.2f", d.extraLimitAmount);
+                    amount = I18nText(locale, TrCtx(L"quota-amount", L"{used} of {limit} spent"),
+                                      {{L"used", text}, {L"limit", limit}});
                 }
-                amount = text;
             }
             row.amount.Text(amount);
             show(row.amount, !amount.empty());
 
-            std::wstring reset = wu.notYetStarted ? L"Not yet started" :
-                                 wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+            std::wstring reset = wu.notYetStarted ? I18nText(locale, TrCtx(L"quota-reset", L"Not yet started")) :
+                                 wu.resetUnixMs   ? I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"),
+                                                             {{L"when", FormatReset(locale, wu.resetUnixMs)}}) :
+                                                    L"";
             row.reset.Text(reset);
             show(row.reset, !reset.empty());
         }
@@ -1038,11 +1071,16 @@ static void UpdateAccountFlyout(
 
         std::wstring freeResets;
         if (d.freeResets > 0) {
-            freeResets = std::to_wstring(d.freeResets) +
-                         (d.freeResets == 1 ? L" free reset available" : L" free resets available");
-            if (d.freeResetsExpiryMs > display.now) {
-                freeResets += L" \u00B7 next expires " + FormatReset(d.freeResetsExpiryMs);
-            }
+            freeResets =
+                d.freeResetsExpiryMs > display.now ?
+                    I18nText(locale,
+                             TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
+                                                   L"available}} \u00B7 next expires {when}"),
+                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs)}}) :
+                    I18nText(locale,
+                             TrCtx(L"free-resets",
+                                   L"{count, plural, one{# free reset available} other{# free resets available}}"),
+                             {{L"count", d.freeResets}});
         }
         popup.freeResets.Text(freeResets);
         show(popup.freeResets, !freeResets.empty());
@@ -1050,28 +1088,32 @@ static void UpdateAccountFlyout(
         show(popup.extraLines, !d.extraLines.empty());
         std::wstring error;
         if (d.error) {
-            error = L"Error: " + AccountErrorText(display.locale, d.error);
-            if (d.retryDeadlineMs > display.now) {
-                error += L" - retry in " +
-                         FormatShortDuration((d.retryDeadlineMs - display.now + 999) / 1000);
-            }
+            std::wstring message = AccountErrorText(locale, d.error);
+            error = d.retryDeadlineMs > display.now ?
+                        I18nText(locale, TrCtx(L"flyout-note", L"Error: {error} - retry in {duration}"),
+                                 {{L"error", message},
+                                  {L"duration",
+                                   FormatShortDuration(locale, (d.retryDeadlineMs - display.now + 999) / 1000)}}) :
+                        I18nText(locale, TrCtx(L"flyout-note", L"Error: {error}"), {{L"error", message}});
         }
         popup.error.Text(error);
         show(popup.error, !error.empty());
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
-            status = L"Sign-in required. Click the bars to sign in.";
+            status = I18nText(locale, TrCtx(L"flyout-note", L"Sign-in required. Click the bars to sign in."));
         } else if (!visibleRows && d.lastSuccessMs && error.empty() && d.extraLines.empty()) {
-            status = L"No quotas reported.";
+            status = I18nText(locale, TrCtx(L"flyout-note", L"No quotas reported."));
         }
         popup.status.Text(status);
         show(popup.status, !status.empty());
         show(popup.notes, !freeResets.empty() || !d.extraLines.empty() || !error.empty() ||
                               !status.empty());
 
-        std::wstring updated = display.visualTestMode ? L"Visual test data" :
-                                                        FormatUpdated(d.lastSuccessMs, display.stale);
-        if (display.refreshing) updated += L" - refreshing...";
+        std::wstring updated = display.visualTestMode ? I18nText(locale, TrCtx(L"flyout-footer", L"Visual test data")) :
+                                                        FormatUpdated(locale, d.lastSuccessMs, display.stale);
+        if (display.refreshing) {
+            updated = I18nText(locale, TrCtx(L"flyout-footer", L"{status} - refreshing..."), {{L"status", updated}});
+        }
         popup.updated.Text(updated);
     } catch (...) {
         Wh_Log(L"UpdateAccountFlyout: exception");

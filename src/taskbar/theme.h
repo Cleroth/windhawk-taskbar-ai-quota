@@ -230,10 +230,10 @@ static FlyoutTheme LoadFlyoutTheme() {
     auto brushSetter = [](PCWSTR target, Color c) {
         wchar_t color[16];
         swprintf(color, ARRAYSIZE(color), L"#%02X%02X%02X%02X", c.A, c.R, c.G, c.B);
-        return std::wstring(L"<Setter Target=\"") + target +
-               L"\"><Setter.Value><LinearGradientBrush><GradientStop Color=\"" + color +
-               L"\" Offset=\"0\"/><GradientStop Color=\"" + color +
-               L"\" Offset=\"1\"/></LinearGradientBrush></Setter.Value></Setter>";
+        return std::wstring(L"<Setter Target=\"") + target +  // i18n-en: XAML
+               L"\"><Setter.Value><LinearGradientBrush><GradientStop Color=\"" + color +  // i18n-en: XAML
+               L"\" Offset=\"0\"/><GradientStop Color=\"" + color +  // i18n-en: XAML
+               L"\" Offset=\"1\"/></LinearGradientBrush></Setter.Value></Setter>";  // i18n-en: XAML
     };
     std::wstring style =
         L"<Style xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
@@ -247,11 +247,11 @@ static FlyoutTheme LoadFlyoutTheme() {
         L"<VisualState x:Name=\"PointerOver\"><VisualState.Setters>" +
         brushSetter(L"Root.Background", p.hover) +
         brushSetter(L"Root.BorderBrush", p.hoverBorder) +
-        L"</VisualState.Setters></VisualState>"
+        L"</VisualState.Setters></VisualState>"  // i18n-en: XAML
         L"<VisualState x:Name=\"Pressed\"><VisualState.Setters>" +
         brushSetter(L"Root.Background", p.pressed) +
         brushSetter(L"Root.BorderBrush", p.hoverBorder) +
-        L"</VisualState.Setters></VisualState>"
+        L"</VisualState.Setters></VisualState>"  // i18n-en: XAML
         L"<VisualState x:Name=\"Disabled\"><VisualState.Setters>"
         L"<Setter Target=\"Root.Opacity\" Value=\"0.4\"/>"
         L"</VisualState.Setters></VisualState>"

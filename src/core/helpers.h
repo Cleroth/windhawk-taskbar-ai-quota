@@ -133,44 +133,57 @@ static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
     return std::wstring(day) + L" " + FormatLocalTime(local);
 }
 
-static std::wstring FormatReset(ULONGLONG unixMs) {
-    if (!unixMs) return L"?";
-    LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
-    if (delta <= 0) return L"now";
-
-    ULONGLONG totalMin = ((ULONGLONG)delta + 59999) / 60000;
-    ULONGLONG days = totalMin / (24 * 60);
-    ULONGLONG hours = (totalMin / 60) % 24;
-    ULONGLONG mins = totalMin % 60;
-
-    wchar_t rel[64];
+// A duration in its two largest units, dropping a zero second one: "1d 3h", "2h 15m", "4m 12s" or
+// "45s".
+static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seconds) {
+    ULONGLONG days = seconds / (24 * 60 * 60);
+    ULONGLONG hours = seconds / (60 * 60) % 24;
+    ULONGLONG minutes = seconds / 60 % 60;
+    ULONGLONG secs = seconds % 60;
     if (days > 0) {
-        if (hours > 0) swprintf(rel, ARRAYSIZE(rel), L"in %llud %lluh", days, hours);
-        else swprintf(rel, ARRAYSIZE(rel), L"in %llud", days);
-    } else if (hours > 0) {
-        if (mins > 0) swprintf(rel, ARRAYSIZE(rel), L"in %lluh %llum", hours, mins);
-        else swprintf(rel, ARRAYSIZE(rel), L"in %lluh", hours);
-    } else {
-        swprintf(rel, ARRAYSIZE(rel), L"in %llum", mins);
+        return hours ? I18nText(locale, TrCtx(L"duration", L"{days}d {hours}h"), {{L"days", days}, {L"hours", hours}}) :
+                       I18nText(locale, TrCtx(L"duration", L"{days}d"), {{L"days", days}});
     }
-
-    SYSTEMTIME local;
-    if (!UnixMsToLocalSystemTime(unixMs, &local)) {
-        return rel;
+    if (hours > 0) {
+        return minutes ? I18nText(locale, TrCtx(L"duration", L"{hours}h {minutes}m"),
+                                  {{L"hours", hours}, {L"minutes", minutes}}) :
+                         I18nText(locale, TrCtx(L"duration", L"{hours}h"), {{L"hours", hours}});
     }
-
-    std::wstring localTime =
-        delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local);
-    return std::wstring(rel) + L" (" + localTime + L")";
+    if (minutes > 0) {
+        return secs ? I18nText(locale, TrCtx(L"duration", L"{minutes}m {seconds}s"),
+                               {{L"minutes", minutes}, {L"seconds", secs}}) :
+                      I18nText(locale, TrCtx(L"duration", L"{minutes}m"), {{L"minutes", minutes}});
+    }
+    return I18nText(locale, TrCtx(L"duration", L"{seconds}s"), {{L"seconds", secs}});
 }
 
-static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
-    if (!unixMs) return L"No data yet";
+// When a reset comes, as running text continues it: "in 3d 4h (Fri 04:59)" (rounded up to the
+// minute; the local time, with its weekday from a day ahead), "now" once due, "?" without one.
+static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
+    if (!unixMs) return L"?";
+    LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
+    if (delta <= 0) return I18nText(locale, TrCtx(L"reset-when", L"now"));
+
+    std::wstring duration = FormatShortDuration(locale, ((ULONGLONG)delta + 59999) / 60000 * 60);
     SYSTEMTIME local;
     if (!UnixMsToLocalSystemTime(unixMs, &local)) {
-        return L"Updated ?";
+        return I18nText(locale, TrCtx(L"reset-when", L"in {duration}"), {{L"duration", duration}});
     }
-    return std::wstring(L"Updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
+    return I18nText(locale, TrCtx(L"reset-when", L"in {duration} ({time})"),
+                    {{L"duration", duration},
+                     {L"time", delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local)}});
+}
+
+// The details flyout's last update; an unreadable time shows as "?".
+static std::wstring FormatUpdated(const I18nLocale& locale, ULONGLONG unixMs, bool stale) {
+    if (!unixMs) return I18nText(locale, TrCtx(L"flyout-footer", L"No data yet"));
+    SYSTEMTIME local;
+    if (!UnixMsToLocalSystemTime(unixMs, &local)) {
+        return I18nText(locale, TrCtx(L"flyout-footer", L"Updated {time}"), {{L"time", L"?"}});
+    }
+    return I18nText(locale, stale ? TrCtx(L"flyout-footer", L"Updated {time} (stale)") :
+                                    TrCtx(L"flyout-footer", L"Updated {time}"),
+                    {{L"time", FormatLocalTime(local)}});
 }
 
 // The shell's Explorer, the only one that polls and records history. Windhawk also loads the mod
@@ -236,12 +249,13 @@ static void OpenUrl(PCWSTR url) {
     g_urlLaunchThreads.push_back(thread);
 }
 
+// Brand names, the same in every language.
 static PCWSTR ProviderDisplayName(const std::wstring& provider) {
-    if (provider == L"anthropic") return L"Anthropic";
-    if (provider == L"openai") return L"OpenAI";
-    if (provider == L"copilot") return L"GitHub Copilot";
-    if (provider == L"opencode") return L"OpenCode Go";
-    return L"Google Antigravity";
+    if (provider == L"anthropic") return L"Anthropic";  // i18n-en
+    if (provider == L"openai") return L"OpenAI";  // i18n-en
+    if (provider == L"copilot") return L"GitHub Copilot";  // i18n-en
+    if (provider == L"opencode") return L"OpenCode Go";  // i18n-en
+    return L"Google Antigravity";  // i18n-en
 }
 
 // OpenCode Go has no OAuth client: its sign-in takes an API key copied from the console, which
@@ -258,8 +272,10 @@ static PCWSTR ProviderDashboardUrl(const std::wstring& provider) {
     return nullptr;
 }
 
-// A GitHub Copilot allowance's unit, as running text names it.
-static PCWSTR CopilotUnitName(CopilotUnit unit) {
-    return unit == CopilotUnit::PremiumRequests ? L"premium requests" :
-           unit == CopilotUnit::ChatRequests ? L"chat requests" : L"AI credits";
+// A GitHub Copilot allowance's unit, as running text names it (the details flyout's row has its
+// own name).
+static std::wstring CopilotUnitName(const I18nLocale& locale, CopilotUnit unit) {
+    return I18nText(locale, unit == CopilotUnit::PremiumRequests ? TrCtx(L"copilot-unit", L"premium requests") :
+                            unit == CopilotUnit::ChatRequests    ? TrCtx(L"copilot-unit", L"chat requests") :
+                                                                   TrCtx(L"copilot-unit", L"AI credits"));
 }

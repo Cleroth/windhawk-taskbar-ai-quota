@@ -9,7 +9,7 @@
 // geometry come from the meter model (meter-model.h).
 
 // The icon font of the outage mark, as the details flyout's glyphs use it.
-static constexpr PCWSTR kTaskbarIconFont = L"Segoe Fluent Icons, Segoe MDL2 Assets";
+static constexpr PCWSTR kTaskbarIconFont = L"Segoe Fluent Icons, Segoe MDL2 Assets";  // i18n-en
 
 // A tile shape (meter-model.h), moved `offset` DIPs right and down: closed figures to fill, or
 // open ones to stroke. PathGeometry fills even-odd by default, as the outline expects.
@@ -176,7 +176,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         for (int k = 0; k <= 8; k++) {
             TextBlock text;
             text.Text(identityText.badgeText);
-            text.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));
+            text.FontFamily(FontFamily(L"Segoe UI Variable Small, Segoe UI"));  // i18n-en
             text.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
             text.FontSize(size);
             text.TextLineBounds(TextLineBounds::Tight);
@@ -213,7 +213,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     if (!tile.logo) {
         tile.text = TextBlock{};
         tile.text.Text(identityText.text);
-        tile.text.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+        tile.text.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
         tile.text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         tile.text.FontSize(10);
         tile.text.TextWrapping(TextWrapping::NoWrap);
@@ -299,7 +299,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         return column;
     }
     append(identity);
-    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
+    FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
 
     if (IsFaceTile(layout)) {
         // Gauges and pies: the face beside the identity. A gauge's number and key are centred
@@ -584,7 +584,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 keyProbe.Text(I18nText(display.locale, key));
                 keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe, display.locale) * meters.matrixKeyFont);
             }
-            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
+            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
             valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
             valueProbe.FontSize(meters.matrixFont);
             valueProbe.Text(L"100%");

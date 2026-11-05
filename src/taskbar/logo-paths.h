@@ -4,7 +4,7 @@
 
 // openai.svg from Simple Icons commit 6ad4d3a^, the last revision that ships it.
 static constexpr PCWSTR kOpenAiLogoPath =
-    L"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6"
+    L"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6"  // i18n-en: path data
     L".0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.096"
     L"6 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.259"
     L"9 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0"
@@ -55,7 +55,7 @@ static constexpr PCWSTR kGeminiLogoPath =
 
 // githubcopilot.svg, from Primer Octicons: Copyright (c) 2026 GitHub Inc., MIT License.
 static constexpr PCWSTR kCopilotLogoPath =
-    L"M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.6"
+    L"M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.6"  // i18n-en: path data
     L"41 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429"
     L".414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406."
     L"89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235"
@@ -75,7 +75,7 @@ static constexpr PCWSTR kCopilotLogoPath =
     L"4 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z";
 
 // opencode.svg.
-static constexpr PCWSTR kOpenCodeLogoPath = L"M22 24H2V0h20zM17 4.8H7v14.4h10z";
+static constexpr PCWSTR kOpenCodeLogoPath = L"M22 24H2V0h20zM17 4.8H7v14.4h10z";  // i18n-en: path data
 
 // The provider's logo.
 static PCWSTR ProviderLogoPath(std::wstring_view provider) {

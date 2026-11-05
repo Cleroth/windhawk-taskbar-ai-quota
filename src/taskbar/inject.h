@@ -196,9 +196,9 @@ static bool InjectQuotaGrid(HWND hWnd) {
     QuotaUiInstance* state = nullptr;
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
-        if (!xamlRoot) return fail(L"no XamlRoot");
+        if (!xamlRoot) return fail(L"no XamlRoot");  // i18n-en: log text
         auto root = xamlRoot.Content().try_as<FrameworkElement>();
-        if (!root) return fail(L"no XamlRoot content");
+        if (!root) return fail(L"no XamlRoot content");  // i18n-en: log text
 
         // An earlier build gives its place back first: its tray column, or its room beside Start.
         state = FindUiState(hWnd);
@@ -304,13 +304,13 @@ static bool InjectQuotaGrid(HWND hWnd) {
             // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
             // Bail and let the retry loop poll until it appears; never inject elsewhere, which
             // would render the bars on top of the clock/tray.
-            if (!trayFrame) return fail(L"no SystemTrayFrameGrid");
+            if (!trayFrame) return fail(L"no SystemTrayFrameGrid");  // i18n-en: log text
             parent = trayFrame.try_as<Panel>();
             trayGrid = trayFrame.try_as<Grid>();
             // Newer Windows taskbars keep the name but use a StackPanel. Don't assume other
             // panel types share its child-order layout semantics.
             if (!parent || (!trayGrid && !trayFrame.try_as<StackPanel>())) {
-                std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";
+                std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";  // i18n-en: log text
                 reason += winrt::get_class_name(trayFrame);
                 return fail(reason.c_str());
             }
@@ -347,12 +347,12 @@ static bool InjectQuotaGrid(HWND hWnd) {
                     state = g_uiInstances->back().get();
                 }
             }
-            if (!state) return fail(L"UI state registry unavailable");
+            if (!state) return fail(L"UI state registry unavailable");  // i18n-en: log text
             if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
                     hWnd, TaskbarWindowSubclassProc, 0)) {
                 EraseUiState(hWnd);
                 state = nullptr;
-                return fail(L"window subclass failed");
+                return fail(L"window subclass failed");  // i18n-en: log text
             }
             state->windowSubclassed = true;
             // Remove a visual left by an earlier failed teardown, but don't guess which column
@@ -368,7 +368,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
             if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
                 ClearQuotaEventState(*state);
                 EraseUiState(hWnd);
-                return fail(L"side taskbar watch failed");
+                return fail(L"side taskbar watch failed");  // i18n-en: log text
             }
             Wh_Log(L"Side taskbar on hwnd=%p has a grid tray; no bars until it moves", hWnd);
             return true;
@@ -381,7 +381,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!quota) {
             RemoveQuotaGridFromState(*state);
             EraseUiState(hWnd);
-            return fail(L"BuildQuotaGrid failed");
+            return fail(L"BuildQuotaGrid failed");  // i18n-en: log text
         }
 
         // A tray slot without a neighbour is the tray's start for Before notification icons (and
@@ -460,7 +460,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
             RemoveQuotaGridFromState(*state);
             EraseUiState(hWnd);
-            return fail(L"taskbar edge watch failed");
+            return fail(L"taskbar edge watch failed");  // i18n-en: log text
         }
         if (reserved) {
             // Every layout pass anywhere in the taskbar raises it; on the bars' own root, the
@@ -820,13 +820,13 @@ static bool HookTaskbarDllSymbols() {
     if (!h) return false;
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},
-        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CSecondaryTaskBand_ITaskListWndSite_vftable},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &CTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"}, &CSecondaryTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},
-        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},
-        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},  // i18n-en: symbol names
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CSecondaryTaskBand_ITaskListWndSite_vftable},  // i18n-en: symbol names
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &CTaskBand_GetTaskbarHost_Original},  // i18n-en: symbol names
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"}, &CSecondaryTaskBand_GetTaskbarHost_Original},  // i18n-en: symbol names
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},  // i18n-en: symbol names
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},  // i18n-en: symbol names
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},  // i18n-en: symbol names
     };
     return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }

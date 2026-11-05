@@ -44,6 +44,27 @@ static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provide
     if (slot == kExtraUsageBar && (provider == L"copilot" || provider == L"opencode")) key = 6;
     return I18nText(locale, kQuotaKeys[key]);
 }
+
+// An extra quota's name in the details flyout: as reported, then the length of the window it was
+// listed with in whole hours, when known ("Sonnet weekly", "Spark 5-hour", "Gemini 2-day").
+// AddExtraQuota merges by its English.
+static std::wstring ExtraQuotaName(const I18nLocale& locale, const NamedQuota& quota) {
+    constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+    ULONGLONG durationMs = quota.nameWindowMs;
+    if (durationMs == kWeeklyWindowMs) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", quota.name}});
+    }
+    if (durationMs && durationMs % kDayMs == 0) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}"),
+                        {{L"name", quota.name}, {L"days", durationMs / kDayMs}});
+    }
+    if (durationMs && durationMs % kHourMs == 0) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}"),
+                        {{L"name", quota.name}, {L"hours", durationMs / kHourMs}});
+    }
+    return quota.name;
+}
+
 // Tile text's cap height, as a share of its font size (Segoe UI Variable).
 static constexpr double kTileCapShare = 0.7;
 // Quota matrix cells: the key, kMatrixKeyGap DIPs, then the number; columns and rows apart by
@@ -168,10 +189,11 @@ static double RelativeLuminance(uint32_t argb) {
 }
 
 // An extra usage or credits amount on the taskbar: whole credits or dollars to the cent below
-// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k).
+// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k). The same in every
+// language, like percentages.
 static std::wstring TaskbarAmountText(double amount, bool dollars) {
     wchar_t text[32];
-    PCWSTR sign = dollars ? L"$" : L"";
+    PCWSTR sign = dollars ? L"$" : L"";  // i18n-en
     if (amount < (dollars ? 999.995 : 999.5)) {
         swprintf(text, ARRAYSIZE(text), dollars ? L"$%.2f" : L"%.0f", amount);
     } else {
@@ -179,7 +201,7 @@ static std::wstring TaskbarAmountText(double amount, bool dollars) {
         bool millions = amount >= 999.5e3;
         double scaled = std::max(amount / (millions ? 1e6 : 1e3), 1.0);
         swprintf(text, ARRAYSIZE(text), scaled < 999.5 ? L"%s%.3g%s" : L"%s%.0f%s", sign, scaled,
-                 millions ? L"M" : L"k");
+                 millions ? L"M" : L"k");  // i18n-en
     }
     return text;
 }
@@ -676,6 +698,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     // share a provider so tiles show number badges. A negative value is a quota not reported.
     // Antigravity is stale, with an error. Identities mix: OAI shows its label (with VisualTestOutage's
     // mark), the Anthropic pair their logo and number badge, Go its logo alone, with the stale mark.
+    // Labels and model names stay as written in every language, as users' and providers' do.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
@@ -685,9 +708,9 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     };
     const std::array<Sample, 4> samples = {{
         {L"openai", L"OAI", {green, yellow, -1, green / 2}, {true, true, false, true}, TileIdentity::Text},
-        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},
-        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},
-        {L"antigravity", L"Go", {green, green * 1.5, orange, -1}, {true, false, false, false}, TileIdentity::Logo},
+        {L"anthropic", L"CC 1", {orange, green, -1, -1}, {true, true, false, false}, TileIdentity::LogoBadge},  // i18n-en
+        {L"anthropic", L"CC 2", {green / 2, red, yellow, green}, {true, true, true, true}, TileIdentity::LogoBadge},  // i18n-en
+        {L"antigravity", L"Go", {green, green * 1.5, orange, -1}, {true, false, false, false}, TileIdentity::Logo},  // i18n-en
     }};
     static constexpr std::array<ULONGLONG, kQuotaBarCount> kDurations = {
         kFiveHourWindowMs,
@@ -739,24 +762,24 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
             accountData.extraUsedAmount = sample.pct[kExtraUsageBar] / 2.0;
             accountData.extraLimitAmount = 50.0;
         }
-        accountData.plan = L"Visual test";
+        accountData.plan = I18nText(display.locale, TrCtx(L"plan", L"Visual test"));
         accountData.lastSuccessMs = now;
         accountData.stale = false;
         // Extra quotas (OpenAI's with their Display setting) and free resets: details flyout only.
-        if (account.label == L"CC 2") {
+        if (account.label == L"CC 2") {  // i18n-en
             accountData.extraQuotas = {
-                {L"Sonnet weekly",
-                 {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}},
-                {L"Opus weekly", {0, 0, kWeeklyWindowMs, true}},
+                {L"Sonnet",  // i18n-en
+                 {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}, kWeeklyWindowMs},
+                {L"Opus", {0, 0, kWeeklyWindowMs, true}, kWeeklyWindowMs},  // i18n-en
             };
             accountData.freeResets = 2;
             accountData.freeResetsExpiryMs = now + 3 * 24 * 60 * 60000ULL;
         } else if (openAi) {
             accountData.extraQuotas = {
-                {L"Spark 5-hour",
-                 {orange, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.3), kFiveHourWindowMs}},
-                {L"Spark weekly",
-                 {green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.7), kWeeklyWindowMs}},
+                {L"Spark",  // i18n-en
+                 {orange, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.3), kFiveHourWindowMs}, kFiveHourWindowMs},
+                {L"Spark",  // i18n-en
+                 {green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.7), kWeeklyWindowMs}, kWeeklyWindowMs},
             };
             accountData.freeResets = 1;
         }
@@ -777,10 +800,11 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
 }
 
 // The visual test accounts' provider status, while outage marks are on: OpenAI's (the OAI sample's
-// provider) degraded since 25 minutes before `now`; the others operational.
+// provider) degraded since 25 minutes before `now`; the others operational. Its component and
+// incident stand for the status page's, which stay as the page writes them.
 static ProviderOutage VisualTestOutage(std::wstring_view provider, ULONGLONG now) {
     if (provider != L"openai") return {};
-    return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};
+    return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};  // i18n-en
 }
 
 // A recorded reading of a quota in its current window (the burn-up curve's), oldest first.
@@ -1889,7 +1913,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             bool column = display.sideWidth > 0;
             m.matrixRow = column ? slotPosition : slotPosition % 2;
             m.matrixColumn = column ? 0 : slotPosition / 2;
-            m.text = L"\u2013";
+            m.text = L"\u2013";  // i18n-en: no reading
             if (wu.pct >= 0) {
                 wchar_t text[24];
                 swprintf(text, ARRAYSIZE(text), L"%.0f%%",
@@ -1908,8 +1932,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
     if (layout == BarLayout::LogoHeadline || gauge) {
         bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
-        meters.headline = L"\u2013";
-        if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";
+        meters.headline = L"\u2013";  // i18n-en: no reading
+        if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";  // i18n-en: no reading
         if (top >= 0) {
             wchar_t text[24];
             swprintf(text, ARRAYSIZE(text), gauge ? L"%.0f" : L"%.0f%%", tileShown(usage[top]->pct));

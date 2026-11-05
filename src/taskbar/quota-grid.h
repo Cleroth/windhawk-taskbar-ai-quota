@@ -101,7 +101,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
         // Context menu items with a Fluent icon; ClearQuotaEventState revokes their Click handlers.
         // Menus show outside the tree, so each item takes the language itself.
-        FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
+        FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");  // i18n-en
         auto menuIcon = [&](PCWSTR glyph) {
             FontIcon icon;
             icon.FontFamily(iconFont);
@@ -795,7 +795,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         // As in the details flyout, OpenAI's Spark plan name needs its extra
                         // limits shown.
                         if (provider == L"openai" && !showSparkPlan &&
-                            (plan.find(L"Spark") != std::wstring::npos ||
+                            (plan.find(L"Spark") != std::wstring::npos ||  // i18n-en: the plan's name
                              plan.find(L"spark") != std::wstring::npos)) {
                             plan.clear();
                         }

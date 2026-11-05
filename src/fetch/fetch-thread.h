@@ -761,8 +761,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         shouldNotify = g_settings.notificationLevel != NotificationLevel::Off;
                     }
                     if (shouldNotify && !g_unloading) {
+                        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
                         std::wstring providerName =
                             ProviderDisplayName(publishedAccounts[i].provider);
+                        std::wstring copilotUnit;
                         wchar_t title[96];
                         PCWSTR quotaName =
                             w == kFiveHourBar ? L"5h" :
@@ -784,7 +786,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                    w == kExtraUsageBar) {
                             quotaName = L"credits";
                         } else if (publishedAccounts[i].provider == L"copilot") {
-                            quotaName = CopilotUnitName(publishedResults[i].copilotUnit);
+                            copilotUnit = CopilotUnitName(locale, publishedResults[i].copilotUnit);
+                            quotaName = copilotUnit.c_str();
                         } else if (publishedAccounts[i].provider == L"opencode" &&
                                    w == kExtraUsageBar) {
                             quotaName = L"monthly";
@@ -793,12 +796,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                                  quotaName, wu.pct);
                         std::wstring body = providerName;
                         if ((w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs) {
-                            body += L" - resets " + FormatReset(wu.resetUnixMs);
+                            body += L" - resets " + FormatReset(locale, wu.resetUnixMs);
                         }
                         // The flyout's projection to the limit; none for an OpenCode Go window at
                         // its limit, as there.
                         std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
-                            NotificationProjectionText(publishedAccounts[i].historyId, w, wu);
+                            NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
                         FireThresholdNotification(title, body, projection,
                                                   ProviderDashboardUrl(publishedAccounts[i].provider),
                                                   AccountIdentityHash(publishedAccounts[i]), w);

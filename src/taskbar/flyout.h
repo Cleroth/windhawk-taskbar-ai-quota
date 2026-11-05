@@ -252,7 +252,7 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         setters.Append(Setter(Control::CornerRadiusProperty(),
                               winrt::box_value(CornerRadius{8, 8, 8, 8})));
         setters.Append(Setter(Control::FontFamilyProperty(),
-                              FontFamily(L"Segoe UI Variable Text, Segoe UI")));
+                              FontFamily(L"Segoe UI Variable Text, Segoe UI")));  // i18n-en
         setters.Append(Setter(FrameworkElement::MarginProperty(), winrt::box_value(Thickness{})));
         setters.Append(Setter(FrameworkElement::MinWidthProperty(), winrt::box_value(0.0)));
         setters.Append(Setter(FrameworkElement::MaxWidthProperty(), winrt::box_value(10000.0)));

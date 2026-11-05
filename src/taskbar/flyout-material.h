@@ -129,7 +129,7 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
         wuc::Compositor compositor = hostVisual.Compositor();
         wuc::CompositionBrush wallpaper = compositor.TryCreateBlurredWallpaperBackdropBrush();
         if (!wallpaper) {
-            LogFlyoutMaterialFailure(L"no blurred wallpaper brush", S_OK);
+            LogFlyoutMaterialFailure(L"no blurred wallpaper brush", S_OK);  // i18n-en: log text
             return;
         }
 
@@ -151,7 +151,7 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
                     float rgba[] = {c.R / 255.f, c.G / 255.f, c.B / 255.f, opacity * c.A / 255.f};
                     return node(kFlood, {PropertyValue::CreateSingleArray(rgba)}, {});
                 };
-                wuc::CompositionEffectSourceParameter backdrop(L"Wallpaper");
+                wuc::CompositionEffectSourceParameter backdrop(L"Wallpaper");  // i18n-en: effect parameter
                 IGraphicsEffect graph{nullptr};
                 if (theme.material == Material::TintedWallpaper) {
                     graph = node(kComposite, {PropertyValue::CreateUInt32(kSourceOver)},
@@ -171,7 +171,7 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
             }
             if (*live != 0) {
                 nodesRetained = true;
-                LogFlyoutMaterialFailure(L"effect graph retained", S_OK);
+                LogFlyoutMaterialFailure(L"effect graph retained", S_OK);  // i18n-en: log text
                 return;
             }
             fo.materialFactory = factory;
@@ -181,25 +181,25 @@ static void AttachFlyoutMaterial(FlyoutUi& fo, UIElement const& host, float corn
         auto status = fo.materialFactory.LoadStatus();
         if (status != wuc::CompositionEffectFactoryLoadStatus::Success &&
             status != wuc::CompositionEffectFactoryLoadStatus::Pending) {
-            LogFlyoutMaterialFailure(L"effect failed to load",
+            LogFlyoutMaterialFailure(L"effect failed to load",  // i18n-en: log text
                                      fo.materialFactory.ExtendedError().value);
             fo.materialFactory = nullptr;
             return;
         }
 
         wuc::CompositionEffectBrush brush = fo.materialFactory.CreateBrush();
-        brush.SetSourceParameter(L"Wallpaper", wallpaper);
+        brush.SetSourceParameter(L"Wallpaper", wallpaper);  // i18n-en: effect parameter
         wuc::SpriteVisual sprite = compositor.CreateSpriteVisual();
         sprite.Brush(brush);
         sprite.IsVisible(false);
         // The host's layout size, for the sprite and its rounded clip.
         wuc::ExpressionAnimation size = compositor.CreateExpressionAnimation(L"host.Size");
         size.SetReferenceParameter(L"host", hostVisual);
-        sprite.StartAnimation(L"Size", size);
+        sprite.StartAnimation(L"Size", size);  // i18n-en: property name
         wuc::CompositionRoundedRectangleGeometry outline =
             compositor.CreateRoundedRectangleGeometry();
         outline.CornerRadius({cornerRadius, cornerRadius});
-        outline.StartAnimation(L"Size", size);
+        outline.StartAnimation(L"Size", size);  // i18n-en: property name
         sprite.Clip(compositor.CreateGeometricClip(outline));
         ElementCompositionPreview::SetElementChildVisual(host, sprite);
         popup.materialVisual = sprite;
@@ -233,7 +233,7 @@ static void SettleFlyoutMaterial(FlyoutUi& fo) {
             popup.materialVisual.IsVisible(true);
             if (card) card.Background(transparent);
         } else if (fo.materialFactory) {
-            LogFlyoutMaterialFailure(L"effect failed to compile",
+            LogFlyoutMaterialFailure(L"effect failed to compile",  // i18n-en: log text
                                      fo.materialFactory.ExtendedError().value);
             fo.materialFactory = nullptr;
         }
