@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.13.1
+// @version         2.14.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -25,7 +25,7 @@ Supported providers and quotas:
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
 - **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
 - **Google Antigravity:** short-window and weekly Gemini pools and Gemini Argon weekly; Claude/GPT
-  pool limits in the details flyout
+  pool limits and its other reported quotas in the details flyout
 - **GitHub Copilot:** the monthly AI credits allowance (Copilot Free's included); the additional
   usage GitHub reports past it and an organization's pooled credits in the details flyout
 - **OpenCode Go:** 5-hour, weekly, and monthly usage limits

@@ -305,7 +305,8 @@ struct WindowUsage {
 };
 
 // A quota the details flyout lists after its main rows, without a taskbar bar, history or alerts:
-// Anthropic's per-model and per-surface limits, OpenAI's additional rate limits.
+// Anthropic's per-model and per-surface limits, OpenAI's additional rate limits, Antigravity's
+// other reported quotas.
 struct NamedQuota {
     std::wstring name;
     WindowUsage usage;

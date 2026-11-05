@@ -453,7 +453,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         rowsGrid.Children().Append(details);
     };
     for (FlyoutQuotaRow& row : popup.rows) addRow(row, true);
-    if (provider == L"anthropic" || provider == L"openai") {
+    if (provider == L"anthropic" || provider == L"openai" || provider == L"antigravity") {
         popup.extraRows.resize(kMaxExtraQuotas);
         for (FlyoutQuotaRow& row : popup.extraRows) {
             addRow(row, false);

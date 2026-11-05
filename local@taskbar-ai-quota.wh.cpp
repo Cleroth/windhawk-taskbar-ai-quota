@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.13.1
+// @version         2.14.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -28,7 +28,7 @@ Supported providers and quotas:
 - **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
 - **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
 - **Google Antigravity:** short-window and weekly Gemini pools and Gemini Argon weekly; Claude/GPT
-  pool limits in the details flyout
+  pool limits and its other reported quotas in the details flyout
 - **GitHub Copilot:** the monthly AI credits allowance (Copilot Free's included); the additional
   usage GitHub reports past it and an organization's pooled credits in the details flyout
 - **OpenCode Go:** 5-hour, weekly, and monthly usage limits
@@ -505,7 +505,8 @@ struct WindowUsage {
 };
 
 // A quota the details flyout lists after its main rows, without a taskbar bar, history or alerts:
-// Anthropic's per-model and per-surface limits, OpenAI's additional rate limits.
+// Anthropic's per-model and per-surface limits, OpenAI's additional rate limits, Antigravity's
+// other reported quotas.
 struct NamedQuota {
     std::wstring name;
     WindowUsage usage;
@@ -3966,6 +3967,7 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 
         auto groups = groupsVal.GetArray();
         bool parsed = false;
+        constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000;
         auto endsWith = [](const std::wstring& value, PCWSTR suffix) {
             size_t suffixLength = wcslen(suffix);
             return value.size() >= suffixLength &&
@@ -3974,7 +3976,8 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
         for (uint32_t i = 0; i < groups.Size(); ++i) {
             if (groups.GetAt(i).ValueType() != JsonValueType::Object) continue;
             auto grp = groups.GetAt(i).GetObject();
-            std::wstring dispName = GetStr(grp, L"displayName");
+            std::wstring groupName = GetStr(grp, L"displayName");
+            std::wstring dispName = groupName;
             std::transform(dispName.begin(), dispName.end(), dispName.begin(),
                            [](wchar_t ch) { return (wchar_t)towlower(ch); });
             bool geminiGroup = dispName.find(L"gemini") != std::wstring::npos;
@@ -3991,8 +3994,10 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 if (buckets.GetAt(j).ValueType() != JsonValueType::Object) continue;
                 auto bucket = buckets.GetAt(j).GetObject();
                 if (GetBool(bucket, L"disabled")) continue;
-                std::wstring bucketId = GetStr(bucket, L"bucketId");
-                std::wstring window = GetStr(bucket, L"window");
+                std::wstring rawBucketId = GetStr(bucket, L"bucketId");
+                std::wstring rawWindow = GetStr(bucket, L"window");
+                std::wstring bucketId = rawBucketId;
+                std::wstring window = rawWindow;
                 std::transform(bucketId.begin(), bucketId.end(), bucketId.begin(),
                                [](wchar_t ch) { return (wchar_t)towlower(ch); });
                 std::transform(window.begin(), window.end(), window.begin(),
@@ -4006,34 +4011,24 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                 bool isSession = window == L"session" || endsWith(bucketId, L"-session");
                 bool isShort = is5h || is3h || isHourly || isSession;
                 if (isWeekly) isShort = false;
-                // Gemini Argon is a pool of its own, known only weekly: its other windows stay
-                // out of the Gemini readings, unshown.
+                // Gemini Argon is a pool of its own, read weekly: its other windows stay out of
+                // the Gemini readings, as rows.
                 bool argonBucket = argonGroup || bucketId.find(L"argon") != std::wstring::npos;
-                if (argonBucket && !isWeekly) {
-                    static bool logged = false;
-                    if (!logged) {
-                        logged = true;
-                        Wh_Log(L"Ignoring Antigravity Argon bucket %s (window %s)",
-                               bucketId.c_str(), window.c_str());
-                    }
-                    continue;
-                }
-                if (!isShort && !isWeekly) continue;
-
                 bool geminiBucket = bucketId.rfind(L"gemini-", 0) == 0 ||
                                      (bucketId.rfind(L"3p-", 0) != 0 && geminiGroup);
                 bool thirdPartyBucket = bucketId.rfind(L"3p-", 0) == 0 ||
                                          (!geminiBucket && thirdPartyGroup);
                 WindowUsage* target = nullptr;
                 if (argonBucket) {
-                    target = &d->fableWeek;
-                } else if (geminiBucket) {
-                    target = isShort ? &d->win5h : &d->winWeek;
-                } else if (thirdPartyBucket) {
-                    target = isShort ? &d->antigravityThirdParty5h :
-                                       &d->antigravityThirdPartyWeek;
+                    if (isWeekly) target = &d->fableWeek;
+                } else if (isShort || isWeekly) {
+                    if (geminiBucket) {
+                        target = isShort ? &d->win5h : &d->winWeek;
+                    } else if (thirdPartyBucket) {
+                        target = isShort ? &d->antigravityThirdParty5h :
+                                           &d->antigravityThirdPartyWeek;
+                    }
                 }
-                if (!target) continue;
 
                 double remaining = GetNum(bucket, L"remainingFraction", -1);
                 std::wstring resetTimeStr = GetStr(bucket, L"resetTime");
@@ -4048,19 +4043,58 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 
                 ULONGLONG resetMs = ParseIso8601Ms(resetTimeStr);
                 double usedPct = std::clamp((1.0 - remaining) * 100.0, 0.0, 100.0);
-                // Duplicate rows can occur during model rollouts; keep the limiting pool.
-                if (target->pct < usedPct) {
-                    target->pct = usedPct;
-                    target->resetUnixMs = resetMs;
-                    target->windowDurationMs = isWeekly ? kWeeklyWindowMs :
-                                               is5h ? kFiveHourWindowMs :
-                                               is3h ? 3ULL * 60 * 60 * 1000 :
-                                               isHourly ? 60ULL * 60 * 1000 : 0;
+                ULONGLONG durationMs = isWeekly ? kWeeklyWindowMs : is5h ? kFiveHourWindowMs :
+                                       is3h ? 3 * kHourMs : isHourly ? kHourMs : 0;
+                if (target) {
+                    // Duplicate rows can occur during model rollouts; keep the limiting pool.
+                    if (target->pct < usedPct) {
+                        target->pct = usedPct;
+                        target->resetUnixMs = resetMs;
+                        target->windowDurationMs = durationMs;
+                    }
+                    parsed = true;
+                    continue;
                 }
-                parsed = true;
+
+                // As without a summary, lite, autocomplete and image models get no row.
+                std::wstring bucketName = GetStr(bucket, L"displayName");
+                std::wstring identity = dispName + L" " + bucketId + L" " + bucketName;
+                std::transform(identity.begin(), identity.end(), identity.begin(),
+                               [](wchar_t ch) { return (wchar_t)towlower(ch); });
+                if (identity.find(L"lite") != std::wstring::npos ||
+                    identity.find(L"autocomplete") != std::wstring::npos ||
+                    identity.find(L"image") != std::wstring::npos) {
+                    continue;
+                }
+
+                // Every other bucket is a flyout row: named by its group (Argon for an Argon
+                // bucket in another group) and its window, by length when known (also daily,
+                // <N>h or <N>d, from the window or the bucket ID's end), else by the bucket's name.
+                if (!durationMs) {
+                    std::wstring cadence =
+                        window.empty() ? bucketId.substr(bucketId.rfind(L'-') + 1) : window;
+                    wchar_t* unit = nullptr;
+                    unsigned long count = wcstoul(cadence.c_str(), &unit, 10);
+                    if (cadence == L"daily") {
+                        durationMs = 24 * kHourMs;
+                    } else if (count > 0 && count <= 1000 && unit[0] && !unit[1]) {
+                        durationMs = unit[0] == L'h' ? count * kHourMs :
+                                     unit[0] == L'd' ? count * 24 * kHourMs : 0;
+                    }
+                }
+                std::wstring name = argonBucket && !argonGroup ? L"Argon" : groupName;
+                if (name.empty()) name = rawBucketId;
+                if (!durationMs) {
+                    std::wstring detail = bucketName;
+                    if (detail.empty()) detail = rawWindow;
+                    if (!detail.empty()) name += name.empty() ? detail : L" " + detail;
+                }
+                AddExtraQuota(d, std::move(name), {usedPct, resetMs, durationMs});
             }
         }
 
+        // Rows only accompany the main readings: a summary without any counts as unsupported.
+        if (!parsed) d->extraQuotas.clear();
         if (!parsed && error) {
             *error = L"no usable Antigravity quota buckets in response";
         }
@@ -4076,6 +4110,9 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
     try {
         bool hasSummaryGeminiShort = d->win5h.pct >= 0;
         bool hasSummaryThirdPartyShort = d->antigravityThirdParty5h.pct >= 0;
+        bool hasSummary = hasSummaryGeminiShort || hasSummaryThirdPartyShort ||
+                          d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||
+                          d->antigravityThirdPartyWeek.pct >= 0;
         auto root = JsonObject::Parse(Utf8ToWide(body));
         JsonObject payload = root;
         if (auto response = GetObj(root, L"response")) payload = response;
@@ -4113,7 +4150,8 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     auto quota = GetObj(config, L"quotaInfo");
                     if (!quota) continue;
 
-                    std::wstring identity = GetStr(config, L"label");
+                    std::wstring label = GetStr(config, L"label");
+                    std::wstring identity = label;
                     if (auto modelOrAlias = GetObj(config, L"modelOrAlias")) {
                         identity += L" " + GetStr(modelOrAlias, L"model");
                     }
@@ -4126,17 +4164,21 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     }
 
                     // Model quota has no window to tell Gemini Argon's weekly pool from others:
-                    // it stays out of the Gemini reading, unshown.
-                    if (identity.find(L"argon") != std::wstring::npos) continue;
+                    // it stays out of the Gemini reading, as a row. Rows (Argon, other model
+                    // families) come only without a quota summary, which reports the pools.
+                    bool argon = identity.find(L"argon") != std::wstring::npos;
                     WindowUsage* target = nullptr;
-                    if (identity.find(L"gemini") != std::wstring::npos) {
-                        target = &d->win5h;
-                    } else if (identity.find(L"claude") != std::wstring::npos ||
-                               identity.find(L"gpt") != std::wstring::npos ||
-                               identity.find(L"openai") != std::wstring::npos) {
-                        target = &d->antigravityThirdParty5h;
+                    if (!argon) {
+                        if (identity.find(L"gemini") != std::wstring::npos) {
+                            target = &d->win5h;
+                        } else if (identity.find(L"claude") != std::wstring::npos ||
+                                   identity.find(L"gpt") != std::wstring::npos ||
+                                   identity.find(L"openai") != std::wstring::npos) {
+                            target = &d->antigravityThirdParty5h;
+                        }
                     }
-                    if (!target || (target == &d->win5h && hasSummaryGeminiShort) ||
+                    if ((!target && hasSummary) ||
+                        (target == &d->win5h && hasSummaryGeminiShort) ||
                         (target == &d->antigravityThirdParty5h &&
                          hasSummaryThirdPartyShort)) {
                         continue;
@@ -4150,6 +4192,13 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     if (!std::isfinite(remaining) || remaining < 0 || remaining > 1) continue;
 
                     double usedPct = std::clamp((1.0 - remaining) * 100.0, 0.0, 100.0);
+                    if (!target) {
+                        // Argon's models share one pool, named like the Gemini and Claude/GPT
+                        // pools' current limits; other models go by their label.
+                        AddExtraQuota(d, argon ? L"Argon current limit" : label,
+                                      {usedPct, ParseIso8601Ms(resetTime), 0});
+                        continue;
+                    }
                     if (target->pct < usedPct) {
                         target->pct = usedPct;
                         target->resetUnixMs = ParseIso8601Ms(resetTime);
@@ -10893,7 +10942,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         rowsGrid.Children().Append(details);
     };
     for (FlyoutQuotaRow& row : popup.rows) addRow(row, true);
-    if (provider == L"anthropic" || provider == L"openai") {
+    if (provider == L"anthropic" || provider == L"openai" || provider == L"antigravity") {
         popup.extraRows.resize(kMaxExtraQuotas);
         for (FlyoutQuotaRow& row : popup.extraRows) {
             addRow(row, false);
