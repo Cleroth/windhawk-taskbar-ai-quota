@@ -1,5 +1,5 @@
-// Sign-in thread: the sign-in window, OpenAI loopback listener, GitHub device flow, code
-// exchange, and OpenCode Go's pasted API key.
+// Sign-in thread: the sign-in window, the Anthropic and OpenAI loopback listeners, GitHub device
+// flow, code exchange, and OpenCode Go's pasted API key.
 
 struct LoginRequest {
     std::wstring provider;
@@ -13,19 +13,25 @@ static std::atomic<uint64_t> g_loginAccountIdentity{0};
 static HANDLE g_loginThread = nullptr;
 static std::mutex g_loginThreadMutex;  // Guards g_loginThread handoff vs. the unload join.
 static std::atomic<HWND> g_loginWnd{nullptr};        // Sign-in window.
-static std::atomic<SOCKET> g_loginSocket{INVALID_SOCKET};  // OpenAI loopback listener.
+static std::atomic<SOCKET> g_loginSocket{INVALID_SOCKET};  // Loopback listener (Anthropic, OpenAI).
 
-static bool StartLoopback(SOCKET* outSock, int* outPort) {
-    for (int port : {1455, 1457}) {
+// Listens on 127.0.0.1 at the first of `ports` that binds (0: a free one Windows picks), held
+// exclusively so no other process can bind it as well (RFC 8252, B.3).
+static bool StartLoopback(std::initializer_list<int> ports, SOCKET* outSock, int* outPort) {
+    for (int port : ports) {
         SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (s == INVALID_SOCKET) continue;
+        BOOL exclusive = TRUE;
+        setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*)&exclusive, sizeof(exclusive));
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons((u_short)port);
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        if (bind(s, (sockaddr*)&addr, sizeof(addr)) == 0 && listen(s, 1) == 0) {
+        int length = sizeof(addr);
+        if (bind(s, (sockaddr*)&addr, sizeof(addr)) == 0 && listen(s, 1) == 0 &&
+            getsockname(s, (sockaddr*)&addr, &length) == 0) {
             *outSock = s;
-            *outPort = port;
+            *outPort = ntohs(addr.sin_port);
             return true;
         }
         closesocket(s);
@@ -35,9 +41,10 @@ static bool StartLoopback(SOCKET* outSock, int* outPort) {
 
 // Answers one localhost request and closes it. Returns true once the sign-in is decided:
 // `code` receives the URL-decoded authorization code, or `terminalError` the failure. Stray
-// hits (favicon, etc.) return false so the sign-in keeps waiting.
-static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedState,
-                                   std::string* code, std::wstring* terminalError) {
+// hits (favicon, other paths, etc.) return false so the sign-in keeps waiting.
+static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRoute,
+                                   const std::string& expectedState, std::string* code,
+                                   std::wstring* terminalError) {
     auto getParam = [](const std::string& query, const std::string& key) -> std::string {
         std::string pat = key + "=";
         for (size_t p = 0; (p = query.find(pat, p)) != std::string::npos; p += pat.size()) {
@@ -74,7 +81,7 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedSta
     std::string state = getParam(query, "state");
     std::string oauthError = getParam(query, "error");
     std::string oauthErrorDesc = getParam(query, "error_description");
-    bool callback = route == "/auth/callback";
+    bool callback = route == expectedRoute;
     bool stateOk = callback && (expectedState.empty() || state == expectedState);
     bool success = !received.empty() && stateOk;
     bool terminalFailure = stateOk && (received.empty() || !oauthError.empty());
@@ -104,28 +111,32 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedSta
 }
 
 // Sign-in window: offers the authorize link to copy or open, then either collects the pasted
-// Anthropic code#state or OpenCode Go API key (masked) or waits for the OpenAI loopback callback;
-// for GitHub's device flow it shows the code to enter and a status line while its message loop
-// polls for the token. Runs its own message loop on the login thread; closed on cancel, submit,
-// callback, a granted device sign-in, or unload. A device sign-in that ends otherwise stays open
-// with the reason until closed.
+// Anthropic code#state or OpenCode Go API key (masked) or waits for the Anthropic or OpenAI
+// loopback callback; for GitHub's device flow it shows the code to enter and a status line while
+// its message loop polls for the token. Runs its own message loop on the login thread; closed on
+// cancel, submit, callback, its alternate button, a granted device sign-in, or unload. A device
+// sign-in that ends otherwise stays open with the reason until closed.
 enum {
     kLoginInstructions = 100,
     kLoginCode,
     kLoginCopyLink,
     kLoginOpenLink,
     kLoginStatus,
+    kLoginAlternate,
 };
 constexpr UINT kLoginAccept = WM_APP + 1;  // FD_ACCEPT notification for the loopback listener.
 
 struct LoginDialogState {
     // Inputs
     std::wstring url;  // The authorize link, or the device flow's verification page.
-    // Loopback flow when set; device flow with `poll`; otherwise a code is pasted, masked when
-    // `secret`.
+    // Loopback flow when set, answered on `callbackRoute`; device flow with `poll`; otherwise a
+    // code is pasted, masked when `secret`.
     SOCKET listener = INVALID_SOCKET;
+    std::string callbackRoute;
     bool secret = false;
     std::string expectedState;
+    // A loopback flow's button that closes the window to sign in another way (alternateChosen).
+    PCWSTR alternate = nullptr;
     // Device flow: the code to enter on the verification page, and the token poll the message
     // loop runs, never the window procedure, once GetTickCount64 reaches nextPollMs. It catches
     // everything itself, may set `status`, which the loop then shows, and returns the wait before
@@ -141,6 +152,7 @@ struct LoginDialogState {
     std::wstring pastedCode;
     std::string callbackCode;
     std::wstring callbackError;
+    bool alternateChosen = false;
     bool ok = false;
     bool done = false;
 
@@ -167,6 +179,9 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
     if (!state.poll) {
         SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
     }
+    if (state.alternate) {
+        SetWindowPos(GetDlgItem(hWnd, kLoginAlternate), nullptr, sc(264), sc(buttonsTop), sc(82), sc(30), flags);
+    }
     if (state.edit) {
         SetWindowPos(state.edit, nullptr, sc(12), sc(110), sc(424), sc(24), flags);
         SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr, sc(262), sc(146), sc(84), sc(30), flags);
@@ -191,7 +206,7 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
     HFONT font = CreateFontIndirectW(&fontDescription);
     if (font) {
         for (int id : {(int)kLoginInstructions, (int)kLoginCode, (int)kLoginCopyLink,
-                       (int)kLoginOpenLink, (int)kLoginStatus, IDOK, IDCANCEL}) {
+                       (int)kLoginOpenLink, (int)kLoginStatus, (int)kLoginAlternate, IDOK, IDCANCEL}) {
             if (HWND child = GetDlgItem(hWnd, id)) {
                 SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
             }
@@ -235,6 +250,7 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 create(0, L"BUTTON", L"Copy link", WS_TABSTOP | BS_PUSHBUTTON, kLoginCopyLink);
                 create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
             }
+            if (st->alternate) create(0, L"BUTTON", st->alternate, WS_TABSTOP | BS_PUSHBUTTON, kLoginAlternate);
             if (st->listener == INVALID_SOCKET && !st->poll) {
                 st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"",
                                   WS_TABSTOP | ES_AUTOHSCROLL | (st->secret ? ES_PASSWORD : 0), kLoginCode);
@@ -269,6 +285,10 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 case kLoginOpenLink:
                     OpenUrl(st->url.c_str());
                     return 0;
+                case kLoginAlternate:
+                    st->alternateChosen = true;
+                    DestroyWindow(hWnd);
+                    return 0;
                 case IDOK: {
                     if (!st->edit) return 0;
                     int len = GetWindowTextLengthW(st->edit);
@@ -295,7 +315,7 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             WSAAsyncSelect(client, hWnd, 0, 0);
             u_long nonBlocking = 0;
             ioctlsocket(client, FIONBIO, &nonBlocking);
-            if (AnswerLoopbackCallback(client, st->expectedState, &st->callbackCode,
+            if (AnswerLoopbackCallback(client, st->callbackRoute, st->expectedState, &st->callbackCode,
                                        &st->callbackError)) {
                 st->ok = !st->callbackCode.empty();
                 DestroyWindow(hWnd);
@@ -462,6 +482,9 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
     return st.ok;
 }
 
+// On this PC the browser hands the code to a localhost listener, as Claude Code's own sign-in
+// does; "Use a code" (or no listener) switches to the page that shows a code#state to paste, for
+// another device. The exchange repeats the redirect its authorize link carried.
 static void DoAnthropicLogin(const LoginRequest& req) {
     std::string verifier = RandomBase64Url(32);
     std::string challenge = Sha256Base64Url(verifier);
@@ -471,20 +494,58 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         return;
     }
 
-    LoginDialogState dialog;
-    dialog.url = BuildAnthropicAuthorizeUrl(challenge, state);
     std::wstring title = L"Sign in: " + req.label + L" (Anthropic)";
-    std::wstring instructions =
-        L"Open the sign-in link in a browser and approve access on claude.ai, then paste "
-        L"the code shown on the page below.";
-    if (!ShowLoginDialog(title, instructions, dialog) || g_unloading) return;
+    std::string redirect;
+    std::wstring code;
+    SOCKET listener = INVALID_SOCKET;
+    int port = 0;
+    bool useCode = !StartLoopback({0}, &listener, &port);
+    if (useCode) {
+        Wh_Log(L"Sign-in [%s]: no localhost listener; asking for a code", req.label.c_str());
+    } else {
+        g_loginSocket.store(listener);
+        redirect = "http://localhost:" + std::to_string(port) + "/callback";
+        LoginDialogState dialog;
+        dialog.url = BuildAnthropicAuthorizeUrl(redirect, challenge, state);
+        dialog.listener = listener;
+        dialog.callbackRoute = "/callback";
+        dialog.expectedState = state;
+        dialog.alternate = L"Use a code";
+        bool received = ShowLoginDialog(
+            title,
+            L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This "
+            L"window closes once sign-in completes. On another device, choose Use a code.",
+            dialog);
+        SOCKET s = g_loginSocket.exchange(INVALID_SOCKET);
+        if (s != INVALID_SOCKET) closesocket(s);
+        if (g_unloading) return;
+        useCode = dialog.alternateChosen;
+        if (!received && !useCode) {
+            if (!dialog.callbackError.empty()) {
+                Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), dialog.callbackError.c_str());
+            } else {
+                Wh_Log(L"Sign-in [%s]: cancelled", req.label.c_str());
+            }
+            return;
+        }
+        code = Utf8ToWide(dialog.callbackCode);
+    }
+    if (useCode) {
+        redirect = WideToUtf8(kAnthropicRedirect);
+        LoginDialogState dialog;
+        dialog.url = BuildAnthropicAuthorizeUrl(redirect, challenge, state);
+        std::wstring instructions =
+            L"Open the sign-in link in a browser and approve access on claude.ai, then paste "
+            L"the code shown on the page below.";
+        if (!ShowLoginDialog(title, instructions, dialog) || g_unloading) return;
 
-    const std::wstring& pasted = dialog.pastedCode;
-    size_t b = pasted.find_first_not_of(L" \t\r\n");
-    size_t e = pasted.find_last_not_of(L" \t\r\n");
-    std::wstring code = b == std::wstring::npos ? L"" : pasted.substr(b, e - b + 1);
-    size_t hashPos = code.find(L'#');  // pasted value is code#state.
-    if (hashPos != std::wstring::npos) code = code.substr(0, hashPos);
+        const std::wstring& pasted = dialog.pastedCode;
+        size_t b = pasted.find_first_not_of(L" \t\r\n");
+        size_t e = pasted.find_last_not_of(L" \t\r\n");
+        code = b == std::wstring::npos ? L"" : pasted.substr(b, e - b + 1);
+        size_t hashPos = code.find(L'#');  // pasted value is code#state.
+        if (hashPos != std::wstring::npos) code = code.substr(0, hashPos);
+    }
     if (code.empty()) {
         Wh_Log(L"Sign-in [%s]: no code entered", req.label.c_str());
         return;
@@ -496,7 +557,7 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         obj.SetNamedValue(L"grant_type", JsonValue::CreateStringValue(L"authorization_code"));
         obj.SetNamedValue(L"client_id", JsonValue::CreateStringValue(winrt::hstring(kAnthropicClientId)));
         obj.SetNamedValue(L"code", JsonValue::CreateStringValue(winrt::hstring(code)));
-        obj.SetNamedValue(L"redirect_uri", JsonValue::CreateStringValue(winrt::hstring(kAnthropicRedirect)));
+        obj.SetNamedValue(L"redirect_uri", JsonValue::CreateStringValue(winrt::hstring(Utf8ToWide(redirect))));
         obj.SetNamedValue(L"code_verifier", JsonValue::CreateStringValue(winrt::hstring(Utf8ToWide(verifier))));
         obj.SetNamedValue(L"state", JsonValue::CreateStringValue(winrt::hstring(Utf8ToWide(state))));
         body = WideToUtf8(std::wstring(obj.Stringify().c_str()));
@@ -536,13 +597,14 @@ static void DoOpenAiLogin(const LoginRequest& req) {
 
     SOCKET listener = INVALID_SOCKET;
     int port = 0;
-    if (!StartLoopback(&listener, &port)) {
+    if (!StartLoopback({1455, 1457}, &listener, &port)) {
         Wh_Log(L"Sign-in [%s]: could not bind localhost:1455/1457 (Codex running?)",
                req.label.c_str());
         return;
     }
     g_loginSocket.store(listener);
     LoginDialogState dialog;
+    dialog.callbackRoute = "/auth/callback";
     dialog.url = BuildOpenAiAuthorizeUrl(port, challenge, state);
     dialog.listener = listener;
     dialog.expectedState = state;

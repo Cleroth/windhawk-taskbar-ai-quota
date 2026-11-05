@@ -6,6 +6,7 @@
 static constexpr PCWSTR kAnthropicClientId = L"9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 static constexpr PCWSTR kAnthropicTokenHost = L"console.anthropic.com";
 static constexpr PCWSTR kAnthropicTokenPath = L"/v1/oauth/token";
+// The page that shows the code#state to paste; on this PC a localhost redirect takes its place.
 static constexpr PCWSTR kAnthropicRedirect = L"https://console.anthropic.com/oauth/code/callback";
 static constexpr PCWSTR kAnthropicScope = L"org:create_api_key user:profile user:inference";
 static constexpr PCWSTR kOpenAiClientId = L"app_EMoamEEZ73f0CkXaXp7hrann";
@@ -64,11 +65,12 @@ static std::string UrlDecode(const std::string& s) {
     return out;
 }
 
-static std::wstring BuildAnthropicAuthorizeUrl(const std::string& challenge, const std::string& state) {
+static std::wstring BuildAnthropicAuthorizeUrl(const std::string& redirect, const std::string& challenge,
+                                               const std::string& state) {
     std::string url = "https://claude.ai/oauth/authorize?code=true";
     url += "&client_id=" + UrlEncode(WideToUtf8(kAnthropicClientId));
     url += "&response_type=code";
-    url += "&redirect_uri=" + UrlEncode(WideToUtf8(kAnthropicRedirect));
+    url += "&redirect_uri=" + UrlEncode(redirect);
     url += "&scope=" + UrlEncode(WideToUtf8(kAnthropicScope));
     url += "&code_challenge=" + challenge;
     url += "&code_challenge_method=S256";

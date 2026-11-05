@@ -27,9 +27,10 @@ The mod is injected into `explorer.exe`. Execution domains:
 - **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`; spawned from
   a taskbar UI thread by `StartLogin`): runs a sign-in in the sign-in window (`g_loginWnd`,
   own message loop), which offers the authorize link to copy or open; never launch a browser
-  unprompted. Anthropic codes and OpenCode Go API keys (masked) are pasted there; the OpenAI
-  loopback listener (`g_loginSocket`) notifies that window via `WSAAsyncSelect`; GitHub
-  Copilot's device flow shows its code there
+  unprompted. The Anthropic (any free port) and OpenAI (1455/1457) loopback listener
+  (`g_loginSocket`) notifies that window via `WSAAsyncSelect`; Anthropic's "Use a code" closes it
+  for a second window, with the paste redirect, taking the pasted code#state, as OpenCode Go's
+  window takes its API key (masked); GitHub Copilot's device flow shows its code there
   and polls the token endpoint from that message loop between pumps, never from the window
   procedure, discarding a result once the window closed; the loop also sets its status line, and
   a sign-in that ends without a token keeps the window open, not polling, until closed. Network
