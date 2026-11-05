@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.10.0
+// @version         2.10.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1294,6 +1294,24 @@ static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
         return L"Updated ?";
     }
     return std::wstring(L"Updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
+}
+
+// The shell's Explorer, the only one that polls and records history. Windhawk also loads the mod
+// into other Explorer processes (folder windows in a separate process, COM servers). Every
+// primary taskbar window is checked: another app's window of that class may come first.
+static bool IsTaskbarOwnerProcess() {
+    bool owner = false;
+    EnumWindows([](HWND hWnd, LPARAM lp) CALLBACK -> BOOL {
+        DWORD processId = 0;
+        wchar_t cls[32] = {};
+        if (GetWindowThreadProcessId(hWnd, &processId) && processId == GetCurrentProcessId() &&
+            GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && _wcsicmp(cls, L"Shell_TrayWnd") == 0) {
+            *reinterpret_cast<bool*>(lp) = true;
+            return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&owner));
+    return owner;
 }
 
 // Browser launch threads still to be joined; Wh_ModUninit collects them. Leaf lock.
@@ -4320,14 +4338,6 @@ static void SetHistoryStatus(std::wstring message) {
     if (changed) NotifySettingsWindowChanged();
 }
 
-static bool IsHistoryOwnerProcess() {
-    DWORD shellProcessId = 0;
-    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        GetWindowThreadProcessId(taskbar, &shellProcessId);
-    }
-    return shellProcessId && shellProcessId == GetCurrentProcessId();
-}
-
 static uint64_t HistoryChecksum(const HistorySample& sample) {
     uint64_t hash = 1469598103934665603ULL;
     const auto* bytes = reinterpret_cast<const unsigned char*>(&sample);
@@ -5489,9 +5499,26 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     const uint64_t historySession = NowUnixMs();
     bool curvesRecording = false;  // Recording was active last round, so curves may be published.
     BurnUpSampleCache curveSamples;  // Journal tails of recorded accounts, kept between rounds.
+    ULONGLONG fastRecheckUntilMs = GetTickCount64() + 60000;
+    bool waitingForTaskbar = false;
     while (!g_unloading) {
-        const bool historyOwner = IsHistoryOwnerProcess();
-        if (historyOwner && g_historyIdsPendingSave) {
+        // Another Explorer process would duplicate requests and notifications and race the
+        // shell over single-use refresh tokens: it makes no requests until it owns the taskbar.
+        // Init can precede the shell's taskbar, and a starting taskbar wakes this thread before
+        // its window may exist, so recheck often for a while after either.
+        if (!IsTaskbarOwnerProcess()) {
+            if (!waitingForTaskbar) Wh_Log(L"This process doesn't own the taskbar; not polling");
+            waitingForTaskbar = true;
+            DWORD recheckMs = GetTickCount64() < fastRecheckUntilMs ? 500 : 10000;
+            HANDLE handles[2] = {g_stopEvent, g_refreshEvent};
+            DWORD wait = WaitForMultipleObjects(2, handles, FALSE, recheckMs);
+            if (wait == WAIT_OBJECT_0) break;
+            if (wait == WAIT_OBJECT_0 + 1) fastRecheckUntilMs = GetTickCount64() + 60000;
+            continue;
+        }
+        if (waitingForTaskbar) Wh_Log(L"This process owns the taskbar; polling");
+        waitingForTaskbar = false;
+        if (g_historyIdsPendingSave) {
             // Init can run before the shell creates its taskbar. Persist the exact IDs
             // under the normal edit lock before any sample uses them, without history IO.
             std::lock_guard configLock(g_configEditMutex);
@@ -5529,15 +5556,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             intervalMin = g_settings.pollMinutes;
             redThreshold = g_settings.redThreshold;
             enableNotifications = g_settings.enableNotifications;
-            historyEnabled = g_settings.historyEnabled && historyOwner && !g_historyIdsPendingSave;
+            historyEnabled = g_settings.historyEnabled && !g_historyIdsPendingSave;
             historyRetentionDays = g_settings.historyRetentionDays;
             skipHiddenPolling = g_settings.skipHiddenPolling;
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
         }
-        ULONGLONG nextHistoryMaintenanceMs = historyOwner && historyEnabled
-            ? MaintainHistory(true) : 0;
+        ULONGLONG nextHistoryMaintenanceMs = historyEnabled ? MaintainHistory(true) : 0;
         bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
                                lastLoggedErrorStates.size() != accounts.size();
         if (settingsChanged) {
@@ -5646,6 +5672,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 continue;
             }
 
+            // Ownership can end mid-round (the shell exiting as another starts): request nothing
+            // more and recheck at once.
+            if (!IsTaskbarOwnerProcess()) {
+                nextPollMs = nowMs;
+                break;
+            }
             int retryAfter = 0;
             FetchAccount(accounts[i], &results[i], &retryAfter);
             // The journal rejects samples without a known provider code.
@@ -5795,7 +5827,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 if (rebuildAll && !curvesPublished) g_burnUpRebuildRequested = true;
             }
         } else if (curvesRecording) {
-            // No longer recording here: consent, history ownership or pending IDs.
+            // No longer recording here: consent or pending IDs.
             curveSamples = {};
             std::lock_guard<std::mutex> lk(g_dataMutex);
             curvesPublished = !g_burnUpCurves.accounts.empty();
@@ -13496,6 +13528,8 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     // Drop UI bound to the previous taskbar windows before injecting into the new ones.
     g_removeQuotaUiBeforeInject = true;
     StartRetryInject();
+    // This process may now own the taskbar: the fetch thread stops waiting for it.
+    if (g_refreshEvent) SetEvent(g_refreshEvent);
 }
 
 static bool HookTaskbarDllSymbols() {
@@ -19696,7 +19730,7 @@ static void LoadSettings() {
         // Startup can precede Shell_TrayWnd: retain IDs and opt-in, but fence recording until
         // the shell fetch thread saves them. Failed saves leave the same fence in place.
         g_historyIdsPendingSave = true;
-        if (IsHistoryOwnerProcess()) {
+        if (IsTaskbarOwnerProcess()) {
             if (SaveOwnedSettings(s)) {
                 g_historyIdsPendingSave = false;
             } else {

@@ -882,7 +882,7 @@ static void LoadSettings() {
         // Startup can precede Shell_TrayWnd: retain IDs and opt-in, but fence recording until
         // the shell fetch thread saves them. Failed saves leave the same fence in place.
         g_historyIdsPendingSave = true;
-        if (IsHistoryOwnerProcess()) {
+        if (IsTaskbarOwnerProcess()) {
             if (SaveOwnedSettings(s)) {
                 g_historyIdsPendingSave = false;
             } else {

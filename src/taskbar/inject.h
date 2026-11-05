@@ -809,6 +809,8 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     // Drop UI bound to the previous taskbar windows before injecting into the new ones.
     g_removeQuotaUiBeforeInject = true;
     StartRetryInject();
+    // This process may now own the taskbar: the fetch thread stops waiting for it.
+    if (g_refreshEvent) SetEvent(g_refreshEvent);
 }
 
 static bool HookTaskbarDllSymbols() {

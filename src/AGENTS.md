@@ -23,7 +23,8 @@ Rules for code under `src/`. Generation, checks, testing and publishing are in t
 The mod is injected into `explorer.exe`. Execution domains:
 
 - **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff, token refresh;
-  owns the tray notify icon. It must NEVER touch XAML.
+  owns the tray notify icon. It must NEVER touch XAML. It runs rounds only while
+  `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh tokens or notify.
 - **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`; spawned from
   a taskbar UI thread by `StartLogin`): runs a sign-in in the sign-in window (`g_loginWnd`,
   own message loop), which offers the authorize link to copy or open; never launch a browser
@@ -104,10 +105,10 @@ first, then reads/updates XAML.
   `RemoveAllQuotaGrids(true)`. A finite marshal may discard only an unclaimed payload; once the
   target claims it, wait for completion. Never add a timeout that lets the DLL unload while a
   worker, hook, subclass or XAML callback can still execute mod code. Hook callbacks on Explorer
-  threads (e.g. taskbar restart) only request removal/injection from the retry worker; they never
-  marshal themselves. The taskbar edge watch (`WatchTaskbarEdge`, owner-thread XAML handlers) may
-  only give back the room beside Start, close the flyout and collapse the bars before requesting
-  a rebuild the same way.
+  threads (e.g. taskbar restart) only request removal/injection from the retry worker (and wake
+  the fetch thread); they never marshal themselves. The taskbar edge watch (`WatchTaskbarEdge`,
+  owner-thread XAML handlers) may only give back the room beside Start, close the flyout and
+  collapse the bars before requesting a rebuild the same way.
 - Check `g_unloading` in loops and before slow/marshaled work.
 
 ## Stability (a crash takes down the shell)

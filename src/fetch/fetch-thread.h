@@ -211,9 +211,26 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     const uint64_t historySession = NowUnixMs();
     bool curvesRecording = false;  // Recording was active last round, so curves may be published.
     BurnUpSampleCache curveSamples;  // Journal tails of recorded accounts, kept between rounds.
+    ULONGLONG fastRecheckUntilMs = GetTickCount64() + 60000;
+    bool waitingForTaskbar = false;
     while (!g_unloading) {
-        const bool historyOwner = IsHistoryOwnerProcess();
-        if (historyOwner && g_historyIdsPendingSave) {
+        // Another Explorer process would duplicate requests and notifications and race the
+        // shell over single-use refresh tokens: it makes no requests until it owns the taskbar.
+        // Init can precede the shell's taskbar, and a starting taskbar wakes this thread before
+        // its window may exist, so recheck often for a while after either.
+        if (!IsTaskbarOwnerProcess()) {
+            if (!waitingForTaskbar) Wh_Log(L"This process doesn't own the taskbar; not polling");
+            waitingForTaskbar = true;
+            DWORD recheckMs = GetTickCount64() < fastRecheckUntilMs ? 500 : 10000;
+            HANDLE handles[2] = {g_stopEvent, g_refreshEvent};
+            DWORD wait = WaitForMultipleObjects(2, handles, FALSE, recheckMs);
+            if (wait == WAIT_OBJECT_0) break;
+            if (wait == WAIT_OBJECT_0 + 1) fastRecheckUntilMs = GetTickCount64() + 60000;
+            continue;
+        }
+        if (waitingForTaskbar) Wh_Log(L"This process owns the taskbar; polling");
+        waitingForTaskbar = false;
+        if (g_historyIdsPendingSave) {
             // Init can run before the shell creates its taskbar. Persist the exact IDs
             // under the normal edit lock before any sample uses them, without history IO.
             std::lock_guard configLock(g_configEditMutex);
@@ -251,15 +268,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             intervalMin = g_settings.pollMinutes;
             redThreshold = g_settings.redThreshold;
             enableNotifications = g_settings.enableNotifications;
-            historyEnabled = g_settings.historyEnabled && historyOwner && !g_historyIdsPendingSave;
+            historyEnabled = g_settings.historyEnabled && !g_historyIdsPendingSave;
             historyRetentionDays = g_settings.historyRetentionDays;
             skipHiddenPolling = g_settings.skipHiddenPolling;
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
         }
-        ULONGLONG nextHistoryMaintenanceMs = historyOwner && historyEnabled
-            ? MaintainHistory(true) : 0;
+        ULONGLONG nextHistoryMaintenanceMs = historyEnabled ? MaintainHistory(true) : 0;
         bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
                                lastLoggedErrorStates.size() != accounts.size();
         if (settingsChanged) {
@@ -368,6 +384,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 continue;
             }
 
+            // Ownership can end mid-round (the shell exiting as another starts): request nothing
+            // more and recheck at once.
+            if (!IsTaskbarOwnerProcess()) {
+                nextPollMs = nowMs;
+                break;
+            }
             int retryAfter = 0;
             FetchAccount(accounts[i], &results[i], &retryAfter);
             // The journal rejects samples without a known provider code.
@@ -517,7 +539,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 if (rebuildAll && !curvesPublished) g_burnUpRebuildRequested = true;
             }
         } else if (curvesRecording) {
-            // No longer recording here: consent, history ownership or pending IDs.
+            // No longer recording here: consent or pending IDs.
             curveSamples = {};
             std::lock_guard<std::mutex> lk(g_dataMutex);
             curvesPublished = !g_burnUpCurves.accounts.empty();

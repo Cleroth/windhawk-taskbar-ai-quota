@@ -173,6 +173,24 @@ static std::wstring FormatUpdated(ULONGLONG unixMs, bool stale) {
     return std::wstring(L"Updated ") + FormatLocalTime(local) + (stale ? L" (stale)" : L"");
 }
 
+// The shell's Explorer, the only one that polls and records history. Windhawk also loads the mod
+// into other Explorer processes (folder windows in a separate process, COM servers). Every
+// primary taskbar window is checked: another app's window of that class may come first.
+static bool IsTaskbarOwnerProcess() {
+    bool owner = false;
+    EnumWindows([](HWND hWnd, LPARAM lp) CALLBACK -> BOOL {
+        DWORD processId = 0;
+        wchar_t cls[32] = {};
+        if (GetWindowThreadProcessId(hWnd, &processId) && processId == GetCurrentProcessId() &&
+            GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && _wcsicmp(cls, L"Shell_TrayWnd") == 0) {
+            *reinterpret_cast<bool*>(lp) = true;
+            return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&owner));
+    return owner;
+}
+
 // Browser launch threads still to be joined; Wh_ModUninit collects them. Leaf lock.
 static std::mutex g_urlLaunchMutex;
 static std::vector<HANDLE> g_urlLaunchThreads;

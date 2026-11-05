@@ -75,7 +75,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
 - **Behavior**:
   - show on: the primary display, all displays, or a detected display with its resolution
   - show details on hover: resting the pointer on a column opens its details flyout (on by default)
-  - cloud poll interval presets plus a custom interval for Anthropic, OpenAI, GitHub Copilot and OpenCode Go (Antigravity polls its local server every minute)
+  - cloud poll interval presets plus a custom interval for Anthropic, OpenAI, GitHub Copilot and OpenCode Go (Antigravity polls its local server every minute); only the Explorer process that runs the taskbar polls, refreshes sign-ins and notifies, so another one (such as folder windows launched in a separate process) adds no requests or notifications
   - do not poll hidden accounts (on by default; overrides per-account history recording)
   - threshold notifications (toast when an account crosses the red threshold)
 - **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, the time span the usage history window opens on (24 hours, **7 days** by default, 30 days, 90 days, or All retained), and the storage folder

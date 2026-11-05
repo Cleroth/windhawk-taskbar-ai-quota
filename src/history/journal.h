@@ -36,14 +36,6 @@ static void SetHistoryStatus(std::wstring message) {
     if (changed) NotifySettingsWindowChanged();
 }
 
-static bool IsHistoryOwnerProcess() {
-    DWORD shellProcessId = 0;
-    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        GetWindowThreadProcessId(taskbar, &shellProcessId);
-    }
-    return shellProcessId && shellProcessId == GetCurrentProcessId();
-}
-
 static uint64_t HistoryChecksum(const HistorySample& sample) {
     uint64_t hash = 1469598103934665603ULL;
     const auto* bytes = reinterpret_cast<const unsigned char*>(&sample);
