@@ -11,6 +11,9 @@ struct StoredToken {
 
 static std::mutex g_authMutex;
 static std::mutex g_authEpochMutex;
+// Per identity, bumped under g_authEpochMutex whenever its stored sign-in ends: replaced by a new
+// sign-in, deleted, or moved away by a rename (whose redirect leads saves on to the new identity).
+// A save with an earlier epoch is stale; a refresh never bumps it.
 static std::vector<std::pair<uint64_t, ULONGLONG>> g_authEpochs;
 
 struct AuthRenameRedirect {
@@ -130,7 +133,18 @@ static bool ClearStoredToken(uint64_t idHash) {
     return !stored[0];
 }
 
-// `newSignIn`: a sign-in's first token, rather than a refreshed one.
+static void BumpAuthEpochLocked(uint64_t idHash) {
+    for (auto& [hash, epoch] : g_authEpochs) {
+        if (hash == idHash) {
+            epoch++;
+            return;
+        }
+    }
+    g_authEpochs.push_back({idHash, 1});
+}
+
+// `newSignIn`: a sign-in's first token, rather than a refreshed one. It starts a new epoch, so a
+// token read before it (a refresh in flight) can't replace it.
 static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
                                                 const StoredToken& t,
                                                 uint64_t* savedIdentity = nullptr,
@@ -153,19 +167,12 @@ static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authE
         destinationEpoch = redirect->destinationEpoch;
     }
     if (!SaveStoredToken(destinationIdentity, t)) return TokenSaveResult::Failed;
-    if (newSignIn) BumpSignInGenerationLocked(destinationIdentity);
+    if (newSignIn) {
+        BumpAuthEpochLocked(destinationIdentity);
+        BumpSignInGenerationLocked(destinationIdentity);
+    }
     if (savedIdentity) *savedIdentity = destinationIdentity;
     return TokenSaveResult::Saved;
-}
-
-static void BumpAuthEpochLocked(uint64_t idHash) {
-    for (auto& [hash, epoch] : g_authEpochs) {
-        if (hash == idHash) {
-            epoch++;
-            return;
-        }
-    }
-    g_authEpochs.push_back({idHash, 1});
 }
 
 static bool ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {

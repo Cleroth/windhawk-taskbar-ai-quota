@@ -160,6 +160,11 @@ access token without refresh or expiry and sent only to its usage endpoint.
 - Details read through a sign-in (Anthropic plan, Codex free resets' expiry) are cached under its
   sign-in generation. Any new path that replaces, deletes or moves a sign-in must call
   `BumpSignInGenerationLocked` in the same `g_authEpochMutex` section, after the token write.
+- Auth epochs make saves of an earlier sign-in's token stale: the same section must also
+  `BumpAuthEpochLocked` the identity whose sign-in it replaces or deletes (a rename: the source,
+  plus a redirect). Save tokens only through `SaveStoredTokenIfCurrent`: a refresh with the epoch
+  read in one `g_authEpochMutex` section with the token it refreshes, a sign-in with the epoch read
+  when it started.
 - Usage history belongs in per-user LocalAppData, not Windhawk's machine-shared writable storage.
   Recording consent is a separate HKCU setting, never a field in machine-shared `settings_v1`.
 - Keep the journal's size cap (maintenance and appends apply it with a number of days; kept

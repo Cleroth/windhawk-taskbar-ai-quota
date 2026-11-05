@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.13.0
+// @version         2.13.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe

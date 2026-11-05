@@ -18,8 +18,9 @@ static constexpr ULONGLONG kPlanCacheMs = 6ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kResetsExpiryCacheMs = 3ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a 429 says when.
 
+// `signInChanged`: polling again after a refreshed token's save went stale.
 static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
-                         AccountDetailsCache* details) {
+                         AccountDetailsCache* details, bool signInChanged = false) {
     d->error.clear();
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
@@ -35,10 +36,18 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     bool copilot = acc.provider == L"copilot";
     bool opencode = acc.provider == L"opencode";  // An API key: never expires, never refreshes.
     uint64_t idHash = AccountIdentityHash(acc);
-    ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
-    uint64_t signInGeneration = CurrentSignInGeneration(idHash);
+    ULONGLONG authEpoch = 0;
+    uint64_t signInGeneration = 0;
     StoredToken tok;
-    if (!LoadStoredToken(idHash, &tok) || tok.accessToken.empty()) {
+    bool signedIn = false;
+    {
+        // The token belongs to the epoch and sign-in generation read with it.
+        std::lock_guard<std::mutex> lk(g_authEpochMutex);
+        authEpoch = AuthEpochLocked(idHash);
+        signInGeneration = SignInGenerationLocked(idHash);
+        signedIn = LoadStoredToken(idHash, &tok) && !tok.accessToken.empty();
+    }
+    if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
         d->error = L"not signed in - click to sign in";
@@ -48,6 +57,17 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     auto refresh = [&](std::wstring* err, int* retryAfterSec) {
         return copilot ? RefreshCopilotToken(&tok, err, retryAfterSec) :
                          RefreshToken(acc.provider, &tok, err, retryAfterSec);
+    };
+    // A refreshed token's save is stale once its sign-in was replaced, deleted or moved again:
+    // poll once more with the current one (none after a sign-out). Should it change again
+    // meanwhile, poll again soon.
+    auto staleSave = [&] {
+        if (!signInChanged) {
+            FetchAccount(acc, d, retryAfterSec, details, true);
+            return;
+        }
+        d->stale = true;
+        d->error = L"token refresh failed";
     };
 
     // Refresh just before expiry so a request rarely races the token going stale.
@@ -60,9 +80,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
             TokenSaveResult saved =
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved == TokenSaveResult::Stale) {
-                d->stale = true;
-                d->needsLogin = true;
-                d->error = L"not signed in - click to sign in";
+                staleSave();
                 return;
             }
             if (saved != TokenSaveResult::Saved) {
@@ -135,9 +153,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                 if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
                 r = requestUsage(tok);
             } else if (saved == TokenSaveResult::Stale) {
-                d->stale = true;
-                d->needsLogin = true;
-                d->error = L"not signed in - click to sign in";
+                staleSave();
                 return;
             } else {
                 d->stale = true;
