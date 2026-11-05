@@ -2779,8 +2779,8 @@ static void RunLayoutTests() {
 
         // A slider's box shows its draft's text and error; the slider the last valid value.
         view = TestView(SettingsUiPage::Layout);
-        view.drafts.push_back({0, SettingsField::BarLength, 1, true, L"12a", 100, false, false,
-                               L"Enter a whole number from 10 to 500."});
+        view.drafts.push_back(
+            {0, SettingsField::BarLength, 1, true, L"12a", 100, false, false, SettingsDraftError::Range});
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::BarLength).text == L"12a");
@@ -2788,8 +2788,8 @@ static void RunLayoutTests() {
         CHECK(HasText(frame, L"Enter a whole number from 10 to 500."));
         // A dragged value whose save failed shows its error too.
         view = TestView(SettingsUiPage::Layout);
-        view.drafts.push_back({0, SettingsField::BarThickness, 1, false, L"", 20, true, true,
-                               L"This change couldn't be saved."});
+        view.drafts.push_back(
+            {0, SettingsField::BarThickness, 1, false, L"", 20, true, true, SettingsDraftError::SaveFailed});
         view.settings.barThickness = 20;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);

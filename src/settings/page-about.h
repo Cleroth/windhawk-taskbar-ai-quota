@@ -39,14 +39,17 @@ static constexpr PCWSTR kSettingsProjectUrl = L"https://github.com/Cleroth/windh
 static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                   float width) {
+    const I18nLocale& locale = view.locale;
+
     // App card (mockup .aboutcard): icon, name, version line, summary.
     {
         constexpr float kPadX = 20, kPadY = 18, kIcon = 52, kGap = 18;
         float textLeft = x + 1 + kPadX + kIcon + kGap;
         float textWidth = std::max(x + width - 1 - kPadX - textLeft, 40.0f);
-        std::wstring versionLine = L"Version " + view.version + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
-        PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub "
-                         L"Copilot and OpenCode Go on the Windows 11 taskbar.";
+        std::wstring versionLine = I18nText(locale, Tr(L"Version {version}  \u00B7  by Cleroth  \u00B7  Windhawk mod"),
+                                            {{L"version", view.version}});
+        std::wstring summary = I18nText(locale, Tr(L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, "
+                                                   L"GitHub Copilot and OpenCode Go on the Windows 11 taskbar."));
         UiTextStyle caption = UiTextStyleFor(UiFont::Caption);
         float versionHeight = UiLayoutSize(UiLayout(g, versionLine, caption, textWidth)).height;
         float summaryHeight = UiLayoutSize(UiLayout(g, summary, caption, textWidth)).height;
@@ -77,7 +80,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
             items.push_back(std::move(line));
             lineTop += height;
         };
-        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);
+        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
         lineTop += 2;
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);
@@ -88,25 +91,30 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.glyph = L"\uE8C8";
-        spec.title = L"Copy version info";
-        spec.description = {{L"The mod\u2019s name and version and the Windows build, for bug reports."}};
+        spec.title = I18nText(locale, Tr(L"Copy version info"));
+        spec.description = {{I18nText(locale, Tr(L"The mod\u2019s name and version and the Windows build, for bug "
+                                                 L"reports."))}};
         spec.minHeight = 62;
-        PCWSTR label = !view.versionCopied ? L"Copy" : *view.versionCopied ? L"Copied" : L"Copy failed";
+        std::wstring label = I18nText(locale, !view.versionCopied ? TrCtx(L"button", L"Copy") :
+                                              *view.versionCopied ? TrCtx(L"button", L"Copied") :
+                                                                    TrCtx(L"button", L"Copy failed"));
         y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo, label);
     }
 
     // Links: whole cards open the page in the browser.
-    y = UiAddSection(items, id, x, y + 20, width, L"Links");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Links")));
     struct LinkCard {
-        PCWSTR glyph, title, description;
-        std::wstring url;
+        PCWSTR glyph;
+        std::wstring title, description, url;
     };
     const LinkCard links[] = {
-        {L"\uE774", L"Project page", L"github.com/Cleroth/windhawk-taskbar-ai-quota",
+        {L"\uE774", I18nText(locale, Tr(L"Project page")), L"github.com/Cleroth/windhawk-taskbar-ai-quota",
          kSettingsProjectUrl},
-        {L"\uEBE8", L"Report an issue", L"Suggestions and bug reports on GitHub",
+        {L"\uEBE8", I18nText(locale, Tr(L"Report an issue")),
+         I18nText(locale, Tr(L"Suggestions and bug reports on GitHub")),
          std::wstring(kSettingsProjectUrl) + L"/issues/new"},
-        {L"\uE81C", L"Usage history guide", L"Recording rules, storage, export and verification",
+        {L"\uE81C", I18nText(locale, Tr(L"Usage history guide")),
+         I18nText(locale, Tr(L"Recording rules, storage, export and verification")),
          std::wstring(kSettingsProjectUrl) + L"#usage-history"},
     };
     for (const LinkCard& link : links) {
@@ -121,24 +129,28 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
     }
 
     // Credits and license.
-    y = UiAddSection(items, id, x, y - 3 + 20, width, L"Credits and license");
+    y = UiAddSection(items, id, x, y - 3 + 20, width,
+                     I18nText(locale, TrCtx(L"settings-section", L"Credits and license")));
     {
-        // Alphabetical, ignoring case (README > Contributors); each name links to its GitHub profile.
+        // Alphabetical, ignoring case (README > Contributors), joined by the language's list
+        // patterns; each name links to its GitHub profile by its login, its link ID.
         constexpr std::pair<PCWSTR, PCWSTR> kContributors[] = {
-            {L"amirf147", L"amirf147"}, {L"Hugh Macdonald", L"HughMacdonald"}, {L"incconutwo", L"incconutwo"},
-            {L"smnio", L"smnio"},       {L"Sof2245", L"Sof2245"},             {L"yalov", L"yalov"},
+            {L"amirf147", L"amirf147"}, {L"Hugh Macdonald", L"HughMacdonald"},  // i18n-en
+            {L"incconutwo", L"incconutwo"}, {L"smnio", L"smnio"},
+            {L"Sof2245", L"Sof2245"}, {L"yalov", L"yalov"},  // i18n-en
         };
-        constexpr size_t kCount = std::size(kContributors);
+        std::vector<std::vector<I18nRun>> names;
+        for (auto [name, login] : kContributors) names.push_back({{name, false, login}});
+        std::vector<I18nRun> sentence =
+            I18nRuns(locale, Tr(L"Thanks to {names}."), {{L"names", I18nList(locale, names)}});
         UiCardSpec spec;
         spec.glyph = L"\uE716";
-        spec.title = L"Contributors";
-        spec.description = {{L"Thanks to "}};
-        for (size_t i = 0; i < kCount; i++) {
-            auto [name, login] = kContributors[i];
-            spec.description.push_back({name, UiRunStyle::Link, UiInk::Inherit,
-                                        {UiActionKind::OpenUrl, 0, std::wstring(L"https://github.com/") + login}});
-            PCWSTR separator = i + 2 < kCount ? L", " : i + 1 < kCount ? L" and " : L".";
-            spec.description.push_back({separator});
+        spec.title = I18nText(locale, Tr(L"Contributors"));
+        for (const I18nRun& run : sentence) {
+            spec.description.push_back(
+                run.link.empty() ? UiRun{run.text} :
+                                   UiRun{run.text, UiRunStyle::Link, UiInk::Inherit,
+                                         {UiActionKind::OpenUrl, 0, L"https://github.com/" + run.link}});
         }
         y = UiAddCard(g, items, id, x, y, width, spec).card.bottom + 3;
     }
@@ -146,19 +158,16 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         constexpr float kLogo = 18, kLogoGap = 14;
         UiCardSpec spec;
         spec.glyph = L"\uE8B9";
-        spec.title = L"Provider logos";
-        spec.description = {
-            {L"From "},
-            {L"Simple Icons", UiRunStyle::Link, UiInk::Inherit,
-             {UiActionKind::OpenUrl, 0, L"https://simpleicons.org"}},
-            {L" (CC0 1.0); the GitHub Copilot mark from "},
-            {L"Primer Octicons", UiRunStyle::Link, UiInk::Inherit,
-             {UiActionKind::OpenUrl, 0, L"https://github.com/primer/octicons"}},
-            {L" (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity uses the Gemini mark.\n"
-             L"Claude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
-             L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only "
-             L"identify which account a tile shows."},
-        };
+        spec.title = I18nText(locale, Tr(L"Provider logos"));
+        spec.description = I18nUiRuns(
+            I18nRuns(locale, Tr(L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot "
+                                L"mark from <link id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) "
+                                L"2026 GitHub Inc.). Google Antigravity uses the Gemini mark.\nClaude, Anthropic, "
+                                L"OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, GitHub Copilot and "
+                                L"OpenCode are trademarks of their respective owners. Logos only identify which "
+                                L"account a tile shows.")),
+            {{L"simple_icons", {UiActionKind::OpenUrl, 0, L"https://simpleicons.org"}},
+             {L"octicons", {UiActionKind::OpenUrl, 0, L"https://github.com/primer/octicons"}}});
         spec.trailing = {5 * kLogo + 4 * kLogoGap, kLogo};
         UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
         float logoLeft = card.trailing.left;
@@ -176,13 +185,13 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         y = card.card.bottom + 3;
     }
     {
-        PCWSTR label = L"MIT License";
+        std::wstring label = I18nText(locale, Tr(L"MIT License"));
         float labelWidth =
             UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
         UiCardSpec spec;
         spec.glyph = L"\uE8A5";
-        spec.title = L"License";
-        spec.description = {{L"Free to use, modify and share."}};
+        spec.title = I18nText(locale, Tr(L"License"));
+        spec.description = {{I18nText(locale, Tr(L"Free to use, modify and share."))}};
         spec.trailing = {std::ceil(labelWidth), 20};
         UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
         // Hyperlink button: its padding reaches into the card's, so the text aligns right.

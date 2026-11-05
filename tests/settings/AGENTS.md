@@ -63,7 +63,11 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   to actions, the History page's two-link sentence with its links reordered by a test catalog
   (actions and focus order follow the IDs), the language field and its edits (a failed save, the
   Behavior reset), the Behavior page in German, Russian and Japanese (plurals, the widened Show on
-  field) and the pseudo-locale, and the locale in the toolkit's text caches.
+  field) and the pseudo-locale, the locale in the toolkit's text caches, the About page's
+  Contributors sentence (Japanese word order, a test catalog's reversed list patterns: links by
+  login and focus order), the History page in Russian (retention and time span plurals, the
+  custom box's unit, the status color inside the line), the settings notices' codes (every
+  English text, a kept history's reason in German) and draft errors re-read per frame language.
   `fixtures/i18n-taskbar.inc`: the meter model's localized text on the production catalogs: the
   quota keys and the headline countdown's forms and width reserve in zh-Hans, ru and the
   pseudo-locale, the preview strip drawing them (the matrix's localized key reserve), an account

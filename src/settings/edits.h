@@ -549,11 +549,6 @@ static std::wstring SettingsFormatNumber(int value, wchar_t separator) {
     return value < 0 ? L"-" + text : text;
 }
 
-static std::wstring SettingsRangeError(SettingsNumberRange range) {
-    return L"Enter a whole number from " + std::to_wstring(range.minimum) + L" to " +
-           std::to_wstring(range.maximum) + L".";
-}
-
 // Account fields ---------------------------------------------------------------------------------
 
 static int SettingsAccountValue(const AccountConfig& a, SettingsField field) {
@@ -663,10 +658,38 @@ struct SettingsAccountRef {
 
 enum class SettingsNoticeKind : uint8_t { Error, Warning, Information };
 
+// What the window tells the user after an operation: a code, its text in the language shown when
+// its message box opens (SettingsNoticeText), never the language of the moment it arose.
+enum class SettingsNoticeCode : uint8_t {
+    None,
+    // The controller's
+    AccountsDropped,  // An account vanished: its drafts were dropped
+    AccountDropped,   // The account acted on vanished
+    AccountNotSaved,  // An account edit failed without a notice of its own
+    // The account commands' (settings/account-commands.h) and the store's
+    AccountExists,
+    AccountSaveFailed,
+    ChangedElsewhere,
+    IdentitySignInRunning,
+    RenameTargetSignedIn,
+    RenameCopyFailed,
+    RenameCopyLeft,       // A failed rename's copied sign-in remains under the new identity
+    RenameOldSignInLeft,  // A rename's old sign-in remains
+    RemoveSignInRunning,
+    RemoveSignInKept,     // The sign-in couldn't be deleted: not removed
+    RemoveSignedOut,      // The sign-in was deleted, the settings not saved
+    RemoveFailed,
+    HistoryKept,          // Removed, its history not deleted: the journal's error is the reason
+    ReorderFailed,
+    VisibilityFailed,
+    SignOutFailed,
+};
+
 struct SettingsAccountResult {
     SettingsSaveResult save = SettingsSaveResult::Unchanged;
     bool missing = false;  // No such account (any more)
-    std::wstring notice;   // What the window tells the user, if anything
+    SettingsNoticeCode notice = SettingsNoticeCode::None;  // What the window tells the user, if anything
+    HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
     SettingsNoticeKind kind = SettingsNoticeKind::Error;
     SettingsAccountRef account;  // The account afterwards: added or renamed
 };
@@ -696,6 +719,15 @@ protected:
 
 // Controller -------------------------------------------------------------------------------------
 
+// A draft's error, shown with its control in the frame's language (SettingsDraftErrorText).
+enum class SettingsDraftError : uint8_t {
+    None,
+    Range,       // Not a number of its field's range
+    LabelEmpty,
+    LabelTaken,  // Another account of its provider uses it
+    SaveFailed,
+};
+
 struct SettingsDraft {
     uint64_t key = 0;
     SettingsField field = SettingsField::None;
@@ -705,8 +737,27 @@ struct SettingsDraft {
     int value = 0;       // Desired value; for text, the last valid one
     bool valid = true;   // `raw` parses
     bool failed = false; // Its last save failed; not retried until the user acts on the field
-    std::wstring error;  // Shown with the control
+    SettingsDraftError error = SettingsDraftError::None;  // Shown with the control
 };
+
+static std::wstring SettingsDraftErrorText(const I18nLocale& locale, const SettingsDraft& draft) {
+    switch (draft.error) {
+        case SettingsDraftError::None:
+            return {};
+        case SettingsDraftError::Range: {
+            SettingsNumberRange range = SettingsFieldRange(draft.field).value_or(SettingsNumberRange{});
+            return I18nText(locale, Tr(L"Enter a whole number from {minimum} to {maximum}."),
+                            {{L"minimum", range.minimum}, {L"maximum", range.maximum}});
+        }
+        case SettingsDraftError::LabelEmpty:
+            return I18nText(locale, Tr(L"Enter a label."));
+        case SettingsDraftError::LabelTaken:
+            return I18nText(locale, Tr(L"Another account of this provider uses this label."));
+        case SettingsDraftError::SaveFailed:
+            return I18nText(locale, Tr(L"This change couldn't be saved."));
+    }
+    return {};
+}
 
 struct SettingsRequest {
     uint64_t key = 0;
@@ -724,10 +775,70 @@ enum class SettingsActionResult : uint8_t { Done, Blocked, Failed };
 
 // A message box the window owes the user. A failure's explains a failed save.
 struct SettingsNotice {
-    std::wstring text;
+    SettingsNoticeCode code = SettingsNoticeCode::None;
     SettingsNoticeKind kind = SettingsNoticeKind::Error;
     bool failure = false;
+    HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
 };
+
+static std::wstring SettingsNoticeText(const I18nLocale& locale, SettingsNoticeCode code,
+                                       HistoryJournalError reason = HistoryJournalError::None) {
+    using enum SettingsNoticeCode;
+    switch (code) {
+        case None:
+            return {};
+        case AccountsDropped:
+            return I18nText(locale, Tr(L"An account is no longer configured; its unsaved changes were dropped."));
+        case AccountDropped:
+            return I18nText(locale, Tr(L"This account is no longer configured; its unsaved changes were dropped."));
+        case AccountNotSaved:
+            return I18nText(locale, Tr(L"Could not save the account. The change is kept here with its error; change it "
+                                       L"again to retry."));
+        case AccountExists:
+            return I18nText(locale, Tr(L"That provider and label are already configured."));
+        case AccountSaveFailed:
+            return I18nText(locale, Tr(L"Could not save the account."));
+        case ChangedElsewhere:
+            return I18nText(locale, Tr(L"The account was changed from another taskbar window."));
+        case IdentitySignInRunning:
+            return I18nText(locale, Tr(L"Wait for the current sign-in to finish before changing identity."));
+        case RenameTargetSignedIn:
+            return I18nText(locale, Tr(L"The renamed account identity already has a retained sign-in. To replace it, "
+                                       L"add an account with that provider and label, then remove it. The account was "
+                                       L"not changed."));
+        case RenameCopyFailed:
+            return I18nText(locale, Tr(L"The stored sign-in could not be copied. The account was not changed."));
+        case RenameCopyLeft:
+            return I18nText(locale, Tr(L"Could not save the account. The copied sign-in remains under the attempted "
+                                       L"new identity. To delete it, add an account with the attempted provider and "
+                                       L"label, then remove it."));
+        case RenameOldSignInLeft:
+            return I18nText(locale, Tr(L"The account was renamed, but a duplicate stored sign-in remains under the old "
+                                       L"identity. To delete it, re-add an account with the old provider and label, "
+                                       L"then remove it."));
+        case RemoveSignInRunning:
+            return I18nText(locale, Tr(L"Wait for the current sign-in to finish before removing accounts."));
+        case RemoveSignInKept:
+            return I18nText(locale, Tr(L"The stored sign-in could not be deleted, so the account was not removed."));
+        case RemoveSignedOut:
+            return I18nText(locale, Tr(L"The stored sign-in was deleted, but settings could not be saved. The account "
+                                       L"remains configured but signed out."));
+        case RemoveFailed:
+            return I18nText(locale, Tr(L"Could not remove the account."));
+        case HistoryKept:
+            return I18nText(locale, Tr(L"The account was removed, but its usage history could not be deleted and was "
+                                       L"kept.\n\n{reason}"),
+                            {{L"reason", HistoryJournalErrorText(locale, reason)}});
+        case ReorderFailed:
+            return I18nText(locale, Tr(L"Could not reorder the account."));
+        case VisibilityFailed:
+            return I18nText(locale, Tr(L"Could not update account visibility."));
+        case SignOutFailed:
+            return I18nText(locale, Tr(L"The stored sign-in could not be deleted and remains retained for this "
+                                       L"account."));
+    }
+    return {};
+}
 
 struct SettingsEdits {
     explicit SettingsEdits(SettingsStore& store) : store(&store) {}
@@ -775,8 +886,7 @@ struct SettingsEdits {
         std::erase_if(drafts, [&](const SettingsDraft& d) { return d.key && !IndexOf(d.key); });
         std::erase_if(queue, [&](const SettingsRequest& r) { return r.key && !IndexOf(r.key); });
         if (drafts.size() != before) {
-            notices.push_back({L"An account is no longer configured; its unsaved changes were dropped.",
-                               SettingsNoticeKind::Warning, false});
+            notices.push_back({SettingsNoticeCode::AccountsDropped, SettingsNoticeKind::Warning, false});
         }
     }
 
@@ -796,7 +906,7 @@ struct SettingsEdits {
             AccountConfig& account = s.accounts[*index];
             if (draft.field == SettingsField::AccountLabel) {
                 std::wstring label = SettingsTrimLabel(draft.raw);
-                if (LabelError(draft.key, label).empty()) account.label = std::move(label);
+                if (LabelError(draft.key, label) == SettingsDraftError::None) account.label = std::move(label);
             } else {
                 SettingsAccountAssign(account, draft.field, draft.value, draft.raw);
             }
@@ -826,19 +936,19 @@ struct SettingsEdits {
         return slot == slots.end() ? 0 : slot->second;
     }
 
-    // Empty when `label` (trimmed) can be the account's: not empty, and no other account of its
+    // None when `label` (trimmed) can be the account's: not empty, and no other account of its
     // provider uses it.
-    std::wstring LabelError(uint64_t key, const std::wstring& label) const {
-        if (label.empty()) return L"Enter a label.";
+    SettingsDraftError LabelError(uint64_t key, const std::wstring& label) const {
+        if (label.empty()) return SettingsDraftError::LabelEmpty;
         std::optional<size_t> index = IndexOf(key);
-        if (!index) return {};
+        if (!index) return SettingsDraftError::None;
         const std::vector<AccountConfig>& accounts = baseline.settings.accounts;
         for (size_t i = 0; i < accounts.size(); i++) {
             if (i != *index && accounts[i].provider == accounts[*index].provider && accounts[i].label == label) {
-                return L"Another account of this provider uses this label.";
+                return SettingsDraftError::LabelTaken;
             }
         }
-        return {};
+        return SettingsDraftError::None;
     }
 
     // A text box's text (every change). Number text that doesn't parse keeps the last valid
@@ -852,7 +962,7 @@ struct SettingsEdits {
         draft.raw = std::move(text);
         if (free) {
             draft.valid = field != SettingsField::AccountLabel ||
-                          LabelError(key, SettingsTrimLabel(draft.raw)).empty();
+                          LabelError(key, SettingsTrimLabel(draft.raw)) == SettingsDraftError::None;
             return;
         }
         SettingsParsedNumber parsed = SettingsParseNumber(draft.raw, *range, baseline.status.groupSeparator);
@@ -893,7 +1003,7 @@ struct SettingsEdits {
             return false;
         }
         draft->failed = false;
-        draft->error.clear();
+        draft->error = SettingsDraftError::None;
         bool queued = std::any_of(queue.begin(), queue.end(), [&](const SettingsRequest& request) {
             return request.key == key && request.field == field && request.revision == draft->revision;
         });
@@ -1046,7 +1156,9 @@ struct SettingsEdits {
         if (action == SettingsField::AccountRemove &&
             (result.missing || result.save == SettingsSaveResult::Changed)) {
             DropAccount(key);
-            if (!result.notice.empty()) notices.push_back({result.notice, result.kind, false});
+            if (result.notice != SettingsNoticeCode::None) {
+                notices.push_back({result.notice, result.kind, false, result.reason});
+            }
             Reload();
             return SettingsActionResult::Done;
         }
@@ -1083,7 +1195,9 @@ struct SettingsEdits {
         }
         SettingsAccountResult result = store->AddAccount(provider, labels);
         bool added = result.save == SettingsSaveResult::Changed;
-        if (!result.notice.empty()) notices.push_back({result.notice, result.kind, !added});
+        if (result.notice != SettingsNoticeCode::None) {
+            notices.push_back({result.notice, result.kind, !added, result.reason});
+        }
         if (!added) return 0;
         Reload();
         for (size_t i = 0; i < keys.size(); i++) {
@@ -1119,7 +1233,7 @@ private:
         }
         draft->revision = ++revisions;
         draft->failed = false;
-        draft->error.clear();
+        draft->error = SettingsDraftError::None;
         return *draft;
     }
 
@@ -1132,15 +1246,14 @@ private:
     // A label's validity follows the other accounts, which may have changed since it was typed.
     bool Valid(SettingsDraft& draft) const {
         if (draft.field == SettingsField::AccountLabel) {
-            draft.valid = LabelError(draft.key, SettingsTrimLabel(draft.raw)).empty();
+            draft.valid = LabelError(draft.key, SettingsTrimLabel(draft.raw)) == SettingsDraftError::None;
         }
         return draft.valid;
     }
 
-    std::wstring InvalidError(const SettingsDraft& draft) const {
+    SettingsDraftError InvalidError(const SettingsDraft& draft) const {
         if (draft.field == SettingsField::AccountLabel) return LabelError(draft.key, SettingsTrimLabel(draft.raw));
-        std::optional<SettingsNumberRange> range = SettingsFieldRange(draft.field);
-        return range ? SettingsRangeError(*range) : std::wstring();
+        return SettingsFieldRange(draft.field) ? SettingsDraftError::Range : SettingsDraftError::None;
     }
 
     SettingsRequest RequestFor(const SettingsDraft& draft) const {
@@ -1181,7 +1294,7 @@ private:
                 auto draft = std::find_if(drafts.begin(), drafts.end(), same);
                 if (draft != drafts.end()) {
                     draft->failed = true;
-                    draft->error = L"This change couldn't be saved.";
+                    draft->error = SettingsDraftError::SaveFailed;
                 }
             }
             return false;
@@ -1196,17 +1309,15 @@ private:
     bool Settle(const SettingsRequest& request, const SettingsAccountResult& result) {
         if (result.missing) {
             DropAccount(request.key);
-            notices.push_back({L"This account is no longer configured; its unsaved changes were dropped.",
-                               SettingsNoticeKind::Warning, true});
+            notices.push_back({SettingsNoticeCode::AccountDropped, SettingsNoticeKind::Warning, true});
             Reload();
             return false;
         }
         bool failed = result.save == SettingsSaveResult::Failed;
-        if (!result.notice.empty()) {
-            notices.push_back({result.notice, result.kind, failed});
+        if (result.notice != SettingsNoticeCode::None) {
+            notices.push_back({result.notice, result.kind, failed, result.reason});
         } else if (failed) {
-            notices.push_back({L"Could not save the account. The change is kept here with its error; change it "
-                               L"again to retry.", SettingsNoticeKind::Error, true});
+            notices.push_back({SettingsNoticeCode::AccountNotSaved, SettingsNoticeKind::Error, true});
         }
         auto same = [&](const SettingsDraft& d) {
             return d.key == request.key && d.field == request.field && d.revision == request.revision;
@@ -1215,7 +1326,7 @@ private:
             auto draft = request.revision ? std::find_if(drafts.begin(), drafts.end(), same) : drafts.end();
             if (draft != drafts.end()) {
                 draft->failed = true;
-                draft->error = L"This change couldn't be saved.";
+                draft->error = SettingsDraftError::SaveFailed;
             }
             return false;
         }

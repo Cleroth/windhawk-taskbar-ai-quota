@@ -34,7 +34,9 @@ preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Co
   (`core/account-error.h`) formats them for presentation in the reader's language, inline or alone
   (sentence case), and for logs and their dedupe in English. Compare codes, never text.
   `AccountErrorCode::Message` holds provider text without a code of its own. The history journal's
-  errors are `HistoryJournalError` codes the same way (`history/journal-error.h`).
+  errors are `HistoryJournalError` codes the same way (`history/journal-error.h`), and so are the
+  settings window's notices and draft errors (`SettingsNoticeCode`, `SettingsDraftError` in
+  `settings/edits.h`), formatted when a message box opens or a frame is built.
 - `I18nLanguageByTag` (explicit choice) reaches any language and `qps-ploc`;
   `I18nMatchLanguage` (Automatic) skips `inProgress` ones and never picks `qps-ploc`.
 - Intentional English literals (IDs, CSV, protocol text) carry `// i18n-en` on their line;

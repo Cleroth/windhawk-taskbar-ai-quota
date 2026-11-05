@@ -63,13 +63,19 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
         add.icon = L"\uE710";
         add.iconSize = 12;
         add.action = SettingsCommand(SettingsField::AccountAdd, -1);
+        // Providers by their product names; how each signs in.
+        std::wstring browser = I18nText(view.locale, TrCtx(L"add-account", L"Sign in with your browser"));
         add.options = {
-            {L"Anthropic (Claude)", 0, L"Sign in with your browser", {{kClaudeLogoPath, {}, UiInk::Primary}}},
-            {L"OpenAI (ChatGPT/Codex)", 1, L"Sign in with your browser", {{kOpenAiLogoPath, {}, UiInk::Primary}}},
-            {L"Google Antigravity", 2, L"Uses the signed-in Antigravity app or CLI",
+            {L"Anthropic (Claude)", 0, browser, {{kClaudeLogoPath, {}, UiInk::Primary}}},  // i18n-en
+            {L"OpenAI (ChatGPT/Codex)", 1, browser, {{kOpenAiLogoPath, {}, UiInk::Primary}}},  // i18n-en
+            {L"Google Antigravity", 2,  // i18n-en
+             I18nText(view.locale, TrCtx(L"add-account", L"Uses the signed-in Antigravity app or CLI")),
              {{kGeminiLogoPath, {}, UiInk::Primary}}},
-            {L"GitHub Copilot", 3, L"Sign in with a code on github.com", {{kCopilotLogoPath, {}, UiInk::Primary}}},
-            {L"OpenCode Go", 4, L"Sign in with an API key from the OpenCode console",
+            {L"GitHub Copilot", 3,  // i18n-en
+             I18nText(view.locale, TrCtx(L"add-account", L"Sign in with a code on github.com")),
+             {{kCopilotLogoPath, {}, UiInk::Primary}}},
+            {L"OpenCode Go", 4,  // i18n-en
+             I18nText(view.locale, TrCtx(L"add-account", L"Sign in with an API key from the OpenCode console")),
              {{kOpenCodeLogoPath, {}, UiInk::Primary}}},
         };
         frame.main.push_back(std::move(add));
@@ -80,10 +86,11 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             note.font = UiFont::Note;
             note.ink = UiInk::Muted;
             note.rect = {kSettingsNavWidth + left, 50, right, 69};
-            note.runs.push_back({view.settings.skipHiddenPolling ?
-                                     L"Drag to reorder. Toggle hides an account from the taskbar; hidden "
-                                     L"accounts are not polled." :
-                                     L"Drag to reorder. Toggle hides an account from the taskbar."});
+            note.runs.push_back({I18nText(view.locale, view.settings.skipHiddenPolling ?
+                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
+                                                              L"taskbar; hidden accounts are not polled.") :
+                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
+                                                              L"taskbar."))});
             frame.main.push_back(std::move(note));
             header = 69;
         }

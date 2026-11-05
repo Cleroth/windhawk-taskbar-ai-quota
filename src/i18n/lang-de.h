@@ -1,33 +1,120 @@
 // German (de): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogDe[] = {
+    {L"", L"1 to 3650 days.", L"1 bis 3650 Tage."},
     {L"", L"2 to 1440 minutes.", L"2 bis 1440 Minuten."},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"Eine Änderung konnte nicht gespeichert werden; sie wird mit ihrem Fehler angezeigt.\n\nNicht gespeicherte "
+     L"Änderungen verwerfen und das Fenster schließen?"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"KI-Abo-Kontingente für Anthropic, OpenAI, Google Antigravity, GitHub Copilot und OpenCode Go in der "
+     L"Taskleiste von Windows 11."},
     {L"", L"All displays", L"Alle Bildschirme"},
+    {L"", L"Also delete its usage history", L"Auch den Nutzungsverlauf löschen"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"Ein Konto ist nicht mehr konfiguriert; seine nicht gespeicherten Änderungen wurden verworfen."},
+    {L"", L"Another account of this provider uses this label.",
+     L"Ein anderes Konto dieses Anbieters verwendet diese Bezeichnung."},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic, OpenAI und GitHub Copilot melden sich über Ihren Browser an, OpenCode Go mit einem API-Schlüssel. "
+     L"Google Antigravity verwendet seine angemeldete App oder CLI, die weiterlaufen muss."},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"Gilt nur für diesen Windows-Benutzer. Beim Ausschalten bleibt der gespeicherte Verlauf erhalten."},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Wählen Sie „Benutzerdefiniert“ unter „Cloud-Abfrageintervall“, um dies zu bearbeiten."},
+    {L"", L"Choose Custom in Keep history to edit.",
+     L"Wählen Sie „Benutzerdefiniert“ unter „Verlauf aufbewahren“, um dies zu bearbeiten."},
     {L"", L"Cloud poll interval", L"Cloud-Abfrageintervall"},
+    {L"", L"Contributors", L"Mitwirkende"},
+    {L"", L"Copy version info", L"Versionsinfo kopieren"},
+    {L"", L"Could not remove the account.", L"Das Konto konnte nicht entfernt werden."},
+    {L"", L"Could not reorder the account.", L"Das Konto konnte nicht verschoben werden."},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"Die Einstellungen konnten nicht gespeichert werden. Die Änderung bleibt hier mit ihrem Fehler erhalten; "
+     L"ändern Sie sie erneut, um es noch einmal zu versuchen."},
+    {L"", L"Could not save the account.", L"Das Konto konnte nicht gespeichert werden."},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"Das Konto konnte nicht gespeichert werden. Die Änderung bleibt hier mit ihrem Fehler erhalten; ändern Sie sie "
+     L"erneut, um es noch einmal zu versuchen."},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"Das Konto konnte nicht gespeichert werden. Die kopierte Anmeldung verbleibt unter der versuchten neuen "
+     L"Identität. Um sie zu löschen, fügen Sie ein Konto mit dem versuchten Anbieter und der versuchten Bezeichnung "
+     L"hinzu und entfernen Sie es dann."},
+    {L"", L"Could not update account visibility.", L"Die Sichtbarkeit des Kontos konnte nicht aktualisiert werden."},
+    {L"", L"Credits max", L"Guthaben-Maximum"},
     {L"", L"Custom interval", L"Benutzerdefiniertes Intervall"},
+    {L"", L"Custom retention", L"Benutzerdefinierte Aufbewahrung"},
+    {L"", L"Default time span", L"Standardzeitraum"},
     {L"", L"Display {number} - unavailable", L"Bildschirm {number} – nicht verfügbar"},
     {L"", L"Display {number} - {width}x{height}", L"Bildschirm {number} – {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)",
      L"Bildschirm {number} – {width}x{height} (Hauptbildschirm)"},
     {L"", L"Do not poll hidden accounts", L"Ausgeblendete Konten nicht abfragen"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
+     L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus; ausgeblendete Konten werden nicht "
+     L"abgefragt."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"Jedes Konto legt selbst fest, ob es aufzeichnet: <link id=\"accounts\">Konten</link> > Verlauf aufzeichnen. "
      L"Ausgeblendete Konten werden nicht aufgezeichnet, solange <link id=\"hidden\">Ausgeblendete Konten nicht "
      L"abfragen</link> unter Verhalten aktiviert ist."},
+    {L"", L"Enter a label.", L"Geben Sie eine Bezeichnung ein."},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.",
+     L"Geben Sie eine ganze Zahl von {minimum} bis {maximum} ein."},
+    {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"Aus <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); das Zeichen von GitHub Copilot aus <link "
+     L"id=\"octicons\">Primer Octicons</link> (MIT-Lizenz, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+     L"verwendet das Gemini-Zeichen.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, "
+     L"GitHub, GitHub Copilot und OpenCode sind Marken ihrer jeweiligen Inhaber. Logos zeigen nur, zu welchem Konto "
+     L"eine Kachel gehört."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Ausgeblendete Konten werden weder abgefragt noch aufgezeichnet, auch wenn „Verlauf aufzeichnen“ aktiviert ist. "
      L"Deaktivieren, um sie weiter aufzuzeichnen. Gilt für alle Windows-Benutzer."},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"Der Verlauf folgt diesem Eintrag, auch nach einer erneuten Anmeldung. Verwenden Sie für ein anderes Login "
+     L"einen neuen Eintrag."},
+    {L"", L"History storage failed; Open usage history shows why.",
+     L"Der Verlaufsspeicher ist fehlgeschlagen; „Nutzungsverlauf öffnen“ zeigt den Grund."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
      L"Sitzung jede Minute ab."},
+    {L"", L"Identity", L"Identität"},
     {L"", L"Interface language", L"Sprache der Oberfläche"},
+    {L"", L"Its stored sign-in will be deleted.", L"Die gespeicherte Anmeldung wird gelöscht."},
+    {L"", L"Its usage history is kept.", L"Der Nutzungsverlauf bleibt erhalten."},
+    {L"", L"Keep history", L"Verlauf aufbewahren"},
+    {L"", L"Label", L"Bezeichnung"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Sprache, Bildschirme, Details beim Daraufzeigen, Abfragen und Benachrichtigungen."},
+    {L"", L"License", L"Lizenz"},
+    {L"", L"MIT License", L"MIT-Lizenz"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"Kennzeichnet dieses Konto neben seinen Balken und auf Kacheln. „Bezeichnung“ zeigt die Bezeichnung an den "
+     L"Balken und ihren Kurztext auf Kacheln. Das Nummern-Badge erscheint, wenn sich mehrere Konten einen Anbieter "
+     L"teilen, ausgeblendete eingeschlossen."},
+    {L"", L"New samples arrive with each poll.", L"Neue Messwerte kommen mit jeder Abfrage hinzu."},
+    {L"", L"No accounts yet", L"Noch keine Konten"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"Nicht verschlüsselt. Messwerte und anonyme IDs, keine Token oder Bezeichnungen. Bleibt nach dem Entfernen des "
+     L"Mods erhalten."},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"Es wurde noch nichts aufgezeichnet. Der Ordner wird mit dem ersten aufgezeichneten Messwert erstellt."},
+    {L"", L"Nothing new is recorded.", L"Es wird nichts Neues aufgezeichnet."},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Benachrichtigt, wenn ein Taskleisten-Kontingent den gewählten Schwellenwert erstmals erreicht. Wird wieder "
      L"aktiv, sobald es darunter fällt."},
@@ -40,19 +127,135 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Primary display only", L"Nur Hauptbildschirm"},
     {L"", L"Primary display, all displays, or one display.",
      L"Hauptbildschirm, alle Bildschirme oder ein bestimmter Bildschirm."},
+    {L"", L"Project page", L"Projektseite"},
+    {L"", L"Provider logos", L"Anbieterlogos"},
+    {L"", L"Quotas on taskbar", L"Kontingente in der Taskleiste"},
+    {L"", L"Record history", L"Verlauf aufzeichnen"},
+    {L"", L"Record usage history", L"Nutzungsverlauf aufzeichnen"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"Aufzeichnung für diesen Windows-Benutzer an, Verlauf unbegrenzt aufbewahren, mit 7 Tagen öffnen. Der "
+     L"gespeicherte Verlauf bleibt erhalten."},
+    {L"", L"Recording rules, storage, export and verification",
+     L"Aufzeichnungsregeln, Speicherung, Export und Überprüfung"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.",
+     L"Die Aufzeichnung beginnt, sobald die Taskleiste ihre Konto-IDs gespeichert hat."},
+    {L"", L"Remove \"{label}\" ({provider})?", L"„{label}“ ({provider}) entfernen?"},
+    {L"", L"Report an issue", L"Problem melden"},
     {L"", L"Reset Behavior to defaults", L"Verhalten auf Standard zurücksetzen"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm anzeigen, "
      L"Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten nicht abfragen, "
      L"Schwellenwert-Benachrichtigungen bei Rot."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"Darstellung auf die Standardwerte zurücksetzen?\n\nAcryl-Material, Balkenmodus „Verbraucht“, Prozenttext beim "
+     L"Daraufzeigen mit adaptiver Ausrichtung, keine Beträge, die Standardpalette (eigene Farben werden ebenfalls "
+     L"zurückgesetzt) mit Gelb ab 50 %, Orange ab 75 % und Rot ab 90 %, veraltete Daten markiert, zusätzliche "
+     L"OpenAI-Ratenlimits ausgeblendet."},
+    {L"", L"Reset History to defaults", L"Verlauf auf Standard zurücksetzen"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"Verlauf auf die Standardwerte zurücksetzen?\n\nDie Aufzeichnung wird für diesen Windows-Benutzer "
+     L"eingeschaltet, der Verlauf wird unbegrenzt aufbewahrt und das Fenster „Nutzungsverlauf“ öffnet mit 7 Tagen. "
+     L"Der gespeicherte Verlauf bleibt erhalten."},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100 x 8 px mit Beschriftungen links, Ringe "
+     L"mit 32 px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, hellgraue Tempomarkierungen als Caret "
+     L"und die Standardabstände. Konten werden nicht geändert."},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"Wählen Sie <b>{button}</b>, um ein Konto von Anthropic, OpenAI, Google Antigravity, GitHub Copilot oder "
+     L"OpenCode Go in der Taskleiste anzuzeigen."},
+    {L"", L"Set Credits max to show the Credits bar.",
+     L"Legen Sie ein Guthaben-Maximum fest, um den Guthaben-Balken anzuzeigen."},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ löscht nichts und hat keine Größenbeschränkung, daher wächst der "
+     L"Verlauf im Speicher des Explorers und auf dem Datenträger weiter. Tageslimits bereinigen stündlich, mit einer "
+     L"Obergrenze von etwa 60 MB."},
+    {L"", L"Short text", L"Kurztext"},
     {L"", L"Show details on hover", L"Details beim Daraufzeigen anzeigen"},
     {L"", L"Show on", L"Anzeigen auf"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"Wird in den Details angezeigt und neben den Balken, wenn „Identität“ auf „Bezeichnung“ steht. Pro Anbieter "
+     L"eindeutig; beim Umbenennen bleiben Anmeldung und Verlauf erhalten."},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"Verlauf nicht mehr unbegrenzt aufbewahren?\n\nDer Verlauf wird wieder {days, plural, one{# Tag} other{# "
+     L"Tage}} lang aufbewahrt und auf 250.000 Messwerte (etwa 60 MB) begrenzt. Ältere Messwerte und die ältesten "
+     L"über diese Grenze hinaus werden dauerhaft gelöscht, für alle Windows-Benutzer."},
+    {L"", L"Storage location", L"Speicherort"},
+    {L"", L"Suggestions and bug reports on GitHub", L"Vorschläge und Fehlerberichte auf GitHub"},
+    {L"", L"Thanks to {names}.", L"Danke an {names}."},
+    {L"", L"That provider and label are already configured.",
+     L"Dieser Anbieter mit dieser Bezeichnung ist bereits konfiguriert."},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"Die Identität „Bezeichnung“ auf Kacheln, bis zu 4 Zeichen. Leer verwendet die Bezeichnung ohne Leerzeichen."},
+    {L"", L"The account was changed from another taskbar window.",
+     L"Das Konto wurde über ein anderes Taskleistenfenster geändert."},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"Das Konto wurde entfernt, aber sein Nutzungsverlauf konnte nicht gelöscht werden und wurde "
+     L"behalten.\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"Das Konto wurde umbenannt, aber unter der alten Identität verbleibt eine doppelte gespeicherte Anmeldung. Um "
+     L"sie zu löschen, fügen Sie erneut ein Konto mit dem alten Anbieter und der alten Bezeichnung hinzu und "
+     L"entfernen Sie es dann."},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"Das Guthaben, das der Guthaben-Balken als 100 % wertet. OpenAI meldet nur das Guthaben."},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"Name und Version des Mods und der Windows-Build, für Fehlerberichte."},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"Der Zeitraum, mit dem das Fenster „Nutzungsverlauf“ öffnet. Seine Zeitraum-Schaltflächen wechseln ihn "
+     L"weiterhin."},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"Die Identität des umbenannten Kontos hat bereits eine aufbewahrte Anmeldung. Um sie zu ersetzen, fügen Sie "
+     L"ein Konto mit diesem Anbieter und dieser Bezeichnung hinzu und entfernen Sie es dann. Das Konto wurde nicht "
+     L"geändert."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"Die Fenster Einstellungen und Nutzungsverlauf sowie die Taskleiste. „Automatisch“ folgt Ihrer "
      L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"Die gespeicherte Anmeldung konnte nicht kopiert werden. Das Konto wurde nicht geändert."},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"Die gespeicherte Anmeldung konnte nicht gelöscht werden und bleibt für dieses Konto erhalten."},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"Die gespeicherte Anmeldung konnte nicht gelöscht werden, daher wurde das Konto nicht entfernt."},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"Die gespeicherte Anmeldung wurde gelöscht, aber die Einstellungen konnten nicht gespeichert werden. Das Konto "
+     L"bleibt konfiguriert, ist aber abgemeldet."},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"Dieses Konto ist nicht mehr konfiguriert; seine nicht gespeicherten Änderungen wurden verworfen."},
+    {L"", L"This change couldn't be saved.", L"Diese Änderung konnte nicht gespeichert werden."},
     {L"", L"Threshold notifications", L"Schwellenwert-Benachrichtigungen"},
+    {L"", L"Turn on Record usage history to change this.",
+     L"Schalten Sie „Nutzungsverlauf aufzeichnen“ ein, um dies zu ändern."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt. "
+     L"Nutzungsdiagramme zeigen Guthaben als Zahl im 7T-Diagramm."},
+    {L"", L"Usage history", L"Nutzungsverlauf"},
+    {L"", L"Usage history guide", L"Leitfaden zum Nutzungsverlauf"},
+    {L"", L"Used on tiles when Identity is Label.",
+     L"Wird auf Kacheln verwendet, wenn „Identität“ auf „Bezeichnung“ steht."},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  von Cleroth  ·  Windhawk-Mod"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.",
+     L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie die Identität ändern."},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.",
+     L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie Konten entfernen."},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity läuft nicht"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity: Kontingent nicht verfügbar"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -118,9 +321,32 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"account-error-alone", L"Unexpected response format", L"Unerwartetes Antwortformat"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Unerwartetes Antwortformat ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"Unerwartete Token-Antwort"},
+    {L"account-state", L"Hidden, not polled", L"Ausgeblendet, nicht abgefragt"},
     {L"account-state", L"Local app not running", L"Lokale App läuft nicht"},
+    {L"account-state", L"Local app running", L"Lokale App läuft"},
+    {L"account-state", L"Sign-in needed", L"Anmeldung erforderlich"},
+    {L"account-state", L"Signed in", L"Angemeldet"},
+    {L"account-state", L"Signing in…", L"Anmeldung läuft…"},
+    {L"account-state", L"Waiting for the local app", L"Warten auf die lokale App"},
+    {L"add-account", L"Sign in with a code on github.com", L"Anmeldung mit einem Code auf github.com"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console",
+     L"Anmeldung mit einem API-Schlüssel aus der OpenCode-Konsole"},
+    {L"add-account", L"Sign in with your browser", L"Anmeldung über Ihren Browser"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI",
+     L"Verwendet die angemeldete Antigravity-App oder -CLI"},
     {L"button", L"Add account", L"Konto hinzufügen"},
+    {L"button", L"Copied", L"Kopiert"},
+    {L"button", L"Copy", L"Kopieren"},
+    {L"button", L"Copy failed", L"Kopieren fehlgeschlagen"},
+    {L"button", L"Custom...", L"Anpassen…"},
+    {L"button", L"Open dashboard", L"Dashboard öffnen"},
+    {L"button", L"Open folder", L"Ordner öffnen"},
+    {L"button", L"Open usage history", L"Nutzungsverlauf öffnen"},
+    {L"button", L"Remove account", L"Konto entfernen"},
     {L"button", L"Reset", L"Zurücksetzen"},
+    {L"button", L"Sign in", L"Anmelden"},
+    {L"button", L"Sign in again", L"Erneut anmelden"},
+    {L"button", L"Sign out", L"Abmelden"},
     {L"chart-readout", L"+{count} more — hide lines in the legend",
      L"+{count} weitere – Linien in der Legende ausblenden"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
@@ -131,6 +357,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"copilot-unit", L"AI credits", L"KI-Guthaben"},
     {L"copilot-unit", L"chat requests", L"Chat-Anfragen"},
     {L"copilot-unit", L"premium requests", L"Premium-Anfragen"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
+     L"{credits, plural, one{Guthaben} other{Guthaben}}"},
     {L"date-month", L"Apr", L"Apr"},
     {L"date-month", L"Aug", L"Aug"},
     {L"date-month", L"Dec", L"Dez"},
@@ -164,6 +392,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"date-weekday", L"Thu", L"Do"},
     {L"date-weekday", L"Tue", L"Di"},
     {L"date-weekday", L"Wed", L"Mi"},
+    {L"dialog-button", L"Remove", L"Entfernen"},
+    {L"dialog-caption", L"Account", L"Konto"},
+    {L"dialog-caption", L"Keep history", L"Verlauf aufbewahren"},
+    {L"dialog-caption", L"Remove account", L"Konto entfernen"},
+    {L"dialog-caption", L"Reset settings", L"Einstellungen zurücksetzen"},
+    {L"dialog-caption", L"Usage history", L"Nutzungsverlauf"},
     {L"duration", L"{days}d", L"{days} T."},
     {L"duration", L"{days}d {hours}h", L"{days} T. {hours} Std."},
     {L"duration", L"{hours}h", L"{hours} Std."},
@@ -200,6 +434,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Aufzeichnung · {days, plural, one{# Tag} other{# Tage}}"},
     {L"history-pill", L"Waiting", L"Wartet"},
+    {L"history-span", L"All retained", L"Alles Aufbewahrte"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}", L"{days, plural, one{# Tag} other{# Tage}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# Stunde} other{# Stunden}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}", L"{years, plural, one{# Jahr} other{# Jahre}}"},
     {L"history-status", L"Updated {time}", L"Aktualisiert {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
      L"Ein Konto in den Einstellungen verwendet diesen Verlauf wieder."},
@@ -291,6 +530,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"quota-name", L"Extra usage", L"Zusätzliche Nutzung"},
     {L"quota-name", L"Monthly", L"Monatlich"},
     {L"quota-name", L"Premium requests", L"Premium-Anfragen"},
+    {L"quota-name", L"Short window", L"Kurzes Fenster"},
     {L"quota-name", L"Weekly", L"Wöchentlich"},
     {L"quota-name", L"{name} current limit", L"{name} aktuelles Limit"},
     {L"quota-name", L"{name} weekly", L"{name} wöchentlich"},
@@ -306,6 +546,14 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"quota-value", L"Available", L"Verfügbar"},
     {L"quota-value", L"Unlimited", L"Unbegrenzt"},
     {L"quota-value", L"Used up", L"Aufgebraucht"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"Speichert nicht"},
+    {L"recording-status", L"Off", L"Aus"},
+    {L"recording-status", L"Off for this Windows user", L"Aus für diesen Windows-Benutzer"},
+    {L"recording-status", L"Paused while hidden", L"Pausiert, solange ausgeblendet"},
+    {L"recording-status", L"Recording", L"Zeichnet auf"},
+    {L"recording-status", L"Unavailable", L"Nicht verfügbar"},
+    {L"recording-status", L"Waiting", L"Wartet"},
     {L"reset-when", L"in {duration}", L"in {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"in {duration} ({time})"},
     {L"reset-when", L"now", L"jetzt"},
@@ -313,6 +561,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"response-shape", L"empty body", L"leerer Inhalt"},
     {L"response-shape", L"keys: {keys}", L"Schlüssel: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body", L"kein Objekt oder ungültiges JSON"},
+    {L"retention", L"Custom", L"Benutzerdefiniert"},
+    {L"retention", L"Forever", L"Unbegrenzt"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}", L"{days, plural, one{Tag} other{Tage}}"},
     {L"settings-page", L"About", L"Info"},
     {L"settings-page", L"Accounts", L"Konten"},
     {L"settings-page", L"Behavior", L"Verhalten"},
@@ -320,10 +571,15 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-page", L"History", L"Verlauf"},
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Warnungen"},
+    {L"settings-section", L"Credits and license", L"Mitwirkende und Lizenz"},
     {L"settings-section", L"Details", L"Details"},
     {L"settings-section", L"Language", L"Sprache"},
+    {L"settings-section", L"Links", L"Links"},
+    {L"settings-section", L"Recording", L"Aufzeichnung"},
+    {L"settings-section", L"Storage", L"Speicher"},
     {L"settings-section", L"Taskbar", L"Taskleiste"},
     {L"settings-section", L"Updates", L"Aktualisierungen"},
+    {L"settings-section", L"Viewer", L"Anzeige"},
     {L"sign-in-button", L"Cancel", L"Abbrechen"},
     {L"sign-in-button", L"Close", L"Schließen"},
     {L"sign-in-button", L"Code copied", L"Code kopiert"},
@@ -390,6 +646,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
     {L"taskbar-setup", L"AI +", L"KI +"},
+    {L"tile-identity", L"Label", L"Bezeichnung"},
+    {L"tile-identity", L"Logo + number badge", L"Logo + Nummern-Badge"},
+    {L"tile-identity", L"Logo only", L"Nur Logo"},
     {L"toggle", L"Off", L"Aus"},
     {L"toggle", L"On", L"Ein"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
@@ -398,5 +657,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Beim Tempo seit {time}: Limit in ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Beim Durchschnittstempo dieses Zeitfensters: Limit in ~{duration}"},
+    {L"window-title", L"{app} — Settings", L"{app} – Einstellungen"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogDe), "sort by (context, English), no duplicates");

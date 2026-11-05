@@ -1,32 +1,113 @@
 // Russian (ru): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogRu[] = {
+    {L"", L"1 to 3650 days.", L"От 1 до 3650 дней."},
     {L"", L"2 to 1440 minutes.", L"От 2 до 1440 минут."},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"Не удалось сохранить изменение; оно показано вместе с ошибкой.\n\nОтменить несохранённые изменения и закрыть "
+     L"окно?"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"Квоты подписок на ИИ Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач "
+     L"Windows 11."},
     {L"", L"All displays", L"Все дисплеи"},
+    {L"", L"Also delete its usage history", L"Также удалить историю использования"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"Аккаунт больше не настроен; его несохранённые изменения отменены."},
+    {L"", L"Another account of this provider uses this label.",
+     L"Эту метку уже использует другой аккаунт этого поставщика."},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic, OpenAI и GitHub Copilot входят через браузер, OpenCode Go — с ключом API. Google Antigravity "
+     L"использует своё приложение или CLI с выполненным входом; они должны оставаться запущенными."},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"Действует только для этого пользователя Windows. При выключении сохранённая история остаётся."},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Чтобы изменить, выберите «Другой» в списке «Интервал опроса облака»."},
+    {L"", L"Choose Custom in Keep history to edit.", L"Чтобы изменить, выберите «Другой» в списке «Хранить историю»."},
     {L"", L"Cloud poll interval", L"Интервал опроса облака"},
+    {L"", L"Contributors", L"Участники"},
+    {L"", L"Copy version info", L"Копировать сведения о версии"},
+    {L"", L"Could not remove the account.", L"Не удалось удалить аккаунт."},
+    {L"", L"Could not reorder the account.", L"Не удалось переместить аккаунт."},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"Не удалось сохранить настройки. Изменение остаётся здесь вместе с ошибкой; измените его ещё раз, чтобы "
+     L"повторить попытку."},
+    {L"", L"Could not save the account.", L"Не удалось сохранить аккаунт."},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"Не удалось сохранить аккаунт. Изменение остаётся здесь вместе с ошибкой; измените его ещё раз, чтобы "
+     L"повторить попытку."},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"Не удалось сохранить аккаунт. Скопированный вход остался под новым идентификатором, который пытались задать. "
+     L"Чтобы удалить его, добавьте аккаунт с этим поставщиком и меткой, а затем удалите его."},
+    {L"", L"Could not update account visibility.", L"Не удалось изменить видимость аккаунта."},
+    {L"", L"Credits max", L"Максимум кредитов"},
     {L"", L"Custom interval", L"Свой интервал"},
+    {L"", L"Custom retention", L"Свой срок хранения"},
+    {L"", L"Default time span", L"Период по умолчанию"},
     {L"", L"Display {number} - unavailable", L"Дисплей {number} — недоступен"},
     {L"", L"Display {number} - {width}x{height}", L"Дисплей {number} — {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Дисплей {number} — {width}x{height} (основной)"},
     {L"", L"Do not poll hidden accounts", L"Не опрашивать скрытые аккаунты"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
+     L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач; скрытые аккаунты не "
+     L"опрашиваются."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"Каждый аккаунт сам решает, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать историю. "
      L"Скрытые аккаунты не записываются, пока в разделе «Поведение» включено <link id=\"hidden\">Не опрашивать скрытые "
      L"аккаунты</link>."},
+    {L"", L"Enter a label.", L"Введите метку."},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.", L"Введите целое число от {minimum} до {maximum}."},
+    {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"Из <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); знак GitHub Copilot — из <link "
+     L"id=\"octicons\">Primer Octicons</link> (лицензия MIT, Copyright (c) 2026 GitHub Inc.). Для Google Antigravity "
+     L"используется знак Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+     L"GitHub Copilot и OpenCode — товарные знаки соответствующих владельцев. Логотипы лишь показывают, какой "
+     L"аккаунт отображает плитка."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Скрытые аккаунты не опрашиваются и не записываются, даже если включено «Записывать историю». Выключите, чтобы "
      L"продолжить их запись. Общий параметр для всех пользователей Windows."},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"История привязана к этой записи, даже после повторного входа. Для другого входа создайте новую запись."},
+    {L"", L"History storage failed; Open usage history shows why.",
+     L"Сбой хранилища истории; причину покажет «Открыть историю использования»."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Antigravity опрашивает свой локальный "
      L"сеанс каждую минуту."},
+    {L"", L"Identity", L"Идентификация"},
     {L"", L"Interface language", L"Язык интерфейса"},
+    {L"", L"Its stored sign-in will be deleted.", L"Сохранённый вход будет удалён."},
+    {L"", L"Its usage history is kept.", L"История использования сохраняется."},
+    {L"", L"Keep history", L"Хранить историю"},
+    {L"", L"Label", L"Метка"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Язык, дисплеи, сведения при наведении, опрос и уведомления."},
+    {L"", L"License", L"Лицензия"},
+    {L"", L"MIT License", L"Лицензия MIT"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"Обозначает этот аккаунт рядом с его полосами и на плитках. «Метка» показывает метку у полос и её короткий "
+     L"текст на плитках. Значок с номером появляется, когда у нескольких аккаунтов один поставщик, включая скрытые."},
+    {L"", L"New samples arrive with each poll.", L"Новые замеры поступают при каждом опросе."},
+    {L"", L"No accounts yet", L"Аккаунтов пока нет"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"Не зашифровано. Замеры и обезличенные идентификаторы, без токенов и меток. Сохраняется после удаления мода."},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"Пока ничего не записано. Папка создаётся с первым записанным замером."},
+    {L"", L"Nothing new is recorded.", L"Ничего нового не записывается."},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Уведомляет, когда квота на панели задач впервые достигает выбранного порога. Срабатывает снова, когда она "
      L"опустится ниже."},
@@ -37,19 +118,126 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
     {L"", L"Primary display only", L"Только основной дисплей"},
     {L"", L"Primary display, all displays, or one display.", L"Основной дисплей, все дисплеи или один дисплей."},
+    {L"", L"Project page", L"Страница проекта"},
+    {L"", L"Provider logos", L"Логотипы поставщиков"},
+    {L"", L"Quotas on taskbar", L"Квоты на панели задач"},
+    {L"", L"Record history", L"Записывать историю"},
+    {L"", L"Record usage history", L"Записывать историю использования"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"Запись включена для этого пользователя Windows, история хранится бессрочно, открывается на 7 днях. "
+     L"Сохранённая история остаётся."},
+    {L"", L"Recording rules, storage, export and verification", L"Правила записи, хранение, экспорт и проверка"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.",
+     L"Запись начнётся, когда панель задач сохранит идентификаторы аккаунтов."},
+    {L"", L"Remove \"{label}\" ({provider})?", L"Удалить «{label}» ({provider})?"},
+    {L"", L"Report an issue", L"Сообщить о проблеме"},
     {L"", L"Reset Behavior to defaults", L"Сбросить «Поведение» к значениям по умолчанию"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"Сбросить «Поведение» к значениям по умолчанию?\n\nАвтоматический язык, показ только на основном дисплее, "
      L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты не опрашиваются, уведомления о пороге на "
      L"красном уровне."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"Сбросить «Отображение» к значениям по умолчанию?\n\nМатериал «Акрил», режим полос «Использовано», текст "
+     L"процентов при наведении с адаптивным выравниванием, без сумм, палитра по умолчанию (свои цвета тоже "
+     L"сбрасываются) с жёлтым от 50 %, оранжевым от 75 % и красным от 90 %, устаревшие данные помечаются, "
+     L"дополнительные лимиты запросов OpenAI скрыты."},
+    {L"", L"Reset History to defaults", L"Сбросить «История» к значениям по умолчанию"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"Сбросить «История» к значениям по умолчанию?\n\nЗапись включается для этого пользователя Windows, история "
+     L"хранится бессрочно, а окно истории использования открывается на 7 днях. Сохранённая история остаётся."},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100 x 8 пикс. с подписями слева, кольца 32 "
+     L"пикс., логотипы и значки с номером цветом текста панели задач, светло-серые метки темпа в виде галочки и "
+     L"интервалы по умолчанию. Аккаунты не изменяются."},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"Нажмите <b>{button}</b>, чтобы показать на панели задач аккаунт Anthropic, OpenAI, Google Antigravity, GitHub "
+     L"Copilot или OpenCode Go."},
+    {L"", L"Set Credits max to show the Credits bar.", L"Задайте «Максимум кредитов», чтобы показать полосу кредитов."},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, "
+     L"поэтому история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый "
+     L"час, с пределом около 60 МБ."},
+    {L"", L"Short text", L"Короткий текст"},
     {L"", L"Show details on hover", L"Показывать сведения при наведении"},
     {L"", L"Show on", L"Показывать на"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"Показывается в сведениях и рядом с полосами, если для «Идентификация» выбрано «Метка». Уникальна для "
+     L"поставщика; при переименовании вход и история сохраняются."},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"Прекратить бессрочное хранение истории?\n\nИстория снова будет храниться {days, plural, one{# день} few{# "
+     L"дня} many{# дней} other{# дня}} и ограничиваться 250 000 замеров (около 60 МБ). Более старые замеры и самые "
+     L"старые сверх этого предела будут удалены безвозвратно для всех пользователей Windows."},
+    {L"", L"Storage location", L"Расположение хранилища"},
+    {L"", L"Suggestions and bug reports on GitHub", L"Предложения и отчёты об ошибках на GitHub"},
+    {L"", L"Thanks to {names}.", L"Благодарим {names}."},
+    {L"", L"That provider and label are already configured.", L"Такой поставщик с такой меткой уже настроен."},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"Идентификация «Метка» на плитках, до 4 символов. Если пусто, используется метка без пробелов."},
+    {L"", L"The account was changed from another taskbar window.",
+     L"Аккаунт был изменён из другого окна панели задач."},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"Аккаунт удалён, но его историю использования удалить не удалось, и она сохранена.\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"Аккаунт переименован, но под старым идентификатором остался дубликат сохранённого входа. Чтобы удалить его, "
+     L"снова добавьте аккаунт со старым поставщиком и меткой, а затем удалите его."},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"Баланс, который полоса кредитов считает за 100 %. OpenAI сообщает только баланс."},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"Название и версия мода и сборка Windows для отчётов об ошибках."},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"Период, с которым открывается окно истории использования. Его кнопки периода по-прежнему переключают его."},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"У идентификатора переименованного аккаунта уже есть сохранённый вход. Чтобы заменить его, добавьте аккаунт с "
+     L"этим поставщиком и меткой, а затем удалите его. Аккаунт не изменён."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"Окна настроек и истории использования, а также панель задач. «Автоматически» следует языку интерфейса Windows. "
      L"Действует только для этого пользователя Windows."},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"Не удалось скопировать сохранённый вход. Аккаунт не изменён."},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"Не удалось удалить сохранённый вход; он остаётся у этого аккаунта."},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"Не удалось удалить сохранённый вход, поэтому аккаунт не удалён."},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"Сохранённый вход удалён, но сохранить настройки не удалось. Аккаунт остаётся настроенным, но вход не выполнен."},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"Этот аккаунт больше не настроен; его несохранённые изменения отменены."},
+    {L"", L"This change couldn't be saved.", L"Не удалось сохранить это изменение."},
     {L"", L"Threshold notifications", L"Уведомления о пороге"},
+    {L"", L"Turn on Record usage history to change this.",
+     L"Чтобы изменить, включите «Записывать историю использования»."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной. На графиках использования "
+     L"кредиты показываются числом на графике 7д."},
+    {L"", L"Usage history", L"История использования"},
+    {L"", L"Usage history guide", L"Руководство по истории использования"},
+    {L"", L"Used on tiles when Identity is Label.",
+     L"Используется на плитках, если для «Идентификация» выбрано «Метка»."},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.",
+     L"Дождитесь завершения текущего входа, прежде чем менять идентификацию."},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.",
+     L"Дождитесь завершения текущего входа, прежде чем удалять аккаунты."},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity не запущен"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity: квота недоступна"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -107,9 +295,31 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-error-alone", L"Unexpected response format", L"Неожиданный формат ответа"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Неожиданный формат ответа ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"Неожиданный ответ с токеном"},
+    {L"account-state", L"Hidden, not polled", L"Скрыт, не опрашивается"},
     {L"account-state", L"Local app not running", L"Локальное приложение не запущено"},
+    {L"account-state", L"Local app running", L"Локальное приложение запущено"},
+    {L"account-state", L"Sign-in needed", L"Требуется вход"},
+    {L"account-state", L"Signed in", L"Вход выполнен"},
+    {L"account-state", L"Signing in…", L"Выполняется вход…"},
+    {L"account-state", L"Waiting for the local app", L"Ожидание локального приложения"},
+    {L"add-account", L"Sign in with a code on github.com", L"Вход с кодом на github.com"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console", L"Вход с ключом API из консоли OpenCode"},
+    {L"add-account", L"Sign in with your browser", L"Вход через браузер"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI",
+     L"Использует приложение или CLI Antigravity с выполненным входом"},
     {L"button", L"Add account", L"Добавить аккаунт"},
+    {L"button", L"Copied", L"Скопировано"},
+    {L"button", L"Copy", L"Копировать"},
+    {L"button", L"Copy failed", L"Не удалось скопировать"},
+    {L"button", L"Custom...", L"Другой…"},
+    {L"button", L"Open dashboard", L"Открыть панель"},
+    {L"button", L"Open folder", L"Открыть папку"},
+    {L"button", L"Open usage history", L"Открыть историю использования"},
+    {L"button", L"Remove account", L"Удалить аккаунт"},
     {L"button", L"Reset", L"Сбросить"},
+    {L"button", L"Sign in", L"Войти"},
+    {L"button", L"Sign in again", L"Войти снова"},
+    {L"button", L"Sign out", L"Выйти"},
     {L"chart-readout", L"+{count} more — hide lines in the legend", L"Ещё {count} — скройте линии в легенде"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"Ещё {count} — скройте линии в легенде или выберите один аккаунт"},
@@ -119,6 +329,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"copilot-unit", L"AI credits", L"ИИ-кредиты"},
     {L"copilot-unit", L"chat requests", L"запросы в чате"},
     {L"copilot-unit", L"premium requests", L"премиум-запросы"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
+     L"{credits, plural, one{кредит} few{кредита} many{кредитов} other{кредита}}"},
     {L"date-month", L"Apr", L"апр"},
     {L"date-month", L"Aug", L"авг"},
     {L"date-month", L"Dec", L"дек"},
@@ -152,6 +364,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"date-weekday", L"Thu", L"чт"},
     {L"date-weekday", L"Tue", L"вт"},
     {L"date-weekday", L"Wed", L"ср"},
+    {L"dialog-button", L"Remove", L"Удалить"},
+    {L"dialog-caption", L"Account", L"Аккаунт"},
+    {L"dialog-caption", L"Keep history", L"Хранить историю"},
+    {L"dialog-caption", L"Remove account", L"Удаление аккаунта"},
+    {L"dialog-caption", L"Reset settings", L"Сброс настроек"},
+    {L"dialog-caption", L"Usage history", L"История использования"},
     {L"duration", L"{days}d", L"{days} д"},
     {L"duration", L"{days}d {hours}h", L"{days} д {hours} ч"},
     {L"duration", L"{hours}h", L"{hours} ч"},
@@ -188,6 +406,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Запись · {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
     {L"history-pill", L"Waiting", L"Ожидание"},
+    {L"history-span", L"All retained", L"Всё сохранённое"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}",
+     L"{days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# час} few{# часа} many{# часов} other{# часа}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}",
+     L"{years, plural, one{# год} few{# года} many{# лет} other{# года}}"},
     {L"history-status", L"Updated {time}", L"Обновлено {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
      L"Аккаунт в настройках снова использует эту историю."},
@@ -278,6 +503,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-name", L"Extra usage", L"Доп. использование"},
     {L"quota-name", L"Monthly", L"Месяц"},
     {L"quota-name", L"Premium requests", L"Премиум-запросы"},
+    {L"quota-name", L"Short window", L"Короткое окно"},
     {L"quota-name", L"Weekly", L"Неделя"},
     {L"quota-name", L"{name} current limit", L"{name}: текущий лимит"},
     {L"quota-name", L"{name} weekly", L"{name}: неделя"},
@@ -293,6 +519,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-value", L"Available", L"Доступно"},
     {L"quota-value", L"Unlimited", L"Без лимита"},
     {L"quota-value", L"Used up", L"Исчерпано"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"Не сохраняется"},
+    {L"recording-status", L"Off", L"Откл."},
+    {L"recording-status", L"Off for this Windows user", L"Откл. для этого пользователя Windows"},
+    {L"recording-status", L"Paused while hidden", L"Приостановлено, пока скрыт"},
+    {L"recording-status", L"Recording", L"Запись"},
+    {L"recording-status", L"Unavailable", L"Недоступно"},
+    {L"recording-status", L"Waiting", L"Ожидание"},
     {L"reset-when", L"in {duration}", L"через {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"через {duration} ({time})"},
     {L"reset-when", L"now", L"сейчас"},
@@ -301,6 +535,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"response-shape", L"keys: {keys}", L"ключи: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body",
      L"тело не является объектом или содержит недопустимый JSON"},
+    {L"retention", L"Custom", L"Другой"},
+    {L"retention", L"Forever", L"Бессрочно"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}",
+     L"{days, plural, one{день} few{дня} many{дней} other{дня}}"},
     {L"settings-page", L"About", L"О программе"},
     {L"settings-page", L"Accounts", L"Аккаунты"},
     {L"settings-page", L"Behavior", L"Поведение"},
@@ -308,10 +546,15 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-page", L"History", L"История"},
     {L"settings-page", L"Layout", L"Макет"},
     {L"settings-section", L"Alerts", L"Оповещения"},
+    {L"settings-section", L"Credits and license", L"Благодарности и лицензия"},
     {L"settings-section", L"Details", L"Подробности"},
     {L"settings-section", L"Language", L"Язык"},
+    {L"settings-section", L"Links", L"Ссылки"},
+    {L"settings-section", L"Recording", L"Запись"},
+    {L"settings-section", L"Storage", L"Хранилище"},
     {L"settings-section", L"Taskbar", L"Панель задач"},
     {L"settings-section", L"Updates", L"Обновления"},
+    {L"settings-section", L"Viewer", L"Просмотр"},
     {L"sign-in-button", L"Cancel", L"Отмена"},
     {L"sign-in-button", L"Close", L"Закрыть"},
     {L"sign-in-button", L"Code copied", L"Код скопирован"},
@@ -376,6 +619,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}ч {minutes}м"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}м"},
     {L"taskbar-setup", L"AI +", L"ИИ +"},
+    {L"tile-identity", L"Label", L"Метка"},
+    {L"tile-identity", L"Logo + number badge", L"Логотип + номер"},
+    {L"tile-identity", L"Logo only", L"Только логотип"},
     {L"toggle", L"Off", L"Откл."},
     {L"toggle", L"On", L"Вкл."},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
@@ -384,5 +630,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"При темпе с {time}: лимит через ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"При среднем темпе этого окна: лимит через ~{duration}"},
+    {L"window-title", L"{app} — Settings", L"{app} — Настройки"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogRu), "sort by (context, English), no duplicates");

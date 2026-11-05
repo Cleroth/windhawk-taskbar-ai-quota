@@ -864,7 +864,7 @@ static void RunRenders(const std::wstring& directory) {
 
                 view = AccountsView({1});
                 view.drafts.push_back({12, SettingsField::AccountLabel, 1, true, L"CC 2", 0, false, false,
-                                       L"Another account of this provider uses this label."});
+                                       SettingsDraftError::LabelTaken});
                 frame = {};
                 SettingsUiBuildFrame(g, view, client, frame);
                 state = {};
@@ -1030,7 +1030,7 @@ static void RunRenders(const std::wstring& directory) {
                 view.settings.showDetailsOnHover = false;
                 view.pollCustom = true;
                 view.drafts.push_back({0, SettingsField::PollMinutes, 1, true, L"7x", 10, false, false,
-                                       L"Enter a whole number from 2 to 1440."});
+                                       SettingsDraftError::Range});
                 UiFrame frame;
                 SettingsUiBuildFrame(g, view, client, frame);
                 UiPaintState state;

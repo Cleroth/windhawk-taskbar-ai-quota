@@ -61,7 +61,7 @@ struct TestStore final : SettingsStore {
         if (failNext > 0) {
             failNext--;
             result.save = SettingsSaveResult::Failed;
-            result.notice = L"Injected failure.";
+            result.notice = SettingsNoticeCode::AccountSaveFailed;
             return result;
         }
         uint64_t identity = AccountIdentityHash(*at);
@@ -77,7 +77,8 @@ struct TestStore final : SettingsStore {
             case SettingsField::AccountRemove:
                 std::erase(signIns, identity);
                 if (value && historyKept) {
-                    result.notice = L"The account was removed, but its usage history could not be deleted and was kept.";
+                    result.notice = SettingsNoticeCode::HistoryKept;
+                    result.reason = HistoryJournalError::CannotWrite;
                     result.kind = SettingsNoticeKind::Warning;
                 } else if (value) {
                     historyDeleted.push_back(at->historyId);
@@ -109,7 +110,7 @@ struct TestStore final : SettingsStore {
                 });
                 if (duplicate) {
                     result.save = SettingsSaveResult::Failed;
-                    result.notice = L"That provider and label are already configured.";
+                    result.notice = SettingsNoticeCode::AccountExists;
                     return result;
                 }
                 uint64_t renamed = AccountIdentityHash(next);
@@ -131,7 +132,7 @@ struct TestStore final : SettingsStore {
             failNext--;
             log.push_back(L"add " + provider + L" failed");
             result.save = SettingsSaveResult::Failed;
-            result.notice = L"Injected failure.";
+            result.notice = SettingsNoticeCode::AccountSaveFailed;
             return result;
         }
         for (const std::wstring& label : labels) {
@@ -152,7 +153,7 @@ struct TestStore final : SettingsStore {
         }
         log.push_back(L"add " + provider + L" none");
         result.save = SettingsSaveResult::Failed;
-        result.notice = L"That provider and label are already configured.";
+        result.notice = SettingsNoticeCode::AccountExists;
         return result;
     }
     bool HasStoredSignIn(uint64_t identity) override {
@@ -169,6 +170,9 @@ struct TestStore final : SettingsStore {
         return applied;
     }
 };
+
+// A draft's error as the window shows it in English.
+static std::wstring ErrorText(const SettingsDraft& draft) { return SettingsDraftErrorText({}, draft); }
 
 static std::wstring Op(SettingsField field, int value) {
     return std::to_wstring(int(field)) + L"=" + std::to_wstring(value);
@@ -345,7 +349,7 @@ static void RunEditTests() {
         edits.SetText(0, kRetention, L"30");
         CHECK(edits.RequestCommit(0, kRetention));
         CHECK(edits.Process() == 1);
-        CHECK(edits.drafts.size() == 1 && edits.drafts[0].failed && !edits.drafts[0].error.empty());
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].failed && !ErrorText(edits.drafts[0]).empty());
         CHECK(edits.Projection().historyRetentionDays == 30);
         edits.Reload();  // Notifications don't retry
         CHECK(edits.Process() == 0 && store.applies == 1 && edits.drafts[0].failed);
@@ -368,9 +372,9 @@ static void RunEditTests() {
         edits.Reload();
         edits.SetText(0, kPoll, L"12a");
         CHECK(!edits.RequestCommit(0, kPoll));
-        CHECK(edits.drafts[0].error == L"Enter a whole number from 2 to 1440." && edits.queue.empty());
+        CHECK(ErrorText(edits.drafts[0]) == L"Enter a whole number from 2 to 1440." && edits.queue.empty());
         edits.SetText(0, kPoll, L"12");  // Typing clears it
-        CHECK(edits.drafts[0].error.empty());
+        CHECK(ErrorText(edits.drafts[0]).empty());
     });
 
     Run("controller: a discrete choice supersedes a queued text draft of the same field", [] {
@@ -483,7 +487,7 @@ static void RunEditTests() {
         CHECK(edits.drafts.size() == 1 && edits.drafts[0].failed);
         edits.SetText(0, kPoll, L"-");
         CHECK(edits.PrepareClose() == SettingsCloseResult::Blocked);  // Retention saves, poll blocks
-        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kPoll && !edits.drafts[0].error.empty());
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kPoll && !ErrorText(edits.drafts[0]).empty());
         edits.Discard();
         CHECK(edits.drafts.empty() && edits.PrepareClose() == SettingsCloseResult::Saved);
         CHECK((store.Applied() == std::vector<std::wstring>{Op(kRetention, 30), Op(kRetention, 30)}));
@@ -581,8 +585,7 @@ static void RunPageTests() {
         view.settings.taskbarMonitorNumber = 3;
         view.settings.showDetailsOnHover = false;
         view.pollCustom = true;
-        view.drafts.push_back({0, kPoll, 1, true, L"7x", 10, false, false,
-                               L"Enter a whole number from 2 to 1440."});
+        view.drafts.push_back({0, kPoll, 1, true, L"7x", 10, false, false, SettingsDraftError::Range});
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::ShowOn).text == L"Display 3 - unavailable");
@@ -611,7 +614,7 @@ static void RunPageTests() {
         // and the box stays enabled.
         view = TestView(SettingsUiPage::Behavior);
         view.settings.pollMinutes = 7;
-        view.drafts.push_back({0, kPoll, 1, true, L"1", 2, true, false, L""});
+        view.drafts.push_back({0, kPoll, 1, true, L"1", 2, true, false});
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, kPoll, 8).text == L"Custom" && Control(frame, kPoll).enabled);

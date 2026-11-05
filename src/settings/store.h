@@ -34,7 +34,7 @@ struct SettingsProductionStore final : SettingsStore {
                 accountStatus.needsSignIn = data[i].needsLogin;
             }
             if (account.provider == L"openai" && !baseline.settings.showOpenAiExtraLimits &&
-                (accountStatus.plan.find(L"Spark") != std::wstring::npos ||
+                (accountStatus.plan.find(L"Spark") != std::wstring::npos ||  // i18n-en
                  accountStatus.plan.find(L"spark") != std::wstring::npos)) {
                 accountStatus.plan.clear();
             }
@@ -140,7 +140,7 @@ struct SettingsProductionStore final : SettingsStore {
                 OpenDashboardForIdentity(identity);
             } else if (!SignOutAccountByIdentity(identity)) {
                 result.save = SettingsSaveResult::Failed;
-                result.notice = L"The stored sign-in could not be deleted and remains retained for this account.";
+                result.notice = SettingsNoticeCode::SignOutFailed;
             }
             return result;
         }
@@ -175,6 +175,7 @@ private:
                                                                          SettingsSaveResult::Changed;
         result.missing = command.missing;
         result.notice = command.message;
+        result.reason = command.reason;
         result.kind = command.icon == MB_ICONWARNING     ? SettingsNoticeKind::Warning :
                       command.icon == MB_ICONINFORMATION ? SettingsNoticeKind::Information :
                                                            SettingsNoticeKind::Error;

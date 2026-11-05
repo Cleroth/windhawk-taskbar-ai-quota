@@ -549,33 +549,120 @@ static constexpr bool I18nCatalogSorted(std::span<const I18nEntry> catalog) {
 // German (de): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogDe[] = {
+    {L"", L"1 to 3650 days.", L"1 bis 3650 Tage."},
     {L"", L"2 to 1440 minutes.", L"2 bis 1440 Minuten."},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"Eine Änderung konnte nicht gespeichert werden; sie wird mit ihrem Fehler angezeigt.\n\nNicht gespeicherte "
+     L"Änderungen verwerfen und das Fenster schließen?"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"KI-Abo-Kontingente für Anthropic, OpenAI, Google Antigravity, GitHub Copilot und OpenCode Go in der "
+     L"Taskleiste von Windows 11."},
     {L"", L"All displays", L"Alle Bildschirme"},
+    {L"", L"Also delete its usage history", L"Auch den Nutzungsverlauf löschen"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"Ein Konto ist nicht mehr konfiguriert; seine nicht gespeicherten Änderungen wurden verworfen."},
+    {L"", L"Another account of this provider uses this label.",
+     L"Ein anderes Konto dieses Anbieters verwendet diese Bezeichnung."},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic, OpenAI und GitHub Copilot melden sich über Ihren Browser an, OpenCode Go mit einem API-Schlüssel. "
+     L"Google Antigravity verwendet seine angemeldete App oder CLI, die weiterlaufen muss."},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"Gilt nur für diesen Windows-Benutzer. Beim Ausschalten bleibt der gespeicherte Verlauf erhalten."},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Wählen Sie „Benutzerdefiniert“ unter „Cloud-Abfrageintervall“, um dies zu bearbeiten."},
+    {L"", L"Choose Custom in Keep history to edit.",
+     L"Wählen Sie „Benutzerdefiniert“ unter „Verlauf aufbewahren“, um dies zu bearbeiten."},
     {L"", L"Cloud poll interval", L"Cloud-Abfrageintervall"},
+    {L"", L"Contributors", L"Mitwirkende"},
+    {L"", L"Copy version info", L"Versionsinfo kopieren"},
+    {L"", L"Could not remove the account.", L"Das Konto konnte nicht entfernt werden."},
+    {L"", L"Could not reorder the account.", L"Das Konto konnte nicht verschoben werden."},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"Die Einstellungen konnten nicht gespeichert werden. Die Änderung bleibt hier mit ihrem Fehler erhalten; "
+     L"ändern Sie sie erneut, um es noch einmal zu versuchen."},
+    {L"", L"Could not save the account.", L"Das Konto konnte nicht gespeichert werden."},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"Das Konto konnte nicht gespeichert werden. Die Änderung bleibt hier mit ihrem Fehler erhalten; ändern Sie sie "
+     L"erneut, um es noch einmal zu versuchen."},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"Das Konto konnte nicht gespeichert werden. Die kopierte Anmeldung verbleibt unter der versuchten neuen "
+     L"Identität. Um sie zu löschen, fügen Sie ein Konto mit dem versuchten Anbieter und der versuchten Bezeichnung "
+     L"hinzu und entfernen Sie es dann."},
+    {L"", L"Could not update account visibility.", L"Die Sichtbarkeit des Kontos konnte nicht aktualisiert werden."},
+    {L"", L"Credits max", L"Guthaben-Maximum"},
     {L"", L"Custom interval", L"Benutzerdefiniertes Intervall"},
+    {L"", L"Custom retention", L"Benutzerdefinierte Aufbewahrung"},
+    {L"", L"Default time span", L"Standardzeitraum"},
     {L"", L"Display {number} - unavailable", L"Bildschirm {number} – nicht verfügbar"},
     {L"", L"Display {number} - {width}x{height}", L"Bildschirm {number} – {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)",
      L"Bildschirm {number} – {width}x{height} (Hauptbildschirm)"},
     {L"", L"Do not poll hidden accounts", L"Ausgeblendete Konten nicht abfragen"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
+     L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus; ausgeblendete Konten werden nicht "
+     L"abgefragt."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"Jedes Konto legt selbst fest, ob es aufzeichnet: <link id=\"accounts\">Konten</link> > Verlauf aufzeichnen. "
      L"Ausgeblendete Konten werden nicht aufgezeichnet, solange <link id=\"hidden\">Ausgeblendete Konten nicht "
      L"abfragen</link> unter Verhalten aktiviert ist."},
+    {L"", L"Enter a label.", L"Geben Sie eine Bezeichnung ein."},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.",
+     L"Geben Sie eine ganze Zahl von {minimum} bis {maximum} ein."},
+    {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"Aus <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); das Zeichen von GitHub Copilot aus <link "
+     L"id=\"octicons\">Primer Octicons</link> (MIT-Lizenz, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+     L"verwendet das Gemini-Zeichen.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, "
+     L"GitHub, GitHub Copilot und OpenCode sind Marken ihrer jeweiligen Inhaber. Logos zeigen nur, zu welchem Konto "
+     L"eine Kachel gehört."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Ausgeblendete Konten werden weder abgefragt noch aufgezeichnet, auch wenn „Verlauf aufzeichnen“ aktiviert ist. "
      L"Deaktivieren, um sie weiter aufzuzeichnen. Gilt für alle Windows-Benutzer."},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"Der Verlauf folgt diesem Eintrag, auch nach einer erneuten Anmeldung. Verwenden Sie für ein anderes Login "
+     L"einen neuen Eintrag."},
+    {L"", L"History storage failed; Open usage history shows why.",
+     L"Der Verlaufsspeicher ist fehlgeschlagen; „Nutzungsverlauf öffnen“ zeigt den Grund."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
      L"Sitzung jede Minute ab."},
+    {L"", L"Identity", L"Identität"},
     {L"", L"Interface language", L"Sprache der Oberfläche"},
+    {L"", L"Its stored sign-in will be deleted.", L"Die gespeicherte Anmeldung wird gelöscht."},
+    {L"", L"Its usage history is kept.", L"Der Nutzungsverlauf bleibt erhalten."},
+    {L"", L"Keep history", L"Verlauf aufbewahren"},
+    {L"", L"Label", L"Bezeichnung"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Sprache, Bildschirme, Details beim Daraufzeigen, Abfragen und Benachrichtigungen."},
+    {L"", L"License", L"Lizenz"},
+    {L"", L"MIT License", L"MIT-Lizenz"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"Kennzeichnet dieses Konto neben seinen Balken und auf Kacheln. „Bezeichnung“ zeigt die Bezeichnung an den "
+     L"Balken und ihren Kurztext auf Kacheln. Das Nummern-Badge erscheint, wenn sich mehrere Konten einen Anbieter "
+     L"teilen, ausgeblendete eingeschlossen."},
+    {L"", L"New samples arrive with each poll.", L"Neue Messwerte kommen mit jeder Abfrage hinzu."},
+    {L"", L"No accounts yet", L"Noch keine Konten"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"Nicht verschlüsselt. Messwerte und anonyme IDs, keine Token oder Bezeichnungen. Bleibt nach dem Entfernen des "
+     L"Mods erhalten."},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"Es wurde noch nichts aufgezeichnet. Der Ordner wird mit dem ersten aufgezeichneten Messwert erstellt."},
+    {L"", L"Nothing new is recorded.", L"Es wird nichts Neues aufgezeichnet."},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Benachrichtigt, wenn ein Taskleisten-Kontingent den gewählten Schwellenwert erstmals erreicht. Wird wieder "
      L"aktiv, sobald es darunter fällt."},
@@ -588,19 +675,135 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Primary display only", L"Nur Hauptbildschirm"},
     {L"", L"Primary display, all displays, or one display.",
      L"Hauptbildschirm, alle Bildschirme oder ein bestimmter Bildschirm."},
+    {L"", L"Project page", L"Projektseite"},
+    {L"", L"Provider logos", L"Anbieterlogos"},
+    {L"", L"Quotas on taskbar", L"Kontingente in der Taskleiste"},
+    {L"", L"Record history", L"Verlauf aufzeichnen"},
+    {L"", L"Record usage history", L"Nutzungsverlauf aufzeichnen"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"Aufzeichnung für diesen Windows-Benutzer an, Verlauf unbegrenzt aufbewahren, mit 7 Tagen öffnen. Der "
+     L"gespeicherte Verlauf bleibt erhalten."},
+    {L"", L"Recording rules, storage, export and verification",
+     L"Aufzeichnungsregeln, Speicherung, Export und Überprüfung"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.",
+     L"Die Aufzeichnung beginnt, sobald die Taskleiste ihre Konto-IDs gespeichert hat."},
+    {L"", L"Remove \"{label}\" ({provider})?", L"„{label}“ ({provider}) entfernen?"},
+    {L"", L"Report an issue", L"Problem melden"},
     {L"", L"Reset Behavior to defaults", L"Verhalten auf Standard zurücksetzen"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm anzeigen, "
      L"Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten nicht abfragen, "
      L"Schwellenwert-Benachrichtigungen bei Rot."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"Darstellung auf die Standardwerte zurücksetzen?\n\nAcryl-Material, Balkenmodus „Verbraucht“, Prozenttext beim "
+     L"Daraufzeigen mit adaptiver Ausrichtung, keine Beträge, die Standardpalette (eigene Farben werden ebenfalls "
+     L"zurückgesetzt) mit Gelb ab 50 %, Orange ab 75 % und Rot ab 90 %, veraltete Daten markiert, zusätzliche "
+     L"OpenAI-Ratenlimits ausgeblendet."},
+    {L"", L"Reset History to defaults", L"Verlauf auf Standard zurücksetzen"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"Verlauf auf die Standardwerte zurücksetzen?\n\nDie Aufzeichnung wird für diesen Windows-Benutzer "
+     L"eingeschaltet, der Verlauf wird unbegrenzt aufbewahrt und das Fenster „Nutzungsverlauf“ öffnet mit 7 Tagen. "
+     L"Der gespeicherte Verlauf bleibt erhalten."},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100 x 8 px mit Beschriftungen links, Ringe "
+     L"mit 32 px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, hellgraue Tempomarkierungen als Caret "
+     L"und die Standardabstände. Konten werden nicht geändert."},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"Wählen Sie <b>{button}</b>, um ein Konto von Anthropic, OpenAI, Google Antigravity, GitHub Copilot oder "
+     L"OpenCode Go in der Taskleiste anzuzeigen."},
+    {L"", L"Set Credits max to show the Credits bar.",
+     L"Legen Sie ein Guthaben-Maximum fest, um den Guthaben-Balken anzuzeigen."},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ löscht nichts und hat keine Größenbeschränkung, daher wächst der "
+     L"Verlauf im Speicher des Explorers und auf dem Datenträger weiter. Tageslimits bereinigen stündlich, mit einer "
+     L"Obergrenze von etwa 60 MB."},
+    {L"", L"Short text", L"Kurztext"},
     {L"", L"Show details on hover", L"Details beim Daraufzeigen anzeigen"},
     {L"", L"Show on", L"Anzeigen auf"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"Wird in den Details angezeigt und neben den Balken, wenn „Identität“ auf „Bezeichnung“ steht. Pro Anbieter "
+     L"eindeutig; beim Umbenennen bleiben Anmeldung und Verlauf erhalten."},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"Verlauf nicht mehr unbegrenzt aufbewahren?\n\nDer Verlauf wird wieder {days, plural, one{# Tag} other{# "
+     L"Tage}} lang aufbewahrt und auf 250.000 Messwerte (etwa 60 MB) begrenzt. Ältere Messwerte und die ältesten "
+     L"über diese Grenze hinaus werden dauerhaft gelöscht, für alle Windows-Benutzer."},
+    {L"", L"Storage location", L"Speicherort"},
+    {L"", L"Suggestions and bug reports on GitHub", L"Vorschläge und Fehlerberichte auf GitHub"},
+    {L"", L"Thanks to {names}.", L"Danke an {names}."},
+    {L"", L"That provider and label are already configured.",
+     L"Dieser Anbieter mit dieser Bezeichnung ist bereits konfiguriert."},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"Die Identität „Bezeichnung“ auf Kacheln, bis zu 4 Zeichen. Leer verwendet die Bezeichnung ohne Leerzeichen."},
+    {L"", L"The account was changed from another taskbar window.",
+     L"Das Konto wurde über ein anderes Taskleistenfenster geändert."},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"Das Konto wurde entfernt, aber sein Nutzungsverlauf konnte nicht gelöscht werden und wurde "
+     L"behalten.\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"Das Konto wurde umbenannt, aber unter der alten Identität verbleibt eine doppelte gespeicherte Anmeldung. Um "
+     L"sie zu löschen, fügen Sie erneut ein Konto mit dem alten Anbieter und der alten Bezeichnung hinzu und "
+     L"entfernen Sie es dann."},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"Das Guthaben, das der Guthaben-Balken als 100 % wertet. OpenAI meldet nur das Guthaben."},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"Name und Version des Mods und der Windows-Build, für Fehlerberichte."},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"Der Zeitraum, mit dem das Fenster „Nutzungsverlauf“ öffnet. Seine Zeitraum-Schaltflächen wechseln ihn "
+     L"weiterhin."},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"Die Identität des umbenannten Kontos hat bereits eine aufbewahrte Anmeldung. Um sie zu ersetzen, fügen Sie "
+     L"ein Konto mit diesem Anbieter und dieser Bezeichnung hinzu und entfernen Sie es dann. Das Konto wurde nicht "
+     L"geändert."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"Die Fenster Einstellungen und Nutzungsverlauf sowie die Taskleiste. „Automatisch“ folgt Ihrer "
      L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"Die gespeicherte Anmeldung konnte nicht kopiert werden. Das Konto wurde nicht geändert."},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"Die gespeicherte Anmeldung konnte nicht gelöscht werden und bleibt für dieses Konto erhalten."},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"Die gespeicherte Anmeldung konnte nicht gelöscht werden, daher wurde das Konto nicht entfernt."},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"Die gespeicherte Anmeldung wurde gelöscht, aber die Einstellungen konnten nicht gespeichert werden. Das Konto "
+     L"bleibt konfiguriert, ist aber abgemeldet."},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"Dieses Konto ist nicht mehr konfiguriert; seine nicht gespeicherten Änderungen wurden verworfen."},
+    {L"", L"This change couldn't be saved.", L"Diese Änderung konnte nicht gespeichert werden."},
     {L"", L"Threshold notifications", L"Schwellenwert-Benachrichtigungen"},
+    {L"", L"Turn on Record usage history to change this.",
+     L"Schalten Sie „Nutzungsverlauf aufzeichnen“ ein, um dies zu ändern."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt. "
+     L"Nutzungsdiagramme zeigen Guthaben als Zahl im 7T-Diagramm."},
+    {L"", L"Usage history", L"Nutzungsverlauf"},
+    {L"", L"Usage history guide", L"Leitfaden zum Nutzungsverlauf"},
+    {L"", L"Used on tiles when Identity is Label.",
+     L"Wird auf Kacheln verwendet, wenn „Identität“ auf „Bezeichnung“ steht."},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  von Cleroth  ·  Windhawk-Mod"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.",
+     L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie die Identität ändern."},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.",
+     L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie Konten entfernen."},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity läuft nicht"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity: Kontingent nicht verfügbar"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -666,9 +869,32 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"account-error-alone", L"Unexpected response format", L"Unerwartetes Antwortformat"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Unerwartetes Antwortformat ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"Unerwartete Token-Antwort"},
+    {L"account-state", L"Hidden, not polled", L"Ausgeblendet, nicht abgefragt"},
     {L"account-state", L"Local app not running", L"Lokale App läuft nicht"},
+    {L"account-state", L"Local app running", L"Lokale App läuft"},
+    {L"account-state", L"Sign-in needed", L"Anmeldung erforderlich"},
+    {L"account-state", L"Signed in", L"Angemeldet"},
+    {L"account-state", L"Signing in…", L"Anmeldung läuft…"},
+    {L"account-state", L"Waiting for the local app", L"Warten auf die lokale App"},
+    {L"add-account", L"Sign in with a code on github.com", L"Anmeldung mit einem Code auf github.com"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console",
+     L"Anmeldung mit einem API-Schlüssel aus der OpenCode-Konsole"},
+    {L"add-account", L"Sign in with your browser", L"Anmeldung über Ihren Browser"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI",
+     L"Verwendet die angemeldete Antigravity-App oder -CLI"},
     {L"button", L"Add account", L"Konto hinzufügen"},
+    {L"button", L"Copied", L"Kopiert"},
+    {L"button", L"Copy", L"Kopieren"},
+    {L"button", L"Copy failed", L"Kopieren fehlgeschlagen"},
+    {L"button", L"Custom...", L"Anpassen…"},
+    {L"button", L"Open dashboard", L"Dashboard öffnen"},
+    {L"button", L"Open folder", L"Ordner öffnen"},
+    {L"button", L"Open usage history", L"Nutzungsverlauf öffnen"},
+    {L"button", L"Remove account", L"Konto entfernen"},
     {L"button", L"Reset", L"Zurücksetzen"},
+    {L"button", L"Sign in", L"Anmelden"},
+    {L"button", L"Sign in again", L"Erneut anmelden"},
+    {L"button", L"Sign out", L"Abmelden"},
     {L"chart-readout", L"+{count} more — hide lines in the legend",
      L"+{count} weitere – Linien in der Legende ausblenden"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
@@ -679,6 +905,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"copilot-unit", L"AI credits", L"KI-Guthaben"},
     {L"copilot-unit", L"chat requests", L"Chat-Anfragen"},
     {L"copilot-unit", L"premium requests", L"Premium-Anfragen"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
+     L"{credits, plural, one{Guthaben} other{Guthaben}}"},
     {L"date-month", L"Apr", L"Apr"},
     {L"date-month", L"Aug", L"Aug"},
     {L"date-month", L"Dec", L"Dez"},
@@ -712,6 +940,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"date-weekday", L"Thu", L"Do"},
     {L"date-weekday", L"Tue", L"Di"},
     {L"date-weekday", L"Wed", L"Mi"},
+    {L"dialog-button", L"Remove", L"Entfernen"},
+    {L"dialog-caption", L"Account", L"Konto"},
+    {L"dialog-caption", L"Keep history", L"Verlauf aufbewahren"},
+    {L"dialog-caption", L"Remove account", L"Konto entfernen"},
+    {L"dialog-caption", L"Reset settings", L"Einstellungen zurücksetzen"},
+    {L"dialog-caption", L"Usage history", L"Nutzungsverlauf"},
     {L"duration", L"{days}d", L"{days} T."},
     {L"duration", L"{days}d {hours}h", L"{days} T. {hours} Std."},
     {L"duration", L"{hours}h", L"{hours} Std."},
@@ -748,6 +982,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Aufzeichnung · {days, plural, one{# Tag} other{# Tage}}"},
     {L"history-pill", L"Waiting", L"Wartet"},
+    {L"history-span", L"All retained", L"Alles Aufbewahrte"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}", L"{days, plural, one{# Tag} other{# Tage}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# Stunde} other{# Stunden}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}", L"{years, plural, one{# Jahr} other{# Jahre}}"},
     {L"history-status", L"Updated {time}", L"Aktualisiert {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
      L"Ein Konto in den Einstellungen verwendet diesen Verlauf wieder."},
@@ -839,6 +1078,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"quota-name", L"Extra usage", L"Zusätzliche Nutzung"},
     {L"quota-name", L"Monthly", L"Monatlich"},
     {L"quota-name", L"Premium requests", L"Premium-Anfragen"},
+    {L"quota-name", L"Short window", L"Kurzes Fenster"},
     {L"quota-name", L"Weekly", L"Wöchentlich"},
     {L"quota-name", L"{name} current limit", L"{name} aktuelles Limit"},
     {L"quota-name", L"{name} weekly", L"{name} wöchentlich"},
@@ -854,6 +1094,14 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"quota-value", L"Available", L"Verfügbar"},
     {L"quota-value", L"Unlimited", L"Unbegrenzt"},
     {L"quota-value", L"Used up", L"Aufgebraucht"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"Speichert nicht"},
+    {L"recording-status", L"Off", L"Aus"},
+    {L"recording-status", L"Off for this Windows user", L"Aus für diesen Windows-Benutzer"},
+    {L"recording-status", L"Paused while hidden", L"Pausiert, solange ausgeblendet"},
+    {L"recording-status", L"Recording", L"Zeichnet auf"},
+    {L"recording-status", L"Unavailable", L"Nicht verfügbar"},
+    {L"recording-status", L"Waiting", L"Wartet"},
     {L"reset-when", L"in {duration}", L"in {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"in {duration} ({time})"},
     {L"reset-when", L"now", L"jetzt"},
@@ -861,6 +1109,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"response-shape", L"empty body", L"leerer Inhalt"},
     {L"response-shape", L"keys: {keys}", L"Schlüssel: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body", L"kein Objekt oder ungültiges JSON"},
+    {L"retention", L"Custom", L"Benutzerdefiniert"},
+    {L"retention", L"Forever", L"Unbegrenzt"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}", L"{days, plural, one{Tag} other{Tage}}"},
     {L"settings-page", L"About", L"Info"},
     {L"settings-page", L"Accounts", L"Konten"},
     {L"settings-page", L"Behavior", L"Verhalten"},
@@ -868,10 +1119,15 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-page", L"History", L"Verlauf"},
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Warnungen"},
+    {L"settings-section", L"Credits and license", L"Mitwirkende und Lizenz"},
     {L"settings-section", L"Details", L"Details"},
     {L"settings-section", L"Language", L"Sprache"},
+    {L"settings-section", L"Links", L"Links"},
+    {L"settings-section", L"Recording", L"Aufzeichnung"},
+    {L"settings-section", L"Storage", L"Speicher"},
     {L"settings-section", L"Taskbar", L"Taskleiste"},
     {L"settings-section", L"Updates", L"Aktualisierungen"},
+    {L"settings-section", L"Viewer", L"Anzeige"},
     {L"sign-in-button", L"Cancel", L"Abbrechen"},
     {L"sign-in-button", L"Close", L"Schließen"},
     {L"sign-in-button", L"Code copied", L"Code kopiert"},
@@ -938,6 +1194,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
     {L"taskbar-setup", L"AI +", L"KI +"},
+    {L"tile-identity", L"Label", L"Bezeichnung"},
+    {L"tile-identity", L"Logo + number badge", L"Logo + Nummern-Badge"},
+    {L"tile-identity", L"Logo only", L"Nur Logo"},
     {L"toggle", L"Off", L"Aus"},
     {L"toggle", L"On", L"Ein"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
@@ -946,38 +1205,121 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Beim Tempo seit {time}: Limit in ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Beim Durchschnittstempo dieses Zeitfensters: Limit in ~{duration}"},
+    {L"window-title", L"{app} — Settings", L"{app} – Einstellungen"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogDe), "sort by (context, English), no duplicates");
 // src/i18n/lang-es.h
 // Spanish (es): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogEs[] = {
+    {L"", L"1 to 3650 days.", L"De 1 a 3650 días."},
     {L"", L"2 to 1440 minutes.", L"De 2 a 1440 minutos."},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"No se pudo guardar un cambio; se muestra con su error.\n\n¿Descartar los cambios sin guardar y cerrar la "
+     L"ventana?"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"Cuotas de suscripciones de IA de Anthropic, OpenAI, Google Antigravity, GitHub Copilot y OpenCode Go en la "
+     L"barra de tareas de Windows 11."},
     {L"", L"All displays", L"Todas las pantallas"},
+    {L"", L"Also delete its usage history", L"Eliminar también su historial de uso"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"Una cuenta ya no está configurada; se descartaron sus cambios sin guardar."},
+    {L"", L"Another account of this provider uses this label.", L"Otra cuenta de este proveedor ya usa esta etiqueta."},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic, OpenAI y GitHub Copilot inician sesión en tu navegador; OpenCode Go, con una clave de API. Google "
+     L"Antigravity usa su app o CLI con la sesión iniciada, que debe seguir en ejecución."},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"Solo se aplica a este usuario de Windows. Desactivarlo conserva el historial guardado."},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"Gráficos, estadísticas y exportación CSV a partir de muestras locales, también con el registro desactivado."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Elige Personalizado en Intervalo de consulta en la nube para editarlo."},
+    {L"", L"Choose Custom in Keep history to edit.", L"Elige Personalizado en Conservar historial para editarlo."},
     {L"", L"Cloud poll interval", L"Intervalo de consulta en la nube"},
+    {L"", L"Contributors", L"Colaboradores"},
+    {L"", L"Copy version info", L"Copiar información de versión"},
+    {L"", L"Could not remove the account.", L"No se pudo quitar la cuenta."},
+    {L"", L"Could not reorder the account.", L"No se pudo reordenar la cuenta."},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"No se pudo guardar la configuración. El cambio se mantiene aquí con su error; vuelve a cambiarlo para "
+     L"reintentarlo."},
+    {L"", L"Could not save the account.", L"No se pudo guardar la cuenta."},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"No se pudo guardar la cuenta. El cambio se mantiene aquí con su error; vuelve a cambiarlo para reintentarlo."},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"No se pudo guardar la cuenta. La sesión copiada permanece en la nueva identidad que se intentó usar. Para "
+     L"eliminarla, agrega una cuenta con ese proveedor y esa etiqueta y luego quítala."},
+    {L"", L"Could not update account visibility.", L"No se pudo actualizar la visibilidad de la cuenta."},
+    {L"", L"Credits max", L"Máximo de créditos"},
     {L"", L"Custom interval", L"Intervalo personalizado"},
+    {L"", L"Custom retention", L"Conservación personalizada"},
+    {L"", L"Default time span", L"Intervalo predeterminado"},
     {L"", L"Display {number} - unavailable", L"Pantalla {number}: no disponible"},
     {L"", L"Display {number} - {width}x{height}", L"Pantalla {number}: {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Pantalla {number}: {width}x{height} (principal)"},
     {L"", L"Do not poll hidden accounts", L"No consultar las cuentas ocultas"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
+     L"Arrastra para reordenar. El interruptor oculta una cuenta de la barra de tareas."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"Arrastra para reordenar. El interruptor oculta una cuenta de la barra de tareas; las cuentas ocultas no se "
+     L"consultan."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"Cada cuenta elige si se registra: <link id=\"accounts\">Cuentas</link> > Registrar historial. Las cuentas "
      L"ocultas no se registran mientras <link id=\"hidden\">No consultar las cuentas ocultas</link> esté activado en "
      L"Comportamiento."},
+    {L"", L"Enter a label.", L"Introduce una etiqueta."},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.",
+     L"Introduce un número entero de {minimum} a {maximum}."},
+    {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"De <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); el logotipo de GitHub Copilot, de <link "
+     L"id=\"octicons\">Primer Octicons</link> (licencia MIT, Copyright (c) 2026 GitHub Inc.). Google Antigravity usa "
+     L"el logotipo de Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+     L"GitHub Copilot y OpenCode son marcas comerciales de sus respectivos propietarios. Los logotipos solo "
+     L"identifican qué cuenta muestra un mosaico."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Las cuentas ocultas no se consultan ni se registran, aunque Registrar historial esté activado. Desactívalo para "
      L"seguir registrándolas. Compartido entre los usuarios de Windows."},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"El historial sigue a esta entrada, incluso tras volver a iniciar sesión. Usa una entrada nueva para otro "
+     L"inicio de sesión."},
+    {L"", L"History storage failed; Open usage history shows why.",
+     L"Error en el almacenamiento del historial; Abrir historial de uso muestra el motivo."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Con qué frecuencia se consultan Anthropic, OpenAI, GitHub Copilot y OpenCode Go. Antigravity consulta su sesión "
      L"local cada minuto."},
+    {L"", L"Identity", L"Identidad"},
     {L"", L"Interface language", L"Idioma de la interfaz"},
+    {L"", L"Its stored sign-in will be deleted.", L"Se eliminará su sesión guardada."},
+    {L"", L"Its usage history is kept.", L"Su historial de uso se conserva."},
+    {L"", L"Keep history", L"Conservar historial"},
+    {L"", L"Label", L"Etiqueta"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Idioma, pantallas, detalles al pasar el puntero, consultas y notificaciones."},
+    {L"", L"License", L"Licencia"},
+    {L"", L"MIT License", L"Licencia MIT"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"Identifica esta cuenta junto a sus barras y en los mosaicos. Etiqueta muestra la etiqueta en las barras y su "
+     L"texto corto en los mosaicos. La insignia numérica aparece cuando varias cuentas comparten proveedor, "
+     L"incluidas las ocultas."},
+    {L"", L"New samples arrive with each poll.", L"Llegan muestras nuevas con cada consulta."},
+    {L"", L"No accounts yet", L"Aún no hay cuentas"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"Sin cifrar. Lecturas e ID opacos, sin tokens ni etiquetas. Se conserva al quitar el mod."},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"Todavía no se ha registrado nada. La carpeta se crea con la primera muestra registrada."},
+    {L"", L"Nothing new is recorded.", L"No se registra nada nuevo."},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Avisa cuando una cuota de la barra de tareas alcanza por primera vez el umbral elegido. Se reactiva cuando baja "
      L"de él."},
@@ -989,19 +1331,131 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Abre los detalles de una cuenta cuando el puntero se detiene sobre ella."},
     {L"", L"Primary display only", L"Solo la pantalla principal"},
     {L"", L"Primary display, all displays, or one display.", L"La pantalla principal, todas las pantallas o una sola."},
+    {L"", L"Project page", L"Página del proyecto"},
+    {L"", L"Provider logos", L"Logotipos de proveedores"},
+    {L"", L"Quotas on taskbar", L"Cuotas en la barra de tareas"},
+    {L"", L"Record history", L"Registrar historial"},
+    {L"", L"Record usage history", L"Registrar historial de uso"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"Registro activado para este usuario de Windows, conservar el historial para siempre, abrir en 7 días. El "
+     L"historial guardado se conserva."},
+    {L"", L"Recording rules, storage, export and verification",
+     L"Reglas de registro, almacenamiento, exportación y verificación"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.",
+     L"El registro empieza cuando la barra de tareas guarde los ID de sus cuentas."},
+    {L"", L"Remove \"{label}\" ({provider})?", L"¿Quitar «{label}» ({provider})?"},
+    {L"", L"Report an issue", L"Informar de un problema"},
     {L"", L"Reset Behavior to defaults", L"Restablecer Comportamiento a los valores predeterminados"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"¿Restablecer Comportamiento a sus valores predeterminados?\n\nIdioma automático, mostrar solo en la pantalla "
      L"principal, mostrar detalles al pasar el puntero, consultar cada 10 minutos, no consultar las cuentas ocultas, "
      L"notificaciones de umbral en rojo."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"¿Restablecer Visualización a sus valores predeterminados?\n\nMaterial acrílico, modo de barra de uso, texto "
+     L"de porcentaje al pasar el puntero con alineación adaptable, sin importes, la paleta predeterminada (los "
+     L"colores personalizados también se restablecen) con amarillo desde el 50 %, naranja desde el 75 % y rojo desde "
+     L"el 90 %, datos obsoletos marcados y límites de frecuencia adicionales de OpenAI ocultos."},
+    {L"", L"Reset History to defaults", L"Restablecer Historial a los valores predeterminados"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"¿Restablecer Historial a sus valores predeterminados?\n\nEl registro se activa para este usuario de Windows, "
+     L"el historial se conserva para siempre y la ventana del historial de uso se abre en 7 días. El historial "
+     L"guardado se conserva."},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"¿Restablecer Diseño a sus valores predeterminados?\n\nBarras apiladas de 100 x 8 px con etiquetas a la "
+     L"izquierda, anillos de 32 px, logotipos e insignias numéricas en el color de texto de la barra de tareas, "
+     L"marcadores de ritmo en forma de signo de intercalación gris claro y el espaciado predeterminado. Las cuentas "
+     L"no cambian."},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"Selecciona <b>{button}</b> para mostrar una cuenta de Anthropic, OpenAI, Google Antigravity, GitHub Copilot u "
+     L"OpenCode Go en la barra de tareas."},
+    {L"", L"Set Credits max to show the Credits bar.",
+     L"Define el máximo de créditos para mostrar la barra de créditos."},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Compartido entre los usuarios de Windows. Para siempre no elimina nada y no tiene límite de tamaño, así que "
+     L"el historial sigue creciendo en la memoria del Explorador y en el disco. Los límites en días depuran cada "
+     L"hora, con un tope de unos 60 MB."},
+    {L"", L"Short text", L"Texto corto"},
     {L"", L"Show details on hover", L"Mostrar detalles al pasar el puntero"},
     {L"", L"Show on", L"Mostrar en"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"Se muestra en los detalles y junto a las barras cuando Identidad es Etiqueta. Única por proveedor; al cambiar "
+     L"el nombre se conservan la sesión y el historial."},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"¿Dejar de conservar el historial para siempre?\n\nEl historial se volverá a conservar durante {days, plural, "
+     L"one{# día} many{# de días} other{# días}} y se limitará a 250.000 muestras (unos 60 MB). Las muestras más "
+     L"antiguas, y las más antiguas por encima de ese límite, se eliminarán de forma permanente para todos los "
+     L"usuarios de Windows."},
+    {L"", L"Storage location", L"Ubicación de almacenamiento"},
+    {L"", L"Suggestions and bug reports on GitHub", L"Sugerencias e informes de errores en GitHub"},
+    {L"", L"Thanks to {names}.", L"Gracias a {names}."},
+    {L"", L"That provider and label are already configured.", L"Ese proveedor y esa etiqueta ya están configurados."},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"La identidad Etiqueta en los mosaicos, hasta 4 caracteres. Si está vacío, se usa la etiqueta sin espacios."},
+    {L"", L"The account was changed from another taskbar window.",
+     L"La cuenta se cambió desde otra ventana de la barra de tareas."},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"La cuenta se quitó, pero su historial de uso no se pudo eliminar y se conservó.\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"La cuenta se renombró, pero queda una sesión guardada duplicada en la identidad anterior. Para eliminarla, "
+     L"vuelve a agregar una cuenta con el proveedor y la etiqueta anteriores y luego quítala."},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"El saldo que la barra de créditos considera el 100 %. OpenAI solo informa del saldo."},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"El nombre y la versión del mod y la compilación de Windows, para informes de errores."},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"El intervalo con el que se abre la ventana del historial de uso. Sus botones de intervalo lo siguen cambiando."},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"La identidad de la cuenta renombrada ya tiene una sesión conservada. Para reemplazarla, agrega una cuenta con "
+     L"ese proveedor y esa etiqueta y luego quítala. La cuenta no se cambió."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"Las ventanas de configuración y del historial de uso, y la barra de tareas. Automático sigue el idioma para "
      L"mostrar de Windows. Solo se aplica a este usuario de Windows."},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"No se pudo copiar la sesión guardada. La cuenta no se cambió."},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"No se pudo eliminar la sesión guardada; se conserva para esta cuenta."},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"No se pudo eliminar la sesión guardada, así que la cuenta no se quitó."},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"Se eliminó la sesión guardada, pero no se pudo guardar la configuración. La cuenta sigue configurada, pero "
+     L"sin sesión iniciada."},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"Esta cuenta ya no está configurada; se descartaron sus cambios sin guardar."},
+    {L"", L"This change couldn't be saved.", L"No se pudo guardar este cambio."},
     {L"", L"Threshold notifications", L"Notificaciones de umbral"},
+    {L"", L"Turn on Record usage history to change this.", L"Activa Registrar historial de uso para cambiar esto."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada. Los gráficos de uso "
+     L"muestran los créditos como un número en el gráfico de 7d."},
+    {L"", L"Usage history", L"Historial de uso"},
+    {L"", L"Usage history guide", L"Guía del historial de uso"},
+    {L"", L"Used on tiles when Identity is Label.", L"Se usa en los mosaicos cuando Identidad es Etiqueta."},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
+     L"Versión {version}  ·  por Cleroth  ·  mod de Windhawk"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.",
+     L"Espera a que termine el inicio de sesión actual antes de cambiar la identidad."},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.",
+     L"Espera a que termine el inicio de sesión actual antes de quitar cuentas."},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity no se está ejecutando"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity: cuota no disponible"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -1065,9 +1519,32 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"account-error-alone", L"Unexpected response format", L"Formato de respuesta inesperado"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Formato de respuesta inesperado ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"Respuesta de token inesperada"},
+    {L"account-state", L"Hidden, not polled", L"Oculta, sin consultar"},
     {L"account-state", L"Local app not running", L"La app local no está en ejecución"},
+    {L"account-state", L"Local app running", L"App local en ejecución"},
+    {L"account-state", L"Sign-in needed", L"Se requiere iniciar sesión"},
+    {L"account-state", L"Signed in", L"Sesión iniciada"},
+    {L"account-state", L"Signing in…", L"Iniciando sesión…"},
+    {L"account-state", L"Waiting for the local app", L"Esperando a la app local"},
+    {L"add-account", L"Sign in with a code on github.com", L"Inicia sesión con un código en github.com"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console",
+     L"Inicia sesión con una clave de API de la consola de OpenCode"},
+    {L"add-account", L"Sign in with your browser", L"Inicia sesión en tu navegador"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI",
+     L"Usa la app o CLI de Antigravity con la sesión iniciada"},
     {L"button", L"Add account", L"Agregar cuenta"},
+    {L"button", L"Copied", L"Copiado"},
+    {L"button", L"Copy", L"Copiar"},
+    {L"button", L"Copy failed", L"Error al copiar"},
+    {L"button", L"Custom...", L"Personalizar…"},
+    {L"button", L"Open dashboard", L"Abrir panel"},
+    {L"button", L"Open folder", L"Abrir carpeta"},
+    {L"button", L"Open usage history", L"Abrir historial de uso"},
+    {L"button", L"Remove account", L"Quitar cuenta"},
     {L"button", L"Reset", L"Restablecer"},
+    {L"button", L"Sign in", L"Iniciar sesión"},
+    {L"button", L"Sign in again", L"Volver a iniciar sesión"},
+    {L"button", L"Sign out", L"Cerrar sesión"},
     {L"chart-readout", L"+{count} more — hide lines in the legend", L"+{count} más: oculta líneas en la leyenda"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"+{count} más: oculta líneas en la leyenda o selecciona una cuenta"},
@@ -1077,6 +1554,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"copilot-unit", L"AI credits", L"créditos de IA"},
     {L"copilot-unit", L"chat requests", L"solicitudes de chat"},
     {L"copilot-unit", L"premium requests", L"solicitudes premium"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
+     L"{credits, plural, one{crédito} many{créditos} other{créditos}}"},
     {L"date-month", L"Apr", L"abr"},
     {L"date-month", L"Aug", L"ago"},
     {L"date-month", L"Dec", L"dic"},
@@ -1110,6 +1589,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"date-weekday", L"Thu", L"jue"},
     {L"date-weekday", L"Tue", L"mar"},
     {L"date-weekday", L"Wed", L"mié"},
+    {L"dialog-button", L"Remove", L"Quitar"},
+    {L"dialog-caption", L"Account", L"Cuenta"},
+    {L"dialog-caption", L"Keep history", L"Conservar historial"},
+    {L"dialog-caption", L"Remove account", L"Quitar cuenta"},
+    {L"dialog-caption", L"Reset settings", L"Restablecer configuración"},
+    {L"dialog-caption", L"Usage history", L"Historial de uso"},
     {L"duration", L"{days}d", L"{days} d"},
     {L"duration", L"{days}d {hours}h", L"{days} d {hours} h"},
     {L"duration", L"{hours}h", L"{hours} h"},
@@ -1147,6 +1632,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Registrando · {days, plural, one{# día} many{# de días} other{# días}}"},
     {L"history-pill", L"Waiting", L"En espera"},
+    {L"history-span", L"All retained", L"Todo lo conservado"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}",
+     L"{days, plural, one{# día} many{# de días} other{# días}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# hora} many{# de horas} other{# horas}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}",
+     L"{years, plural, one{# año} many{# de años} other{# años}}"},
     {L"history-status", L"Updated {time}", L"Actualizado {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
      L"Una cuenta de Configuración vuelve a usar este historial."},
@@ -1239,6 +1731,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"quota-name", L"Extra usage", L"Uso adicional"},
     {L"quota-name", L"Monthly", L"Mensual"},
     {L"quota-name", L"Premium requests", L"Solicitudes premium"},
+    {L"quota-name", L"Short window", L"Ventana corta"},
     {L"quota-name", L"Weekly", L"Semanal"},
     {L"quota-name", L"{name} current limit", L"{name}: límite actual"},
     {L"quota-name", L"{name} weekly", L"{name} semanal"},
@@ -1254,6 +1747,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"quota-value", L"Available", L"Disponible"},
     {L"quota-value", L"Unlimited", L"Ilimitado"},
     {L"quota-value", L"Used up", L"Agotado"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"Sin guardar"},
+    {L"recording-status", L"Off", L"Desactivado"},
+    {L"recording-status", L"Off for this Windows user", L"Desactivado para este usuario de Windows"},
+    {L"recording-status", L"Paused while hidden", L"En pausa mientras está oculta"},
+    {L"recording-status", L"Recording", L"Registrando"},
+    {L"recording-status", L"Unavailable", L"No disponible"},
+    {L"recording-status", L"Waiting", L"En espera"},
     {L"reset-when", L"in {duration}", L"en {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"en {duration} ({time})"},
     {L"reset-when", L"now", L"ahora"},
@@ -1261,6 +1762,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"response-shape", L"empty body", L"cuerpo vacío"},
     {L"response-shape", L"keys: {keys}", L"claves: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body", L"cuerpo JSON no válido o que no es un objeto"},
+    {L"retention", L"Custom", L"Personalizado"},
+    {L"retention", L"Forever", L"Para siempre"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}", L"{days, plural, one{día} many{días} other{días}}"},
     {L"settings-page", L"About", L"Acerca de"},
     {L"settings-page", L"Accounts", L"Cuentas"},
     {L"settings-page", L"Behavior", L"Comportamiento"},
@@ -1268,10 +1772,15 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"settings-page", L"History", L"Historial"},
     {L"settings-page", L"Layout", L"Diseño"},
     {L"settings-section", L"Alerts", L"Alertas"},
+    {L"settings-section", L"Credits and license", L"Créditos y licencia"},
     {L"settings-section", L"Details", L"Detalles"},
     {L"settings-section", L"Language", L"Idioma"},
+    {L"settings-section", L"Links", L"Enlaces"},
+    {L"settings-section", L"Recording", L"Registro"},
+    {L"settings-section", L"Storage", L"Almacenamiento"},
     {L"settings-section", L"Taskbar", L"Barra de tareas"},
     {L"settings-section", L"Updates", L"Actualizaciones"},
+    {L"settings-section", L"Viewer", L"Visor"},
     {L"sign-in-button", L"Cancel", L"Cancelar"},
     {L"sign-in-button", L"Close", L"Cerrar"},
     {L"sign-in-button", L"Code copied", L"Código copiado"},
@@ -1338,6 +1847,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
     {L"taskbar-setup", L"AI +", L"IA +"},
+    {L"tile-identity", L"Label", L"Etiqueta"},
+    {L"tile-identity", L"Logo + number badge", L"Logotipo + insignia numérica"},
+    {L"tile-identity", L"Logo only", L"Solo logotipo"},
     {L"toggle", L"Off", L"Desactivado"},
     {L"toggle", L"On", L"Activado"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
@@ -1346,38 +1858,125 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Al ritmo desde {time}: límite en ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Al ritmo medio de esta ventana: límite en ~{duration}"},
+    {L"window-title", L"{app} — Settings", L"{app} — Configuración"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogEs), "sort by (context, English), no duplicates");
 // src/i18n/lang-fr.h
 // French (fr): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogFr[] = {
+    {L"", L"1 to 3650 days.", L"De 1 à 3650\u00A0jours."},
     {L"", L"2 to 1440 minutes.", L"De 2 à 1440 minutes."},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"Une modification n’a pas pu être enregistrée\u00A0; elle est affichée avec son erreur.\n\nIgnorer les "
+     L"modifications non enregistrées et fermer la fenêtre\u00A0?"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"Les quotas d’abonnements IA d’Anthropic, OpenAI, Google Antigravity, GitHub Copilot et OpenCode Go dans la "
+     L"barre des tâches de Windows 11."},
     {L"", L"All displays", L"Tous les écrans"},
+    {L"", L"Also delete its usage history", L"Supprimer aussi son historique d’utilisation"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"Un compte n’est plus configuré\u00A0; ses modifications non enregistrées ont été abandonnées."},
+    {L"", L"Another account of this provider uses this label.",
+     L"Un autre compte de ce fournisseur utilise ce libellé."},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic, OpenAI et GitHub Copilot se connectent via votre navigateur, OpenCode Go avec une clé d’API. "
+     L"Google Antigravity utilise son application ou sa CLI connectée, qui doit rester lancée."},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"S’applique uniquement à cet utilisateur Windows. Le désactiver conserve l’historique enregistré."},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"Graphiques, statistiques et export CSV à partir des échantillons locaux, même quand l’enregistrement est "
+     L"désactivé."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Choisissez Personnalisé dans Intervalle d’interrogation cloud pour le modifier."},
+    {L"", L"Choose Custom in Keep history to edit.",
+     L"Choisissez Personnalisé dans Conserver l’historique pour le modifier."},
     {L"", L"Cloud poll interval", L"Intervalle d’interrogation cloud"},
+    {L"", L"Contributors", L"Contributeurs"},
+    {L"", L"Copy version info", L"Copier les informations de version"},
+    {L"", L"Could not remove the account.", L"Impossible de supprimer le compte."},
+    {L"", L"Could not reorder the account.", L"Impossible de déplacer le compte."},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"Impossible d’enregistrer les paramètres. La modification reste affichée ici avec son erreur\u00A0; "
+     L"modifiez-la à nouveau pour réessayer."},
+    {L"", L"Could not save the account.", L"Impossible d’enregistrer le compte."},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"Impossible d’enregistrer le compte. La modification reste affichée ici avec son erreur\u00A0; modifiez-la à "
+     L"nouveau pour réessayer."},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"Impossible d’enregistrer le compte. La connexion copiée reste sous la nouvelle identité tentée. Pour la "
+     L"supprimer, ajoutez un compte avec le fournisseur et le libellé tentés, puis supprimez-le."},
+    {L"", L"Could not update account visibility.", L"Impossible de mettre à jour la visibilité du compte."},
+    {L"", L"Credits max", L"Maximum de crédits"},
     {L"", L"Custom interval", L"Intervalle personnalisé"},
+    {L"", L"Custom retention", L"Conservation personnalisée"},
+    {L"", L"Default time span", L"Période par défaut"},
     {L"", L"Display {number} - unavailable", L"Écran {number} – indisponible"},
     {L"", L"Display {number} - {width}x{height}", L"Écran {number} – {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Écran {number} – {width}x{height} (principal)"},
     {L"", L"Do not poll hidden accounts", L"Ne pas interroger les comptes masqués"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
+     L"Faites glisser pour réorganiser. L’interrupteur masque un compte de la barre des tâches."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"Faites glisser pour réorganiser. L’interrupteur masque un compte de la barre des tâches\u00A0; les comptes "
+     L"masqués ne sont pas interrogés."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"Chaque compte choisit s’il est enregistré\u00A0: <link id=\"accounts\">Comptes</link> > Enregistrer "
      L"l’historique. Les comptes masqués ne sont pas enregistrés tant que <link id=\"hidden\">Ne pas interroger les "
      L"comptes masqués</link> est activé dans Comportement."},
+    {L"", L"Enter a label.", L"Saisissez un libellé."},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.",
+     L"Saisissez un nombre entier de {minimum} à {maximum}."},
+    {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"Issus de <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0)\u00A0; le logo GitHub Copilot provient de "
+     L"<link id=\"octicons\">Primer Octicons</link> (licence MIT, Copyright (c) 2026 GitHub Inc.). Google "
+     L"Antigravity utilise le logo Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, "
+     L"GitHub, GitHub Copilot et OpenCode sont des marques de leurs propriétaires respectifs. Les logos indiquent "
+     L"seulement quel compte une vignette affiche."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Les comptes masqués ne sont ni interrogés ni enregistrés, même si Enregistrer l’historique est activé. "
      L"Désactivez pour continuer à les enregistrer. Partagé entre les utilisateurs Windows."},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"L’historique suit cette entrée, même après une nouvelle connexion. Utilisez une nouvelle entrée pour un autre "
+     L"identifiant."},
+    {L"", L"History storage failed; Open usage history shows why.",
+     L"Échec du stockage de l’historique\u00A0; Ouvrir l’historique d’utilisation en indique la raison."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Fréquence d’interrogation d’Anthropic, OpenAI, GitHub Copilot et OpenCode Go. Antigravity interroge sa session "
      L"locale chaque minute."},
+    {L"", L"Identity", L"Identité"},
     {L"", L"Interface language", L"Langue de l’interface"},
+    {L"", L"Its stored sign-in will be deleted.", L"Sa connexion enregistrée sera supprimée."},
+    {L"", L"Its usage history is kept.", L"Son historique d’utilisation est conservé."},
+    {L"", L"Keep history", L"Conserver l’historique"},
+    {L"", L"Label", L"Libellé"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Langue, écrans, détails au survol, interrogations et notifications."},
+    {L"", L"License", L"Licence"},
+    {L"", L"MIT License", L"Licence MIT"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"Identifie ce compte à côté de ses barres et sur les vignettes. Libellé affiche le libellé sur les barres et "
+     L"son texte court sur les vignettes. Le badge numéroté apparaît quand plusieurs comptes partagent un "
+     L"fournisseur, comptes masqués compris."},
+    {L"", L"New samples arrive with each poll.", L"De nouveaux échantillons arrivent à chaque interrogation."},
+    {L"", L"No accounts yet", L"Aucun compte pour l’instant"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"Non chiffré. Relevés et ID opaques, sans jetons ni libellés. Conservé après la suppression du mod."},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"Rien n’a encore été enregistré. Le dossier est créé avec le premier échantillon enregistré."},
+    {L"", L"Nothing new is recorded.", L"Rien de nouveau n’est enregistré."},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Avertit quand un quota de la barre des tâches atteint pour la première fois le seuil choisi. Se réarme quand il "
      L"repasse en dessous."},
@@ -1389,19 +1988,132 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Ouvre les détails d’un compte quand le pointeur s’y arrête."},
     {L"", L"Primary display only", L"Écran principal uniquement"},
     {L"", L"Primary display, all displays, or one display.", L"L’écran principal, tous les écrans ou un seul écran."},
+    {L"", L"Project page", L"Page du projet"},
+    {L"", L"Provider logos", L"Logos des fournisseurs"},
+    {L"", L"Quotas on taskbar", L"Quotas dans la barre des tâches"},
+    {L"", L"Record history", L"Enregistrer l’historique"},
+    {L"", L"Record usage history", L"Enregistrer l’historique d’utilisation"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"Enregistrement activé pour cet utilisateur Windows, historique conservé indéfiniment, ouverture sur "
+     L"7\u00A0jours. L’historique enregistré est conservé."},
+    {L"", L"Recording rules, storage, export and verification",
+     L"Règles d’enregistrement, stockage, export et vérification"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.",
+     L"L’enregistrement commence dès que la barre des tâches a enregistré les ID de ses comptes."},
+    {L"", L"Remove \"{label}\" ({provider})?", L"Supprimer «\u00A0{label}\u00A0» ({provider})\u00A0?"},
+    {L"", L"Report an issue", L"Signaler un problème"},
     {L"", L"Reset Behavior to defaults", L"Rétablir les valeurs par défaut de Comportement"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"Rétablir les valeurs par défaut de Comportement\u00A0?\n\nLangue automatique, affichage sur l’écran principal "
      L"uniquement, détails au survol, interrogation toutes les 10 minutes, comptes masqués non interrogés, "
      L"notifications de seuil au rouge."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"Rétablir les valeurs par défaut de Affichage\u00A0?\n\nMatériau acrylique, mode de barre utilisé, texte de "
+     L"pourcentage au survol avec alignement adaptatif, aucun montant, la palette par défaut (couleurs "
+     L"personnalisées rétablies aussi) avec jaune à partir de 50\u00A0%, orange à partir de 75\u00A0% et rouge à "
+     L"partir de 90\u00A0%, données obsolètes signalées, limites de débit OpenAI supplémentaires masquées."},
+    {L"", L"Reset History to defaults", L"Rétablir les valeurs par défaut de Historique"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"Rétablir les valeurs par défaut de Historique\u00A0?\n\nL’enregistrement s’active pour cet utilisateur "
+     L"Windows, l’historique est conservé indéfiniment et la fenêtre de l’historique d’utilisation s’ouvre sur "
+     L"7\u00A0jours. L’historique enregistré est conservé."},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Rétablir les valeurs par défaut de Disposition\u00A0?\n\nBarres empilées de 100 x 8\u00A0px avec libellés à "
+     L"gauche, anneaux de 32\u00A0px, logos et badges numérotés dans la couleur du texte de la barre des tâches, "
+     L"repères de rythme en chevron gris clair et l’espacement par défaut. Les comptes ne sont pas modifiés."},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"Sélectionnez <b>{button}</b> pour afficher un compte Anthropic, OpenAI, Google Antigravity, GitHub Copilot ou "
+     L"OpenCode Go dans la barre des tâches."},
+    {L"", L"Set Credits max to show the Credits bar.",
+     L"Définissez le maximum de crédits pour afficher la barre des crédits."},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Partagé entre les utilisateurs Windows. Indéfiniment ne supprime rien et n’a pas de limite de taille\u00A0: "
+     L"l’historique continue de grossir dans la mémoire de l’Explorateur et sur le disque. Les limites en jours "
+     L"élaguent toutes les heures, avec un plafond d’environ 60\u00A0Mo."},
+    {L"", L"Short text", L"Texte court"},
     {L"", L"Show details on hover", L"Afficher les détails au survol"},
     {L"", L"Show on", L"Afficher sur"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"Affiché dans les détails, et à côté des barres quand Identité vaut Libellé. Unique par fournisseur\u00A0; le "
+     L"renommer conserve la connexion et l’historique."},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"Ne plus conserver l’historique indéfiniment\u00A0?\n\nL’historique sera de nouveau conservé {days, plural, "
+     L"one{# jour} many{# de jours} other{# jours}} et limité à 250\u00A0000 échantillons (environ 60\u00A0Mo). Les "
+     L"échantillons plus anciens, et les plus anciens au-delà de cette limite, seront supprimés définitivement, pour "
+     L"tous les utilisateurs Windows."},
+    {L"", L"Storage location", L"Emplacement de stockage"},
+    {L"", L"Suggestions and bug reports on GitHub", L"Suggestions et rapports de bogues sur GitHub"},
+    {L"", L"Thanks to {names}.", L"Merci à {names}."},
+    {L"", L"That provider and label are already configured.", L"Ce fournisseur et ce libellé sont déjà configurés."},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"L’identité Libellé sur les vignettes, jusqu’à 4\u00A0caractères. Vide, c’est le libellé sans espaces."},
+    {L"", L"The account was changed from another taskbar window.",
+     L"Le compte a été modifié depuis une autre fenêtre de la barre des tâches."},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"Le compte a été supprimé, mais son historique d’utilisation n’a pas pu être supprimé et a été "
+     L"conservé.\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"Le compte a été renommé, mais une connexion enregistrée en double reste sous l’ancienne identité. Pour la "
+     L"supprimer, ajoutez à nouveau un compte avec l’ancien fournisseur et l’ancien libellé, puis supprimez-le."},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"Le solde que la barre des crédits considère comme 100\u00A0%. OpenAI ne communique que le solde."},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"Le nom et la version du mod et la build de Windows, pour les rapports de bogues."},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"La période sur laquelle s’ouvre la fenêtre de l’historique d’utilisation. Ses boutons de période permettent "
+     L"toujours d’en changer."},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"L’identité du compte renommé a déjà une connexion conservée. Pour la remplacer, ajoutez un compte avec ce "
+     L"fournisseur et ce libellé, puis supprimez-le. Le compte n’a pas été modifié."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"Les fenêtres des paramètres et de l’historique d’utilisation, et la barre des tâches. Automatique suit la "
      L"langue d’affichage de Windows. S’applique uniquement à cet utilisateur Windows."},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"Impossible de copier la connexion enregistrée. Le compte n’a pas été modifié."},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"Impossible de supprimer la connexion enregistrée\u00A0; elle reste conservée pour ce compte."},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"Impossible de supprimer la connexion enregistrée, le compte n’a donc pas été supprimé."},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"La connexion enregistrée a été supprimée, mais les paramètres n’ont pas pu être enregistrés. Le compte reste "
+     L"configuré mais déconnecté."},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"Ce compte n’est plus configuré\u00A0; ses modifications non enregistrées ont été abandonnées."},
+    {L"", L"This change couldn't be saved.", L"Cette modification n’a pas pu être enregistrée."},
     {L"", L"Threshold notifications", L"Notifications de seuil"},
+    {L"", L"Turn on Record usage history to change this.",
+     L"Activez Enregistrer l’historique d’utilisation pour modifier ce réglage."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné. Les graphiques "
+     L"d’utilisation affichent les crédits sous forme de nombre sur le graphique 7j."},
+    {L"", L"Usage history", L"Historique d’utilisation"},
+    {L"", L"Usage history guide", L"Guide de l’historique d’utilisation"},
+    {L"", L"Used on tiles when Identity is Label.", L"Utilisé sur les vignettes quand Identité vaut Libellé."},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  par Cleroth  ·  mod Windhawk"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.",
+     L"Attendez la fin de la connexion en cours avant de changer d’identité."},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.",
+     L"Attendez la fin de la connexion en cours avant de supprimer des comptes."},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity n’est pas lancé"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity\u00A0: quota indisponible"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -1464,9 +2176,32 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"account-error-alone", L"Unexpected response format", L"Format de réponse inattendu"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Format de réponse inattendu ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"Réponse de jeton inattendue"},
+    {L"account-state", L"Hidden, not polled", L"Masqué, non interrogé"},
     {L"account-state", L"Local app not running", L"L’application locale n’est pas lancée"},
+    {L"account-state", L"Local app running", L"Application locale lancée"},
+    {L"account-state", L"Sign-in needed", L"Connexion requise"},
+    {L"account-state", L"Signed in", L"Connecté"},
+    {L"account-state", L"Signing in…", L"Connexion…"},
+    {L"account-state", L"Waiting for the local app", L"En attente de l’application locale"},
+    {L"add-account", L"Sign in with a code on github.com", L"Connexion avec un code sur github.com"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console",
+     L"Connexion avec une clé d’API de la console OpenCode"},
+    {L"add-account", L"Sign in with your browser", L"Connexion via votre navigateur"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI",
+     L"Utilise l’application ou la CLI Antigravity connectée"},
     {L"button", L"Add account", L"Ajouter un compte"},
+    {L"button", L"Copied", L"Copié"},
+    {L"button", L"Copy", L"Copier"},
+    {L"button", L"Copy failed", L"Échec de la copie"},
+    {L"button", L"Custom...", L"Personnaliser…"},
+    {L"button", L"Open dashboard", L"Ouvrir le tableau de bord"},
+    {L"button", L"Open folder", L"Ouvrir le dossier"},
+    {L"button", L"Open usage history", L"Ouvrir l’historique d’utilisation"},
+    {L"button", L"Remove account", L"Supprimer le compte"},
     {L"button", L"Reset", L"Rétablir"},
+    {L"button", L"Sign in", L"Se connecter"},
+    {L"button", L"Sign in again", L"Se reconnecter"},
+    {L"button", L"Sign out", L"Se déconnecter"},
     {L"chart-readout", L"+{count} more — hide lines in the legend",
      L"+{count} de plus – masquez des lignes dans la légende"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
@@ -1477,6 +2212,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"copilot-unit", L"AI credits", L"crédits IA"},
     {L"copilot-unit", L"chat requests", L"requêtes de chat"},
     {L"copilot-unit", L"premium requests", L"requêtes premium"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
+     L"{credits, plural, one{crédit} many{crédits} other{crédits}}"},
     {L"date-month", L"Apr", L"avr."},
     {L"date-month", L"Aug", L"août"},
     {L"date-month", L"Dec", L"déc."},
@@ -1510,6 +2247,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"date-weekday", L"Thu", L"jeu."},
     {L"date-weekday", L"Tue", L"mar."},
     {L"date-weekday", L"Wed", L"mer."},
+    {L"dialog-button", L"Remove", L"Supprimer"},
+    {L"dialog-caption", L"Account", L"Compte"},
+    {L"dialog-caption", L"Keep history", L"Conserver l’historique"},
+    {L"dialog-caption", L"Remove account", L"Supprimer le compte"},
+    {L"dialog-caption", L"Reset settings", L"Rétablir les paramètres"},
+    {L"dialog-caption", L"Usage history", L"Historique d’utilisation"},
     {L"duration", L"{days}d", L"{days} j"},
     {L"duration", L"{days}d {hours}h", L"{days} j {hours} h"},
     {L"duration", L"{hours}h", L"{hours} h"},
@@ -1547,6 +2290,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Enregistrement · {days, plural, one{# jour} many{# de jours} other{# jours}}"},
     {L"history-pill", L"Waiting", L"En attente"},
+    {L"history-span", L"All retained", L"Tout l’historique conservé"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}",
+     L"{days, plural, one{# jour} many{# de jours} other{# jours}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# heure} many{# d’heures} other{# heures}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}",
+     L"{years, plural, one{# an} many{# d’ans} other{# ans}}"},
     {L"history-status", L"Updated {time}", L"Mis à jour {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
      L"Un compte des Paramètres utilise de nouveau cet historique."},
@@ -1643,6 +2393,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"quota-name", L"Extra usage", L"Utilisation supplémentaire"},
     {L"quota-name", L"Monthly", L"Mensuel"},
     {L"quota-name", L"Premium requests", L"Requêtes premium"},
+    {L"quota-name", L"Short window", L"Fenêtre courte"},
     {L"quota-name", L"Weekly", L"Hebdomadaire"},
     {L"quota-name", L"{name} current limit", L"{name}\u00A0: limite actuelle"},
     {L"quota-name", L"{name} weekly", L"{name} hebdomadaire"},
@@ -1658,6 +2409,14 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"quota-value", L"Available", L"Disponible"},
     {L"quota-value", L"Unlimited", L"Illimité"},
     {L"quota-value", L"Used up", L"Épuisé"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"Non enregistré"},
+    {L"recording-status", L"Off", L"Désactivé"},
+    {L"recording-status", L"Off for this Windows user", L"Désactivé pour cet utilisateur Windows"},
+    {L"recording-status", L"Paused while hidden", L"En pause tant qu’il est masqué"},
+    {L"recording-status", L"Recording", L"Enregistrement"},
+    {L"recording-status", L"Unavailable", L"Indisponible"},
+    {L"recording-status", L"Waiting", L"En attente"},
     {L"reset-when", L"in {duration}", L"dans {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"dans {duration} ({time})"},
     {L"reset-when", L"now", L"maintenant"},
@@ -1665,6 +2424,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"response-shape", L"empty body", L"corps vide"},
     {L"response-shape", L"keys: {keys}", L"clés\u00A0: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body", L"corps JSON non valide ou qui n’est pas un objet"},
+    {L"retention", L"Custom", L"Personnalisé"},
+    {L"retention", L"Forever", L"Indéfiniment"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}",
+     L"{days, plural, one{jour} many{jours} other{jours}}"},
     {L"settings-page", L"About", L"À propos"},
     {L"settings-page", L"Accounts", L"Comptes"},
     {L"settings-page", L"Behavior", L"Comportement"},
@@ -1672,10 +2435,15 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"settings-page", L"History", L"Historique"},
     {L"settings-page", L"Layout", L"Disposition"},
     {L"settings-section", L"Alerts", L"Alertes"},
+    {L"settings-section", L"Credits and license", L"Crédits et licence"},
     {L"settings-section", L"Details", L"Détails"},
     {L"settings-section", L"Language", L"Langue"},
+    {L"settings-section", L"Links", L"Liens"},
+    {L"settings-section", L"Recording", L"Enregistrement"},
+    {L"settings-section", L"Storage", L"Stockage"},
     {L"settings-section", L"Taskbar", L"Barre des tâches"},
     {L"settings-section", L"Updates", L"Mises à jour"},
+    {L"settings-section", L"Viewer", L"Visionneuse"},
     {L"sign-in-button", L"Cancel", L"Annuler"},
     {L"sign-in-button", L"Close", L"Fermer"},
     {L"sign-in-button", L"Code copied", L"Code copié"},
@@ -1741,6 +2509,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
     {L"taskbar-setup", L"AI +", L"IA +"},
+    {L"tile-identity", L"Label", L"Libellé"},
+    {L"tile-identity", L"Logo + number badge", L"Logo + badge numéroté"},
+    {L"tile-identity", L"Logo only", L"Logo seul"},
     {L"toggle", L"Off", L"Désactivé"},
     {L"toggle", L"On", L"Activé"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
@@ -1749,37 +2520,108 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Au rythme depuis {time}\u00A0: limite dans ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Au rythme moyen de cette fenêtre\u00A0: limite dans ~{duration}"},
+    {L"window-title", L"{app} — Settings", L"{app} — Paramètres"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogFr), "sort by (context, English), no duplicates");
 // src/i18n/lang-ja.h
 // Japanese (ja): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogJa[] = {
+    {L"", L"1 to 3650 days.", L"1～3650 日。"},
     {L"", L"2 to 1440 minutes.", L"2～1440 分。"},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"変更を保存できませんでした。その変更はエラーと共に表示されています。\n\n保存されていない変更を破棄してウィンドウを閉じますか？"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go の AI サブスクリプションのクォータを Windows 11 のタスク バーに表示します。"},
     {L"", L"All displays", L"すべてのディスプレイ"},
+    {L"", L"Also delete its usage history", L"使用履歴も削除する"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"あるアカウントの構成がなくなったため、その保存されていない変更は破棄されました。"},
+    {L"", L"Another account of this provider uses this label.", L"このプロバイダーの別のアカウントがこのラベルを使っています。"},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic、OpenAI、GitHub Copilot はブラウザーで、OpenCode Go は API キーでサインインします。Google Antigravity はサインイン済みのアプリまたは CLI "
+     L"を使うため、それを実行したままにしてください。"},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"この Windows ユーザーにのみ適用されます。オフにしても保存済みの履歴は残ります。"},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"ローカルのサンプルからのグラフ、統計、CSV エクスポート。記録がオフでも使えます。"},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"編集するには、［クラウドのポーリング間隔］で［カスタム］を選んでください。"},
+    {L"", L"Choose Custom in Keep history to edit.", L"編集するには、［履歴の保持］で［カスタム］を選んでください。"},
     {L"", L"Cloud poll interval", L"クラウドのポーリング間隔"},
+    {L"", L"Contributors", L"コントリビューター"},
+    {L"", L"Copy version info", L"バージョン情報をコピー"},
+    {L"", L"Could not remove the account.", L"アカウントを削除できませんでした。"},
+    {L"", L"Could not reorder the account.", L"アカウントを並べ替えられませんでした。"},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"設定を保存できませんでした。変更はエラーと共にここに残ります。もう一度変更すると再試行します。"},
+    {L"", L"Could not save the account.", L"アカウントを保存できませんでした。"},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"アカウントを保存できませんでした。変更はエラーと共にここに残ります。もう一度変更すると再試行します。"},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"アカウントを保存できませんでした。コピーされたサインインは、変更しようとした新しい ID に残っています。削除するには、そのプロバイダーとラベルでアカウントを追加してから削除してください。"},
+    {L"", L"Could not update account visibility.", L"アカウントの表示状態を更新できませんでした。"},
+    {L"", L"Credits max", L"クレジット上限"},
     {L"", L"Custom interval", L"カスタム間隔"},
+    {L"", L"Custom retention", L"カスタムの保持期間"},
+    {L"", L"Default time span", L"既定の期間"},
     {L"", L"Display {number} - unavailable", L"ディスプレイ {number} - 使用できません"},
     {L"", L"Display {number} - {width}x{height}", L"ディスプレイ {number} - {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"ディスプレイ {number} - {width}x{height} (メイン)"},
     {L"", L"Do not poll hidden accounts", L"非表示のアカウントをポーリングしない"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。非表示のアカウントはポーリングされません。"},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"記録するかどうかはアカウントごとに選べます: <link id=\"accounts\">アカウント</link> > 履歴を記録。［動作］の "
      L"<link id=\"hidden\">非表示のアカウントをポーリングしない</link> がオンの間、非表示のアカウントは記録されません。"},
+    {L"", L"Enter a label.", L"ラベルを入力してください。"},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.", L"{minimum}～{maximum} の整数を入力してください。"},
+    {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"<link id=\"simple_icons\">Simple Icons</link> (CC0 1.0) より。GitHub Copilot のマークは <link id=\"octicons\">Primer "
+     L"Octicons</link> (MIT ライセンス、Copyright (c) 2026 GitHub Inc.) より。Google Antigravity には Gemini "
+     L"のマークを使っています。\nClaude、Anthropic、OpenAI、ChatGPT、Codex、Google、Gemini、Antigravity、GitHub、GitHub Copilot、OpenCode "
+     L"は各所有者の商標です。ロゴは、タイルがどのアカウントを示すかを表すためだけに使われます。"},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"非表示のアカウントは、［履歴を記録］がオンでもポーリングも記録もされません。記録を続けるにはオフにしてください。"
      L"Windows のユーザー間で共有されます。"},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"履歴は、サインインし直してもこのエントリに引き継がれます。別のログインには新しいエントリを使ってください。"},
+    {L"", L"History storage failed; Open usage history shows why.", L"履歴の保存に失敗しました。［使用履歴を開く］で理由を確認できます。"},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル "
      L"セッションを毎分ポーリングします。"},
+    {L"", L"Identity", L"識別"},
     {L"", L"Interface language", L"表示言語"},
+    {L"", L"Its stored sign-in will be deleted.", L"保存されたサインインは削除されます。"},
+    {L"", L"Its usage history is kept.", L"使用履歴は保持されます。"},
+    {L"", L"Keep history", L"履歴の保持"},
+    {L"", L"Label", L"ラベル"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"言語、ディスプレイ、ホバー時の詳細、ポーリング、通知。"},
+    {L"", L"License", L"ライセンス"},
+    {L"", L"MIT License", L"MIT ライセンス"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"このアカウントをバーの横とタイル上で示します。［ラベル］では、バーにラベルを、タイルにその短いテキストを表示します。番号バッジは、複数のアカウントが同じプロバイダーを使うとき (非表示のものも含む) に表示されます。"},
+    {L"", L"New samples arrive with each poll.", L"ポーリングのたびに新しいサンプルが追加されます。"},
+    {L"", L"No accounts yet", L"アカウントはまだありません"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"暗号化されていません。測定値と不透明な ID のみで、トークンやラベルは含みません。Mod を削除しても残ります。"},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"まだ何も記録されていません。フォルダーは最初のサンプルが記録されたときに作成されます。"},
+    {L"", L"Nothing new is recorded.", L"新しいデータは記録されません。"},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"タスク バーのクォータが選んだしきい値に初めて達したときに通知します。しきい値を下回ると再び有効になります。"},
     {L"", L"Open AI quota settings", L"AI クォータの設定を開く"},
@@ -1790,18 +2632,107 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Primary display only", L"メイン ディスプレイのみ"},
     {L"", L"Primary display, all displays, or one display.",
      L"メイン ディスプレイ、すべてのディスプレイ、または 1 つのディスプレイ。"},
+    {L"", L"Project page", L"プロジェクト ページ"},
+    {L"", L"Provider logos", L"プロバイダーのロゴ"},
+    {L"", L"Quotas on taskbar", L"タスク バーのクォータ"},
+    {L"", L"Record history", L"履歴を記録"},
+    {L"", L"Record usage history", L"使用履歴を記録"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"この Windows ユーザーの記録はオン、履歴は無期限に保持、7 日で開きます。保存済みの履歴は残ります。"},
+    {L"", L"Recording rules, storage, export and verification", L"記録のルール、保存、エクスポート、検証"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.", L"タスク バーがアカウント ID を保存すると記録が始まります。"},
+    {L"", L"Remove \"{label}\" ({provider})?", L"「{label}」({provider}) を削除しますか？"},
+    {L"", L"Report an issue", L"問題を報告"},
     {L"", L"Reset Behavior to defaults", L"動作を既定値にリセット"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 "
      L"分ごとにポーリング、非表示のアカウントはポーリングしない、しきい値の通知は赤。"},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"表示を既定値にリセットしますか？\n\nアクリル素材、使用量のバー モード、ホバー時のパーセント表示 (配置は自動)、金額なし、既定のパレット (カスタム色もリセット) で 50% から黄、75% から橙、90% "
+     L"から赤、古いデータを表示、OpenAI の追加のレート制限は非表示。"},
+    {L"", L"Reset History to defaults", L"履歴を既定値にリセット"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"履歴を既定値にリセットしますか？\n\nこの Windows ユーザーの記録がオンになり、履歴は無期限に保持され、使用履歴ウィンドウは 7 日で開きます。保存済みの履歴は残ります。"},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"レイアウトを既定値にリセットしますか？\n\n100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、薄い灰色のキャレット型ペース "
+     L"マーカー、既定の間隔。アカウントは変更されません。"},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"<b>{button}</b> を選ぶと、Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go のアカウントをタスク バーに表示できます。"},
+    {L"", L"Set Credits max to show the Credits bar.", L"クレジット バーを表示するには、［クレジット上限］を設定してください。"},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Windows のユーザー間で共有されます。［無期限］では何も削除されずサイズの上限もないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。日数の上限では 1 時間ごとに整理され、上限は約 60 MB "
+     L"です。"},
+    {L"", L"Short text", L"短いテキスト"},
     {L"", L"Show details on hover", L"ホバー時に詳細を表示"},
     {L"", L"Show on", L"表示先"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"詳細に表示され、［識別］が［ラベル］のときはバーの横にも表示されます。プロバイダーごとに一意で、名前を変えてもサインインと履歴は保持されます。"},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"履歴の無期限保持をやめますか？\n\n履歴は再び {days, plural, other{# 日間}} 保持され、250,000 サンプル (約 60 MB) "
+     L"に制限されます。それより古いサンプルと、上限を超えた最も古いサンプルは、すべての Windows ユーザーについて完全に削除されます。"},
+    {L"", L"Storage location", L"保存場所"},
+    {L"", L"Suggestions and bug reports on GitHub", L"GitHub での提案とバグ報告"},
+    {L"", L"Thanks to {names}.", L"{names} に感謝します。"},
+    {L"", L"That provider and label are already configured.", L"そのプロバイダーとラベルはすでに構成されています。"},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"タイルでの［ラベル］識別です (最大 4 文字)。空の場合は、スペースを除いたラベルを使います。"},
+    {L"", L"The account was changed from another taskbar window.", L"アカウントは別のタスク バー ウィンドウから変更されました。"},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"アカウントは削除されましたが、使用履歴は削除できなかったため保持されています。\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"アカウントの名前は変更されましたが、重複した保存済みサインインが古い ID に残っています。削除するには、古いプロバイダーとラベルでアカウントを追加し直してから削除してください。"},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"クレジット バーが 100% とみなす残高です。OpenAI は残高のみを報告します。"},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"Mod の名前とバージョン、および Windows のビルド。バグ報告に使います。"},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"使用履歴ウィンドウを開いたときの期間です。ウィンドウの期間ボタンでいつでも切り替えられます。"},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"名前を変更したアカウントの ID には、保持されているサインインがすでにあります。置き換えるには、そのプロバイダーとラベルでアカウントを追加してから削除してください。アカウントは変更されませんでした。"},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"設定ウィンドウ、使用履歴ウィンドウ、タスク バー。［自動］は Windows の表示言語に従います。この Windows "
      L"ユーザーにのみ適用されます。"},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"保存されたサインインをコピーできませんでした。アカウントは変更されませんでした。"},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"保存されたサインインを削除できなかったため、このアカウントに保持されたままです。"},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"保存されたサインインを削除できなかったため、アカウントは削除されませんでした。"},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"保存されたサインインは削除されましたが、設定を保存できませんでした。アカウントは構成されたまま、サインアウトした状態です。"},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"このアカウントの構成がなくなったため、保存されていない変更は破棄されました。"},
+    {L"", L"This change couldn't be saved.", L"この変更を保存できませんでした。"},
     {L"", L"Threshold notifications", L"しきい値の通知"},
+    {L"", L"Turn on Record usage history to change this.", L"変更するには、［使用履歴を記録］をオンにしてください。"},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。使用量グラフでは、クレジットは 7日 のグラフに数値で表示されます。"},
+    {L"", L"Usage history", L"使用履歴"},
+    {L"", L"Usage history guide", L"使用履歴ガイド"},
+    {L"", L"Used on tiles when Identity is Label.", L"［識別］が［ラベル］のとき、タイルで使われます。"},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"バージョン {version}  ·  作者 Cleroth  ·  Windhawk Mod"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.", L"ID を変更する前に、現在のサインインが完了するまでお待ちください。"},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.", L"アカウントを削除する前に、現在のサインインが完了するまでお待ちください。"},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity が実行されていません"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity のクォータを利用できません"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -1857,9 +2788,30 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"account-error-alone", L"Unexpected response format", L"予期しない応答形式"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"予期しない応答形式 ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"予期しないトークン応答"},
+    {L"account-state", L"Hidden, not polled", L"非表示、ポーリングなし"},
     {L"account-state", L"Local app not running", L"ローカル アプリが実行されていません"},
+    {L"account-state", L"Local app running", L"ローカル アプリ実行中"},
+    {L"account-state", L"Sign-in needed", L"サインインが必要です"},
+    {L"account-state", L"Signed in", L"サインイン済み"},
+    {L"account-state", L"Signing in…", L"サインイン中…"},
+    {L"account-state", L"Waiting for the local app", L"ローカル アプリを待機中"},
+    {L"add-account", L"Sign in with a code on github.com", L"github.com でコードを使ってサインイン"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console", L"OpenCode コンソールの API キーでサインイン"},
+    {L"add-account", L"Sign in with your browser", L"ブラウザーでサインイン"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI", L"サインイン済みの Antigravity アプリまたは CLI を使用"},
     {L"button", L"Add account", L"アカウントを追加"},
+    {L"button", L"Copied", L"コピーしました"},
+    {L"button", L"Copy", L"コピー"},
+    {L"button", L"Copy failed", L"コピーできませんでした"},
+    {L"button", L"Custom...", L"カスタム…"},
+    {L"button", L"Open dashboard", L"ダッシュボードを開く"},
+    {L"button", L"Open folder", L"フォルダーを開く"},
+    {L"button", L"Open usage history", L"使用履歴を開く"},
+    {L"button", L"Remove account", L"アカウントを削除"},
     {L"button", L"Reset", L"リセット"},
+    {L"button", L"Sign in", L"サインイン"},
+    {L"button", L"Sign in again", L"再度サインイン"},
+    {L"button", L"Sign out", L"サインアウト"},
     {L"chart-readout", L"+{count} more — hide lines in the legend",
      L"ほか {count} 件 — 凡例で線を非表示にしてください"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
@@ -1870,6 +2822,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"copilot-unit", L"AI credits", L"AI クレジット"},
     {L"copilot-unit", L"chat requests", L"チャット リクエスト"},
     {L"copilot-unit", L"premium requests", L"プレミアム リクエスト"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}", L"{credits, plural, other{クレジット}}"},
     {L"date-month", L"Apr", L"4月"},
     {L"date-month", L"Aug", L"8月"},
     {L"date-month", L"Dec", L"12月"},
@@ -1903,6 +2856,12 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"date-weekday", L"Thu", L"木"},
     {L"date-weekday", L"Tue", L"火"},
     {L"date-weekday", L"Wed", L"水"},
+    {L"dialog-button", L"Remove", L"削除"},
+    {L"dialog-caption", L"Account", L"アカウント"},
+    {L"dialog-caption", L"Keep history", L"履歴の保持"},
+    {L"dialog-caption", L"Remove account", L"アカウントの削除"},
+    {L"dialog-caption", L"Reset settings", L"設定のリセット"},
+    {L"dialog-caption", L"Usage history", L"使用履歴"},
     {L"duration", L"{days}d", L"{days}日"},
     {L"duration", L"{days}d {hours}h", L"{days}日{hours}時間"},
     {L"duration", L"{hours}h", L"{hours}時間"},
@@ -1936,6 +2895,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-pill", L"Recording · forever", L"記録中 · 無期限"},
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"記録中 · {days, plural, other{#日}}"},
     {L"history-pill", L"Waiting", L"待機中"},
+    {L"history-span", L"All retained", L"保持期間のすべて"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}", L"{days, plural, other{# 日}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 時間}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}", L"{years, plural, other{# 年}}"},
     {L"history-status", L"Updated {time}", L"{time} に更新"},
     {L"history-storage", L"An account in Settings uses this history again.", L"設定内のアカウントがこの履歴を再び使用しています。"},
     {L"history-storage", L"Cannot create the local history directory.", L"ローカルの履歴フォルダーを作成できません。"},
@@ -2021,6 +2984,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"quota-name", L"Extra usage", L"追加使用量"},
     {L"quota-name", L"Monthly", L"月間"},
     {L"quota-name", L"Premium requests", L"プレミアム リクエスト"},
+    {L"quota-name", L"Short window", L"短期間"},
     {L"quota-name", L"Weekly", L"週間"},
     {L"quota-name", L"{name} current limit", L"{name} 現在の上限"},
     {L"quota-name", L"{name} weekly", L"{name} 週間"},
@@ -2034,6 +2998,14 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"quota-value", L"Available", L"利用可能"},
     {L"quota-value", L"Unlimited", L"無制限"},
     {L"quota-value", L"Used up", L"使い切り"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"保存できません"},
+    {L"recording-status", L"Off", L"オフ"},
+    {L"recording-status", L"Off for this Windows user", L"この Windows ユーザーではオフ"},
+    {L"recording-status", L"Paused while hidden", L"非表示の間は一時停止"},
+    {L"recording-status", L"Recording", L"記録中"},
+    {L"recording-status", L"Unavailable", L"利用不可"},
+    {L"recording-status", L"Waiting", L"待機中"},
     {L"reset-when", L"in {duration}", L"{duration}後"},
     {L"reset-when", L"in {duration} ({time})", L"{duration}後 ({time})"},
     {L"reset-when", L"now", L"今"},
@@ -2041,6 +3013,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"response-shape", L"empty body", L"本文が空"},
     {L"response-shape", L"keys: {keys}", L"キー: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body", L"オブジェクトでないか無効な JSON 本文"},
+    {L"retention", L"Custom", L"カスタム"},
+    {L"retention", L"Forever", L"無期限"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}", L"{days, plural, other{日}}"},
     {L"settings-page", L"About", L"バージョン情報"},
     {L"settings-page", L"Accounts", L"アカウント"},
     {L"settings-page", L"Behavior", L"動作"},
@@ -2048,10 +3023,15 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"settings-page", L"History", L"履歴"},
     {L"settings-page", L"Layout", L"レイアウト"},
     {L"settings-section", L"Alerts", L"アラート"},
+    {L"settings-section", L"Credits and license", L"クレジットとライセンス"},
     {L"settings-section", L"Details", L"詳細"},
     {L"settings-section", L"Language", L"言語"},
+    {L"settings-section", L"Links", L"リンク"},
+    {L"settings-section", L"Recording", L"記録"},
+    {L"settings-section", L"Storage", L"ストレージ"},
     {L"settings-section", L"Taskbar", L"タスク バー"},
     {L"settings-section", L"Updates", L"更新"},
+    {L"settings-section", L"Viewer", L"ビューアー"},
     {L"sign-in-button", L"Cancel", L"キャンセル"},
     {L"sign-in-button", L"Close", L"閉じる"},
     {L"sign-in-button", L"Code copied", L"コードをコピーしました"},
@@ -2110,43 +3090,125 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
     {L"taskbar-setup", L"AI +", L"AI +"},
+    {L"tile-identity", L"Label", L"ラベル"},
+    {L"tile-identity", L"Logo + number badge", L"ロゴ + 番号バッジ"},
+    {L"tile-identity", L"Logo only", L"ロゴのみ"},
     {L"toggle", L"Off", L"オフ"},
     {L"toggle", L"On", L"オン"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"直近 24 時間のペースでは: 約 {duration}後に上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペースでは: 約 {duration}後に上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペースでは: 約 {duration}後に上限"},
+    {L"window-title", L"{app} — Settings", L"{app} — 設定"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogJa), "sort by (context, English), no duplicates");
 // src/i18n/lang-pt-BR.h
 // Portuguese (Brazil) (pt-BR): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogPtBr[] = {
+    {L"", L"1 to 3650 days.", L"De 1 a 3650 dias."},
     {L"", L"2 to 1440 minutes.", L"De 2 a 1440 minutos."},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"Não foi possível salvar uma alteração; ela é mostrada com o erro.\n\nDescartar as alterações não salvas e "
+     L"fechar a janela?"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"Cotas de assinaturas de IA da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de "
+     L"tarefas do Windows 11."},
     {L"", L"All displays", L"Todas as telas"},
+    {L"", L"Also delete its usage history", L"Excluir também o histórico de uso"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"Uma conta não está mais configurada; as alterações não salvas dela foram descartadas."},
+    {L"", L"Another account of this provider uses this label.", L"Outra conta deste provedor usa este rótulo."},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic, OpenAI e GitHub Copilot entram pelo navegador; o OpenCode Go, com uma chave de API. O Google "
+     L"Antigravity usa o app ou a CLI conectados, que precisam continuar em execução."},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"Vale somente para este usuário do Windows. Desativar mantém o histórico salvo."},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"Gráficos, estatísticas e exportação CSV a partir de amostras locais, também com o registro desativado."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Escolha Personalizado em Intervalo de consulta na nuvem para editar."},
+    {L"", L"Choose Custom in Keep history to edit.", L"Escolha Personalizado em Manter histórico para editar."},
     {L"", L"Cloud poll interval", L"Intervalo de consulta na nuvem"},
+    {L"", L"Contributors", L"Colaboradores"},
+    {L"", L"Copy version info", L"Copiar informações da versão"},
+    {L"", L"Could not remove the account.", L"Não foi possível remover a conta."},
+    {L"", L"Could not reorder the account.", L"Não foi possível reordenar a conta."},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"Não foi possível salvar as configurações. A alteração fica aqui com o erro; altere-a novamente para tentar de "
+     L"novo."},
+    {L"", L"Could not save the account.", L"Não foi possível salvar a conta."},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"Não foi possível salvar a conta. A alteração fica aqui com o erro; altere-a novamente para tentar de novo."},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"Não foi possível salvar a conta. O login copiado permanece na nova identidade que se tentou usar. Para "
+     L"excluí-lo, adicione uma conta com esse provedor e esse rótulo e depois remova-a."},
+    {L"", L"Could not update account visibility.", L"Não foi possível atualizar a visibilidade da conta."},
+    {L"", L"Credits max", L"Máximo de créditos"},
     {L"", L"Custom interval", L"Intervalo personalizado"},
+    {L"", L"Custom retention", L"Retenção personalizada"},
+    {L"", L"Default time span", L"Período padrão"},
     {L"", L"Display {number} - unavailable", L"Tela {number} - indisponível"},
     {L"", L"Display {number} - {width}x{height}", L"Tela {number} - {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Tela {number} - {width}x{height} (principal)"},
     {L"", L"Do not poll hidden accounts", L"Não consultar contas ocultas"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
+     L"Arraste para reordenar. A chave oculta uma conta da barra de tarefas."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"Arraste para reordenar. A chave oculta uma conta da barra de tarefas; contas ocultas não são consultadas."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"Cada conta escolhe se é registrada: <link id=\"accounts\">Contas</link> > Registrar histórico. Contas ocultas "
      L"não são registradas enquanto <link id=\"hidden\">Não consultar contas ocultas</link> estiver ativado em "
      L"Comportamento."},
+    {L"", L"Enter a label.", L"Insira um rótulo."},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.", L"Insira um número inteiro de {minimum} a {maximum}."},
+    {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"De <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); a marca do GitHub Copilot, de <link "
+     L"id=\"octicons\">Primer Octicons</link> (licença MIT, Copyright (c) 2026 GitHub Inc.). O Google Antigravity "
+     L"usa a marca do Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+     L"GitHub Copilot e OpenCode são marcas comerciais de seus respectivos proprietários. Os logos apenas "
+     L"identificam qual conta um bloco mostra."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Contas ocultas não são consultadas nem registradas, mesmo com Registrar histórico ativado. Desative para "
      L"continuar registrando-as. Compartilhado entre os usuários do Windows."},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"O histórico acompanha esta entrada, mesmo depois de entrar novamente. Use uma nova entrada para outro login."},
+    {L"", L"History storage failed; Open usage history shows why.",
+     L"Falha no armazenamento do histórico; Abrir histórico de uso mostra o motivo."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Com que frequência Anthropic, OpenAI, GitHub Copilot e OpenCode Go são consultados. O Antigravity consulta sua "
      L"sessão local a cada minuto."},
+    {L"", L"Identity", L"Identidade"},
     {L"", L"Interface language", L"Idioma da interface"},
+    {L"", L"Its stored sign-in will be deleted.", L"O login armazenado será excluído."},
+    {L"", L"Its usage history is kept.", L"O histórico de uso é mantido."},
+    {L"", L"Keep history", L"Manter histórico"},
+    {L"", L"Label", L"Rótulo"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Idioma, telas, detalhes ao passar o ponteiro, consultas e notificações."},
+    {L"", L"License", L"Licença"},
+    {L"", L"MIT License", L"Licença MIT"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"Identifica esta conta ao lado das barras e nos blocos. Rótulo mostra o rótulo nas barras e o texto curto nos "
+     L"blocos. O selo numérico aparece quando várias contas compartilham um provedor, incluindo as ocultas."},
+    {L"", L"New samples arrive with each poll.", L"Novas amostras chegam a cada consulta."},
+    {L"", L"No accounts yet", L"Nenhuma conta ainda"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"Não criptografado. Leituras e IDs opacos, sem tokens nem rótulos. Permanece após a remoção do mod."},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"Nada foi registrado ainda. A pasta é criada com a primeira amostra registrada."},
+    {L"", L"Nothing new is recorded.", L"Nada novo é registrado."},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Avisa quando uma cota da barra de tarefas atinge pela primeira vez o limite escolhido. Rearma quando ela cai "
      L"abaixo dele."},
@@ -2157,19 +3219,128 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Abre os detalhes de uma conta quando o ponteiro para sobre ela."},
     {L"", L"Primary display only", L"Somente a tela principal"},
     {L"", L"Primary display, all displays, or one display.", L"A tela principal, todas as telas ou uma tela."},
+    {L"", L"Project page", L"Página do projeto"},
+    {L"", L"Provider logos", L"Logos dos provedores"},
+    {L"", L"Quotas on taskbar", L"Cotas na barra de tarefas"},
+    {L"", L"Record history", L"Registrar histórico"},
+    {L"", L"Record usage history", L"Registrar histórico de uso"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"Registro ativado para este usuário do Windows, manter o histórico para sempre, abrir em 7 dias. O histórico "
+     L"salvo permanece."},
+    {L"", L"Recording rules, storage, export and verification",
+     L"Regras de registro, armazenamento, exportação e verificação"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.",
+     L"O registro começa assim que a barra de tarefas salvar os IDs das contas."},
+    {L"", L"Remove \"{label}\" ({provider})?", L"Remover \"{label}\" ({provider})?"},
+    {L"", L"Report an issue", L"Relatar um problema"},
     {L"", L"Reset Behavior to defaults", L"Redefinir Comportamento para o padrão"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"Redefinir Comportamento para o padrão?\n\nIdioma automático, mostrar somente na tela principal, mostrar "
      L"detalhes ao passar o ponteiro, consultar a cada 10 minutos, não consultar contas ocultas, notificações de "
      L"limite no vermelho."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"Redefinir Exibição para o padrão?\n\nMaterial acrílico, modo de barra usado, texto de porcentagem ao passar o "
+     L"ponteiro com alinhamento adaptável, sem valores, a paleta padrão (as cores personalizadas também são "
+     L"redefinidas) com amarelo a partir de 50%, laranja a partir de 75% e vermelho a partir de 90%, dados "
+     L"desatualizados marcados, limites de taxa adicionais da OpenAI ocultos."},
+    {L"", L"Reset History to defaults", L"Redefinir Histórico para o padrão"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"Redefinir Histórico para o padrão?\n\nO registro é ativado para este usuário do Windows, o histórico é "
+     L"mantido para sempre e a janela do histórico de uso abre em 7 dias. O histórico salvo permanece."},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Redefinir Layout para o padrão?\n\nBarras empilhadas de 100 x 8 px com rótulos à esquerda, anéis de 32 px, "
+     L"logos e selos numéricos na cor do texto da barra de tarefas, marcadores de ritmo em circunflexo cinza-claro e "
+     L"o espaçamento padrão. As contas não são alteradas."},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"Selecione <b>{button}</b> para mostrar uma conta da Anthropic, OpenAI, Google Antigravity, GitHub Copilot ou "
+     L"OpenCode Go na barra de tarefas."},
+    {L"", L"Set Credits max to show the Credits bar.",
+     L"Defina o máximo de créditos para mostrar a barra de créditos."},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Compartilhado entre os usuários do Windows. Para sempre não exclui nada e não tem limite de tamanho, então o "
+     L"histórico continua crescendo na memória do Explorer e no disco. Limites em dias limpam a cada hora, com um "
+     L"teto de cerca de 60 MB."},
+    {L"", L"Short text", L"Texto curto"},
     {L"", L"Show details on hover", L"Mostrar detalhes ao passar o ponteiro"},
     {L"", L"Show on", L"Mostrar em"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"Mostrado nos detalhes e ao lado das barras quando Identidade é Rótulo. Único por provedor; renomear mantém o "
+     L"login e o histórico."},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"Parar de manter o histórico para sempre?\n\nO histórico voltará a ser mantido por {days, plural, one{# dia} "
+     L"many{# de dias} other{# dias}} e limitado a 250.000 amostras (cerca de 60 MB). As amostras mais antigas, e as "
+     L"mais antigas além desse limite, serão excluídas permanentemente, para todos os usuários do Windows."},
+    {L"", L"Storage location", L"Local de armazenamento"},
+    {L"", L"Suggestions and bug reports on GitHub", L"Sugestões e relatórios de bugs no GitHub"},
+    {L"", L"Thanks to {names}.", L"Agradecimentos a {names}."},
+    {L"", L"That provider and label are already configured.", L"Esse provedor e esse rótulo já estão configurados."},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"A identidade Rótulo nos blocos, até 4 caracteres. Vazio usa o rótulo sem espaços."},
+    {L"", L"The account was changed from another taskbar window.",
+     L"A conta foi alterada em outra janela da barra de tarefas."},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"A conta foi removida, mas o histórico de uso dela não pôde ser excluído e foi mantido.\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"A conta foi renomeada, mas um login armazenado duplicado permanece na identidade antiga. Para excluí-lo, "
+     L"adicione novamente uma conta com o provedor e o rótulo antigos e depois remova-a."},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"O saldo que a barra de créditos considera 100%. A OpenAI informa apenas o saldo."},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"O nome e a versão do mod e o build do Windows, para relatórios de bugs."},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"O período com que a janela do histórico de uso abre. Os botões de período dela continuam alternando."},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"A identidade da conta renomeada já tem um login retido. Para substituí-lo, adicione uma conta com esse "
+     L"provedor e esse rótulo e depois remova-a. A conta não foi alterada."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"As janelas de configurações e de histórico de uso, e a barra de tarefas. Automático segue o idioma de exibição "
      L"do Windows. Aplica-se somente a este usuário do Windows."},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"Não foi possível copiar o login armazenado. A conta não foi alterada."},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"Não foi possível excluir o login armazenado; ele continua retido para esta conta."},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"Não foi possível excluir o login armazenado, então a conta não foi removida."},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"O login armazenado foi excluído, mas não foi possível salvar as configurações. A conta continua configurada, "
+     L"mas desconectada."},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"Esta conta não está mais configurada; as alterações não salvas dela foram descartadas."},
+    {L"", L"This change couldn't be saved.", L"Não foi possível salvar esta alteração."},
     {L"", L"Threshold notifications", L"Notificações de limite"},
+    {L"", L"Turn on Record usage history to change this.", L"Ative Registrar histórico de uso para alterar isto."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada. Os gráficos de uso "
+     L"mostram os créditos como um número no gráfico de 7d."},
+    {L"", L"Usage history", L"Histórico de uso"},
+    {L"", L"Usage history guide", L"Guia do histórico de uso"},
+    {L"", L"Used on tiles when Identity is Label.", L"Usado nos blocos quando Identidade é Rótulo."},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
+     L"Versão {version}  ·  por Cleroth  ·  mod do Windhawk"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.",
+     L"Aguarde o login atual terminar antes de alterar a identidade."},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.",
+     L"Aguarde o login atual terminar antes de remover contas."},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity não está em execução"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity: cota indisponível"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -2229,9 +3400,31 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"account-error-alone", L"Unexpected response format", L"Formato de resposta inesperado"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Formato de resposta inesperado ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"Resposta de token inesperada"},
+    {L"account-state", L"Hidden, not polled", L"Oculta, sem consulta"},
     {L"account-state", L"Local app not running", L"App local não está em execução"},
+    {L"account-state", L"Local app running", L"App local em execução"},
+    {L"account-state", L"Sign-in needed", L"É preciso entrar"},
+    {L"account-state", L"Signed in", L"Conectado"},
+    {L"account-state", L"Signing in…", L"Entrando…"},
+    {L"account-state", L"Waiting for the local app", L"Aguardando o app local"},
+    {L"add-account", L"Sign in with a code on github.com", L"Entre com um código no github.com"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console",
+     L"Entre com uma chave de API do console do OpenCode"},
+    {L"add-account", L"Sign in with your browser", L"Entre pelo navegador"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI", L"Usa o app ou a CLI do Antigravity conectados"},
     {L"button", L"Add account", L"Adicionar conta"},
+    {L"button", L"Copied", L"Copiado"},
+    {L"button", L"Copy", L"Copiar"},
+    {L"button", L"Copy failed", L"Falha ao copiar"},
+    {L"button", L"Custom...", L"Personalizar…"},
+    {L"button", L"Open dashboard", L"Abrir painel"},
+    {L"button", L"Open folder", L"Abrir pasta"},
+    {L"button", L"Open usage history", L"Abrir histórico de uso"},
+    {L"button", L"Remove account", L"Remover conta"},
     {L"button", L"Reset", L"Redefinir"},
+    {L"button", L"Sign in", L"Entrar"},
+    {L"button", L"Sign in again", L"Entrar novamente"},
+    {L"button", L"Sign out", L"Sair"},
     {L"chart-readout", L"+{count} more — hide lines in the legend", L"+{count} a mais — oculte linhas na legenda"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"+{count} a mais — oculte linhas na legenda ou selecione uma conta"},
@@ -2241,6 +3434,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"copilot-unit", L"AI credits", L"créditos de IA"},
     {L"copilot-unit", L"chat requests", L"solicitações de chat"},
     {L"copilot-unit", L"premium requests", L"solicitações premium"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
+     L"{credits, plural, one{crédito} many{créditos} other{créditos}}"},
     {L"date-month", L"Apr", L"abr"},
     {L"date-month", L"Aug", L"ago"},
     {L"date-month", L"Dec", L"dez"},
@@ -2274,6 +3469,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"date-weekday", L"Thu", L"qui"},
     {L"date-weekday", L"Tue", L"ter"},
     {L"date-weekday", L"Wed", L"qua"},
+    {L"dialog-button", L"Remove", L"Remover"},
+    {L"dialog-caption", L"Account", L"Conta"},
+    {L"dialog-caption", L"Keep history", L"Manter histórico"},
+    {L"dialog-caption", L"Remove account", L"Remover conta"},
+    {L"dialog-caption", L"Reset settings", L"Redefinir configurações"},
+    {L"dialog-caption", L"Usage history", L"Histórico de uso"},
     {L"duration", L"{days}d", L"{days} d"},
     {L"duration", L"{days}d {hours}h", L"{days} d {hours} h"},
     {L"duration", L"{hours}h", L"{hours} h"},
@@ -2311,6 +3512,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Registrando · {days, plural, one{# dia} many{# de dias} other{# dias}}"},
     {L"history-pill", L"Waiting", L"Aguardando"},
+    {L"history-span", L"All retained", L"Tudo o que foi mantido"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}",
+     L"{days, plural, one{# dia} many{# de dias} other{# dias}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# hora} many{# de horas} other{# horas}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}",
+     L"{years, plural, one{# ano} many{# de anos} other{# anos}}"},
     {L"history-status", L"Updated {time}", L"Atualizado {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
      L"Uma conta em Configurações voltou a usar este histórico."},
@@ -2403,6 +3611,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"quota-name", L"Extra usage", L"Uso adicional"},
     {L"quota-name", L"Monthly", L"Mensal"},
     {L"quota-name", L"Premium requests", L"Solicitações premium"},
+    {L"quota-name", L"Short window", L"Janela curta"},
     {L"quota-name", L"Weekly", L"Semanal"},
     {L"quota-name", L"{name} current limit", L"{name}: limite atual"},
     {L"quota-name", L"{name} weekly", L"{name} semanal"},
@@ -2418,6 +3627,14 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"quota-value", L"Available", L"Disponível"},
     {L"quota-value", L"Unlimited", L"Ilimitado"},
     {L"quota-value", L"Used up", L"Esgotado"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"Sem salvar"},
+    {L"recording-status", L"Off", L"Desativado"},
+    {L"recording-status", L"Off for this Windows user", L"Desativado para este usuário do Windows"},
+    {L"recording-status", L"Paused while hidden", L"Pausado enquanto oculta"},
+    {L"recording-status", L"Recording", L"Registrando"},
+    {L"recording-status", L"Unavailable", L"Indisponível"},
+    {L"recording-status", L"Waiting", L"Aguardando"},
     {L"reset-when", L"in {duration}", L"em {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"em {duration} ({time})"},
     {L"reset-when", L"now", L"agora"},
@@ -2425,6 +3642,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"response-shape", L"empty body", L"corpo vazio"},
     {L"response-shape", L"keys: {keys}", L"chaves: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body", L"corpo JSON inválido ou que não é um objeto"},
+    {L"retention", L"Custom", L"Personalizado"},
+    {L"retention", L"Forever", L"Para sempre"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}", L"{days, plural, one{dia} many{dias} other{dias}}"},
     {L"settings-page", L"About", L"Sobre"},
     {L"settings-page", L"Accounts", L"Contas"},
     {L"settings-page", L"Behavior", L"Comportamento"},
@@ -2432,10 +3652,15 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-page", L"History", L"Histórico"},
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Alertas"},
+    {L"settings-section", L"Credits and license", L"Créditos e licença"},
     {L"settings-section", L"Details", L"Detalhes"},
     {L"settings-section", L"Language", L"Idioma"},
+    {L"settings-section", L"Links", L"Links"},
+    {L"settings-section", L"Recording", L"Registro"},
+    {L"settings-section", L"Storage", L"Armazenamento"},
     {L"settings-section", L"Taskbar", L"Barra de tarefas"},
     {L"settings-section", L"Updates", L"Atualizações"},
+    {L"settings-section", L"Viewer", L"Visualizador"},
     {L"sign-in-button", L"Cancel", L"Cancelar"},
     {L"sign-in-button", L"Close", L"Fechar"},
     {L"sign-in-button", L"Code copied", L"Código copiado"},
@@ -2501,6 +3726,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
     {L"taskbar-setup", L"AI +", L"IA +"},
+    {L"tile-identity", L"Label", L"Rótulo"},
+    {L"tile-identity", L"Logo + number badge", L"Logo + selo numérico"},
+    {L"tile-identity", L"Logo only", L"Só o logo"},
     {L"toggle", L"Off", L"Desativado"},
     {L"toggle", L"On", L"Ativado"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
@@ -2509,38 +3737,120 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"No ritmo desde {time}: limite em ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"No ritmo médio desta janela: limite em ~{duration}"},
+    {L"window-title", L"{app} — Settings", L"{app} — Configurações"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogPtBr), "sort by (context, English), no duplicates");
 // src/i18n/lang-ru.h
 // Russian (ru): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogRu[] = {
+    {L"", L"1 to 3650 days.", L"От 1 до 3650 дней."},
     {L"", L"2 to 1440 minutes.", L"От 2 до 1440 минут."},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"Не удалось сохранить изменение; оно показано вместе с ошибкой.\n\nОтменить несохранённые изменения и закрыть "
+     L"окно?"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"Квоты подписок на ИИ Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач "
+     L"Windows 11."},
     {L"", L"All displays", L"Все дисплеи"},
+    {L"", L"Also delete its usage history", L"Также удалить историю использования"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.",
+     L"Аккаунт больше не настроен; его несохранённые изменения отменены."},
+    {L"", L"Another account of this provider uses this label.",
+     L"Эту метку уже использует другой аккаунт этого поставщика."},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic, OpenAI и GitHub Copilot входят через браузер, OpenCode Go — с ключом API. Google Antigravity "
+     L"использует своё приложение или CLI с выполненным входом; они должны оставаться запущенными."},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
+     L"Действует только для этого пользователя Windows. При выключении сохранённая история остаётся."},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Чтобы изменить, выберите «Другой» в списке «Интервал опроса облака»."},
+    {L"", L"Choose Custom in Keep history to edit.", L"Чтобы изменить, выберите «Другой» в списке «Хранить историю»."},
     {L"", L"Cloud poll interval", L"Интервал опроса облака"},
+    {L"", L"Contributors", L"Участники"},
+    {L"", L"Copy version info", L"Копировать сведения о версии"},
+    {L"", L"Could not remove the account.", L"Не удалось удалить аккаунт."},
+    {L"", L"Could not reorder the account.", L"Не удалось переместить аккаунт."},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"Не удалось сохранить настройки. Изменение остаётся здесь вместе с ошибкой; измените его ещё раз, чтобы "
+     L"повторить попытку."},
+    {L"", L"Could not save the account.", L"Не удалось сохранить аккаунт."},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"Не удалось сохранить аккаунт. Изменение остаётся здесь вместе с ошибкой; измените его ещё раз, чтобы "
+     L"повторить попытку."},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"Не удалось сохранить аккаунт. Скопированный вход остался под новым идентификатором, который пытались задать. "
+     L"Чтобы удалить его, добавьте аккаунт с этим поставщиком и меткой, а затем удалите его."},
+    {L"", L"Could not update account visibility.", L"Не удалось изменить видимость аккаунта."},
+    {L"", L"Credits max", L"Максимум кредитов"},
     {L"", L"Custom interval", L"Свой интервал"},
+    {L"", L"Custom retention", L"Свой срок хранения"},
+    {L"", L"Default time span", L"Период по умолчанию"},
     {L"", L"Display {number} - unavailable", L"Дисплей {number} — недоступен"},
     {L"", L"Display {number} - {width}x{height}", L"Дисплей {number} — {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"Дисплей {number} — {width}x{height} (основной)"},
     {L"", L"Do not poll hidden accounts", L"Не опрашивать скрытые аккаунты"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
+     L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач; скрытые аккаунты не "
+     L"опрашиваются."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"Каждый аккаунт сам решает, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать историю. "
      L"Скрытые аккаунты не записываются, пока в разделе «Поведение» включено <link id=\"hidden\">Не опрашивать скрытые "
      L"аккаунты</link>."},
+    {L"", L"Enter a label.", L"Введите метку."},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.", L"Введите целое число от {minimum} до {maximum}."},
+    {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"Из <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); знак GitHub Copilot — из <link "
+     L"id=\"octicons\">Primer Octicons</link> (лицензия MIT, Copyright (c) 2026 GitHub Inc.). Для Google Antigravity "
+     L"используется знак Gemini.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+     L"GitHub Copilot и OpenCode — товарные знаки соответствующих владельцев. Логотипы лишь показывают, какой "
+     L"аккаунт отображает плитка."},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Скрытые аккаунты не опрашиваются и не записываются, даже если включено «Записывать историю». Выключите, чтобы "
      L"продолжить их запись. Общий параметр для всех пользователей Windows."},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"История привязана к этой записи, даже после повторного входа. Для другого входа создайте новую запись."},
+    {L"", L"History storage failed; Open usage history shows why.",
+     L"Сбой хранилища истории; причину покажет «Открыть историю использования»."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Antigravity опрашивает свой локальный "
      L"сеанс каждую минуту."},
+    {L"", L"Identity", L"Идентификация"},
     {L"", L"Interface language", L"Язык интерфейса"},
+    {L"", L"Its stored sign-in will be deleted.", L"Сохранённый вход будет удалён."},
+    {L"", L"Its usage history is kept.", L"История использования сохраняется."},
+    {L"", L"Keep history", L"Хранить историю"},
+    {L"", L"Label", L"Метка"},
     {L"", L"Language, displays, hover details, polling and notifications.",
      L"Язык, дисплеи, сведения при наведении, опрос и уведомления."},
+    {L"", L"License", L"Лицензия"},
+    {L"", L"MIT License", L"Лицензия MIT"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"Обозначает этот аккаунт рядом с его полосами и на плитках. «Метка» показывает метку у полос и её короткий "
+     L"текст на плитках. Значок с номером появляется, когда у нескольких аккаунтов один поставщик, включая скрытые."},
+    {L"", L"New samples arrive with each poll.", L"Новые замеры поступают при каждом опросе."},
+    {L"", L"No accounts yet", L"Аккаунтов пока нет"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"Не зашифровано. Замеры и обезличенные идентификаторы, без токенов и меток. Сохраняется после удаления мода."},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"Пока ничего не записано. Папка создаётся с первым записанным замером."},
+    {L"", L"Nothing new is recorded.", L"Ничего нового не записывается."},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Уведомляет, когда квота на панели задач впервые достигает выбранного порога. Срабатывает снова, когда она "
      L"опустится ниже."},
@@ -2551,19 +3861,126 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
     {L"", L"Primary display only", L"Только основной дисплей"},
     {L"", L"Primary display, all displays, or one display.", L"Основной дисплей, все дисплеи или один дисплей."},
+    {L"", L"Project page", L"Страница проекта"},
+    {L"", L"Provider logos", L"Логотипы поставщиков"},
+    {L"", L"Quotas on taskbar", L"Квоты на панели задач"},
+    {L"", L"Record history", L"Записывать историю"},
+    {L"", L"Record usage history", L"Записывать историю использования"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"Запись включена для этого пользователя Windows, история хранится бессрочно, открывается на 7 днях. "
+     L"Сохранённая история остаётся."},
+    {L"", L"Recording rules, storage, export and verification", L"Правила записи, хранение, экспорт и проверка"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.",
+     L"Запись начнётся, когда панель задач сохранит идентификаторы аккаунтов."},
+    {L"", L"Remove \"{label}\" ({provider})?", L"Удалить «{label}» ({provider})?"},
+    {L"", L"Report an issue", L"Сообщить о проблеме"},
     {L"", L"Reset Behavior to defaults", L"Сбросить «Поведение» к значениям по умолчанию"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"Сбросить «Поведение» к значениям по умолчанию?\n\nАвтоматический язык, показ только на основном дисплее, "
      L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты не опрашиваются, уведомления о пороге на "
      L"красном уровне."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"Сбросить «Отображение» к значениям по умолчанию?\n\nМатериал «Акрил», режим полос «Использовано», текст "
+     L"процентов при наведении с адаптивным выравниванием, без сумм, палитра по умолчанию (свои цвета тоже "
+     L"сбрасываются) с жёлтым от 50 %, оранжевым от 75 % и красным от 90 %, устаревшие данные помечаются, "
+     L"дополнительные лимиты запросов OpenAI скрыты."},
+    {L"", L"Reset History to defaults", L"Сбросить «История» к значениям по умолчанию"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"Сбросить «История» к значениям по умолчанию?\n\nЗапись включается для этого пользователя Windows, история "
+     L"хранится бессрочно, а окно истории использования открывается на 7 днях. Сохранённая история остаётся."},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100 x 8 пикс. с подписями слева, кольца 32 "
+     L"пикс., логотипы и значки с номером цветом текста панели задач, светло-серые метки темпа в виде галочки и "
+     L"интервалы по умолчанию. Аккаунты не изменяются."},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"Нажмите <b>{button}</b>, чтобы показать на панели задач аккаунт Anthropic, OpenAI, Google Antigravity, GitHub "
+     L"Copilot или OpenCode Go."},
+    {L"", L"Set Credits max to show the Credits bar.", L"Задайте «Максимум кредитов», чтобы показать полосу кредитов."},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, "
+     L"поэтому история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый "
+     L"час, с пределом около 60 МБ."},
+    {L"", L"Short text", L"Короткий текст"},
     {L"", L"Show details on hover", L"Показывать сведения при наведении"},
     {L"", L"Show on", L"Показывать на"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"Показывается в сведениях и рядом с полосами, если для «Идентификация» выбрано «Метка». Уникальна для "
+     L"поставщика; при переименовании вход и история сохраняются."},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"Прекратить бессрочное хранение истории?\n\nИстория снова будет храниться {days, plural, one{# день} few{# "
+     L"дня} many{# дней} other{# дня}} и ограничиваться 250 000 замеров (около 60 МБ). Более старые замеры и самые "
+     L"старые сверх этого предела будут удалены безвозвратно для всех пользователей Windows."},
+    {L"", L"Storage location", L"Расположение хранилища"},
+    {L"", L"Suggestions and bug reports on GitHub", L"Предложения и отчёты об ошибках на GitHub"},
+    {L"", L"Thanks to {names}.", L"Благодарим {names}."},
+    {L"", L"That provider and label are already configured.", L"Такой поставщик с такой меткой уже настроен."},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"Идентификация «Метка» на плитках, до 4 символов. Если пусто, используется метка без пробелов."},
+    {L"", L"The account was changed from another taskbar window.",
+     L"Аккаунт был изменён из другого окна панели задач."},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"Аккаунт удалён, но его историю использования удалить не удалось, и она сохранена.\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"Аккаунт переименован, но под старым идентификатором остался дубликат сохранённого входа. Чтобы удалить его, "
+     L"снова добавьте аккаунт со старым поставщиком и меткой, а затем удалите его."},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"Баланс, который полоса кредитов считает за 100 %. OpenAI сообщает только баланс."},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.",
+     L"Название и версия мода и сборка Windows для отчётов об ошибках."},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"Период, с которым открывается окно истории использования. Его кнопки периода по-прежнему переключают его."},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"У идентификатора переименованного аккаунта уже есть сохранённый вход. Чтобы заменить его, добавьте аккаунт с "
+     L"этим поставщиком и меткой, а затем удалите его. Аккаунт не изменён."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"Окна настроек и истории использования, а также панель задач. «Автоматически» следует языку интерфейса Windows. "
      L"Действует только для этого пользователя Windows."},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.",
+     L"Не удалось скопировать сохранённый вход. Аккаунт не изменён."},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"Не удалось удалить сохранённый вход; он остаётся у этого аккаунта."},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.",
+     L"Не удалось удалить сохранённый вход, поэтому аккаунт не удалён."},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"Сохранённый вход удалён, но сохранить настройки не удалось. Аккаунт остаётся настроенным, но вход не выполнен."},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.",
+     L"Этот аккаунт больше не настроен; его несохранённые изменения отменены."},
+    {L"", L"This change couldn't be saved.", L"Не удалось сохранить это изменение."},
     {L"", L"Threshold notifications", L"Уведомления о пороге"},
+    {L"", L"Turn on Record usage history to change this.",
+     L"Чтобы изменить, включите «Записывать историю использования»."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
+     L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной."},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной. На графиках использования "
+     L"кредиты показываются числом на графике 7д."},
+    {L"", L"Usage history", L"История использования"},
+    {L"", L"Usage history guide", L"Руководство по истории использования"},
+    {L"", L"Used on tiles when Identity is Label.",
+     L"Используется на плитках, если для «Идентификация» выбрано «Метка»."},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.",
+     L"Дождитесь завершения текущего входа, прежде чем менять идентификацию."},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.",
+     L"Дождитесь завершения текущего входа, прежде чем удалять аккаунты."},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity не запущен"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity: квота недоступна"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -2621,9 +4038,31 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-error-alone", L"Unexpected response format", L"Неожиданный формат ответа"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Неожиданный формат ответа ({shape})"},
     {L"account-error-alone", L"Unexpected token response", L"Неожиданный ответ с токеном"},
+    {L"account-state", L"Hidden, not polled", L"Скрыт, не опрашивается"},
     {L"account-state", L"Local app not running", L"Локальное приложение не запущено"},
+    {L"account-state", L"Local app running", L"Локальное приложение запущено"},
+    {L"account-state", L"Sign-in needed", L"Требуется вход"},
+    {L"account-state", L"Signed in", L"Вход выполнен"},
+    {L"account-state", L"Signing in…", L"Выполняется вход…"},
+    {L"account-state", L"Waiting for the local app", L"Ожидание локального приложения"},
+    {L"add-account", L"Sign in with a code on github.com", L"Вход с кодом на github.com"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console", L"Вход с ключом API из консоли OpenCode"},
+    {L"add-account", L"Sign in with your browser", L"Вход через браузер"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI",
+     L"Использует приложение или CLI Antigravity с выполненным входом"},
     {L"button", L"Add account", L"Добавить аккаунт"},
+    {L"button", L"Copied", L"Скопировано"},
+    {L"button", L"Copy", L"Копировать"},
+    {L"button", L"Copy failed", L"Не удалось скопировать"},
+    {L"button", L"Custom...", L"Другой…"},
+    {L"button", L"Open dashboard", L"Открыть панель"},
+    {L"button", L"Open folder", L"Открыть папку"},
+    {L"button", L"Open usage history", L"Открыть историю использования"},
+    {L"button", L"Remove account", L"Удалить аккаунт"},
     {L"button", L"Reset", L"Сбросить"},
+    {L"button", L"Sign in", L"Войти"},
+    {L"button", L"Sign in again", L"Войти снова"},
+    {L"button", L"Sign out", L"Выйти"},
     {L"chart-readout", L"+{count} more — hide lines in the legend", L"Ещё {count} — скройте линии в легенде"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"Ещё {count} — скройте линии в легенде или выберите один аккаунт"},
@@ -2633,6 +4072,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"copilot-unit", L"AI credits", L"ИИ-кредиты"},
     {L"copilot-unit", L"chat requests", L"запросы в чате"},
     {L"copilot-unit", L"premium requests", L"премиум-запросы"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
+     L"{credits, plural, one{кредит} few{кредита} many{кредитов} other{кредита}}"},
     {L"date-month", L"Apr", L"апр"},
     {L"date-month", L"Aug", L"авг"},
     {L"date-month", L"Dec", L"дек"},
@@ -2666,6 +4107,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"date-weekday", L"Thu", L"чт"},
     {L"date-weekday", L"Tue", L"вт"},
     {L"date-weekday", L"Wed", L"ср"},
+    {L"dialog-button", L"Remove", L"Удалить"},
+    {L"dialog-caption", L"Account", L"Аккаунт"},
+    {L"dialog-caption", L"Keep history", L"Хранить историю"},
+    {L"dialog-caption", L"Remove account", L"Удаление аккаунта"},
+    {L"dialog-caption", L"Reset settings", L"Сброс настроек"},
+    {L"dialog-caption", L"Usage history", L"История использования"},
     {L"duration", L"{days}d", L"{days} д"},
     {L"duration", L"{days}d {hours}h", L"{days} д {hours} ч"},
     {L"duration", L"{hours}h", L"{hours} ч"},
@@ -2702,6 +4149,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Запись · {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
     {L"history-pill", L"Waiting", L"Ожидание"},
+    {L"history-span", L"All retained", L"Всё сохранённое"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}",
+     L"{days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# час} few{# часа} many{# часов} other{# часа}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}",
+     L"{years, plural, one{# год} few{# года} many{# лет} other{# года}}"},
     {L"history-status", L"Updated {time}", L"Обновлено {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
      L"Аккаунт в настройках снова использует эту историю."},
@@ -2792,6 +4246,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-name", L"Extra usage", L"Доп. использование"},
     {L"quota-name", L"Monthly", L"Месяц"},
     {L"quota-name", L"Premium requests", L"Премиум-запросы"},
+    {L"quota-name", L"Short window", L"Короткое окно"},
     {L"quota-name", L"Weekly", L"Неделя"},
     {L"quota-name", L"{name} current limit", L"{name}: текущий лимит"},
     {L"quota-name", L"{name} weekly", L"{name}: неделя"},
@@ -2807,6 +4262,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-value", L"Available", L"Доступно"},
     {L"quota-value", L"Unlimited", L"Без лимита"},
     {L"quota-value", L"Used up", L"Исчерпано"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"Не сохраняется"},
+    {L"recording-status", L"Off", L"Откл."},
+    {L"recording-status", L"Off for this Windows user", L"Откл. для этого пользователя Windows"},
+    {L"recording-status", L"Paused while hidden", L"Приостановлено, пока скрыт"},
+    {L"recording-status", L"Recording", L"Запись"},
+    {L"recording-status", L"Unavailable", L"Недоступно"},
+    {L"recording-status", L"Waiting", L"Ожидание"},
     {L"reset-when", L"in {duration}", L"через {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"через {duration} ({time})"},
     {L"reset-when", L"now", L"сейчас"},
@@ -2815,6 +4278,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"response-shape", L"keys: {keys}", L"ключи: {keys}"},
     {L"response-shape", L"non-object or invalid JSON body",
      L"тело не является объектом или содержит недопустимый JSON"},
+    {L"retention", L"Custom", L"Другой"},
+    {L"retention", L"Forever", L"Бессрочно"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}",
+     L"{days, plural, one{день} few{дня} many{дней} other{дня}}"},
     {L"settings-page", L"About", L"О программе"},
     {L"settings-page", L"Accounts", L"Аккаунты"},
     {L"settings-page", L"Behavior", L"Поведение"},
@@ -2822,10 +4289,15 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-page", L"History", L"История"},
     {L"settings-page", L"Layout", L"Макет"},
     {L"settings-section", L"Alerts", L"Оповещения"},
+    {L"settings-section", L"Credits and license", L"Благодарности и лицензия"},
     {L"settings-section", L"Details", L"Подробности"},
     {L"settings-section", L"Language", L"Язык"},
+    {L"settings-section", L"Links", L"Ссылки"},
+    {L"settings-section", L"Recording", L"Запись"},
+    {L"settings-section", L"Storage", L"Хранилище"},
     {L"settings-section", L"Taskbar", L"Панель задач"},
     {L"settings-section", L"Updates", L"Обновления"},
+    {L"settings-section", L"Viewer", L"Просмотр"},
     {L"sign-in-button", L"Cancel", L"Отмена"},
     {L"sign-in-button", L"Close", L"Закрыть"},
     {L"sign-in-button", L"Code copied", L"Код скопирован"},
@@ -2890,6 +4362,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}ч {minutes}м"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}м"},
     {L"taskbar-setup", L"AI +", L"ИИ +"},
+    {L"tile-identity", L"Label", L"Метка"},
+    {L"tile-identity", L"Logo + number badge", L"Логотип + номер"},
+    {L"tile-identity", L"Logo only", L"Только логотип"},
     {L"toggle", L"Off", L"Откл."},
     {L"toggle", L"On", L"Вкл."},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
@@ -2898,33 +4373,101 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"При темпе с {time}: лимит через ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"При среднем темпе этого окна: лимит через ~{duration}"},
+    {L"window-title", L"{app} — Settings", L"{app} — Настройки"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogRu), "sort by (context, English), no duplicates");
 // src/i18n/lang-zh-Hans.h
 // Simplified Chinese (zh-Hans): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogZhHans[] = {
+    {L"", L"1 to 3650 days.", L"1 至 3650 天。"},
     {L"", L"2 to 1440 minutes.", L"2 至 1440 分钟。"},
+    {L"", L"A change couldn't be saved; it is shown with its error.\n\nDiscard unsaved changes and close the window?",
+     L"有一项更改无法保存，已连同错误一起显示。\n\n要放弃未保存的更改并关闭窗口吗？"},
+    {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
+          L"Windows 11 taskbar.",
+     L"在 Windows 11 任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 订阅配额。"},
     {L"", L"All displays", L"所有显示器"},
+    {L"", L"Also delete its usage history", L"同时删除其使用历史"},
+    {L"", L"An account is no longer configured; its unsaved changes were dropped.", L"某个账户已不再配置；其未保存的更改已被丢弃。"},
+    {L"", L"Another account of this provider uses this label.", L"此提供商的另一个账户正在使用此标签。"},
+    {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
+          L"Antigravity uses its signed-in app or CLI, which must keep running.",
+     L"Anthropic、OpenAI 和 GitHub Copilot 通过浏览器登录，OpenCode Go 使用 API 密钥登录。Google Antigravity 使用已登录的应用或 CLI，需保持其运行。"},
+    {L"", L"Applies to this Windows user only. Turning it off keeps saved history.", L"仅适用于此 Windows 用户。关闭后会保留已保存的历史。"},
+    {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
+     L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
     {L"", L"Choose Custom in Cloud poll interval to edit.", L"在“云端轮询间隔”中选择“自定义”后即可编辑。"},
+    {L"", L"Choose Custom in Keep history to edit.", L"在“保留历史”中选择“自定义”后即可编辑。"},
     {L"", L"Cloud poll interval", L"云端轮询间隔"},
+    {L"", L"Contributors", L"贡献者"},
+    {L"", L"Copy version info", L"复制版本信息"},
+    {L"", L"Could not remove the account.", L"无法移除账户。"},
+    {L"", L"Could not reorder the account.", L"无法重新排序账户。"},
+    {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
+     L"无法保存设置。此更改会连同错误保留在这里；再次更改即可重试。"},
+    {L"", L"Could not save the account.", L"无法保存账户。"},
+    {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
+     L"无法保存账户。此更改会连同错误保留在这里；再次更改即可重试。"},
+    {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
+          L"add an account with the attempted provider and label, then remove it.",
+     L"无法保存账户。复制的登录信息仍保留在尝试使用的新标识下。要删除它，请添加一个使用所尝试的提供商和标签的账户，然后将其移除。"},
+    {L"", L"Could not update account visibility.", L"无法更新账户的可见性。"},
+    {L"", L"Credits max", L"积分上限"},
     {L"", L"Custom interval", L"自定义间隔"},
+    {L"", L"Custom retention", L"自定义保留期"},
+    {L"", L"Default time span", L"默认时间范围"},
     {L"", L"Display {number} - unavailable", L"显示器 {number} - 不可用"},
     {L"", L"Display {number} - {width}x{height}", L"显示器 {number} - {width}x{height}"},
     {L"", L"Display {number} - {width}x{height} (primary)", L"显示器 {number} - {width}x{height}（主显示器）"},
     {L"", L"Do not poll hidden accounts", L"不轮询隐藏的账户"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"拖动可重新排序。开关可在任务栏上隐藏账户。"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
+     L"拖动可重新排序。开关可在任务栏上隐藏账户；隐藏的账户不会被轮询。"},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。在“行为”中开启<link "
      L"id=\"hidden\">不轮询隐藏的账户</link>时，隐藏的账户不会被记录。"},
+    {L"", L"Enter a label.", L"请输入标签。"},
+    {L"", L"Enter a whole number from {minimum} to {maximum}.", L"请输入 {minimum} 至 {maximum} 之间的整数。"},
+    {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
+    {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
+          L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
+          L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+          L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
+          L"a tile shows.",
+     L"来自 <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0)；GitHub Copilot 标志来自 <link id=\"octicons\">Primer "
+     L"Octicons</link> (MIT 许可证，Copyright (c) 2026 GitHub Inc.)。Google Antigravity 使用 Gemini "
+     L"标志。\nClaude、Anthropic、OpenAI、ChatGPT、Codex、Google、Gemini、Antigravity、GitHub、GitHub Copilot 和 OpenCode "
+     L"是其各自所有者的商标。徽标仅用于标识磁贴显示的是哪个账户。"},
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"即使开启了“记录历史”，隐藏的账户也不会被轮询或记录。关闭此项可继续记录它们。所有 Windows 用户共享此设置。"},
+    {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
+     L"历史会跟随此条目，即使重新登录也是如此。其他登录请使用新条目。"},
+    {L"", L"History storage failed; Open usage history shows why.", L"历史记录存储失败；“打开使用历史”会显示原因。"},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
+    {L"", L"Identity", L"标识"},
     {L"", L"Interface language", L"界面语言"},
+    {L"", L"Its stored sign-in will be deleted.", L"其已存储的登录信息将被删除。"},
+    {L"", L"Its usage history is kept.", L"其使用历史会保留。"},
+    {L"", L"Keep history", L"保留历史"},
+    {L"", L"Label", L"标签"},
     {L"", L"Language, displays, hover details, polling and notifications.", L"语言、显示器、悬停详情、轮询和通知。"},
+    {L"", L"License", L"许可证"},
+    {L"", L"MIT License", L"MIT 许可证"},
+    {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
+          L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
+     L"在条形旁和磁贴上标识此账户。“标签”会在条形上显示标签，在磁贴上显示其短文本。多个账户使用同一提供商时（包括隐藏的账户）会显示编号徽章。"},
+    {L"", L"New samples arrive with each poll.", L"每次轮询都会加入新样本。"},
+    {L"", L"No accounts yet", L"还没有账户"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
+     L"未加密。仅包含读数和不透明 ID，不含令牌或标签。移除模组后仍会保留。"},
+    {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
+     L"尚未记录任何内容。记录第一个样本时会创建该文件夹。"},
+    {L"", L"Nothing new is recorded.", L"不会记录新数据。"},
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"任务栏配额首次达到所选阈值时通知。降到阈值以下后重新生效。"},
     {L"", L"Open AI quota settings", L"打开 AI 配额设置"},
@@ -2933,17 +4476,99 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.", L"指针停留在账户上时打开其详情。"},
     {L"", L"Primary display only", L"仅主显示器"},
     {L"", L"Primary display, all displays, or one display.", L"主显示器、所有显示器或某一个显示器。"},
+    {L"", L"Project page", L"项目主页"},
+    {L"", L"Provider logos", L"提供商徽标"},
+    {L"", L"Quotas on taskbar", L"任务栏上的配额"},
+    {L"", L"Record history", L"记录历史"},
+    {L"", L"Record usage history", L"记录使用历史"},
+    {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
+     L"为此 Windows 用户开启记录、永久保留历史、以 7 天打开。已保存的历史会保留。"},
+    {L"", L"Recording rules, storage, export and verification", L"记录规则、存储、导出和验证"},
+    {L"", L"Recording starts once the taskbar saves its account IDs.", L"任务栏保存其账户 ID 后即开始记录。"},
+    {L"", L"Remove \"{label}\" ({provider})?", L"移除“{label}”（{provider}）？"},
+    {L"", L"Report an issue", L"报告问题"},
     {L"", L"Reset Behavior to defaults", L"将“行为”重置为默认值"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
      L"将“行为”重置为默认值？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
      L"分钟轮询一次、不轮询隐藏的账户、在红色阈值时通知。"},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
+          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
+          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
+     L"将“显示”重置为默认值？\n\n亚克力材质、已用量条形模式、悬停时显示百分比文本并自适应对齐、不显示金额、默认调色板（自定义颜色也会重置），50% 起为黄色、75% 起为橙色、90% 起为红色，标记过时数据，隐藏 "
+     L"OpenAI 的其他速率限制。"},
+    {L"", L"Reset History to defaults", L"将“历史”重置为默认值"},
+    {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
+          L"the usage history window opens on 7 days. Saved history stays.",
+     L"将“历史”重置为默认值？\n\n将为此 Windows 用户开启记录，永久保留历史，使用历史窗口以 7 天打开。已保存的历史会保留。"},
+    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
+          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"将“布局”重置为默认值？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
+    {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
+          L"account on the taskbar.",
+     L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
+    {L"", L"Set Credits max to show the Credits bar.", L"设置“积分上限”以显示积分条。"},
+    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
+          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
+     L"所有 Windows 用户共享此设置。“永久”不会删除任何数据，也没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长。按天数限制时每小时清理一次，上限约 60 MB。"},
+    {L"", L"Short text", L"短文本"},
     {L"", L"Show details on hover", L"悬停时显示详情"},
     {L"", L"Show on", L"显示位置"},
+    {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
+          L"sign-in and history.",
+     L"显示在详情中；“标识”为“标签”时也显示在条形旁。每个提供商内唯一；重命名会保留登录和历史。"},
+    {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
+          L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
+          L"deleted permanently, for every Windows user.",
+     L"停止永久保留历史？\n\n历史将重新保留 {days, plural, other{# 天}}，并限制为 250,000 个样本（约 60 MB）。更早的样本以及超出该上限的最旧样本将被永久删除，对所有 Windows "
+     L"用户生效。"},
+    {L"", L"Storage location", L"存储位置"},
+    {L"", L"Suggestions and bug reports on GitHub", L"在 GitHub 上提交建议和错误报告"},
+    {L"", L"Thanks to {names}.", L"感谢 {names}。"},
+    {L"", L"That provider and label are already configured.", L"该提供商和标签已配置。"},
+    {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
+     L"磁贴上的“标签”标识，最多 4 个字符。留空则使用去掉空格的标签。"},
+    {L"", L"The account was changed from another taskbar window.", L"该账户已在另一个任务栏窗口中更改。"},
+    {L"", L"The account was removed, but its usage history could not be deleted and was kept.\n\n{reason}",
+     L"账户已移除，但无法删除其使用历史，已将其保留。\n\n{reason}"},
+    {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
+          L"re-add an account with the old provider and label, then remove it.",
+     L"账户已重命名，但旧标识下仍有一份重复的已存储登录信息。要删除它，请重新添加一个使用旧提供商和标签的账户，然后将其移除。"},
+    {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
+     L"积分条视为 100% 的余额。OpenAI 只报告余额。"},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.", L"模组的名称和版本以及 Windows 版本号，用于错误报告。"},
+    {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
+     L"使用历史窗口打开时显示的范围。仍可用窗口中的范围按钮切换。"},
+    {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
+          L"provider and label, then remove it. The account was not changed.",
+     L"重命名后的账户标识已有保留的登录信息。要替换它，请添加一个使用该提供商和标签的账户，然后将其移除。账户未更改。"},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
      L"设置窗口、使用历史窗口和任务栏。“自动”跟随 Windows 显示语言。仅适用于当前 Windows 用户。"},
+    {L"", L"The stored sign-in could not be copied. The account was not changed.", L"无法复制已存储的登录信息。账户未更改。"},
+    {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
+     L"无法删除已存储的登录信息，该信息仍为此账户保留。"},
+    {L"", L"The stored sign-in could not be deleted, so the account was not removed.", L"无法删除已存储的登录信息，因此未移除该账户。"},
+    {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
+          L"signed out.",
+     L"已删除存储的登录信息，但无法保存设置。该账户仍处于已配置但已退出登录的状态。"},
+    {L"", L"This account is no longer configured; its unsaved changes were dropped.", L"此账户已不再配置；其未保存的更改已被丢弃。"},
+    {L"", L"This change couldn't be saved.", L"无法保存此更改。"},
     {L"", L"Threshold notifications", L"阈值通知"},
+    {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
+    {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
+          L"on the 7d chart.",
+     L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在 7天 图表上以数字显示积分。"},
+    {L"", L"Usage history", L"使用历史"},
+    {L"", L"Usage history guide", L"使用历史指南"},
+    {L"", L"Used on tiles when Identity is Label.", L"“标识”为“标签”时在磁贴上使用。"},
+    {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"版本 {version}  ·  作者 Cleroth  ·  Windhawk 模组"},
+    {L"", L"Wait for the current sign-in to finish before changing identity.", L"请等待当前登录完成后再更改标识。"},
+    {L"", L"Wait for the current sign-in to finish before removing accounts.", L"请等待当前登录完成后再移除账户。"},
+    {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
+    {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity 未运行"},
     {L"account-error", L"Antigravity quota unavailable", L"Antigravity 配额不可用"},
     {L"account-error", L"HTTP {status}", L"HTTP {status}"},
@@ -2998,9 +4623,30 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"account-error-alone", L"Unexpected response format", L"意外的响应格式"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"意外的响应格式（{shape}）"},
     {L"account-error-alone", L"Unexpected token response", L"意外的令牌响应"},
+    {L"account-state", L"Hidden, not polled", L"已隐藏，不轮询"},
     {L"account-state", L"Local app not running", L"本地应用未运行"},
+    {L"account-state", L"Local app running", L"本地应用正在运行"},
+    {L"account-state", L"Sign-in needed", L"需要登录"},
+    {L"account-state", L"Signed in", L"已登录"},
+    {L"account-state", L"Signing in…", L"正在登录…"},
+    {L"account-state", L"Waiting for the local app", L"正在等待本地应用"},
+    {L"add-account", L"Sign in with a code on github.com", L"在 github.com 上使用代码登录"},
+    {L"add-account", L"Sign in with an API key from the OpenCode console", L"使用 OpenCode 控制台中的 API 密钥登录"},
+    {L"add-account", L"Sign in with your browser", L"通过浏览器登录"},
+    {L"add-account", L"Uses the signed-in Antigravity app or CLI", L"使用已登录的 Antigravity 应用或 CLI"},
     {L"button", L"Add account", L"添加账户"},
+    {L"button", L"Copied", L"已复制"},
+    {L"button", L"Copy", L"复制"},
+    {L"button", L"Copy failed", L"复制失败"},
+    {L"button", L"Custom...", L"自定义…"},
+    {L"button", L"Open dashboard", L"打开仪表板"},
+    {L"button", L"Open folder", L"打开文件夹"},
+    {L"button", L"Open usage history", L"打开使用历史"},
+    {L"button", L"Remove account", L"移除账户"},
     {L"button", L"Reset", L"重置"},
+    {L"button", L"Sign in", L"登录"},
+    {L"button", L"Sign in again", L"重新登录"},
+    {L"button", L"Sign out", L"退出登录"},
     {L"chart-readout", L"+{count} more — hide lines in the legend", L"还有 {count} 条 — 在图例中隐藏线条"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"还有 {count} 条 — 在图例中隐藏线条或选择一个账户"},
@@ -3010,6 +4656,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"copilot-unit", L"AI credits", L"AI 积分"},
     {L"copilot-unit", L"chat requests", L"聊天请求"},
     {L"copilot-unit", L"premium requests", L"高级请求"},
+    {L"credits-unit", L"{credits, plural, one{credits} other{credits}}", L"{credits, plural, other{积分}}"},
     {L"date-month", L"Apr", L"4月"},
     {L"date-month", L"Aug", L"8月"},
     {L"date-month", L"Dec", L"12月"},
@@ -3043,6 +4690,12 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"date-weekday", L"Thu", L"周四"},
     {L"date-weekday", L"Tue", L"周二"},
     {L"date-weekday", L"Wed", L"周三"},
+    {L"dialog-button", L"Remove", L"移除"},
+    {L"dialog-caption", L"Account", L"账户"},
+    {L"dialog-caption", L"Keep history", L"保留历史"},
+    {L"dialog-caption", L"Remove account", L"移除账户"},
+    {L"dialog-caption", L"Reset settings", L"重置设置"},
+    {L"dialog-caption", L"Usage history", L"使用历史"},
     {L"duration", L"{days}d", L"{days}天"},
     {L"duration", L"{days}d {hours}h", L"{days}天{hours}小时"},
     {L"duration", L"{hours}h", L"{hours}小时"},
@@ -3076,6 +4729,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-pill", L"Recording · forever", L"记录中 · 永久"},
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"记录中 · {days, plural, other{# 天}}"},
     {L"history-pill", L"Waiting", L"等待中"},
+    {L"history-span", L"All retained", L"全部保留数据"},
+    {L"history-span", L"{days, plural, one{# day} other{# days}}", L"{days, plural, other{# 天}}"},
+    {L"history-span", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 小时}}"},
+    {L"history-span", L"{years, plural, one{# year} other{# years}}", L"{years, plural, other{# 年}}"},
     {L"history-status", L"Updated {time}", L"更新于 {time}"},
     {L"history-storage", L"An account in Settings uses this history again.", L"设置中的某个账户再次使用了此历史记录。"},
     {L"history-storage", L"Cannot create the local history directory.", L"无法创建本地历史记录文件夹。"},
@@ -3158,6 +4815,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"quota-name", L"Extra usage", L"额外用量"},
     {L"quota-name", L"Monthly", L"每月"},
     {L"quota-name", L"Premium requests", L"高级请求"},
+    {L"quota-name", L"Short window", L"短时段"},
     {L"quota-name", L"Weekly", L"每周"},
     {L"quota-name", L"{name} current limit", L"{name} 当前限额"},
     {L"quota-name", L"{name} weekly", L"{name} 每周"},
@@ -3171,6 +4829,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"quota-value", L"Available", L"可用"},
     {L"quota-value", L"Unlimited", L"无限制"},
     {L"quota-value", L"Used up", L"已用完"},
+    {L"recording-detail", L"{status} · {detail}", L"{status} · {detail}"},
+    {L"recording-status", L"Not saving", L"未保存"},
+    {L"recording-status", L"Off", L"关闭"},
+    {L"recording-status", L"Off for this Windows user", L"此 Windows 用户已关闭"},
+    {L"recording-status", L"Paused while hidden", L"隐藏期间暂停"},
+    {L"recording-status", L"Recording", L"记录中"},
+    {L"recording-status", L"Unavailable", L"不可用"},
+    {L"recording-status", L"Waiting", L"等待中"},
     {L"reset-when", L"in {duration}", L"{duration}后"},
     {L"reset-when", L"in {duration} ({time})", L"{duration}后 ({time})"},
     {L"reset-when", L"now", L"现在"},
@@ -3178,6 +4844,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"response-shape", L"empty body", L"正文为空"},
     {L"response-shape", L"keys: {keys}", L"键：{keys}"},
     {L"response-shape", L"non-object or invalid JSON body", L"非对象或无效的 JSON 正文"},
+    {L"retention", L"Custom", L"自定义"},
+    {L"retention", L"Forever", L"永久"},
+    {L"retention-unit", L"{days, plural, one{days} other{days}}", L"{days, plural, other{天}}"},
     {L"settings-page", L"About", L"关于"},
     {L"settings-page", L"Accounts", L"账户"},
     {L"settings-page", L"Behavior", L"行为"},
@@ -3185,10 +4854,15 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"settings-page", L"History", L"历史"},
     {L"settings-page", L"Layout", L"布局"},
     {L"settings-section", L"Alerts", L"提醒"},
+    {L"settings-section", L"Credits and license", L"致谢与许可证"},
     {L"settings-section", L"Details", L"详情"},
     {L"settings-section", L"Language", L"语言"},
+    {L"settings-section", L"Links", L"链接"},
+    {L"settings-section", L"Recording", L"记录"},
+    {L"settings-section", L"Storage", L"存储"},
     {L"settings-section", L"Taskbar", L"任务栏"},
     {L"settings-section", L"Updates", L"更新"},
+    {L"settings-section", L"Viewer", L"查看器"},
     {L"sign-in-button", L"Cancel", L"取消"},
     {L"sign-in-button", L"Close", L"关闭"},
     {L"sign-in-button", L"Code copied", L"已复制代码"},
@@ -3244,11 +4918,15 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
     {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
     {L"taskbar-setup", L"AI +", L"AI +"},
+    {L"tile-identity", L"Label", L"标签"},
+    {L"tile-identity", L"Logo + number badge", L"徽标 + 编号徽章"},
+    {L"tile-identity", L"Logo only", L"仅徽标"},
     {L"toggle", L"Off", L"关"},
     {L"toggle", L"On", L"开"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"按过去 24 小时的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
+    {L"window-title", L"{app} — Settings", L"{app} — 设置"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogZhHans), "sort by (context, English), no duplicates");
 
@@ -25613,342 +27291,6 @@ static UINT WindowDpi(HWND hWnd) {
     return dpi ? dpi : 96;
 }
 
-// src/settings/account-commands.h
-// Account commands of the settings window: add, edit, remove, reorder and show or hide an
-// account, each one transaction on fresh settings under the edit lock, the account resolved
-// afresh. Settings thread only. They show nothing: the result says what to tell the user.
-
-// Which account: by history ID, else (none generated) by provider+label identity.
-struct AccountTarget {
-    uint64_t historyId = 0;
-    uint64_t identity = 0;
-};
-
-struct AccountCommandResult {
-    SettingsApplyResult apply = SettingsApplyResult::Failed;
-    bool missing = false;      // The account isn't configured (any more)
-    std::wstring message;      // For the user, if not empty
-    UINT icon = MB_ICONERROR;  // The message's
-    AccountTarget account;     // The account afterwards: added, renamed or edited
-};
-
-static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
-                                const AccountConfig& account) {
-    for (const auto& existing : settings.accounts) {
-        if (ignoredIdentity && AccountIdentityHash(existing) == ignoredIdentity) continue;
-        if (existing.provider == account.provider && existing.label == account.label) return true;
-    }
-    return false;
-}
-
-static int FindAccountTarget(const Settings& settings, AccountTarget target) {
-    for (size_t i = 0; i < settings.accounts.size(); i++) {
-        const AccountConfig& account = settings.accounts[i];
-        if (target.historyId ? account.historyId == target.historyId :
-                               AccountIdentityHash(account) == target.identity) {
-            return int(i);
-        }
-    }
-    return -1;
-}
-
-// The published account with an identity, as normalization left it (its history ID). Called
-// under the edit lock.
-static AccountTarget PublishedAccountTarget(uint64_t identity) {
-    std::lock_guard<std::mutex> lk(g_settingsMutex);
-    for (const AccountConfig& account : g_settings.accounts) {
-        if (AccountIdentityHash(account) == identity) return {account.historyId, identity};
-    }
-    return {0, identity};
-}
-
-// Adds `account` labelled with the first of `labels` its provider doesn't use yet.
-static AccountCommandResult AddAccountCommand(AccountConfig account, const std::vector<std::wstring>& labels) {
-    AccountCommandResult result;
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    auto label = std::find_if(labels.begin(), labels.end(), [&](const std::wstring& candidate) {
-        AccountConfig labelled = account;
-        labelled.label = candidate;
-        return !HasDuplicateAccount(settings, 0, labelled);
-    });
-    if (label == labels.end()) {
-        result.message = L"That provider and label are already configured.";
-        result.icon = MB_ICONWARNING;
-        return result;
-    }
-    account.label = *label;
-    uint64_t identity = AccountIdentityHash(account);
-    settings.accounts.push_back(std::move(account));
-    result.apply = ApplyOwnedSettings(std::move(settings));
-    if (result.apply != SettingsApplyResult::Failed) result.account = PublishedAccountTarget(identity);
-    configLock.unlock();
-    if (result.apply == SettingsApplyResult::Failed) {
-        result.message = L"Could not save the account.";
-    } else if (result.apply == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
-    return result;
-}
-
-// Replaces the account with `edit` applied to its fresh settings. Visibility (which a taskbar
-// menu can change meanwhile) and the history ID stay the fresh ones; a provider change starts a
-// new history. A rename moves the stored sign-in to the new identity, blocking epoch-gated token
-// saves across the local copy, settings and delete transaction.
-static AccountCommandResult EditAccountCommand(AccountTarget target,
-                                               const std::function<void(AccountConfig&)>& edit) {
-    AccountCommandResult result;
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = FindAccountTarget(settings, target);
-    if (index < 0) {
-        result.missing = true;
-        result.message = L"The account was changed from another taskbar window.";
-        result.icon = MB_ICONWARNING;
-        return result;
-    }
-    AccountConfig oldAccount = settings.accounts[index];
-    AccountConfig newAccount = oldAccount;
-    edit(newAccount);
-    uint64_t oldIdentity = AccountIdentityHash(oldAccount);
-    uint64_t newIdentity = AccountIdentityHash(newAccount);
-    bool identityChanged = oldIdentity != newIdentity;
-    if (identityChanged && g_loginInProgress.load()) {
-        result.message = L"Wait for the current sign-in to finish before changing identity.";
-        result.icon = MB_ICONINFORMATION;
-        return result;
-    }
-    if (HasDuplicateAccount(settings, oldIdentity, newAccount)) {
-        result.message = L"That provider and label are already configured.";
-        result.icon = MB_ICONWARNING;
-        return result;
-    }
-    // The identity is read only while building columns, so its edits take the rebuild path.
-    bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
-                                   oldAccount.label == newAccount.label &&
-                                   oldAccount.tileIdentity == newAccount.tileIdentity &&
-                                   oldAccount.tileText == newAccount.tileText &&
-                                   oldAccount.creditsMax == newAccount.creditsMax &&
-                                   oldAccount.recordHistory == newAccount.recordHistory &&
-                                   oldAccount.historyId == newAccount.historyId &&
-                                   oldAccount.showBars != newAccount.showBars;
-
-    bool sameProviderIdentityChange = identityChanged &&
-                                      oldAccount.provider == newAccount.provider;
-    bool sameProviderRename = sameProviderIdentityChange &&
-                              oldAccount.provider != L"antigravity";
-    TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
-    bool oldTokenCleared = true;
-    ULONGLONG oldAuthEpoch = 0;
-    ULONGLONG newAuthEpoch = 0;
-    std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
-    if (sameProviderRename) {
-        // Block epoch-gated saves only across the local copy/settings/delete transaction.
-        authEpochLock.lock();
-        oldAuthEpoch = AuthEpochLocked(oldIdentity);
-        newAuthEpoch = AuthEpochLocked(newIdentity);
-        tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
-        if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
-            tokenCopyResult == TokenCopyResult::Failed) {
-            authEpochLock.unlock();
-            configLock.unlock();
-            result.message =
-                tokenCopyResult == TokenCopyResult::DestinationOccupied ?
-                    L"The renamed account identity already has a retained sign-in. To replace it, "
-                    L"add an account with that provider and label, then remove it. The account was "
-                    L"not changed." :
-                    L"The stored sign-in could not be copied. The account was not changed.";
-            return result;
-        }
-    }
-
-    // Visibility can be toggled from a taskbar menu meanwhile.
-    newAccount.hidden = oldAccount.hidden;
-    // Renames retain history; switching providers starts a new series during normalization.
-    newAccount.historyId = oldAccount.provider == newAccount.provider ? oldAccount.historyId : 0;
-    settings.accounts[index] = newAccount;
-    result.apply = ApplyOwnedSettings(
-        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
-        sameProviderIdentityChange ? newIdentity : 0);
-    if (result.apply == SettingsApplyResult::Failed) {
-        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
-                                  ClearStoredToken(newIdentity);
-        if (authEpochLock.owns_lock()) authEpochLock.unlock();
-        configLock.unlock();
-        result.message =
-            copiedTokenCleared ?
-                L"Could not save the account." :
-                L"Could not save the account. The copied sign-in remains under the attempted "
-                L"new identity. To delete it, add an account with the attempted provider and "
-                L"label, then remove it.";
-        return result;
-    }
-    if (sameProviderRename) {
-        oldTokenCleared = ClearStoredToken(oldIdentity);
-        BumpAuthEpochLocked(oldIdentity);
-        BumpSignInGenerationLocked(oldIdentity);
-        BumpSignInGenerationLocked(newIdentity);
-        g_authRenameRedirects.push_back(
-            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
-        authEpochLock.unlock();
-    }
-    result.account = PublishedAccountTarget(newIdentity);
-    configLock.unlock();
-    if (result.apply == SettingsApplyResult::Changed) {
-        // A quota selection change updates in place: bar layouts already hold every bar and
-        // only change visibility and spacing; tile layouts regenerate their meter shapes.
-        if (onlyBarSelectionChanged) {
-            PostUiUpdate();
-            if (!g_uiInjected.load(std::memory_order_acquire)) StartRetryInject();
-        } else {
-            FinishSettingsApply();
-        }
-    }
-    if (!oldTokenCleared) {
-        result.message =
-            L"The account was renamed, but a duplicate stored sign-in remains under the old "
-            L"identity. To delete it, re-add an account with the old provider and label, then "
-            L"remove it.";
-        result.icon = MB_ICONWARNING;
-    }
-    NotifySettingsWindowChanged();
-    return result;
-}
-
-// Removes the account with its stored sign-in (all but Antigravity; deleted first), then, when
-// asked, its recorded usage history, outside every settings lock; if that fails the account
-// stays removed and the message says its history was kept. Not during a sign-in.
-static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteHistory) {
-    AccountCommandResult result;
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    if (g_loginInProgress.load()) {
-        result.message = L"Wait for the current sign-in to finish before removing accounts.";
-        result.icon = MB_ICONINFORMATION;
-        return result;
-    }
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = FindAccountTarget(settings, target);
-    if (index < 0) {
-        result.missing = true;
-        return result;
-    }
-    uint64_t identity = AccountIdentityHash(settings.accounts[index]);
-    uint64_t historyId = settings.accounts[index].historyId;
-    bool signIn = settings.accounts[index].provider != L"antigravity";
-    if (signIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
-        result.message = L"The stored sign-in could not be deleted, so the account was not removed.";
-        return result;
-    }
-    settings.accounts.erase(settings.accounts.begin() + index);
-    result.apply = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (result.apply == SettingsApplyResult::Failed) {
-        if (signIn) {
-            RefreshQuotaByIdentity(identity);
-            NotifySettingsWindowChanged();
-        }
-        result.message = signIn ?
-            L"The stored sign-in was deleted, but settings could not be saved. The account "
-            L"remains configured but signed out." :
-            L"Could not remove the account.";
-        return result;
-    }
-    if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
-    HistoryJournalError error = HistoryJournalError::None;
-    if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &error)) {
-        result.message = L"The account was removed, but its usage history could not be deleted and was kept.\n\n" +
-                         HistoryJournalErrorText(I18nLocale(*g_language.load(std::memory_order_acquire)), error);
-        result.icon = MB_ICONWARNING;
-    }
-    return result;
-}
-
-// Moves the account to `to` in the account order (clamped).
-static AccountCommandResult MoveAccountCommand(AccountTarget target, int to) {
-    AccountCommandResult result;
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = FindAccountTarget(settings, target);
-    if (index < 0) {
-        result.missing = true;
-        return result;
-    }
-    to = std::clamp(to, 0, int(settings.accounts.size()) - 1);
-    if (to == index) {
-        result.apply = SettingsApplyResult::Unchanged;
-        return result;
-    }
-    AccountConfig moved = std::move(settings.accounts[index]);
-    settings.accounts.erase(settings.accounts.begin() + index);
-    settings.accounts.insert(settings.accounts.begin() + to, std::move(moved));
-    result.apply = ApplyOwnedSettings(std::move(settings));
-    configLock.unlock();
-    if (result.apply == SettingsApplyResult::Failed) {
-        result.message = L"Could not reorder the account.";
-    } else if (result.apply == SettingsApplyResult::Changed) {
-        FinishSettingsApply();
-    }
-    return result;
-}
-
-// Shows or hides the account on the taskbar (the desired state), keeping one visible, and
-// persists the hidden set as the taskbar menu does.
-static AccountCommandResult SetAccountHiddenCommand(AccountTarget target, bool hidden) {
-    AccountCommandResult result;
-    std::unique_lock<std::mutex> configLock(g_configEditMutex);
-    Settings settings;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMutex);
-        settings = g_settings;
-    }
-    int index = FindAccountTarget(settings, target);
-    if (index < 0) {
-        result.missing = true;
-        return result;
-    }
-    int visibleCount = int(std::count_if(settings.accounts.begin(), settings.accounts.end(),
-                                         [](const AccountConfig& account) { return !account.hidden; }));
-    if (hidden && !settings.accounts[index].hidden && visibleCount <= 1) {
-        result.apply = SettingsApplyResult::Unchanged;
-        return result;
-    }
-    settings.accounts[index].hidden = hidden;
-    result.apply = ApplyOwnedSettings(settings);
-    configLock.unlock();
-    if (result.apply == SettingsApplyResult::Failed) {
-        result.message = L"Could not update account visibility.";
-    } else if (result.apply == SettingsApplyResult::Changed) {
-        std::wstring hashes;
-        wchar_t buffer[24];
-        for (const auto& account : settings.accounts) {
-            if (!account.hidden) continue;
-            if (!hashes.empty()) hashes += L";";
-            swprintf(buffer, ARRAYSIZE(buffer), L"%016llx",
-                     (unsigned long long)AccountIdentityHash(account));
-            hashes += buffer;
-        }
-        Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
-        FinishSettingsApply();
-    }
-    return result;
-}
-
 // src/settings/edits.h
 // Edit controller of the settings window: drafts, the render projection, the commit queue and
 // the navigation and close flushes. Pure: it talks to a SettingsStore (production:
@@ -26501,11 +27843,6 @@ static std::wstring SettingsFormatNumber(int value, wchar_t separator) {
     return value < 0 ? L"-" + text : text;
 }
 
-static std::wstring SettingsRangeError(SettingsNumberRange range) {
-    return L"Enter a whole number from " + std::to_wstring(range.minimum) + L" to " +
-           std::to_wstring(range.maximum) + L".";
-}
-
 // Account fields ---------------------------------------------------------------------------------
 
 static int SettingsAccountValue(const AccountConfig& a, SettingsField field) {
@@ -26615,10 +27952,38 @@ struct SettingsAccountRef {
 
 enum class SettingsNoticeKind : uint8_t { Error, Warning, Information };
 
+// What the window tells the user after an operation: a code, its text in the language shown when
+// its message box opens (SettingsNoticeText), never the language of the moment it arose.
+enum class SettingsNoticeCode : uint8_t {
+    None,
+    // The controller's
+    AccountsDropped,  // An account vanished: its drafts were dropped
+    AccountDropped,   // The account acted on vanished
+    AccountNotSaved,  // An account edit failed without a notice of its own
+    // The account commands' (settings/account-commands.h) and the store's
+    AccountExists,
+    AccountSaveFailed,
+    ChangedElsewhere,
+    IdentitySignInRunning,
+    RenameTargetSignedIn,
+    RenameCopyFailed,
+    RenameCopyLeft,       // A failed rename's copied sign-in remains under the new identity
+    RenameOldSignInLeft,  // A rename's old sign-in remains
+    RemoveSignInRunning,
+    RemoveSignInKept,     // The sign-in couldn't be deleted: not removed
+    RemoveSignedOut,      // The sign-in was deleted, the settings not saved
+    RemoveFailed,
+    HistoryKept,          // Removed, its history not deleted: the journal's error is the reason
+    ReorderFailed,
+    VisibilityFailed,
+    SignOutFailed,
+};
+
 struct SettingsAccountResult {
     SettingsSaveResult save = SettingsSaveResult::Unchanged;
     bool missing = false;  // No such account (any more)
-    std::wstring notice;   // What the window tells the user, if anything
+    SettingsNoticeCode notice = SettingsNoticeCode::None;  // What the window tells the user, if anything
+    HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
     SettingsNoticeKind kind = SettingsNoticeKind::Error;
     SettingsAccountRef account;  // The account afterwards: added or renamed
 };
@@ -26648,6 +28013,15 @@ protected:
 
 // Controller -------------------------------------------------------------------------------------
 
+// A draft's error, shown with its control in the frame's language (SettingsDraftErrorText).
+enum class SettingsDraftError : uint8_t {
+    None,
+    Range,       // Not a number of its field's range
+    LabelEmpty,
+    LabelTaken,  // Another account of its provider uses it
+    SaveFailed,
+};
+
 struct SettingsDraft {
     uint64_t key = 0;
     SettingsField field = SettingsField::None;
@@ -26657,8 +28031,27 @@ struct SettingsDraft {
     int value = 0;       // Desired value; for text, the last valid one
     bool valid = true;   // `raw` parses
     bool failed = false; // Its last save failed; not retried until the user acts on the field
-    std::wstring error;  // Shown with the control
+    SettingsDraftError error = SettingsDraftError::None;  // Shown with the control
 };
+
+static std::wstring SettingsDraftErrorText(const I18nLocale& locale, const SettingsDraft& draft) {
+    switch (draft.error) {
+        case SettingsDraftError::None:
+            return {};
+        case SettingsDraftError::Range: {
+            SettingsNumberRange range = SettingsFieldRange(draft.field).value_or(SettingsNumberRange{});
+            return I18nText(locale, Tr(L"Enter a whole number from {minimum} to {maximum}."),
+                            {{L"minimum", range.minimum}, {L"maximum", range.maximum}});
+        }
+        case SettingsDraftError::LabelEmpty:
+            return I18nText(locale, Tr(L"Enter a label."));
+        case SettingsDraftError::LabelTaken:
+            return I18nText(locale, Tr(L"Another account of this provider uses this label."));
+        case SettingsDraftError::SaveFailed:
+            return I18nText(locale, Tr(L"This change couldn't be saved."));
+    }
+    return {};
+}
 
 struct SettingsRequest {
     uint64_t key = 0;
@@ -26676,10 +28069,70 @@ enum class SettingsActionResult : uint8_t { Done, Blocked, Failed };
 
 // A message box the window owes the user. A failure's explains a failed save.
 struct SettingsNotice {
-    std::wstring text;
+    SettingsNoticeCode code = SettingsNoticeCode::None;
     SettingsNoticeKind kind = SettingsNoticeKind::Error;
     bool failure = false;
+    HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
 };
+
+static std::wstring SettingsNoticeText(const I18nLocale& locale, SettingsNoticeCode code,
+                                       HistoryJournalError reason = HistoryJournalError::None) {
+    using enum SettingsNoticeCode;
+    switch (code) {
+        case None:
+            return {};
+        case AccountsDropped:
+            return I18nText(locale, Tr(L"An account is no longer configured; its unsaved changes were dropped."));
+        case AccountDropped:
+            return I18nText(locale, Tr(L"This account is no longer configured; its unsaved changes were dropped."));
+        case AccountNotSaved:
+            return I18nText(locale, Tr(L"Could not save the account. The change is kept here with its error; change it "
+                                       L"again to retry."));
+        case AccountExists:
+            return I18nText(locale, Tr(L"That provider and label are already configured."));
+        case AccountSaveFailed:
+            return I18nText(locale, Tr(L"Could not save the account."));
+        case ChangedElsewhere:
+            return I18nText(locale, Tr(L"The account was changed from another taskbar window."));
+        case IdentitySignInRunning:
+            return I18nText(locale, Tr(L"Wait for the current sign-in to finish before changing identity."));
+        case RenameTargetSignedIn:
+            return I18nText(locale, Tr(L"The renamed account identity already has a retained sign-in. To replace it, "
+                                       L"add an account with that provider and label, then remove it. The account was "
+                                       L"not changed."));
+        case RenameCopyFailed:
+            return I18nText(locale, Tr(L"The stored sign-in could not be copied. The account was not changed."));
+        case RenameCopyLeft:
+            return I18nText(locale, Tr(L"Could not save the account. The copied sign-in remains under the attempted "
+                                       L"new identity. To delete it, add an account with the attempted provider and "
+                                       L"label, then remove it."));
+        case RenameOldSignInLeft:
+            return I18nText(locale, Tr(L"The account was renamed, but a duplicate stored sign-in remains under the old "
+                                       L"identity. To delete it, re-add an account with the old provider and label, "
+                                       L"then remove it."));
+        case RemoveSignInRunning:
+            return I18nText(locale, Tr(L"Wait for the current sign-in to finish before removing accounts."));
+        case RemoveSignInKept:
+            return I18nText(locale, Tr(L"The stored sign-in could not be deleted, so the account was not removed."));
+        case RemoveSignedOut:
+            return I18nText(locale, Tr(L"The stored sign-in was deleted, but settings could not be saved. The account "
+                                       L"remains configured but signed out."));
+        case RemoveFailed:
+            return I18nText(locale, Tr(L"Could not remove the account."));
+        case HistoryKept:
+            return I18nText(locale, Tr(L"The account was removed, but its usage history could not be deleted and was "
+                                       L"kept.\n\n{reason}"),
+                            {{L"reason", HistoryJournalErrorText(locale, reason)}});
+        case ReorderFailed:
+            return I18nText(locale, Tr(L"Could not reorder the account."));
+        case VisibilityFailed:
+            return I18nText(locale, Tr(L"Could not update account visibility."));
+        case SignOutFailed:
+            return I18nText(locale, Tr(L"The stored sign-in could not be deleted and remains retained for this "
+                                       L"account."));
+    }
+    return {};
+}
 
 struct SettingsEdits {
     explicit SettingsEdits(SettingsStore& store) : store(&store) {}
@@ -26727,8 +28180,7 @@ struct SettingsEdits {
         std::erase_if(drafts, [&](const SettingsDraft& d) { return d.key && !IndexOf(d.key); });
         std::erase_if(queue, [&](const SettingsRequest& r) { return r.key && !IndexOf(r.key); });
         if (drafts.size() != before) {
-            notices.push_back({L"An account is no longer configured; its unsaved changes were dropped.",
-                               SettingsNoticeKind::Warning, false});
+            notices.push_back({SettingsNoticeCode::AccountsDropped, SettingsNoticeKind::Warning, false});
         }
     }
 
@@ -26748,7 +28200,7 @@ struct SettingsEdits {
             AccountConfig& account = s.accounts[*index];
             if (draft.field == SettingsField::AccountLabel) {
                 std::wstring label = SettingsTrimLabel(draft.raw);
-                if (LabelError(draft.key, label).empty()) account.label = std::move(label);
+                if (LabelError(draft.key, label) == SettingsDraftError::None) account.label = std::move(label);
             } else {
                 SettingsAccountAssign(account, draft.field, draft.value, draft.raw);
             }
@@ -26778,19 +28230,19 @@ struct SettingsEdits {
         return slot == slots.end() ? 0 : slot->second;
     }
 
-    // Empty when `label` (trimmed) can be the account's: not empty, and no other account of its
+    // None when `label` (trimmed) can be the account's: not empty, and no other account of its
     // provider uses it.
-    std::wstring LabelError(uint64_t key, const std::wstring& label) const {
-        if (label.empty()) return L"Enter a label.";
+    SettingsDraftError LabelError(uint64_t key, const std::wstring& label) const {
+        if (label.empty()) return SettingsDraftError::LabelEmpty;
         std::optional<size_t> index = IndexOf(key);
-        if (!index) return {};
+        if (!index) return SettingsDraftError::None;
         const std::vector<AccountConfig>& accounts = baseline.settings.accounts;
         for (size_t i = 0; i < accounts.size(); i++) {
             if (i != *index && accounts[i].provider == accounts[*index].provider && accounts[i].label == label) {
-                return L"Another account of this provider uses this label.";
+                return SettingsDraftError::LabelTaken;
             }
         }
-        return {};
+        return SettingsDraftError::None;
     }
 
     // A text box's text (every change). Number text that doesn't parse keeps the last valid
@@ -26804,7 +28256,7 @@ struct SettingsEdits {
         draft.raw = std::move(text);
         if (free) {
             draft.valid = field != SettingsField::AccountLabel ||
-                          LabelError(key, SettingsTrimLabel(draft.raw)).empty();
+                          LabelError(key, SettingsTrimLabel(draft.raw)) == SettingsDraftError::None;
             return;
         }
         SettingsParsedNumber parsed = SettingsParseNumber(draft.raw, *range, baseline.status.groupSeparator);
@@ -26845,7 +28297,7 @@ struct SettingsEdits {
             return false;
         }
         draft->failed = false;
-        draft->error.clear();
+        draft->error = SettingsDraftError::None;
         bool queued = std::any_of(queue.begin(), queue.end(), [&](const SettingsRequest& request) {
             return request.key == key && request.field == field && request.revision == draft->revision;
         });
@@ -26998,7 +28450,9 @@ struct SettingsEdits {
         if (action == SettingsField::AccountRemove &&
             (result.missing || result.save == SettingsSaveResult::Changed)) {
             DropAccount(key);
-            if (!result.notice.empty()) notices.push_back({result.notice, result.kind, false});
+            if (result.notice != SettingsNoticeCode::None) {
+                notices.push_back({result.notice, result.kind, false, result.reason});
+            }
             Reload();
             return SettingsActionResult::Done;
         }
@@ -27035,7 +28489,9 @@ struct SettingsEdits {
         }
         SettingsAccountResult result = store->AddAccount(provider, labels);
         bool added = result.save == SettingsSaveResult::Changed;
-        if (!result.notice.empty()) notices.push_back({result.notice, result.kind, !added});
+        if (result.notice != SettingsNoticeCode::None) {
+            notices.push_back({result.notice, result.kind, !added, result.reason});
+        }
         if (!added) return 0;
         Reload();
         for (size_t i = 0; i < keys.size(); i++) {
@@ -27071,7 +28527,7 @@ private:
         }
         draft->revision = ++revisions;
         draft->failed = false;
-        draft->error.clear();
+        draft->error = SettingsDraftError::None;
         return *draft;
     }
 
@@ -27084,15 +28540,14 @@ private:
     // A label's validity follows the other accounts, which may have changed since it was typed.
     bool Valid(SettingsDraft& draft) const {
         if (draft.field == SettingsField::AccountLabel) {
-            draft.valid = LabelError(draft.key, SettingsTrimLabel(draft.raw)).empty();
+            draft.valid = LabelError(draft.key, SettingsTrimLabel(draft.raw)) == SettingsDraftError::None;
         }
         return draft.valid;
     }
 
-    std::wstring InvalidError(const SettingsDraft& draft) const {
+    SettingsDraftError InvalidError(const SettingsDraft& draft) const {
         if (draft.field == SettingsField::AccountLabel) return LabelError(draft.key, SettingsTrimLabel(draft.raw));
-        std::optional<SettingsNumberRange> range = SettingsFieldRange(draft.field);
-        return range ? SettingsRangeError(*range) : std::wstring();
+        return SettingsFieldRange(draft.field) ? SettingsDraftError::Range : SettingsDraftError::None;
     }
 
     SettingsRequest RequestFor(const SettingsDraft& draft) const {
@@ -27133,7 +28588,7 @@ private:
                 auto draft = std::find_if(drafts.begin(), drafts.end(), same);
                 if (draft != drafts.end()) {
                     draft->failed = true;
-                    draft->error = L"This change couldn't be saved.";
+                    draft->error = SettingsDraftError::SaveFailed;
                 }
             }
             return false;
@@ -27148,17 +28603,15 @@ private:
     bool Settle(const SettingsRequest& request, const SettingsAccountResult& result) {
         if (result.missing) {
             DropAccount(request.key);
-            notices.push_back({L"This account is no longer configured; its unsaved changes were dropped.",
-                               SettingsNoticeKind::Warning, true});
+            notices.push_back({SettingsNoticeCode::AccountDropped, SettingsNoticeKind::Warning, true});
             Reload();
             return false;
         }
         bool failed = result.save == SettingsSaveResult::Failed;
-        if (!result.notice.empty()) {
-            notices.push_back({result.notice, result.kind, failed});
+        if (result.notice != SettingsNoticeCode::None) {
+            notices.push_back({result.notice, result.kind, failed, result.reason});
         } else if (failed) {
-            notices.push_back({L"Could not save the account. The change is kept here with its error; change it "
-                               L"again to retry.", SettingsNoticeKind::Error, true});
+            notices.push_back({SettingsNoticeCode::AccountNotSaved, SettingsNoticeKind::Error, true});
         }
         auto same = [&](const SettingsDraft& d) {
             return d.key == request.key && d.field == request.field && d.revision == request.revision;
@@ -27167,7 +28620,7 @@ private:
             auto draft = request.revision ? std::find_if(drafts.begin(), drafts.end(), same) : drafts.end();
             if (draft != drafts.end()) {
                 draft->failed = true;
-                draft->error = L"This change couldn't be saved.";
+                draft->error = SettingsDraftError::SaveFailed;
             }
             return false;
         }
@@ -27179,6 +28632,327 @@ private:
         return true;
     }
 };
+
+// src/settings/account-commands.h
+// Account commands of the settings window: add, edit, remove, reorder and show or hide an
+// account, each one transaction on fresh settings under the edit lock, the account resolved
+// afresh. Settings thread only. They show nothing: the result says what to tell the user.
+
+// Which account: by history ID, else (none generated) by provider+label identity.
+struct AccountTarget {
+    uint64_t historyId = 0;
+    uint64_t identity = 0;
+};
+
+struct AccountCommandResult {
+    SettingsApplyResult apply = SettingsApplyResult::Failed;
+    bool missing = false;      // The account isn't configured (any more)
+    SettingsNoticeCode message = SettingsNoticeCode::None;   // For the user (settings/edits.h)
+    HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
+    UINT icon = MB_ICONERROR;  // The message's
+    AccountTarget account;     // The account afterwards: added, renamed or edited
+};
+
+static bool HasDuplicateAccount(const Settings& settings, uint64_t ignoredIdentity,
+                                const AccountConfig& account) {
+    for (const auto& existing : settings.accounts) {
+        if (ignoredIdentity && AccountIdentityHash(existing) == ignoredIdentity) continue;
+        if (existing.provider == account.provider && existing.label == account.label) return true;
+    }
+    return false;
+}
+
+static int FindAccountTarget(const Settings& settings, AccountTarget target) {
+    for (size_t i = 0; i < settings.accounts.size(); i++) {
+        const AccountConfig& account = settings.accounts[i];
+        if (target.historyId ? account.historyId == target.historyId :
+                               AccountIdentityHash(account) == target.identity) {
+            return int(i);
+        }
+    }
+    return -1;
+}
+
+// The published account with an identity, as normalization left it (its history ID). Called
+// under the edit lock.
+static AccountTarget PublishedAccountTarget(uint64_t identity) {
+    std::lock_guard<std::mutex> lk(g_settingsMutex);
+    for (const AccountConfig& account : g_settings.accounts) {
+        if (AccountIdentityHash(account) == identity) return {account.historyId, identity};
+    }
+    return {0, identity};
+}
+
+// Adds `account` labelled with the first of `labels` its provider doesn't use yet.
+static AccountCommandResult AddAccountCommand(AccountConfig account, const std::vector<std::wstring>& labels) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    auto label = std::find_if(labels.begin(), labels.end(), [&](const std::wstring& candidate) {
+        AccountConfig labelled = account;
+        labelled.label = candidate;
+        return !HasDuplicateAccount(settings, 0, labelled);
+    });
+    if (label == labels.end()) {
+        result.message = SettingsNoticeCode::AccountExists;
+        result.icon = MB_ICONWARNING;
+        return result;
+    }
+    account.label = *label;
+    uint64_t identity = AccountIdentityHash(account);
+    settings.accounts.push_back(std::move(account));
+    result.apply = ApplyOwnedSettings(std::move(settings));
+    if (result.apply != SettingsApplyResult::Failed) result.account = PublishedAccountTarget(identity);
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        result.message = SettingsNoticeCode::AccountSaveFailed;
+    } else if (result.apply == SettingsApplyResult::Changed) {
+        FinishSettingsApply();
+    }
+    return result;
+}
+
+// Replaces the account with `edit` applied to its fresh settings. Visibility (which a taskbar
+// menu can change meanwhile) and the history ID stay the fresh ones; a provider change starts a
+// new history. A rename moves the stored sign-in to the new identity, blocking epoch-gated token
+// saves across the local copy, settings and delete transaction.
+static AccountCommandResult EditAccountCommand(AccountTarget target,
+                                               const std::function<void(AccountConfig&)>& edit) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        result.message = SettingsNoticeCode::ChangedElsewhere;
+        result.icon = MB_ICONWARNING;
+        return result;
+    }
+    AccountConfig oldAccount = settings.accounts[index];
+    AccountConfig newAccount = oldAccount;
+    edit(newAccount);
+    uint64_t oldIdentity = AccountIdentityHash(oldAccount);
+    uint64_t newIdentity = AccountIdentityHash(newAccount);
+    bool identityChanged = oldIdentity != newIdentity;
+    if (identityChanged && g_loginInProgress.load()) {
+        result.message = SettingsNoticeCode::IdentitySignInRunning;
+        result.icon = MB_ICONINFORMATION;
+        return result;
+    }
+    if (HasDuplicateAccount(settings, oldIdentity, newAccount)) {
+        result.message = SettingsNoticeCode::AccountExists;
+        result.icon = MB_ICONWARNING;
+        return result;
+    }
+    // The identity is read only while building columns, so its edits take the rebuild path.
+    bool onlyBarSelectionChanged = oldAccount.provider == newAccount.provider &&
+                                   oldAccount.label == newAccount.label &&
+                                   oldAccount.tileIdentity == newAccount.tileIdentity &&
+                                   oldAccount.tileText == newAccount.tileText &&
+                                   oldAccount.creditsMax == newAccount.creditsMax &&
+                                   oldAccount.recordHistory == newAccount.recordHistory &&
+                                   oldAccount.historyId == newAccount.historyId &&
+                                   oldAccount.showBars != newAccount.showBars;
+
+    bool sameProviderIdentityChange = identityChanged &&
+                                      oldAccount.provider == newAccount.provider;
+    bool sameProviderRename = sameProviderIdentityChange &&
+                              oldAccount.provider != L"antigravity";
+    TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
+    bool oldTokenCleared = true;
+    ULONGLONG oldAuthEpoch = 0;
+    ULONGLONG newAuthEpoch = 0;
+    std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
+    if (sameProviderRename) {
+        // Block epoch-gated saves only across the local copy/settings/delete transaction.
+        authEpochLock.lock();
+        oldAuthEpoch = AuthEpochLocked(oldIdentity);
+        newAuthEpoch = AuthEpochLocked(newIdentity);
+        tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
+        if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
+            tokenCopyResult == TokenCopyResult::Failed) {
+            authEpochLock.unlock();
+            configLock.unlock();
+            result.message = tokenCopyResult == TokenCopyResult::DestinationOccupied ?
+                                 SettingsNoticeCode::RenameTargetSignedIn : SettingsNoticeCode::RenameCopyFailed;
+            return result;
+        }
+    }
+
+    // Visibility can be toggled from a taskbar menu meanwhile.
+    newAccount.hidden = oldAccount.hidden;
+    // Renames retain history; switching providers starts a new series during normalization.
+    newAccount.historyId = oldAccount.provider == newAccount.provider ? oldAccount.historyId : 0;
+    settings.accounts[index] = newAccount;
+    result.apply = ApplyOwnedSettings(
+        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
+        sameProviderIdentityChange ? newIdentity : 0);
+    if (result.apply == SettingsApplyResult::Failed) {
+        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
+                                  ClearStoredToken(newIdentity);
+        if (authEpochLock.owns_lock()) authEpochLock.unlock();
+        configLock.unlock();
+        result.message =
+            copiedTokenCleared ? SettingsNoticeCode::AccountSaveFailed : SettingsNoticeCode::RenameCopyLeft;
+        return result;
+    }
+    if (sameProviderRename) {
+        oldTokenCleared = ClearStoredToken(oldIdentity);
+        BumpAuthEpochLocked(oldIdentity);
+        BumpSignInGenerationLocked(oldIdentity);
+        BumpSignInGenerationLocked(newIdentity);
+        g_authRenameRedirects.push_back(
+            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
+        authEpochLock.unlock();
+    }
+    result.account = PublishedAccountTarget(newIdentity);
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Changed) {
+        // A quota selection change updates in place: bar layouts already hold every bar and
+        // only change visibility and spacing; tile layouts regenerate their meter shapes.
+        if (onlyBarSelectionChanged) {
+            PostUiUpdate();
+            if (!g_uiInjected.load(std::memory_order_acquire)) StartRetryInject();
+        } else {
+            FinishSettingsApply();
+        }
+    }
+    if (!oldTokenCleared) {
+        result.message = SettingsNoticeCode::RenameOldSignInLeft;
+        result.icon = MB_ICONWARNING;
+    }
+    NotifySettingsWindowChanged();
+    return result;
+}
+
+// Removes the account with its stored sign-in (all but Antigravity; deleted first), then, when
+// asked, its recorded usage history, outside every settings lock; if that fails the account
+// stays removed and the message says its history was kept. Not during a sign-in.
+static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool deleteHistory) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    if (g_loginInProgress.load()) {
+        result.message = SettingsNoticeCode::RemoveSignInRunning;
+        result.icon = MB_ICONINFORMATION;
+        return result;
+    }
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        return result;
+    }
+    uint64_t identity = AccountIdentityHash(settings.accounts[index]);
+    uint64_t historyId = settings.accounts[index].historyId;
+    bool signIn = settings.accounts[index].provider != L"antigravity";
+    if (signIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
+        result.message = SettingsNoticeCode::RemoveSignInKept;
+        return result;
+    }
+    settings.accounts.erase(settings.accounts.begin() + index);
+    result.apply = ApplyOwnedSettings(std::move(settings));
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        if (signIn) {
+            RefreshQuotaByIdentity(identity);
+            NotifySettingsWindowChanged();
+        }
+        result.message = signIn ? SettingsNoticeCode::RemoveSignedOut : SettingsNoticeCode::RemoveFailed;
+        return result;
+    }
+    if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
+    if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &result.reason)) {
+        result.message = SettingsNoticeCode::HistoryKept;
+        result.icon = MB_ICONWARNING;
+    }
+    return result;
+}
+
+// Moves the account to `to` in the account order (clamped).
+static AccountCommandResult MoveAccountCommand(AccountTarget target, int to) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        return result;
+    }
+    to = std::clamp(to, 0, int(settings.accounts.size()) - 1);
+    if (to == index) {
+        result.apply = SettingsApplyResult::Unchanged;
+        return result;
+    }
+    AccountConfig moved = std::move(settings.accounts[index]);
+    settings.accounts.erase(settings.accounts.begin() + index);
+    settings.accounts.insert(settings.accounts.begin() + to, std::move(moved));
+    result.apply = ApplyOwnedSettings(std::move(settings));
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        result.message = SettingsNoticeCode::ReorderFailed;
+    } else if (result.apply == SettingsApplyResult::Changed) {
+        FinishSettingsApply();
+    }
+    return result;
+}
+
+// Shows or hides the account on the taskbar (the desired state), keeping one visible, and
+// persists the hidden set as the taskbar menu does.
+static AccountCommandResult SetAccountHiddenCommand(AccountTarget target, bool hidden) {
+    AccountCommandResult result;
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    int index = FindAccountTarget(settings, target);
+    if (index < 0) {
+        result.missing = true;
+        return result;
+    }
+    int visibleCount = int(std::count_if(settings.accounts.begin(), settings.accounts.end(),
+                                         [](const AccountConfig& account) { return !account.hidden; }));
+    if (hidden && !settings.accounts[index].hidden && visibleCount <= 1) {
+        result.apply = SettingsApplyResult::Unchanged;
+        return result;
+    }
+    settings.accounts[index].hidden = hidden;
+    result.apply = ApplyOwnedSettings(settings);
+    configLock.unlock();
+    if (result.apply == SettingsApplyResult::Failed) {
+        result.message = SettingsNoticeCode::VisibilityFailed;
+    } else if (result.apply == SettingsApplyResult::Changed) {
+        std::wstring hashes;
+        wchar_t buffer[24];
+        for (const auto& account : settings.accounts) {
+            if (!account.hidden) continue;
+            if (!hashes.empty()) hashes += L";";
+            swprintf(buffer, ARRAYSIZE(buffer), L"%016llx",
+                     (unsigned long long)AccountIdentityHash(account));
+            hashes += buffer;
+        }
+        Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
+        FinishSettingsApply();
+    }
+    return result;
+}
 
 // src/settings/store.h
 // Production store of the settings window's edit controller (settings/edits.h): the published
@@ -27217,7 +28991,7 @@ struct SettingsProductionStore final : SettingsStore {
                 accountStatus.needsSignIn = data[i].needsLogin;
             }
             if (account.provider == L"openai" && !baseline.settings.showOpenAiExtraLimits &&
-                (accountStatus.plan.find(L"Spark") != std::wstring::npos ||
+                (accountStatus.plan.find(L"Spark") != std::wstring::npos ||  // i18n-en
                  accountStatus.plan.find(L"spark") != std::wstring::npos)) {
                 accountStatus.plan.clear();
             }
@@ -27323,7 +29097,7 @@ struct SettingsProductionStore final : SettingsStore {
                 OpenDashboardForIdentity(identity);
             } else if (!SignOutAccountByIdentity(identity)) {
                 result.save = SettingsSaveResult::Failed;
-                result.notice = L"The stored sign-in could not be deleted and remains retained for this account.";
+                result.notice = SettingsNoticeCode::SignOutFailed;
             }
             return result;
         }
@@ -27358,6 +29132,7 @@ private:
                                                                          SettingsSaveResult::Changed;
         result.missing = command.missing;
         result.notice = command.message;
+        result.reason = command.reason;
         result.kind = command.icon == MB_ICONWARNING     ? SettingsNoticeKind::Warning :
                       command.icon == MB_ICONINFORMATION ? SettingsNoticeKind::Information :
                                                            SettingsNoticeKind::Error;
@@ -27429,6 +29204,20 @@ static UiToggleText SettingsToggleText(const SettingsView& view) {
     return {I18nText(view.locale, TrCtx(L"toggle", L"On")), I18nText(view.locale, TrCtx(L"toggle", L"Off"))};
 }
 
+// A status shown in its color inside localized text: the argument SettingsStatusArg makes, whose
+// link ID SettingsStatusRuns turns into the ink (these templates have no links of their own).
+static std::vector<I18nRun> SettingsStatusArg(std::wstring text) {
+    return {{std::move(text), false, L"status"}};
+}
+
+static std::vector<UiRun> SettingsStatusRuns(const std::vector<I18nRun>& runs, UiInk ink) {
+    std::vector<UiRun> out;
+    for (const I18nRun& run : runs) {
+        out.push_back(run.link == L"status" ? UiRun{run.text, UiRunStyle::Normal, ink} : UiRun{run.text});
+    }
+    return out;
+}
+
 // Shared cards; each returns its bottom.
 
 static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
@@ -27437,7 +29226,9 @@ static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
     bool on = SettingsFieldValue(view.settings, field) != 0;
     UiToggleText states = SettingsToggleText(view);
     spec.trailing = UiToggleSize(g, states);
-    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) {
+        spec.error = SettingsDraftErrorText(view.locale, *draft);
+    }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddToggle(items, SettingsControlId(field), card.trailing, on, spec.enabled,
                 SettingsCommand(field, !on), states);
@@ -27459,7 +29250,7 @@ static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
     fieldWidth = std::max(fieldWidth, std::min(widest, width / 2));
     spec.trailing = {fieldWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field); draft && !draft->text) {
-        spec.error = draft->error;
+        spec.error = SettingsDraftErrorText(view.locale, *draft);
     }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddDropdown(items, SettingsControlId(field, part), card.trailing, std::move(options),
@@ -27477,7 +29268,7 @@ static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
         draft->raw : SettingsFormatNumber(SettingsFieldValue(view.settings, field),
                                           view.status.groupSeparator);
     spec.trailing = UiNumberBoxSize(g, unit);
-    if (draft && draft->text) spec.error = draft->error;
+    if (draft && draft->text) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddNumberBox(items, SettingsControlId(field), card.trailing, std::move(text), std::move(unit),
                    spec.enabled, SettingsCommand(field));
@@ -27494,7 +29285,7 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
     int value = SettingsFieldValue(view.settings, field);
     const SettingsDraft* draft = SettingsViewDraft(view, field);
     spec.trailing = {60 + 14 + 220, 32};
-    if (draft) spec.error = draft->error;
+    if (draft) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     const D2D1_RECT_F& slot = card.trailing;
     UiItem box;
@@ -27519,12 +29310,14 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
                                   SettingsField field, SettingsField custom, std::vector<COLORREF> colors,
                                   COLORREF current, int customValue = 0) {
     if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
-    PCWSTR customText = L"Custom...";
+    std::wstring customText = I18nText(view.locale, TrCtx(L"button", L"Custom..."));
     float buttonWidth =
         std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
     float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
     spec.trailing = {swatches + 16 + buttonWidth, 32};
-    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) {
+        spec.error = SettingsDraftErrorText(view.locale, *draft);
+    }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     float center = (card.trailing.top + card.trailing.bottom) / 2;
     for (size_t i = 0; i < colors.size(); i++) {
@@ -28742,14 +30535,17 @@ static constexpr PCWSTR kSettingsProjectUrl = L"https://github.com/Cleroth/windh
 static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
                                   std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                   float width) {
+    const I18nLocale& locale = view.locale;
+
     // App card (mockup .aboutcard): icon, name, version line, summary.
     {
         constexpr float kPadX = 20, kPadY = 18, kIcon = 52, kGap = 18;
         float textLeft = x + 1 + kPadX + kIcon + kGap;
         float textWidth = std::max(x + width - 1 - kPadX - textLeft, 40.0f);
-        std::wstring versionLine = L"Version " + view.version + L"  \u00B7  by Cleroth  \u00B7  Windhawk mod";
-        PCWSTR summary = L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub "
-                         L"Copilot and OpenCode Go on the Windows 11 taskbar.";
+        std::wstring versionLine = I18nText(locale, Tr(L"Version {version}  \u00B7  by Cleroth  \u00B7  Windhawk mod"),
+                                            {{L"version", view.version}});
+        std::wstring summary = I18nText(locale, Tr(L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, "
+                                                   L"GitHub Copilot and OpenCode Go on the Windows 11 taskbar."));
         UiTextStyle caption = UiTextStyleFor(UiFont::Caption);
         float versionHeight = UiLayoutSize(UiLayout(g, versionLine, caption, textWidth)).height;
         float summaryHeight = UiLayoutSize(UiLayout(g, summary, caption, textWidth)).height;
@@ -28780,7 +30576,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
             items.push_back(std::move(line));
             lineTop += height;
         };
-        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);
+        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
         lineTop += 2;
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);
@@ -28791,25 +30587,30 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.glyph = L"\uE8C8";
-        spec.title = L"Copy version info";
-        spec.description = {{L"The mod\u2019s name and version and the Windows build, for bug reports."}};
+        spec.title = I18nText(locale, Tr(L"Copy version info"));
+        spec.description = {{I18nText(locale, Tr(L"The mod\u2019s name and version and the Windows build, for bug "
+                                                 L"reports."))}};
         spec.minHeight = 62;
-        PCWSTR label = !view.versionCopied ? L"Copy" : *view.versionCopied ? L"Copied" : L"Copy failed";
+        std::wstring label = I18nText(locale, !view.versionCopied ? TrCtx(L"button", L"Copy") :
+                                              *view.versionCopied ? TrCtx(L"button", L"Copied") :
+                                                                    TrCtx(L"button", L"Copy failed"));
         y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo, label);
     }
 
     // Links: whole cards open the page in the browser.
-    y = UiAddSection(items, id, x, y + 20, width, L"Links");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Links")));
     struct LinkCard {
-        PCWSTR glyph, title, description;
-        std::wstring url;
+        PCWSTR glyph;
+        std::wstring title, description, url;
     };
     const LinkCard links[] = {
-        {L"\uE774", L"Project page", L"github.com/Cleroth/windhawk-taskbar-ai-quota",
+        {L"\uE774", I18nText(locale, Tr(L"Project page")), L"github.com/Cleroth/windhawk-taskbar-ai-quota",
          kSettingsProjectUrl},
-        {L"\uEBE8", L"Report an issue", L"Suggestions and bug reports on GitHub",
+        {L"\uEBE8", I18nText(locale, Tr(L"Report an issue")),
+         I18nText(locale, Tr(L"Suggestions and bug reports on GitHub")),
          std::wstring(kSettingsProjectUrl) + L"/issues/new"},
-        {L"\uE81C", L"Usage history guide", L"Recording rules, storage, export and verification",
+        {L"\uE81C", I18nText(locale, Tr(L"Usage history guide")),
+         I18nText(locale, Tr(L"Recording rules, storage, export and verification")),
          std::wstring(kSettingsProjectUrl) + L"#usage-history"},
     };
     for (const LinkCard& link : links) {
@@ -28824,24 +30625,28 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
     }
 
     // Credits and license.
-    y = UiAddSection(items, id, x, y - 3 + 20, width, L"Credits and license");
+    y = UiAddSection(items, id, x, y - 3 + 20, width,
+                     I18nText(locale, TrCtx(L"settings-section", L"Credits and license")));
     {
-        // Alphabetical, ignoring case (README > Contributors); each name links to its GitHub profile.
+        // Alphabetical, ignoring case (README > Contributors), joined by the language's list
+        // patterns; each name links to its GitHub profile by its login, its link ID.
         constexpr std::pair<PCWSTR, PCWSTR> kContributors[] = {
-            {L"amirf147", L"amirf147"}, {L"Hugh Macdonald", L"HughMacdonald"}, {L"incconutwo", L"incconutwo"},
-            {L"smnio", L"smnio"},       {L"Sof2245", L"Sof2245"},             {L"yalov", L"yalov"},
+            {L"amirf147", L"amirf147"}, {L"Hugh Macdonald", L"HughMacdonald"},  // i18n-en
+            {L"incconutwo", L"incconutwo"}, {L"smnio", L"smnio"},
+            {L"Sof2245", L"Sof2245"}, {L"yalov", L"yalov"},  // i18n-en
         };
-        constexpr size_t kCount = std::size(kContributors);
+        std::vector<std::vector<I18nRun>> names;
+        for (auto [name, login] : kContributors) names.push_back({{name, false, login}});
+        std::vector<I18nRun> sentence =
+            I18nRuns(locale, Tr(L"Thanks to {names}."), {{L"names", I18nList(locale, names)}});
         UiCardSpec spec;
         spec.glyph = L"\uE716";
-        spec.title = L"Contributors";
-        spec.description = {{L"Thanks to "}};
-        for (size_t i = 0; i < kCount; i++) {
-            auto [name, login] = kContributors[i];
-            spec.description.push_back({name, UiRunStyle::Link, UiInk::Inherit,
-                                        {UiActionKind::OpenUrl, 0, std::wstring(L"https://github.com/") + login}});
-            PCWSTR separator = i + 2 < kCount ? L", " : i + 1 < kCount ? L" and " : L".";
-            spec.description.push_back({separator});
+        spec.title = I18nText(locale, Tr(L"Contributors"));
+        for (const I18nRun& run : sentence) {
+            spec.description.push_back(
+                run.link.empty() ? UiRun{run.text} :
+                                   UiRun{run.text, UiRunStyle::Link, UiInk::Inherit,
+                                         {UiActionKind::OpenUrl, 0, L"https://github.com/" + run.link}});
         }
         y = UiAddCard(g, items, id, x, y, width, spec).card.bottom + 3;
     }
@@ -28849,19 +30654,16 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         constexpr float kLogo = 18, kLogoGap = 14;
         UiCardSpec spec;
         spec.glyph = L"\uE8B9";
-        spec.title = L"Provider logos";
-        spec.description = {
-            {L"From "},
-            {L"Simple Icons", UiRunStyle::Link, UiInk::Inherit,
-             {UiActionKind::OpenUrl, 0, L"https://simpleicons.org"}},
-            {L" (CC0 1.0); the GitHub Copilot mark from "},
-            {L"Primer Octicons", UiRunStyle::Link, UiInk::Inherit,
-             {UiActionKind::OpenUrl, 0, L"https://github.com/primer/octicons"}},
-            {L" (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity uses the Gemini mark.\n"
-             L"Claude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
-             L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only "
-             L"identify which account a tile shows."},
-        };
+        spec.title = I18nText(locale, Tr(L"Provider logos"));
+        spec.description = I18nUiRuns(
+            I18nRuns(locale, Tr(L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot "
+                                L"mark from <link id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) "
+                                L"2026 GitHub Inc.). Google Antigravity uses the Gemini mark.\nClaude, Anthropic, "
+                                L"OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, GitHub Copilot and "
+                                L"OpenCode are trademarks of their respective owners. Logos only identify which "
+                                L"account a tile shows.")),
+            {{L"simple_icons", {UiActionKind::OpenUrl, 0, L"https://simpleicons.org"}},
+             {L"octicons", {UiActionKind::OpenUrl, 0, L"https://github.com/primer/octicons"}}});
         spec.trailing = {5 * kLogo + 4 * kLogoGap, kLogo};
         UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
         float logoLeft = card.trailing.left;
@@ -28879,13 +30681,13 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         y = card.card.bottom + 3;
     }
     {
-        PCWSTR label = L"MIT License";
+        std::wstring label = I18nText(locale, Tr(L"MIT License"));
         float labelWidth =
             UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
         UiCardSpec spec;
         spec.glyph = L"\uE8A5";
-        spec.title = L"License";
-        spec.description = {{L"Free to use, modify and share."}};
+        spec.title = I18nText(locale, Tr(L"License"));
+        spec.description = {{I18nText(locale, Tr(L"Free to use, modify and share."))}};
         spec.trailing = {std::ceil(labelWidth), 20};
         UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
         // Hyperlink button: its padding reaches into the card's, so the text aligns right.
@@ -29053,109 +30855,133 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                                     std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                     float width) {
     const Settings& s = view.settings;
+    const I18nLocale& locale = view.locale;
 
     // Recording: the status follows consent, then the recorder's state.
-    y = UiAddSection(items, id, x, y + 16, width, L"Recording");
+    y = UiAddSection(items, id, x, y + 16, width, I18nText(locale, TrCtx(L"settings-section", L"Recording")));
     {
         struct Status {
             PCWSTR mark;
+            I18nKey state;
             UiInk ink;
-            PCWSTR detail;
+            I18nKey detail;
         };
         Status status = !s.historyEnabled ?
-            Status{L"\u25CB Off", UiInk::Secondary, L" \u00B7 Nothing new is recorded."} :
+            Status{L"\u25CB ", TrCtx(L"recording-status", L"Off"), UiInk::Secondary, Tr(L"Nothing new is recorded.")} :
             view.status.recording == SettingsRecording::PendingSave ?
-            Status{L"\u25CF Waiting", UiInk::Caution,
-                   L" \u00B7 Recording starts once the taskbar saves its account IDs."} :
+            Status{L"\u25CF ", TrCtx(L"recording-status", L"Waiting"), UiInk::Caution,
+                   Tr(L"Recording starts once the taskbar saves its account IDs.")} :
             view.status.recording == SettingsRecording::StorageError ?
-            Status{L"\u25CF Not saving", UiInk::Danger,
-                   L" \u00B7 History storage failed; Open usage history shows why."} :
-            Status{L"\u25CF Recording", UiInk::Success, L" \u00B7 New samples arrive with each poll."};
+            Status{L"\u25CF ", TrCtx(L"recording-status", L"Not saving"), UiInk::Danger,
+                   Tr(L"History storage failed; Open usage history shows why.")} :
+            Status{L"\u25CF ", TrCtx(L"recording-status", L"Recording"), UiInk::Success,
+                   Tr(L"New samples arrive with each poll.")};
         UiCardSpec spec;
-        spec.title = L"Record usage history";
-        spec.description = {{status.mark, UiRunStyle::Normal, status.ink},
-                            {std::wstring(status.detail) + L"\n"},
-                            {L"Applies to this Windows user only. Turning it off keeps saved history."}};
+        spec.title = I18nText(locale, Tr(L"Record usage history"));
+        spec.description = SettingsStatusRuns(
+            I18nRuns(locale, TrCtx(L"recording-detail", L"{status} \u00B7 {detail}"),
+                     {{L"status", SettingsStatusArg(status.mark + I18nText(locale, status.state))},
+                      {L"detail", I18nText(locale, status.detail)}}),
+            status.ink);
+        spec.description.back().text += L"\n";
+        spec.description.push_back(
+            {I18nText(locale, Tr(L"Applies to this Windows user only. Turning it off keeps saved history."))});
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::RecordHistory);
     }
     // Retention: a preset, Forever (0) or Custom (-1) with its own number. Text typed into the
     // custom box keeps Custom even while a partial number matches a preset.
-    std::vector<UiOption> options = {{L"30 days", 30}, {L"90 days", 90}, {L"1 year", 365},
-                                     {L"Forever", 0},  {L"Custom", -1}};
+    auto days = [&](int count) {
+        return I18nText(locale, TrCtx(L"history-span", L"{days, plural, one{# day} other{# days}}"),
+                        {{L"days", count}});
+    };
+    std::vector<UiOption> options = {
+        {days(30), 30},
+        {days(90), 90},
+        {I18nText(locale, TrCtx(L"history-span", L"{years, plural, one{# year} other{# years}}"), {{L"years", 1}}),
+         365},
+        {I18nText(locale, TrCtx(L"retention", L"Forever")), 0},
+        {I18nText(locale, TrCtx(L"retention", L"Custom")), -1}};
     bool preset = std::any_of(options.begin(), options.end(),
                               [&](const UiOption& option) { return option.value == s.historyRetentionDays; });
     const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::RetentionDays);
     bool custom = s.historyRetentionDays > 0 && (view.retentionCustom || !preset || (typed && typed->text));
+    std::wstring recordingOff = I18nText(locale, Tr(L"Turn on Record usage history to change this."));
     {
         UiCardSpec spec;
-        spec.title = L"Keep history";
-        spec.description = {{L"Shared across Windows users. Forever deletes nothing and has no size limit, "
-                             L"so history keeps growing in Explorer's memory and on disk. Day limits prune "
-                             L"hourly, with a cap of about 60 MB."}};
+        spec.title = I18nText(locale, Tr(L"Keep history"));
+        spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever deletes nothing and has no "
+                                                 L"size limit, so history keeps growing in Explorer's memory and on "
+                                                 L"disk. Day limits prune hourly, with a cap of about 60 MB."))}};
         spec.enabled = s.historyEnabled;
-        if (!s.historyEnabled) spec.reason = L"Turn on Record usage history to change this.";
+        if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
                                     200, std::move(options), custom ? -1 : s.historyRetentionDays);
     }
     {
         UiCardSpec spec;
-        spec.title = L"Custom retention";
-        spec.description = {{L"1 to 3650 days."}};
+        spec.title = I18nText(locale, Tr(L"Custom retention"));
+        spec.description = {{I18nText(locale, Tr(L"1 to 3650 days."))}};
         spec.enabled = s.historyEnabled && custom;
-        if (!s.historyEnabled) spec.reason = L"Turn on Record usage history to change this.";
-        else if (!custom) spec.reason = L"Choose Custom in Keep history to edit.";
-        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec,
-                                  SettingsField::RetentionDays, L"days");
+        if (!s.historyEnabled) spec.reason = recordingOff;
+        else if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Keep history to edit."));
+        // The unit agrees with the saved retention, not text still being typed.
+        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RetentionDays,
+                                  I18nText(locale, TrCtx(L"retention-unit", L"{days, plural, one{days} other{days}}"),
+                                           {{L"days", SettingsFieldValue(s, SettingsField::RetentionDays)}}));
     }
     y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::RetentionDays, 8), x, y + 3, width,
-                     I18nUiRuns(I18nRuns(view.locale, Tr(L"Each account chooses whether it records: <link "
-                                                         L"id=\"accounts\">Accounts</link> > Record history. Hidden "
-                                                         L"accounts are not recorded while <link id=\"hidden\">Do not "
-                                                         L"poll hidden accounts</link> is on in Behavior.")),
+                     I18nUiRuns(I18nRuns(locale, Tr(L"Each account chooses whether it records: <link "
+                                                    L"id=\"accounts\">Accounts</link> > Record history. Hidden "
+                                                    L"accounts are not recorded while <link id=\"hidden\">Do not "
+                                                    L"poll hidden accounts</link> is on in Behavior.")),
                                 {{L"accounts", {UiActionKind::Navigate, int(SettingsUiPage::Accounts)}},
                                  {L"hidden", {UiActionKind::Navigate, int(SettingsUiPage::Behavior)}}}));
 
     // Viewer
-    y = UiAddSection(items, id, x, y + 20, width, L"Viewer");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Viewer")));
     {
         UiCardSpec spec;
-        spec.title = L"Usage history";
-        spec.description = {{L"Charts, statistics and CSV export from local samples, also while "
-                             L"recording is off."}};
+        spec.title = I18nText(locale, Tr(L"Usage history"));
+        spec.description = {{I18nText(locale, Tr(L"Charts, statistics and CSV export from local samples, also while "
+                                                 L"recording is off."))}};
         y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistory,
-                                  L"Open usage history", L"\uE81C");
+                                  I18nText(locale, TrCtx(L"button", L"Open usage history")), L"\uE81C");
     }
     {
         UiCardSpec spec;
-        spec.title = L"Default time span";
-        spec.description = {{L"The range the usage history window opens on. Its range buttons still switch it."}};
-        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HistoryRange, 200,
-                                    {{L"24 hours", int(HistoryUiRange::Day)},
-                                     {L"7 days", int(HistoryUiRange::Week)},
-                                     {L"30 days", int(HistoryUiRange::Month)},
-                                     {L"90 days", int(HistoryUiRange::Quarter)},
-                                     {L"All retained", int(HistoryUiRange::All)}},
-                                    int(s.historyDefaultRange));
+        spec.title = I18nText(locale, Tr(L"Default time span"));
+        spec.description = {{I18nText(locale, Tr(L"The range the usage history window opens on. Its range buttons "
+                                                 L"still switch it."))}};
+        y = SettingsAddDropdownCard(
+            g, view, items, id, x, y + 3, width, spec, SettingsField::HistoryRange, 200,
+            {{I18nText(locale, TrCtx(L"history-span", L"{hours, plural, one{# hour} other{# hours}}"),
+                       {{L"hours", 24}}),
+              int(HistoryUiRange::Day)},
+             {days(7), int(HistoryUiRange::Week)},
+             {days(30), int(HistoryUiRange::Month)},
+             {days(90), int(HistoryUiRange::Quarter)},
+             {I18nText(locale, TrCtx(L"history-span", L"All retained")), int(HistoryUiRange::All)}},
+            int(s.historyDefaultRange));
     }
 
     // Storage
-    y = UiAddSection(items, id, x, y + 20, width, L"Storage");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Storage")));
     {
         UiCardSpec spec;
-        spec.title = L"Storage location";
+        spec.title = I18nText(locale, Tr(L"Storage location"));
         spec.description = {{view.status.historyFolder + L"\n", UiRunStyle::Normal, UiInk::Secondary},
-                            {L"Not encrypted. Readings and opaque IDs, no tokens or labels. "
-                             L"Survives mod removal."}};
+                            {I18nText(locale, Tr(L"Not encrypted. Readings and opaque IDs, no tokens or labels. "
+                                                 L"Survives mod removal."))}};
         y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistoryFolder,
-                                  L"Open folder", L"\uE838");
+                                  I18nText(locale, TrCtx(L"button", L"Open folder")), L"\uE838");
     }
 
     UiCardSpec reset;
-    reset.title = L"Reset History to defaults";
-    reset.description = {{L"Recording on for this Windows user, keep history forever, open on 7 days. "
-                          L"Saved history stays."}};
+    reset.title = I18nText(locale, Tr(L"Reset History to defaults"));
+    reset.description = {{I18nText(locale, Tr(L"Recording on for this Windows user, keep history forever, open on 7 "
+                                              L"days. Saved history stays."))}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
-                                 SettingsField::ResetHistory, L"Reset");
+                                 SettingsField::ResetHistory, I18nText(locale, TrCtx(L"button", L"Reset")));
 }
 
 // src/settings/page-layout.h
@@ -29866,21 +31692,26 @@ static bool SettingsMoveAccountCards(std::vector<UiItem>& items, const std::vect
 static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                      uint32_t& id, float x, float y, float width) {
     const Settings& s = view.settings;
+    const I18nLocale& locale = view.locale;
     auto textWidth = [&](std::wstring_view text, UiFont font) {
         return std::ceil(UiLayoutSize(UiLayout(g, text, UiTextStyleFor(font), 10000, false)).width);
     };
 
-    // Empty state (mockup .emptycard): an icon in a circle, a title, two centered paragraphs.
+    // Empty state (mockup .emptycard): an icon in a circle, a title, two centered paragraphs. The
+    // first names the header's button by its label.
     if (s.accounts.empty()) {
         constexpr float kPadTop = 44, kPadBottom = 48, kIcon = 56, kGap = 8;
         float top = y + 14, center = x + width / 2;
         float lines = std::clamp(width - 120, 40.0f, 440.0f);
-        std::vector<UiRun> first = {{L"Select "}, {L"Add account", UiRunStyle::Strong},
-                                    {L" to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or "
-                                     L"OpenCode Go account on the taskbar."}};
-        std::vector<UiRun> second = {{L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, "
-                                      L"OpenCode Go with an API key. Google Antigravity uses its signed-in app or "
-                                      L"CLI, which must keep running."}};
+        std::vector<UiRun> first = I18nUiRuns(
+            I18nRuns(locale, Tr(L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub "
+                                L"Copilot or OpenCode Go account on the taskbar."),
+                     {{L"button", I18nText(locale, TrCtx(L"button", L"Add account"))}}),
+            {});
+        std::vector<UiRun> second = {{I18nText(locale, Tr(L"Anthropic, OpenAI and GitHub Copilot sign in through "
+                                                          L"your browser, OpenCode Go with an API key. Google "
+                                                          L"Antigravity uses its signed-in app or CLI, which must "
+                                                          L"keep running."))}};
         float firstHeight = UiLayoutSize(UiRichLayout(g, first, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float secondHeight = UiLayoutSize(UiRichLayout(g, second, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float bottom = top + 1 + kPadTop + kIcon + 6 + kGap + 26 + kGap + firstHeight + kGap + secondHeight +
@@ -29920,7 +31751,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             items.push_back(std::move(text));
             at += height + kGap;
         };
-        addText({{L"No accounts yet"}}, UiFont::Subtitle, UiInk::Primary, 26);
+        addText({{I18nText(locale, Tr(L"No accounts yet"))}}, UiFont::Subtitle, UiInk::Primary, 26);
         addText(std::move(first), UiFont::Note, UiInk::Muted, firstHeight);
         addText(std::move(second), UiFont::Note, UiInk::Muted, secondHeight);
         return bottom;
@@ -30026,13 +31857,14 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         right -= 10;
         if (signInNeeded) {
-            float buttonWidth = textWidth(L"Sign in", UiFont::Note) + 24;
+            std::wstring label = I18nText(locale, TrCtx(L"button", L"Sign in"));
+            float buttonWidth = textWidth(label, UiFont::Note) + 24;
             UiItem signIn;
             signIn.id = control(SettingsField::AccountSignIn);
             signIn.kind = UiItemKind::Button;
             signIn.button = UiButtonStyle::Accent;
             signIn.font = UiFont::Note;
-            signIn.text = L"Sign in";
+            signIn.text = std::move(label);
             signIn.rect = {right - buttonWidth, cy - 14, right, cy + 14};
             signIn.enabled = !view.status.signInRunning;
             signIn.action = command(SettingsField::AccountSignIn);
@@ -30041,35 +31873,41 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         for (auto item = trailing.rbegin(); item != trailing.rend(); ++item) push(std::move(*item));
 
-        // Label and "Provider · plan · status".
+        // Label and "Provider · plan · status", the status in its color.
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
         // The last poll's error on its own, cut at 60 characters.
         std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
         if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
         if (status.signingIn) {
-            stateText = L"Signing in\u2026";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Signing in\u2026"));
             stateInk = UiInk::Accent;
         } else if (signInNeeded) {
-            stateText = L"Sign-in needed";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Sign-in needed"));
             stateInk = UiInk::Caution;
         } else if (notPolled) {
-            stateText = L"Hidden, not polled";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Hidden, not polled"));
             stateInk = UiInk::Secondary;
         } else if (!error.empty()) {
             stateText = !signsIn && status.error.code == AccountErrorCode::AntigravityNotRunning ?
                             I18nText(view.locale, TrCtx(L"account-state", L"Local app not running")) : error;
             stateInk = UiInk::Caution;
         } else if (!signsIn) {
-            stateText = status.polled ? L"Local app running" : L"Waiting for the local app";
+            stateText = I18nText(locale, status.polled ? TrCtx(L"account-state", L"Local app running") :
+                                                         TrCtx(L"account-state", L"Waiting for the local app"));
             stateInk = status.polled ? UiInk::Success : UiInk::Secondary;
         } else {
-            stateText = L"Signed in";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Signed in"));
         }
-        std::wstring details = anthropic ? L"Anthropic \u00B7 " : openai ? L"OpenAI \u00B7 " :
-                               copilot ? L"GitHub Copilot \u00B7 " : opencode ? L"OpenCode Go \u00B7 " :
-                                         L"Antigravity \u00B7 ";
-        if (!status.plan.empty()) details += status.plan + L" \u00B7 ";
+        PCWSTR provider = anthropic ? L"Anthropic" : openai ? L"OpenAI" :  // i18n-en
+                          copilot ? L"GitHub Copilot" : opencode ? L"OpenCode Go" : L"Antigravity";  // i18n-en
+        std::vector<UiRun> details = SettingsStatusRuns(
+            status.plan.empty() ?
+                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {state}"),
+                         {{L"provider", provider}, {L"state", SettingsStatusArg(stateText)}}) :
+                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {plan} \u00B7 {state}"),
+                         {{L"provider", provider}, {L"plan", status.plan}, {L"state", SettingsStatusArg(stateText)}}),
+            stateInk);
         float textRight = std::max(right, x + 77 + 40);
         UiItem title;
         title.id = id++;
@@ -30083,7 +31921,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         state.font = UiFont::Caption;
         state.ink = UiInk::Muted;
         state.rect = {x + 77, cy + 2, textRight, cy + 18};
-        state.runs = {{details}, {stateText, UiRunStyle::Normal, stateInk}};
+        state.runs = std::move(details);
         push(state);
 
         // Expanded rows (mockup .scard.sub).
@@ -30099,11 +31937,12 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             {
                 const SettingsDraft* draft = draftOf(SettingsField::AccountLabel);
                 UiCardSpec spec;
-                spec.title = L"Label";
-                spec.description = {{L"Shown in details, and next to bars when Identity is Label. Unique per "
-                                     L"provider; renaming keeps the sign-in and history."}};
+                spec.title = I18nText(locale, Tr(L"Label"));
+                spec.description = {{I18nText(locale, Tr(L"Shown in details, and next to bars when Identity is "
+                                                         L"Label. Unique per provider; renaming keeps the sign-in "
+                                                         L"and history."))}};
                 spec.trailing = {200, 32};
-                if (draft) spec.error = draft->error;
+                if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
                 box.id = control(SettingsField::AccountLabel);
@@ -30118,33 +31957,42 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 // Chips: the desired selection with this quota flipped; the last one stays.
                 struct Quota {
                     int bar;
-                    PCWSTR name;
+                    std::wstring name;
                 };
-                std::vector<Quota> quotas = {{kFiveHourBar, signsIn ? L"5-hour" : L"Short window"},
-                                             {kWeeklyBar, L"Weekly"}};
+                auto name = [&](I18nKey key) { return I18nText(locale, key); };
+                auto weekly = [&](PCWSTR model) {
+                    return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", model}});
+                };
+                std::vector<Quota> quotas = {
+                    {kFiveHourBar,
+                     name(signsIn ? TrCtx(L"quota-name", L"5-hour") : TrCtx(L"quota-name", L"Short window"))},
+                    {kWeeklyBar, name(TrCtx(L"quota-name", L"Weekly"))}};
                 if (anthropic) {
-                    quotas.push_back({kFableWeeklyBar, L"Fable weekly"});
-                    quotas.push_back({kExtraUsageBar, L"Extra usage"});
+                    quotas.push_back({kFableWeeklyBar, weekly(L"Fable")});  // i18n-en
+                    quotas.push_back({kExtraUsageBar, name(TrCtx(L"quota-name", L"Extra usage"))});
                 } else if (openai) {
-                    quotas.push_back({kExtraUsageBar, L"Credits"});
+                    quotas.push_back({kExtraUsageBar, name(TrCtx(L"quota-name", L"Credits"))});
                 } else if (copilot) {
                     // The monthly allowance is its only quota.
-                    quotas = {{kExtraUsageBar, L"AI credits"}};
+                    quotas = {{kExtraUsageBar, name(TrCtx(L"quota-name", L"AI credits"))}};
                 } else if (opencode) {
-                    quotas.push_back({kExtraUsageBar, L"Monthly"});
+                    quotas.push_back({kExtraUsageBar, name(TrCtx(L"quota-name", L"Monthly"))});
                 } else {
-                    quotas.push_back({kFableWeeklyBar, L"Argon weekly"});
+                    quotas.push_back({kFableWeeklyBar, weekly(L"Argon")});  // i18n-en
                 }
                 float chipsWidth = 0;
                 for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;
                 UiCardSpec spec;
-                spec.title = L"Quotas on taskbar";
-                spec.description = {{L"Unavailable quotas hide automatically. At least one stays selected."}};
-                if (openai && s.barLayout == BarLayout::Sparkline) {
-                    spec.description[0].text += L" Usage graphs show Credits as a number on the 7d chart.";
-                }
+                spec.title = I18nText(locale, Tr(L"Quotas on taskbar"));
+                spec.description = {{I18nText(
+                    locale, openai && s.barLayout == BarLayout::Sparkline ?
+                                Tr(L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs "
+                                   L"show Credits as a number on the 7d chart.") :
+                                Tr(L"Unavailable quotas hide automatically. At least one stays selected."))}};
                 spec.trailing = {chipsWidth - 4, 26};
-                if (openai && !account.creditsMax) spec.reason = L"Set Credits max to show the Credits bar.";
+                if (openai && !account.creditsMax) {
+                    spec.reason = I18nText(locale, Tr(L"Set Credits max to show the Credits bar."));
+                }
                 UiCardLayout layout = row(spec);
                 float left = layout.trailing.left;
                 for (const Quota& quota : quotas) {
@@ -30167,30 +32015,38 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             if (openai) {
                 const SettingsDraft* draft = draftOf(SettingsField::AccountCreditsMax);
                 UiCardSpec spec;
-                spec.title = L"Credits max";
-                spec.description = {{L"The balance the Credits bar treats as 100%. OpenAI reports only the "
-                                     L"balance."}};
-                spec.trailing = UiNumberBoxSize(g, L"credits");
-                if (draft && draft->text) spec.error = draft->error;
+                spec.title = I18nText(locale, Tr(L"Credits max"));
+                spec.description = {{I18nText(locale, Tr(L"The balance the Credits bar treats as 100%. OpenAI reports "
+                                                         L"only the balance."))}};
+                // The unit agrees with the saved max, not text still being typed.
+                std::wstring unit =
+                    I18nText(locale, TrCtx(L"credits-unit", L"{credits, plural, one{credits} other{credits}}"),
+                             {{L"credits", account.creditsMax}});
+                spec.trailing = UiNumberBoxSize(g, unit);
+                if (draft && draft->text) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiAddNumberBox(cardItems, control(SettingsField::AccountCreditsMax), layout.trailing,
                                draft && draft->text ? draft->raw :
                                                       SettingsFormatNumber(account.creditsMax, view.status.groupSeparator),
-                               L"credits", true, command(SettingsField::AccountCreditsMax));
+                               std::move(unit), true, command(SettingsField::AccountCreditsMax));
             }
             {
                 UiCardSpec spec;
-                spec.title = L"Identity";
-                spec.description = {{L"Marks this account beside its bars and on tiles. Label "
-                                     L"shows the label on bars and its short text on tiles. The number badge "
-                                     L"appears when several accounts share a provider, hidden ones included."}};
+                spec.title = I18nText(locale, Tr(L"Identity"));
+                spec.description = {{I18nText(locale, Tr(L"Marks this account beside its bars and on tiles. Label "
+                                                         L"shows the label on bars and its short text on tiles. The "
+                                                         L"number badge appears when several accounts share a "
+                                                         L"provider, hidden ones included."))}};
                 spec.trailing = {220, 32};
-                if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
+                if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) {
+                    spec.error = SettingsDraftErrorText(locale, *draft);
+                }
                 UiCardLayout layout = row(spec);
                 UiAddDropdown(cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
-                              {{L"Logo + number badge", int(TileIdentity::LogoBadge)},
-                               {L"Logo only", int(TileIdentity::Logo)},
-                               {L"Label", int(TileIdentity::Text)}},
+                              {{I18nText(locale, TrCtx(L"tile-identity", L"Logo + number badge")),
+                                int(TileIdentity::LogoBadge)},
+                               {I18nText(locale, TrCtx(L"tile-identity", L"Logo only")), int(TileIdentity::Logo)},
+                               {I18nText(locale, TrCtx(L"tile-identity", L"Label")), int(TileIdentity::Text)}},
                               true, command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
             {
@@ -30198,13 +32054,13 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 bool used = account.tileIdentity == TileIdentity::Text;
                 const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
                 UiCardSpec spec;
-                spec.title = L"Short text";
-                spec.description = {{L"The Label identity on tiles, up to 4 characters. Empty "
-                                     L"uses the label without spaces."}};
+                spec.title = I18nText(locale, Tr(L"Short text"));
+                spec.description = {{I18nText(locale, Tr(L"The Label identity on tiles, up to 4 characters. Empty uses "
+                                                         L"the label without spaces."))}};
                 spec.trailing = {96, 32};
                 spec.enabled = used;
-                if (!used) spec.reason = L"Used on tiles when Identity is Label.";
-                if (draft) spec.error = draft->error;
+                if (!used) spec.reason = I18nText(locale, Tr(L"Used on tiles when Identity is Label."));
+                if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
                 box.id = control(SettingsField::AccountTileText);
@@ -30225,21 +32081,32 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 // recorder's state.
                 struct Recording {
                     PCWSTR mark;
+                    I18nKey state;
                     UiInk ink;
                 };
                 Recording recording =
-                    !account.recordHistory ? Recording{L"\u25CB Off", UiInk::Secondary} :
-                    !s.historyEnabled ? Recording{L"\u25CB Off for this Windows user", UiInk::Secondary} :
-                    view.status.recording == SettingsRecording::PendingSave ? Recording{L"\u25CF Waiting", UiInk::Caution} :
-                    !account.historyId ? Recording{L"\u25CF Unavailable", UiInk::Caution} :
-                    account.hidden && s.skipHiddenPolling ? Recording{L"\u25CF Paused while hidden", UiInk::Caution} :
-                    view.status.recording == SettingsRecording::StorageError ? Recording{L"\u25CF Not saving", UiInk::Danger} :
-                    Recording{L"\u25CF Recording", UiInk::Success};
+                    !account.recordHistory ?
+                        Recording{L"\u25CB ", TrCtx(L"recording-status", L"Off"), UiInk::Secondary} :
+                    !s.historyEnabled ?
+                        Recording{L"\u25CB ", TrCtx(L"recording-status", L"Off for this Windows user"),
+                                  UiInk::Secondary} :
+                    view.status.recording == SettingsRecording::PendingSave ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Waiting"), UiInk::Caution} :
+                    !account.historyId ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Unavailable"), UiInk::Caution} :
+                    account.hidden && s.skipHiddenPolling ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Paused while hidden"), UiInk::Caution} :
+                    view.status.recording == SettingsRecording::StorageError ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Not saving"), UiInk::Danger} :
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Recording"), UiInk::Success};
                 UiCardSpec spec;
-                spec.title = L"Record history";
-                spec.description = {{recording.mark, UiRunStyle::Normal, recording.ink},
-                                    {L" \u00B7 History follows this entry, even after signing in again. Use a new "
-                                     L"entry for a different login."}};
+                spec.title = I18nText(locale, Tr(L"Record history"));
+                spec.description = SettingsStatusRuns(
+                    I18nRuns(locale, TrCtx(L"recording-detail", L"{status} \u00B7 {detail}"),
+                             {{L"status", SettingsStatusArg(recording.mark + I18nText(locale, recording.state))},
+                              {L"detail", I18nText(locale, Tr(L"History follows this entry, even after signing in "
+                                                              L"again. Use a new entry for a different login."))}}),
+                    recording.ink);
                 UiToggleText states = SettingsToggleText(view);
                 spec.trailing = UiToggleSize(g, states);
                 UiCardLayout layout = row(spec);
@@ -30256,15 +32123,16 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             rule.rect = {x + 1, bottom, x + width - 1, bottom + 1};
             push(rule);
             float buttonTop = bottom + 12, left = x + 56;
-            auto addButton = [&](SettingsField field, PCWSTR text, PCWSTR icon, UiButtonStyle style, bool enabled,
+            auto addButton = [&](SettingsField field, I18nKey key, PCWSTR icon, UiButtonStyle style, bool enabled,
                                  bool trailing) {
+                std::wstring text = I18nText(locale, key);
                 float buttonWidth = textWidth(text, UiFont::Body) + 28 + (icon[0] ? 12 + 8 : 0);
                 float buttonLeft = trailing ? x + width - 19 - buttonWidth : left;
                 UiItem button;
                 button.id = control(field, 1);
                 button.kind = UiItemKind::Button;
                 button.button = style;
-                button.text = text;
+                button.text = std::move(text);
                 button.icon = icon;
                 button.iconSize = 12;
                 button.rect = {buttonLeft, buttonTop, buttonLeft + buttonWidth, buttonTop + 32};
@@ -30274,17 +32142,19 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 if (!trailing) left += buttonWidth + 8;
             };
             if (signsIn) {
-                addButton(SettingsField::AccountDashboard, L"Open dashboard", L"\uE8A7", UiButtonStyle::Standard, true,
-                          false);
+                addButton(SettingsField::AccountDashboard, TrCtx(L"button", L"Open dashboard"), L"\uE8A7",
+                          UiButtonStyle::Standard, true, false);
                 if (status.signedIn && !signInNeeded) {
-                    addButton(SettingsField::AccountSignIn, L"Sign in again", L"", UiButtonStyle::Standard,
-                              !view.status.signInRunning, false);
+                    addButton(SettingsField::AccountSignIn, TrCtx(L"button", L"Sign in again"), L"",
+                              UiButtonStyle::Standard, !view.status.signInRunning, false);
                 }
                 if (status.signedIn) {
-                    addButton(SettingsField::AccountSignOut, L"Sign out", L"", UiButtonStyle::Standard, true, false);
+                    addButton(SettingsField::AccountSignOut, TrCtx(L"button", L"Sign out"), L"",
+                              UiButtonStyle::Standard, true, false);
                 }
             }
-            addButton(SettingsField::AccountRemove, L"Remove account", L"", UiButtonStyle::Danger, true, true);
+            addButton(SettingsField::AccountRemove, TrCtx(L"button", L"Remove account"), L"", UiButtonStyle::Danger,
+                      true, true);
             bottom += 12 + 32 + 14;
         }
         cardItems.front().rect.bottom = bottom;
@@ -30371,13 +32241,19 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
         add.icon = L"\uE710";
         add.iconSize = 12;
         add.action = SettingsCommand(SettingsField::AccountAdd, -1);
+        // Providers by their product names; how each signs in.
+        std::wstring browser = I18nText(view.locale, TrCtx(L"add-account", L"Sign in with your browser"));
         add.options = {
-            {L"Anthropic (Claude)", 0, L"Sign in with your browser", {{kClaudeLogoPath, {}, UiInk::Primary}}},
-            {L"OpenAI (ChatGPT/Codex)", 1, L"Sign in with your browser", {{kOpenAiLogoPath, {}, UiInk::Primary}}},
-            {L"Google Antigravity", 2, L"Uses the signed-in Antigravity app or CLI",
+            {L"Anthropic (Claude)", 0, browser, {{kClaudeLogoPath, {}, UiInk::Primary}}},  // i18n-en
+            {L"OpenAI (ChatGPT/Codex)", 1, browser, {{kOpenAiLogoPath, {}, UiInk::Primary}}},  // i18n-en
+            {L"Google Antigravity", 2,  // i18n-en
+             I18nText(view.locale, TrCtx(L"add-account", L"Uses the signed-in Antigravity app or CLI")),
              {{kGeminiLogoPath, {}, UiInk::Primary}}},
-            {L"GitHub Copilot", 3, L"Sign in with a code on github.com", {{kCopilotLogoPath, {}, UiInk::Primary}}},
-            {L"OpenCode Go", 4, L"Sign in with an API key from the OpenCode console",
+            {L"GitHub Copilot", 3,  // i18n-en
+             I18nText(view.locale, TrCtx(L"add-account", L"Sign in with a code on github.com")),
+             {{kCopilotLogoPath, {}, UiInk::Primary}}},
+            {L"OpenCode Go", 4,  // i18n-en
+             I18nText(view.locale, TrCtx(L"add-account", L"Sign in with an API key from the OpenCode console")),
              {{kOpenCodeLogoPath, {}, UiInk::Primary}}},
         };
         frame.main.push_back(std::move(add));
@@ -30388,10 +32264,11 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             note.font = UiFont::Note;
             note.ink = UiInk::Muted;
             note.rect = {kSettingsNavWidth + left, 50, right, 69};
-            note.runs.push_back({view.settings.skipHiddenPolling ?
-                                     L"Drag to reorder. Toggle hides an account from the taskbar; hidden "
-                                     L"accounts are not polled." :
-                                     L"Drag to reorder. Toggle hides an account from the taskbar."});
+            note.runs.push_back({I18nText(view.locale, view.settings.skipHiddenPolling ?
+                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
+                                                              L"taskbar; hidden accounts are not polled.") :
+                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
+                                                              L"taskbar."))});
             frame.main.push_back(std::move(note));
             header = 69;
         }
@@ -30454,6 +32331,14 @@ static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 // Copy version info's button shows whether it copied until this timer ends it.
 static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
+// The product name, English in every language: the general message boxes' caption, and in the
+// window's title.
+static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Quota";  // i18n-en
+
+// The window's title in a language.
+static std::wstring SettingsWindowTitle(const I18nLocale& locale) {
+    return I18nText(locale, TrCtx(L"window-title", L"{app} \u2014 Settings"), {{L"app", kSettingsProductName}});
+}
 
 // The settings and usage history windows' backdrop for a material: Windows has none for Tinted
 // wallpaper, so they use Mica.
@@ -30473,11 +32358,12 @@ struct SettingsUiClient final : UiHostClient {
     SettingsEdits edits{store};
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
-    // Window state. Custom poll and retention modes stick once chosen or typed into, so their
-    // boxes don't disable themselves when a partial number happens to match a preset. The
-    // preview's scroll belongs to the position it was built for. The last built view paints the
-    // preview; the color dialog's custom colors last for the window. Copy version info's result
-    // shows until kSettingsCopiedTimer.
+    // Window state. The title is in the language it was last set in. Custom poll and retention
+    // modes stick once chosen or typed into, so their boxes don't disable themselves when a
+    // partial number happens to match a preset. The preview's scroll belongs to the position it
+    // was built for. The last built view paints the preview; the color dialog's custom colors last
+    // for the window. Copy version info's result shows until kSettingsCopiedTimer.
+    I18nLocale titleLocale;
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
@@ -30523,9 +32409,13 @@ struct SettingsUiClient final : UiHostClient {
         return result;
     }
 
-    int Ask(UiHost& host, PCWSTR text, PCWSTR caption, UINT type) {
-        return Modal(host, [&] { return SettingsMessageBoxW(host.main, text, caption, type); });
+    int Ask(UiHost& host, const std::wstring& text, const std::wstring& caption, UINT type) {
+        return Modal(host, [&] { return SettingsMessageBoxW(host.main, text.c_str(), caption.c_str(), type); });
     }
+
+    // A dialog's language: the current one as it opens, kept until it closes. Windows' own buttons
+    // follow the Windows display language.
+    static I18nLocale DialogLocale() { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
 
     // The controller's notices, a message box each. Account operations explain their failures;
     // other failed saves get the general message.
@@ -30534,13 +32424,15 @@ struct SettingsUiClient final : UiHostClient {
         int explained = int(std::count_if(notices.begin(), notices.end(),
                                           [](const SettingsNotice& notice) { return notice.failure; }));
         if (failures > explained) {
-            Ask(host, L"Could not save settings. The change is kept here with its error; "
-                      L"change it again to retry.",
-                L"Taskbar AI Quota", MB_OK | MB_ICONERROR);
+            Ask(host, I18nText(DialogLocale(), Tr(L"Could not save settings. The change is kept here with its error; "
+                                                  L"change it again to retry.")),
+                kSettingsProductName, MB_OK | MB_ICONERROR);
         }
         for (const SettingsNotice& notice : notices) {
             if (Unloading() || host.closing) break;
-            Ask(host, notice.text.c_str(), L"Account",
+            I18nLocale locale = DialogLocale();
+            Ask(host, SettingsNoticeText(locale, notice.code, notice.reason),
+                I18nText(locale, TrCtx(L"dialog-caption", L"Account")),
                 MB_OK | (notice.kind == SettingsNoticeKind::Error   ? MB_ICONERROR :
                          notice.kind == SettingsNoticeKind::Warning ? MB_ICONWARNING : MB_ICONINFORMATION));
         }
@@ -30589,14 +32481,17 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // Each frame takes the current language, its text and the toolkit's text formats both. The
-    // preview's scroll stays within what the built strip can scroll, and a new position starts it
-    // from its home. Account cards follow the projection's order, a dragged card its drag order.
-    // The window takes the projected material at once.
+    // Each frame takes the current language, its text, the toolkit's text formats and the title
+    // all. The preview's scroll stays within what the built strip can scroll, and a new position
+    // starts it from its home. Account cards follow the projection's order, a dragged card its
+    // drag order. The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.locale = I18nLocale(*g_language.load(std::memory_order_acquire));
         host.graphics->locale = view.locale.LocaleName();
+        if (std::exchange(titleLocale, view.locale) != view.locale) {
+            SetWindowTextW(host.main, SettingsWindowTitle(view.locale).c_str());
+        }
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
@@ -30700,12 +32595,14 @@ struct SettingsUiClient final : UiHostClient {
                         bool forever = edits.baseline.settings.historyRetentionDays <= 0;
                         int days = action.value < 0 ? 3650 : action.value;
                         if (forever && days) {
-                            std::wstring question =
-                                L"Stop keeping history forever?\n\nHistory will be kept for " +
-                                std::to_wstring(days) + L" days and limited to 250,000 samples (about "
-                                L"60 MB) again. Older samples, and the oldest beyond that limit, will be "
-                                L"deleted permanently, for every Windows user.";
-                            if (Ask(host, question.c_str(), L"Keep history",
+                            I18nLocale locale = DialogLocale();
+                            std::wstring question = I18nText(
+                                locale, Tr(L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, "
+                                           L"one{# day} other{# days}} and limited to 250,000 samples (about 60 MB) "
+                                           L"again. Older samples, and the oldest beyond that limit, will be deleted "
+                                           L"permanently, for every Windows user."),
+                                {{L"days", days}});
+                            if (Ask(host, question, I18nText(locale, TrCtx(L"dialog-caption", L"Keep history")),
                                     MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES ||
                                 Unloading() || closePreparation || host.closing) {
                                 break;
@@ -30728,27 +32625,26 @@ struct SettingsUiClient final : UiHostClient {
                     case SettingsField::ResetHistory:
                     case SettingsField::ResetLayout:
                     case SettingsField::ResetDisplay: {
-                        std::wstring question =
+                        I18nLocale locale = DialogLocale();
+                        std::wstring question = I18nText(
+                            locale,
                             field == SettingsField::ResetBehavior ?
-                                I18nText(view.locale, Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show "
-                                                         L"on the primary display only, show details on hover, poll "
-                                                         L"every 10 minutes, do not poll hidden accounts, threshold "
-                                                         L"notifications at red.")) :
+                                Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary "
+                                   L"display only, show details on hover, poll every 10 minutes, do not poll hidden "
+                                   L"accounts, threshold notifications at red.") :
                             field == SettingsField::ResetLayout ?
-                                L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
-                                L"on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
-                                L"text color, light grey caret pace markers and the default spacing. "
-                                L"Accounts are not changed." :
+                                Tr(L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, "
+                                   L"32 px rings, logos and number badges in the taskbar\u2019s text color, light "
+                                   L"grey caret pace markers and the default spacing. Accounts are not changed.") :
                             field == SettingsField::ResetDisplay ?
-                                L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, "
-                                L"percentage text on hover with adaptive alignment, no amounts, the "
-                                L"default palette (custom colors reset too) with yellow from 50%, orange "
-                                L"from 75% and red from 90%, stale data marked, additional OpenAI rate "
-                                L"limits hidden." :
-                                L"Reset History to its defaults?\n\nRecording turns on for this "
-                                L"Windows user, history is kept forever and the usage history window "
-                                L"opens on 7 days. Saved history stays.";
-                        if (Ask(host, question.c_str(), L"Reset settings",
+                                Tr(L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage "
+                                   L"text on hover with adaptive alignment, no amounts, the default palette (custom "
+                                   L"colors reset too) with yellow from 50%, orange from 75% and red from 90%, stale "
+                                   L"data marked, additional OpenAI rate limits hidden.") :
+                                Tr(L"Reset History to its defaults?\n\nRecording turns on for this Windows user, "
+                                   L"history is kept forever and the usage history window opens on 7 days. Saved "
+                                   L"history stays."));
+                        if (Ask(host, question, I18nText(locale, TrCtx(L"dialog-caption", L"Reset settings")),
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {
                             break;
@@ -30801,8 +32697,9 @@ struct SettingsUiClient final : UiHostClient {
                                          L"UBR", RRF_RT_REG_DWORD, nullptr, &revision, &size) != ERROR_SUCCESS) {
                             revision = 0;
                         }
+                        // English in every language: diagnostics for issue reports.
                         wchar_t text[128];
-                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",
+                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
                                  WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, revision);
                         bool copied = false;
                         size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
@@ -30828,9 +32725,11 @@ struct SettingsUiClient final : UiHostClient {
                                                             GetFileAttributesW(folder.c_str());
                         if (attributes == INVALID_FILE_ATTRIBUTES ||
                             !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                            Ask(host, L"Nothing has been recorded yet. The folder is created with "
-                                      L"the first recorded sample.",
-                                L"Usage history", MB_OK | MB_ICONINFORMATION);
+                            I18nLocale locale = DialogLocale();
+                            Ask(host, I18nText(locale, Tr(L"Nothing has been recorded yet. The folder is created with "
+                                                          L"the first recorded sample.")),
+                                I18nText(locale, TrCtx(L"dialog-caption", L"Usage history")),
+                                MB_OK | MB_ICONINFORMATION);
                             break;
                         }
                         OpenUrl(folder.c_str());
@@ -30879,39 +32778,47 @@ struct SettingsUiClient final : UiHostClient {
                         }
                         std::optional<size_t> index = edits.IndexOf(key);
                         if (!index) break;
+                        I18nLocale locale = DialogLocale();
                         if (edits.baseline.status.signInRunning) {
-                            Ask(host, L"Wait for the current sign-in to finish before removing accounts.",
-                                L"Account", MB_OK | MB_ICONINFORMATION);
+                            Ask(host, SettingsNoticeText(locale, SettingsNoticeCode::RemoveSignInRunning),
+                                I18nText(locale, TrCtx(L"dialog-caption", L"Account")), MB_OK | MB_ICONINFORMATION);
                             break;
                         }
+                        // The question and each conditional paragraph are whole sentences of their own.
                         const AccountConfig& account = edits.baseline.settings.accounts[*index];
-                        std::wstring title = L"Remove \"" + account.label + L"\" (" +
-                                             ProviderDisplayName(account.provider) + L")?";
-                        PCWSTR signIn = *index < edits.baseline.status.accounts.size() &&
-                                                edits.baseline.status.accounts[*index].signedIn ?
-                                            L"Its stored sign-in will be deleted." : nullptr;
+                        std::wstring title = I18nText(locale, Tr(L"Remove \"{label}\" ({provider})?"),
+                                                      {{L"label", account.label},
+                                                       {L"provider", ProviderDisplayName(account.provider)}});
+                        std::wstring signIn = *index < edits.baseline.status.accounts.size() &&
+                                                      edits.baseline.status.accounts[*index].signedIn ?
+                                                  I18nText(locale, Tr(L"Its stored sign-in will be deleted.")) :
+                                                  std::wstring();
                         bool history = account.historyId && HistoryMayHaveSamples(account.historyId);
-                        TASKDIALOG_BUTTON remove{IDOK, L"Remove"};
+                        std::wstring caption = I18nText(locale, TrCtx(L"dialog-caption", L"Remove account"));
+                        std::wstring removeLabel = I18nText(locale, TrCtx(L"dialog-button", L"Remove"));
+                        std::wstring alsoHistory = I18nText(locale, Tr(L"Also delete its usage history"));
+                        TASKDIALOG_BUTTON remove{IDOK, removeLabel.c_str()};
                         TASKDIALOGCONFIG config{};
                         config.cbSize = sizeof(config);
                         config.hwndParent = host.main;
                         config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
                         config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
-                        config.pszWindowTitle = L"Remove account";
+                        config.pszWindowTitle = caption.c_str();
                         config.pszMainIcon = TD_WARNING_ICON;
                         config.pszMainInstruction = title.c_str();
-                        config.pszContent = signIn;
+                        config.pszContent = signIn.empty() ? nullptr : signIn.c_str();
                         config.cButtons = 1;
                         config.pButtons = &remove;
                         config.nDefaultButton = IDOK;
-                        config.pszVerificationText = history ? L"Also delete its usage history" : nullptr;
+                        config.pszVerificationText = history ? alsoHistory.c_str() : nullptr;
                         BOOL deleteHistory = FALSE;
                         int answer = Modal(host, [&] { return SettingsTaskDialog(config, &deleteHistory); });
                         if (!answer) {
                             deleteHistory = FALSE;
-                            std::wstring text = title + (signIn ? L"\n\n" + std::wstring(signIn) : L"") +
-                                                (history ? L"\n\nIts usage history is kept." : L"");
-                            answer = Ask(host, text.c_str(), L"Remove account", MB_OKCANCEL | MB_ICONWARNING);
+                            std::wstring text = title;
+                            if (!signIn.empty()) text += L"\n\n" + signIn;
+                            if (history) text += L"\n\n" + I18nText(locale, Tr(L"Its usage history is kept."));
+                            answer = Ask(host, text, caption, MB_OKCANCEL | MB_ICONWARNING);
                         }
                         if (answer != IDOK || Unloading() || closePreparation || host.closing) break;
                         std::erase(expanded, key);
@@ -31162,9 +33069,9 @@ struct SettingsUiClient final : UiHostClient {
         if (!close) {
             UiHostRequestRebuild(host, false);
             close = Ask(host,
-                        L"A change couldn't be saved; it is shown with its error.\n\n"
-                        L"Discard unsaved changes and close the window?",
-                        L"Taskbar AI Quota", MB_YESNO | MB_ICONWARNING) == IDYES ||
+                        I18nText(DialogLocale(), Tr(L"A change couldn't be saved; it is shown with its error.\n\n"
+                                                    L"Discard unsaved changes and close the window?")),
+                        kSettingsProductName, MB_YESNO | MB_ICONWARNING) == IDYES ||
                     Unloading();
             if (close) edits.Discard();
         }
@@ -31289,11 +33196,13 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
 
     if (apartmentInitialized && !g_unloading && !g_settingsWindowCancelRequested) {
         SettingsUiClient client;
+        client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
+        std::wstring title = SettingsWindowTitle(client.titleLocale);
         UiHostConfig config;
         config.mainClass = kSettingsUiClass;
         config.viewportClass = kSettingsUiViewportClass;
         config.popupClass = kSettingsUiPopupClass;
-        config.title = L"Taskbar AI Quota \u2014 Settings";
+        config.title = title.c_str();
         config.activateMessage = GetSettingsActivateMessage();
         config.icon = SettingsAppIcon({});
         config.appId = kWindowAppId;

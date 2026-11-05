@@ -14,6 +14,14 @@ static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 // Copy version info's button shows whether it copied until this timer ends it.
 static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
+// The product name, English in every language: the general message boxes' caption, and in the
+// window's title.
+static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Quota";  // i18n-en
+
+// The window's title in a language.
+static std::wstring SettingsWindowTitle(const I18nLocale& locale) {
+    return I18nText(locale, TrCtx(L"window-title", L"{app} \u2014 Settings"), {{L"app", kSettingsProductName}});
+}
 
 // The settings and usage history windows' backdrop for a material: Windows has none for Tinted
 // wallpaper, so they use Mica.
@@ -33,11 +41,12 @@ struct SettingsUiClient final : UiHostClient {
     SettingsEdits edits{store};
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
-    // Window state. Custom poll and retention modes stick once chosen or typed into, so their
-    // boxes don't disable themselves when a partial number happens to match a preset. The
-    // preview's scroll belongs to the position it was built for. The last built view paints the
-    // preview; the color dialog's custom colors last for the window. Copy version info's result
-    // shows until kSettingsCopiedTimer.
+    // Window state. The title is in the language it was last set in. Custom poll and retention
+    // modes stick once chosen or typed into, so their boxes don't disable themselves when a
+    // partial number happens to match a preset. The preview's scroll belongs to the position it
+    // was built for. The last built view paints the preview; the color dialog's custom colors last
+    // for the window. Copy version info's result shows until kSettingsCopiedTimer.
+    I18nLocale titleLocale;
     SettingsUiPage page = SettingsUiPage::Accounts;
     bool pollCustom = false, retentionCustom = false;
     float previewScroll = 0;
@@ -83,9 +92,13 @@ struct SettingsUiClient final : UiHostClient {
         return result;
     }
 
-    int Ask(UiHost& host, PCWSTR text, PCWSTR caption, UINT type) {
-        return Modal(host, [&] { return SettingsMessageBoxW(host.main, text, caption, type); });
+    int Ask(UiHost& host, const std::wstring& text, const std::wstring& caption, UINT type) {
+        return Modal(host, [&] { return SettingsMessageBoxW(host.main, text.c_str(), caption.c_str(), type); });
     }
+
+    // A dialog's language: the current one as it opens, kept until it closes. Windows' own buttons
+    // follow the Windows display language.
+    static I18nLocale DialogLocale() { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
 
     // The controller's notices, a message box each. Account operations explain their failures;
     // other failed saves get the general message.
@@ -94,13 +107,15 @@ struct SettingsUiClient final : UiHostClient {
         int explained = int(std::count_if(notices.begin(), notices.end(),
                                           [](const SettingsNotice& notice) { return notice.failure; }));
         if (failures > explained) {
-            Ask(host, L"Could not save settings. The change is kept here with its error; "
-                      L"change it again to retry.",
-                L"Taskbar AI Quota", MB_OK | MB_ICONERROR);
+            Ask(host, I18nText(DialogLocale(), Tr(L"Could not save settings. The change is kept here with its error; "
+                                                  L"change it again to retry.")),
+                kSettingsProductName, MB_OK | MB_ICONERROR);
         }
         for (const SettingsNotice& notice : notices) {
             if (Unloading() || host.closing) break;
-            Ask(host, notice.text.c_str(), L"Account",
+            I18nLocale locale = DialogLocale();
+            Ask(host, SettingsNoticeText(locale, notice.code, notice.reason),
+                I18nText(locale, TrCtx(L"dialog-caption", L"Account")),
                 MB_OK | (notice.kind == SettingsNoticeKind::Error   ? MB_ICONERROR :
                          notice.kind == SettingsNoticeKind::Warning ? MB_ICONWARNING : MB_ICONINFORMATION));
         }
@@ -149,14 +164,17 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // Each frame takes the current language, its text and the toolkit's text formats both. The
-    // preview's scroll stays within what the built strip can scroll, and a new position starts it
-    // from its home. Account cards follow the projection's order, a dragged card its drag order.
-    // The window takes the projected material at once.
+    // Each frame takes the current language, its text, the toolkit's text formats and the title
+    // all. The preview's scroll stays within what the built strip can scroll, and a new position
+    // starts it from its home. Account cards follow the projection's order, a dragged card its
+    // drag order. The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
         view.locale = I18nLocale(*g_language.load(std::memory_order_acquire));
         host.graphics->locale = view.locale.LocaleName();
+        if (std::exchange(titleLocale, view.locale) != view.locale) {
+            SetWindowTextW(host.main, SettingsWindowTitle(view.locale).c_str());
+        }
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
@@ -260,12 +278,14 @@ struct SettingsUiClient final : UiHostClient {
                         bool forever = edits.baseline.settings.historyRetentionDays <= 0;
                         int days = action.value < 0 ? 3650 : action.value;
                         if (forever && days) {
-                            std::wstring question =
-                                L"Stop keeping history forever?\n\nHistory will be kept for " +
-                                std::to_wstring(days) + L" days and limited to 250,000 samples (about "
-                                L"60 MB) again. Older samples, and the oldest beyond that limit, will be "
-                                L"deleted permanently, for every Windows user.";
-                            if (Ask(host, question.c_str(), L"Keep history",
+                            I18nLocale locale = DialogLocale();
+                            std::wstring question = I18nText(
+                                locale, Tr(L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, "
+                                           L"one{# day} other{# days}} and limited to 250,000 samples (about 60 MB) "
+                                           L"again. Older samples, and the oldest beyond that limit, will be deleted "
+                                           L"permanently, for every Windows user."),
+                                {{L"days", days}});
+                            if (Ask(host, question, I18nText(locale, TrCtx(L"dialog-caption", L"Keep history")),
                                     MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES ||
                                 Unloading() || closePreparation || host.closing) {
                                 break;
@@ -288,27 +308,26 @@ struct SettingsUiClient final : UiHostClient {
                     case SettingsField::ResetHistory:
                     case SettingsField::ResetLayout:
                     case SettingsField::ResetDisplay: {
-                        std::wstring question =
+                        I18nLocale locale = DialogLocale();
+                        std::wstring question = I18nText(
+                            locale,
                             field == SettingsField::ResetBehavior ?
-                                I18nText(view.locale, Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show "
-                                                         L"on the primary display only, show details on hover, poll "
-                                                         L"every 10 minutes, do not poll hidden accounts, threshold "
-                                                         L"notifications at red.")) :
+                                Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary "
+                                   L"display only, show details on hover, poll every 10 minutes, do not poll hidden "
+                                   L"accounts, threshold notifications at red.") :
                             field == SettingsField::ResetLayout ?
-                                L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
-                                L"on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
-                                L"text color, light grey caret pace markers and the default spacing. "
-                                L"Accounts are not changed." :
+                                Tr(L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, "
+                                   L"32 px rings, logos and number badges in the taskbar\u2019s text color, light "
+                                   L"grey caret pace markers and the default spacing. Accounts are not changed.") :
                             field == SettingsField::ResetDisplay ?
-                                L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, "
-                                L"percentage text on hover with adaptive alignment, no amounts, the "
-                                L"default palette (custom colors reset too) with yellow from 50%, orange "
-                                L"from 75% and red from 90%, stale data marked, additional OpenAI rate "
-                                L"limits hidden." :
-                                L"Reset History to its defaults?\n\nRecording turns on for this "
-                                L"Windows user, history is kept forever and the usage history window "
-                                L"opens on 7 days. Saved history stays.";
-                        if (Ask(host, question.c_str(), L"Reset settings",
+                                Tr(L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage "
+                                   L"text on hover with adaptive alignment, no amounts, the default palette (custom "
+                                   L"colors reset too) with yellow from 50%, orange from 75% and red from 90%, stale "
+                                   L"data marked, additional OpenAI rate limits hidden.") :
+                                Tr(L"Reset History to its defaults?\n\nRecording turns on for this Windows user, "
+                                   L"history is kept forever and the usage history window opens on 7 days. Saved "
+                                   L"history stays."));
+                        if (Ask(host, question, I18nText(locale, TrCtx(L"dialog-caption", L"Reset settings")),
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {
                             break;
@@ -361,8 +380,9 @@ struct SettingsUiClient final : UiHostClient {
                                          L"UBR", RRF_RT_REG_DWORD, nullptr, &revision, &size) != ERROR_SUCCESS) {
                             revision = 0;
                         }
+                        // English in every language: diagnostics for issue reports.
                         wchar_t text[128];
-                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",
+                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
                                  WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, revision);
                         bool copied = false;
                         size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
@@ -388,9 +408,11 @@ struct SettingsUiClient final : UiHostClient {
                                                             GetFileAttributesW(folder.c_str());
                         if (attributes == INVALID_FILE_ATTRIBUTES ||
                             !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                            Ask(host, L"Nothing has been recorded yet. The folder is created with "
-                                      L"the first recorded sample.",
-                                L"Usage history", MB_OK | MB_ICONINFORMATION);
+                            I18nLocale locale = DialogLocale();
+                            Ask(host, I18nText(locale, Tr(L"Nothing has been recorded yet. The folder is created with "
+                                                          L"the first recorded sample.")),
+                                I18nText(locale, TrCtx(L"dialog-caption", L"Usage history")),
+                                MB_OK | MB_ICONINFORMATION);
                             break;
                         }
                         OpenUrl(folder.c_str());
@@ -439,39 +461,47 @@ struct SettingsUiClient final : UiHostClient {
                         }
                         std::optional<size_t> index = edits.IndexOf(key);
                         if (!index) break;
+                        I18nLocale locale = DialogLocale();
                         if (edits.baseline.status.signInRunning) {
-                            Ask(host, L"Wait for the current sign-in to finish before removing accounts.",
-                                L"Account", MB_OK | MB_ICONINFORMATION);
+                            Ask(host, SettingsNoticeText(locale, SettingsNoticeCode::RemoveSignInRunning),
+                                I18nText(locale, TrCtx(L"dialog-caption", L"Account")), MB_OK | MB_ICONINFORMATION);
                             break;
                         }
+                        // The question and each conditional paragraph are whole sentences of their own.
                         const AccountConfig& account = edits.baseline.settings.accounts[*index];
-                        std::wstring title = L"Remove \"" + account.label + L"\" (" +
-                                             ProviderDisplayName(account.provider) + L")?";
-                        PCWSTR signIn = *index < edits.baseline.status.accounts.size() &&
-                                                edits.baseline.status.accounts[*index].signedIn ?
-                                            L"Its stored sign-in will be deleted." : nullptr;
+                        std::wstring title = I18nText(locale, Tr(L"Remove \"{label}\" ({provider})?"),
+                                                      {{L"label", account.label},
+                                                       {L"provider", ProviderDisplayName(account.provider)}});
+                        std::wstring signIn = *index < edits.baseline.status.accounts.size() &&
+                                                      edits.baseline.status.accounts[*index].signedIn ?
+                                                  I18nText(locale, Tr(L"Its stored sign-in will be deleted.")) :
+                                                  std::wstring();
                         bool history = account.historyId && HistoryMayHaveSamples(account.historyId);
-                        TASKDIALOG_BUTTON remove{IDOK, L"Remove"};
+                        std::wstring caption = I18nText(locale, TrCtx(L"dialog-caption", L"Remove account"));
+                        std::wstring removeLabel = I18nText(locale, TrCtx(L"dialog-button", L"Remove"));
+                        std::wstring alsoHistory = I18nText(locale, Tr(L"Also delete its usage history"));
+                        TASKDIALOG_BUTTON remove{IDOK, removeLabel.c_str()};
                         TASKDIALOGCONFIG config{};
                         config.cbSize = sizeof(config);
                         config.hwndParent = host.main;
                         config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
                         config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
-                        config.pszWindowTitle = L"Remove account";
+                        config.pszWindowTitle = caption.c_str();
                         config.pszMainIcon = TD_WARNING_ICON;
                         config.pszMainInstruction = title.c_str();
-                        config.pszContent = signIn;
+                        config.pszContent = signIn.empty() ? nullptr : signIn.c_str();
                         config.cButtons = 1;
                         config.pButtons = &remove;
                         config.nDefaultButton = IDOK;
-                        config.pszVerificationText = history ? L"Also delete its usage history" : nullptr;
+                        config.pszVerificationText = history ? alsoHistory.c_str() : nullptr;
                         BOOL deleteHistory = FALSE;
                         int answer = Modal(host, [&] { return SettingsTaskDialog(config, &deleteHistory); });
                         if (!answer) {
                             deleteHistory = FALSE;
-                            std::wstring text = title + (signIn ? L"\n\n" + std::wstring(signIn) : L"") +
-                                                (history ? L"\n\nIts usage history is kept." : L"");
-                            answer = Ask(host, text.c_str(), L"Remove account", MB_OKCANCEL | MB_ICONWARNING);
+                            std::wstring text = title;
+                            if (!signIn.empty()) text += L"\n\n" + signIn;
+                            if (history) text += L"\n\n" + I18nText(locale, Tr(L"Its usage history is kept."));
+                            answer = Ask(host, text, caption, MB_OKCANCEL | MB_ICONWARNING);
                         }
                         if (answer != IDOK || Unloading() || closePreparation || host.closing) break;
                         std::erase(expanded, key);
@@ -722,9 +752,9 @@ struct SettingsUiClient final : UiHostClient {
         if (!close) {
             UiHostRequestRebuild(host, false);
             close = Ask(host,
-                        L"A change couldn't be saved; it is shown with its error.\n\n"
-                        L"Discard unsaved changes and close the window?",
-                        L"Taskbar AI Quota", MB_YESNO | MB_ICONWARNING) == IDYES ||
+                        I18nText(DialogLocale(), Tr(L"A change couldn't be saved; it is shown with its error.\n\n"
+                                                    L"Discard unsaved changes and close the window?")),
+                        kSettingsProductName, MB_YESNO | MB_ICONWARNING) == IDYES ||
                     Unloading();
             if (close) edits.Discard();
         }

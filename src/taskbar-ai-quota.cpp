@@ -345,9 +345,9 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "settings/native.h"
 
-#include "settings/account-commands.h"
-
 #include "settings/edits.h"
+
+#include "settings/account-commands.h"
 
 #include "settings/store.h"
 

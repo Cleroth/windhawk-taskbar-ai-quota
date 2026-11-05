@@ -60,6 +60,20 @@ static UiToggleText SettingsToggleText(const SettingsView& view) {
     return {I18nText(view.locale, TrCtx(L"toggle", L"On")), I18nText(view.locale, TrCtx(L"toggle", L"Off"))};
 }
 
+// A status shown in its color inside localized text: the argument SettingsStatusArg makes, whose
+// link ID SettingsStatusRuns turns into the ink (these templates have no links of their own).
+static std::vector<I18nRun> SettingsStatusArg(std::wstring text) {
+    return {{std::move(text), false, L"status"}};
+}
+
+static std::vector<UiRun> SettingsStatusRuns(const std::vector<I18nRun>& runs, UiInk ink) {
+    std::vector<UiRun> out;
+    for (const I18nRun& run : runs) {
+        out.push_back(run.link == L"status" ? UiRun{run.text, UiRunStyle::Normal, ink} : UiRun{run.text});
+    }
+    return out;
+}
+
 // Shared cards; each returns its bottom.
 
 static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
@@ -68,7 +82,9 @@ static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
     bool on = SettingsFieldValue(view.settings, field) != 0;
     UiToggleText states = SettingsToggleText(view);
     spec.trailing = UiToggleSize(g, states);
-    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) {
+        spec.error = SettingsDraftErrorText(view.locale, *draft);
+    }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddToggle(items, SettingsControlId(field), card.trailing, on, spec.enabled,
                 SettingsCommand(field, !on), states);
@@ -90,7 +106,7 @@ static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
     fieldWidth = std::max(fieldWidth, std::min(widest, width / 2));
     spec.trailing = {fieldWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field); draft && !draft->text) {
-        spec.error = draft->error;
+        spec.error = SettingsDraftErrorText(view.locale, *draft);
     }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddDropdown(items, SettingsControlId(field, part), card.trailing, std::move(options),
@@ -108,7 +124,7 @@ static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
         draft->raw : SettingsFormatNumber(SettingsFieldValue(view.settings, field),
                                           view.status.groupSeparator);
     spec.trailing = UiNumberBoxSize(g, unit);
-    if (draft && draft->text) spec.error = draft->error;
+    if (draft && draft->text) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddNumberBox(items, SettingsControlId(field), card.trailing, std::move(text), std::move(unit),
                    spec.enabled, SettingsCommand(field));
@@ -125,7 +141,7 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
     int value = SettingsFieldValue(view.settings, field);
     const SettingsDraft* draft = SettingsViewDraft(view, field);
     spec.trailing = {60 + 14 + 220, 32};
-    if (draft) spec.error = draft->error;
+    if (draft) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     const D2D1_RECT_F& slot = card.trailing;
     UiItem box;
@@ -150,12 +166,14 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
                                   SettingsField field, SettingsField custom, std::vector<COLORREF> colors,
                                   COLORREF current, int customValue = 0) {
     if (std::find(colors.begin(), colors.end(), current) == colors.end()) colors.push_back(current);
-    PCWSTR customText = L"Custom...";
+    std::wstring customText = I18nText(view.locale, TrCtx(L"button", L"Custom..."));
     float buttonWidth =
         std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
     float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
     spec.trailing = {swatches + 16 + buttonWidth, 32};
-    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
+    if (const SettingsDraft* draft = SettingsViewDraft(view, field)) {
+        spec.error = SettingsDraftErrorText(view.locale, *draft);
+    }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     float center = (card.trailing.top + card.trailing.bottom) / 2;
     for (size_t i = 0; i < colors.size(); i++) {

@@ -11,7 +11,8 @@ struct AccountTarget {
 struct AccountCommandResult {
     SettingsApplyResult apply = SettingsApplyResult::Failed;
     bool missing = false;      // The account isn't configured (any more)
-    std::wstring message;      // For the user, if not empty
+    SettingsNoticeCode message = SettingsNoticeCode::None;   // For the user (settings/edits.h)
+    HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
     UINT icon = MB_ICONERROR;  // The message's
     AccountTarget account;     // The account afterwards: added, renamed or edited
 };
@@ -61,7 +62,7 @@ static AccountCommandResult AddAccountCommand(AccountConfig account, const std::
         return !HasDuplicateAccount(settings, 0, labelled);
     });
     if (label == labels.end()) {
-        result.message = L"That provider and label are already configured.";
+        result.message = SettingsNoticeCode::AccountExists;
         result.icon = MB_ICONWARNING;
         return result;
     }
@@ -72,7 +73,7 @@ static AccountCommandResult AddAccountCommand(AccountConfig account, const std::
     if (result.apply != SettingsApplyResult::Failed) result.account = PublishedAccountTarget(identity);
     configLock.unlock();
     if (result.apply == SettingsApplyResult::Failed) {
-        result.message = L"Could not save the account.";
+        result.message = SettingsNoticeCode::AccountSaveFailed;
     } else if (result.apply == SettingsApplyResult::Changed) {
         FinishSettingsApply();
     }
@@ -95,7 +96,7 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     int index = FindAccountTarget(settings, target);
     if (index < 0) {
         result.missing = true;
-        result.message = L"The account was changed from another taskbar window.";
+        result.message = SettingsNoticeCode::ChangedElsewhere;
         result.icon = MB_ICONWARNING;
         return result;
     }
@@ -106,12 +107,12 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     uint64_t newIdentity = AccountIdentityHash(newAccount);
     bool identityChanged = oldIdentity != newIdentity;
     if (identityChanged && g_loginInProgress.load()) {
-        result.message = L"Wait for the current sign-in to finish before changing identity.";
+        result.message = SettingsNoticeCode::IdentitySignInRunning;
         result.icon = MB_ICONINFORMATION;
         return result;
     }
     if (HasDuplicateAccount(settings, oldIdentity, newAccount)) {
-        result.message = L"That provider and label are already configured.";
+        result.message = SettingsNoticeCode::AccountExists;
         result.icon = MB_ICONWARNING;
         return result;
     }
@@ -144,12 +145,8 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
             tokenCopyResult == TokenCopyResult::Failed) {
             authEpochLock.unlock();
             configLock.unlock();
-            result.message =
-                tokenCopyResult == TokenCopyResult::DestinationOccupied ?
-                    L"The renamed account identity already has a retained sign-in. To replace it, "
-                    L"add an account with that provider and label, then remove it. The account was "
-                    L"not changed." :
-                    L"The stored sign-in could not be copied. The account was not changed.";
+            result.message = tokenCopyResult == TokenCopyResult::DestinationOccupied ?
+                                 SettingsNoticeCode::RenameTargetSignedIn : SettingsNoticeCode::RenameCopyFailed;
             return result;
         }
     }
@@ -168,11 +165,7 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         if (authEpochLock.owns_lock()) authEpochLock.unlock();
         configLock.unlock();
         result.message =
-            copiedTokenCleared ?
-                L"Could not save the account." :
-                L"Could not save the account. The copied sign-in remains under the attempted "
-                L"new identity. To delete it, add an account with the attempted provider and "
-                L"label, then remove it.";
+            copiedTokenCleared ? SettingsNoticeCode::AccountSaveFailed : SettingsNoticeCode::RenameCopyLeft;
         return result;
     }
     if (sameProviderRename) {
@@ -197,10 +190,7 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         }
     }
     if (!oldTokenCleared) {
-        result.message =
-            L"The account was renamed, but a duplicate stored sign-in remains under the old "
-            L"identity. To delete it, re-add an account with the old provider and label, then "
-            L"remove it.";
+        result.message = SettingsNoticeCode::RenameOldSignInLeft;
         result.icon = MB_ICONWARNING;
     }
     NotifySettingsWindowChanged();
@@ -214,7 +204,7 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
     AccountCommandResult result;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     if (g_loginInProgress.load()) {
-        result.message = L"Wait for the current sign-in to finish before removing accounts.";
+        result.message = SettingsNoticeCode::RemoveSignInRunning;
         result.icon = MB_ICONINFORMATION;
         return result;
     }
@@ -232,7 +222,7 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
     uint64_t historyId = settings.accounts[index].historyId;
     bool signIn = settings.accounts[index].provider != L"antigravity";
     if (signIn && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
-        result.message = L"The stored sign-in could not be deleted, so the account was not removed.";
+        result.message = SettingsNoticeCode::RemoveSignInKept;
         return result;
     }
     settings.accounts.erase(settings.accounts.begin() + index);
@@ -243,17 +233,12 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
             RefreshQuotaByIdentity(identity);
             NotifySettingsWindowChanged();
         }
-        result.message = signIn ?
-            L"The stored sign-in was deleted, but settings could not be saved. The account "
-            L"remains configured but signed out." :
-            L"Could not remove the account.";
+        result.message = signIn ? SettingsNoticeCode::RemoveSignedOut : SettingsNoticeCode::RemoveFailed;
         return result;
     }
     if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
-    HistoryJournalError error = HistoryJournalError::None;
-    if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &error)) {
-        result.message = L"The account was removed, but its usage history could not be deleted and was kept.\n\n" +
-                         HistoryJournalErrorText(I18nLocale(*g_language.load(std::memory_order_acquire)), error);
+    if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &result.reason)) {
+        result.message = SettingsNoticeCode::HistoryKept;
         result.icon = MB_ICONWARNING;
     }
     return result;
@@ -284,7 +269,7 @@ static AccountCommandResult MoveAccountCommand(AccountTarget target, int to) {
     result.apply = ApplyOwnedSettings(std::move(settings));
     configLock.unlock();
     if (result.apply == SettingsApplyResult::Failed) {
-        result.message = L"Could not reorder the account.";
+        result.message = SettingsNoticeCode::ReorderFailed;
     } else if (result.apply == SettingsApplyResult::Changed) {
         FinishSettingsApply();
     }
@@ -316,7 +301,7 @@ static AccountCommandResult SetAccountHiddenCommand(AccountTarget target, bool h
     result.apply = ApplyOwnedSettings(settings);
     configLock.unlock();
     if (result.apply == SettingsApplyResult::Failed) {
-        result.message = L"Could not update account visibility.";
+        result.message = SettingsNoticeCode::VisibilityFailed;
     } else if (result.apply == SettingsApplyResult::Changed) {
         std::wstring hashes;
         wchar_t buffer[24];

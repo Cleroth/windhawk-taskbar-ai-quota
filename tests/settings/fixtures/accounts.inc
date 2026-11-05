@@ -148,11 +148,11 @@ static void RunAccountEditTests() {
         edits.Reload();
         edits.SetText(12, kLabel, L"   ");
         CHECK(!edits.RequestCommit(12, kLabel) && edits.queue.empty());
-        CHECK(DraftOf(edits, 12, kLabel)->error == L"Enter a label.");
+        CHECK(ErrorText(*DraftOf(edits, 12, kLabel)) == L"Enter a label.");
         edits.SetText(12, kLabel, L"CC 2");
-        CHECK(DraftOf(edits, 12, kLabel)->error.empty());  // Typing clears it
+        CHECK(ErrorText(*DraftOf(edits, 12, kLabel)).empty());  // Typing clears it
         CHECK(!edits.RequestCommit(12, kLabel, true) && edits.queue.empty());
-        CHECK(DraftOf(edits, 12, kLabel)->error == L"Another account of this provider uses this label.");
+        CHECK(ErrorText(*DraftOf(edits, 12, kLabel)) == L"Another account of this provider uses this label.");
         CHECK(edits.Projection().accounts[1].label == L"CC 1");  // An invalid label doesn't show
         edits.SetText(12, kLabel, L"  OAI ");  // OpenAI's label: fine for Anthropic
         CHECK(edits.Projection().accounts[1].label == L"OAI");
@@ -188,7 +188,7 @@ static void RunAccountEditTests() {
         edits.Reload();
         edits.SetText(12, kLabel, L"");  // Typed, never committed
         CHECK(edits.AccountAction(12, SettingsField::AccountSignIn, 0) == SettingsActionResult::Blocked);
-        CHECK(AccountOps(store).empty() && DraftOf(edits, 12, kLabel)->error == L"Enter a label.");
+        CHECK(AccountOps(store).empty() && ErrorText(*DraftOf(edits, 12, kLabel)) == L"Enter a label.");
         // Valid once, then another account takes the label: blocked again, not sent.
         edits.SetText(12, kLabel, L"CC 4");
         store.settings.accounts[2].label = L"CC 4";
@@ -200,8 +200,8 @@ static void RunAccountEditTests() {
         CHECK(edits.AccountAction(12, SettingsField::AccountSignIn, 0) == SettingsActionResult::Blocked);
         CHECK(AccountOps(store) == std::vector<std::wstring>{AccountOp(kLabel, L"CC 1", L"CC 5")});
         const SettingsDraft* failed = DraftOf(edits, 12, kLabel);
-        CHECK(failed && failed->failed && failed->error == L"This change couldn't be saved.");
-        CHECK(edits.notices.size() == 1 && edits.notices[0].failure && edits.notices[0].text == L"Injected failure.");
+        CHECK(failed && failed->failed && ErrorText(*failed) == L"This change couldn't be saved.");
+        CHECK(edits.notices.size() == 1 && edits.notices[0].failure && edits.notices[0].code == SettingsNoticeCode::AccountSaveFailed);
         CHECK(edits.Process() == 0 && AccountOps(store).size() == 1);  // Not retried by itself
         CHECK(edits.AccountAction(12, SettingsField::AccountSignIn, 0) == SettingsActionResult::Done);
         CHECK(AccountOps(store).back() == AccountOp(SettingsField::AccountSignIn, L"CC 5", L"0"));
@@ -457,7 +457,7 @@ static void RunAccountEditTests() {
         CHECK(edits.drafts.empty() && store.settings.accounts[1].label == L"CC 1");
         edits.SetText(12, kLabel, L"CC 3");
         CHECK(edits.PrepareClose() == SettingsCloseResult::Blocked);
-        CHECK(DraftOf(edits, 12, kLabel)->error == L"Another account of this provider uses this label.");
+        CHECK(ErrorText(*DraftOf(edits, 12, kLabel)) == L"Another account of this provider uses this label.");
     });
 
     Run("reorder target: past every other card whose center is above the pointer", [] {
@@ -653,7 +653,7 @@ static void RunAccountEditTests() {
         view.settings.accounts[0].tileIdentity = TileIdentity::Text;
         view.settings.accounts[0].showBars = {false, true, false, false};
         view.settings.accounts[0].creditsMax = 0;
-        view.drafts.push_back({11, kLabel, 1, true, L"", 0, false, false, L"Enter a label."});
+        view.drafts.push_back({11, kLabel, 1, true, L"", 0, false, false, SettingsDraftError::LabelEmpty});
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountTileText))->enabled);

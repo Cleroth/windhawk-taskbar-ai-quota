@@ -44,21 +44,26 @@ static bool SettingsMoveAccountCards(std::vector<UiItem>& items, const std::vect
 static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                      uint32_t& id, float x, float y, float width) {
     const Settings& s = view.settings;
+    const I18nLocale& locale = view.locale;
     auto textWidth = [&](std::wstring_view text, UiFont font) {
         return std::ceil(UiLayoutSize(UiLayout(g, text, UiTextStyleFor(font), 10000, false)).width);
     };
 
-    // Empty state (mockup .emptycard): an icon in a circle, a title, two centered paragraphs.
+    // Empty state (mockup .emptycard): an icon in a circle, a title, two centered paragraphs. The
+    // first names the header's button by its label.
     if (s.accounts.empty()) {
         constexpr float kPadTop = 44, kPadBottom = 48, kIcon = 56, kGap = 8;
         float top = y + 14, center = x + width / 2;
         float lines = std::clamp(width - 120, 40.0f, 440.0f);
-        std::vector<UiRun> first = {{L"Select "}, {L"Add account", UiRunStyle::Strong},
-                                    {L" to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or "
-                                     L"OpenCode Go account on the taskbar."}};
-        std::vector<UiRun> second = {{L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, "
-                                      L"OpenCode Go with an API key. Google Antigravity uses its signed-in app or "
-                                      L"CLI, which must keep running."}};
+        std::vector<UiRun> first = I18nUiRuns(
+            I18nRuns(locale, Tr(L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub "
+                                L"Copilot or OpenCode Go account on the taskbar."),
+                     {{L"button", I18nText(locale, TrCtx(L"button", L"Add account"))}}),
+            {});
+        std::vector<UiRun> second = {{I18nText(locale, Tr(L"Anthropic, OpenAI and GitHub Copilot sign in through "
+                                                          L"your browser, OpenCode Go with an API key. Google "
+                                                          L"Antigravity uses its signed-in app or CLI, which must "
+                                                          L"keep running."))}};
         float firstHeight = UiLayoutSize(UiRichLayout(g, first, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float secondHeight = UiLayoutSize(UiRichLayout(g, second, UiFont::Note, lines, DWRITE_TEXT_ALIGNMENT_CENTER)).height;
         float bottom = top + 1 + kPadTop + kIcon + 6 + kGap + 26 + kGap + firstHeight + kGap + secondHeight +
@@ -98,7 +103,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             items.push_back(std::move(text));
             at += height + kGap;
         };
-        addText({{L"No accounts yet"}}, UiFont::Subtitle, UiInk::Primary, 26);
+        addText({{I18nText(locale, Tr(L"No accounts yet"))}}, UiFont::Subtitle, UiInk::Primary, 26);
         addText(std::move(first), UiFont::Note, UiInk::Muted, firstHeight);
         addText(std::move(second), UiFont::Note, UiInk::Muted, secondHeight);
         return bottom;
@@ -204,13 +209,14 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         right -= 10;
         if (signInNeeded) {
-            float buttonWidth = textWidth(L"Sign in", UiFont::Note) + 24;
+            std::wstring label = I18nText(locale, TrCtx(L"button", L"Sign in"));
+            float buttonWidth = textWidth(label, UiFont::Note) + 24;
             UiItem signIn;
             signIn.id = control(SettingsField::AccountSignIn);
             signIn.kind = UiItemKind::Button;
             signIn.button = UiButtonStyle::Accent;
             signIn.font = UiFont::Note;
-            signIn.text = L"Sign in";
+            signIn.text = std::move(label);
             signIn.rect = {right - buttonWidth, cy - 14, right, cy + 14};
             signIn.enabled = !view.status.signInRunning;
             signIn.action = command(SettingsField::AccountSignIn);
@@ -219,35 +225,41 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         for (auto item = trailing.rbegin(); item != trailing.rend(); ++item) push(std::move(*item));
 
-        // Label and "Provider · plan · status".
+        // Label and "Provider · plan · status", the status in its color.
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
         // The last poll's error on its own, cut at 60 characters.
         std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
         if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
         if (status.signingIn) {
-            stateText = L"Signing in\u2026";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Signing in\u2026"));
             stateInk = UiInk::Accent;
         } else if (signInNeeded) {
-            stateText = L"Sign-in needed";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Sign-in needed"));
             stateInk = UiInk::Caution;
         } else if (notPolled) {
-            stateText = L"Hidden, not polled";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Hidden, not polled"));
             stateInk = UiInk::Secondary;
         } else if (!error.empty()) {
             stateText = !signsIn && status.error.code == AccountErrorCode::AntigravityNotRunning ?
                             I18nText(view.locale, TrCtx(L"account-state", L"Local app not running")) : error;
             stateInk = UiInk::Caution;
         } else if (!signsIn) {
-            stateText = status.polled ? L"Local app running" : L"Waiting for the local app";
+            stateText = I18nText(locale, status.polled ? TrCtx(L"account-state", L"Local app running") :
+                                                         TrCtx(L"account-state", L"Waiting for the local app"));
             stateInk = status.polled ? UiInk::Success : UiInk::Secondary;
         } else {
-            stateText = L"Signed in";
+            stateText = I18nText(locale, TrCtx(L"account-state", L"Signed in"));
         }
-        std::wstring details = anthropic ? L"Anthropic \u00B7 " : openai ? L"OpenAI \u00B7 " :
-                               copilot ? L"GitHub Copilot \u00B7 " : opencode ? L"OpenCode Go \u00B7 " :
-                                         L"Antigravity \u00B7 ";
-        if (!status.plan.empty()) details += status.plan + L" \u00B7 ";
+        PCWSTR provider = anthropic ? L"Anthropic" : openai ? L"OpenAI" :  // i18n-en
+                          copilot ? L"GitHub Copilot" : opencode ? L"OpenCode Go" : L"Antigravity";  // i18n-en
+        std::vector<UiRun> details = SettingsStatusRuns(
+            status.plan.empty() ?
+                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {state}"),
+                         {{L"provider", provider}, {L"state", SettingsStatusArg(stateText)}}) :
+                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {plan} \u00B7 {state}"),
+                         {{L"provider", provider}, {L"plan", status.plan}, {L"state", SettingsStatusArg(stateText)}}),
+            stateInk);
         float textRight = std::max(right, x + 77 + 40);
         UiItem title;
         title.id = id++;
@@ -261,7 +273,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         state.font = UiFont::Caption;
         state.ink = UiInk::Muted;
         state.rect = {x + 77, cy + 2, textRight, cy + 18};
-        state.runs = {{details}, {stateText, UiRunStyle::Normal, stateInk}};
+        state.runs = std::move(details);
         push(state);
 
         // Expanded rows (mockup .scard.sub).
@@ -277,11 +289,12 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             {
                 const SettingsDraft* draft = draftOf(SettingsField::AccountLabel);
                 UiCardSpec spec;
-                spec.title = L"Label";
-                spec.description = {{L"Shown in details, and next to bars when Identity is Label. Unique per "
-                                     L"provider; renaming keeps the sign-in and history."}};
+                spec.title = I18nText(locale, Tr(L"Label"));
+                spec.description = {{I18nText(locale, Tr(L"Shown in details, and next to bars when Identity is "
+                                                         L"Label. Unique per provider; renaming keeps the sign-in "
+                                                         L"and history."))}};
                 spec.trailing = {200, 32};
-                if (draft) spec.error = draft->error;
+                if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
                 box.id = control(SettingsField::AccountLabel);
@@ -296,33 +309,42 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 // Chips: the desired selection with this quota flipped; the last one stays.
                 struct Quota {
                     int bar;
-                    PCWSTR name;
+                    std::wstring name;
                 };
-                std::vector<Quota> quotas = {{kFiveHourBar, signsIn ? L"5-hour" : L"Short window"},
-                                             {kWeeklyBar, L"Weekly"}};
+                auto name = [&](I18nKey key) { return I18nText(locale, key); };
+                auto weekly = [&](PCWSTR model) {
+                    return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", model}});
+                };
+                std::vector<Quota> quotas = {
+                    {kFiveHourBar,
+                     name(signsIn ? TrCtx(L"quota-name", L"5-hour") : TrCtx(L"quota-name", L"Short window"))},
+                    {kWeeklyBar, name(TrCtx(L"quota-name", L"Weekly"))}};
                 if (anthropic) {
-                    quotas.push_back({kFableWeeklyBar, L"Fable weekly"});
-                    quotas.push_back({kExtraUsageBar, L"Extra usage"});
+                    quotas.push_back({kFableWeeklyBar, weekly(L"Fable")});  // i18n-en
+                    quotas.push_back({kExtraUsageBar, name(TrCtx(L"quota-name", L"Extra usage"))});
                 } else if (openai) {
-                    quotas.push_back({kExtraUsageBar, L"Credits"});
+                    quotas.push_back({kExtraUsageBar, name(TrCtx(L"quota-name", L"Credits"))});
                 } else if (copilot) {
                     // The monthly allowance is its only quota.
-                    quotas = {{kExtraUsageBar, L"AI credits"}};
+                    quotas = {{kExtraUsageBar, name(TrCtx(L"quota-name", L"AI credits"))}};
                 } else if (opencode) {
-                    quotas.push_back({kExtraUsageBar, L"Monthly"});
+                    quotas.push_back({kExtraUsageBar, name(TrCtx(L"quota-name", L"Monthly"))});
                 } else {
-                    quotas.push_back({kFableWeeklyBar, L"Argon weekly"});
+                    quotas.push_back({kFableWeeklyBar, weekly(L"Argon")});  // i18n-en
                 }
                 float chipsWidth = 0;
                 for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;
                 UiCardSpec spec;
-                spec.title = L"Quotas on taskbar";
-                spec.description = {{L"Unavailable quotas hide automatically. At least one stays selected."}};
-                if (openai && s.barLayout == BarLayout::Sparkline) {
-                    spec.description[0].text += L" Usage graphs show Credits as a number on the 7d chart.";
-                }
+                spec.title = I18nText(locale, Tr(L"Quotas on taskbar"));
+                spec.description = {{I18nText(
+                    locale, openai && s.barLayout == BarLayout::Sparkline ?
+                                Tr(L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs "
+                                   L"show Credits as a number on the 7d chart.") :
+                                Tr(L"Unavailable quotas hide automatically. At least one stays selected."))}};
                 spec.trailing = {chipsWidth - 4, 26};
-                if (openai && !account.creditsMax) spec.reason = L"Set Credits max to show the Credits bar.";
+                if (openai && !account.creditsMax) {
+                    spec.reason = I18nText(locale, Tr(L"Set Credits max to show the Credits bar."));
+                }
                 UiCardLayout layout = row(spec);
                 float left = layout.trailing.left;
                 for (const Quota& quota : quotas) {
@@ -345,30 +367,38 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             if (openai) {
                 const SettingsDraft* draft = draftOf(SettingsField::AccountCreditsMax);
                 UiCardSpec spec;
-                spec.title = L"Credits max";
-                spec.description = {{L"The balance the Credits bar treats as 100%. OpenAI reports only the "
-                                     L"balance."}};
-                spec.trailing = UiNumberBoxSize(g, L"credits");
-                if (draft && draft->text) spec.error = draft->error;
+                spec.title = I18nText(locale, Tr(L"Credits max"));
+                spec.description = {{I18nText(locale, Tr(L"The balance the Credits bar treats as 100%. OpenAI reports "
+                                                         L"only the balance."))}};
+                // The unit agrees with the saved max, not text still being typed.
+                std::wstring unit =
+                    I18nText(locale, TrCtx(L"credits-unit", L"{credits, plural, one{credits} other{credits}}"),
+                             {{L"credits", account.creditsMax}});
+                spec.trailing = UiNumberBoxSize(g, unit);
+                if (draft && draft->text) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiAddNumberBox(cardItems, control(SettingsField::AccountCreditsMax), layout.trailing,
                                draft && draft->text ? draft->raw :
                                                       SettingsFormatNumber(account.creditsMax, view.status.groupSeparator),
-                               L"credits", true, command(SettingsField::AccountCreditsMax));
+                               std::move(unit), true, command(SettingsField::AccountCreditsMax));
             }
             {
                 UiCardSpec spec;
-                spec.title = L"Identity";
-                spec.description = {{L"Marks this account beside its bars and on tiles. Label "
-                                     L"shows the label on bars and its short text on tiles. The number badge "
-                                     L"appears when several accounts share a provider, hidden ones included."}};
+                spec.title = I18nText(locale, Tr(L"Identity"));
+                spec.description = {{I18nText(locale, Tr(L"Marks this account beside its bars and on tiles. Label "
+                                                         L"shows the label on bars and its short text on tiles. The "
+                                                         L"number badge appears when several accounts share a "
+                                                         L"provider, hidden ones included."))}};
                 spec.trailing = {220, 32};
-                if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) spec.error = draft->error;
+                if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) {
+                    spec.error = SettingsDraftErrorText(locale, *draft);
+                }
                 UiCardLayout layout = row(spec);
                 UiAddDropdown(cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
-                              {{L"Logo + number badge", int(TileIdentity::LogoBadge)},
-                               {L"Logo only", int(TileIdentity::Logo)},
-                               {L"Label", int(TileIdentity::Text)}},
+                              {{I18nText(locale, TrCtx(L"tile-identity", L"Logo + number badge")),
+                                int(TileIdentity::LogoBadge)},
+                               {I18nText(locale, TrCtx(L"tile-identity", L"Logo only")), int(TileIdentity::Logo)},
+                               {I18nText(locale, TrCtx(L"tile-identity", L"Label")), int(TileIdentity::Text)}},
                               true, command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
             {
@@ -376,13 +406,13 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 bool used = account.tileIdentity == TileIdentity::Text;
                 const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
                 UiCardSpec spec;
-                spec.title = L"Short text";
-                spec.description = {{L"The Label identity on tiles, up to 4 characters. Empty "
-                                     L"uses the label without spaces."}};
+                spec.title = I18nText(locale, Tr(L"Short text"));
+                spec.description = {{I18nText(locale, Tr(L"The Label identity on tiles, up to 4 characters. Empty uses "
+                                                         L"the label without spaces."))}};
                 spec.trailing = {96, 32};
                 spec.enabled = used;
-                if (!used) spec.reason = L"Used on tiles when Identity is Label.";
-                if (draft) spec.error = draft->error;
+                if (!used) spec.reason = I18nText(locale, Tr(L"Used on tiles when Identity is Label."));
+                if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
                 box.id = control(SettingsField::AccountTileText);
@@ -403,21 +433,32 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 // recorder's state.
                 struct Recording {
                     PCWSTR mark;
+                    I18nKey state;
                     UiInk ink;
                 };
                 Recording recording =
-                    !account.recordHistory ? Recording{L"\u25CB Off", UiInk::Secondary} :
-                    !s.historyEnabled ? Recording{L"\u25CB Off for this Windows user", UiInk::Secondary} :
-                    view.status.recording == SettingsRecording::PendingSave ? Recording{L"\u25CF Waiting", UiInk::Caution} :
-                    !account.historyId ? Recording{L"\u25CF Unavailable", UiInk::Caution} :
-                    account.hidden && s.skipHiddenPolling ? Recording{L"\u25CF Paused while hidden", UiInk::Caution} :
-                    view.status.recording == SettingsRecording::StorageError ? Recording{L"\u25CF Not saving", UiInk::Danger} :
-                    Recording{L"\u25CF Recording", UiInk::Success};
+                    !account.recordHistory ?
+                        Recording{L"\u25CB ", TrCtx(L"recording-status", L"Off"), UiInk::Secondary} :
+                    !s.historyEnabled ?
+                        Recording{L"\u25CB ", TrCtx(L"recording-status", L"Off for this Windows user"),
+                                  UiInk::Secondary} :
+                    view.status.recording == SettingsRecording::PendingSave ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Waiting"), UiInk::Caution} :
+                    !account.historyId ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Unavailable"), UiInk::Caution} :
+                    account.hidden && s.skipHiddenPolling ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Paused while hidden"), UiInk::Caution} :
+                    view.status.recording == SettingsRecording::StorageError ?
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Not saving"), UiInk::Danger} :
+                        Recording{L"\u25CF ", TrCtx(L"recording-status", L"Recording"), UiInk::Success};
                 UiCardSpec spec;
-                spec.title = L"Record history";
-                spec.description = {{recording.mark, UiRunStyle::Normal, recording.ink},
-                                    {L" \u00B7 History follows this entry, even after signing in again. Use a new "
-                                     L"entry for a different login."}};
+                spec.title = I18nText(locale, Tr(L"Record history"));
+                spec.description = SettingsStatusRuns(
+                    I18nRuns(locale, TrCtx(L"recording-detail", L"{status} \u00B7 {detail}"),
+                             {{L"status", SettingsStatusArg(recording.mark + I18nText(locale, recording.state))},
+                              {L"detail", I18nText(locale, Tr(L"History follows this entry, even after signing in "
+                                                              L"again. Use a new entry for a different login."))}}),
+                    recording.ink);
                 UiToggleText states = SettingsToggleText(view);
                 spec.trailing = UiToggleSize(g, states);
                 UiCardLayout layout = row(spec);
@@ -434,15 +475,16 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             rule.rect = {x + 1, bottom, x + width - 1, bottom + 1};
             push(rule);
             float buttonTop = bottom + 12, left = x + 56;
-            auto addButton = [&](SettingsField field, PCWSTR text, PCWSTR icon, UiButtonStyle style, bool enabled,
+            auto addButton = [&](SettingsField field, I18nKey key, PCWSTR icon, UiButtonStyle style, bool enabled,
                                  bool trailing) {
+                std::wstring text = I18nText(locale, key);
                 float buttonWidth = textWidth(text, UiFont::Body) + 28 + (icon[0] ? 12 + 8 : 0);
                 float buttonLeft = trailing ? x + width - 19 - buttonWidth : left;
                 UiItem button;
                 button.id = control(field, 1);
                 button.kind = UiItemKind::Button;
                 button.button = style;
-                button.text = text;
+                button.text = std::move(text);
                 button.icon = icon;
                 button.iconSize = 12;
                 button.rect = {buttonLeft, buttonTop, buttonLeft + buttonWidth, buttonTop + 32};
@@ -452,17 +494,19 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 if (!trailing) left += buttonWidth + 8;
             };
             if (signsIn) {
-                addButton(SettingsField::AccountDashboard, L"Open dashboard", L"\uE8A7", UiButtonStyle::Standard, true,
-                          false);
+                addButton(SettingsField::AccountDashboard, TrCtx(L"button", L"Open dashboard"), L"\uE8A7",
+                          UiButtonStyle::Standard, true, false);
                 if (status.signedIn && !signInNeeded) {
-                    addButton(SettingsField::AccountSignIn, L"Sign in again", L"", UiButtonStyle::Standard,
-                              !view.status.signInRunning, false);
+                    addButton(SettingsField::AccountSignIn, TrCtx(L"button", L"Sign in again"), L"",
+                              UiButtonStyle::Standard, !view.status.signInRunning, false);
                 }
                 if (status.signedIn) {
-                    addButton(SettingsField::AccountSignOut, L"Sign out", L"", UiButtonStyle::Standard, true, false);
+                    addButton(SettingsField::AccountSignOut, TrCtx(L"button", L"Sign out"), L"",
+                              UiButtonStyle::Standard, true, false);
                 }
             }
-            addButton(SettingsField::AccountRemove, L"Remove account", L"", UiButtonStyle::Danger, true, true);
+            addButton(SettingsField::AccountRemove, TrCtx(L"button", L"Remove account"), L"", UiButtonStyle::Danger,
+                      true, true);
             bottom += 12 + 32 + 14;
         }
         cardItems.front().rect.bottom = bottom;

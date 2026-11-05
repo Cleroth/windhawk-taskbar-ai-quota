@@ -20,6 +20,9 @@ MODEL = [
     *I18N,
     ("fragment", "core/model.h"),
     ("fragment", "core/account-error.h"),
+    # The journal's errors: a settings notice's reason.
+    ("fragment", "history/types.h"),
+    ("fragment", "history/journal-error.h"),
     ("definition", "ApplyCreditsMax"),
     # Threshold notifications' text and toast XML (fetch/notifications.h).
     ("definition", "ProviderDisplayName"),

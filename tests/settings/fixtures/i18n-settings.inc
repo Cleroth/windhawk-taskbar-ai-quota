@@ -15,6 +15,17 @@ static_assert(I18nCatalogSorted(kTestCatalogLinks));
 static constexpr I18nLanguage kTestLinks{L"x-links", L"", L"en-US", I18nPluralRule::English, true, kTestCatalogLinks,
                                          false};
 
+// A test language that thanks the contributors last to first, its list patterns reversing them.
+static constexpr I18nEntry kTestCatalogThanks[] = {
+    {L"", L"Thanks to {names}.", L"{names}: thank you!"},
+    {L"list-end", L"{a} and {b}", L"{b} with {a}"},
+    {L"list-middle", L"{a}, {b}", L"{b}; {a}"},
+    {L"list-start", L"{a}, {b}", L"{b}; {a}"},
+};
+static_assert(I18nCatalogSorted(kTestCatalogThanks));
+static constexpr I18nLanguage kTestThanks{L"x-thanks", L"", L"en-US", I18nPluralRule::English, true,
+                                          kTestCatalogThanks, false};
+
 // A production language by its tag.
 static I18nLocale TestLocale(std::wstring_view tag) {
     const I18nLanguage* language = I18nLanguageByTag(tag);
@@ -130,7 +141,7 @@ static void RunI18nSettingsTests() {
         store.failNext = 1;
         CHECK(edits.Commit(0, SettingsField::Language, 5) == 1);
         CHECK(store.settings.language == L"ru" && edits.drafts.size() == 1 && edits.drafts[0].failed &&
-              edits.drafts[0].error == L"This change couldn't be saved.");
+              ErrorText(edits.drafts[0]) == L"This change couldn't be saved.");
         // The failed choice shows with its error until the next change.
         CHECK(edits.Projection().language == L"ja");
         CHECK(edits.Reset(SettingsField::ResetBehavior) == 0);
@@ -278,5 +289,193 @@ static void RunI18nSettingsTests() {
         g.locale = L"en-US";
         CHECK(UiFormat(g, body) == english && UiLayout(g, L"\u8FD9\u4E2A", body, 100) == plain &&
               UiRichLayout(g, {{L"\u8FD9\u4E2A"}}, UiFont::Body, 100) == rich);
+    });
+
+    Run("about page: the Contributors sentence in the language's word order and list patterns; each name links to "
+        "its profile by its login, in the translation's focus order", [] {
+        UiGraphics& g = TestGraphics();
+        struct Shown {
+            std::wstring text;
+            std::vector<std::pair<std::wstring, std::wstring>> links;  // Focus order: name, URL
+        };
+        auto shown = [&](const I18nLocale& locale) {
+            SettingsView view;
+            view.page = SettingsUiPage::About;
+            view.version = L"9.8.7";
+            view.locale = locale;
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            Shown result;
+            for (const UiItem& item : frame.content) {
+                if (std::count_if(item.runs.begin(), item.runs.end(),
+                                  [](const UiRun& run) { return run.style == UiRunStyle::Link; }) != 6) {
+                    continue;
+                }
+                result.text = UiRunsText(item.runs);
+                for (const UiFocusStop& stop : UiFocusStops(frame)) {
+                    if (stop.ref.id != item.id) continue;
+                    const UiAction* action = UiActionOf(frame, stop.ref);
+                    CHECK(action && action->kind == UiActionKind::OpenUrl);
+                    result.links.push_back({UiLinkRun(item.runs, stop.ref.link)->text, action ? action->text : L""});
+                }
+            }
+            return result;
+        };
+        auto profile = [](PCWSTR name, PCWSTR login) {
+            return std::pair<std::wstring, std::wstring>{name, std::wstring(L"https://github.com/") + login};
+        };
+        const std::vector<std::pair<std::wstring, std::wstring>> alphabetical = {
+            profile(L"amirf147", L"amirf147"), profile(L"Hugh Macdonald", L"HughMacdonald"),
+            profile(L"incconutwo", L"incconutwo"), profile(L"smnio", L"smnio"), profile(L"Sof2245", L"Sof2245"),
+            profile(L"yalov", L"yalov")};
+        Shown english = shown({});
+        CHECK(english.text == L"Thanks to amirf147, Hugh Macdonald, incconutwo, smnio, Sof2245 and yalov.");
+        CHECK(english.links == alphabetical);
+        // Japanese: the names first, joined by its enumeration comma.
+        Shown japanese = shown(TestLocale(L"ja"));
+        CHECK(japanese.text == L"amirf147\u3001Hugh Macdonald\u3001incconutwo\u3001smnio\u3001Sof2245\u3001yalov "
+                               L"\u306B\u611F\u8B1D\u3057\u307E\u3059\u3002");
+        CHECK(japanese.links == alphabetical);
+        // List patterns that reverse their items move each link, and its focus stop, with its name.
+        Shown reversed = shown(I18nLocale(kTestThanks));
+        CHECK(reversed.text == L"yalov with Sof2245; smnio; incconutwo; Hugh Macdonald; amirf147: thank you!");
+        CHECK((reversed.links == std::vector<std::pair<std::wstring, std::wstring>>{
+                   alphabetical[5], alphabetical[4], alphabetical[3], alphabetical[2], alphabetical[1],
+                   alphabetical[0]}));
+    });
+
+    Run("history page in Russian: retention and time span options agree with their numbers, the custom box's unit "
+        "with the saved days; the status keeps its color inside the translated line", [] {
+        UiGraphics& g = TestGraphics();
+        auto frameFor = [&](int days) {
+            SettingsView view = TestView(SettingsUiPage::History);
+            view.locale = TestLocale(L"ru");
+            view.settings.historyRetentionDays = days;
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            return frame;
+        };
+        UiFrame frame = frameFor(21);
+        const UiItem& keep = Control(frame, kKeep);
+        CHECK((TestOptionTexts(keep) ==
+               std::vector<std::wstring>{L"30 \u0434\u043D\u0435\u0439", L"90 \u0434\u043D\u0435\u0439",
+                                         L"1 \u0433\u043E\u0434", L"\u0411\u0435\u0441\u0441\u0440\u043E\u0447\u043D\u043E",
+                                         L"\u0414\u0440\u0443\u0433\u043E\u0439"}));
+        CHECK(keep.text == L"\u0414\u0440\u0443\u0433\u043E\u0439");  // 21 days: Другой
+        CHECK((TestOptionTexts(Control(frame, SettingsField::HistoryRange)) ==
+               std::vector<std::wstring>{L"24 \u0447\u0430\u0441\u0430", L"7 \u0434\u043D\u0435\u0439",
+                                         L"30 \u0434\u043D\u0435\u0439", L"90 \u0434\u043D\u0435\u0439",
+                                         L"\u0412\u0441\u0451 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u043E\u0435"}));
+        CHECK(Control(frame, kRetention, 3).runs[0].text == L"\u0434\u0435\u043D\u044C");  // 21 день
+        CHECK(Control(frameFor(2), kRetention, 3).runs[0].text == L"\u0434\u043D\u044F");  // 2 дня
+        CHECK(Control(frameFor(5), kRetention, 3).runs[0].text == L"\u0434\u043D\u0435\u0439");  // 5 дней
+        CHECK(Control(frameFor(0), kRetention, 3).runs[0].text == L"\u0434\u043D\u0435\u0439");  // forever: 3650 дней
+        // ● Запись · Новые замеры поступают при каждом опросе.
+        const UiItem* status = nullptr;
+        for (const UiItem& item : frame.content) {
+            if (!item.runs.empty() && item.runs[0].text == L"\u25CF \u0417\u0430\u043F\u0438\u0441\u044C") status = &item;
+        }
+        CHECK(status && status->runs.size() == 3 && status->runs[0].ink == UiInk::Success &&
+              status->runs[1].text == L" \u00B7 \u041D\u043E\u0432\u044B\u0435 \u0437\u0430\u043C\u0435\u0440\u044B "
+                                      L"\u043F\u043E\u0441\u0442\u0443\u043F\u0430\u044E\u0442 \u043F\u0440\u0438 "
+                                      L"\u043A\u0430\u0436\u0434\u043E\u043C \u043E\u043F\u0440\u043E\u0441\u0435.\n" &&
+              status->runs[1].ink == UiInk::Inherit);
+    });
+
+    Run("settings notices: each code's text in English as before, read in the language shown when its box opens; "
+        "a kept history's reason in the same language, inside the whole sentence", [] {
+        using enum SettingsNoticeCode;
+        const std::pair<SettingsNoticeCode, PCWSTR> english[] = {
+            {AccountsDropped, L"An account is no longer configured; its unsaved changes were dropped."},
+            {AccountDropped, L"This account is no longer configured; its unsaved changes were dropped."},
+            {AccountNotSaved, L"Could not save the account. The change is kept here with its error; change it again "
+                              L"to retry."},
+            {AccountExists, L"That provider and label are already configured."},
+            {AccountSaveFailed, L"Could not save the account."},
+            {ChangedElsewhere, L"The account was changed from another taskbar window."},
+            {IdentitySignInRunning, L"Wait for the current sign-in to finish before changing identity."},
+            {RenameTargetSignedIn, L"The renamed account identity already has a retained sign-in. To replace it, add "
+                                   L"an account with that provider and label, then remove it. The account was not "
+                                   L"changed."},
+            {RenameCopyFailed, L"The stored sign-in could not be copied. The account was not changed."},
+            {RenameCopyLeft, L"Could not save the account. The copied sign-in remains under the attempted new "
+                             L"identity. To delete it, add an account with the attempted provider and label, then "
+                             L"remove it."},
+            {RenameOldSignInLeft, L"The account was renamed, but a duplicate stored sign-in remains under the old "
+                                  L"identity. To delete it, re-add an account with the old provider and label, then "
+                                  L"remove it."},
+            {RemoveSignInRunning, L"Wait for the current sign-in to finish before removing accounts."},
+            {RemoveSignInKept, L"The stored sign-in could not be deleted, so the account was not removed."},
+            {RemoveSignedOut, L"The stored sign-in was deleted, but settings could not be saved. The account remains "
+                              L"configured but signed out."},
+            {RemoveFailed, L"Could not remove the account."},
+            {ReorderFailed, L"Could not reorder the account."},
+            {VisibilityFailed, L"Could not update account visibility."},
+            {SignOutFailed, L"The stored sign-in could not be deleted and remains retained for this account."},
+        };
+        for (auto [code, text] : english) CHECK_TEXT(SettingsNoticeText({}, code), text);
+        CHECK(SettingsNoticeText({}, None).empty());
+        // A removal whose history stays: the controller keeps the code and the journal's error.
+        TestStore store;
+        AddTestAccounts(store.settings);
+        store.historyKept = true;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.AccountAction(11, SettingsField::AccountRemove, 1) == SettingsActionResult::Done);
+        CHECK(edits.notices.size() == 1 && edits.notices[0].code == HistoryKept &&
+              edits.notices[0].reason == HistoryJournalError::CannotWrite);
+        const SettingsNotice& kept = edits.notices[0];
+        CHECK_TEXT(SettingsNoticeText({}, kept.code, kept.reason),
+                   L"The account was removed, but its usage history could not be deleted and was kept.\n\nCannot "
+                   L"write history. Check disk space and storage permissions.");
+        CHECK_TEXT(SettingsNoticeText(TestLocale(L"de"), kept.code, kept.reason),
+                   L"Das Konto wurde entfernt, aber sein Nutzungsverlauf konnte nicht gel\u00F6scht werden und wurde "
+                   L"behalten.\n\nDer Verlauf kann nicht geschrieben werden. Pr\u00FCfen Sie Speicherplatz und "
+                   L"Speicherberechtigungen.");
+        CHECK_TEXT(SettingsNoticeText(TestLocale(L"ru"), RemoveSignInRunning),
+                   L"\u0414\u043E\u0436\u0434\u0438\u0442\u0435\u0441\u044C \u0437\u0430\u0432\u0435\u0440\u0448\u0435"
+                   L"\u043D\u0438\u044F \u0442\u0435\u043A\u0443\u0449\u0435\u0433\u043E \u0432\u0445\u043E\u0434\u0430, "
+                   L"\u043F\u0440\u0435\u0436\u0434\u0435 \u0447\u0435\u043C \u0443\u0434\u0430\u043B\u044F\u0442\u044C "
+                   L"\u0430\u043A\u043A\u0430\u0443\u043D\u0442\u044B.");
+    });
+
+    Run("validation: a draft keeps its error as a code, so each frame shows it in its own language and a language "
+        "switch re-reads it; English as before", [] {
+        UiGraphics& g = TestGraphics();
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kPoll, L"12a");
+        CHECK(!edits.RequestCommit(0, kPoll) && edits.drafts[0].error == SettingsDraftError::Range);
+        edits.SetText(12, SettingsField::AccountLabel, L" ");
+        CHECK(!edits.RequestCommit(12, SettingsField::AccountLabel) &&
+              edits.drafts[1].error == SettingsDraftError::LabelEmpty);
+        auto frameFor = [&](SettingsUiPage page, const I18nLocale& locale) {
+            SettingsView view = TestView(page);
+            view.locale = locale;
+            view.settings = edits.Projection();
+            view.drafts = edits.drafts;
+            for (size_t i = 0; i < edits.keys.size(); i++) {
+                view.accounts.push_back({edits.keys[i], edits.SlotOf(edits.keys[i]), {}, edits.keys[i] == 12});
+            }
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            return frame;
+        };
+        CHECK(HasText(frameFor(SettingsUiPage::Behavior, {}), L"Enter a whole number from 2 to 1440."));
+        UiFrame german = frameFor(SettingsUiPage::Behavior, TestLocale(L"de"));
+        CHECK(HasText(german, L"Geben Sie eine ganze Zahl von 2 bis 1440 ein.") &&
+              !HasText(german, L"Enter a whole number"));
+        CHECK(HasText(frameFor(SettingsUiPage::Behavior, TestLocale(L"ru")),
+                      L"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0446\u0435\u043B\u043E\u0435 \u0447\u0438\u0441"
+                      L"\u043B\u043E \u043E\u0442 2 \u0434\u043E 1440."));
+        CHECK(HasText(frameFor(SettingsUiPage::Behavior, {}), L"Enter a whole number from 2 to 1440."));
+        // The label's error on its expanded card, the same way.
+        CHECK(HasText(frameFor(SettingsUiPage::Accounts, {}), L"Enter a label."));
+        UiFrame russian = frameFor(SettingsUiPage::Accounts, TestLocale(L"ru"));
+        CHECK(HasText(russian, L"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043C\u0435\u0442\u043A\u0443.") &&
+              !HasText(russian, L"Enter a label."));
+        CHECK(HasText(frameFor(SettingsUiPage::Accounts, TestLocale(L"de")), L"Geben Sie eine Bezeichnung ein."));
     });
 }
