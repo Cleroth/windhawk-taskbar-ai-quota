@@ -1,4 +1,5 @@
 #include "support.inc"
+#include "i18n.inc"
 #include "meter.inc"
 #include "logos.inc"
 #include "ui.inc"
@@ -26,6 +27,7 @@ int main(int argc, char** argv) {
         RunRenders(directory);
         RunControlRenders(directory);
     } else {
+        RunI18nTests();
         RunMeterTests();
         RunLogoTests();
         RunUiTests();

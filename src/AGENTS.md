@@ -199,3 +199,5 @@ access token without refresh or expiry and sent only to its usage endpoint.
   reset in `settings/edits.h`, its page builder) and the
   [README settings list](../README.md#settings).
 - Wide strings throughout; `swprintf`'s `%s` is wide here.
+- Localization (message keys, grammar, catalogs, translator notes, the catalog checker):
+  [i18n/AGENTS.md](i18n/AGENTS.md).

@@ -184,6 +184,7 @@ Have a suggestion or found a bug?
 #include <mutex>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -202,6 +203,790 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 // Unity build: the fragments below form one translation unit, included in dependency
 // order. generate-mod.ps1 inlines them into the published single-file mod.
+
+// src/i18n/template.h
+// Message templates: the grammar of English keys and their translations (i18n/AGENTS.md) and
+// integer CLDR plural rules. Pure and constexpr: Tr and TrCtx check English keys at compile time,
+// lookups check translations against them.
+
+// CLDR cardinal categories, in kI18nPluralNames' order.
+enum class I18nPlural : uint8_t { Zero, One, Two, Few, Many, Other };
+static constexpr std::wstring_view kI18nPluralNames[] = {L"zero", L"one", L"two", L"few", L"many", L"other"};
+
+// Integer CLDR cardinal rules, named after a language that uses them.
+enum class I18nPluralRule : uint8_t {
+    English,    // en, de: one (1), other
+    Spanish,    // es: one (1), many (non-zero multiples of a million), other
+    French,     // fr, pt-BR: one (0 and 1), many (as Spanish), other
+    Russian,    // ru: one (1, 21, 101), few (2-4, 22-24), many (0, 5-20, 25-30, 111)
+    OtherOnly,  // ja, zh-Hans
+};
+
+// The category of an integer's absolute value.
+static constexpr I18nPlural I18nPluralCategory(I18nPluralRule rule, unsigned long long i) {
+    bool millions = i != 0 && i % 1000000 == 0;
+    switch (rule) {
+    case I18nPluralRule::English:
+        return i == 1 ? I18nPlural::One : I18nPlural::Other;
+    case I18nPluralRule::Spanish:
+        return i == 1 ? I18nPlural::One : millions ? I18nPlural::Many : I18nPlural::Other;
+    case I18nPluralRule::French:
+        return i <= 1 ? I18nPlural::One : millions ? I18nPlural::Many : I18nPlural::Other;
+    case I18nPluralRule::Russian:
+        if (i % 10 == 1 && i % 100 != 11) return I18nPlural::One;
+        if (i % 10 >= 2 && i % 10 <= 4 && (i % 100 < 12 || i % 100 > 14)) return I18nPlural::Few;
+        return I18nPlural::Many;
+    case I18nPluralRule::OtherOnly:
+        return I18nPlural::Other;
+    }
+    return I18nPlural::Other;
+}
+
+// A rule's categories as bits (1 << category). Russian's other holds fractions, never an integer,
+// but a selector that isn't a number shows it.
+static constexpr unsigned I18nPluralMask(I18nPluralRule rule) {
+    auto bit = [](I18nPlural category) { return 1u << unsigned(category); };
+    switch (rule) {
+    case I18nPluralRule::English:
+        return bit(I18nPlural::One) | bit(I18nPlural::Other);
+    case I18nPluralRule::Spanish:
+    case I18nPluralRule::French:
+        return bit(I18nPlural::One) | bit(I18nPlural::Many) | bit(I18nPlural::Other);
+    case I18nPluralRule::Russian:
+        return bit(I18nPlural::One) | bit(I18nPlural::Few) | bit(I18nPlural::Many) | bit(I18nPlural::Other);
+    case I18nPluralRule::OtherOnly:
+        return bit(I18nPlural::Other);
+    }
+    return bit(I18nPlural::Other);
+}
+
+// Characters a backslash escapes; a backslash before anything else is a syntax error.
+static constexpr std::wstring_view kI18nEscapable = L"{}<#\\";
+
+// Parse scopes: what an element is inside. Plurals and tags never nest in their own kind; a tag
+// may hold a plural or sit in a branch. Tags stay flat as the UI's runs are: bold or a link.
+enum : unsigned { kI18nInBranch = 1, kI18nInTag = 2 };
+
+// Reads elements up to the end or a closer ("}", "</b>", "</link>"), which it leaves for the caller
+// to match, and reports them to the sink in order: Text (an escape arrives as its character
+// alone), Arg, Number ('#' in a branch), PluralBegin, Branch, BranchEnd, PluralEnd, BoldBegin,
+// BoldEnd, LinkBegin, LinkEnd. False on a syntax error, after reporting what came before it.
+template <class Sink>
+static constexpr bool I18nParseMessage(std::wstring_view s, size_t& at, Sink& sink, unsigned scope) {
+    size_t literal = at;
+    auto flush = [&] {
+        if (at > literal) sink.Text(s.substr(literal, at - literal));
+    };
+    auto spaces = [&] {
+        while (at < s.size() && s[at] == L' ') at++;
+    };
+    auto next = [&](wchar_t c) { return at < s.size() && s[at] == c; };
+    auto name = [&] {
+        size_t start = at;
+        while (at < s.size() && ((s[at] >= L'a' && s[at] <= L'z') || (s[at] >= L'A' && s[at] <= L'Z') ||
+                                 s[at] == L'_' || (at > start && s[at] >= L'0' && s[at] <= L'9'))) {
+            at++;
+        }
+        return s.substr(start, at - start);
+    };
+    while (at < s.size()) {
+        std::wstring_view rest = s.substr(at);
+        if (rest[0] == L'}' || rest.starts_with(L"</b>") || rest.starts_with(L"</link>")) break;
+        if (rest[0] == L'\\') {
+            if (rest.size() < 2 || kI18nEscapable.find(rest[1]) == std::wstring_view::npos) return false;
+            flush();
+            sink.Text(rest.substr(1, 1));
+            at += 2;
+        } else if (rest[0] == L'#' && (scope & kI18nInBranch)) {
+            flush();
+            sink.Number();
+            at++;
+        } else if (rest[0] == L'{') {
+            flush();
+            at++;
+            spaces();
+            std::wstring_view arg = name();
+            spaces();
+            if (arg.empty()) return false;
+            if (next(L'}')) {
+                sink.Arg(arg);
+                at++;
+            } else {
+                // {arg, plural, category{message} ... other{message}}
+                if ((scope & kI18nInBranch) || !next(L',')) return false;
+                at++;
+                spaces();
+                if (name() != L"plural") return false;
+                spaces();
+                if (!next(L',')) return false;
+                at++;
+                sink.PluralBegin(arg);
+                unsigned seen = 0;
+                for (spaces(); !next(L'}'); spaces()) {
+                    std::wstring_view keyword = name();
+                    size_t category = size_t(std::find(std::begin(kI18nPluralNames), std::end(kI18nPluralNames),
+                                                       keyword) - std::begin(kI18nPluralNames));
+                    if (keyword.empty() || category == std::size(kI18nPluralNames) || (seen & (1u << category))) {
+                        return false;
+                    }
+                    seen |= 1u << category;
+                    spaces();
+                    if (!next(L'{')) return false;
+                    at++;
+                    sink.Branch(I18nPlural(category));
+                    if (!I18nParseMessage(s, at, sink, scope | kI18nInBranch) || !next(L'}')) return false;
+                    at++;
+                    sink.BranchEnd();
+                }
+                if (!(seen & (1u << size_t(I18nPlural::Other)))) return false;
+                at++;
+                sink.PluralEnd();
+            }
+        } else if (rest[0] == L'<') {
+            flush();
+            bool bold = rest.starts_with(L"<b>");
+            if (scope & kI18nInTag) return false;
+            if (bold) {
+                at += 3;
+                sink.BoldBegin();
+            } else if (rest.starts_with(L"<link id=\"")) {
+                at += 10;
+                std::wstring_view id = name();
+                if (id.empty() || !s.substr(at).starts_with(L"\">")) return false;
+                at += 2;
+                sink.LinkBegin(id);
+            } else {
+                return false;
+            }
+            size_t content = at;
+            std::wstring_view closer = bold ? L"</b>" : L"</link>";
+            if (!I18nParseMessage(s, at, sink, scope | kI18nInTag) || at == content ||
+                !s.substr(at).starts_with(closer)) {
+                return false;
+            }
+            at += closer.size();
+            if (bold) sink.BoldEnd();
+            else sink.LinkEnd();
+        } else {
+            at++;
+            continue;
+        }
+        literal = at;
+    }
+    flush();
+    return true;
+}
+
+// Distinct argument names and link IDs one template may use, each.
+static constexpr size_t kI18nMaxNames = 16;
+
+// A set of argument names or link IDs.
+struct I18nNames {
+    std::array<std::wstring_view, kI18nMaxNames> items{};
+    size_t count = 0;
+
+    // Its index; count when absent.
+    constexpr size_t Find(std::wstring_view name) const {
+        size_t i = 0;
+        while (i < count && items[i] != name) i++;
+        return i;
+    }
+    constexpr bool Has(std::wstring_view name) const { return Find(name) < count; }
+    // False when full.
+    constexpr bool Add(std::wstring_view name) {
+        if (Has(name)) return true;
+        if (count == items.size()) return false;
+        items[count++] = name;
+        return true;
+    }
+    constexpr bool operator==(const I18nNames& other) const {
+        if (count != other.count) return false;
+        for (size_t i = 0; i < count; i++) {
+            if (!other.Has(items[i])) return false;
+        }
+        return true;
+    }
+};
+
+// What a translation must share with its English key. valid: the template parses, uses only its
+// language's plural categories, and has each link exactly once in every expansion (each branch of
+// a plural holding links holds the same ones). An expansion is the text one category per selector
+// shows: plurals on the same selector pick together, and a missing category picks other.
+struct I18nShape {
+    bool valid = false;
+    I18nNames args;     // Plural selectors included
+    I18nNames plurals;  // Plural selectors
+    I18nNames links;
+    I18nNames linked;   // Arguments inside a link
+    // Per args entry: its fewest and most {name} uses in an expansion ('#' and plurals aside).
+    std::array<size_t, kI18nMaxNames> fewest{};
+    std::array<size_t, kI18nMaxNames> most{};
+};
+
+// Distinct plural selectors one template may use.
+static constexpr size_t kI18nMaxSelectors = 4;
+
+// Collects I18nTemplateShape's shape.
+struct I18nShapeSink {
+    using Uses = std::array<size_t, kI18nMaxNames>;
+    static constexpr size_t kCategories = std::size(kI18nPluralNames);
+
+    I18nPluralRule rule = I18nPluralRule::English;
+    I18nShape shape{};
+    bool ok = true;
+    bool inLink = false;
+    // The plural being read: its selector's index, the categories it has, the branch being read
+    // and its links, the first branch's links (the others match them) and each branch's uses.
+    bool inPlural = false;
+    size_t selector = 0;
+    unsigned present = 0;
+    size_t branch = 0;
+    size_t branches = 0;
+    I18nNames branchLinks{};
+    I18nNames pluralLinks{};
+    std::array<Uses, kCategories> branchUses{};
+    // Per selector and category: the uses in the branches that category picks.
+    std::array<std::array<Uses, kCategories>, kI18nMaxSelectors> picked{};
+
+    constexpr void Text(std::wstring_view) {}
+    constexpr void Number() {}
+    constexpr void Arg(std::wstring_view name) {
+        ok = shape.args.Add(name) && (!inLink || shape.linked.Add(name)) && ok;
+        size_t i = shape.args.Find(name);
+        if (i == shape.args.count) return;
+        if (inPlural) {
+            branchUses[branch][i]++;
+        } else {
+            shape.fewest[i]++;
+            shape.most[i]++;
+        }
+    }
+    constexpr void PluralBegin(std::wstring_view name) {
+        ok = shape.args.Add(name) && shape.plurals.Add(name) && ok;
+        selector = shape.plurals.Find(name);
+        ok = ok && selector < kI18nMaxSelectors;
+        inPlural = true;
+        present = 0;
+        branches = 0;
+        branchUses = {};
+    }
+    constexpr void Branch(I18nPlural category) {
+        branch = size_t(category);
+        present |= 1u << branch;
+        ok = ok && (I18nPluralMask(rule) & (1u << branch));
+        branchLinks = {};
+    }
+    constexpr void BranchEnd() {
+        if (branches++ == 0) pluralLinks = branchLinks;
+        else ok = ok && branchLinks == pluralLinks;
+    }
+    constexpr void PluralEnd() {
+        for (size_t i = 0; i < pluralLinks.count; i++) {
+            ok = ok && !shape.links.Has(pluralLinks.items[i]) && shape.links.Add(pluralLinks.items[i]);
+        }
+        for (size_t c = 0; selector < kI18nMaxSelectors && c < kCategories; c++) {
+            if (!(I18nPluralMask(rule) & (1u << c))) continue;
+            const Uses& uses = branchUses[present & (1u << c) ? c : size_t(I18nPlural::Other)];
+            for (size_t i = 0; i < kI18nMaxNames; i++) picked[selector][c][i] += uses[i];
+        }
+        inPlural = false;
+    }
+    constexpr void BoldBegin() {}
+    constexpr void BoldEnd() {}
+    constexpr void LinkBegin(std::wstring_view id) {
+        I18nNames& links = inPlural ? branchLinks : shape.links;
+        ok = ok && !links.Has(id) && links.Add(id);
+        inLink = true;
+    }
+    constexpr void LinkEnd() { inLink = false; }
+};
+
+// A template's shape under a plural rule (English keys: English).
+static constexpr I18nShape I18nTemplateShape(std::wstring_view text, I18nPluralRule rule) {
+    I18nShapeSink sink;
+    sink.rule = rule;
+    size_t at = 0;
+    bool parsed = I18nParseMessage(text, at, sink, 0) && at == text.size();
+    sink.shape.valid = parsed && sink.ok;
+    // Each selector's plurals add their fewest and most uses over the categories it can select.
+    for (size_t s = 0; s < std::min(sink.shape.plurals.count, kI18nMaxSelectors); s++) {
+        for (size_t i = 0; i < kI18nMaxNames; i++) {
+            size_t fewest = std::numeric_limits<size_t>::max(), most = 0;
+            for (size_t c = 0; c < I18nShapeSink::kCategories; c++) {
+                if (!(I18nPluralMask(rule) & (1u << c))) continue;
+                fewest = std::min(fewest, sink.picked[s][c][i]);
+                most = std::max(most, sink.picked[s][c][i]);
+            }
+            sink.shape.fewest[i] += fewest;
+            sink.shape.most[i] += most;
+        }
+    }
+    return sink.shape;
+}
+
+// src/i18n/catalog.h
+// Catalog entries: one language's translation of an English key in its context. Each language's
+// catalog (i18n/lang-*.h) is sorted by (context, English) with no duplicates, for binary search.
+
+struct I18nEntry {
+    std::wstring_view context;
+    std::wstring_view english;
+    std::wstring_view translation;
+};
+
+// The catalogs' order: context, then English, by UTF-16 code units.
+static constexpr bool I18nEntryBefore(const I18nEntry& a, const I18nEntry& b) {
+    return a.context != b.context ? a.context < b.context : a.english < b.english;
+}
+
+static constexpr bool I18nCatalogSorted(std::span<const I18nEntry> catalog) {
+    return std::adjacent_find(catalog.begin(), catalog.end(), [](const I18nEntry& a, const I18nEntry& b) {
+               return !I18nEntryBefore(a, b);
+           }) == catalog.end();
+}
+
+// src/i18n/lang-de.h
+// German (de): {context, English, translation}, sorted by context, then English.
+// Adding, changing and translating entries: i18n/AGENTS.md.
+static constexpr I18nEntry kI18nCatalogDe[] = {
+    {L"list-end", L"{a} and {b}", L"{a} und {b}"},
+    {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
+    {L"list-pair", L"{a} and {b}", L"{a} und {b}"},
+    {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+};
+static_assert(I18nCatalogSorted(kI18nCatalogDe), "sort by (context, English), no duplicates");
+// src/i18n/lang-es.h
+// Spanish (es): {context, English, translation}, sorted by context, then English.
+// Adding, changing and translating entries: i18n/AGENTS.md.
+static constexpr I18nEntry kI18nCatalogEs[] = {
+    {L"list-end", L"{a} and {b}", L"{a} y {b}"},
+    {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
+    {L"list-pair", L"{a} and {b}", L"{a} y {b}"},
+    {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+};
+static_assert(I18nCatalogSorted(kI18nCatalogEs), "sort by (context, English), no duplicates");
+// src/i18n/lang-fr.h
+// French (fr): {context, English, translation}, sorted by context, then English.
+// Adding, changing and translating entries: i18n/AGENTS.md.
+static constexpr I18nEntry kI18nCatalogFr[] = {
+    {L"list-end", L"{a} and {b}", L"{a} et {b}"},
+    {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
+    {L"list-pair", L"{a} and {b}", L"{a} et {b}"},
+    {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+};
+static_assert(I18nCatalogSorted(kI18nCatalogFr), "sort by (context, English), no duplicates");
+// src/i18n/lang-ja.h
+// Japanese (ja): {context, English, translation}, sorted by context, then English.
+// Adding, changing and translating entries: i18n/AGENTS.md.
+static constexpr I18nEntry kI18nCatalogJa[] = {
+    {L"list-end", L"{a} and {b}", L"{a}、{b}"},
+    {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
+    {L"list-pair", L"{a} and {b}", L"{a}、{b}"},
+    {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+};
+static_assert(I18nCatalogSorted(kI18nCatalogJa), "sort by (context, English), no duplicates");
+// src/i18n/lang-pt-BR.h
+// Portuguese (Brazil) (pt-BR): {context, English, translation}, sorted by context, then English.
+// Adding, changing and translating entries: i18n/AGENTS.md.
+static constexpr I18nEntry kI18nCatalogPtBr[] = {
+    {L"list-end", L"{a} and {b}", L"{a} e {b}"},
+    {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
+    {L"list-pair", L"{a} and {b}", L"{a} e {b}"},
+    {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+};
+static_assert(I18nCatalogSorted(kI18nCatalogPtBr), "sort by (context, English), no duplicates");
+// src/i18n/lang-ru.h
+// Russian (ru): {context, English, translation}, sorted by context, then English.
+// Adding, changing and translating entries: i18n/AGENTS.md.
+static constexpr I18nEntry kI18nCatalogRu[] = {
+    {L"list-end", L"{a} and {b}", L"{a} и {b}"},
+    {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
+    {L"list-pair", L"{a} and {b}", L"{a} и {b}"},
+    {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+};
+static_assert(I18nCatalogSorted(kI18nCatalogRu), "sort by (context, English), no duplicates");
+// src/i18n/lang-zh-Hans.h
+// Simplified Chinese (zh-Hans): {context, English, translation}, sorted by context, then English.
+// Adding, changing and translating entries: i18n/AGENTS.md.
+static constexpr I18nEntry kI18nCatalogZhHans[] = {
+    {L"list-end", L"{a} and {b}", L"{a}和{b}"},
+    {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
+    {L"list-pair", L"{a} and {b}", L"{a}和{b}"},
+    {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+};
+static_assert(I18nCatalogSorted(kI18nCatalogZhHans), "sort by (context, English), no duplicates");
+
+// src/i18n/languages.h
+// Languages: the registry, the pseudo-locale, explicit choices by tag, Automatic's match over the
+// user's preferred languages, and the localization context pure code receives.
+
+struct I18nLanguage {
+    std::wstring_view tag;         // BCP-47; what an explicit choice stores
+    std::wstring_view nativeName;  // The language list's name for it
+    std::wstring_view localeName;  // DirectWrite's locale and XAML's Language
+    I18nPluralRule plural;
+    bool inProgress;               // Automatic skips it; an explicit choice doesn't
+    std::span<const I18nEntry> catalog;
+    bool pseudo;                   // English transformed at lookup
+};
+
+// English, the source language, first.
+static constexpr I18nLanguage kI18nLanguages[] = {
+    {L"en", L"English", L"en-US", I18nPluralRule::English, false, {}, false},
+    {L"de", L"Deutsch", L"de-DE", I18nPluralRule::English, true, kI18nCatalogDe, false},
+    {L"es", L"Español", L"es-ES", I18nPluralRule::Spanish, true, kI18nCatalogEs, false},
+    {L"fr", L"Français", L"fr-FR", I18nPluralRule::French, true, kI18nCatalogFr, false},
+    {L"ja", L"日本語", L"ja-JP", I18nPluralRule::OtherOnly, true, kI18nCatalogJa, false},
+    {L"pt-BR", L"Português (Brasil)", L"pt-BR", I18nPluralRule::French, true, kI18nCatalogPtBr, false},
+    {L"ru", L"Русский", L"ru-RU", I18nPluralRule::Russian, true, kI18nCatalogRu, false},
+    {L"zh-Hans", L"简体中文", L"zh-CN", I18nPluralRule::OtherOnly, true, kI18nCatalogZhHans, false},
+};
+
+// The pseudo-locale (i18n/pseudo.h): not among the languages, so only an explicit choice reaches it.
+static constexpr I18nLanguage kI18nPseudoLanguage{L"qps-ploc", L"Pseudo-locale", L"en-US", I18nPluralRule::English,
+                                                  true, {}, true};
+
+// Tags compare ASCII case-insensitively, reading '_' as '-'.
+static constexpr bool I18nTagEquals(std::wstring_view a, std::wstring_view b) {
+    auto fold = [](wchar_t c) { return c == L'_' ? L'-' : c >= L'A' && c <= L'Z' ? wchar_t(c - L'A' + L'a') : c; };
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); i++) {
+        if (fold(a[i]) != fold(b[i])) return false;
+    }
+    return true;
+}
+
+// API entry points carry [[maybe_unused]]: a build or test target may use only some of them.
+
+// An explicit choice by its stored tag, in progress or the pseudo-locale; null when unknown.
+[[maybe_unused]] static const I18nLanguage* I18nLanguageByTag(std::wstring_view tag) {
+    for (const I18nLanguage& language : kI18nLanguages) {
+        if (I18nTagEquals(language.tag, tag)) return &language;
+    }
+    return I18nTagEquals(kI18nPseudoLanguage.tag, tag) ? &kI18nPseudoLanguage : nullptr;
+}
+
+// Automatic: for each preferred tag in order, the first finished language it names, else the next
+// tag; English (the registry's first entry) when none does. A tag names its exact language, else
+// its primary language's (de-AT: de, pt-PT: pt-BR). Chinese goes by script, explicit or implied by
+// the region: Hans (zh-Hans, zh-CN, zh-SG, bare zh) or Hant (zh-Hant, zh-TW, zh-HK, zh-MO), which
+// no catalog serves; an explicit script beats the region. languages: the registry; tests pass theirs.
+[[maybe_unused]] static const I18nLanguage& I18nMatchLanguage(
+    std::span<const std::wstring_view> preferred, std::span<const I18nLanguage> languages = kI18nLanguages) {
+    auto primary = [](std::wstring_view tag) { return tag.substr(0, tag.find_first_of(L"-_")); };
+    for (std::wstring_view tag : preferred) {
+        std::wstring_view wanted = tag;
+        if (I18nTagEquals(primary(tag), L"zh")) {
+            // BCP-47 positions: extended languages (3 letters), then a script (4 letters), then a
+            // region (2 letters or 3 digits); variants and singletons (extensions, private use) end it.
+            auto all = [](std::wstring_view s, bool letters) {
+                return std::all_of(s.begin(), s.end(), [letters](wchar_t c) {
+                    return letters ? (c | 0x20) >= L'a' && (c | 0x20) <= L'z' : c >= L'0' && c <= L'9';
+                });
+            };
+            std::wstring_view script, region;
+            for (std::wstring_view rest = tag.substr(std::min<size_t>(tag.size(), 3)); !rest.empty();) {
+                size_t cut = rest.find_first_of(L"-_");
+                std::wstring_view subtag = rest.substr(0, cut);
+                rest = cut == std::wstring_view::npos ? std::wstring_view{} : rest.substr(cut + 1);
+                if (script.empty() && subtag.size() == 3 && all(subtag, true)) continue;
+                if (script.empty() && subtag.size() == 4 && all(subtag, true)) {
+                    script = subtag;
+                    continue;
+                }
+                if ((subtag.size() == 2 && all(subtag, true)) || (subtag.size() == 3 && all(subtag, false))) {
+                    region = subtag;
+                }
+                break;
+            }
+            bool hans = !script.empty() ? I18nTagEquals(script, L"Hans") :
+                        !I18nTagEquals(region, L"TW") && !I18nTagEquals(region, L"HK") && !I18nTagEquals(region, L"MO");
+            if (!hans) continue;
+            wanted = L"zh-Hans";
+        }
+        const I18nLanguage* parent = nullptr;
+        for (const I18nLanguage& language : languages) {
+            if (language.inProgress) continue;
+            if (I18nTagEquals(language.tag, wanted)) return language;
+            if (!parent && I18nTagEquals(primary(language.tag), primary(wanted))) parent = &language;
+        }
+        if (parent) return *parent;
+    }
+    return languages.front();
+}
+
+// The localization context: one immutable value per frame, notification or dialog that pure code
+// receives through its inputs, never from a global. Regional formats join it later. Default:
+// English.
+class I18nLocale {
+public:
+    constexpr I18nLocale() = default;
+    constexpr explicit I18nLocale(const I18nLanguage& language) : language_(&language) {}
+
+    constexpr const I18nLanguage& Language() const { return *language_; }
+    // DirectWrite's locale and XAML's Language.
+    constexpr std::wstring_view LocaleName() const { return language_->localeName; }
+
+    constexpr bool operator==(const I18nLocale&) const = default;
+
+private:
+    const I18nLanguage* language_ = &kI18nLanguages[0];
+};
+
+// src/i18n/pseudo.h
+// The pseudo-locale (qps-ploc): English with accented letters, about 35% padding and brackets, so
+// untranslated, cut or concatenated text stands out. Arguments, plurals, markup and link IDs stay.
+
+// Re-emits a template with its text transformed.
+struct I18nPseudoSink {
+    std::wstring out = L"[";
+    size_t letters = 0;  // Text characters, which the padding follows
+
+    void Text(std::wstring_view text) {
+        static constexpr std::wstring_view kUpper = L"ÅƁÇÐÉƑĜĤÎĴĶĹṀÑÖƤǪŔŠŦÛṼŴẊÝŽ";
+        static constexpr std::wstring_view kLower = L"åƀçðéƒĝĥîĵķļɱñöþǫŕšţûṽŵẋýž";
+        for (wchar_t c : text) {
+            letters++;
+            if (kI18nEscapable.find(c) != std::wstring_view::npos) out += L'\\';
+            out += c >= L'A' && c <= L'Z' ? kUpper[c - L'A'] : c >= L'a' && c <= L'z' ? kLower[c - L'a'] : c;
+        }
+    }
+    void Arg(std::wstring_view name) { out.append(L"{").append(name).append(L"}"); }
+    void Number() { out += L'#'; }
+    void PluralBegin(std::wstring_view name) { out.append(L"{").append(name).append(L", plural,"); }
+    void Branch(I18nPlural category) { out.append(L" ").append(kI18nPluralNames[size_t(category)]).append(L"{"); }
+    void BranchEnd() { out += L'}'; }
+    void PluralEnd() { out += L'}'; }
+    void BoldBegin() { out += L"<b>"; }
+    void BoldEnd() { out += L"</b>"; }
+    void LinkBegin(std::wstring_view id) { out.append(L"<link id=\"").append(id).append(L"\">"); }
+    void LinkEnd() { out += L"</link>"; }
+};
+
+// The pseudo-locale's template for an English one; a testing boundary as well as the lookup's.
+static std::wstring I18nPseudoTemplate(std::wstring_view english) {
+    static constexpr std::wstring_view kPadding = L" ļöŕéɱ îþšûɱ ðöļöŕ šîţ åɱéţ";
+    I18nPseudoSink sink;
+    size_t at = 0;
+    I18nParseMessage(english, at, sink, 0);
+    for (size_t i = 0, pad = (sink.letters * 35 + 99) / 100; i < pad; i++) sink.out += kPadding[i % kPadding.size()];
+    return sink.out + L']';
+}
+
+// src/i18n/format.h
+// Localized text: message keys, arguments, formatting with whole-entry English fallback, and list
+// patterns. Call forms and rules: i18n/AGENTS.md.
+
+class I18nKey;
+template <size_t N>
+static consteval I18nKey Tr(const wchar_t (&english)[N]);
+template <size_t C, size_t N>
+static consteval I18nKey TrCtx(const wchar_t (&context)[C], const wchar_t (&english)[N]);
+
+// A message key: a literal English template, and the context that tells apart uses of the same
+// English (none: empty). Only Tr and TrCtx make keys, so tests/i18n/check.py extracts every one
+// from source; both reject a malformed English template at compile time.
+class I18nKey {
+public:
+    constexpr std::wstring_view Context() const { return context_; }
+    constexpr std::wstring_view English() const { return english_; }
+
+private:
+    constexpr I18nKey(std::wstring_view context, std::wstring_view english)
+        : context_(context), english_(english) {}
+
+    std::wstring_view context_;
+    std::wstring_view english_;
+
+    template <size_t N>
+    friend consteval I18nKey Tr(const wchar_t (&english)[N]);
+    template <size_t C, size_t N>
+    friend consteval I18nKey TrCtx(const wchar_t (&context)[C], const wchar_t (&english)[N]);
+};
+
+template <size_t N>
+static consteval I18nKey Tr(const wchar_t (&english)[N]) {
+    if (N < 2 || !I18nTemplateShape({english, N - 1}, I18nPluralRule::English).valid) {
+        throw "malformed English template";
+    }
+    return I18nKey({}, {english, N - 1});
+}
+
+template <size_t C, size_t N>
+static consteval I18nKey TrCtx(const wchar_t (&context)[C], const wchar_t (&english)[N]) {
+    if (C < 2) throw "empty context: use Tr";
+    if (N < 2 || !I18nTemplateShape({english, N - 1}, I18nPluralRule::English).valid) {
+        throw "malformed English template";
+    }
+    return I18nKey({context, C - 1}, {english, N - 1});
+}
+
+// Formatted text: plain, bold, or a link the code binds to an action by ID. Never a bold link: the
+// UI's runs are one or the other, so bold around a link is dropped.
+struct I18nRun {
+    std::wstring text;
+    bool bold = false;
+    std::wstring link;  // Link ID; empty: not a link
+
+    bool operator==(const I18nRun&) const = default;
+};
+
+// A named argument: plain text (inserted as is, never parsed), an integer of any type (a plural's
+// selector; decimal digits, '-' when negative, no grouping), or trusted runs that keep their bold
+// and links. It refers to the caller's value, so build it in the call.
+struct I18nArg {
+    std::wstring_view name;
+    std::wstring_view text{};
+    unsigned long long magnitude = 0;
+    bool negative = false;
+    bool isNumber = false;
+    const std::vector<I18nRun>* runs = nullptr;
+
+    I18nArg(std::wstring_view name, std::wstring_view text) : name(name), text(text) {}
+    template <class T>
+        requires std::is_integral_v<T>
+    I18nArg(std::wstring_view name, T number) : name(name), magnitude((unsigned long long)number), isNumber(true) {
+        if constexpr (std::is_signed_v<T>) {
+            negative = number < 0;
+            if (negative) magnitude = 0 - magnitude;
+        }
+    }
+    I18nArg(std::wstring_view name, const std::vector<I18nRun>& runs) : name(name), runs(&runs) {}
+};
+
+// Formats a parsed, valid template. A plural shows its number's category's branch, else other; a
+// missing argument shows as "{name}", and a plural on one that isn't a number shows other.
+struct I18nFormatSink {
+    std::initializer_list<I18nArg> args;
+    I18nPluralRule rule = I18nPluralRule::English;
+    std::vector<I18nRun> runs{};
+    bool bold = false;
+    std::wstring_view link{};
+    // The plural being read: its selector and each branch's runs, until its end picks one.
+    std::wstring_view selector{};
+    std::array<std::vector<I18nRun>, std::size(kI18nPluralNames)> branches{};
+    unsigned seen = 0;
+    std::vector<I18nRun>* out = &runs;
+
+    void Emit(std::wstring_view text, bool strong, std::wstring_view id) {
+        if (text.empty()) return;
+        strong = strong && id.empty();
+        if (!out->empty() && out->back().bold == strong && out->back().link == id) out->back().text += text;
+        else out->push_back({std::wstring(text), strong, std::wstring(id)});
+    }
+    void Text(std::wstring_view text) { Emit(text, bold, link); }
+    void Arg(std::wstring_view name) {
+        for (const I18nArg& arg : args) {
+            if (arg.name != name) continue;
+            if (arg.runs) {
+                for (const I18nRun& run : *arg.runs) {
+                    Emit(run.text, bold || run.bold, run.link.empty() ? link : std::wstring_view(run.link));
+                }
+            } else if (arg.isNumber) {
+                Emit((arg.negative ? L"-" : L"") + std::to_wstring(arg.magnitude), bold, link);
+            } else {
+                Emit(arg.text, bold, link);
+            }
+            return;
+        }
+        Emit(L"{" + std::wstring(name) + L"}", bold, link);
+    }
+    void Number() { Arg(selector); }
+    void PluralBegin(std::wstring_view name) {
+        selector = name;
+        seen = 0;
+    }
+    void Branch(I18nPlural category) {
+        seen |= 1u << size_t(category);
+        out = &branches[size_t(category)];
+    }
+    void BranchEnd() { out = &runs; }
+    void PluralEnd() {
+        I18nPlural category = I18nPlural::Other;
+        for (const I18nArg& arg : args) {
+            if (arg.name == selector && arg.isNumber) category = I18nPluralCategory(rule, arg.magnitude);
+        }
+        if (!(seen & (1u << size_t(category)))) category = I18nPlural::Other;
+        for (const I18nRun& run : branches[size_t(category)]) Emit(run.text, run.bold, run.link);
+        branches = {};
+    }
+    void BoldBegin() { bold = true; }
+    void BoldEnd() { bold = false; }
+    void LinkBegin(std::wstring_view id) { link = id; }
+    void LinkEnd() { link = {}; }
+};
+
+// API entry points carry [[maybe_unused]]: a build or test target may use only some of them.
+
+// A key's runs in the locale's language: its translation when usable, else English with English
+// plural rules. Usable: it parses under the language's plural rule and has the English template's
+// argument names, plural selectors and links; an argument English shows in every expansion shows
+// in every one of the translation's, none shows more often than English's most (selectors aside)
+// and none sits in a link unless it does in English, so linked runs never repeat, vanish or split
+// a link. The pseudo-locale's transform of English is read the same way.
+[[maybe_unused]] static std::vector<I18nRun> I18nRuns(const I18nLocale& locale, I18nKey key,
+                                                      std::initializer_list<I18nArg> args = {}) {
+    const I18nLanguage& language = locale.Language();
+    std::wstring pseudo;
+    std::wstring_view translation;
+    if (language.pseudo) {
+        pseudo = I18nPseudoTemplate(key.English());
+        translation = pseudo;
+    } else {
+        I18nEntry probe{key.Context(), key.English(), {}};
+        auto entry = std::lower_bound(language.catalog.begin(), language.catalog.end(), probe,
+                                      I18nEntryBefore);
+        if (entry != language.catalog.end() && !I18nEntryBefore(probe, *entry)) {
+            translation = entry->translation;
+        }
+    }
+    I18nShape english = I18nTemplateShape(key.English(), I18nPluralRule::English);
+    I18nShape shape = I18nTemplateShape(translation, language.plural);
+    bool usable = !translation.empty() && shape.valid && shape.args == english.args &&
+                  shape.plurals == english.plurals && shape.links == english.links;
+    for (size_t i = 0; usable && i < english.args.count; i++) {
+        if (english.plurals.Has(english.args.items[i])) continue;
+        size_t index = shape.args.Find(english.args.items[i]);
+        usable = (english.fewest[i] == 0 || shape.fewest[index] > 0) && shape.most[index] <= english.most[i];
+    }
+    for (size_t i = 0; usable && i < shape.linked.count; i++) usable = english.linked.Has(shape.linked.items[i]);
+    I18nFormatSink sink;
+    sink.args = args;
+    sink.rule = usable ? language.plural : I18nPluralRule::English;
+    std::wstring_view text = usable ? translation : key.English();
+    size_t at = 0;
+    I18nParseMessage(text, at, sink, 0);
+    return std::move(sink.runs);
+}
+
+[[maybe_unused]] static std::wstring I18nRunsText(const std::vector<I18nRun>& runs) {
+    std::wstring text;
+    for (const I18nRun& run : runs) text += run.text;
+    return text;
+}
+
+// Plain text: a rich template's runs joined.
+[[maybe_unused]] static std::wstring I18nText(const I18nLocale& locale, I18nKey key,
+                                              std::initializer_list<I18nArg> args = {}) {
+    return I18nRunsText(I18nRuns(locale, key, args));
+}
+
+// Items joined by the language's CLDR list patterns, keeping their runs: "A", "A and B",
+// "A, B and C". In each pattern {a} is one item and {b} the next one or the joined rest.
+[[maybe_unused]] static std::vector<I18nRun> I18nList(const I18nLocale& locale,
+                                                      const std::vector<std::vector<I18nRun>>& items) {
+    size_t n = items.size();
+    if (n < 2) return n ? items[0] : std::vector<I18nRun>{};
+    if (n == 2) {
+        return I18nRuns(locale, TrCtx(L"list-pair", L"{a} and {b}"), {{L"a", items[0]}, {L"b", items[1]}});
+    }
+    std::vector<I18nRun> rest =
+        I18nRuns(locale, TrCtx(L"list-end", L"{a} and {b}"), {{L"a", items[n - 2]}, {L"b", items[n - 1]}});
+    for (size_t i = n - 2; --i > 0;) {
+        rest = I18nRuns(locale, TrCtx(L"list-middle", L"{a}, {b}"), {{L"a", items[i]}, {L"b", rest}});
+    }
+    return I18nRuns(locale, TrCtx(L"list-start", L"{a}, {b}"), {{L"a", items[0]}, {L"b", rest}});
+}
 
 // src/core/model.h
 // Account configuration, settings, and fetched quota data shared by every domain.

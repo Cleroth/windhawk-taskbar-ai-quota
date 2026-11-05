@@ -6,11 +6,16 @@ from pathlib import Path
 import re
 
 # Declaration order: each section may use the ones before it.
+# The localization engine with its catalogs, ahead of everything that may localize.
+I18N = [("fragment", f"i18n/{name}.h") for name in
+        ("template", "catalog", "lang-de", "lang-es", "lang-fr", "lang-ja", "lang-pt-BR", "lang-ru", "lang-zh-Hans",
+         "languages", "pseudo", "format")]
 UI_PURE = [("fragment", f"ui/{name}.h") for name in
            ("tokens", "draw", "svg-path", "rich-text", "items", "paint", "input", "tooltip-layout")]
 
 # Pure model, toolkit and page builders: tests and offscreen renders.
 MODEL = [
+    *I18N,
     ("fragment", "core/model.h"),
     ("definition", "ApplyCreditsMax"),
     ("fragment", "taskbar/logo-paths.h"),
@@ -32,6 +37,7 @@ MODEL = [
 # on the shared history model and CSV writer: tests and offscreen renders. No journal, settings
 # storage, production ops or window code.
 HISTORY = [
+    *I18N,
     ("fragment", "core/model.h"),
     ("definition", "ApplyCreditsMax"),
     ("definition", "Utf8ToWide"),

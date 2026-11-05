@@ -53,6 +53,12 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
 - `model`: pure fixtures (meter model with ring tile outlines, sparkline geometry (the long
   windows' span around now included) and its history requests, usage projections (the tiles' and the flyout's), quota matrix cells, logos, toolkit palette/input/focus/
   hit testing/scroll, controls, popup rows/placement/keys, settings shell and pages).
+  `fixtures/i18n.inc`: the localization engine (`src/i18n/`, also extracted into the history
+  target) on test-only catalogs: grammar and escapes, shapes and limits, plural categories and
+  formatting per language, each fallback case with English plural results, reordered links,
+  literal, numeric and rich arguments, list patterns per production catalog, the registry,
+  explicit choices and the context, Automatic matching over tag lists, the pseudo-locale, lookup
+  with and without context.
   `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,

@@ -181,6 +181,7 @@ Have a suggestion or found a bug?
 #include <mutex>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -199,6 +200,24 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 // Unity build: the fragments below form one translation unit, included in dependency
 // order. generate-mod.ps1 inlines them into the published single-file mod.
+
+#include "i18n/template.h"
+
+#include "i18n/catalog.h"
+
+#include "i18n/lang-de.h"
+#include "i18n/lang-es.h"
+#include "i18n/lang-fr.h"
+#include "i18n/lang-ja.h"
+#include "i18n/lang-pt-BR.h"
+#include "i18n/lang-ru.h"
+#include "i18n/lang-zh-Hans.h"
+
+#include "i18n/languages.h"
+
+#include "i18n/pseudo.h"
+
+#include "i18n/format.h"
 
 #include "core/model.h"
 

@@ -13,6 +13,8 @@ Windhawk mod that draws AI subscription quota bars on the Windows 11 taskbar; it
 - Usage-history behavior, storage and manual verification:
   [README > Usage history](README.md#usage-history).
 - History regression suite: [tests/history/AGENTS.md](tests/history/AGENTS.md).
+- Localization engine, catalogs, translator notes and the catalog checker:
+  [src/i18n/AGENTS.md](src/i18n/AGENTS.md).
 - Contributors: when a commit credits someone new (`Co-authored-by`, or work taken from their
   PR), add them alphabetically (ignoring case) to [README > Contributors](README.md#contributors)
   and the About page's Contributors card (`src/settings/page-about.h`; its test's URL list and
@@ -73,6 +75,9 @@ Build files go to `.out/icon/`. Nothing references the two files.
   `--tooltip-interactive`: by hand); its full run includes `check-mod.ps1`'s check; guide:
   [tests/settings/AGENTS.md](tests/settings/AGENTS.md).
 - A full integration check still requires Windhawk loading the mod into `explorer.exe`.
+- `python tests/i18n/check.py` reports the catalogs against the message keys in `src/` (missing,
+  stale, unsorted, mismatched entries; unwrapped UI literals), and `python tests/i18n/test_check.py`
+  self-tests it; guide: [src/i18n/AGENTS.md](src/i18n/AGENTS.md#checker).
 - When changed native-control behavior is hidden by stubs, verify the assumed API/message contract
   with an isolated real-control probe under relevant, verified host contexts. Report caller-logic,
   native-contract, and Explorer integration results separately; a stub pass does not verify
