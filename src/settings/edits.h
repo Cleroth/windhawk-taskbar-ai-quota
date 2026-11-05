@@ -19,7 +19,7 @@ enum class SettingsField : uint8_t {
     ShowDetailsOnHover,
     PollMinutes,
     SkipHiddenPolling,
-    Notifications,
+    Notifications,  // A NotificationLevel
     // History
     RecordHistory,  // This Windows user's recording consent
     KeepHistory,    // The retention: days, or 0 for forever
@@ -207,7 +207,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowDetailsOnHover: return s.showDetailsOnHover;
         case SettingsField::PollMinutes: return s.pollMinutes;
         case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
-        case SettingsField::Notifications: return s.enableNotifications;
+        case SettingsField::Notifications: return int(s.notificationLevel);
         case SettingsField::RecordHistory: return s.historyEnabled;
         case SettingsField::KeepHistory: return s.historyRetentionDays;
         case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
@@ -285,7 +285,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowDetailsOnHover: s.showDetailsOnHover = value != 0; break;
         case SettingsField::PollMinutes: s.pollMinutes = value; break;
         case SettingsField::SkipHiddenPolling: s.skipHiddenPolling = value != 0; break;
-        case SettingsField::Notifications: s.enableNotifications = value != 0; break;
+        case SettingsField::Notifications:
+            s.notificationLevel = NotificationLevel(std::clamp(value, int(NotificationLevel::Off),
+                                                               int(NotificationLevel::Red)));
+            break;
         case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
         case SettingsField::KeepHistory: s.historyRetentionDays = std::clamp(value, 0, 3650); break;
         case SettingsField::RetentionDays:
@@ -438,7 +441,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showDetailsOnHover = defaults.showDetailsOnHover;
             s.pollMinutes = defaults.pollMinutes;
             s.skipHiddenPolling = defaults.skipHiddenPolling;
-            s.enableNotifications = defaults.enableNotifications;
+            s.notificationLevel = defaults.notificationLevel;
             break;
         case SettingsField::ResetHistory:
             s.historyEnabled = defaults.historyEnabled;

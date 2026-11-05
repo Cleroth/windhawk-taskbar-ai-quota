@@ -247,11 +247,18 @@ static void RunEditTests() {
         CHECK(s.historyDefaultRange == HistoryUiRange::All);
         SettingsAssign(s, SettingsField::HistoryRange, -1);
         CHECK(s.historyDefaultRange == HistoryUiRange::Day);
+        // Notification levels: choices clamped to Off and Red.
+        CHECK(SettingsFieldValue(s, SettingsField::Notifications) == int(NotificationLevel::Red));
+        SettingsAssign(s, SettingsField::Notifications, int(NotificationLevel::Yellow));
+        CHECK(s.notificationLevel == NotificationLevel::Yellow);
+        SettingsAssign(s, SettingsField::Notifications, 9);
+        CHECK(s.notificationLevel == NotificationLevel::Red);
+        SettingsAssign(s, SettingsField::Notifications, -1);
+        CHECK(s.notificationLevel == NotificationLevel::Off);
         s.historyEnabled = false;
-        s.enableNotifications = false;
         SettingsAssign(s, SettingsField::ResetBehavior, 0);
         CHECK(s.taskbarMonitorMode == TaskbarMonitorMode::Primary && s.taskbarMonitorNumber == 1);
-        CHECK(s.showDetailsOnHover && s.pollMinutes == 10 && s.enableNotifications);
+        CHECK(s.showDetailsOnHover && s.pollMinutes == 10 && s.notificationLevel == NotificationLevel::Red);
         CHECK(!s.historyEnabled && s.historyRetentionDays == 3650);  // Not Behavior's
         CHECK(s.historyDefaultRange == HistoryUiRange::Day);
         SettingsAssign(s, SettingsField::ResetHistory, 0);
@@ -349,8 +356,10 @@ static void RunEditTests() {
         // A discrete control keeps its desired value while failed.
         store.failNext = 1;
         CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 1);
-        CHECK(!edits.Projection().enableNotifications && store.settings.enableNotifications);
-        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 0 && !store.settings.enableNotifications);
+        CHECK(edits.Projection().notificationLevel == NotificationLevel::Off &&
+              store.settings.notificationLevel == NotificationLevel::Red);
+        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 0 &&
+              store.settings.notificationLevel == NotificationLevel::Off);
     });
 
     Run("controller: an invalid draft gets its error and is never queued", [] {
@@ -542,13 +551,25 @@ static void RunPageTests() {
         const UiItem& custom = Control(frame, kPoll);
         CHECK(custom.kind == UiItemKind::NumberBox && !custom.enabled && custom.text == L"10");
         CHECK(HasText(frame, L"Choose Custom in Cloud poll interval to edit."));
-        for (SettingsField field : {SettingsField::ShowDetailsOnHover, SettingsField::SkipHiddenPolling,
-                                    SettingsField::Notifications}) {
+        for (SettingsField field : {SettingsField::ShowDetailsOnHover, SettingsField::SkipHiddenPolling}) {
             const UiItem& toggle = Control(frame, field);
             CHECK(toggle.kind == UiItemKind::Toggle && toggle.selected && toggle.action.value == 0);
         }
+        // Threshold notifications: Off or a level, each with its threshold.
+        const UiItem& notifications = Control(frame, SettingsField::Notifications);
+        CHECK(notifications.kind == UiItemKind::Dropdown && notifications.text == L"Red (90%)" &&
+              notifications.options.size() == 4);
+        CHECK_NEAR(notifications.rect.right - notifications.rect.left, 200);
+        const std::pair<PCWSTR, NotificationLevel> levels[] = {{L"Off", NotificationLevel::Off},
+                                                               {L"Yellow (50%)", NotificationLevel::Yellow},
+                                                               {L"Orange (75%)", NotificationLevel::Orange},
+                                                               {L"Red (90%)", NotificationLevel::Red}};
+        for (size_t i = 0; i < std::size(levels); i++) {
+            CHECK(notifications.options[i].text == levels[i].first &&
+                  notifications.options[i].value == int(levels[i].second));
+        }
         CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Reset");
-        CHECK(HasText(frame, L"red threshold (90%)"));
+        CHECK(HasText(frame, L"Notifies when a taskbar quota first reaches the chosen threshold."));
         // Focus order: dropdown, poll dropdown, (disabled box skipped), toggles, reset.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         CHECK(stops.size() == 6 + 6);
@@ -571,7 +592,19 @@ static void RunPageTests() {
         const UiItem& hover = Control(frame, SettingsField::ShowDetailsOnHover);
         CHECK(!hover.selected && hover.text == L"Off" && hover.action.value == 1);
         // The control ids stay put when lines appear above them.
-        CHECK(Control(frame, SettingsField::Notifications).kind == UiItemKind::Toggle);
+        CHECK(Control(frame, SettingsField::Notifications).kind == UiItemKind::Dropdown);
+
+        // The levels follow the thresholds; Off shows as chosen.
+        view = TestView(SettingsUiPage::Behavior);
+        view.settings.yellowThreshold = 40;
+        view.settings.orangeThreshold = 60;
+        view.settings.redThreshold = 85;
+        view.settings.notificationLevel = NotificationLevel::Off;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        const UiItem& off = Control(frame, SettingsField::Notifications);
+        CHECK(off.text == L"Off" && off.options[1].text == L"Yellow (40%)" &&
+              off.options[2].text == L"Orange (60%)" && off.options[3].text == L"Red (85%)");
 
         // A saved custom interval being retyped: "1" projects to 2, a preset, yet Custom stays
         // and the box stays enabled.

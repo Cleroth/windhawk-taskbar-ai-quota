@@ -57,6 +57,37 @@ static std::wstring FormatShortDuration(ULONGLONG seconds) {
     return text;
 }
 
+// A projection's text when it reaches the limit before the reset, naming its rate's span, as the
+// details flyout and threshold notifications show it; empty otherwise.
+static std::wstring LimitProjectionText(const std::optional<UsageProjection>& projected,
+                                        const WindowUsage& reading) {
+    if (!projected || !projected->limit) return {};
+    std::wstring rate = L"this window's average rate";
+    SYSTEMTIME since;
+    if (projected->sinceMs + kProjectionLookbackMs == projected->fromMs) {
+        rate = L"the last 24h's rate";
+    } else if (projected->sinceMs != reading.resetUnixMs - reading.windowDurationMs &&
+               UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
+        rate = L"the rate since " + FormatLocalDayTime(since);
+    }
+    ULONGLONG minutes = std::max<ULONGLONG>(1, (projected->toMs - projected->fromMs + 59999) / 60000);
+    return L"At " + rate + L": limit in ~" + FormatShortDuration(minutes * 60);
+}
+
+// Fetch thread: the flyout's projection text for a fresh reading of a taskbar slot, from the
+// account's published curve (the flyout row's) and its lookback. Takes the settings and data
+// locks; call holding neither.
+static std::wstring NotificationProjectionText(uint64_t historyId, int slot, const WindowUsage& reading) {
+    static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow, kFlyoutFableRow,
+                                                  kFlyoutExtraRow};
+    std::vector<TileTracePoint> trace;
+    if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(historyId, kRows[slot], reading)) {
+        for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
+    }
+    return LimitProjectionText(
+        ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs), reading);
+}
+
 // Builds the card for `provider` into state.flyout.popup, registering its button delegates there
 // as they are created. Values are filled by UpdateAccountFlyout.
 static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provider,
@@ -771,20 +802,7 @@ static void UpdateAccountFlyout(
                 projected = ProjectUsage(wu, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
-            std::wstring projection;
-            if (projected && projected->limit) {
-                std::wstring rate = L"this window's average rate";
-                SYSTEMTIME since;
-                if (projected->sinceMs + kProjectionLookbackMs == projected->fromMs) {
-                    rate = L"the last 24h's rate";
-                } else if (projected->sinceMs != wu.resetUnixMs - wu.windowDurationMs &&
-                           UnixMsToLocalSystemTime(projected->sinceMs, &since)) {
-                    rate = L"the rate since " + FormatLocalDayTime(since);
-                }
-                ULONGLONG minutes = std::max<ULONGLONG>(
-                    1, (projected->toMs - projected->fromMs + 59999) / 60000);
-                projection = L"At " + rate + L": limit in ~" + FormatShortDuration(minutes * 60);
-            }
+            std::wstring projection = LimitProjectionText(projected, wu);
             row.projection.Text(projection);
             show(row.projection, !projection.empty());
 

@@ -20,7 +20,9 @@ On a taskbar at the left or right of the screen (Windows 11's own taskbar positi
 
 Each column shows the account's identity beside its bars: the provider logo (with a number badge when several accounts share a provider, hidden ones included) or the account's label. Bars can show compact quota keys and percentage text, and use configurable green/yellow/orange/red thresholds with an optional colorblind palette. Optional pace ticks compare quota usage with elapsed time in each reset window. Stale errors can mark the identity with `!` and the details flyout with a warning icon.
 
-It can also fire a Windows notification when an account first crosses the red threshold on a selected bar. The notification re-arms once usage drops back below the threshold.
+It can also show a Windows notification when a quota selected for the taskbar first reaches the threshold chosen in **Settings > Behavior**: yellow, orange or red (the default). It re-arms once usage drops back below the threshold; changing the level or the thresholds never notifies by itself. Notifications show under the mod's own name and icon and, when usage is projected to reach the limit before the reset, say when, as the details flyout does. Clicking one opens the provider's dashboard (Antigravity has none), and a repeat for the same account and quota replaces the earlier one.
+
+While notifications are on, the mod registers its name and icon with Windows under `HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAIQuota.<mod ID>`, the icon being `%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>\notification-icon.png`. Turning notifications off or disabling the mod removes the registry key; the icon file stays, like history. Windows keeps its own entry for the mod in **Settings > System > Notifications**, and turning the mod off there silences it. Only when Windows fails to show a notification does the mod fall back to a tray balloon, which Windows attributes to Windows Explorer.
 
 ## Setup
 
@@ -77,7 +79,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - show details on hover: resting the pointer on a column opens its details flyout (on by default)
   - cloud poll interval presets plus a custom interval for Anthropic, OpenAI, GitHub Copilot and OpenCode Go (Antigravity polls its local server every minute); only the Explorer process that runs the taskbar polls, refreshes sign-ins and notifies, so another one (such as folder windows launched in a separate process) adds no requests or notifications
   - do not poll hidden accounts (on by default; overrides per-account history recording)
-  - threshold notifications (toast when an account crosses the red threshold)
+  - threshold notifications: off, or the yellow, orange or red threshold (the default), each listed with its percentage from Display; a selected taskbar quota notifies when it first reaches it
 - **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, the time span the usage history window opens on (24 hours, **7 days** by default, 30 days, 90 days, or All retained), and the storage folder
 - **About**: version, project links, credits, and license
 
@@ -216,7 +218,9 @@ history that way, earlier versions also report the journal as damaged (until Cle
 account's key stays stored: after updating back, renaming a new OpenCode Go account to its old
 label takes it over. Versions before 2.6.0 ignore Antigravity's Argon weekly
 and its recorded history, and saving settings there drops its selection (an account with only
-Argon selected falls back to its short window), so it is on again after updating back. Downgrading to a version without
+Argon selected falls back to its short window), so it is on again after updating back. Versions
+before 2.12.0 notify only at red: with Yellow or Orange chosen they notify at red, and saving
+settings there drops the choice, so it is Red after updating back. Downgrading to a version without
 **Forever** keeps 3650 days but applies its size cap, permanently discarding samples beyond the
 newest 250,000.
 

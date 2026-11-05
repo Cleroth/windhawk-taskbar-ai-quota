@@ -185,6 +185,14 @@ static constexpr COLORREF kBadgeTaskbarTextColor = RGB(0xFF, 0xFF, 0xFF);
 // Usage history window ranges: 24 hours, 7, 30 and 90 days, and every retained day.
 enum class HistoryUiRange : int { Day, Week, Month, Quarter, All };
 
+// The usage color threshold at which a selected taskbar quota notifies, once per crossing.
+enum class NotificationLevel {
+    Off,
+    Yellow,
+    Orange,
+    Red,
+};
+
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
@@ -264,7 +272,7 @@ struct Settings {
     bool showOpenAiExtraLimits = false;
     bool colorblindMode = false;
     bool showStaleWarning = true;
-    bool enableNotifications = true;
+    NotificationLevel notificationLevel = NotificationLevel::Red;
     Material material = Material::Acrylic;
 
     bool operator==(const Settings&) const = default;

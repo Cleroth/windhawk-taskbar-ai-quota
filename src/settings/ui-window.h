@@ -284,7 +284,7 @@ struct SettingsUiClient final : UiHostClient {
                             field == SettingsField::ResetBehavior ?
                                 L"Reset Behavior to its defaults?\n\nShow on the primary display "
                                 L"only, show details on hover, poll every 10 minutes, do not poll "
-                                L"hidden accounts, threshold notifications on." :
+                                L"hidden accounts, threshold notifications at red." :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
                                 L"on the left, 32 px rings, logos and number badges in the taskbar\u2019s "

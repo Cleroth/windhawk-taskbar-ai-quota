@@ -132,7 +132,7 @@ static void RunDisplayPageTests() {
         every.taskbarMonitorNumber = 2;
         every.showDetailsOnHover = false;
         every.skipHiddenPolling = false;
-        every.enableNotifications = false;
+        every.notificationLevel = NotificationLevel::Off;
         every.historyEnabled = false;
         every.historyDefaultRange = HistoryUiRange::Quarter;
         every.barLayout = BarLayout::LogoHeadline;
@@ -335,6 +335,17 @@ static void RunDisplayPageTests() {
         CHECK(std::any_of(stops.begin(), stops.end(), [](const UiFocusStop& stop) {
             return stop.ref.id == SettingsControlId(kRed, 1);
         }));
+
+        // The threshold notifications' level says so on its card; Off on none.
+        CHECK(TextCount(frame, L"Also the level for threshold notifications.") == 1);
+        view.settings.notificationLevel = NotificationLevel::Yellow;
+        frame = DisplayFrame(view);
+        CHECK(TextCount(frame, L"Usage below this is green. Also the level for threshold notifications.") == 1);
+        CHECK(!HasText(frame, L"red. Also"));
+        view.settings.notificationLevel = NotificationLevel::Off;
+        frame = DisplayFrame(view);
+        CHECK(!HasText(frame, L"Also the level for threshold notifications."));
+        view.settings.notificationLevel = NotificationLevel::Red;
 
         // Colorblind: the dots and the green band's wording follow the palette.
         view.settings.colorblindMode = true;

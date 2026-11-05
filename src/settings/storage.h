@@ -149,6 +149,9 @@ static bool NormalizeSettings(Settings* s) {
         s->percentTextVisibility = PercentTextVisibility::Hover;
     }
     if (s->material < Material::Acrylic || s->material > Material::Solid) s->material = Settings().material;
+    if (s->notificationLevel < NotificationLevel::Off || s->notificationLevel > NotificationLevel::Red) {
+        s->notificationLevel = NotificationLevel::Red;
+    }
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
     s->redThreshold = std::clamp(s->redThreshold, s->orangeThreshold, 100);
@@ -290,7 +293,11 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
-        setBool(L"notifications", s.enableNotifications);
+        setString(L"notificationLevel", s.notificationLevel == NotificationLevel::Off ? L"off" :
+                                        s.notificationLevel == NotificationLevel::Yellow ? L"yellow" :
+                                        s.notificationLevel == NotificationLevel::Orange ? L"orange" : L"red");
+        // Builds before notification levels read only this switch, on at red.
+        setBool(L"notifications", s.notificationLevel != NotificationLevel::Off);
         setBool(L"colorblind", s.colorblindMode);
         setBool(L"staleWarning", s.showStaleWarning);
         setString(L"material", s.material == Material::Mica ? L"mica" :
@@ -520,7 +527,15 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);
-        s.enableNotifications = getBoolDefault(L"notifications", true);
+        // Settings saved by builds before notification levels have only the switch: on notifies at
+        // red.
+        std::wstring notificationLevel = GetStr(root, L"notificationLevel");
+        s.notificationLevel = notificationLevel == L"off" ? NotificationLevel::Off :
+                              notificationLevel == L"yellow" ? NotificationLevel::Yellow :
+                              notificationLevel == L"orange" ? NotificationLevel::Orange :
+                              notificationLevel == L"red" ? NotificationLevel::Red :
+                              getBoolDefault(L"notifications", true) ? NotificationLevel::Red :
+                                                                       NotificationLevel::Off;
         s.colorblindMode = getBoolDefault(L"colorblind", false);
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
         // A missing or unknown material keeps the default.
@@ -716,7 +731,7 @@ static bool LoadLegacySettings(Settings* out) {
     s.yellowThreshold = getInt(L"yellowThreshold", 50);
     s.orangeThreshold = getInt(L"orangeThreshold", 75);
     s.redThreshold = getInt(L"redThreshold", 90);
-    s.enableNotifications = getBool(L"enableNotifications", true);
+    s.notificationLevel = getBool(L"enableNotifications", true) ? NotificationLevel::Red : NotificationLevel::Off;
     s.colorblindMode = getBool(L"colorblindMode", false);
     s.showStaleWarning = getBool(L"showStaleWarning", true);
     int oldBarLength = s.barLength;

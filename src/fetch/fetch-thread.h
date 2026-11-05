@@ -285,9 +285,18 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
     std::vector<AccountDetailsCache> accountDetails;
-    // Per-account red-crossing arm state, indexed by QuotaBarIndex:
+    // Per-account notification arm state at the chosen threshold, indexed by QuotaBarIndex:
     // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
-    std::vector<std::array<int, kQuotaBarCount>> redState;
+    std::vector<std::array<int, kQuotaBarCount>> armState;
+    // The chosen level's threshold; Off has none to reach, its value only primes.
+    auto notificationThresholdOf = [](const Settings& s) {
+        return s.notificationLevel == NotificationLevel::Yellow ? s.yellowThreshold :
+               s.notificationLevel == NotificationLevel::Orange ? s.orangeThreshold : s.redThreshold;
+    };
+    // The toasts' app identity may be registered, by this shell or an earlier one that ended
+    // without unloading. The taskbar's process removes it while notifications are off and at
+    // unload; a failed removal retries.
+    bool toastAppIdMayExist = true;
     ULONGLONG lastLoggedSettingsGeneration = 0;
     const uint64_t historySession = NowUnixMs();
     bool curvesRecording = false;  // Recording was active last round, so curves may be published.
@@ -335,8 +344,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             refreshRequested = g_refreshing.load();
         }
         std::vector<AccountConfig> accounts;
-        int intervalMin, redThreshold;
-        bool enableNotifications, historyEnabled, skipHiddenPolling;
+        int intervalMin, notificationThreshold;
+        bool notificationsOn, historyEnabled, skipHiddenPolling;
         int historyRetentionDays;
         ULONGLONG settingsGeneration, historyContinuityGeneration, curvePolicyGeneration;
         const uint64_t historyEpoch = g_historyEpoch.load();
@@ -347,14 +356,18 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
             intervalMin = g_settings.pollMinutes;
-            redThreshold = g_settings.redThreshold;
-            enableNotifications = g_settings.enableNotifications;
+            notificationThreshold = notificationThresholdOf(g_settings);
+            notificationsOn = g_settings.notificationLevel != NotificationLevel::Off;
             historyEnabled = g_settings.historyEnabled && !g_historyIdsPendingSave;
             historyRetentionDays = g_settings.historyRetentionDays;
             skipHiddenPolling = g_settings.skipHiddenPolling;
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
+        }
+        if (!notificationsOn) {
+            if (g_notifyWnd) RemoveNotifyIcon();
+            if (toastAppIdMayExist) toastAppIdMayExist = !RemoveToastAppId();
         }
         ULONGLONG nextHistoryMaintenanceMs = historyEnabled ? MaintainHistory(true) : 0;
         bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
@@ -406,8 +419,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             std::lock_guard<std::mutex> lk(g_dataMutex);
             if (g_data.size() == results.size()) results = g_data;
         }
-        if (settingsChanged || redState.size() != accounts.size()) {
-            redState.assign(accounts.size(),
+        if (settingsChanged || armState.size() != accounts.size()) {
+            armState.assign(accounts.size(),
                             std::array<int, kQuotaBarCount>{-1, -1, -1, -1});
             for (size_t i = 0; i < accounts.size(); i++) {
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
@@ -415,7 +428,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     &results[i].extraUsage};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (usage[w]->pct >= 0) {
-                        redState[i][w] = usage[w]->pct >= redThreshold ? 1 : 0;
+                        armState[i][w] = usage[w]->pct >= notificationThreshold ? 1 : 0;
                     }
                 }
             }
@@ -562,8 +575,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         std::vector<AccountData> previousCurrentResults;
         std::vector<AccountData> remappedResults;
         std::vector<bool> remappedFetchedOk;
-        int notificationRedThreshold = redThreshold;
-        bool notificationsEnabled = enableNotifications;
+        int publishedThreshold = notificationThreshold;
+        bool notificationsEnabled = notificationsOn;
         {
             // Account details read through a sign-in replaced, removed or moved since (this round
             // or an earlier one, the usage request failing since) aren't published. The lock keeps
@@ -588,8 +601,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             } else {
                 generationRaced = true;
                 currentAccounts = g_settings.accounts;
-                notificationRedThreshold = g_settings.redThreshold;
-                notificationsEnabled = g_settings.enableNotifications;
+                publishedThreshold = notificationThresholdOf(g_settings);
+                notificationsEnabled = g_settings.notificationLevel != NotificationLevel::Off;
 
                 std::lock_guard<std::mutex> lk2(g_dataMutex);
                 previousCurrentResults.resize(currentAccounts.size());
@@ -655,7 +668,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             g_burnUpCurves = {};
         }
         curvesRecording = historyEnabled;
-        if (!notificationsEnabled && g_notifyWnd) RemoveNotifyIcon();
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
             if (refreshGeneration == g_refreshGeneration.load()) {
@@ -664,9 +676,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
         }
         if (published) {
-            // Fire one toast per upward crossing of the red threshold; re-arm when
-            // usage drops back below. A generation-raced result uses current settings and
-            // current pre-publication data so settings edits alone cannot cause a toast.
+            // Notify once per upward crossing of the chosen threshold; re-arm when usage
+            // drops back below. A generation-raced result uses current settings and current
+            // pre-publication data so settings edits alone cannot cause a notification.
             const auto& publishedAccounts = generationRaced ? currentAccounts : accounts;
             const auto& publishedResults = generationRaced ? remappedResults : results;
             const auto& publishedFetchedOk = generationRaced ? remappedFetchedOk : fetchedOk;
@@ -688,19 +700,25 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     if (generationRaced) {
                         const WindowUsage& previous = *previousUsage[w];
                         shouldNotify = previous.pct >= 0 &&
-                                       previous.pct < notificationRedThreshold &&
-                                       wu.pct >= notificationRedThreshold &&
+                                       previous.pct < publishedThreshold &&
+                                       wu.pct >= publishedThreshold &&
                                        notificationsEnabled;
                     } else {
-                        int& st = redState[i][w];
-                        if (wu.pct >= notificationRedThreshold) {
+                        int& st = armState[i][w];
+                        if (wu.pct >= publishedThreshold) {
                             shouldNotify = st == 0 && notificationsEnabled;
                             st = 1;
                         } else {
                             st = 0;
                         }
                     }
+                    // Turned off since publication (history and earlier notifications take time):
+                    // nothing more shows.
                     if (shouldNotify) {
+                        std::lock_guard<std::mutex> lk(g_settingsMutex);
+                        shouldNotify = g_settings.notificationLevel != NotificationLevel::Off;
+                    }
+                    if (shouldNotify && !g_unloading) {
                         std::wstring providerName =
                             ProviderDisplayName(publishedAccounts[i].provider);
                         wchar_t title[96];
@@ -735,7 +753,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         if ((w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs) {
                             body += L" - resets " + FormatReset(wu.resetUnixMs);
                         }
-                        FireThresholdNotification(title, body);
+                        // The flyout's projection to the limit; none for an OpenCode Go window at
+                        // its limit, as there.
+                        std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
+                            NotificationProjectionText(publishedAccounts[i].historyId, w, wu);
+                        FireThresholdNotification(title, body, projection,
+                                                  ProviderDashboardUrl(publishedAccounts[i].provider),
+                                                  AccountIdentityHash(publishedAccounts[i]), w);
+                        toastAppIdMayExist = true;
                     }
                 }
             }
@@ -769,6 +794,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         if (WaitForMultipleObjects(2, handles, FALSE, waitMs) == WAIT_OBJECT_0) break;
     }
     RemoveNotifyIcon();
+    if (toastAppIdMayExist && IsTaskbarOwnerProcess()) RemoveToastAppId();
     if (apartmentInitialized) winrt::uninit_apartment();
     return 0;
 }

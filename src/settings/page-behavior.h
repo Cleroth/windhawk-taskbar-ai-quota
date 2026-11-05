@@ -82,14 +82,22 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                   SettingsField::SkipHiddenPolling);
     }
 
-    // Alerts
+    // Alerts: each level with its threshold from Display.
     y = UiAddSection(items, id, x, y + 20, width, L"Alerts");
     {
+        auto level = [](PCWSTR name, int threshold) {
+            return std::wstring(name) + L" (" + std::to_wstring(threshold) + L"%)";
+        };
         UiCardSpec spec;
         spec.title = L"Threshold notifications";
-        spec.description = {{L"Notifies when a taskbar quota first reaches the red threshold (" +
-                             std::to_wstring(s.redThreshold) + L"%). Re-arms after it drops below."}};
-        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::Notifications);
+        spec.description = {{L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it "
+                             L"drops below."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Notifications, 200,
+                                    {{L"Off", int(NotificationLevel::Off)},
+                                     {level(L"Yellow", s.yellowThreshold), int(NotificationLevel::Yellow)},
+                                     {level(L"Orange", s.orangeThreshold), int(NotificationLevel::Orange)},
+                                     {level(L"Red", s.redThreshold), int(NotificationLevel::Red)}},
+                                    int(s.notificationLevel));
     }
 
     UiCardSpec reset;

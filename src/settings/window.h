@@ -1,4 +1,5 @@
-// Settings window thread and opener: one window at a time, on its own STA thread.
+// Settings window thread and opener: one window at a time, on its own STA thread. Also the app
+// icon for what the toolkit doesn't host: the sign-in window's icons and the notifications' file.
 
 // The app icon on a window the toolkit doesn't host (the sign-in window): drawn at `dpi` in the
 // app theme's palette, `icons` kept and destroyed by the caller as UiSetWindowIcons describes.
@@ -11,6 +12,78 @@ static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons
     } catch (...) {
         Wh_Log(L"Could not draw the window icons");
     }
+}
+
+// The app icon as a 256 px PNG at `path`, the notifications' icon: transparent, straight alpha,
+// its tracks in a fixed grey that suits light and dark backgrounds. The file is replaced only
+// once written whole. Any thread with COM initialized.
+static bool SaveAppIconPng(const std::wstring& path) {
+    constexpr UINT kPixels = 256;
+    std::wstring temp = path + L".tmp";
+    bool written = false;
+    try {
+        UiGraphics graphics;
+        UiCreateGraphics(graphics);
+        winrt::com_ptr<IWICImagingFactory> wic;
+        winrt::check_hresult(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                              __uuidof(IWICImagingFactory), wic.put_void()));
+
+        // Drawn premultiplied by a software target at 96 DPI (a DIP is a pixel), as the window icon is.
+        winrt::com_ptr<IWICBitmap> bitmap;
+        winrt::check_hresult(wic->CreateBitmap(kPixels, kPixels, GUID_WICPixelFormat32bppPBGRA,
+                                               WICBitmapCacheOnLoad, bitmap.put()));
+        {
+            D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+                D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
+            winrt::com_ptr<ID2D1RenderTarget> target;
+            winrt::check_hresult(graphics.d2d->CreateWicBitmapRenderTarget(bitmap.get(), &properties, target.put()));
+            std::vector<UiItem> items{SettingsAppIcon({0, 0, float(kPixels), float(kPixels)})};
+            for (UiShapePart& part : items[0].parts) {
+                if (part.ink == UiInk::Inherit) continue;
+                part.color = UiRgb(0x8C8C8C, 0.42f);
+                part.ink = UiInk::Inherit;
+            }
+            UiTargetCache cache;
+            target->BeginDraw();
+            target->Clear(D2D1_COLOR_F{});
+            UiPaintItems(target.get(), graphics, cache, UiPaletteFor({}), items, {}, {0, 0}, 1, -1e9f, 1e9f);
+            winrt::check_hresult(target->EndDraw());
+        }
+
+        // Straight alpha, rounded as the window icon's.
+        std::vector<BYTE> pixels(size_t(kPixels) * kPixels * 4);
+        winrt::check_hresult(bitmap->CopyPixels(nullptr, kPixels * 4, UINT(pixels.size()), pixels.data()));
+        for (size_t p = 0; p < pixels.size(); p += 4) {
+            if (BYTE alpha = pixels[p + 3]) {
+                for (int c = 0; c < 3; c++) {
+                    pixels[p + c] = BYTE(std::min(255, (pixels[p + c] * 255 + alpha / 2) / alpha));
+                }
+            }
+        }
+        winrt::com_ptr<IWICStream> stream;
+        winrt::check_hresult(wic->CreateStream(stream.put()));
+        winrt::check_hresult(stream->InitializeFromFilename(temp.c_str(), GENERIC_WRITE));
+        winrt::com_ptr<IWICBitmapEncoder> encoder;
+        winrt::check_hresult(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, encoder.put()));
+        winrt::check_hresult(encoder->Initialize(stream.get(), WICBitmapEncoderNoCache));
+        winrt::com_ptr<IWICBitmapFrameEncode> frame;
+        winrt::check_hresult(encoder->CreateNewFrame(frame.put(), nullptr));
+        winrt::check_hresult(frame->Initialize(nullptr));
+        winrt::check_hresult(frame->SetSize(kPixels, kPixels));
+        WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
+        winrt::check_hresult(frame->SetPixelFormat(&format));
+        if (format != GUID_WICPixelFormat32bppBGRA) winrt::throw_hresult(WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT);
+        winrt::check_hresult(frame->WritePixels(kPixels, kPixels * 4, UINT(pixels.size()), pixels.data()));
+        winrt::check_hresult(frame->Commit());
+        winrt::check_hresult(encoder->Commit());
+        written = true;
+    } catch (...) {}
+    // The stream closed the file with the try block.
+    if (written && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) return true;
+    DeleteFileW(temp.c_str());
+    Wh_Log(L"Could not write the notification icon");
+    return false;
 }
 
 static UINT GetSettingsActivateMessage() {

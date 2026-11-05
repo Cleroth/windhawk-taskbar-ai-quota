@@ -23,8 +23,10 @@ Rules for code under `src/`. Generation, checks, testing and publishing are in t
 The mod is injected into `explorer.exe`. Execution domains:
 
 - **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff, token refresh;
-  owns the tray notify icon. It must NEVER touch XAML. It runs rounds only while
-  `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh tokens or notify.
+  owns the notifications: their HKCU app identity (registered before each toast, removed while
+  they are off and at unload) and the fallback tray icon. It must NEVER touch XAML. It runs
+  rounds only while `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh
+  tokens or notify.
 - **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`; spawned from
   a taskbar UI thread by `StartLogin`): runs a sign-in in the sign-in window (`g_loginWnd`,
   own message loop), which offers the authorize link to copy or open; never launch a browser

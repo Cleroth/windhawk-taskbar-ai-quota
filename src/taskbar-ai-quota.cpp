@@ -2,13 +2,13 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.11.0
+// @version         2.12.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -luuid -ld2d1 -ldwrite -ldwmapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -luuid -ld2d1 -ldwrite -ldwmapi -lwindowscodecs
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,7 +30,8 @@ Supported providers and quotas:
   usage GitHub reports past it and an organization's pooled credits in the details flyout
 - **OpenCode Go:** 5-hour, weekly, and monthly usage limits
 
-Optional notifications warn when usage crosses the configured red threshold.
+Optional notifications, under the mod's own name and icon, warn when usage reaches the yellow,
+orange or red threshold you choose, and say when it is projected to reach the limit.
 
 ![Quota tooltip](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss1.png)
 
@@ -122,6 +123,7 @@ Have a suggestion or found a bug?
 #include <d2d1.h>
 #include <dwrite.h>
 #include <dwrite_3.h>
+#include <wincodec.h>
 #include <dwmapi.h>
 
 #ifdef GetCurrentTime
@@ -130,12 +132,14 @@ Have a suggestion or found a bug?
 
 #include <winrt/base.h>
 #include <winrt/Windows.Data.Json.h>
+#include <winrt/Windows.Data.Xml.Dom.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Graphics.Effects.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.Notifications.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.h>

@@ -244,6 +244,20 @@ static PCWSTR ProviderDisplayName(const std::wstring& provider) {
     return L"Google Antigravity";
 }
 
+// OpenCode Go has no OAuth client: its sign-in takes an API key copied from the console, which
+// also shows the usage.
+static constexpr PCWSTR kOpenCodeConsoleUrl = L"https://opencode.ai/console";
+
+// The provider's usage page: the dashboard actions and notifications open it. Antigravity has
+// none.
+static PCWSTR ProviderDashboardUrl(const std::wstring& provider) {
+    if (provider == L"anthropic") return L"https://claude.ai/settings/usage";
+    if (provider == L"copilot") return L"https://github.com/settings/copilot";
+    if (provider == L"opencode") return kOpenCodeConsoleUrl;
+    if (provider == L"openai") return L"https://chatgpt.com/codex/cloud/settings/analytics#usage";
+    return nullptr;
+}
+
 // A GitHub Copilot allowance's unit, as running text names it.
 static PCWSTR CopilotUnitName(CopilotUnit unit) {
     return unit == CopilotUnit::PremiumRequests ? L"premium requests" :

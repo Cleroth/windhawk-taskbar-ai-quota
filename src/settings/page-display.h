@@ -87,6 +87,7 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
 
     // Usage colors. Each threshold's dot is its band's usage color (taskbar/meter-model.h) in the
     // chosen palette, taken from thresholds 1, 2 and 3 so equal thresholds still show their own.
+    // The level threshold notifications use (Behavior) says so.
     y = UiAddSection(items, id, x, y + 20, width, L"Usage colors");
     {
         UiCardSpec spec;
@@ -98,7 +99,7 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         {SettingsField::YellowThreshold, L"Yellow from",
          s.colorblindMode ? L"Usage below this is blue." : L"Usage below this is green."},
         {SettingsField::OrangeThreshold, L"Orange from", L"Thresholds stay in order: yellow, orange, red."},
-        {SettingsField::RedThreshold, L"Red from", L"Also the level for threshold notifications."},
+        {SettingsField::RedThreshold, L"Red from", L""},
     };
     for (int i = 0; i < 3; i++) {
         auto [field, title, description] = thresholds[i];
@@ -106,7 +107,11 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         UiCardSpec spec;
         spec.dot = RGB(color >> 16 & 0xFF, color >> 8 & 0xFF, color & 0xFF);
         spec.title = title;
-        spec.description = {{description}};
+        std::wstring text = description;
+        if (int(s.notificationLevel) == i + 1) {
+            text += std::wstring(text.empty() ? L"" : L" ") + L"Also the level for threshold notifications.";
+        }
+        if (!text.empty()) spec.description = {{text}};
         y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, field);
     }
 
