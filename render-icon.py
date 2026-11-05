@@ -1,6 +1,7 @@
 """Render the app icon (SettingsAppIcon, src/settings/page-about.h) to icon.png and icon.ico.
 
-Extracts the icon and the toolkit's pure painting code from the generated mod, renders each size
+Extracts the icon with the settings suite's pure sections it builds on (model, toolkit, settings
+page support) from the generated mod, renders each size
 natively with Windhawk's bundled clang, Direct2D and WIC, and assembles the ICO from those PNGs.
 Stdlib only; build files go to .out/icon/.
 """
@@ -18,7 +19,8 @@ COMPILER = Path(r"C:\Program Files\Windhawk\Compiler\bin\clang++.exe")
 SOURCE = REPO / "local@taskbar-ai-quota.wh.cpp"
 BUILD = REPO / ".out" / "icon"
 SIZES = [16, 20, 24, 32, 40, 48, 64, 256]
-FRAGMENTS = ["taskbar/logo-paths.h", *(name for _, name in extract.UI_PURE), "settings/page-about.h"]
+# The settings suite's pure sections up to the About page, in its declaration order.
+SECTIONS = extract.MODEL[:extract.MODEL.index(("fragment", "settings/page-about.h")) + 1]
 
 DRIVER = r"""
 // Renders SettingsAppIcon at each size in argv[2...] into argv[1]\icon-<size>.png: one render per
@@ -108,8 +110,8 @@ def main():
     # Production fragments verbatim (diagnostics point at the generated file), then the driver.
     text = SOURCE.read_bytes().decode("utf-8-sig")
     chunks = ['#include "harness.hpp"\n']
-    for name in FRAGMENTS:
-        a, b = extract.fragment(text, name)
+    for kind, name in SECTIONS:
+        a, b = extract.fragment(text, name) if kind == "fragment" else extract.definition(text, name)
         chunks.append(f"\n#line {text.count(chr(10), 0, a) + 1} {json.dumps(SOURCE.as_posix())}\n{text[a:b]}\n")
     chunks.append(f'\n#line 1 "render-icon.py: DRIVER"{DRIVER}')
     cpp, exe = BUILD / "render-icon.cpp", BUILD / "render-icon.exe"
