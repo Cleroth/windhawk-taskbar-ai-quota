@@ -59,9 +59,10 @@ struct HistoryOps {
     virtual bool OpenFolder() = 0;
     // A message box over the window, its dialogs tracked (history/modal.h): the close latch or
     // unload ends it. Its answer; 0: it couldn't be shown safely.
-    virtual int Ask(const std::wstring& text, PCWSTR caption, UINT type) = 0;
-    // The save dialog for a CSV, titled `title`, tracked as Ask (its overwrite prompt too).
-    virtual HistoryDestination ChooseDestination(const std::wstring& title) = 0;
+    virtual int Ask(const std::wstring& text, const std::wstring& caption, UINT type) = 0;
+    // The save dialog for a CSV, titled `title`, its file types in `locale`'s language, tracked as
+    // Ask (its overwrite prompt too).
+    virtual HistoryDestination ChooseDestination(const std::wstring& title, const I18nLocale& locale) = 0;
     // Posts the window's write message (Write); false when it couldn't.
     virtual bool PostWrite() = 0;
     // Writes the scope's CSV to a new temporary file beside `destination` and replaces the
@@ -112,9 +113,88 @@ struct HistorySeriesKey {
 // the deletion).
 enum class HistoryOperation : uint8_t { None, Export, Writing, Clear, Delete };
 
-// Operation notices shared by several of their ends. A cancelled operation shows none.
-static constexpr PCWSTR kHistoryExportNotStarted = L"CSV export could not start; no file written.";
-static constexpr PCWSTR kHistoryUntracked = L"Cannot track native dialogs safely; operation cancelled.";
+// An operation's result (approved Q3 a): a code with its arguments, shown in the language of each
+// composition (HistoryNoticeText), so a language switch re-labels a notice already showing. A
+// cancelled operation shows none.
+enum class HistoryNoticeCode : uint8_t {
+    None,
+    NothingRecorded,      // Open history folder: no folder yet
+    ConsentFailed,        // Enable recording
+    Untracked,            // A dialog couldn't be tracked
+    SaveDialogFailed,     // `error`: the save dialog's common dialog error
+    ExportNotStarted,     // The write couldn't be posted, or its progress never showed
+    TemporaryFileFailed,  // `error`: the Windows error
+    ExportFailed,         // `error`: the Windows error
+    Exported,             // `rows` of the selected account (or `all` accounts) to `text`, both weeks if `compare`
+    ClearFailed,          // `reason`
+    Cleared,
+    DeleteFailed,         // `reason`
+    Deleted,              // `text`: the removed account's label
+};
+
+struct HistoryNotice {
+    HistoryNoticeCode code = HistoryNoticeCode::None;
+    DWORD error = 0;
+    HistoryJournalError reason = HistoryJournalError::None;
+    size_t rows = 0;
+    bool all = false, compare = false;
+    std::wstring text;
+};
+
+// A notice in a language: failures as errors, successes as information.
+static HistoryUiNotice HistoryNoticeText(const I18nLocale& locale, const HistoryNotice& notice) {
+    using enum HistoryNoticeCode;
+    auto failure = [](std::wstring text) { return HistoryUiNotice{std::move(text), UiSeverity::Error}; };
+    switch (notice.code) {
+        case None:
+            return {};
+        case NothingRecorded:
+            return {I18nText(locale, Tr(L"Nothing has been recorded yet. The folder is created with the first recorded "
+                                        L"sample."))};
+        case ConsentFailed:
+            return failure(I18nText(locale, Tr(L"Could not save recording consent. Recording is still off.")));
+        case Untracked:
+            return failure(I18nText(locale, Tr(L"Cannot track native dialogs safely; operation cancelled.")));
+        case SaveDialogFailed:
+            return failure(I18nText(locale, Tr(L"Save dialog failed (code {code})."), {{L"code", notice.error}}));
+        case ExportNotStarted:
+            return failure(I18nText(locale, Tr(L"CSV export could not start; no file written.")));
+        case TemporaryFileFailed:
+            return failure(I18nText(locale, Tr(L"Cannot create the CSV temporary file (Windows error {code}). Existing "
+                                               L"destination unchanged."),
+                                    {{L"code", notice.error}}));
+        case ExportFailed:
+            return failure(I18nText(locale, Tr(L"CSV export failed (Windows error {code}). Existing destination "
+                                               L"unchanged."),
+                                    {{L"code", notice.error}}));
+        case Exported: {
+            std::wstring count = HistoryUiCount(notice.rows);
+            std::wstring text =
+                notice.all ? I18nText(locale, Tr(L"Exported {rows, plural, one{{count} meter rows} other{{count} meter "
+                                                 L"rows}} (all accounts) to {path}. Labels omitted; times UTC."),
+                                      {{L"rows", notice.rows}, {L"count", count}, {L"path", notice.text}}) :
+                             I18nText(locale, Tr(L"Exported {rows, plural, one{{count} meter rows} other{{count} meter "
+                                                 L"rows}} (selected account) to {path}. Labels omitted; times UTC."),
+                                      {{L"rows", notice.rows}, {L"count", count}, {L"path", notice.text}});
+            if (notice.compare) {
+                text = I18nText(locale, Tr(L"{exported} Includes both elapsed 7-day periods."), {{L"exported", text}});
+            }
+            return {std::move(text)};
+        }
+        case ClearFailed:
+            return failure(I18nText(locale, Tr(L"Could not clear all history. {reason}"),
+                                    {{L"reason", HistoryJournalErrorText(locale, notice.reason)}}));
+        case Cleared:
+            return {I18nText(locale, Tr(L"All local history cleared. Future polls can start recording again."))};
+        case DeleteFailed:
+            return failure(I18nText(locale, Tr(L"Could not delete this account's history. {reason}"),
+                                    {{L"reason", HistoryJournalErrorText(locale, notice.reason)}}));
+        case Deleted:
+            return {I18nText(locale, Tr(L"Deleted the history of removed account {label}."),
+                             {{L"label", notice.text}})};
+    }
+    return {};
+}
 
 // Samples in time order, journal order among equal times. The journal keeps that order, so
 // this usually only checks it.
@@ -164,7 +244,7 @@ struct HistoryController {
     std::vector<std::pair<uint64_t, int>> hidden;
 
     // An operation's notice, and a request to focus the selected entry the window takes
-    HistoryUiNotice notice;
+    HistoryNotice notice;
     bool focusSelected = false;
 
     // The chart as the last build laid it out, and the lines the pointer picks on it
@@ -276,8 +356,7 @@ struct HistoryController {
                         break;
                     case HistoryUiMenuItem::Folder:
                         if (!ops->OpenFolder()) {
-                            notice = {L"Nothing has been recorded yet. The folder is created with the first recorded "
-                                      L"sample."};
+                            notice = {HistoryNoticeCode::NothingRecorded};
                             Compose();
                         }
                         break;
@@ -319,7 +398,7 @@ struct HistoryController {
         if (result == HistoryConsentResult::Stopped || closeRequested || ops->Unloading()) return;
         Load();
         if (result == HistoryConsentResult::Failed) {
-            notice = {L"Could not save recording consent. Recording is still off.", UiSeverity::Error};
+            notice = {HistoryNoticeCode::ConsentFailed};
             Compose();
         } else {
             focusSelected = true;
@@ -340,9 +419,10 @@ struct HistoryController {
     // Export (once loaded). Its scope freezes at the command: the selected account or every one,
     // the shown times with the week before while comparing, and the snapshot itself, so what
     // arrives during its dialogs (activation, refresh) changes nothing it writes. A large one asks
-    // first (Cancel the default); then the save dialog titled by its scope. Every return from a
-    // dialog checks the close latch and unload. With a file chosen the write is posted: the window
-    // shows its progress before the write starts (Write).
+    // first (Cancel the default); then the save dialog titled by its scope. Each dialog is in the
+    // language current as it opens, and every return from one checks the close latch and unload.
+    // With a file chosen the write is posted: the window shows its progress before the write
+    // starts (Write).
     void Export() {
         if (!snapshot) return;
         notice = {};
@@ -357,18 +437,26 @@ struct HistoryController {
         }
         operation = HistoryOperation::Export;
         if (estimate > 500000) {
-            int answer = Ask(L"This export contains about " + std::to_wstring(estimate) +
-                                 L" rows. It may take a while and exceed spreadsheet row limits. The history window "
-                                 L"will be busy while writing; Explorer's taskbar remains available. Continue?",
-                             L"Large history export", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+            I18nLocale locale = ops->Locale();
+            int answer = Ask(I18nText(locale, Tr(L"This export contains about {rows, plural, one{# rows} other{# "
+                                                 L"rows}}. It may take a while and exceed spreadsheet row limits. The "
+                                                 L"history window will be busy while writing; Explorer's taskbar "
+                                                 L"remains available. Continue?"),
+                                      {{L"rows", estimate}}),
+                             I18nText(locale, TrCtx(L"dialog-caption", L"Large history export")),
+                             MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
             if (Stopped()) return;
-            if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+            if (!answer) return Finish({HistoryNoticeCode::Untracked});
             if (answer != IDOK) return Finish({});
         }
+        I18nLocale locale = ops->Locale();
         ModalBegan();
         HistoryDestination chosen = ops->ChooseDestination(
-            scope.accountId ? L"Export selected account \u2014 all meters, selected range (both weeks if comparing)" :
-                              L"Export all accounts \u2014 all meters, selected range (both weeks if comparing)");
+            I18nText(locale, scope.accountId ? TrCtx(L"dialog-caption", L"Export selected account \u2014 all meters, "
+                                                                        L"selected range (both weeks if comparing)") :
+                                               TrCtx(L"dialog-caption", L"Export all accounts \u2014 all meters, "
+                                                                        L"selected range (both weeks if comparing)")),
+            locale);
         ModalEnded();
         if (Stopped()) return;
         switch (chosen.result) {
@@ -377,15 +465,15 @@ struct HistoryController {
             case HistoryDialogResult::Cancelled:
                 return Finish({});
             case HistoryDialogResult::Failed:
-                return Finish({L"Save dialog failed (code " + std::to_wstring(chosen.error) + L").", UiSeverity::Error});
+                return Finish({HistoryNoticeCode::SaveDialogFailed, chosen.error});
             case HistoryDialogResult::Untracked:
-                return Finish({kHistoryUntracked, UiSeverity::Error});
+                return Finish({HistoryNoticeCode::Untracked});
         }
         exportScope = std::move(scope);
         destination = std::move(chosen.path);
         exported = 0;
         operation = HistoryOperation::Writing;
-        if (!ops->PostWrite()) return Finish({kHistoryExportNotStarted, UiSeverity::Error});
+        if (!ops->PostWrite()) return Finish({HistoryNoticeCode::ExportNotStarted});
         Compose();
     }
 
@@ -395,24 +483,16 @@ struct HistoryController {
     // nothing else. Its notice: the rows and where they went, or why the destination is unchanged.
     void Write(bool shown, const std::function<void()>& repaint) {
         if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return;
-        if (!shown) return Finish({kHistoryExportNotStarted, UiSeverity::Error});
+        if (!shown) return Finish({HistoryNoticeCode::ExportNotStarted});
         HistoryCsvResult result = ops->WriteCsv(*exportScope, destination, [&](size_t rows) {
             exported = rows;
             repaint();
         });
         if (Stopped()) return;
-        std::wstring error = std::to_wstring(result.error);
-        if (!result.created) {
-            return Finish({L"Cannot create the CSV temporary file (Windows error " + error +
-                               L"). Existing destination unchanged.", UiSeverity::Error});
-        }
-        if (result.error) {
-            return Finish({L"CSV export failed (Windows error " + error + L"). Existing destination unchanged.",
-                           UiSeverity::Error});
-        }
-        Finish({L"Exported " + HistoryUiCount(result.rows) + L" meter rows (" +
-                (exportScope->accountId ? L"selected account" : L"all accounts") + L") to " + destination +
-                L". Labels omitted; times UTC." + (exportScope->compare ? L" Includes both elapsed 7-day periods." : L"")});
+        if (!result.created) return Finish({HistoryNoticeCode::TemporaryFileFailed, result.error});
+        if (result.error) return Finish({HistoryNoticeCode::ExportFailed, result.error});
+        Finish({.code = HistoryNoticeCode::Exported, .rows = result.rows, .all = !exportScope->accountId,
+                .compare = exportScope->compare, .text = destination});
     }
 
     // Clear all history (the More menu): asked first (Cancel the default). Whatever its result the
@@ -421,24 +501,24 @@ struct HistoryController {
     void Clear() {
         notice = {};
         operation = HistoryOperation::Clear;
-        int answer = Ask(L"Permanently clear ALL local usage history for this Windows user, including deleted "
-                         L"accounts?\r\n\r\nThis cannot be undone. Settings and sign-ins are not changed. If recording "
-                         L"stays enabled, future polls will record new history.",
-                         L"Clear all usage history", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+        I18nLocale locale = ops->Locale();
+        int answer = Ask(I18nText(locale, Tr(L"Permanently clear ALL local usage history for this Windows user, "
+                                             L"including deleted accounts?\r\n\r\nThis cannot be undone. Settings and "
+                                             L"sign-ins are not changed. If recording stays enabled, future polls will "
+                                             L"record new history.")),
+                         I18nText(locale, TrCtx(L"dialog-caption", L"Clear all usage history")),
+                         MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
         if (Stopped()) return;
-        if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+        if (!answer) return Finish({HistoryNoticeCode::Untracked});
         if (answer != IDOK) return Finish({});
         HistoryJournalError error = HistoryJournalError::None;
         bool cleared = ops->Clear(error);
         ops->InvalidateCurves();
         if (Stopped()) return;
         operation = HistoryOperation::None;
-        if (!cleared) {
-            return Finish({L"Could not clear all history. " + HistoryJournalErrorText(view.locale, error),
-                           UiSeverity::Error});
-        }
+        if (!cleared) return Finish({.code = HistoryNoticeCode::ClearFailed, .reason = error});
         Load();
-        Finish({L"All local history cleared. Future polls can start recording again."});
+        Finish({HistoryNoticeCode::Cleared});
     }
 
     // Delete history (a listed removed account's info bar): asked first, naming the account
@@ -450,94 +530,103 @@ struct HistoryController {
         std::wstring label = account->label;
         notice = {};
         operation = HistoryOperation::Delete;
-        int answer = Ask(L"Permanently delete all usage history of the removed " +
-                             std::wstring(HistoryUiProviderName(account->provider)) + L" account " + label +
-                             L"?\r\n\r\nEvery recorded sample of it is deleted, not only the selected range. This cannot "
-                             L"be undone.",
-                         L"Delete account history", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+        I18nLocale locale = ops->Locale();
+        int answer = Ask(I18nText(locale, Tr(L"Permanently delete all usage history of the removed {provider} account "
+                                             L"{label}?\r\n\r\nEvery recorded sample of it is deleted, not only the "
+                                             L"selected range. This cannot be undone."),
+                                  {{L"provider", HistoryUiProviderName(locale, account->provider)}, {L"label", label}}),
+                         I18nText(locale, TrCtx(L"dialog-caption", L"Delete account history")),
+                         MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
         if (Stopped()) return;
-        if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
+        if (!answer) return Finish({HistoryNoticeCode::Untracked});
         if (answer != IDOK) return Finish({});
         HistoryJournalError error = HistoryJournalError::None;
         bool deleted = ops->DeleteHistory(id, error);
         if (Stopped()) return;
         operation = HistoryOperation::None;
-        if (!deleted) {
-            return Finish({L"Could not delete this account's history. " + HistoryJournalErrorText(view.locale, error),
-                           UiSeverity::Error});
-        }
+        if (!deleted) return Finish({.code = HistoryNoticeCode::DeleteFailed, .reason = error});
         Load();
-        Finish({L"Deleted the history of removed account " + label + L"."});
+        Finish({.code = HistoryNoticeCode::Deleted, .text = label});
     }
 
     // About these charts (the More menu): how to read the window, the retention and the oldest
-    // sample loaded.
+    // sample loaded, in the language current as it opens. Each section is its heading, a line
+    // break and its paragraph; a blank line follows it.
     void About() {
-        std::wstring text =
-            L"Reading the charts\r\n"
-            L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or "
-            L"All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, "
-            L"one account on All meters; each keeps its view until the window closes. The window opens on the "
-            L"Default time span set in Settings > History. Weekly follows each Anthropic "
-            L"account's taskbar weekly selections; removed accounts keep both weeklies, and All meters includes "
-            L"weeklies hidden on the taskbar. Antigravity Gemini, Argon and Claude/GPT quotas share the matching "
-            L"short-term and weekly views. Each quota keeps its own line and resets; overlapping limits are never "
-            L"added or merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
-            L"shows limiting pools, which can change.\r\n\r\n"
-            L"Legend and readout\r\n"
-            L"Each chip above the chart names a line with its color and width: click it to hide or show the line; "
-            L"point at it to emphasize the line. Point at the chart to read every nearby or overlapping line, "
-            L"current and previous week, at the recorded reading nearest the drawn line, never an interpolated "
-            L"value. Values are rounded for display; the CSV keeps them exact. Previous-week times are the original "
-            L"sample times. Gaps are not lines and have no readings.\r\n\r\n"
-            L"Axes and units\r\n"
-            L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
-            L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
-            L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI "
-            L"credits used and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI "
-            L"credits remaining, which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters "
-            L"also plots it on its own axis. Accounts without readings in the range are listed under No "
-            L"readings.\r\n\r\n"
-            L"Lines and markers\r\n"
-            L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
-            L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots "
-            L"mark only isolated readings (filled: current, hollow: previous). Resets, missing or failed readings, "
-            L"gaps, restarts and recording changes break lines without extra markers. Lines are reduced for drawing; "
-            L"cards and the CSV use the raw samples.\r\n\r\n"
-            L"Cards\r\n"
-            L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh "
-            L"poll. Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage "
-            L"counts connected intervals. Time at or above the red threshold (at or below what it leaves, in the "
-            L"Remaining mode) is estimated within those intervals, never across gaps or beyond the last sample. "
-            L"Dollar details report sampled last and peak spending, not total spending in the range. Times are local. Week "
-            L"comparison uses two elapsed seven-day periods; daylight saving can shift local clock times.\r\n\r\n"
-            L"Recording and export\r\n"
-            L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice "
-            L"applies to the current Windows user only, and per-account recording and hidden-account rules still "
-            L"apply. Recording starts with the next poll, once account history IDs are saved. No data can also mean "
-            L"an unsupported meter, failed polls or expired history. Nothing is backfilled. The window follows new "
-            L"polls (the chart waits while the pointer is on it); Refresh or F5 reads local history again. Export "
-            L"writes every supported meter of the selected account, or of every account under All accounts, over "
-            L"the selected range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are "
-            L"not dollars or a spending ledger.\r\n\r\n"
-            L"Retention: " +
-            (settings.settings.historyRetentionDays > 0 ?
-                 std::to_wstring(settings.settings.historyRetentionDays) +
-                     L" days, also limited to 250,000 records / about 60 MB." :
-                 std::wstring(L"forever, with no size limit.")) +
-            L" Turning recording off keeps saved history. Removed "
-            L"accounts remain under their IDs until expiry or Clear, unless their history was deleted with them; "
-            L"select one to delete its history.";
-        if (snapshot && !snapshot->samples.empty()) {
-            text += L"\r\nOldest loaded sample: " +
-                    HistoryUiTime(view.locale, snapshot->samples.front().timeMs, ops->Now(),
-                                  [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+        I18nLocale locale = ops->Locale();
+        const std::pair<I18nKey, I18nKey> sections[] = {
+            {TrCtx(L"history-about", L"Reading the charts"),
+             Tr(L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, "
+                L"or All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on "
+                L"Weekly, one account on All meters; each keeps its view until the window closes. The window opens on "
+                L"the Default time span set in Settings > History. Weekly follows each Anthropic account's taskbar "
+                L"weekly selections; removed accounts keep both weeklies, and All meters includes weeklies hidden on "
+                L"the taskbar. Antigravity Gemini, Argon and Claude/GPT quotas share the matching short-term and "
+                L"weekly views. Each quota keeps its own line and resets; overlapping limits are never added or "
+                L"merged. Short-window labels use recorded durations (or the current limit when unknown). Antigravity "
+                L"shows limiting pools, which can change.")},
+            {TrCtx(L"history-about", L"Legend and readout"),
+             Tr(L"Each chip above the chart names a line with its color and width: click it to hide or show the line; "
+                L"point at it to emphasize the line. Point at the chart to read every nearby or overlapping line, "
+                L"current and previous week, at the recorded reading nearest the drawn line, never an interpolated "
+                L"value. Values are rounded for display; the CSV keeps them exact. Previous-week times are the "
+                L"original sample times. Gaps are not lines and have no readings.")},
+            {TrCtx(L"history-about", L"Axes and units"),
+             Tr(L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
+                L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
+                L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI "
+                L"credits used and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI "
+                L"credits remaining, which fall as usage rises, on their own axis. Dollar spending shows on the "
+                L"cards; All meters also plots it on its own axis. Accounts without readings in the range are listed "
+                L"under No readings.")},
+            {TrCtx(L"history-about", L"Lines and markers"),
+             Tr(L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and "
+                L"tinted. One account gives each meter its own color. Solid lines: current. Dashed lines: previous "
+                L"week. Dots mark only isolated readings (filled: current, hollow: previous). Resets, missing or "
+                L"failed readings, gaps, restarts and recording changes break lines without extra markers. Lines are "
+                L"reduced for drawing; cards and the CSV use the raw samples.")},
+            {TrCtx(L"history-about", L"Cards"),
+             Tr(L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh "
+                L"poll. Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage "
+                L"counts connected intervals. Time at or above the red threshold (at or below what it leaves, in the "
+                L"Remaining mode) is estimated within those intervals, never across gaps or beyond the last sample. "
+                L"Dollar details report sampled last and peak spending, not total spending in the range. Times are "
+                L"local. Week comparison uses two elapsed seven-day periods; daylight saving can shift local clock "
+                L"times.")},
+            {TrCtx(L"history-about", L"Recording and export"),
+             Tr(L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice "
+                L"applies to the current Windows user only, and per-account recording and hidden-account rules still "
+                L"apply. Recording starts with the next poll, once account history IDs are saved. No data can also "
+                L"mean an unsupported meter, failed polls or expired history. Nothing is backfilled. The window "
+                L"follows new polls (the chart waits while the pointer is on it); Refresh or F5 reads local history "
+                L"again. Export writes every supported meter of the selected account, or of every account under All "
+                L"accounts, over the selected range (both weeks when comparing), with UTC times and IDs instead of "
+                L"labels. Credits are not dollars or a spending ledger.")},
+        };
+        std::wstring text;
+        for (const auto& [heading, paragraph] : sections) {
+            text += I18nText(locale, heading) + L"\r\n" + I18nText(locale, paragraph) + L"\r\n\r\n";
         }
-        Ask(text, L"About these charts", MB_OK | MB_ICONINFORMATION);
+        int days = settings.settings.historyRetentionDays;
+        text += days > 0 ?
+            I18nText(locale, Tr(L"Retention: {days, plural, one{# days} other{# days}}, also limited to 250,000 "
+                                L"records / about 60 MB. Turning recording off keeps saved history. Removed accounts "
+                                L"remain under their IDs until expiry or Clear, unless their history was deleted with "
+                                L"them; select one to delete its history."),
+                     {{L"days", days}}) :
+            I18nText(locale, Tr(L"Retention: forever, with no size limit. Turning recording off keeps saved history. "
+                                L"Removed accounts remain under their IDs until expiry or Clear, unless their history "
+                                L"was deleted with them; select one to delete its history."));
+        if (snapshot && !snapshot->samples.empty()) {
+            text += L"\r\n" + I18nText(locale, TrCtx(L"history-about", L"Oldest loaded sample: {time}"),
+                                       {{L"time", HistoryUiTime(locale, snapshot->samples.front().timeMs, ops->Now(),
+                                                                [this](ULONGLONG ms) { return ops->LocalTime(ms); })}});
+        }
+        Ask(text, I18nText(locale, TrCtx(L"dialog-caption", L"About these charts")), MB_OK | MB_ICONINFORMATION);
     }
 
     // A message box: a modal meanwhile.
-    int Ask(const std::wstring& text, PCWSTR caption, UINT type) {
+    int Ask(const std::wstring& text, const std::wstring& caption, UINT type) {
         ModalBegan();
         int answer = ops->Ask(text, caption, type);
         ModalEnded();
@@ -555,7 +644,7 @@ struct HistoryController {
 
     // The operation ends: what waited for it runs, then its notice shows (nothing that ran replaces
     // it).
-    void Finish(HistoryUiNotice result) {
+    void Finish(HistoryNotice result) {
         operation = HistoryOperation::None;
         exportScope.reset();
         Resume();
@@ -796,7 +885,7 @@ struct HistoryController {
         v.remaining = s.barMode == BarMode::Remaining;
         v.logoBrands = s.logoBrands;
         v.material = s.material;
-        v.notice = notice;
+        v.notice = HistoryNoticeText(v.locale, notice);
         v.canExport = snapshot != nullptr;
         v.exporting = operation == HistoryOperation::Writing;
         // Not saving: the journal's error (before the first load, the storage flag); waiting:
@@ -818,7 +907,8 @@ struct HistoryController {
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
                                  v.selected >= 0 ? selectedId : 0, compare, v.locale};
             if (!(key == seriesKey)) {
-                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold, v.remaining};
+                HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold, v.remaining,
+                                         v.locale};
                 series = HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
                 // A build cut short is never taken for a complete one.
                 seriesKey = ops->Unloading() ? HistorySeriesKey{} : key;
@@ -867,9 +957,13 @@ struct HistoryController {
         c.compare = compare;
         c.redThreshold = view.redThreshold;
         c.remaining = view.remaining;
-        c.message = view.lines.empty() ? (view.cards.empty() ? L"No readings in this range." :
-                                              L"No percentage readings to plot. Dollar spending is shown below.") :
-                    hiddenAll ? L"All lines are hidden" : L"";
+        c.locale = view.locale;
+        c.message = !view.lines.empty() ?
+                        (hiddenAll ? I18nText(c.locale, TrCtx(L"chart-message", L"All lines are hidden")) : L"") :
+                    view.cards.empty() ?
+                        I18nText(c.locale, TrCtx(L"chart-message", L"No readings in this range.")) :
+                        I18nText(c.locale, TrCtx(L"chart-message", L"No percentage readings to plot. Dollar spending "
+                                                                   L"is shown below."));
         c.axes = HistoryChartAxes(c.lines, c.remaining);
         float plotWidth = c.plot.right - c.plot.left;
         HistoryChartLayout(g, c, rect, scale);

@@ -16,12 +16,14 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
     if (apartmentInitialized && !g_unloading && !g_historyWindowCancelRequested) {
         try {
             HistoryUiClient client;
+            client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
+            std::wstring title = HistoryWindowTitle(client.titleLocale);
             UiHostConfig config;
             config.mainClass = kHistoryUiClass;
             config.viewportClass = kHistoryUiViewportClass;
             config.popupClass = kHistoryUiPopupClass;
             config.tooltipClass = kHistoryUiTooltipClass;
-            config.title = L"Taskbar AI Quota \u2014 Usage history";
+            config.title = title.c_str();
             config.activateMessage = kHistoryActivateMessage;
             config.size = {1100, 830};
             config.minSize = {800, 590};

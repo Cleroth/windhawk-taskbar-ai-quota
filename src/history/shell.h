@@ -8,6 +8,8 @@ static constexpr float kHistoryUiNavWidth = 260;
 static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_SIZE_F client, UiFrame& frame) {
     uint32_t id = kHistoryUiFirstRunning;
     const bool light = view.theme == UiThemeKind::Light;
+    const I18nLocale& locale = view.locale;
+    const std::wstring allAccounts = I18nText(locale, TrCtx(L"history-nav", L"All accounts"));
     // While an export writes, every control but the legend's chips is disabled (s-states).
     const bool active = !view.exporting;
     const HistoryUiViewAccount* selected =
@@ -24,7 +26,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     all.id = kHistoryUiNavAll;
     all.kind = UiItemKind::Nav;
     all.rect = {8, y, kHistoryUiNavWidth - 8, y + 38};
-    all.text = L"All accounts";
+    all.text = allAccounts;
     all.icon = L"\uE716";
     all.selected = !selected;
     all.enabled = active;
@@ -41,7 +43,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
             header.font = UiFont::Caption;
             header.ink = UiInk::Muted;
             header.rect = {22, y + 12, kHistoryUiNavWidth - 8, y + 28};
-            header.runs = {{L"Removed", UiRunStyle::Strong}};
+            header.runs = {{I18nText(locale, TrCtx(L"history-nav", L"Removed")), UiRunStyle::Strong}};
             frame.nav.push_back(std::move(header));
             y += 36;
         }
@@ -104,15 +106,19 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         PCWSTR glyph;
         HistoryUiCommand command;
         bool enabled;
-        PCWSTR name, detail;
+        std::wstring name, detail;
     };
     const IconButton buttons[] = {
-        {kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, active, L"Refresh (F5)", nullptr},
+        {kHistoryUiRefresh, L"\uE72C", HistoryUiCommand::Refresh, active,
+         I18nText(locale, TrCtx(L"history-button", L"Refresh (F5)")), {}},
         {kHistoryUiExport, L"\uEDE1", HistoryUiCommand::Export, active && view.canExport,
-         selected ? L"Export CSV\u2026" : L"Export all CSV\u2026",
-         L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
-         L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels."},
-        {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, active, L"More options", nullptr}};
+         I18nText(locale, selected ? TrCtx(L"history-button", L"Export CSV\u2026") :
+                                     TrCtx(L"history-button", L"Export all CSV\u2026")),
+         I18nText(locale, Tr(L"Export all raw meters for the selected account, or every account under All accounts. "
+                             L"Uses the selected date range, plus the preceding 7 days in week comparison. UTC "
+                             L"timestamps; text IDs; no labels."))},
+        {kHistoryUiMore, L"\uE712", HistoryUiCommand::Menu, active,
+         I18nText(locale, TrCtx(L"history-button", L"More options")), {}}};
     float x = right - 3 * 32 - 2 * 4;
     for (const IconButton& spec : buttons) {
         UiItem button;
@@ -123,16 +129,21 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         button.icon = spec.glyph;
         button.iconSize = 15;
         button.enabled = spec.enabled;
-        button.tooltip = spec.detail ? std::vector<UiRun>{{spec.name, UiRunStyle::Strong},
-                                                          {std::wstring(L"\n") + spec.detail, UiRunStyle::Normal,
-                                                           UiInk::Secondary}} :
-                                       std::vector<UiRun>{{spec.name}};
+        button.tooltip = !spec.detail.empty() ? std::vector<UiRun>{{spec.name, UiRunStyle::Strong},
+                                                                   {L"\n" + spec.detail, UiRunStyle::Normal,
+                                                                    UiInk::Secondary}} :
+                                                std::vector<UiRun>{{spec.name}};
         button.action = HistoryUiAction(spec.command, spec.command == HistoryUiCommand::Menu ? -1 : 0);
         if (spec.command == HistoryUiCommand::Menu) {
-            button.options = {{L"Settings", int(HistoryUiMenuItem::Settings), {}, {}, L"\uE713"},
-                              {L"Open history folder", int(HistoryUiMenuItem::Folder), {}, {}, L"\uE838"},
-                              {L"About these charts", int(HistoryUiMenuItem::About), {}, {}, L"\uE946"},
-                              {L"Clear all history\u2026", int(HistoryUiMenuItem::Clear), {}, {}, L"\uE74D", true}};
+            button.options = {
+                {I18nText(locale, TrCtx(L"history-menu", L"Settings")), int(HistoryUiMenuItem::Settings), {}, {},
+                 L"\uE713"},
+                {I18nText(locale, TrCtx(L"history-menu", L"Open history folder")), int(HistoryUiMenuItem::Folder), {},
+                 {}, L"\uE838"},
+                {I18nText(locale, TrCtx(L"history-menu", L"About these charts")), int(HistoryUiMenuItem::About), {}, {},
+                 L"\uE946"},
+                {I18nText(locale, TrCtx(L"history-menu", L"Clear all history\u2026")), int(HistoryUiMenuItem::Clear),
+                 {}, {}, L"\uE74D", true}};
         }
         frame.main.push_back(std::move(button));
         x += 36;
@@ -155,13 +166,12 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         item.align = align;
         frame.main.push_back(std::move(item));
     };
-    const std::wstring widest = HistoryUiProgressText(2000000);
+    const std::wstring widest = HistoryUiProgressText(locale, 2000000);
     struct Pill {
         std::wstring text;
         UiInk ink;
         bool on;
     };
-    const I18nLocale& locale = view.locale;
     Pill pill = view.pill == HistoryUiPill::Off ? Pill{I18nText(locale, TrCtx(L"history-pill", L"Off")), UiInk::Secondary,
                                                        false} :
                 view.pill == HistoryUiPill::NotSaving ?
@@ -173,7 +183,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                 Pill{I18nText(locale, TrCtx(L"history-pill", L"Recording \u00B7 {days, plural, one{# day} other{# days}}"),
                               {{L"days", view.retentionDays}}),
                      UiInk::Success, true};
-    PCWSTR title = selected ? selected->label.c_str() : L"All accounts";
+    const std::wstring& title = selected ? selected->label : allAccounts;
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, UiTextStyleFor(UiFont::Title), 100000, false)).width);
     float statusWidth = view.exporting     ? 22 + measure(widest, UiFont::Caption) :
@@ -209,12 +219,20 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     // didn't fit the title row; an export's progress 12 DIP after that line, or starting it.
     std::wstring subtitle;
     if (selected) {
-        subtitle = std::wstring(HistoryUiProviderName(selected->provider)) + L" \u00B7 " +
-                   (selected->removed                                    ? L"Removed" :
-                    !view.recordingEnabled || selected->recordingOff ? L"Recording off" :
-                    selected->paused                                     ? L"Paused" : L"Recording");
+        I18nKey recording = selected->removed ? TrCtx(L"history-account-state", L"Removed") :
+                            !view.recordingEnabled || selected->recordingOff ?
+                                                TrCtx(L"history-account-state", L"Recording off") :
+                            selected->paused ? TrCtx(L"history-account-state", L"Paused") :
+                                               TrCtx(L"history-account-state", L"Recording");
+        subtitle = I18nText(locale, TrCtx(L"history-account", L"{provider} \u00B7 {recording}"),
+                            {{L"provider", HistoryUiProviderName(locale, selected->provider)},
+                             {L"recording", I18nText(locale, recording)}});
     }
-    if (narrow && !view.exporting) subtitle += (subtitle.empty() ? L"" : L" \u00B7 ") + view.status;
+    if (narrow && !view.exporting) {
+        subtitle = subtitle.empty() ? view.status :
+                                      I18nText(locale, TrCtx(L"history-subtitle", L"{account} \u00B7 {updated}"),
+                                               {{L"account", subtitle}, {L"updated", view.status}});
+    }
     float top = 56;
     if (!subtitle.empty() || narrow) {
         float lineRight = right;
@@ -243,8 +261,12 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     // before it), 10 DIP apart, wrapping into rows 10 DIP apart. Comparing shows Range as 7 days,
     // disabled.
     std::vector<UiOption> views, ranges;
-    for (int i = 0; i < int(std::size(kHistoryViewNames)); i++) views.push_back({kHistoryViewNames[i], i});
-    for (int i = 0; i < int(std::size(kHistoryUiRangeNames)); i++) ranges.push_back({kHistoryUiRangeNames[i], i});
+    for (int i = 0; i < int(std::size(kHistoryViewNames)); i++) {
+        views.push_back({I18nText(locale, kHistoryViewNames[i]), i});
+    }
+    for (int i = 0; i < int(std::size(kHistoryUiRangeNames)); i++) {
+        ranges.push_back({I18nText(locale, kHistoryUiRangeNames[i]), i});
+    }
     float cx = left;
     auto place = [&](D2D1_SIZE_F size) {
         if (cx > left && cx + size.width > right) {
@@ -261,7 +283,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     UiAddSegmented(frame.main, kHistoryUiRanges, place(rangesSize), std::move(ranges), active && !view.compare,
                    HistoryUiAction(HistoryUiCommand::Range,
                                    int(view.compare ? HistoryUiRange::Week : view.range)));
-    PCWSTR compare = L"Compare previous week";
+    std::wstring compare = I18nText(locale, TrCtx(L"history-toggle", L"Compare previous week"));
     D2D1_SIZE_F compareSize = UiToggleSize(g, compare);
     D2D1_RECT_F compareSlot = place({4 + compareSize.width, 32});
     UiAddToggle(frame.main, kHistoryUiCompare, {compareSlot.left + 4, compareSlot.top, compareSlot.right, compareSlot.bottom},

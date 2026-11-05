@@ -123,7 +123,7 @@ struct TestHistoryOps final : HistoryOps {
         log.push_back(folder ? L"open folder" : L"no folder");
         return folder;
     }
-    int Ask(const std::wstring& text, PCWSTR caption, UINT type) override {
+    int Ask(const std::wstring& text, const std::wstring& caption, UINT type) override {
         log.push_back(std::wstring(L"ask ") + caption);
         asked.push_back({text, type});
         if (asking) asking();
@@ -132,7 +132,7 @@ struct TestHistoryOps final : HistoryOps {
         answers.pop_front();
         return answer;
     }
-    HistoryDestination ChooseDestination(const std::wstring& title) override {
+    HistoryDestination ChooseDestination(const std::wstring& title, const I18nLocale&) override {
         log.push_back(L"choose " + title);
         if (choosing) choosing();
         return destination;

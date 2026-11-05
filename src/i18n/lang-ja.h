@@ -32,7 +32,17 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"［自動］: 右側に表示し、バーが黄のしきい値に達すると左側に移動します。"},
     {L"", L"Additional OpenAI rate limits", L"OpenAI の追加のレート制限"},
     {L"", L"Adds ! when a refresh failed or is overdue.", L"更新に失敗したか、更新が遅れているときに ! を付けます。"},
+    {L"", L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
+          L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots mark "
+          L"only isolated readings (filled: current, hollow: previous). Resets, missing or failed readings, gaps, "
+          L"restarts and recording changes break lines without extra markers. Lines are reduced for drawing; cards "
+          L"and the CSV use the raw samples.",
+     L"［すべてのアカウント］では、アカウントごとに色を割り当てます。主要なクォータは太く、対象が限定されたクォータは細く色味を変えて表示します。1 つのアカウントでは、メーターごとに別の色を割り当てます。実線: 現在。破線: "
+     L"前週。点は孤立した測定値だけを示します (塗りつぶし: 現在、中空: 前週)。リセット、欠落または失敗した測定値、ギャップ、再起動、記録の変更では、マーカーを追加せずに線が途切れます。線は描画用に間引かれます。カードと "
+     L"CSV では元のサンプルを使います。"},
     {L"", L"All displays", L"すべてのディスプレイ"},
+    {L"", L"All local history cleared. Future polls can start recording again.",
+     L"ローカルの履歴をすべて消去しました。今後のポーリングで再び記録を始められます。"},
     {L"", L"Also delete its usage history", L"使用履歴も削除する"},
     {L"", L"Also the level for threshold notifications.", L"しきい値の通知のレベルでもあります。"},
     {L"", L"Amounts on extra usage and credits", L"追加使用量とクレジットの金額"},
@@ -63,6 +73,12 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Bar style", L"バーのスタイル"},
     {L"", L"Bar text size", L"バーの文字サイズ"},
     {L"", L"Bar thickness", L"バーの太さ"},
+    {L"", L"CSV export could not start; no file written.", L"CSV エクスポートを開始できませんでした。ファイルは書き込まれていません。"},
+    {L"", L"CSV export failed (Windows error {code}). Existing destination unchanged.",
+     L"CSV エクスポートに失敗しました (Windows エラー {code})。既存の保存先ファイルは変更されていません。"},
+    {L"", L"Cannot create the CSV temporary file (Windows error {code}). Existing destination unchanged.",
+     L"CSV の一時ファイルを作成できません (Windows エラー {code})。既存の保存先ファイルは変更されていません。"},
+    {L"", L"Cannot track native dialogs safely; operation cancelled.", L"ネイティブ ダイアログを安全に追跡できないため、操作をキャンセルしました。"},
     {L"", L"Chart height", L"グラフの高さ"},
     {L"", L"Chart outline", L"グラフの枠線"},
     {L"", L"Chart width", L"グラフの幅"},
@@ -78,8 +94,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"Codex Spark、gpt-reserve などの非表示のモデル レーン、OpenAI の詳細での Spark のプラン名。"},
     {L"", L"Contributors", L"コントリビューター"},
     {L"", L"Copy version info", L"バージョン情報をコピー"},
+    {L"", L"Could not clear all history. {reason}", L"すべての履歴を消去できませんでした。{reason}"},
+    {L"", L"Could not delete this account's history. {reason}", L"このアカウントの履歴を削除できませんでした。{reason}"},
     {L"", L"Could not remove the account.", L"アカウントを削除できませんでした。"},
     {L"", L"Could not reorder the account.", L"アカウントを並べ替えられませんでした。"},
+    {L"", L"Could not save recording consent. Recording is still off.", L"記録の同意を保存できませんでした。記録はオフのままです。"},
     {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
      L"設定を保存できませんでした。変更はエラーと共にここに残ります。もう一度変更すると再試行します。"},
     {L"", L"Could not save the account.", L"アカウントを保存できませんでした。"},
@@ -96,6 +115,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
           L"threshold.",
      L"［既定］: 緑、黄、橙、赤。［色覚対応］: 青から朱色まで。［カスタム］: しきい値ごとに選んだ色。"},
+    {L"", L"Deleted the history of removed account {label}.", L"削除されたアカウント「{label}」の履歴を削除しました。"},
     {L"", L"Diameter in pixels.", L"直径 (ピクセル単位)。"},
     {L"", L"Display {number} - unavailable", L"ディスプレイ {number} - 使用できません"},
     {L"", L"Display {number} - {width}x{height}", L"ディスプレイ {number} - {width}x{height}"},
@@ -123,11 +143,29 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"記録するかどうかはアカウントごとに選べます: <link id=\"accounts\">アカウント</link> > 履歴を記録。［動作］の "
      L"<link id=\"hidden\">非表示のアカウントをポーリングしない</link> がオンの間、非表示のアカウントは記録されません。"},
+    {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
+          L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
+          L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
+          L"rounded for display; the CSV keeps them exact. Previous-week times are the original sample times. Gaps "
+          L"are not lines and have no readings.",
+     L"グラフの上の各チップは、線の名前とその色と太さを示します。クリックすると線の表示/非表示を切り替え、ポインターを置くと線を強調表示します。グラフにポインターを置くと、近くにある線や重なった線 (現在と前週) "
+     L"をすべて、描画された線に最も近い記録済みの測定値で読み取れます。補間された値は表示しません。値は表示用に丸められますが、CSV "
+     L"では正確な値が保持されます。前週の時刻は、元のサンプルの時刻です。ギャップは線ではなく、測定値もありません。"},
     {L"", L"Elapsed time", L"経過時間"},
     {L"", L"Enter a label.", L"ラベルを入力してください。"},
     {L"", L"Enter a whole number from {minimum} to {maximum}.", L"{minimum}～{maximum} の整数を入力してください。"},
     {L"", L"Example accounts, updates as you change settings", L"サンプル アカウント (設定の変更を反映)"},
     {L"", L"Example accounts, wider than shown: drag to scroll", L"サンプル アカウント (はみ出し分はドラッグでスクロール)"},
+    {L"", L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
+          L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.",
+     L"選択したアカウント (［すべてのアカウント］では全アカウント) の生のメーターをすべてエクスポートします。選択した期間を使い、週の比較中はその前の 7 日間も含めます。タイムスタンプは UTC、ID "
+     L"はテキスト、ラベルは含みません。"},
+    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+          L"Labels omitted; times UTC.",
+     L"{rows, plural, other{メーター {count} 行}} (すべてのアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+          L"Labels omitted; times UTC.",
+     L"{rows, plural, other{メーター {count} 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -149,6 +187,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"Windows のユーザー間で共有されます。"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"履歴は、サインインし直してもこのエントリに引き継がれます。別のログインには新しいエントリを使ってください。"},
+    {L"", L"History recording is off. Saved history stays; nothing new is recorded.",
+     L"履歴の記録はオフです。保存済みの履歴は残りますが、新しいデータは記録されません。"},
     {L"", L"History storage failed; Open usage history shows why.", L"履歴の保存に失敗しました。［使用履歴を開く］で理由を確認できます。"},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
@@ -170,6 +210,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"既定では薄い灰色、明るいタスク バーでは暗い色です。［カスタム…］でカラー ピッカーを開きます。"},
     {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
      L"クォータの期間のうち経過した部分を明るくし、残りは暗いままにします。"},
+    {L"", L"Loading local history…", L"ローカルの履歴を読み込んでいます…"},
     {L"", L"Logo + number badge, logo only, or label.", L"ロゴ + 番号バッジ、ロゴのみ、またはラベル。"},
     {L"", L"Logo size", L"ロゴのサイズ"},
     {L"", L"Long windows", L"長期間"},
@@ -183,6 +224,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Material", L"素材"},
     {L"", L"Material, values, usage colors, status marks and flyout details.", L"素材、値、使用量の色、ステータスの表示、詳細フライアウト。"},
     {L"", L"New samples arrive with each poll.", L"ポーリングのたびに新しいサンプルが追加されます。"},
+    {L"", L"No accounts support this view.", L"このビューに対応しているアカウントはありません。"},
+    {L"", L"No accounts to display.", L"表示するアカウントはありません。"},
     {L"", L"No accounts yet", L"アカウントはまだありません"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
      L"暗号化されていません。測定値と不透明な ID のみで、トークンやラベルは含みません。Mod を削除しても残ります。"},
@@ -213,6 +256,24 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Percentage text", L"パーセント表示"},
     {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
      L"パーセント表示とクォータ キー。パーセント表示は［表示］ページで設定します。"},
+    {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
+          L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
+          L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
+          L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
+          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
+          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+     L"パーセントは左の軸を使い、網掛けの帯は赤のしきい値を示します。［残量］バー モード (［設定］>［表示］) では残りの分を表示するため、使用量が増えると線は下がり、上限を超えると 0% "
+     L"を下回ります。帯は下端に表示されます。［追加使用量］には、Anthropic の予算、GitHub Copilot の AI クレジット、OpenCode Go の月間割り当ての使用量 (%) "
+     L"(［残量］モードでは残り) と、OpenAI の残りクレジットが表示されます。OpenAI "
+     L"のクレジットは使用量が増えると下がり、専用の軸を使います。ドルでの支出はカードに表示され、［全メーター］では専用の軸にもプロットされます。期間内に測定値がないアカウントは、［期間内の測定値なし］に表示されます。"},
+    {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
+          L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
+          L"record new history.",
+     L"この Windows "
+     L"ユーザーのローカルの使用履歴を、削除したアカウントの分も含めてすべて完全に消去しますか？\r\n\r\nこの操作は元に戻せません。設定とサインインは変更されません。記録が有効のままの場合、今後のポーリングで新しい履歴が記録されます。"},
+    {L"", L"Permanently delete all usage history of the removed {provider} account {label}?\r\n\r\nEvery recorded "
+          L"sample of it is deleted, not only the selected range. This cannot be undone.",
+     L"削除された {provider} アカウント「{label}」の使用履歴をすべて完全に削除しますか？\r\n\r\n選択した期間だけでなく、このアカウントの記録済みサンプルがすべて削除されます。この操作は元に戻せません。"},
     {L"", L"Pie area", L"円グラフの領域"},
     {L"", L"Pixels across each bar.", L"各バーの太さ (ピクセル単位)。"},
     {L"", L"Pixels across each quota’s chart.", L"各クォータのグラフの幅 (ピクセル単位)。"},
@@ -234,6 +295,24 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Reading size", L"測定値のサイズ"},
     {L"", L"Record history", L"履歴を記録"},
     {L"", L"Record usage history", L"使用履歴を記録"},
+    {L"", L"Recording is off for this account. Its saved history stays; turn on Record history in Settings > Accounts "
+          L"to record new polls.",
+     L"このアカウントの記録はオフです。保存済みの履歴は残ります。新しいポーリングを記録するには、［設定］>［アカウント］で［履歴を記録］をオンにしてください。"},
+    {L"", L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice applies "
+          L"to the current Windows user only, and per-account recording and hidden-account rules still apply. "
+          L"Recording starts with the next poll, once account history IDs are saved. No data can also mean an "
+          L"unsupported meter, failed polls or expired history. Nothing is backfilled. The window follows new polls "
+          L"(the chart waits while the pointer is on it); Refresh or F5 reads local history again. Export writes "
+          L"every supported meter of the selected account, or of every account under All accounts, over the selected "
+          L"range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are not dollars or a "
+          L"spending ledger.",
+     L"記録は既定でオンです。オフの場合は、情報バーの［記録を有効にする］か［設定］でオンにしてください。この選択は現在の Windows "
+     L"ユーザーにのみ適用され、アカウントごとの記録と非表示のアカウントのルールも引き続き適用されます。記録は、アカウントの履歴 ID "
+     L"が保存された後、次のポーリングから始まります。データがない場合は、サポートされていないメーター、ポーリングの失敗、または期限切れの履歴が原因のこともあります。過去のデータが後から補完されることはありません。ウィンドウは新しいポーリングに追従します "
+     L"(ポインターがグラフ上にある間、グラフは更新を待ちます)。［更新］または F5 でローカルの履歴を読み込み直します。エクスポートでは、選択したアカウント (［すべてのアカウント］では全アカウント) "
+     L"のサポートされているすべてのメーターを、選択した期間 (比較中は両方の週) について、ラベルの代わりに UTC の時刻と ID で書き出します。クレジットはドルではなく、支出の台帳でもありません。"},
+    {L"", L"Recording is paused for this account: it is hidden from the taskbar, and hidden accounts are not polled.",
+     L"このアカウントの記録は一時停止中です: タスク バーで非表示になっており、非表示のアカウントはポーリングされません。"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
      L"この Windows ユーザーの記録はオン、履歴は無期限に保持、7 日で開きます。保存済みの履歴は残ります。"},
     {L"", L"Recording rules, storage, export and verification", L"記録のルール、保存、エクスポート、検証"},
@@ -263,9 +342,21 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"レイアウトを既定値にリセットしますか？\n\n100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、薄い灰色のキャレット型ペース "
      L"マーカー、既定の間隔。アカウントは変更されません。"},
     {L"", L"Reset countdown", L"リセットまでの残り時間"},
+    {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
+          L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
+          L"delete its history.",
+     L"保持期間: 無期限、サイズの上限なし。記録をオフにしても保存済みの履歴は残ります。削除されたアカウントは、一緒に履歴も削除した場合を除き、期限切れになるか［すべての履歴を消去］するまで、その ID "
+     L"で残ります。履歴を削除するには、そのアカウントを選択してください。"},
+    {L"", L"Retention: {days, plural, one{# days} other{# days}}, also limited to 250,000 records / about 60 MB. "
+          L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
+          L"unless their history was deleted with them; select one to delete its history.",
+     L"保持期間: {days, plural, other{# 日間}}。250,000 レコード / 約 60 MB "
+     L"にも制限されます。記録をオフにしても保存済みの履歴は残ります。削除されたアカウントは、一緒に履歴も削除した場合を除き、期限切れになるか［すべての履歴を消去］するまで、その ID "
+     L"で残ります。履歴を削除するには、そのアカウントを選択してください。"},
     {L"", L"Ring size", L"リングのサイズ"},
     {L"", L"Ring thickness", L"リングの太さ"},
     {L"", L"Ringed reading", L"リング付きの測定値"},
+    {L"", L"Save dialog failed (code {code}).", L"保存ダイアログでエラーが発生しました (コード {code})。"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"<b>{button}</b> を選ぶと、Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go のアカウントをタスク バーに表示できます。"},
@@ -285,6 +376,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"sign-in and history.",
      L"詳細に表示され、［識別］が［ラベル］のときはバーの横にも表示されます。プロバイダーごとに一意で、名前を変えてもサインインと履歴は保持されます。"},
     {L"", L"Side in pixels.", L"辺の長さ (ピクセル単位)。"},
+    {L"", L"Solid / filled: current range. Click to hide or show this line.",
+     L"実線 / 塗りつぶし: 現在の期間。クリックすると、この線の表示/非表示を切り替えます。"},
+    {L"", L"Solid / filled: current week. Dashed / hollow: previous week. Click to hide or show this line.",
+     L"実線 / 塗りつぶし: 現在の週。破線 / 中空: 前週。クリックすると、この線の表示/非表示を切り替えます。"},
     {L"", L"Space after the last account, before whatever comes next on the taskbar.",
      L"最後のアカウントの後、タスク バー上の次の要素までのスペース。"},
     {L"", L"Space between an account’s bars.", L"1 つのアカウントのバー同士の間隔。"},
@@ -298,6 +393,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"deleted permanently, for every Windows user.",
      L"履歴の無期限保持をやめますか？\n\n履歴は再び {days, plural, other{# 日間}} 保持され、250,000 サンプル (約 60 MB) "
      L"に制限されます。それより古いサンプルと、上限を超えた最も古いサンプルは、すべての Windows ユーザーについて完全に削除されます。"},
+    {L"", L"Storage cap reached; oldest samples were pruned.", L"保存容量の上限に達したため、最も古いサンプルが削除されました。"},
     {L"", L"Storage location", L"保存場所"},
     {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
      L"線の幅 (ピクセル単位)。円弧が数値の周りに収まらないときは自動的に細くなります。"},
@@ -327,6 +423,16 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"アカウントの名前は変更されましたが、重複した保存済みサインインが古い ID に残っています。削除するには、古いプロバイダーとラベルでアカウントを追加し直してから削除してください。"},
     {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
      L"クレジット バーが 100% とみなす残高です。OpenAI は残高のみを報告します。"},
+    {L"", L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh poll. "
+          L"Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage counts "
+          L"connected intervals. Time at or above the red threshold (at or below what it leaves, in the Remaining "
+          L"mode) is estimated within those intervals, never across gaps or beyond the last sample. Dollar details "
+          L"report sampled last and peak spending, not total spending in the range. Times are local. Week comparison "
+          L"uses two elapsed seven-day periods; daylight saving can shift local clock times.",
+     L"大きな値は期間内の最新の測定値です。「現在」は、それがアカウントの最新のポーリングによる新しい値であることを示します。［ピーク］は記録された最大値で、［残量］モードでは［最低］が残りの最も少ない値です。［カバー範囲］には、測定値がつながっている区間だけが含まれます。赤のしきい値以上 "
+     L"(［残量］モードでは、しきい値が残す分以下) "
+     L"の時間は、それらの区間内で推定され、ギャップをまたいだり最後のサンプルを超えたりすることはありません。ドルの詳細は、サンプリングされた最後の支出とピークの支出であり、期間内の支出の合計ではありません。時刻はローカル時刻です。週の比較では、経過した "
+     L"2 つの 7 日間を使います。夏時間によってローカルの時刻がずれることがあります。"},
     {L"", L"The mod’s name and version and the Windows build, for bug reports.",
      L"Mod の名前とバージョン、および Windows のビルド。バグ報告に使います。"},
     {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
@@ -350,12 +456,34 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"保存されたサインインは削除されましたが、設定を保存できませんでした。アカウントは構成されたまま、サインアウトした状態です。"},
     {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
      L"タスク バーの文字色、または Claude のオレンジ。詳細フライアウト、［アカウント］ページ、使用履歴も同じ色になります。"},
+    {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
+          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
+          L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
+          L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
+          L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
+          L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
+     L"これはサンプリングしたクォータの水準であり、トークン数や日ごとの消費量ではありません。サイドバーでアカウントまたは［すべてのアカウント］を選び、ビュー (［短期］、［週間］、［追加使用量］、［全メーター］) "
+     L"を選んでください。［すべてのアカウント］は［週間］で、個々のアカウントは［全メーター］で始まり、それぞれウィンドウを閉じるまでビューを保持します。ウィンドウは、［設定］>［履歴］で設定した［既定の期間］で開きます。［週間］は、各 "
+     L"Anthropic アカウントのタスク バーでの週間クォータの選択に従います。削除されたアカウントでは両方の週間クォータが残り、［全メーター］にはタスク バーで非表示の週間クォータも含まれます。Antigravity "
+     L"の Gemini、Argon、Claude/GPT "
+     L"のクォータは、対応する短期と週間のビューに表示されます。各クォータには独自の線とリセットがあり、重なり合う上限が加算や統合されることはありません。短期間のラベルには記録された期間 (不明な場合は現在の上限) "
+     L"を使います。Antigravity では制限となっているプールを表示し、これは変わることがあります。"},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
      L"細いキャレット、全幅の線、端の切れ込み、中央の点、または時間トラック (各バーの下で経過時間に応じて伸びる小さなバー)。"},
+    {L"", L"This account has no meters in this view.", L"このアカウントには、このビューのメーターがありません。"},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"このアカウントの構成がなくなったため、保存されていない変更は破棄されました。"},
+    {L"", L"This account was removed. Its saved history stays until it expires or is deleted.",
+     L"このアカウントは削除されました。保存済みの履歴は、期限切れになるか削除されるまで残ります。"},
     {L"", L"This change couldn't be saved.", L"この変更を保存できませんでした。"},
+    {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
+          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
+          L"available. Continue?",
+     L"このエクスポートには約 {rows, plural, other{# 行}} "
+     L"が含まれます。時間がかかり、スプレッドシートの行数の上限を超える可能性があります。書き込み中は履歴ウィンドウを操作できませんが、エクスプローラーのタスク バーは引き続き使用できます。続行しますか？"},
     {L"", L"Threshold notifications", L"しきい値の通知"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"しきい値は黄、橙、赤の順に保たれます。"},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
@@ -406,6 +534,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"既定の白は、タスク バーの文字色に従います。［カスタム…］でカラー ピッカーを開きます。"},
     {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows の透明効果がオフのため、［単色］として表示されます。"},
     {L"", L"Yellow from", L"黄のしきい値"},
+    {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported}経過した 2 つの 7 日間を両方とも含みます。"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity が実行されていません"},
@@ -483,6 +612,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"button", L"Copy", L"コピー"},
     {L"button", L"Copy failed", L"コピーできませんでした"},
     {L"button", L"Custom...", L"カスタム…"},
+    {L"button", L"Delete history…", L"履歴を削除…"},
+    {L"button", L"Enable recording", L"記録を有効にする"},
     {L"button", L"Open dashboard", L"ダッシュボードを開く"},
     {L"button", L"Open folder", L"フォルダーを開く"},
     {L"button", L"Open usage history", L"使用履歴を開く"},
@@ -491,16 +622,26 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"button", L"Sign in", L"サインイン"},
     {L"button", L"Sign in again", L"再度サインイン"},
     {L"button", L"Sign out", L"サインアウト"},
+    {L"chart-axis", L"{value} cr", L"{value} cr"},
+    {L"chart-key", L"Solid: current", L"実線: 現在"},
+    {L"chart-key", L"Solid: current · Dashed: previous", L"実線: 現在 · 破線: 前週"},
+    {L"chart-message", L"All lines are hidden", L"すべての線が非表示です"},
+    {L"chart-message", L"No percentage readings to plot. Dollar spending is shown below.",
+     L"プロットするパーセントの測定値はありません。ドルでの支出は下に表示されます。"},
+    {L"chart-message", L"No readings in this range.", L"この期間に測定値はありません。"},
     {L"chart-readout", L"+{count} more — hide lines in the legend",
      L"ほか {count} 件 — 凡例で線を非表示にしてください"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"ほか {count} 件 — 凡例で線を非表示にするか、アカウントを 1 つ選んでください"},
+    {L"chart-readout", L"[Current]", L"[現在]"},
+    {L"chart-readout", L"[Previous week]", L"[前週]"},
     {L"chart-tick-day", L"{month} {day}", L"{month}{day}日"},
     {L"chart-tick-month", L"{month} {year}", L"{year}年{month}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{day}日({weekday})"},
     {L"copilot-unit", L"AI credits", L"AI クレジット"},
     {L"copilot-unit", L"chat requests", L"チャット リクエスト"},
     {L"copilot-unit", L"premium requests", L"プレミアム リクエスト"},
+    {L"credits-amount", L"{amount} credits", L"{amount} クレジット"},
     {L"credits-unit", L"{credits, plural, one{credits} other{credits}}", L"{credits, plural, other{クレジット}}"},
     {L"date-month", L"Apr", L"4月"},
     {L"date-month", L"Aug", L"8月"},
@@ -536,8 +677,16 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"date-weekday", L"Tue", L"火"},
     {L"date-weekday", L"Wed", L"水"},
     {L"dialog-button", L"Remove", L"削除"},
+    {L"dialog-caption", L"About these charts", L"グラフについて"},
     {L"dialog-caption", L"Account", L"アカウント"},
+    {L"dialog-caption", L"Clear all usage history", L"すべての使用履歴の消去"},
+    {L"dialog-caption", L"Delete account history", L"アカウントの履歴の削除"},
+    {L"dialog-caption", L"Export all accounts — all meters, selected range (both weeks if comparing)",
+     L"全アカウントのエクスポート — 全メーター、選択した期間 (比較中は両方の週)"},
+    {L"dialog-caption", L"Export selected account — all meters, selected range (both weeks if comparing)",
+     L"選択したアカウントのエクスポート — 全メーター、選択した期間 (比較中は両方の週)"},
     {L"dialog-caption", L"Keep history", L"履歴の保持"},
+    {L"dialog-caption", L"Large history export", L"大量の履歴のエクスポート"},
     {L"dialog-caption", L"Remove account", L"アカウントの削除"},
     {L"dialog-caption", L"Reset settings", L"設定のリセット"},
     {L"dialog-caption", L"Usage history", L"使用履歴"},
@@ -548,6 +697,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"duration", L"{minutes}m", L"{minutes}分"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
     {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"file-type", L"All files (*.*)", L"すべてのファイル (*.*)"},
+    {L"file-type", L"CSV files (*.csv)", L"CSV ファイル (*.csv)"},
     {L"flyout-footer", L"No data yet", L"データはまだありません"},
     {L"flyout-footer", L"Updated {time}", L"{time} に更新"},
     {L"flyout-footer", L"Updated {time} (stale)", L"{time} に更新 (古いデータ)"},
@@ -569,11 +720,64 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, other{無料リセットが # 回利用可能}} · 次回の期限: {when}"},
+    {L"history-about", L"Axes and units", L"軸と単位"},
+    {L"history-about", L"Cards", L"カード"},
+    {L"history-about", L"Legend and readout", L"凡例と値の表示"},
+    {L"history-about", L"Lines and markers", L"線とマーカー"},
+    {L"history-about", L"Oldest loaded sample: {time}", L"読み込まれた最も古いサンプル: {time}"},
+    {L"history-about", L"Reading the charts", L"グラフの見方"},
+    {L"history-about", L"Recording and export", L"記録とエクスポート"},
+    {L"history-account", L"{provider} · {recording}", L"{provider} · {recording}"},
+    {L"history-account-state", L"Paused", L"一時停止中"},
+    {L"history-account-state", L"Recording", L"記録中"},
+    {L"history-account-state", L"Recording off", L"記録オフ"},
+    {L"history-account-state", L"Removed", L"削除済み"},
+    {L"history-account-status", L"paused", L"一時停止中"},
+    {L"history-account-status", L"recording off", L"記録オフ"},
+    {L"history-button", L"Export CSV…", L"CSV エクスポート…"},
+    {L"history-button", L"Export all CSV…", L"全アカウントの CSV エクスポート…"},
+    {L"history-button", L"More options", L"その他のオプション"},
+    {L"history-button", L"Refresh (F5)", L"更新 (F5)"},
+    {L"history-card", L"Coverage {hours} ({percent}%)", L"カバー範囲 {hours} ({percent}%)"},
+    {L"history-card", L"Current: {line}", L"現在: {line}"},
+    {L"history-card", L"Est. ≤{threshold}%: {hours}", L"推定 ≤{threshold}%: {hours}"},
+    {L"history-card", L"Est. ≥{threshold}%: {hours}", L"推定 ≥{threshold}%: {hours}"},
+    {L"history-card", L"Last recorded spend: {reading}", L"最後に記録された支出: {reading}"},
+    {L"history-card", L"Lowest {reading}", L"最低 {reading}"},
+    {L"history-card", L"No dollar readings in this period.", L"この期間にドルの測定値はありません。"},
+    {L"history-card", L"No readings in range", L"期間内の測定値なし"},
+    {L"history-card", L"Peak {reading}", L"ピーク {reading}"},
+    {L"history-card", L"Previous: {line}", L"前週: {line}"},
+    {L"history-card", L"now", L"現在"},
+    {L"history-card", L"{title} — details only", L"{title} — 詳細のみ"},
+    {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
+     L"{title}<link id=\"status\"> · {status}</link>"},
+    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
+     L"{rows, plural, other{{count} 行をエクスポート中…}}"},
+    {L"history-menu", L"About these charts", L"グラフについて"},
+    {L"history-menu", L"Clear all history…", L"すべての履歴を消去…"},
+    {L"history-menu", L"Open history folder", L"履歴フォルダーを開く"},
+    {L"history-menu", L"Settings", L"設定"},
+    {L"history-meter", L"Credits remaining", L"残りクレジット"},
+    {L"history-meter", L"Extra budget", L"追加予算"},
+    {L"history-meter", L"Extra spending (USD)", L"追加支出 (USD)"},
+    {L"history-nav", L"All accounts", L"すべてのアカウント"},
+    {L"history-nav", L"Removed", L"削除済み"},
     {L"history-pill", L"Not saving", L"保存できません"},
     {L"history-pill", L"Off", L"オフ"},
     {L"history-pill", L"Recording · forever", L"記録中 · 無期限"},
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"記録中 · {days, plural, other{#日}}"},
     {L"history-pill", L"Waiting", L"待機中"},
+    {L"history-provider", L"Unknown provider", L"不明なプロバイダー"},
+    {L"history-range", L"24h", L"24時間"},
+    {L"history-range", L"30d", L"30日"},
+    {L"history-range", L"7d", L"7日"},
+    {L"history-range", L"90d", L"90日"},
+    {L"history-range", L"All", L"全期間"},
+    {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
+    {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
+    {L"history-series", L"{meter} left (%)", L"{meter} の残量 (%)"},
+    {L"history-series", L"{meter} used (%)", L"{meter} の使用量 (%)"},
     {L"history-span", L"All retained", L"保持期間のすべて"},
     {L"history-span", L"{days, plural, one{# day} other{# days}}", L"{days, plural, other{# 日}}"},
     {L"history-span", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 時間}}"},
@@ -600,6 +804,13 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-storage", L"History write failed; the previous journal was kept.", L"履歴の書き込みに失敗しました。以前のジャーナルは保持されています。"},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"履歴ファイルがサポートされていないか、破損しています。履歴を消去してやり直してください。"},
+    {L"history-subtitle", L"{account} · {updated}", L"{account} · {updated}"},
+    {L"history-toggle", L"Compare previous week", L"前週と比較"},
+    {L"history-view", L"All meters", L"全メーター"},
+    {L"history-view", L"Extra usage", L"追加使用量"},
+    {L"history-view", L"Short-term", L"短期"},
+    {L"history-view", L"Weekly", L"週間"},
+    {L"hours-value", L"{hours} h", L"{hours} 時間"},
     {L"identity-position", L"Bottom", L"下"},
     {L"identity-position", L"Hidden", L"非表示"},
     {L"identity-position", L"Left", L"左"},
@@ -698,15 +909,20 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"quota-name", L"AI credits", L"AI クレジット"},
     {L"quota-name", L"Chat requests", L"チャット リクエスト"},
     {L"quota-name", L"Credits", L"クレジット"},
+    {L"quota-name", L"Current limit", L"現在の上限"},
     {L"quota-name", L"Extra usage", L"追加使用量"},
     {L"quota-name", L"Monthly", L"月間"},
     {L"quota-name", L"Premium requests", L"プレミアム リクエスト"},
     {L"quota-name", L"Short window", L"短期間"},
+    {L"quota-name", L"Short-term (varying windows)", L"短期 (期間が変動)"},
     {L"quota-name", L"Weekly", L"週間"},
+    {L"quota-name", L"{hours}h", L"{hours} 時間"},
     {L"quota-name", L"{name} current limit", L"{name} 現在の上限"},
+    {L"quota-name", L"{name} short-term (varying windows)", L"{name} 短期 (期間が変動)"},
     {L"quota-name", L"{name} weekly", L"{name} 週間"},
     {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}", L"{name} {days, plural, other{# 日間}}"},
     {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}", L"{name} {hours, plural, other{# 時間}}"},
+    {L"quota-name", L"{name} {hours} h", L"{name} {hours} 時間"},
     {L"quota-name", L"{name} {hours}h", L"{name} {hours} 時間"},
     {L"quota-reset", L"Not yet started", L"未開始"},
     {L"quota-reset", L"Resets {when}", L"リセット: {when}"},
@@ -857,5 +1073,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペースでは: 約 {duration}後に上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペースでは: 約 {duration}後に上限"},
     {L"window-title", L"{app} — Settings", L"{app} — 設定"},
+    {L"window-title", L"{app} — Usage history", L"{app} — 使用履歴"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogJa), "sort by (context, English), no duplicates");

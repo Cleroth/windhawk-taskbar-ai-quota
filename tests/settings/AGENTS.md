@@ -218,8 +218,12 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   are reported; complete-text tooltips placed whole there; `OBSERVE` lines report widths and
   capacities), `fixtures/i18n-history.inc` (compact dates and chart ticks per language, the
   status pill's plural, and the controller's language switch: status, cards, ticks and readout
-  re-labeled, a modal keeping its language), `fixtures/i18n-journal.inc` (the journal's coded
-  errors per language, the storage bar and a failed Clear's reason in the window's language) and
+  re-labeled, a modal keeping its language; an export's save dialog title, notice and progress
+  in Russian with their plurals, its notice re-labeled by a switch; Delete history's dialog and
+  notices in Russian with the journal's reason; a dialog keeping the language it opened in; the
+  readout's rows in Chinese), `fixtures/i18n-journal.inc` (the journal's coded errors per
+  language, the storage bar and a failed Clear's notice with its reason in the window's
+  language) and
   `fixtures/history-chart.inc` (the chart through the controller on synthetic journals in the
   mockups' shapes: axes, the plot's layout on device pixels, local time ticks per range, across
   daylight saving and over ten years; picking (every nearby or coincident line in both periods at

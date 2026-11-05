@@ -75,14 +75,16 @@ evidence is a fresh successful run, not a result from an older source hash.
   changes. Preserve extracted text exactly, including line endings; never patch generated code to
   pass a test. Review extraction when production structure changes. Extraction reads the
   generated file, but every section is bounded by its own `// src/<path>` fragment: pure
-  fragments (`core/model.h`, `history/types.h`, `continuity.h`, `burn-up.h`, `series.h`,
-  `csv.h`) and the journal's coordination state (`history/state.h`) whole, other fragments by
+  fragments (the localization engine with its catalogs for the model's titles, `core/model.h`,
+  `history/types.h`, `continuity.h`, `burn-up.h`, `series.h`, `csv.h`) and the journal's
+  coordination state (`history/state.h`) whole, other fragments by
   named definitions or anchors searched inside that fragment only, so include order can't change
   what is extracted. `history/journal.h` keeps its in-memory state before its storage state
   (`g_historyPath` ends the extracted block). Fix production code in `src/` and regenerate.
 - `fixtures/model.inc` tests the history model (`history/series.h`) through its explicit inputs.
   `fixtures/csv.inc` tests the CSV writer (`history/csv.h`, whole) with frozen scopes:
-  hand-derived bytes, 64 KiB pieces, cancellation, a failing sink.
+  hand-derived bytes, 64 KiB pieces, cancellation, a failing sink, and the model's titles in
+  another language beside the CSV's unchanged English IDs and units.
 - Fixtures are split by domain under `fixtures/`. Add independent expected behavior, not
   Python/C++ copies of production decision rules or source-text call-count audits.
 - Preserve synthetic continuity coverage for clock rollback, gaps, real resets, idle rolling

@@ -48,15 +48,17 @@ struct HistoryChartAxis {
     std::vector<double> values;
 };
 
-// Axis labels: rounded, trailing decimal zeros dropped, abbreviated from 10,000.
-static std::wstring HistoryChartAxisLabel(size_t axis, double value) {
+// Axis labels: rounded, trailing decimal zeros dropped, abbreviated from 10,000. Dollars keep their
+// currency code and percentages their sign in every language.
+static std::wstring HistoryChartAxisLabel(const I18nLocale& locale, size_t axis, double value) {
     std::wstring number = HistoryUiNumber(value, 2);
     size_t end = std::min(number.find_first_not_of(L"-0123456789."), number.size()), dot = number.find(L'.');
     if (dot < end) {
         size_t last = number.find_last_not_of(L'0', end - 1);
         number.erase(last == dot ? dot : last + 1, end - (last == dot ? dot : last + 1));
     }
-    return number + (axis == 0 ? L"%" : axis == 1 ? L" USD" : L" cr");
+    if (axis == 2) return I18nText(locale, TrCtx(L"chart-axis", L"{value} cr"), {{L"value", number}});
+    return number + (axis == 0 ? L"%" : L" USD");
 }
 
 // Axes over the visible lines (percent, USD, credits; never shared by unlike units). Percent is
@@ -136,7 +138,7 @@ struct HistoryChartKey {
 struct HistoryChart {
     // Data: the view's lines, the period ([readFrom, from) is the previous week while comparing),
     // the red threshold, whether percentages show what is left (the Remaining bar mode), the
-    // snapshot with its generation, and a message instead of lines
+    // snapshot with its generation, a message instead of lines, and the language of its labels
     std::vector<HistoryUiLine> lines;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     bool compare = false;
@@ -145,6 +147,7 @@ struct HistoryChart {
     std::shared_ptr<const HistorySnapshot> snapshot;
     uint64_t generation = 0;
     std::wstring message;
+    I18nLocale locale;
 
     // Layout at `scale`: the item's rectangle and the plot in it, the plot's device-pixel width,
     // the axes with their label columns (percent left, USD and credits right) and the time ticks
@@ -189,7 +192,7 @@ static void HistoryChartLayout(UiGraphics& g, HistoryChart& c, D2D1_RECT_F rect,
     auto widest = [&](size_t axis) {
         float width = 0;
         for (double value : c.axes[axis].values) {
-            width = std::max(width, std::ceil(UiLayoutSize(UiLayout(g, HistoryChartAxisLabel(axis, value),
+            width = std::max(width, std::ceil(UiLayoutSize(UiLayout(g, HistoryChartAxisLabel(c.locale, axis, value),
                                                                     kHistoryChartAxisStyle, 10000, false)).width));
         }
         return width;
@@ -370,8 +373,10 @@ static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name,
                                     int meter, int period, double value, ULONGLONG time, ULONGLONG now,
                                     const HistoryUiLocalTime& localTime) {
     return {std::move(name),
-            {{period ? L"[Previous week]" : L"[Current]", UiRunStyle::Normal, UiInk::Secondary},
-             {L" " + HistoryUiValue(meter, value, 1)},
+            {{I18nText(locale, period ? TrCtx(L"chart-readout", L"[Previous week]") :
+                                        TrCtx(L"chart-readout", L"[Current]")),
+              UiRunStyle::Normal, UiInk::Secondary},
+             {L" " + HistoryUiValue(locale, meter, value, 1)},
              {L" \u00B7 " + HistoryUiTime(locale, time, now, localTime), UiRunStyle::Normal, UiInk::Secondary}},
             color,
             float(stroke)};
@@ -524,7 +529,7 @@ static HistoryChartScene HistoryChartBuildScene(const HistoryChart& c, const std
         if (i) x += 8;
         for (double value : axis.values) {
             float y = HistoryChartY(axis, plot, value);
-            label(HistoryChartAxisLabel(i, value),
+            label(HistoryChartAxisLabel(c.locale, i, value),
                   i ? D2D1_RECT_F{x, y - 7, x + c.columns[i], y + 7} : D2D1_RECT_F{c.rect.left, y - 7, plot.left - 8, y + 7},
                   i ? DWRITE_TEXT_ALIGNMENT_LEADING : DWRITE_TEXT_ALIGNMENT_TRAILING, ink);
         }

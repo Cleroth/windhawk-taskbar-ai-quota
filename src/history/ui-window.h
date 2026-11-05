@@ -10,15 +10,25 @@ static constexpr PCWSTR kHistoryUiViewportClass = L"AiQuotaHistoryUiView_" WH_MO
 static constexpr PCWSTR kHistoryUiPopupClass = L"AiQuotaHistoryUiPopup_" WH_MOD_ID;
 static constexpr PCWSTR kHistoryUiTooltipClass = L"AiQuotaHistoryUiTip_" WH_MOD_ID;
 
+// The window's title in a language.
+static std::wstring HistoryWindowTitle(const I18nLocale& locale) {
+    return I18nText(locale, TrCtx(L"window-title", L"{app} \u2014 Usage history"), {{L"app", kSettingsProductName}});
+}
+
 struct HistoryUiClient final : UiHostClient {
     HistoryProductionOps ops;
     HistoryController controller{ops};
+    // The language the title was last set in
+    I18nLocale titleLocale;
 
     // The chart is laid out (and reduced, when its key changed) for the item the frame placed;
-    // the window takes the settings' material, and the toolkit the view's language.
+    // the window takes the settings' material, and the toolkit and the title the view's language.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         HistoryUiView view = controller.view;
         host.graphics->locale = view.locale.LocaleName();
+        if (std::exchange(titleLocale, view.locale) != view.locale) {
+            SetWindowTextW(host.main, HistoryWindowTitle(view.locale).c_str());
+        }
         UiHostSetBackdrop(host, MaterialBackdrop(view.material));
         view.theme = host.theme.kind;
         HistoryUiBuildFrame(*host.graphics, view, client, frame);
@@ -30,7 +40,7 @@ struct HistoryUiClient final : UiHostClient {
     void PaintCustom(UiHost& host, ID2D1RenderTarget* target, UiTargetCache& cache, const UiItem& item,
                      const UiPaintState& state) override {
         HistoryUiPaintCustom(target, *host.graphics, cache, host.palette, controller.chart, controller.picked,
-                             controller.exported, item, state, UiHostScale(host));
+                             controller.view.locale, controller.exported, item, state, UiHostScale(host));
     }
 
     // Only a change of the picked lines repaints the chart's surface; the readout's rows change

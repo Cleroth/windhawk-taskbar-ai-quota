@@ -38,7 +38,20 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Adaptable: a la derecha, y pasa a la izquierda cuando la barra alcanza el umbral amarillo."},
     {L"", L"Additional OpenAI rate limits", L"Límites de frecuencia adicionales de OpenAI"},
     {L"", L"Adds ! when a refresh failed or is overdue.", L"Agrega ! cuando una actualización falla o se retrasa."},
+    {L"", L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
+          L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots mark "
+          L"only isolated readings (filled: current, hollow: previous). Resets, missing or failed readings, gaps, "
+          L"restarts and recording changes break lines without extra markers. Lines are reduced for drawing; cards "
+          L"and the CSV use the raw samples.",
+     L"Todas las cuentas da un color a cada cuenta: las cuotas principales son más gruesas; las cuotas específicas, "
+     L"más finas y teñidas. Una sola cuenta da a cada métrica su propio color. Líneas continuas: actual. Líneas "
+     L"discontinuas: semana anterior. Los puntos marcan solo lecturas aisladas (rellenos: actual; vacíos: anterior). "
+     L"Los reinicios de cuota, las lecturas ausentes o fallidas, los huecos, los rearranques y los cambios en el "
+     L"registro cortan las líneas sin marcadores adicionales. Las líneas se simplifican para dibujarlas; las "
+     L"tarjetas y el CSV usan las muestras sin procesar."},
     {L"", L"All displays", L"Todas las pantallas"},
+    {L"", L"All local history cleared. Future polls can start recording again.",
+     L"Se borró todo el historial local. Las próximas consultas pueden volver a registrar."},
     {L"", L"Also delete its usage history", L"Eliminar también su historial de uso"},
     {L"", L"Also the level for threshold notifications.", L"También es el nivel de las notificaciones de umbral."},
     {L"", L"Amounts on extra usage and credits", L"Importes en uso adicional y créditos"},
@@ -71,6 +84,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Bar style", L"Estilo de barra"},
     {L"", L"Bar text size", L"Tamaño del texto de barra"},
     {L"", L"Bar thickness", L"Grosor de barra"},
+    {L"", L"CSV export could not start; no file written.",
+     L"No se pudo iniciar la exportación CSV; no se escribió ningún archivo."},
+    {L"", L"CSV export failed (Windows error {code}). Existing destination unchanged.",
+     L"Error en la exportación CSV (error de Windows {code}). El destino existente no cambió."},
+    {L"", L"Cannot create the CSV temporary file (Windows error {code}). Existing destination unchanged.",
+     L"No se puede crear el archivo CSV temporal (error de Windows {code}). El destino existente no cambió."},
+    {L"", L"Cannot track native dialogs safely; operation cancelled.",
+     L"No se pueden supervisar con seguridad los cuadros de diálogo nativos; se canceló la operación."},
     {L"", L"Chart height", L"Alto del gráfico"},
     {L"", L"Chart outline", L"Contorno del gráfico"},
     {L"", L"Chart width", L"Ancho del gráfico"},
@@ -86,8 +107,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Codex Spark, límites ocultos por modelo como gpt-reserve y el nombre del plan Spark en los detalles de OpenAI."},
     {L"", L"Contributors", L"Colaboradores"},
     {L"", L"Copy version info", L"Copiar información de versión"},
+    {L"", L"Could not clear all history. {reason}", L"No se pudo borrar todo el historial. {reason}"},
+    {L"", L"Could not delete this account's history. {reason}",
+     L"No se pudo eliminar el historial de esta cuenta. {reason}"},
     {L"", L"Could not remove the account.", L"No se pudo quitar la cuenta."},
     {L"", L"Could not reorder the account.", L"No se pudo reordenar la cuenta."},
+    {L"", L"Could not save recording consent. Recording is still off.",
+     L"No se pudo guardar el consentimiento de registro. El registro sigue desactivado."},
     {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
      L"No se pudo guardar la configuración. El cambio se mantiene aquí con su error; vuelve a cambiarlo para "
      L"reintentarlo."},
@@ -107,6 +133,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"threshold.",
      L"Predeterminada: verde, amarillo, naranja y rojo. Para daltónicos: de azul a bermellón. Personalizada: un "
      L"color que eliges para cada umbral."},
+    {L"", L"Deleted the history of removed account {label}.", L"Se eliminó el historial de la cuenta quitada {label}."},
     {L"", L"Diameter in pixels.", L"Diámetro en píxeles."},
     {L"", L"Display {number} - unavailable", L"Pantalla {number}: no disponible"},
     {L"", L"Display {number} - {width}x{height}", L"Pantalla {number}: {width}x{height}"},
@@ -143,12 +170,36 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Cada cuenta elige si se registra: <link id=\"accounts\">Cuentas</link> > Registrar historial. Las cuentas "
      L"ocultas no se registran mientras <link id=\"hidden\">No consultar las cuentas ocultas</link> esté activado en "
      L"Comportamiento."},
+    {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
+          L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
+          L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
+          L"rounded for display; the CSV keeps them exact. Previous-week times are the original sample times. Gaps "
+          L"are not lines and have no readings.",
+     L"Cada elemento de la leyenda, encima del gráfico, identifica una línea por su color y grosor: haz clic en él "
+     L"para ocultar o mostrar la línea; pasa el puntero sobre él para resaltarla. Pasa el puntero sobre el gráfico "
+     L"para leer todas las líneas cercanas o superpuestas, de la semana actual y de la anterior, en la lectura "
+     L"registrada más cercana a la línea dibujada, nunca un valor interpolado. Los valores se redondean al "
+     L"mostrarlos; el CSV los conserva exactos. Las horas de la semana anterior son las horas originales de las "
+     L"muestras. Los huecos no son líneas y no tienen lecturas."},
     {L"", L"Elapsed time", L"Tiempo transcurrido"},
     {L"", L"Enter a label.", L"Introduce una etiqueta."},
     {L"", L"Enter a whole number from {minimum} to {maximum}.",
      L"Introduce un número entero de {minimum} a {maximum}."},
     {L"", L"Example accounts, updates as you change settings", L"Cuentas de ejemplo; reflejan tus cambios"},
     {L"", L"Example accounts, wider than shown: drag to scroll", L"Cuentas de ejemplo; arrastra para ver el resto"},
+    {L"", L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
+          L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.",
+     L"Exporta todas las métricas sin procesar de la cuenta seleccionada, o de todas las cuentas en Todas las "
+     L"cuentas. Usa el intervalo de fechas seleccionado, más los 7 días anteriores al comparar semanas. Marcas de "
+     L"tiempo en UTC; ID de texto; sin etiquetas."},
+    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+          L"Labels omitted; times UTC.",
+     L"{rows, plural, one{Se exportó {count} fila de métricas} many{Se exportaron {count} de filas de métricas} "
+     L"other{Se exportaron {count} filas de métricas}} (todas las cuentas) en {path}. Sin etiquetas; horas en UTC."},
+    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+          L"Labels omitted; times UTC.",
+     L"{rows, plural, one{Se exportó {count} fila de métricas} many{Se exportaron {count} de filas de métricas} "
+     L"other{Se exportaron {count} filas de métricas}} (cuenta seleccionada) en {path}. Sin etiquetas; horas en UTC."},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -172,6 +223,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"El historial sigue a esta entrada, incluso tras volver a iniciar sesión. Usa una entrada nueva para otro "
      L"inicio de sesión."},
+    {L"", L"History recording is off. Saved history stays; nothing new is recorded.",
+     L"El registro del historial está desactivado. El historial guardado se conserva; no se registra nada nuevo."},
     {L"", L"History storage failed; Open usage history shows why.",
      L"Error en el almacenamiento del historial; Abrir historial de uso muestra el motivo."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
@@ -195,6 +248,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"color."},
     {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.",
      L"Ilumina la parte de la ventana de la cuota que ya ha pasado; el resto queda atenuado."},
+    {L"", L"Loading local history…", L"Cargando el historial local…"},
     {L"", L"Logo + number badge, logo only, or label.", L"Logotipo + insignia numérica, solo logotipo o etiqueta."},
     {L"", L"Logo size", L"Tamaño del logotipo"},
     {L"", L"Long windows", L"Ventanas largas"},
@@ -211,6 +265,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Material, values, usage colors, status marks and flyout details.",
      L"Material, valores, colores de uso, marcas de estado y panel de detalles."},
     {L"", L"New samples arrive with each poll.", L"Llegan muestras nuevas con cada consulta."},
+    {L"", L"No accounts support this view.", L"Ninguna cuenta admite esta vista."},
+    {L"", L"No accounts to display.", L"No hay cuentas que mostrar."},
     {L"", L"No accounts yet", L"Aún no hay cuentas"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
      L"Sin cifrar. Lecturas e ID opacos, sin tokens ni etiquetas. Se conserva al quitar el mod."},
@@ -245,6 +301,30 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Percentage text", L"Texto de porcentaje"},
     {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
      L"Texto de porcentaje y claves de cuota. El texto de porcentaje se configura en Visualización."},
+    {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
+          L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
+          L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
+          L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
+          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
+          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+     L"Los porcentajes usan el eje izquierdo; la franja sombreada marca tu umbral rojo. En el modo de barra Restante "
+     L"(Configuración > Visualización) muestran lo que queda, así que las líneas bajan a medida que sube el uso, por "
+     L"debajo del 0% al superar el límite, y la franja queda abajo. Uso adicional muestra el presupuesto usado de "
+     L"Anthropic, los créditos de IA usados de GitHub Copilot y la asignación mensual usada de OpenCode Go (%) (lo "
+     L"que queda, en modo Restante), y los créditos restantes de OpenAI, que bajan a medida que sube el uso, en su "
+     L"propio eje. El gasto en dólares aparece en las tarjetas; Todas las métricas también lo representa en su "
+     L"propio eje. Las cuentas sin lecturas en el intervalo aparecen en la tarjeta Sin lecturas en el intervalo."},
+    {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
+          L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
+          L"record new history.",
+     L"¿Borrar de forma permanente TODO el historial de uso local de este usuario de Windows, incluidas las cuentas "
+     L"quitadas?\r\n\r\nEsta acción no se puede deshacer. La configuración y las sesiones iniciadas no cambian. Si "
+     L"el registro sigue activado, las próximas consultas registrarán historial nuevo."},
+    {L"", L"Permanently delete all usage history of the removed {provider} account {label}?\r\n\r\nEvery recorded "
+          L"sample of it is deleted, not only the selected range. This cannot be undone.",
+     L"¿Eliminar de forma permanente todo el historial de uso de la cuenta quitada {label} ({provider})?\r\n\r\nSe "
+     L"eliminan todas sus muestras registradas, no solo las del intervalo seleccionado. Esta acción no se puede "
+     L"deshacer."},
     {L"", L"Pie area", L"Área de sectores"},
     {L"", L"Pixels across each bar.", L"Píxeles a lo ancho de cada barra."},
     {L"", L"Pixels across each quota’s chart.", L"Píxeles a lo ancho del gráfico de cada cuota."},
@@ -267,6 +347,30 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Reading size", L"Tamaño de la lectura"},
     {L"", L"Record history", L"Registrar historial"},
     {L"", L"Record usage history", L"Registrar historial de uso"},
+    {L"", L"Recording is off for this account. Its saved history stays; turn on Record history in Settings > Accounts "
+          L"to record new polls.",
+     L"El registro está desactivado para esta cuenta. Su historial guardado se conserva; activa Registrar historial "
+     L"en Configuración > Cuentas para registrar las nuevas consultas."},
+    {L"", L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice applies "
+          L"to the current Windows user only, and per-account recording and hidden-account rules still apply. "
+          L"Recording starts with the next poll, once account history IDs are saved. No data can also mean an "
+          L"unsupported meter, failed polls or expired history. Nothing is backfilled. The window follows new polls "
+          L"(the chart waits while the pointer is on it); Refresh or F5 reads local history again. Export writes "
+          L"every supported meter of the selected account, or of every account under All accounts, over the selected "
+          L"range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are not dollars or a "
+          L"spending ledger.",
+     L"El registro está activado de forma predeterminada. Si está desactivado, actívalo con Activar registro en el "
+     L"aviso o en Configuración; la elección solo se aplica al usuario de Windows actual, y siguen vigentes el "
+     L"registro por cuenta y las reglas de las cuentas ocultas. El registro empieza con la siguiente consulta, una "
+     L"vez guardados los ID de historial de las cuentas. La falta de datos también puede deberse a una métrica no "
+     L"compatible, a consultas fallidas o a historial caducado. No se rellena nada con datos anteriores. La ventana "
+     L"sigue las nuevas consultas (el gráfico espera mientras el puntero está sobre él); Actualizar o F5 vuelve a "
+     L"leer el historial local. Exportar CSV escribe todas las métricas compatibles de la cuenta seleccionada, o de "
+     L"todas las cuentas en Todas las cuentas, en el intervalo seleccionado (ambas semanas al comparar), con horas "
+     L"en UTC e ID en lugar de etiquetas. Los créditos no son dólares ni un registro contable de gastos."},
+    {L"", L"Recording is paused for this account: it is hidden from the taskbar, and hidden accounts are not polled.",
+     L"El registro está en pausa para esta cuenta: está oculta en la barra de tareas y las cuentas ocultas no se "
+     L"consultan."},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
      L"Registro activado para este usuario de Windows, conservar el historial para siempre, abrir en 7 días. El "
      L"historial guardado se conserva."},
@@ -306,9 +410,23 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"marcadores de ritmo en forma de signo de intercalación gris claro y el espaciado predeterminado. Las cuentas "
      L"no cambian."},
     {L"", L"Reset countdown", L"Cuenta atrás de reinicio"},
+    {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
+          L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
+          L"delete its history.",
+     L"Conservación: para siempre, sin límite de tamaño. Desactivar el registro conserva el historial guardado. Las "
+     L"cuentas quitadas permanecen con sus ID hasta que caduquen o se use Borrar todo el historial, salvo que su "
+     L"historial se eliminara con ellas; selecciona una para eliminar su historial."},
+    {L"", L"Retention: {days, plural, one{# days} other{# days}}, also limited to 250,000 records / about 60 MB. "
+          L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
+          L"unless their history was deleted with them; select one to delete its history.",
+     L"Conservación: {days, plural, one{# día} many{# de días} other{# días}}, con un límite adicional de 250.000 "
+     L"registros / unos 60 MB. Desactivar el registro conserva el historial guardado. Las cuentas quitadas "
+     L"permanecen con sus ID hasta que caduquen o se use Borrar todo el historial, salvo que su historial se "
+     L"eliminara con ellas; selecciona una para eliminar su historial."},
     {L"", L"Ring size", L"Tamaño del anillo"},
     {L"", L"Ring thickness", L"Grosor del anillo"},
     {L"", L"Ringed reading", L"Lectura con anillo"},
+    {L"", L"Save dialog failed (code {code}).", L"Error en el cuadro de diálogo Guardar (código {code})."},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"Selecciona <b>{button}</b> para mostrar una cuenta de Anthropic, OpenAI, Google Antigravity, GitHub Copilot u "
@@ -333,6 +451,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Se muestra en los detalles y junto a las barras cuando Identidad es Etiqueta. Única por proveedor; al cambiar "
      L"el nombre se conservan la sesión y el historial."},
     {L"", L"Side in pixels.", L"Lado en píxeles."},
+    {L"", L"Solid / filled: current range. Click to hide or show this line.",
+     L"Continua / relleno: intervalo actual. Haz clic para ocultar o mostrar esta línea."},
+    {L"", L"Solid / filled: current week. Dashed / hollow: previous week. Click to hide or show this line.",
+     L"Continua / relleno: semana actual. Discontinua / vacío: semana anterior. Haz clic para ocultar o mostrar esta "
+     L"línea."},
     {L"", L"Space after the last account, before whatever comes next on the taskbar.",
      L"Espacio tras la última cuenta, antes de lo que siga en la barra de tareas."},
     {L"", L"Space between an account’s bars.", L"Espacio entre las barras de una cuenta."},
@@ -349,6 +472,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"one{# día} many{# de días} other{# días}} y se limitará a 250.000 muestras (unos 60 MB). Las muestras más "
      L"antiguas, y las más antiguas por encima de ese límite, se eliminarán de forma permanente para todos los "
      L"usuarios de Windows."},
+    {L"", L"Storage cap reached; oldest samples were pruned.",
+     L"Se alcanzó el límite de almacenamiento; se depuraron las muestras más antiguas."},
     {L"", L"Storage location", L"Ubicación de almacenamiento"},
     {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
      L"Ancho del trazo en píxeles. Se estrecha automáticamente cuando el arco no cabe alrededor del número."},
@@ -383,6 +508,19 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"vuelve a agregar una cuenta con el proveedor y la etiqueta anteriores y luego quítala."},
     {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
      L"El saldo que la barra de créditos considera el 100 %. OpenAI solo informa del saldo."},
+    {L"", L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh poll. "
+          L"Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage counts "
+          L"connected intervals. Time at or above the red threshold (at or below what it leaves, in the Remaining "
+          L"mode) is estimated within those intervals, never across gaps or beyond the last sample. Dollar details "
+          L"report sampled last and peak spending, not total spending in the range. Times are local. Week comparison "
+          L"uses two elapsed seven-day periods; daylight saving can shift local clock times.",
+     L"El valor grande es la última lectura del intervalo; «ahora» indica que es la última consulta reciente de la "
+     L"cuenta. Máximo es el valor registrado más alto; en modo Restante, Mínimo es lo menos que queda. Cobertura "
+     L"cuenta los tramos conectados. El tiempo en el umbral rojo o por encima (en lo que deja o por debajo, en modo "
+     L"Restante) se estima dentro de esos tramos, nunca a través de huecos ni más allá de la última muestra. Los "
+     L"detalles en dólares indican el último gasto y el gasto máximo muestreados, no el gasto total del intervalo. "
+     L"Las horas son locales. La comparación semanal usa dos periodos transcurridos de siete días; el horario de "
+     L"verano puede desplazar las horas del reloj local."},
     {L"", L"The mod’s name and version and the Windows build, for bug reports.",
      L"El nombre y la versión del mod y la compilación de Windows, para informes de errores."},
     {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
@@ -410,13 +548,40 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
      L"El color de texto de la barra de tareas o el naranja de Claude. Los detalles, Cuentas y el historial de uso "
      L"usan el mismo."},
+    {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
+          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
+          L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
+          L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
+          L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
+          L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
+     L"Son niveles de cuota muestreados, no tokens ni consumo diario. Elige una cuenta en la barra lateral, o Todas "
+     L"las cuentas, y una vista: Corto plazo, Semanal, Uso adicional o Todas las métricas. Todas las cuentas empieza "
+     L"en Semanal, y una sola cuenta en Todas las métricas; cada una conserva su vista hasta que se cierra la "
+     L"ventana. La ventana se abre con el Intervalo predeterminado definido en Configuración > Historial. Semanal "
+     L"sigue, en cada cuenta de Anthropic, las cuotas semanales seleccionadas para la barra de tareas; las cuentas "
+     L"quitadas conservan ambas semanales, y Todas las métricas incluye las semanales ocultas en la barra de tareas. "
+     L"Las cuotas Gemini, Argon y Claude/GPT de Antigravity comparten las vistas de corto plazo y semanal "
+     L"correspondientes. Cada cuota conserva su propia línea y sus reinicios; los límites superpuestos nunca se "
+     L"suman ni se combinan. Los nombres de las cuotas de ventana corta usan las duraciones registradas (o el límite "
+     L"actual si se desconocen). Antigravity muestra los grupos de cuota que limitan, que pueden cambiar."},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
      L"Signo de intercalación fino, línea de ancho completo, muesca en el borde, punto centrado o pista de tiempo: "
      L"una pequeña barra bajo cada barra que se llena con el tiempo transcurrido."},
+    {L"", L"This account has no meters in this view.", L"Esta cuenta no tiene métricas en esta vista."},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
      L"Esta cuenta ya no está configurada; se descartaron sus cambios sin guardar."},
+    {L"", L"This account was removed. Its saved history stays until it expires or is deleted.",
+     L"Esta cuenta se quitó. Su historial guardado se conserva hasta que caduque o se elimine."},
     {L"", L"This change couldn't be saved.", L"No se pudo guardar este cambio."},
+    {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
+          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
+          L"available. Continue?",
+     L"Esta exportación contiene aproximadamente {rows, plural, one{# fila} many{# de filas} other{# filas}}. Puede "
+     L"tardar un rato y superar el límite de filas de las hojas de cálculo. La ventana del historial estará ocupada "
+     L"mientras se escribe; la barra de tareas del Explorador sigue disponible. ¿Continuar?"},
     {L"", L"Threshold notifications", L"Notificaciones de umbral"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Los umbrales mantienen el orden: amarillo, naranja, rojo."},
@@ -482,6 +647,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Los efectos de transparencia de Windows están desactivados, así que se muestra como Sólido."},
     {L"", L"Yellow from", L"Amarillo desde"},
+    {L"", L"{exported} Includes both elapsed 7-day periods.",
+     L"{exported} Incluye los dos periodos de 7 días transcurridos."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity no se está ejecutando"},
@@ -569,6 +736,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"button", L"Copy", L"Copiar"},
     {L"button", L"Copy failed", L"Error al copiar"},
     {L"button", L"Custom...", L"Personalizar…"},
+    {L"button", L"Delete history…", L"Eliminar historial…"},
+    {L"button", L"Enable recording", L"Activar registro"},
     {L"button", L"Open dashboard", L"Abrir panel"},
     {L"button", L"Open folder", L"Abrir carpeta"},
     {L"button", L"Open usage history", L"Abrir historial de uso"},
@@ -577,15 +746,25 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"button", L"Sign in", L"Iniciar sesión"},
     {L"button", L"Sign in again", L"Volver a iniciar sesión"},
     {L"button", L"Sign out", L"Cerrar sesión"},
+    {L"chart-axis", L"{value} cr", L"{value} cr"},
+    {L"chart-key", L"Solid: current", L"Continua: actual"},
+    {L"chart-key", L"Solid: current · Dashed: previous", L"Continua: actual · Discontinua: anterior"},
+    {L"chart-message", L"All lines are hidden", L"Todas las líneas están ocultas"},
+    {L"chart-message", L"No percentage readings to plot. Dollar spending is shown below.",
+     L"No hay lecturas en porcentaje que representar. El gasto en dólares se muestra abajo."},
+    {L"chart-message", L"No readings in this range.", L"No hay lecturas en este intervalo."},
     {L"chart-readout", L"+{count} more — hide lines in the legend", L"+{count} más: oculta líneas en la leyenda"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"+{count} más: oculta líneas en la leyenda o selecciona una cuenta"},
+    {L"chart-readout", L"[Current]", L"[Actual]"},
+    {L"chart-readout", L"[Previous week]", L"[Sem. anterior]"},
     {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
     {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
     {L"copilot-unit", L"AI credits", L"créditos de IA"},
     {L"copilot-unit", L"chat requests", L"solicitudes de chat"},
     {L"copilot-unit", L"premium requests", L"solicitudes premium"},
+    {L"credits-amount", L"{amount} credits", L"{amount} créditos"},
     {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
      L"{credits, plural, one{crédito} many{créditos} other{créditos}}"},
     {L"date-month", L"Apr", L"abr"},
@@ -622,8 +801,16 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"date-weekday", L"Tue", L"mar"},
     {L"date-weekday", L"Wed", L"mié"},
     {L"dialog-button", L"Remove", L"Quitar"},
+    {L"dialog-caption", L"About these charts", L"Acerca de estos gráficos"},
     {L"dialog-caption", L"Account", L"Cuenta"},
+    {L"dialog-caption", L"Clear all usage history", L"Borrar todo el historial de uso"},
+    {L"dialog-caption", L"Delete account history", L"Eliminar historial de la cuenta"},
+    {L"dialog-caption", L"Export all accounts — all meters, selected range (both weeks if comparing)",
+     L"Exportar todas las cuentas — todas las métricas, intervalo seleccionado (ambas semanas si se compara)"},
+    {L"dialog-caption", L"Export selected account — all meters, selected range (both weeks if comparing)",
+     L"Exportar la cuenta seleccionada — todas las métricas, intervalo seleccionado (ambas semanas si se compara)"},
     {L"dialog-caption", L"Keep history", L"Conservar historial"},
+    {L"dialog-caption", L"Large history export", L"Exportación grande del historial"},
     {L"dialog-caption", L"Remove account", L"Quitar cuenta"},
     {L"dialog-caption", L"Reset settings", L"Restablecer configuración"},
     {L"dialog-caption", L"Usage history", L"Historial de uso"},
@@ -634,6 +821,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"duration", L"{minutes}m", L"{minutes} min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes} min {seconds} s"},
     {L"duration", L"{seconds}s", L"{seconds} s"},
+    {L"file-type", L"All files (*.*)", L"Todos los archivos (*.*)"},
+    {L"file-type", L"CSV files (*.csv)", L"Archivos CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Aún no hay datos"},
     {L"flyout-footer", L"Updated {time}", L"Actualizado {time}"},
     {L"flyout-footer", L"Updated {time} (stale)", L"Actualizado {time} (desactualizado)"},
@@ -658,12 +847,66 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
                      L"{when}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}} · el próximo caduca {when}"},
+    {L"history-about", L"Axes and units", L"Ejes y unidades"},
+    {L"history-about", L"Cards", L"Tarjetas"},
+    {L"history-about", L"Legend and readout", L"Leyenda y lectura de valores"},
+    {L"history-about", L"Lines and markers", L"Líneas y marcadores"},
+    {L"history-about", L"Oldest loaded sample: {time}", L"Muestra cargada más antigua: {time}"},
+    {L"history-about", L"Reading the charts", L"Cómo leer los gráficos"},
+    {L"history-about", L"Recording and export", L"Registro y exportación"},
+    {L"history-account", L"{provider} · {recording}", L"{provider} · {recording}"},
+    {L"history-account-state", L"Paused", L"En pausa"},
+    {L"history-account-state", L"Recording", L"Registrando"},
+    {L"history-account-state", L"Recording off", L"Registro desactivado"},
+    {L"history-account-state", L"Removed", L"Quitada"},
+    {L"history-account-status", L"paused", L"en pausa"},
+    {L"history-account-status", L"recording off", L"registro desactivado"},
+    {L"history-button", L"Export CSV…", L"Exportar CSV…"},
+    {L"history-button", L"Export all CSV…", L"Exportar todo a CSV…"},
+    {L"history-button", L"More options", L"Más opciones"},
+    {L"history-button", L"Refresh (F5)", L"Actualizar (F5)"},
+    {L"history-card", L"Coverage {hours} ({percent}%)", L"Cobertura {hours} ({percent}%)"},
+    {L"history-card", L"Current: {line}", L"Actual: {line}"},
+    {L"history-card", L"Est. ≤{threshold}%: {hours}", L"Est. ≤{threshold}%: {hours}"},
+    {L"history-card", L"Est. ≥{threshold}%: {hours}", L"Est. ≥{threshold}%: {hours}"},
+    {L"history-card", L"Last recorded spend: {reading}", L"Último gasto registrado: {reading}"},
+    {L"history-card", L"Lowest {reading}", L"Mínimo {reading}"},
+    {L"history-card", L"No dollar readings in this period.", L"No hay lecturas en dólares en este periodo."},
+    {L"history-card", L"No readings in range", L"Sin lecturas en el intervalo"},
+    {L"history-card", L"Peak {reading}", L"Máximo {reading}"},
+    {L"history-card", L"Previous: {line}", L"Anterior: {line}"},
+    {L"history-card", L"now", L"ahora"},
+    {L"history-card", L"{title} — details only", L"{title} — solo detalles"},
+    {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
+     L"{title}<link id=\"status\"> · {status}</link>"},
+    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
+     L"{rows, plural, one{Exportando {count} fila…} many{Exportando {count} de filas…} other{Exportando {count} "
+     L"filas…}}"},
+    {L"history-menu", L"About these charts", L"Acerca de estos gráficos"},
+    {L"history-menu", L"Clear all history…", L"Borrar todo el historial…"},
+    {L"history-menu", L"Open history folder", L"Abrir carpeta del historial"},
+    {L"history-menu", L"Settings", L"Configuración"},
+    {L"history-meter", L"Credits remaining", L"Créditos restantes"},
+    {L"history-meter", L"Extra budget", L"Presupuesto adicional"},
+    {L"history-meter", L"Extra spending (USD)", L"Gasto adicional (USD)"},
+    {L"history-nav", L"All accounts", L"Todas las cuentas"},
+    {L"history-nav", L"Removed", L"Quitadas"},
     {L"history-pill", L"Not saving", L"Sin guardar"},
     {L"history-pill", L"Off", L"Desactivado"},
     {L"history-pill", L"Recording · forever", L"Registrando · siempre"},
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
      L"Registrando · {days, plural, one{# día} many{# de días} other{# días}}"},
     {L"history-pill", L"Waiting", L"En espera"},
+    {L"history-provider", L"Unknown provider", L"Proveedor desconocido"},
+    {L"history-range", L"24h", L"24 h"},
+    {L"history-range", L"30d", L"30 d"},
+    {L"history-range", L"7d", L"7 d"},
+    {L"history-range", L"90d", L"90 d"},
+    {L"history-range", L"All", L"Todo"},
+    {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
+    {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
+    {L"history-series", L"{meter} left (%)", L"{meter} (% restante)"},
+    {L"history-series", L"{meter} used (%)", L"{meter} (% usado)"},
     {L"history-span", L"All retained", L"Todo lo conservado"},
     {L"history-span", L"{days, plural, one{# day} other{# days}}",
      L"{days, plural, one{# día} many{# de días} other{# días}}"},
@@ -697,6 +940,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Error al escribir el historial; se conservó el registro anterior."},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"Archivo de historial no compatible o dañado. Borra el historial para empezar de nuevo."},
+    {L"history-subtitle", L"{account} · {updated}", L"{account} · {updated}"},
+    {L"history-toggle", L"Compare previous week", L"Comparar semana anterior"},
+    {L"history-view", L"All meters", L"Todas las métricas"},
+    {L"history-view", L"Extra usage", L"Uso adicional"},
+    {L"history-view", L"Short-term", L"Corto plazo"},
+    {L"history-view", L"Weekly", L"Semanal"},
+    {L"hours-value", L"{hours} h", L"{hours} h"},
     {L"identity-position", L"Bottom", L"Abajo"},
     {L"identity-position", L"Hidden", L"Oculta"},
     {L"identity-position", L"Left", L"Izquierda"},
@@ -798,17 +1048,22 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"quota-name", L"AI credits", L"Créditos de IA"},
     {L"quota-name", L"Chat requests", L"Solicitudes de chat"},
     {L"quota-name", L"Credits", L"Créditos"},
+    {L"quota-name", L"Current limit", L"Límite actual"},
     {L"quota-name", L"Extra usage", L"Uso adicional"},
     {L"quota-name", L"Monthly", L"Mensual"},
     {L"quota-name", L"Premium requests", L"Solicitudes premium"},
     {L"quota-name", L"Short window", L"Ventana corta"},
+    {L"quota-name", L"Short-term (varying windows)", L"Corto plazo (ventanas variables)"},
     {L"quota-name", L"Weekly", L"Semanal"},
+    {L"quota-name", L"{hours}h", L"{hours} h"},
     {L"quota-name", L"{name} current limit", L"{name}: límite actual"},
+    {L"quota-name", L"{name} short-term (varying windows)", L"{name}: corto plazo (ventanas variables)"},
     {L"quota-name", L"{name} weekly", L"{name} semanal"},
     {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}",
      L"{name} ({days, plural, one{# día} many{# días} other{# días}})"},
     {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
      L"{name} ({hours, plural, one{# hora} many{# horas} other{# horas}})"},
+    {L"quota-name", L"{name} {hours} h", L"{name} {hours} h"},
     {L"quota-name", L"{name} {hours}h", L"{name} {hours} h"},
     {L"quota-reset", L"Not yet started", L"Aún no ha comenzado"},
     {L"quota-reset", L"Resets {when}", L"Se reinicia {when}"},
@@ -970,5 +1225,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Al ritmo medio de esta ventana: límite en ~{duration}"},
     {L"window-title", L"{app} — Settings", L"{app} — Configuración"},
+    {L"window-title", L"{app} — Usage history", L"{app} — Historial de uso"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogEs), "sort by (context, English), no duplicates");

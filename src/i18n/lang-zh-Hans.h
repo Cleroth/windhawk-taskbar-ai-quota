@@ -28,7 +28,15 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.", L"自适应：位于右侧，条形达到黄色阈值后移到左侧。"},
     {L"", L"Additional OpenAI rate limits", L"OpenAI 的其他速率限制"},
     {L"", L"Adds ! when a refresh failed or is overdue.", L"刷新失败或逾期未刷新时添加 ! 标记。"},
+    {L"", L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
+          L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots mark "
+          L"only isolated readings (filled: current, hollow: previous). Resets, missing or failed readings, gaps, "
+          L"restarts and recording changes break lines without extra markers. Lines are reduced for drawing; cards "
+          L"and the CSV use the raw samples.",
+     L"“所有账户”为每个账户分配一种颜色：主配额的线条较粗，限定范围的配额线条较细并带有色调。单个账户则为每个指标分配各自的颜色。实线：当前。虚线：前一周。圆点仅标记孤立的读数（实心：当前，空心：前一周）。重置、缺失或失败的读数、间隙、重启以及记录变更都会使线条中断，但不另加标记。线条为绘制而经过精简；卡片和 "
+     L"CSV 使用原始样本。"},
     {L"", L"All displays", L"所有显示器"},
+    {L"", L"All local history cleared. Future polls can start recording again.", L"已清除全部本地历史记录。之后的轮询可以重新开始记录。"},
     {L"", L"Also delete its usage history", L"同时删除其使用历史"},
     {L"", L"Also the level for threshold notifications.", L"也是阈值通知的触发级别。"},
     {L"", L"Amounts on extra usage and credits", L"额外用量和积分的金额"},
@@ -55,6 +63,12 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Bar style", L"条形样式"},
     {L"", L"Bar text size", L"条形文字大小"},
     {L"", L"Bar thickness", L"条形粗细"},
+    {L"", L"CSV export could not start; no file written.", L"无法开始 CSV 导出；未写入任何文件。"},
+    {L"", L"CSV export failed (Windows error {code}). Existing destination unchanged.",
+     L"CSV 导出失败（Windows 错误 {code}）。现有目标文件未更改。"},
+    {L"", L"Cannot create the CSV temporary file (Windows error {code}). Existing destination unchanged.",
+     L"无法创建 CSV 临时文件（Windows 错误 {code}）。现有目标文件未更改。"},
+    {L"", L"Cannot track native dialogs safely; operation cancelled.", L"无法安全地跟踪原生对话框；操作已取消。"},
     {L"", L"Chart height", L"图表高度"},
     {L"", L"Chart outline", L"图表轮廓"},
     {L"", L"Chart width", L"图表宽度"},
@@ -69,8 +83,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"Codex Spark、gpt-reserve 等隐藏的模型通道，以及 OpenAI 详情中的 Spark 计划名称。"},
     {L"", L"Contributors", L"贡献者"},
     {L"", L"Copy version info", L"复制版本信息"},
+    {L"", L"Could not clear all history. {reason}", L"无法清除全部历史记录。{reason}"},
+    {L"", L"Could not delete this account's history. {reason}", L"无法删除此账户的历史记录。{reason}"},
     {L"", L"Could not remove the account.", L"无法移除账户。"},
     {L"", L"Could not reorder the account.", L"无法重新排序账户。"},
+    {L"", L"Could not save recording consent. Recording is still off.", L"无法保存记录许可。记录仍处于关闭状态。"},
     {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
      L"无法保存设置。此更改会连同错误保留在这里；再次更改即可重试。"},
     {L"", L"Could not save the account.", L"无法保存账户。"},
@@ -87,6 +104,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Default: green, yellow, orange and red. Colorblind: blue to vermilion. Custom: a color you pick for each "
           L"threshold.",
      L"默认：绿色、黄色、橙色和红色。色盲友好：从蓝色到朱红色。自定义：为每个阈值自选一种颜色。"},
+    {L"", L"Deleted the history of removed account {label}.", L"已删除被移除账户 {label} 的历史记录。"},
     {L"", L"Diameter in pixels.", L"直径（像素）。"},
     {L"", L"Display {number} - unavailable", L"显示器 {number} - 不可用"},
     {L"", L"Display {number} - {width}x{height}", L"显示器 {number} - {width}x{height}"},
@@ -114,11 +132,27 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
      L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。在“行为”中开启<link "
      L"id=\"hidden\">不轮询隐藏的账户</link>时，隐藏的账户不会被记录。"},
+    {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
+          L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
+          L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
+          L"rounded for display; the CSV keeps them exact. Previous-week times are the original sample times. Gaps "
+          L"are not lines and have no readings.",
+     L"图表上方的每个图例项以其颜色和粗细标明一条线：单击可隐藏或显示该线；将指针指向它可突出显示该线。将指针指向图表，即可读取附近或重叠的每条线（当前和前一周）在最接近所绘线条处的记录读数，绝不是插值。数值经过舍入后显示；CSV "
+     L"中保留精确值。前一周的时间为原始样本时间。间隙不是线条，也没有读数。"},
     {L"", L"Elapsed time", L"已过时间"},
     {L"", L"Enter a label.", L"请输入标签。"},
     {L"", L"Enter a whole number from {minimum} to {maximum}.", L"请输入 {minimum} 至 {maximum} 之间的整数。"},
     {L"", L"Example accounts, updates as you change settings", L"示例账户，随设置更改即时更新"},
     {L"", L"Example accounts, wider than shown: drag to scroll", L"示例账户，超出显示范围：拖动以滚动"},
+    {L"", L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
+          L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.",
+     L"导出所选账户（在“所有账户”下为每个账户）的全部原始指标。使用所选日期范围，周对比时另含之前的 7 天。UTC 时间戳；文本形式的 ID；不含标签。"},
+    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+          L"Labels omitted; times UTC.",
+     L"已将 {rows, plural, other{{count} 行指标数据}}（所有账户）导出到 {path}。已省略标签；时间为 UTC。"},
+    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+          L"Labels omitted; times UTC.",
+     L"已将 {rows, plural, other{{count} 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -138,6 +172,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"即使开启了“记录历史”，隐藏的账户也不会被轮询或记录。关闭此项可继续记录它们。所有 Windows 用户共享此设置。"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"历史会跟随此条目，即使重新登录也是如此。其他登录请使用新条目。"},
+    {L"", L"History recording is off. Saved history stays; nothing new is recorded.", L"历史记录功能已关闭。已保存的历史会保留；不会记录新数据。"},
     {L"", L"History storage failed; Open usage history shows why.", L"历史记录存储失败；“打开使用历史”会显示原因。"},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
@@ -156,6 +191,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"默认为浅灰色，在浅色任务栏上为深色。“自定义…”会打开颜色选择器。"},
     {L"", L"Lights the part of the quota’s window that has passed; the rest stays dim.", L"点亮配额时段中已过去的部分；其余部分保持暗淡。"},
+    {L"", L"Loading local history…", L"正在加载本地历史记录…"},
     {L"", L"Logo + number badge, logo only, or label.", L"徽标 + 编号徽章、仅徽标或标签。"},
     {L"", L"Logo size", L"徽标大小"},
     {L"", L"Long windows", L"长时段"},
@@ -169,6 +205,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Material", L"材质"},
     {L"", L"Material, values, usage colors, status marks and flyout details.", L"材质、数值、用量颜色、状态标记和浮窗详情。"},
     {L"", L"New samples arrive with each poll.", L"每次轮询都会加入新样本。"},
+    {L"", L"No accounts support this view.", L"没有账户支持此视图。"},
+    {L"", L"No accounts to display.", L"没有可显示的账户。"},
     {L"", L"No accounts yet", L"还没有账户"},
     {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
      L"未加密。仅包含读数和不透明 ID，不含令牌或标签。移除模组后仍会保留。"},
@@ -197,6 +235,22 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Percentage on each bar: never, on hover, or always.", L"每个条形上的百分比：从不、悬停时或始终显示。"},
     {L"", L"Percentage text", L"百分比文本"},
     {L"", L"Percentage text and quota keys. Percentage text is set in Display.", L"百分比文本和配额简称。百分比文本在“显示”中设置。"},
+    {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
+          L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
+          L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
+          L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
+          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
+          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+     L"百分比使用左侧坐标轴；阴影带标示你的红色阈值。在“剩余量”条形模式下（“设置 > 显示”），百分比显示剩余部分，因此线条随用量上升而下降，超过上限后低于 0%，阴影带则位于底部。“额外用量”显示 Anthropic "
+     L"已用预算、GitHub Copilot 已用 AI 积分和 OpenCode Go 已用月度额度（%）（“剩余量”模式下为剩余），以及在单独坐标轴上显示的 OpenAI "
+     L"剩余积分（随用量上升而下降）。美元花费显示在卡片上；“全部指标”还会在单独的坐标轴上绘制它。范围内没有读数的账户会列在“范围内无读数”下。"},
+    {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
+          L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
+          L"record new history.",
+     L"要永久清除此 Windows 用户的全部本地使用历史（包括已删除的账户）吗？\r\n\r\n此操作无法撤消。设置和登录信息不会更改。如果记录保持开启，之后的轮询将记录新的历史。"},
+    {L"", L"Permanently delete all usage history of the removed {provider} account {label}?\r\n\r\nEvery recorded "
+          L"sample of it is deleted, not only the selected range. This cannot be undone.",
+     L"要永久删除已移除的 {provider} 账户 {label} 的全部使用历史吗？\r\n\r\n将删除其记录的每个样本，而不仅是所选范围内的样本。此操作无法撤消。"},
     {L"", L"Pie area", L"饼图区域"},
     {L"", L"Pixels across each bar.", L"每个条形的粗细（像素）。"},
     {L"", L"Pixels across each quota’s chart.", L"每个配额图表的宽度（像素）。"},
@@ -217,6 +271,22 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Reading size", L"读数大小"},
     {L"", L"Record history", L"记录历史"},
     {L"", L"Record usage history", L"记录使用历史"},
+    {L"", L"Recording is off for this account. Its saved history stays; turn on Record history in Settings > Accounts "
+          L"to record new polls.",
+     L"此账户的记录已关闭。其已保存的历史会保留；在“设置 > 账户”中开启“记录历史”即可记录新的轮询。"},
+    {L"", L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice applies "
+          L"to the current Windows user only, and per-account recording and hidden-account rules still apply. "
+          L"Recording starts with the next poll, once account history IDs are saved. No data can also mean an "
+          L"unsupported meter, failed polls or expired history. Nothing is backfilled. The window follows new polls "
+          L"(the chart waits while the pointer is on it); Refresh or F5 reads local history again. Export writes "
+          L"every supported meter of the selected account, or of every account under All accounts, over the selected "
+          L"range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are not dollars or a "
+          L"spending ledger.",
+     L"记录默认开启。关闭时，可通过提示栏中的“开启记录”或在“设置”中开启；此选择仅适用于当前 Windows 用户，且各账户的记录设置和隐藏账户规则仍然适用。保存账户历史 ID "
+     L"后，记录从下一次轮询开始。没有数据也可能意味着指标不受支持、轮询失败或历史已过期。不会回填任何数据。窗口会随新的轮询更新（指针停在图表上时图表暂不更新）；“刷新”或 F5 "
+     L"会重新读取本地历史记录。导出会写入所选账户（在“所有账户”下为每个账户）在所选范围内（对比时包括两周）的每个受支持指标，使用 UTC 时间，并以 ID 代替标签。积分不是美元，也不是花费账目。"},
+    {L"", L"Recording is paused for this account: it is hidden from the taskbar, and hidden accounts are not polled.",
+     L"此账户的记录已暂停：它已在任务栏上隐藏，而隐藏的账户不会被轮询。"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
      L"为此 Windows 用户开启记录、永久保留历史、以 7 天打开。已保存的历史会保留。"},
     {L"", L"Recording rules, storage, export and verification", L"记录规则、存储、导出和验证"},
@@ -245,9 +315,19 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"Accounts are not changed.",
      L"将“布局”重置为默认值？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
     {L"", L"Reset countdown", L"重置倒计时"},
+    {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
+          L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
+          L"delete its history.",
+     L"保留期：永久，无大小限制。关闭记录会保留已保存的历史。已移除的账户会以其 ID 保留，直到过期或执行“清除全部历史记录”，除非其历史已随账户一起删除；选择其中一个账户即可删除其历史。"},
+    {L"", L"Retention: {days, plural, one{# days} other{# days}}, also limited to 250,000 records / about 60 MB. "
+          L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
+          L"unless their history was deleted with them; select one to delete its history.",
+     L"保留期：{days, plural, other{# 天}}，并限制为 250,000 条记录 / 约 60 MB。关闭记录会保留已保存的历史。已移除的账户会以其 ID "
+     L"保留，直到过期或执行“清除全部历史记录”，除非其历史已随账户一起删除；选择其中一个账户即可删除其历史。"},
     {L"", L"Ring size", L"圆环大小"},
     {L"", L"Ring thickness", L"圆环粗细"},
     {L"", L"Ringed reading", L"带环读数"},
+    {L"", L"Save dialog failed (code {code}).", L"保存对话框失败（代码 {code}）。"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
@@ -266,6 +346,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"sign-in and history.",
      L"显示在详情中；“标识”为“标签”时也显示在条形旁。每个提供商内唯一；重命名会保留登录和历史。"},
     {L"", L"Side in pixels.", L"边长（像素）。"},
+    {L"", L"Solid / filled: current range. Click to hide or show this line.", L"实线 / 实心：当前范围。单击可隐藏或显示此线条。"},
+    {L"", L"Solid / filled: current week. Dashed / hollow: previous week. Click to hide or show this line.",
+     L"实线 / 实心：当前周。虚线 / 空心：前一周。单击可隐藏或显示此线条。"},
     {L"", L"Space after the last account, before whatever comes next on the taskbar.", L"最后一个账户之后、任务栏上下一个元素之前的间距。"},
     {L"", L"Space between an account’s bars.", L"同一账户的条形之间的间距。"},
     {L"", L"Space between the identity and the bars.", L"标识与条形之间的间距。"},
@@ -278,6 +361,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"deleted permanently, for every Windows user.",
      L"停止永久保留历史？\n\n历史将重新保留 {days, plural, other{# 天}}，并限制为 250,000 个样本（约 60 MB）。更早的样本以及超出该上限的最旧样本将被永久删除，对所有 Windows "
      L"用户生效。"},
+    {L"", L"Storage cap reached; oldest samples were pruned.", L"已达到存储上限；已清理最旧的样本。"},
     {L"", L"Storage location", L"存储位置"},
     {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
      L"描边宽度（像素）。圆弧无法围住数字时会自动变细。"},
@@ -307,6 +391,13 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"账户已重命名，但旧标识下仍有一份重复的已存储登录信息。要删除它，请重新添加一个使用旧提供商和标签的账户，然后将其移除。"},
     {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
      L"积分条视为 100% 的余额。OpenAI 只报告余额。"},
+    {L"", L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh poll. "
+          L"Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage counts "
+          L"connected intervals. Time at or above the red threshold (at or below what it leaves, in the Remaining "
+          L"mode) is estimated within those intervals, never across gaps or beyond the last sample. Dollar details "
+          L"report sampled last and peak spending, not total spending in the range. Times are local. Week comparison "
+          L"uses two elapsed seven-day periods; daylight saving can shift local clock times.",
+     L"大号数值是范围内的最新读数；“现在”表示它来自该账户最近一次未过时的轮询。“峰值”是记录到的最高值；在“剩余量”模式下，“最低”是剩余最少的值。“覆盖时长”统计相连的区间。达到或超过红色阈值的时间（“剩余量”模式下为达到或低于该阈值对应剩余量的时间）仅在这些区间内估算，绝不跨越间隙或超出最后一个样本。美元详情报告的是采样到的最新花费和峰值花费，而非范围内的总花费。时间为本地时间。周对比使用两个已过去的七天时段；夏令时可能使本地时钟时间发生偏移。"},
     {L"", L"The mod’s name and version and the Windows build, for bug reports.", L"模组的名称和版本以及 Windows 版本号，用于错误报告。"},
     {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
      L"使用历史窗口打开时显示的范围。仍可用窗口中的范围按钮切换。"},
@@ -326,11 +417,31 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"已删除存储的登录信息，但无法保存设置。该账户仍处于已配置但已退出登录的状态。"},
     {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
      L"任务栏文字颜色，或 Claude 的橙色。详情、“账户”和使用历史中也会保持一致。"},
+    {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
+          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
+          L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
+          L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
+          L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
+          L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
+     L"这些是采样得到的配额水平，而非 token "
+     L"数或每日消耗量。在侧栏中选择一个账户或“所有账户”，再选择一个视图：“短期”、“每周”、“额外用量”或“全部指标”。“所有账户”默认显示“每周”，单个账户默认显示“全部指标”；各自保留所选视图，直到窗口关闭。窗口打开时使用“设置 "
+     L"> 历史”中设定的“默认时间范围”。“每周”遵循每个 Anthropic 账户在任务栏上的每周配额选择；已移除的账户保留两种每周配额，“全部指标”还包括在任务栏上隐藏的每周配额。Antigravity 的 "
+     L"Gemini、Argon 和 Claude/GPT 配额归入对应的“短期”和“每周”视图。每个配额保留各自的线条和重置；重叠的限额绝不会相加或合并。短时段标签使用记录的时长（未知时使用当前限额）。Antigravity "
+     L"显示起限制作用的配额池，这些配额池可能会变化。"},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
      L"细插入符号、全宽线条、边缘缺口、居中圆点或时间轨道：每个条形下方随已过时间填充的小条。"},
+    {L"", L"This account has no meters in this view.", L"此账户在此视图中没有指标。"},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.", L"此账户已不再配置；其未保存的更改已被丢弃。"},
+    {L"", L"This account was removed. Its saved history stays until it expires or is deleted.",
+     L"此账户已移除。其已保存的历史会保留，直到过期或被删除。"},
     {L"", L"This change couldn't be saved.", L"无法保存此更改。"},
+    {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
+          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
+          L"available. Continue?",
+     L"此导出约包含 {rows, plural, other{# 行}}。这可能需要一段时间，并可能超出电子表格的行数限制。写入期间历史窗口将处于忙碌状态；资源管理器的任务栏仍可使用。要继续吗？"},
     {L"", L"Threshold notifications", L"阈值通知"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"阈值始终保持顺序：黄色、橙色、红色。"},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",
@@ -377,6 +488,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"默认的白色跟随任务栏文字颜色。“自定义…”会打开颜色选择器。"},
     {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows 透明效果已关闭，因此显示为“纯色”。"},
     {L"", L"Yellow from", L"黄色起点"},
+    {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported}包含两个已过去的 7 天时段。"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
     {L"account-error", L"Antigravity not running", L"Antigravity 未运行"},
@@ -453,6 +565,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"button", L"Copy", L"复制"},
     {L"button", L"Copy failed", L"复制失败"},
     {L"button", L"Custom...", L"自定义…"},
+    {L"button", L"Delete history…", L"删除历史记录…"},
+    {L"button", L"Enable recording", L"开启记录"},
     {L"button", L"Open dashboard", L"打开仪表板"},
     {L"button", L"Open folder", L"打开文件夹"},
     {L"button", L"Open usage history", L"打开使用历史"},
@@ -461,15 +575,24 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"button", L"Sign in", L"登录"},
     {L"button", L"Sign in again", L"重新登录"},
     {L"button", L"Sign out", L"退出登录"},
+    {L"chart-axis", L"{value} cr", L"{value} 积分"},
+    {L"chart-key", L"Solid: current", L"实线：当前"},
+    {L"chart-key", L"Solid: current · Dashed: previous", L"实线：当前 · 虚线：前一周"},
+    {L"chart-message", L"All lines are hidden", L"所有线条均已隐藏"},
+    {L"chart-message", L"No percentage readings to plot. Dollar spending is shown below.", L"没有可绘制的百分比读数。美元花费显示在下方。"},
+    {L"chart-message", L"No readings in this range.", L"此范围内没有读数。"},
     {L"chart-readout", L"+{count} more — hide lines in the legend", L"还有 {count} 条 — 在图例中隐藏线条"},
     {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
      L"还有 {count} 条 — 在图例中隐藏线条或选择一个账户"},
+    {L"chart-readout", L"[Current]", L"[当前]"},
+    {L"chart-readout", L"[Previous week]", L"[前一周]"},
     {L"chart-tick-day", L"{month} {day}", L"{month}{day}日"},
     {L"chart-tick-month", L"{month} {year}", L"{year}年{month}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{day}日 {weekday}"},
     {L"copilot-unit", L"AI credits", L"AI 积分"},
     {L"copilot-unit", L"chat requests", L"聊天请求"},
     {L"copilot-unit", L"premium requests", L"高级请求"},
+    {L"credits-amount", L"{amount} credits", L"{amount} 积分"},
     {L"credits-unit", L"{credits, plural, one{credits} other{credits}}", L"{credits, plural, other{积分}}"},
     {L"date-month", L"Apr", L"4月"},
     {L"date-month", L"Aug", L"8月"},
@@ -505,8 +628,16 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"date-weekday", L"Tue", L"周二"},
     {L"date-weekday", L"Wed", L"周三"},
     {L"dialog-button", L"Remove", L"移除"},
+    {L"dialog-caption", L"About these charts", L"关于这些图表"},
     {L"dialog-caption", L"Account", L"账户"},
+    {L"dialog-caption", L"Clear all usage history", L"清除全部使用历史"},
+    {L"dialog-caption", L"Delete account history", L"删除账户历史"},
+    {L"dialog-caption", L"Export all accounts — all meters, selected range (both weeks if comparing)",
+     L"导出所有账户 — 全部指标，所选范围（对比时包括两周）"},
+    {L"dialog-caption", L"Export selected account — all meters, selected range (both weeks if comparing)",
+     L"导出所选账户 — 全部指标，所选范围（对比时包括两周）"},
     {L"dialog-caption", L"Keep history", L"保留历史"},
+    {L"dialog-caption", L"Large history export", L"大型历史导出"},
     {L"dialog-caption", L"Remove account", L"移除账户"},
     {L"dialog-caption", L"Reset settings", L"重置设置"},
     {L"dialog-caption", L"Usage history", L"使用历史"},
@@ -517,6 +648,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"duration", L"{minutes}m", L"{minutes}分钟"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
     {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"file-type", L"All files (*.*)", L"所有文件 (*.*)"},
+    {L"file-type", L"CSV files (*.csv)", L"CSV 文件 (*.csv)"},
     {L"flyout-footer", L"No data yet", L"暂无数据"},
     {L"flyout-footer", L"Updated {time}", L"更新于 {time}"},
     {L"flyout-footer", L"Updated {time} (stale)", L"更新于 {time} (已过时)"},
@@ -538,11 +671,64 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, other{可用免费重置 # 次}} · 下一次{when}过期"},
+    {L"history-about", L"Axes and units", L"坐标轴和单位"},
+    {L"history-about", L"Cards", L"卡片"},
+    {L"history-about", L"Legend and readout", L"图例和读数"},
+    {L"history-about", L"Lines and markers", L"线条和标记"},
+    {L"history-about", L"Oldest loaded sample: {time}", L"已加载的最早样本：{time}"},
+    {L"history-about", L"Reading the charts", L"如何阅读图表"},
+    {L"history-about", L"Recording and export", L"记录和导出"},
+    {L"history-account", L"{provider} · {recording}", L"{provider} · {recording}"},
+    {L"history-account-state", L"Paused", L"已暂停"},
+    {L"history-account-state", L"Recording", L"记录中"},
+    {L"history-account-state", L"Recording off", L"记录已关闭"},
+    {L"history-account-state", L"Removed", L"已移除"},
+    {L"history-account-status", L"paused", L"已暂停"},
+    {L"history-account-status", L"recording off", L"记录已关闭"},
+    {L"history-button", L"Export CSV…", L"导出 CSV…"},
+    {L"history-button", L"Export all CSV…", L"全部导出 CSV…"},
+    {L"history-button", L"More options", L"更多选项"},
+    {L"history-button", L"Refresh (F5)", L"刷新 (F5)"},
+    {L"history-card", L"Coverage {hours} ({percent}%)", L"覆盖时长 {hours}（{percent}%）"},
+    {L"history-card", L"Current: {line}", L"当前：{line}"},
+    {L"history-card", L"Est. ≤{threshold}%: {hours}", L"≤{threshold}% 估计时长：{hours}"},
+    {L"history-card", L"Est. ≥{threshold}%: {hours}", L"≥{threshold}% 估计时长：{hours}"},
+    {L"history-card", L"Last recorded spend: {reading}", L"最后记录的花费：{reading}"},
+    {L"history-card", L"Lowest {reading}", L"最低 {reading}"},
+    {L"history-card", L"No dollar readings in this period.", L"此时段内没有美元读数。"},
+    {L"history-card", L"No readings in range", L"范围内无读数"},
+    {L"history-card", L"Peak {reading}", L"峰值 {reading}"},
+    {L"history-card", L"Previous: {line}", L"前一周：{line}"},
+    {L"history-card", L"now", L"现在"},
+    {L"history-card", L"{title} — details only", L"{title} — 仅详情"},
+    {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
+     L"{title}<link id=\"status\"> · {status}</link>"},
+    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
+     L"{rows, plural, other{正在导出 {count} 行…}}"},
+    {L"history-menu", L"About these charts", L"关于这些图表"},
+    {L"history-menu", L"Clear all history…", L"清除全部历史记录…"},
+    {L"history-menu", L"Open history folder", L"打开历史文件夹"},
+    {L"history-menu", L"Settings", L"设置"},
+    {L"history-meter", L"Credits remaining", L"剩余积分"},
+    {L"history-meter", L"Extra budget", L"额外预算"},
+    {L"history-meter", L"Extra spending (USD)", L"额外花费（USD）"},
+    {L"history-nav", L"All accounts", L"所有账户"},
+    {L"history-nav", L"Removed", L"已移除"},
     {L"history-pill", L"Not saving", L"未保存"},
     {L"history-pill", L"Off", L"关闭"},
     {L"history-pill", L"Recording · forever", L"记录中 · 永久"},
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"记录中 · {days, plural, other{# 天}}"},
     {L"history-pill", L"Waiting", L"等待中"},
+    {L"history-provider", L"Unknown provider", L"未知提供商"},
+    {L"history-range", L"24h", L"24小时"},
+    {L"history-range", L"30d", L"30天"},
+    {L"history-range", L"7d", L"7天"},
+    {L"history-range", L"90d", L"90天"},
+    {L"history-range", L"All", L"全部"},
+    {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
+    {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
+    {L"history-series", L"{meter} left (%)", L"{meter} 剩余（%）"},
+    {L"history-series", L"{meter} used (%)", L"{meter} 已用（%）"},
     {L"history-span", L"All retained", L"全部保留数据"},
     {L"history-span", L"{days, plural, one{# day} other{# days}}", L"{days, plural, other{# 天}}"},
     {L"history-span", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 小时}}"},
@@ -566,6 +752,13 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-storage", L"History write failed; the previous journal was kept.", L"写入历史记录失败；已保留之前的日志。"},
     {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
      L"历史记录文件不受支持或已损坏。请清除历史记录以重新开始。"},
+    {L"history-subtitle", L"{account} · {updated}", L"{account} · {updated}"},
+    {L"history-toggle", L"Compare previous week", L"对比前一周"},
+    {L"history-view", L"All meters", L"全部指标"},
+    {L"history-view", L"Extra usage", L"额外用量"},
+    {L"history-view", L"Short-term", L"短期"},
+    {L"history-view", L"Weekly", L"每周"},
+    {L"hours-value", L"{hours} h", L"{hours} 小时"},
     {L"identity-position", L"Bottom", L"下方"},
     {L"identity-position", L"Hidden", L"隐藏"},
     {L"identity-position", L"Left", L"左侧"},
@@ -664,15 +857,20 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"quota-name", L"AI credits", L"AI 积分"},
     {L"quota-name", L"Chat requests", L"聊天请求"},
     {L"quota-name", L"Credits", L"积分"},
+    {L"quota-name", L"Current limit", L"当前限额"},
     {L"quota-name", L"Extra usage", L"额外用量"},
     {L"quota-name", L"Monthly", L"每月"},
     {L"quota-name", L"Premium requests", L"高级请求"},
     {L"quota-name", L"Short window", L"短时段"},
+    {L"quota-name", L"Short-term (varying windows)", L"短期（时段不一）"},
     {L"quota-name", L"Weekly", L"每周"},
+    {L"quota-name", L"{hours}h", L"{hours} 小时"},
     {L"quota-name", L"{name} current limit", L"{name} 当前限额"},
+    {L"quota-name", L"{name} short-term (varying windows)", L"{name} 短期（时段不一）"},
     {L"quota-name", L"{name} weekly", L"{name} 每周"},
     {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}", L"{name} {days, plural, other{# 天}}"},
     {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}", L"{name} {hours, plural, other{# 小时}}"},
+    {L"quota-name", L"{name} {hours} h", L"{name} {hours} 小时"},
     {L"quota-name", L"{name} {hours}h", L"{name} {hours} 小时"},
     {L"quota-reset", L"Not yet started", L"尚未开始"},
     {L"quota-reset", L"Resets {when}", L"{when}重置"},
@@ -820,5 +1018,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
     {L"window-title", L"{app} — Settings", L"{app} — 设置"},
+    {L"window-title", L"{app} — Usage history", L"{app} — 使用历史"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogZhHans), "sort by (context, English), no duplicates");

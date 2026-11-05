@@ -87,10 +87,14 @@ def generate(source, output, expected_hash):
         # Keep compiler diagnostics on the actual source without modifying the definition.
         chunks.append(f'\n#line {line} {json.dumps(source.as_posix())}\n{code}\n')
 
-    # Every section is bounded by its own fragment. Pure fragments are taken whole: the account
-    # model, sample types, continuity rules, the flyout's burn-up curves, the history model and
-    # its CSV writer; so is the journal's coordination state (a lock, counters and flags). The
-    # journal and helper fragments only contribute named definitions.
+    # Every section is bounded by its own fragment. Pure fragments are taken whole: the
+    # localization engine with its catalogs (the history model's titles), the account model,
+    # sample types, continuity rules, the flyout's burn-up curves, the history model and its CSV
+    # writer; so is the journal's coordination state (a lock, counters and flags). The journal and
+    # helper fragments only contribute named definitions.
+    for name in ["template", "catalog", "lang-de", "lang-es", "lang-fr", "lang-ja", "lang-pt-BR", "lang-ru",
+                 "lang-zh-Hans", "languages", "pseudo", "format"]:
+        emit(f"i18n/{name}.h", fragment(text, f"i18n/{name}.h"))
     emit("core/model.h", fragment(text, "core/model.h"))
     emit("history/types.h", fragment(text, "history/types.h"))
     # The journal's memory-only parts: its in-memory state (never the storage state after it),

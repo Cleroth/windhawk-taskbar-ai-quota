@@ -1,6 +1,7 @@
 // The history journal's coded errors on the production catalogs: each one's English as the journal
 // wrote it before codes, German and Japanese, and the history window presenting them in its
-// language (the storage bar, a failed Clear's reason). Expected text is written out by hand.
+// language (the storage bar, a failed Clear's notice with its reason). Expected text is written out
+// by hand.
 
 static void RunJournalErrorI18nTests() {
     using enum HistoryJournalError;
@@ -49,10 +50,10 @@ static void RunJournalErrorI18nTests() {
         ops.clearResult = false;
         ops.clearError = InUse;
         c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Clear));
-        // The notice's own sentence is the history window's; its reason: Der Verlaufsspeicher wird von einer
-        // anderen Explorer-Sitzung verwendet oder ist nicht zugänglich.
-        CHECK(c.view.notice.text.ends_with(L"Der Verlaufsspeicher wird von einer anderen Explorer-Sitzung verwendet "
-                                           L"oder ist nicht zug\u00E4nglich.") &&
+        // Der gesamte Verlauf konnte nicht gelöscht werden. Der Verlaufsspeicher wird von einer anderen
+        // Explorer-Sitzung verwendet oder ist nicht zugänglich.
+        CHECK(c.view.notice.text == L"Der gesamte Verlauf konnte nicht gel\u00F6scht werden. Der Verlaufsspeicher wird "
+                                    L"von einer anderen Explorer-Sitzung verwendet oder ist nicht zug\u00E4nglich." &&
               c.view.notice.severity == UiSeverity::Error);
     });
 }

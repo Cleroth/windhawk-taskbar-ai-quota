@@ -153,6 +153,45 @@
         CHECK(empty.pieces == std::vector<std::string>{header} && empty.lasts[0]);
     });
 
+    Run("csv: the history model names meters in its query's language while the CSV keeps its English meter IDs and "
+        "units (German: Anthropic's 5-hour, weekly, extra budget and dollars, OpenCode Go's monthly)", [&] {
+        std::vector<HistoryUiAccount> accounts(2);
+        accounts[0].id = 0xA1;
+        accounts[0].provider = 1;
+        accounts[0].label = L"CC";
+        accounts[1].id = 0xF6;
+        accounts[1].provider = 5;
+        accounts[1].label = L"Go";
+        for (size_t row = 0; row < samples.size(); row++) {
+            for (HistoryUiAccount& account : accounts) {
+                if (samples[row].accountId == account.id) account.rows.push_back(row);
+            }
+        }
+        HistorySeriesQuery query{-1, HistoryView::AllMeters, baseTime, baseTime + kHistoryWeekMs, baseTime, false, 90,
+                                 false, I18nLocale(*I18nLanguageByTag(L"de"))};
+        HistorySeriesSet german = HistoryBuildSeries(samples, accounts, query, Never);
+        CHECK(Meters(german, 0) == (std::set<int>{0, 1, 3, 6}) && Meters(german, 1) == (std::set<int>{0, 1, 3}));
+        CHECK(Series(german, 0, 0).legendTitle == L"CC \u00B7 5 Std." &&
+              Series(german, 0, 0).hoverTitle == L"CC \u00B7 5 Std. verbraucht (%)");
+        CHECK(Series(german, 0, 1).hoverTitle == L"CC \u00B7 W\u00F6chentlich verbraucht (%)");
+        CHECK(Series(german, 0, 3).hoverTitle == L"CC \u00B7 Zusatzbudget verbraucht (%)");
+        CHECK(Series(german, 0, 6).hoverTitle == L"CC \u00B7 Zusatzausgaben (USD)");
+        CHECK(Series(german, 1, 3).hoverTitle == L"Go \u00B7 Monatlich verbraucht (%)");
+        query.locale = {};
+        CHECK(Series(HistoryBuildSeries(samples, accounts, query, Never), 0, 3).hoverTitle ==
+              L"CC \u00B7 Extra budget used (%)");
+        // The writer takes no language: the same scopes write the same English bytes.
+        for (uint64_t account : {0xA1ULL, 0xF6ULL}) {
+            Pieces pieces;
+            size_t rows = 0;
+            CHECK(direct(scope(account), rows, pieces, Never) == HistoryCsvEnd::Written);
+            CHECK(pieces.Joined() == header + (account == 0xA1 ? accountA : accountF));
+        }
+        CHECK(accountA.find("extra_percent,percent,7.25,") != std::string::npos &&
+              accountA.find("anthropic_extra_used,USD,3.5,") != std::string::npos &&
+              accountF.find("monthly,percent,88,") != std::string::npos);
+    });
+
     Run("csv: a large export goes out in pieces of at least 64 KiB, then a shorter last one", [&] {
         std::vector<HistorySample> many;
         for (int i = 0; i < 3000; i++) {

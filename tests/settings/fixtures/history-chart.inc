@@ -302,10 +302,10 @@ static void RunHistoryChartTests() {
         CHECK(HistoryChartAxes({line(7, 0, 100)}, false)[2].high == 100);
         CHECK(HistoryChartAxes({line(7, 0, 100.0001)}, false)[2].high == 200);
         CHECK(HistoryChartAxes({line(7, -700, 10)}, false)[2].low == -800);
-        CHECK(HistoryChartAxisLabel(0, 50) == L"50%" && HistoryChartAxisLabel(0, -25) == L"-25%");
-        CHECK(HistoryChartAxisLabel(1, 0.5) == L"0.5 USD" && HistoryChartAxisLabel(1, 1250) == L"1250 USD");
-        CHECK(HistoryChartAxisLabel(1, 0.75) == L"0.75 USD" && HistoryChartAxisLabel(2, 0) == L"0 cr");
-        CHECK(HistoryChartAxisLabel(2, 12500) == L"12.5K cr" && HistoryChartAxisLabel(2, 10000) == L"10K cr");
+        CHECK(HistoryChartAxisLabel({}, 0, 50) == L"50%" && HistoryChartAxisLabel({}, 0, -25) == L"-25%");
+        CHECK(HistoryChartAxisLabel({}, 1, 0.5) == L"0.5 USD" && HistoryChartAxisLabel({}, 1, 1250) == L"1250 USD");
+        CHECK(HistoryChartAxisLabel({}, 1, 0.75) == L"0.75 USD" && HistoryChartAxisLabel({}, 2, 0) == L"0 cr");
+        CHECK(HistoryChartAxisLabel({}, 2, 12500) == L"12.5K cr" && HistoryChartAxisLabel({}, 2, 10000) == L"10K cr");
     });
 
     Run("history chart: the plot in the chart's item (mockup: 44 DIP left, 10 above, 26 below and right, or the "

@@ -93,7 +93,8 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
         UiCustomPaint custom = [&](const UiItem& item) {
             if (!controller && item.id != kHistoryUiProgress) return;
             HistoryUiPaintCustom(target.get(), g, cache, palette, controller ? controller->chart : none,
-                                 controller ? controller->picked : picked, part.exported, item, state, scale);
+                                 controller ? controller->picked : picked, part.view.locale, part.exported, item, state,
+                                 scale);
         };
         UiPaintItems(target.get(), g, cache, palette, frame.main, state, {0, 0}, scale, -1e9f, 1e9f, &custom);
         const D2D1_RECT_F& pane = frame.navPane;

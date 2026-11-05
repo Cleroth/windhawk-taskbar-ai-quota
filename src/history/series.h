@@ -2,11 +2,8 @@
 // reduction, series building, account collection and selection resolution. Explicit inputs
 // only; loops stop as soon as `cancelled` returns true.
 
-// Percentages (meters 0-5) get " used (%)" or, in the Remaining bar mode, " left (%)" after them.
-static constexpr PCWSTR kHistoryMeterNames[kHistoryMeterCount] = {
-    L"Short-term", L"Weekly", L"Fable weekly", L"Extra budget", L"Claude/GPT short-term", L"Claude/GPT weekly",
-    L"Extra spending (USD)", L"Credits remaining",
-};
+// The meters' CSV IDs, English in every language. Their display names are the series' titles
+// (HistoryBuildSeries), in the query's language.
 static constexpr const char* kHistoryMeterIds[kHistoryMeterCount] = {
     "short", "weekly", "fable_weekly", "extra_percent", "third_party_short",
     "third_party_weekly", "anthropic_extra_used", "openai_credit_balance",
@@ -14,7 +11,9 @@ static constexpr const char* kHistoryMeterIds[kHistoryMeterCount] = {
 
 // Views group existing journal lanes; raw meter indices and CSV remain unchanged.
 enum class HistoryView { ShortTerm, Weekly, ExtraUsage, AllMeters };
-static constexpr PCWSTR kHistoryViewNames[] = {L"Short-term", L"Weekly", L"Extra usage", L"All meters"};
+static constexpr I18nKey kHistoryViewNames[] = {
+    TrCtx(L"history-view", L"Short-term"), TrCtx(L"history-view", L"Weekly"), TrCtx(L"history-view", L"Extra usage"),
+    TrCtx(L"history-view", L"All meters")};
 static constexpr unsigned kHistoryViewMeters[] = {
     (1U << 0) | (1U << 4), (1U << 1) | (1U << 2) | (1U << 5),
     (1U << 3) | (1U << 6) | (1U << 7), (1U << kHistoryMeterCount) - 1,
@@ -84,6 +83,7 @@ struct HistorySeriesQuery {
     bool overlay = false;  // Compare previous week: [readFrom, from) is the previous period.
     int redThreshold = 90;
     bool remaining = false;  // Titles name percentages left (the Remaining bar mode)
+    I18nLocale locale;       // The titles' language
 };
 
 struct HistorySeriesSet {
@@ -106,9 +106,10 @@ static std::string HistoryCsvId(const char* prefix, uint64_t id) {
     return text;
 }
 
+// Hours with two decimals: `1.50`.
 static std::wstring HistoryHours(double ms) {
     wchar_t text[40];
-    swprintf(text, ARRAYSIZE(text), L"%.2f h", ms / 3600000.0);
+    swprintf(text, ARRAYSIZE(text), L"%.2f", ms / 3600000.0);
     return text;
 }
 
@@ -277,11 +278,6 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                    (GetGValue(color) * 3 + 255) / 4,
                                    (GetBValue(color) * 3 + 255) / 4);
             }
-            std::wstring label = kHistoryMeterNames[meter];
-            if (account.provider == 3 && meter == 1) label = L"Gemini weekly";
-            if (account.provider == 3 && meter == 2) label = L"Argon weekly";
-            if (account.provider == 4 && meter == 3) label = L"AI credits";
-            if (account.provider == 5 && meter == 3) label = L"Monthly";
             ULONGLONG shortDuration = 0;
             bool hasDuration = false, mixedDuration = false;
             for (size_t row : account.rows) {
@@ -299,18 +295,60 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                     hasDuration = true;
                 }
             }
+            // Its name in the query's language: a short-term meter's by its recorded window,
+            // Antigravity's (provider 3) by model family. Its full title names the account, and a
+            // percentage (meters 0-5) whether it is used or, in the Remaining bar mode, left.
+            const I18nLocale& locale = query.locale;
+            const bool antigravity = account.provider == 3;
+            auto weekly = [&](PCWSTR name) {
+                return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", name}});
+            };
+            std::wstring label;
             if (meter == 0 || meter == 4) {
-                label = mixedDuration ? L"Short-term (varying windows)" : !shortDuration ? L"Current limit" :
-                    shortDuration % 3600000 == 0 ? std::to_wstring(shortDuration / 3600000) + L"h" :
-                    HistoryHours(double(shortDuration));
-                if (account.provider == 3) {
-                    label.front() = wchar_t(towlower(label.front()));
-                    label = (meter == 4 ? L"Claude/GPT " : L"Gemini ") + label;
+                PCWSTR family = meter == 4 ? L"Claude/GPT" : L"Gemini";  // i18n-en
+                if (mixedDuration) {
+                    label = antigravity ? I18nText(locale, TrCtx(L"quota-name", L"{name} short-term (varying windows)"),
+                                                   {{L"name", family}}) :
+                                          I18nText(locale, TrCtx(L"quota-name", L"Short-term (varying windows)"));
+                } else if (!shortDuration) {
+                    label = antigravity ?
+                        I18nText(locale, TrCtx(L"quota-name", L"{name} current limit"), {{L"name", family}}) :
+                        I18nText(locale, TrCtx(L"quota-name", L"Current limit"));
+                } else if (shortDuration % 3600000 == 0) {
+                    label = antigravity ? I18nText(locale, TrCtx(L"quota-name", L"{name} {hours}h"),
+                                                   {{L"name", family}, {L"hours", shortDuration / 3600000}}) :
+                                          I18nText(locale, TrCtx(L"quota-name", L"{hours}h"),
+                                                   {{L"hours", shortDuration / 3600000}});
+                } else {
+                    std::wstring hours = HistoryHours(double(shortDuration));
+                    label = antigravity ? I18nText(locale, TrCtx(L"quota-name", L"{name} {hours} h"),
+                                                   {{L"name", family}, {L"hours", hours}}) :
+                                          I18nText(locale, TrCtx(L"hours-value", L"{hours} h"), {{L"hours", hours}});
                 }
+            } else if (meter == 1) {
+                label = antigravity ? weekly(L"Gemini") : I18nText(locale, TrCtx(L"quota-name", L"Weekly"));  // i18n-en
+            } else if (meter == 2) {
+                label = weekly(antigravity ? L"Argon" : L"Fable");  // i18n-en
+            } else if (meter == 3) {
+                label = I18nText(locale, account.provider == 4 ? TrCtx(L"quota-name", L"AI credits") :
+                                         account.provider == 5 ? TrCtx(L"quota-name", L"Monthly") :
+                                                                 TrCtx(L"history-meter", L"Extra budget"));
+            } else if (meter == 5) {
+                label = weekly(L"Claude/GPT");  // i18n-en
+            } else {
+                label = I18nText(locale, meter == 6 ? TrCtx(L"history-meter", L"Extra spending (USD)") :
+                                                      TrCtx(L"history-meter", L"Credits remaining"));
             }
-            series.legendTitle = (query.selected < 0 ? account.label + L" · " : L"") + label;
-            if (meter < 6) label += query.remaining ? L" left (%)" : L" used (%)";
-            series.hoverTitle = account.label + L" · " + label;
+            auto titled = [&](const std::wstring& name) {
+                return I18nText(locale, TrCtx(L"history-series", L"{account} \u00B7 {meter}"),
+                                {{L"account", account.label}, {L"meter", name}});
+            };
+            series.legendTitle = query.selected < 0 ? titled(label) : label;
+            series.hoverTitle =
+                titled(meter >= 6 ? label :
+                                    I18nText(locale, query.remaining ? TrCtx(L"history-series", L"{meter} left (%)") :
+                                                                       TrCtx(L"history-series", L"{meter} used (%)"),
+                                             {{L"meter", label}}));
             result.series.push_back(std::move(series));
         }
         if (result.series.size() == firstSeries) result.noReadingAccounts.push_back(i);

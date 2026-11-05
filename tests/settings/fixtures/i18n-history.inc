@@ -2,8 +2,11 @@
 // (each language's order and names, always 24-hour; Russian months in a date's form and alone),
 // the status pill's plural, the readout's hint, and the controller's language: each composition
 // takes the current one, a modal keeps the one it started in, and a switch re-labels what was
-// built in the old one (the status, the series, the ticks, the readout and its key). Expected
-// text is written out by hand from the production catalogs.
+// built in the old one (the status, the series, the ticks, the readout and its key, an operation's
+// notice). An export's notice and progress in Russian with their plurals, Delete history's dialog
+// and notices in Russian with the journal's reason, a dialog keeping the language it opened in,
+// and the readout's rows in Chinese. Expected text is written out by hand from the production
+// catalogs.
 
 static I18nLocale TestLocale(std::wstring_view tag) {
     const I18nLanguage* language = I18nLanguageByTag(tag);
@@ -139,5 +142,166 @@ static void RunHistoryI18nTests() {
         c.ModalEnded();
         c.Notify();
         CHECK(c.ProcessRefresh(false, false) && c.view.locale == TestLocale(L"ja"));
+    });
+
+    Run("history export in Russian: the save dialog titled in its language, the notice's rows in each plural form "
+        "(1, 3, 5, 12, 21, 100,003), the selected account's while comparing with its second sentence, re-labeled "
+        "by a switch to English; the progress line's plural", [] {
+        TestHistoryOps ops = TestControllerOps();
+        ops.locale = TestLocale(L"ru");
+        HistoryController c(ops);
+        TestLoaded(c, ops);
+        // choose Экспорт всех аккаунтов — все показатели, выбранный период (при сравнении — обе недели)
+        const std::wstring title =
+            L"choose \u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u0432\u0441\u0435\u0445 \u0430\u043A\u043A\u0430"
+            L"\u0443\u043D\u0442\u043E\u0432 \u2014 \u0432\u0441\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u0442"
+            L"\u0435\u043B\u0438, \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u043F\u0435\u0440\u0438"
+            L"\u043E\u0434 (\u043F\u0440\u0438 \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0438 \u2014 \u043E"
+            L"\u0431\u0435 \u043D\u0435\u0434\u0435\u043B\u0438)";
+        // ... показателей (все аккаунты) в C:\Exports\usage.csv. Метки не включены; время в UTC.
+        const std::wstring all =
+            L" \u043F\u043E\u043A\u0430\u0437\u0430\u0442\u0435\u043B\u0435\u0439 (\u0432\u0441\u0435 \u0430\u043A"
+            L"\u043A\u0430\u0443\u043D\u0442\u044B) \u0432 C:\\Exports\\usage.csv. \u041C\u0435\u0442\u043A\u0438 "
+            L"\u043D\u0435 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u044B; \u0432\u0440\u0435\u043C\u044F \u0432 "
+            L"UTC.";
+        // Экспортирована 1 строка (one), Экспортированы 3 строки (few), Экспортировано 5 строк (many) ...
+        const std::pair<size_t, std::wstring> cases[] = {
+            {1, L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0430 1 \u0441\u0442"
+                L"\u0440\u043E\u043A\u0430"},
+            {3, L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u044B 3 \u0441\u0442"
+                L"\u0440\u043E\u043A\u0438"},
+            {5, L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043E 5 \u0441\u0442"
+                L"\u0440\u043E\u043A"},
+            {12, L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043E 12 \u0441"
+                 L"\u0442\u0440\u043E\u043A"},
+            {21, L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0430 21 \u0441"
+                 L"\u0442\u0440\u043E\u043A\u0430"},
+            {100003, L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u044B "
+                     L"100,003 \u0441\u0442\u0440\u043E\u043A\u0438"}};
+        for (const auto& [rows, head] : cases) {
+            ops.writeResult = {rows, 0, true};
+            ops.log.clear();
+            c.Command(HistoryUiCommand::Export);
+            CHECK(ops.log.at(0) == title);
+            c.Write(true, [] {});
+            CHECK(c.view.notice.text == head + all && c.view.notice.severity == UiSeverity::Info);
+        }
+        c.Command(HistoryUiCommand::Select, 0, 0xC1);
+        c.Command(HistoryUiCommand::Compare, 1);
+        ops.writeResult = {5, 0, true};
+        c.Command(HistoryUiCommand::Export);
+        c.Write(true, [] {});
+        // Экспортировано 5 строк показателей (выбранный аккаунт) в C:\Exports\usage.csv. Метки не включены;
+        // время в UTC. Включает оба прошедших 7-дневных периода.
+        CHECK(c.view.notice.text ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043E 5 \u0441\u0442"
+              L"\u0440\u043E\u043A \u043F\u043E\u043A\u0430\u0437\u0430\u0442\u0435\u043B\u0435\u0439 (\u0432\u044B"
+              L"\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442) \u0432 C:\\Exp"
+              L"orts\\usage.csv. \u041C\u0435\u0442\u043A\u0438 \u043D\u0435 \u0432\u043A\u043B\u044E\u0447\u0435"
+              L"\u043D\u044B; \u0432\u0440\u0435\u043C\u044F \u0432 UTC. \u0412\u043A\u043B\u044E\u0447\u0430\u0435"
+              L"\u0442 \u043E\u0431\u0430 \u043F\u0440\u043E\u0448\u0435\u0434\u0448\u0438\u0445 7-\u0434\u043D\u0435"
+              L"\u0432\u043D\u044B\u0445 \u043F\u0435\u0440\u0438\u043E\u0434\u0430.");
+        // The notice stays a code: the next composition shows it in the new language.
+        ops.locale = {};
+        c.Notify();
+        CHECK(c.ProcessRefresh(false, false));
+        CHECK(c.view.notice.text == L"Exported 5 meter rows (selected account) to C:\\Exports\\usage.csv. Labels "
+                                    L"omitted; times UTC. Includes both elapsed 7-day periods.");
+        // Экспорт: 1 строка… / 3 строки… / 5 строк… / 2,000,000 строк…
+        I18nLocale ru = TestLocale(L"ru");
+        CHECK(HistoryUiProgressText(ru, 1) ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442: 1 \u0441\u0442\u0440\u043E\u043A\u0430\u2026");
+        CHECK(HistoryUiProgressText(ru, 3) ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442: 3 \u0441\u0442\u0440\u043E\u043A\u0438\u2026");
+        CHECK(HistoryUiProgressText(ru, 5) ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442: 5 \u0441\u0442\u0440\u043E\u043A\u2026");
+        CHECK(HistoryUiProgressText(ru, 2000000) ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442: 2,000,000 \u0441\u0442\u0440\u043E\u043A\u2026");
+        CHECK(HistoryUiProgressText({}, 1) == L"Exporting 1 rows\u2026");
+    });
+
+    Run("history Delete history in Russian: the confirmation and its caption, a failure's notice with the "
+        "journal's reason, then the success naming the account", [] {
+        TestHistoryOps ops = TestControllerOps();
+        ops.locale = TestLocale(L"ru");
+        ops.deleteResult = false;
+        HistoryController c(ops);
+        TestLoaded(c, ops, 0xDEAD);
+        c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+        // ask Удаление истории аккаунта
+        CHECK(ops.log.at(0) == L"ask \u0423\u0434\u0430\u043B\u0435\u043D\u0438\u0435 \u0438\u0441\u0442\u043E\u0440"
+                               L"\u0438\u0438 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430");
+        // Безвозвратно удалить всю историю использования удалённого аккаунта Anthropic account_000000000000dead?
+        CHECK(ops.asked.at(0).first.starts_with(
+            L"\u0411\u0435\u0437\u0432\u043E\u0437\u0432\u0440\u0430\u0442\u043D\u043E \u0443\u0434\u0430\u043B"
+            L"\u0438\u0442\u044C \u0432\u0441\u044E \u0438\u0441\u0442\u043E\u0440\u0438\u044E \u0438\u0441\u043F"
+            L"\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u044F \u0443\u0434\u0430\u043B\u0451\u043D"
+            L"\u043D\u043E\u0433\u043E \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430 Anthropic account_000000000"
+            L"000dead?\r\n\r\n"));
+        // Не удалось удалить историю этого аккаунта. Хранилище истории используется другим сеансом проводника
+        // или недоступно.
+        CHECK(c.view.notice.text ==
+              L"\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0443\u0434\u0430\u043B\u0438\u0442\u044C "
+              L"\u0438\u0441\u0442\u043E\u0440\u0438\u044E \u044D\u0442\u043E\u0433\u043E \u0430\u043A\u043A\u0430"
+              L"\u0443\u043D\u0442\u0430. \u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u0438\u0441\u0442"
+              L"\u043E\u0440\u0438\u0438 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0441\u044F "
+              L"\u0434\u0440\u0443\u0433\u0438\u043C \u0441\u0435\u0430\u043D\u0441\u043E\u043C \u043F\u0440\u043E"
+              L"\u0432\u043E\u0434\u043D\u0438\u043A\u0430 \u0438\u043B\u0438 \u043D\u0435\u0434\u043E\u0441\u0442"
+              L"\u0443\u043F\u043D\u043E.");
+        CHECK(c.view.notice.severity == UiSeverity::Error);
+        ops.deleteResult = true;
+        c.Command(HistoryUiCommand::DeleteHistory, 0, 0xDEAD);
+        // История удалённого аккаунта account_000000000000dead удалена.
+        CHECK(c.view.notice.text ==
+              L"\u0418\u0441\u0442\u043E\u0440\u0438\u044F \u0443\u0434\u0430\u043B\u0451\u043D\u043D\u043E\u0433"
+              L"\u043E \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430 account_000000000000dead \u0443\u0434\u0430"
+              L"\u043B\u0435\u043D\u0430.");
+        CHECK(c.view.notice.severity == UiSeverity::Info);
+    });
+
+    Run("history dialogs keep the language they opened in: Clear's confirmation in Japanese while a switch to "
+        "German arrives, whose language its notice then shows", [] {
+        TestHistoryOps ops = TestControllerOps();
+        ops.locale = TestLocale(L"ja");
+        HistoryController c(ops);
+        TestLoaded(c, ops);
+        ops.asking = [&] {
+            ops.locale = TestLocale(L"de");
+            c.Notify();
+        };
+        c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Clear));
+        // ask すべての使用履歴の消去; この Windows ユーザーのローカルの使用履歴を、削除したアカウントの分も含めて
+        // すべて完全に消去しますか？
+        CHECK(ops.log.at(0) == L"ask \u3059\u3079\u3066\u306E\u4F7F\u7528\u5C65\u6B74\u306E\u6D88\u53BB");
+        CHECK(ops.asked.at(0).first.starts_with(
+            L"\u3053\u306E Windows \u30E6\u30FC\u30B6\u30FC\u306E\u30ED\u30FC\u30AB\u30EB\u306E\u4F7F\u7528\u5C65"
+            L"\u6B74\u3092\u3001\u524A\u9664\u3057\u305F\u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u5206\u3082\u542B"
+            L"\u3081\u3066\u3059\u3079\u3066\u5B8C\u5168\u306B\u6D88\u53BB\u3057\u307E\u3059\u304B\uFF1F\r\n\r\n"));
+        // Der gesamte lokale Verlauf wurde gelöscht. Künftige Abfragen können wieder mit der Aufzeichnung beginnen.
+        CHECK(c.view.locale == TestLocale(L"de") &&
+              c.view.notice.text == L"Der gesamte lokale Verlauf wurde gel\u00F6scht. K\u00FCnftige Abfragen k\u00F6nnen "
+                                    L"wieder mit der Aufzeichnung beginnen.");
+    });
+
+    Run("history readout rows in Chinese: the period tags, each unit and the time, in the row's inks", [] {
+        I18nLocale zh = TestLocale(L"zh-Hans");
+        auto row = [&](int meter, int period, double value, WORD day, WORD hour, WORD minute) {
+            return HistoryChartRow(zh, L"", {}, 2, meter, period, value, TestLocalMs(2026, 10, day, hour, minute), kWeekTo,
+                                   TestZone()).detail;
+        };
+        std::vector<UiRun> previous = row(1, 1, 37.6, 20, 12, 32);
+        // [前一周] 37.6% · 10月20日 周二 12:32
+        CHECK(UiRunsText(previous) == L"[\u524D\u4E00\u5468] 37.6% \u00B7 10\u670820\u65E5 \u5468\u4E8C 12:32");
+        CHECK(previous.size() == 3 && previous[0].text == L"[\u524D\u4E00\u5468]" && previous[0].ink == UiInk::Secondary &&
+              previous[1].ink == UiInk::Inherit && previous[2].ink == UiInk::Secondary);
+        // [当前] 38.0% · 10月27日 周二 12:31
+        CHECK(UiRunsText(row(1, 0, 38.04, 27, 12, 31)) ==
+              L"[\u5F53\u524D] 38.0% \u00B7 10\u670827\u65E5 \u5468\u4E8C 12:31");
+        // [前一周] 9999.94 积分 · 10月20日 周二 12:32
+        CHECK(UiRunsText(row(7, 1, 9999.94, 20, 12, 32)) ==
+              L"[\u524D\u4E00\u5468] 9999.94 \u79EF\u5206 \u00B7 10\u670820\u65E5 \u5468\u4E8C 12:32");
+        // [当前] USD 11.00 · 10月27日 周二 12:31: dollars keep their code.
+        CHECK(UiRunsText(row(6, 0, 11, 27, 12, 31)) ==
+              L"[\u5F53\u524D] USD 11.00 \u00B7 10\u670827\u65E5 \u5468\u4E8C 12:31");
     });
 }

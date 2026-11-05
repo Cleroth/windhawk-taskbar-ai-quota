@@ -101,7 +101,7 @@ static void RunReadoutGuarantee(const I18nLocale& locale, const std::string& nam
         float overall = 0;
         for (Unit unit : {Unit{"percent", 0}, Unit{"USD", 6}, Unit{"credits", 7}}) {
             std::vector<std::pair<float, double>> printed;
-            for (double value : values) printed.push_back({TestRunsWidth({{HistoryUiValue(unit.meter, value, 1)}}), value});
+            for (double value : values) printed.push_back({TestRunsWidth({{HistoryUiValue(locale, unit.meter, value, 1)}}), value});
             std::sort(printed.rbegin(), printed.rend());
             float best = 0;
             std::vector<UiRun> bestRuns;
@@ -238,12 +238,14 @@ static void RunHistoryTooltipTests() {
 // The arrow pointer of the mockups (a 32 DIP image, hotspot at its top-left).
 static constexpr PCWSTR kTestArrowPath = L"M.5,.5V17.6L4.6,13.7L7.6,20.6L10.4,19.4L7.5,12.6H13.3Z";
 
-// In `locale`'s language: its times and hint (the rest of the readout follows later phases), with
-// its text formats; the expected English text is checked only in English.
+// In `locale`'s language: its rows' periods, values and times and its hint (the sheet's own row
+// titles stay English), with its text formats; the expected English text is checked only in
+// English.
 static void RenderTooltipSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
                                const UiThemeInput& theme, UINT dpi, const I18nLocale& locale = {}) {
-    constexpr float kWidth = 1180, kHeight = 1740;
     const bool english = locale == I18nLocale();
+    // Another language's complete-text tooltips can take a second row.
+    const float kWidth = 1180, kHeight = english ? 1740 : 1860;
     TestLocaleScope scope(g, locale);
     float scale = float(dpi) / 96;
     winrt::com_ptr<IWICBitmap> bitmap = RenderBitmap(wic, {kWidth, kHeight}, dpi);
@@ -416,9 +418,18 @@ static void RenderTooltipSheet(UiGraphics& g, IWICImagingFactory* wic, const std
     float x = 16, rowBottom = y;
     for (const UiTooltipContent& tip : texts) {
         auto px = [&](float dip) { return LONG(std::lround(dip * scale)); };
-        UiTooltipKey key = TestKey({px(x), px(y) - px(60)}, {px(x), px(y), px(kWidth - 16), px(kHeight - 16)}, px(32),
-                                   {0, 0}, dpi);
-        auto spot = UiTooltipPlacement(g, tip, {}, key);
+        auto place = [&] {
+            UiTooltipKey key = TestKey({px(x), px(y) - px(60)}, {px(x), px(y), px(kWidth - 16), px(kHeight - 16)},
+                                       px(32), {0, 0}, dpi);
+            return UiTooltipPlacement(g, tip, {}, key);
+        };
+        auto spot = place();
+        // A tooltip the row has no room left for (a longer language's) starts the next row.
+        if (!spot && x > 16) {
+            x = 16;
+            y = rowBottom + 24;
+            spot = place();
+        }
         CHECK(spot);
         D2D1_SIZE_F size{float(spot->rect.right - spot->rect.left) / scale,
                          float(spot->rect.bottom - spot->rect.top) / scale};

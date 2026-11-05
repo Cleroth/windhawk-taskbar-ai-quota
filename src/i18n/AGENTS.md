@@ -26,7 +26,8 @@ preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Co
   A missing one shows as `{name}`.
 - Pure code gets an `I18nLocale` (language, locale name) through its inputs, never a global:
   `SettingsView::locale`, `HistoryUiView::locale` (the controller takes it from
-  `HistoryOps::Locale`), `MeterDisplay::locale` (`MeterDisplayFor`'s), and the history formats'
+  `HistoryOps::Locale`, and passes it on in `HistorySeriesQuery::locale` and
+  `HistoryChart::locale`), `MeterDisplay::locale` (`MeterDisplayFor`'s), and the history formats'
   `locale` parameter. The `ui/` toolkit gets only translated strings (toggle states, the
   readout's hint) and `UiGraphics::locale`.
 - Account errors the mod authors are `AccountError` codes (`core/model.h`), with arguments in
@@ -36,7 +37,8 @@ preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Co
   `AccountErrorCode::Message` holds provider text without a code of its own. The history journal's
   errors are `HistoryJournalError` codes the same way (`history/journal-error.h`), and so are the
   settings window's notices and draft errors (`SettingsNoticeCode`, `SettingsDraftError` in
-  `settings/edits.h`), formatted when a message box opens or a frame is built.
+  `settings/edits.h`) and the history window's operation notices (`HistoryNoticeCode`,
+  `history/controller.h`), formatted when a message box opens or a frame is built.
 - `I18nLanguageByTag` (explicit choice) reaches any language and `qps-ploc`;
   `I18nMatchLanguage` (Automatic) skips `inProgress` ones and never picks `qps-ploc`.
 - Intentional English literals (IDs, CSV, protocol text) carry `// i18n-en` on their line;

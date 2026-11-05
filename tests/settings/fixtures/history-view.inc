@@ -85,7 +85,8 @@ static HistoryUiView TestCards(const TestHistory& h,
         view.accounts.push_back(std::move(account));
     }
     if (live) live(view);
-    HistorySeriesQuery query{h.selected, h.view, kWeekFrom, kWeekTo, readFrom, h.compare, 90, view.remaining};
+    HistorySeriesQuery query{h.selected, h.view, kWeekFrom, kWeekTo, readFrom, h.compare, 90, view.remaining,
+                             view.locale};
     HistorySeriesSet set = HistoryBuildSeries(h.samples, collected, query, never);
     HistoryUiSetCards(view, set, kWeekFrom, kWeekTo, kWeekTo, TestZone());
     return view;
@@ -163,20 +164,20 @@ static void RunHistoryViewTests() {
         CHECK(HistoryUiNumber(9999.6, 0) == L"10.0K");
         CHECK(HistoryUiNumber(98.81, 1) == L"98.8");
         CHECK(HistoryUiNumber(std::nan(""), 1) == L"\u2014");
-        CHECK(HistoryUiValue(1, 93.04, 0) == L"93%");
-        CHECK(HistoryUiValue(5, 38.04, 1) == L"38.0%");
-        CHECK(HistoryUiValue(1, 19.999999999999996, 1) == L"20.0%");
-        CHECK(HistoryUiValue(6, 10, 0) == L"USD 10.00");
-        CHECK(HistoryUiValue(6, 9999.996, 0) == L"USD 10.0K");
-        CHECK(HistoryUiValue(7, 1240, 0) == L"1240.00 credits");
-        CHECK(HistoryUiValue(7, 25000, 0) == L"25.0K credits");
-        CHECK(HistoryUiHours(166 * double(kHourMs)) == L"166 h");
-        CHECK(HistoryUiHours(0.4 * double(kHourMs)) == L"0.4 h");
-        CHECK(HistoryUiHours(23.2 * double(kHourMs)) == L"23.2 h");
-        CHECK(HistoryUiHours(165.96 * double(kHourMs)) == L"166 h");
-        CHECK(HistoryUiHours(0.04 * double(kHourMs)) == L"0 h");
-        CHECK(HistoryUiHours(0) == L"0 h");
-        CHECK(HistoryUiHours(87600 * double(kHourMs)) == L"87600 h");
+        CHECK(HistoryUiValue({}, 1, 93.04, 0) == L"93%");
+        CHECK(HistoryUiValue({}, 5, 38.04, 1) == L"38.0%");
+        CHECK(HistoryUiValue({}, 1, 19.999999999999996, 1) == L"20.0%");
+        CHECK(HistoryUiValue({}, 6, 10, 0) == L"USD 10.00");
+        CHECK(HistoryUiValue({}, 6, 9999.996, 0) == L"USD 10.0K");
+        CHECK(HistoryUiValue({}, 7, 1240, 0) == L"1240.00 credits");
+        CHECK(HistoryUiValue({}, 7, 25000, 0) == L"25.0K credits");
+        CHECK(HistoryUiHours({}, 166 * double(kHourMs)) == L"166 h");
+        CHECK(HistoryUiHours({}, 0.4 * double(kHourMs)) == L"0.4 h");
+        CHECK(HistoryUiHours({}, 23.2 * double(kHourMs)) == L"23.2 h");
+        CHECK(HistoryUiHours({}, 165.96 * double(kHourMs)) == L"166 h");
+        CHECK(HistoryUiHours({}, 0.04 * double(kHourMs)) == L"0 h");
+        CHECK(HistoryUiHours({}, 0) == L"0 h");
+        CHECK(HistoryUiHours({}, 87600 * double(kHourMs)) == L"87600 h");
     });
 
     Run("history cards: one account's headline, peak, coverage and time at the red threshold; "
@@ -407,7 +408,7 @@ static void RunHistoryViewTests() {
         h.view = HistoryView::ExtraUsage;
         HistoryUiView all = TestCards(h);
         CHECK(all.cards.size() == 1 && all.cards[0].title == L"Work \u00B7 AI credits");
-        CHECK(HistoryUiProviderName(4) == std::wstring_view(L"GitHub Copilot"));
+        CHECK(HistoryUiProviderName({}, 4) == std::wstring_view(L"GitHub Copilot"));
         HistoryUiView branded;
         branded.logoBrands = {true, true};
         std::vector<UiShapePart> logo = HistoryUiLogo(branded, 4, true);
@@ -449,8 +450,8 @@ static void RunHistoryViewTests() {
         h.samples.clear();
         HistoryUiView empty = TestCards(h);
         CHECK(empty.cards.empty() && empty.noReadings.size() == 1 && empty.noReadings[0].detail == L"OpenCode Go");
-        CHECK(HistoryUiProviderName(5) == std::wstring_view(L"OpenCode Go"));
-        CHECK(HistoryUiProviderName(6) == std::wstring_view(L"Unknown provider"));
+        CHECK(HistoryUiProviderName({}, 5) == std::wstring_view(L"OpenCode Go"));
+        CHECK(HistoryUiProviderName({}, 6) == std::wstring_view(L"Unknown provider"));
         HistoryUiView branded;
         branded.logoBrands = {true, true};
         std::vector<UiShapePart> logo = HistoryUiLogo(branded, 5, true);

@@ -8,6 +8,7 @@
 static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std::vector<UiItem>& items,
                                    uint32_t& id, float x, float y, float width, float viewHeight) {
     const bool hc = view.theme == UiThemeKind::HighContrast, light = view.theme == UiThemeKind::Light;
+    const I18nLocale& locale = view.locale;
     auto text = [&](D2D1_RECT_F rect, std::vector<UiRun> runs, UiFont font, UiInk ink, bool trim) {
         UiItem item;
         item.id = id++;
@@ -44,9 +45,11 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
     }
     if (!view.recordingEnabled) {
         y = UiAddInfoBar(g, items, id, id++, x, y, width,
-                         {{L"History recording is off. Saved history stays; nothing new is recorded."}},
+                         {{I18nText(locale, Tr(L"History recording is off. Saved history stays; nothing new is "
+                                               L"recorded."))}},
                          UiSeverity::Caution,
-                         UiInfoButton{kHistoryUiEnableRecording, L"Enable recording",
+                         UiInfoButton{kHistoryUiEnableRecording,
+                                      I18nText(locale, TrCtx(L"button", L"Enable recording")),
                                       HistoryUiAction(HistoryUiCommand::EnableRecording),
                                       view.canEnableRecording && !view.exporting}) + 10;
     }
@@ -54,25 +57,29 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
         y = UiAddInfoBar(g, items, id, id++, x, y, width, {{view.storageError}}, UiSeverity::Error) + 10;
     }
     if (view.storageCapped) {
-        y = UiAddInfoBar(g, items, id, id++, x, y, width, {{L"Storage cap reached; oldest samples were pruned."}},
+        y = UiAddInfoBar(g, items, id, id++, x, y, width,
+                         {{I18nText(locale, Tr(L"Storage cap reached; oldest samples were pruned."))}},
                          UiSeverity::Caution) + 10;
     }
     if (view.selected >= 0 && size_t(view.selected) < view.accounts.size()) {
         const HistoryUiViewAccount& account = view.accounts[size_t(view.selected)];
         if (account.removed) {
             y = UiAddInfoBar(g, items, id, id++, x, y, width,
-                             {{L"This account was removed. Its saved history stays until it expires or is deleted."}},
+                             {{I18nText(locale, Tr(L"This account was removed. Its saved history stays until it "
+                                                   L"expires or is deleted."))}},
                              UiSeverity::Info,
-                             UiInfoButton{kHistoryUiDeleteHistory, L"Delete history\u2026",
+                             UiInfoButton{kHistoryUiDeleteHistory,
+                                          I18nText(locale, TrCtx(L"button", L"Delete history\u2026")),
                                           HistoryUiAction(HistoryUiCommand::DeleteHistory, 0, account.historyId),
                                           !view.exporting}) + 10;
         } else if (view.recordingEnabled && (account.recordingOff || account.paused)) {
             y = UiAddInfoBar(g, items, id, id++, x, y, width,
                              {{account.recordingOff ?
-                                   L"Recording is off for this account. Its saved history stays; turn on Record "
-                                   L"history in Settings > Accounts to record new polls." :
-                                   L"Recording is paused for this account: it is hidden from the taskbar, and hidden "
-                                   L"accounts are not polled."}}) + 10;
+                                   I18nText(locale, Tr(L"Recording is off for this account. Its saved history stays; "
+                                                       L"turn on Record history in Settings > Accounts to record new "
+                                                       L"polls.")) :
+                                   I18nText(locale, Tr(L"Recording is paused for this account: it is hidden from the "
+                                                       L"taskbar, and hidden accounts are not polled."))}}) + 10;
         }
     }
 
@@ -83,14 +90,14 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
     // no legend. Without a chart, a message instead (a shorter card): the first load, no accounts,
     // a view no account supports.
     float plot = std::clamp(viewHeight - 212, 200.0f, 300.0f), height = plot + 40;
-    PCWSTR message = view.loading                                     ? L"Loading local history\u2026" :
-                     view.accounts.empty()                            ? L"No accounts to display." :
-                     view.cards.empty() && view.noReadings.empty() ?
-                         (view.selected >= 0 ? L"This account has no meters in this view." :
-                                               L"No accounts support this view.") : nullptr;
+    std::wstring message = view.loading ? I18nText(locale, Tr(L"Loading local history\u2026")) :
+                           view.accounts.empty() ? I18nText(locale, Tr(L"No accounts to display.")) :
+                           !view.cards.empty() || !view.noReadings.empty() ? std::wstring() :
+                           view.selected >= 0 ? I18nText(locale, Tr(L"This account has no meters in this view.")) :
+                                                I18nText(locale, Tr(L"No accounts support this view."));
     size_t graphCard = items.size();
     panel({x, y, x + width, y + height});
-    if (!message) {
+    if (message.empty()) {
         // A chip: 1 DIP border, 10 DIP padding, its 18 DIP swatch and 7 DIP gap, the 12.5 DIP name.
         float left = x + 15, right = x + width - 15, top = y + 11;
         UiTextStyle name{UiFamily::Text, 12.5f, 16, DWRITE_FONT_WEIGHT_NORMAL};
@@ -110,9 +117,11 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
             chip.selected = !line.hidden;
             chip.action = HistoryUiAction(HistoryUiCommand::Line, line.meter, line.historyId);
             chip.tooltip = {{line.title, UiRunStyle::Strong},
-                            {view.compare ? L"\nSolid / filled: current week. Dashed / hollow: previous week. Click to "
-                                            L"hide or show this line." :
-                                            L"\nSolid / filled: current range. Click to hide or show this line.",
+                            {L"\n" + (view.compare ? I18nText(locale, Tr(L"Solid / filled: current week. Dashed / "
+                                                                         L"hollow: previous week. Click to hide or "
+                                                                         L"show this line.")) :
+                                                     I18nText(locale, Tr(L"Solid / filled: current range. Click to "
+                                                                         L"hide or show this line."))),
                              UiRunStyle::Normal, UiInk::Secondary}};
             items.push_back(std::move(chip));
             cx += chipWidth + 6;
@@ -120,8 +129,9 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
         if (!view.lines.empty()) {
             top += 24 + 4;
             text({left + 2, top, right, top + 16},
-                 {{view.compare ? L"Solid: current \u00B7 Dashed: previous" : L"Solid: current"}}, UiFont::Caption,
-                 UiInk::Muted, true);
+                 {{I18nText(locale, view.compare ? TrCtx(L"chart-key", L"Solid: current \u00B7 Dashed: previous") :
+                                                   TrCtx(L"chart-key", L"Solid: current"))}},
+                 UiFont::Caption, UiInk::Muted, true);
             top += 16 + 4;
         }
         UiItem chart;
@@ -168,7 +178,8 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
             float cx = x + (cardWidth + 8) * float(i - first), left = cx + 13, right = cx + cardWidth - 13;
             panel({cx, y, cx + cardWidth, y + rowHeight});
             if (i == view.cards.size()) {
-                text({left, y + 11, right, y + 27}, {{L"No readings in range"}}, UiFont::Caption, UiInk::Primary, true);
+                text({left, y + 11, right, y + 27}, {{I18nText(locale, TrCtx(L"history-card", L"No readings in range"))}},
+                     UiFont::Caption, UiInk::Primary, true);
                 float row = y + 31;
                 for (const HistoryUiNoReadings& entry : view.noReadings) {
                     if (std::vector<UiShapePart> logo = HistoryUiLogo(view, entry.provider, true); !logo.empty()) {
@@ -197,8 +208,17 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
                 shape({left, y + 15, left + 16, y + 23}, 16, {line});
                 titleLeft = left + 24;
             }
+            // The account's recording status muted after the title: the template's `status` link
+            // marks it.
             std::vector<UiRun> title{{card.title}};
-            if (!card.status.empty()) title.push_back({L" \u00B7 " + card.status, UiRunStyle::Normal, UiInk::Muted});
+            if (!card.status.empty()) {
+                title.clear();
+                for (const I18nRun& run : I18nRuns(locale, TrCtx(L"history-card", L"{title}<link id=\"status\"> \u00B7 "
+                                                                                  L"{status}</link>"),
+                                                   {{L"title", card.title}, {L"status", card.status}})) {
+                    title.push_back(run.link.empty() ? UiRun{run.text} : UiRun{run.text, UiRunStyle::Normal, UiInk::Muted});
+                }
+            }
             text({titleLeft, y + 11, right, y + 27}, std::move(title), UiFont::Caption, UiInk::Primary, true);
             float lineTop = y + 31;
             if (!card.value.empty()) {

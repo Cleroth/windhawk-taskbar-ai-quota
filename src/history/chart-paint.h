@@ -4,16 +4,18 @@
 // (UiGraphics); brushes and colored layouts live in the surface's cache.
 
 // Paints the chart item or one of its legend chips, the emphasis from the paint state and the
-// chart's picks (HistoryChartEmphasis), or the progress of an export that wrote `exported` rows.
+// chart's picks (HistoryChartEmphasis), or the progress of an export that wrote `exported` rows in
+// the frame's language.
 static void HistoryUiPaintCustom(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache& cache, const UiPalette& p,
-                                 const HistoryChart& chart, const std::vector<size_t>& picked, size_t exported,
-                                 const UiItem& item, const UiPaintState& state, float scale) {
+                                 const HistoryChart& chart, const std::vector<size_t>& picked,
+                                 const I18nLocale& locale, size_t exported, const UiItem& item,
+                                 const UiPaintState& state, float scale) {
     // The progress (s-states .upd): its line in the item's font, muted, after a 16 DIP ring and 6
     // DIP gap, at the item's leading or trailing end, centered on it vertically.
     if (item.id == kHistoryUiProgress) {
         const bool hc = p.kind == UiThemeKind::HighContrast;
         UiTextStyle style = UiTextStyleFor(item.font);
-        IDWriteTextLayout* layout = UiLayout(g, HistoryUiProgressText(exported), style, 10000, false);
+        IDWriteTextLayout* layout = UiLayout(g, HistoryUiProgressText(locale, exported), style, 10000, false);
         float width = std::ceil(UiLayoutSize(layout).width), middle = (item.rect.top + item.rect.bottom) / 2;
         float x = item.align == DWRITE_TEXT_ALIGNMENT_TRAILING ? item.rect.right - width - 22 : item.rect.left;
         UiDrawLayout(target, cache, layout, {x + 22, middle - style.lineHeight / 2}, p.textMuted);

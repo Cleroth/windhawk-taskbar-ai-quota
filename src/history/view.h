@@ -3,7 +3,9 @@
 // cards built from a series set (history/series.h). Pure.
 
 // Range segments, by HistoryUiRange (core/model.h).
-static constexpr PCWSTR kHistoryUiRangeNames[] = {L"24h", L"7d", L"30d", L"90d", L"All"};
+static constexpr I18nKey kHistoryUiRangeNames[] = {TrCtx(L"history-range", L"24h"), TrCtx(L"history-range", L"7d"),
+                                                   TrCtx(L"history-range", L"30d"), TrCtx(L"history-range", L"90d"),
+                                                   TrCtx(L"history-range", L"All")};
 
 // The header's status pill: Recording (with the retention), Waiting (recording on while the
 // taskbar hasn't saved account IDs yet or no sample is in range), Not saving (a storage error),
@@ -145,10 +147,12 @@ static UiAction HistoryUiAction(HistoryUiCommand command, int value = 0, uint64_
     return {UiActionKind::Command, value, {}, uint32_t(command), key};
 }
 
-static PCWSTR HistoryUiProviderName(uint32_t provider) {
-    return provider == 1 ? L"Anthropic" : provider == 2 ? L"OpenAI" :
-           provider == 3 ? L"Google Antigravity" : provider == 4 ? L"GitHub Copilot" :
-           provider == 5 ? L"OpenCode Go" : L"Unknown provider";
+// A provider's brand name (English in every language), or an unknown one's description.
+static std::wstring HistoryUiProviderName(const I18nLocale& locale, uint32_t provider) {
+    if (provider < 1 || provider > 5) return I18nText(locale, TrCtx(L"history-provider", L"Unknown provider"));
+    return provider == 1 ? L"Anthropic" : provider == 2 ? L"OpenAI" :              // i18n-en
+           provider == 3 ? L"Google Antigravity" : provider == 4 ? L"GitHub Copilot" :  // i18n-en
+                           L"OpenCode Go";                                          // i18n-en
 }
 
 // A provider's logo (taskbar/logo-paths.h, 24 DIP view box) in the primary ink, or in its brand
@@ -243,19 +247,21 @@ static std::wstring HistoryUiCount(size_t count) {
 }
 
 // An export's progress line: `Exporting 12,345 rows…`. Digits are tabular: a count's width
-// bounds every smaller one's.
-static std::wstring HistoryUiProgressText(size_t rows) {
-    return L"Exporting " + HistoryUiCount(rows) + L" rows\u2026";
+// bounds every smaller one's in a language whose plural forms are as wide.
+static std::wstring HistoryUiProgressText(const I18nLocale& locale, size_t rows) {
+    return I18nText(locale, TrCtx(L"history-export", L"{rows, plural, one{Exporting {count} rows\u2026} "
+                                                     L"other{Exporting {count} rows\u2026}}"),
+                    {{L"rows", rows}, {L"count", HistoryUiCount(rows)}});
 }
 
 // Hours to a tenth without a trailing zero: `166 h`, `0.4 h`.
-static std::wstring HistoryUiHours(double ms) {
+static std::wstring HistoryUiHours(const I18nLocale& locale, double ms) {
     char text[32];
     auto [end, error] = std::to_chars(text, text + sizeof(text), ms / 3600000.0, std::chars_format::fixed, 1);
-    if (error != std::errc{}) return L"? h";
-    std::string_view printed(text, end);
+    std::string_view printed = error != std::errc{} ? "?" : std::string_view(text, end);
     if (printed.ends_with(".0")) printed.remove_suffix(2);
-    return std::wstring(printed.begin(), printed.end()) + L" h";
+    return I18nText(locale, TrCtx(L"hours-value", L"{hours} h"),
+                    {{L"hours", std::wstring(printed.begin(), printed.end())}});
 }
 
 // A recorded value as the window shows it: in the Remaining bar mode a percentage's share left
@@ -266,10 +272,14 @@ static double HistoryUiShown(int meter, double value, bool remaining) {
 }
 
 // A meter's value with its unit: percentages with `percentDecimals` places (cards whole, the
-// readout and shares one), dollars and credits with two.
-static std::wstring HistoryUiValue(int meter, double value, int percentDecimals) {
+// readout and shares one), dollars and credits with two. Dollars keep their currency code and
+// percentages their sign in every language.
+static std::wstring HistoryUiValue(const I18nLocale& locale, int meter, double value, int percentDecimals) {
     if (meter == 6) return L"USD " + HistoryUiNumber(value, 2);
-    if (meter == 7) return HistoryUiNumber(value, 2) + L" credits";
+    if (meter == 7) {
+        return I18nText(locale, TrCtx(L"credits-amount", L"{amount} credits"),
+                        {{L"amount", HistoryUiNumber(value, 2)}});
+    }
     return HistoryUiNumber(value, percentDecimals) + L"%";
 }
 
@@ -284,10 +294,12 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
                               ULONGLONG now, const HistoryUiLocalTime& localTime) {
     view.cards.clear();
     view.noReadings.clear();
+    const I18nLocale& locale = view.locale;
     auto status = [&](size_t account) -> std::wstring {
         const HistoryUiViewAccount& a = view.accounts[account];
         if (a.removed || !view.recordingEnabled) return {};
-        return a.recordingOff ? L"recording off" : a.paused ? L"paused" : L"";
+        return a.recordingOff ? I18nText(locale, TrCtx(L"history-account-status", L"recording off")) :
+               a.paused       ? I18nText(locale, TrCtx(L"history-account-status", L"paused")) : std::wstring();
     };
     double duration = double(to > from ? to - from : 0);
     size_t previousAccount = SIZE_MAX;
@@ -295,45 +307,66 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
         if (series.account >= view.accounts.size()) continue;
         const HistoryUiViewAccount& account = view.accounts[series.account];
         HistoryUiCard card;
-        card.title = series.legendTitle;
-        if (!series.plotted) card.title += L" \u2014 details only";
+        card.title = series.plotted ? series.legendTitle :
+                                      I18nText(locale, TrCtx(L"history-card", L"{title} \u2014 details only"),
+                                               {{L"title", series.legendTitle}});
         if (view.selected < 0 && series.account != previousAccount) card.status = status(series.account);
         previousAccount = series.account;
         card.color = series.color;
         card.detailsOnly = !series.plotted;
         const bool left = view.remaining && series.meter < 6;
         auto shown = [&](double value) {
-            return HistoryUiValue(series.meter, HistoryUiShown(series.meter, value, left), 0);
+            return HistoryUiValue(locale, series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
         auto reading = [&](double value, ULONGLONG time) {
-            return shown(value) + L" \u00B7 " + HistoryUiTime(view.locale, time, now, localTime);
+            return I18nText(locale, TrCtx(L"history-reading", L"{value} \u00B7 {time}"),
+                            {{L"value", shown(value)}, {L"time", HistoryUiTime(locale, time, now, localTime)}});
         };
-        const PCWSTR peak = left ? L"Lowest " : L"Peak ";
+        auto peak = [&](const std::wstring& text) {
+            return I18nText(locale, left ? TrCtx(L"history-card", L"Lowest {reading}") :
+                                           TrCtx(L"history-card", L"Peak {reading}"),
+                            {{L"reading", text}});
+        };
         const HistoryStatistics& current = series.current;
         if (current.hasValue) {
             card.value = shown(current.latest);
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
-            card.when = latestPoll ? L"now" : HistoryUiTime(view.locale, current.latestTime, now, localTime);
+            card.when = latestPoll ? I18nText(locale, TrCtx(L"history-card", L"now")) :
+                                     HistoryUiTime(locale, current.latestTime, now, localTime);
         }
-        // Per period (comparing: current, then previous, each first line prefixed). The headline
+        // Per period (comparing: current, then previous, each first line naming it). The headline
         // holds the current period's last dollar reading.
         for (int period = 0; period < (view.compare ? 2 : 1); period++) {
             const HistoryStatistics& stats = period ? series.previous : series.current;
-            std::wstring prefix = !view.compare ? L"" : period ? L"Previous: " : L"Current: ";
-            auto line = [&](std::wstring text) { card.lines.push_back(std::exchange(prefix, {}) + text); };
+            bool named = !view.compare;
+            auto line = [&](std::wstring text) {
+                if (!std::exchange(named, true)) {
+                    text = I18nText(locale, period ? TrCtx(L"history-card", L"Previous: {line}") :
+                                                     TrCtx(L"history-card", L"Current: {line}"),
+                                    {{L"line", text}});
+                }
+                card.lines.push_back(std::move(text));
+            };
             if (!stats.hasValue) {
-                line(series.plotted ? std::wstring(peak) + L"\u2014" : L"No dollar readings in this period.");
+                line(series.plotted ? peak(L"\u2014") :
+                                      I18nText(locale, TrCtx(L"history-card", L"No dollar readings in this period.")));
                 continue;
             }
-            if (!series.plotted && period) line(L"Last recorded spend: " + reading(stats.latest, stats.latestTime));
-            line(peak + reading(stats.peak, stats.peakTime));
+            if (!series.plotted && period) {
+                line(I18nText(locale, TrCtx(L"history-card", L"Last recorded spend: {reading}"),
+                              {{L"reading", reading(stats.latest, stats.latestTime)}}));
+            }
+            line(peak(reading(stats.peak, stats.peakTime)));
             if (!series.plotted) continue;
-            line(L"Coverage " + HistoryUiHours(stats.coverageMs) + L" (" +
-                 HistoryUiNumber(duration > 0 ? 100 * stats.coverageMs / duration : 0, 1) + L"%)");
+            line(I18nText(locale, TrCtx(L"history-card", L"Coverage {hours} ({percent}%)"),
+                          {{L"hours", HistoryUiHours(locale, stats.coverageMs)},
+                           {L"percent", HistoryUiNumber(duration > 0 ? 100 * stats.coverageMs / duration : 0, 1)}}));
             if (series.meter < 6) {
-                line((left ? L"Est. \u2264" + std::to_wstring(100 - set.redThreshold) :
-                             L"Est. \u2265" + std::to_wstring(set.redThreshold)) + L"%: " +
-                     (stats.coverageMs ? HistoryUiHours(stats.nearLimitMs) : L"\u2014"));
+                std::wstring hours = stats.coverageMs ? HistoryUiHours(locale, stats.nearLimitMs) : L"\u2014";
+                line(left ? I18nText(locale, TrCtx(L"history-card", L"Est. \u2264{threshold}%: {hours}"),
+                                     {{L"threshold", 100 - set.redThreshold}, {L"hours", hours}}) :
+                            I18nText(locale, TrCtx(L"history-card", L"Est. \u2265{threshold}%: {hours}"),
+                                     {{L"threshold", set.redThreshold}, {L"hours", hours}}));
             }
         }
         view.cards.push_back(std::move(card));
@@ -342,8 +375,10 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
     // Accounts without readings, in account order.
     for (size_t i : set.noReadingAccounts) {
         if (i >= view.accounts.size()) continue;
-        std::wstring detail = HistoryUiProviderName(view.accounts[i].provider);
-        if (std::wstring s = status(i); !s.empty()) detail += L" \u00B7 " + s;
+        std::wstring provider = HistoryUiProviderName(locale, view.accounts[i].provider), recording = status(i);
+        std::wstring detail = recording.empty() ? provider :
+                              I18nText(locale, TrCtx(L"history-account", L"{provider} \u00B7 {recording}"),
+                                       {{L"provider", provider}, {L"recording", recording}});
         view.noReadings.push_back({view.accounts[i].provider, view.accounts[i].label, std::move(detail)});
     }
 }

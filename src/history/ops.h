@@ -78,23 +78,30 @@ struct HistoryProductionOps final : HistoryOps {
         return true;
     }
 
-    int Ask(const std::wstring& text, PCWSTR caption, UINT type) override {
+    int Ask(const std::wstring& text, const std::wstring& caption, UINT type) override {
         UiHostClosePopup(*host);
         HistoryDialogScope scope(dialogs);
-        return scope.hook ? MessageBoxW(host->main, text.c_str(), caption, type) : 0;
+        return scope.hook ? MessageBoxW(host->main, text.c_str(), caption.c_str(), type) : 0;
     }
 
-    // The export's save dialog; its overwrite prompt runs in the same scope.
-    HistoryDestination ChooseDestination(const std::wstring& title) override {
+    // The export's save dialog; its overwrite prompt runs in the same scope. Its file types: each
+    // a label in `locale`'s language and a pattern, both NUL-terminated; an empty one ends them.
+    HistoryDestination ChooseDestination(const std::wstring& title, const I18nLocale& locale) override {
         UiHostClosePopup(*host);
         HistoryDialogScope scope(dialogs);
         if (!scope.hook) return {};
-        std::wstring path = L"ai-quota-history.csv";
+        std::wstring path = L"ai-quota-history.csv";  // i18n-en
         path.resize(32768);
+        std::wstring filter;
+        for (auto [label, pattern] : {std::pair{TrCtx(L"file-type", L"CSV files (*.csv)"), L"*.csv"},
+                                      std::pair{TrCtx(L"file-type", L"All files (*.*)"), L"*.*"}}) {
+            filter += I18nText(locale, label) + L'\0' + pattern + L'\0';
+        }
+        filter += L'\0';
         OPENFILENAMEW picker{};
         picker.lStructSize = sizeof(picker);
         picker.hwndOwner = host->main;
-        picker.lpstrFilter = L"CSV files (*.csv)\0*.csv\0All files (*.*)\0*.*\0\0";
+        picker.lpstrFilter = filter.c_str();
         picker.lpstrFile = path.data();
         picker.nMaxFile = DWORD(path.size());
         picker.lpstrDefExt = L"csv";
