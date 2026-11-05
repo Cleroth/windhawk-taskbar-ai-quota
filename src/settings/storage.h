@@ -123,7 +123,7 @@ static bool NormalizeSettings(Settings* s) {
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
-    if (s->barLayout < BarLayout::Stacked || s->barLayout > kLastBarLayout) {
+    if (s->barLayout < BarLayout::Sparkline || s->barLayout > kLastBarLayout) {
         s->barLayout = BarLayout::Stacked;
     }
     if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {

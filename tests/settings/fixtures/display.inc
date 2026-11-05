@@ -416,8 +416,9 @@ static void RunDisplayPageTests() {
 
     Run("display page: bar-only rows disable for tile styles; hidden text disables alignment and amounts", [] {
         SettingsView view = TestView(SettingsUiPage::Display);
-        for (int style = 2; style < 5; style++) {
-            view.settings.barLayout = BarLayout(style);
+        for (BarLayout layout : {BarLayout::Sparkline, BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
+            const int style = int(layout);
+            view.settings.barLayout = layout;
             UiFrame frame = DisplayFrame(view);
             CHECK(Control(frame, SettingsField::BarMode).enabled);
             for (SettingsField field : {SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,

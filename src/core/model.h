@@ -40,9 +40,9 @@ enum class TaskbarMonitorMode {
 
 // Tile styles, in the gallery's order.
 enum class BarLayout {
+    Sparkline,      // Each quota's burn-up over its window side by side, the identity beside.
     Stacked,
     Vertical,
-    Sparkline,      // Each quota's burn-up over its window side by side, the identity beside.
     SegmentedRing,
     ConcentricRings,
     Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.

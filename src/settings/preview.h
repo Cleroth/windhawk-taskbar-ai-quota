@@ -147,7 +147,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         accounts = {accounts[1], accounts[2]};
         data = {data[1], data[2]};
     }
-    const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Stacked),
+    const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Sparkline),
                                                   int(kLastBarLayout)));
     const float H = gallery ? 48 : float(std::clamp(taskbarHeight > 0 ? taskbarHeight : 48.0, 24.0, 96.0));
     const float margin = float(std::clamp(settings.accountMargin, 0, 500));

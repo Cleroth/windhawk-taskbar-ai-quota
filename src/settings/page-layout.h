@@ -3,7 +3,7 @@
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Usage graph",
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Usage graph",    L"Stacked bars",     L"Vertical bars",
                                                  L"Segmented ring", L"Concentric rings", L"Gauge %",
                                                  L"Clock pies",     L"Rounded square",   L"Headline %",
                                                  L"Quota matrix"};

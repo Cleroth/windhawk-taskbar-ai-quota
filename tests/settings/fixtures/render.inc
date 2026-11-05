@@ -612,7 +612,7 @@ static void RunRenders(const std::wstring& directory) {
         auto path = [&](const std::string& name) {
             return directory + L"\\" + std::wstring(name.begin(), name.end());
         };
-        static constexpr const char* kStyleNames[] = {"stacked", "vertical", "spark",    "ring",     "concentric",
+        static constexpr const char* kStyleNames[] = {"spark",   "stacked",  "vertical", "ring",     "concentric",
                                                       "gauge",   "pies",     "square",   "headline", "matrix"};
         for (const RenderTheme& theme : RenderThemes()) {
             for (UINT dpi : {96u, 144u, 192u}) {
@@ -636,7 +636,7 @@ static void RunRenders(const std::wstring& directory) {
                 }
                 // Layout with each tile style (every DPI for stacked bars and the segmented ring).
                 for (int style = 0; style < int(std::size(kStyleNames)); style++) {
-                    if (dpi != 144 && style != 0 && style != 3) continue;
+                    if (dpi != 144 && style != int(BarLayout::Stacked) && style != int(BarLayout::SegmentedRing)) continue;
                     std::string name = std::string("render-layout-") + kStyleNames[style] + "-" + theme.name +
                                        "-" + std::to_string(dpi) + ".png";
                     Run(name, [&] {

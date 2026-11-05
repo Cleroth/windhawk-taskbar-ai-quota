@@ -233,9 +233,9 @@ enum class TaskbarMonitorMode {
 
 // Tile styles, in the gallery's order.
 enum class BarLayout {
+    Sparkline,      // Each quota's burn-up over its window side by side, the identity beside.
     Stacked,
     Vertical,
-    Sparkline,      // Each quota's burn-up over its window side by side, the identity beside.
     SegmentedRing,
     ConcentricRings,
     Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
@@ -18604,7 +18604,7 @@ static bool NormalizeSettings(Settings* s) {
     s->labelGap = std::clamp(s->labelGap, 0, 500);
     s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
-    if (s->barLayout < BarLayout::Stacked || s->barLayout > kLastBarLayout) {
+    if (s->barLayout < BarLayout::Sparkline || s->barLayout > kLastBarLayout) {
         s->barLayout = BarLayout::Stacked;
     }
     if (s->barStyle < BarStyle::Track || s->barStyle > BarStyle::Rail) {
@@ -20143,7 +20143,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.historyDefaultRange = HistoryUiRange(std::clamp(value, int(HistoryUiRange::Day), int(HistoryUiRange::All)));
             break;
         case SettingsField::BarLayout:
-            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(kLastBarLayout)));
+            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Sparkline), int(kLastBarLayout)));
             break;
         case SettingsField::BarStyle:
             s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
@@ -21482,7 +21482,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         accounts = {accounts[1], accounts[2]};
         data = {data[1], data[2]};
     }
-    const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Stacked),
+    const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Sparkline),
                                                   int(kLastBarLayout)));
     const float H = gallery ? 48 : float(std::clamp(taskbarHeight > 0 ? taskbarHeight : 48.0, 24.0, 96.0));
     const float margin = float(std::clamp(settings.accountMargin, 0, 500));
@@ -22827,7 +22827,7 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 // shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
-static constexpr PCWSTR kSettingsTileStyles[] = {L"Stacked bars",   L"Vertical bars",    L"Usage graph",
+static constexpr PCWSTR kSettingsTileStyles[] = {L"Usage graph",    L"Stacked bars",     L"Vertical bars",
                                                  L"Segmented ring", L"Concentric rings", L"Gauge %",
                                                  L"Clock pies",     L"Rounded square",   L"Headline %",
                                                  L"Quota matrix"};

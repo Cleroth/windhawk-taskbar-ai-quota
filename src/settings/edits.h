@@ -296,7 +296,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.historyDefaultRange = HistoryUiRange(std::clamp(value, int(HistoryUiRange::Day), int(HistoryUiRange::All)));
             break;
         case SettingsField::BarLayout:
-            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Stacked), int(kLastBarLayout)));
+            s.barLayout = BarLayout(std::clamp(value, int(BarLayout::Sparkline), int(kLastBarLayout)));
             break;
         case SettingsField::BarStyle:
             s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));

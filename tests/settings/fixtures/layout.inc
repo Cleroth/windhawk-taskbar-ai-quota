@@ -2522,17 +2522,18 @@ static void RunLayoutTests() {
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         // Ten gallery cards, three a row: the tile styles in BarLayout order.
-        const PCWSTR styles[] = {L"Stacked bars",     L"Vertical bars", L"Usage graph", L"Segmented ring",
-                                 L"Concentric rings", L"Gauge %",       L"Clock pies",  L"Rounded square",
+        const PCWSTR styles[] = {L"Usage graph",      L"Stacked bars", L"Vertical bars", L"Segmented ring",
+                                 L"Concentric rings", L"Gauge %",      L"Clock pies",    L"Rounded square",
                                  L"Headline %",       L"Quota matrix"};
         for (int i = 0; i < 10; i++) {
             const UiItem& card = Control(frame, SettingsField::BarLayout, uint32_t(i));
-            CHECK(card.kind == UiItemKind::Gallery && card.selected == (i == 0) && card.action.value == i);
+            CHECK(card.kind == UiItemKind::Gallery && card.selected == (i == int(BarLayout::Stacked)) &&
+                  card.action.value == i);
             CHECK(card.text == styles[i]);
         }
         CHECK(std::count_if(frame.content.begin(), frame.content.end(),
                             [](const UiItem& item) { return item.kind == UiItemKind::Gallery; }) == 10);
-        CHECK(std::size(kSettingsTileStyles) == 10 && int(BarLayout::Sparkline) == 2 &&
+        CHECK(std::size(kSettingsTileStyles) == 10 && int(BarLayout::Sparkline) == 0 && int(BarLayout::Stacked) == 1 &&
               int(BarLayout::ConcentricRings) == 4 && int(BarLayout::Gauge) == 5 && int(BarLayout::ClockPies) == 6 &&
               int(BarLayout::LogoHeadline) == 8 && int(kLastBarLayout) == 9);
         const UiItem& first = Control(frame, SettingsField::BarLayout, 0);
@@ -2856,7 +2857,7 @@ static void RunLayoutTests() {
         view.settings.barLayout = BarLayout::Sparkline;
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        CHECK(Control(frame, SettingsField::BarLayout, 2).selected && !Control(frame, SettingsField::BarLayout, 0).selected);
+        CHECK(Control(frame, SettingsField::BarLayout, 0).selected && !Control(frame, SettingsField::BarLayout, 1).selected);
         CHECK(section(frame, L"Usage graph") && section(frame, L"Current position") && section(frame, L"Identity") &&
               section(frame, L"Pace markers") && section(frame, L"Spacing") && !section(frame, L"Matrix") &&
               !section(frame, L"Ring") && !section(frame, L"Headline") && !section(frame, L"Bars"));
