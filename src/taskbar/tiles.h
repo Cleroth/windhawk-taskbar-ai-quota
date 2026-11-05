@@ -97,9 +97,31 @@ static void UpdateHoverSpans(QuotaUiInstance& state) {
     if (state.buildSparkHoverSwap && state.sparkSwapIndex != state.flyout.hoverIndex) UpdateQuotaUi(state);
 }
 
-// Text width per DIP of font size, measured out of the tree; estimated if measuring fails.
-static double TileTextWidthPerPt(TextBlock const& text) {
+// Gives our XAML the frame's language, which picks its font fallback and shaping (Han glyph forms
+// above all). English leaves the language Explorer's tree passes down, so labels and provider text
+// in the user's own language render as they always have.
+static void SetXamlLanguage(FrameworkElement const& element, I18nLocale const& locale) {
+    if (locale != I18nLocale()) element.Language(winrt::hstring(locale.LocaleName()));
+}
+
+// A tooltip in the frame's language: a ToolTip of its own carries it; English keeps the plain text
+// value, as SetXamlLanguage leaves it.
+static void SetXamlToolTip(DependencyObject const& element, std::wstring const& text, I18nLocale const& locale) {
+    if (locale == I18nLocale()) {
+        ToolTipService::SetToolTip(element, winrt::box_value(text));
+        return;
+    }
+    ToolTip tip;
+    tip.Content(winrt::box_value(text));
+    SetXamlLanguage(tip, locale);
+    ToolTipService::SetToolTip(element, tip);
+}
+
+// Text width per DIP of font size, measured out of the tree in the frame's language, which the
+// tree won't pass down there; estimated if measuring fails.
+static double TileTextWidthPerPt(TextBlock const& text, I18nLocale const& locale) {
     try {
+        SetXamlLanguage(text, locale);
         text.Measure({INFINITY, INFINITY});
         double width = text.DesiredSize().Width;
         if (width > 0 && text.FontSize() > 0) return width / text.FontSize();
@@ -199,7 +221,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         tile.text.TextLineBounds(TextLineBounds::Tight);
         tile.text.HorizontalAlignment(HorizontalAlignment::Center);
         tile.text.VerticalAlignment(VerticalAlignment::Center);
-        tile.textWidthPerPt = TileTextWidthPerPt(tile.text);
+        tile.textWidthPerPt = TileTextWidthPerPt(tile.text, display.locale);
         if (!ring) {
             // Shrinks to fit 26 DIPs, then clips.
             tile.text.FontSize(std::clamp(26 / tile.textWidthPerPt, 8.0, 12.0));
@@ -434,25 +456,26 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     // The key follows the number; the row reserves "100%" and the widest key so the tile keeps
     // its width as values change.
     tile.headline.Text(L"100%");
-    double reserve = std::ceil(TileTextWidthPerPt(tile.headline) * fontSize) + 3;
+    double reserve = std::ceil(TileTextWidthPerPt(tile.headline, display.locale) * fontSize) + 3;
     tile.headline.Text(L"");
     double keyWidth = 0;
-    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-        tile.headlineKey.Text(key);
-        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey) * keySize);
+    for (I18nKey key : kQuotaKeys) {
+        tile.headlineKey.Text(I18nText(display.locale, key));
+        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey, display.locale) * keySize);
     }
     tile.headlineKey.Text(L"");
     numberRow.MinWidth(reserve + std::ceil(keyWidth));
     headline.Children().Append(numberRow);
     if (display.headlineCountdown) {
-        // Behind a reset arrow; reserves "00h 00m", so minute ticks keep the tile's width.
+        // Behind a reset arrow; reserves its hours-and-minutes form, so minute ticks keep the
+        // tile's width.
         tile.countdown = TextBlock{};
         tile.countdown.FontSize(keySize);
         tile.countdown.Opacity(0.7);
         tile.countdown.TextLineBounds(TextLineBounds::Tight);
         tile.countdown.HorizontalAlignment(HorizontalAlignment::Left);
-        tile.countdown.Text(kHeadlineCountdownReserve);
-        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown) * keySize));
+        tile.countdown.Text(HeadlineCountdownReserve(display.locale));
+        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown, display.locale) * keySize));
         tile.countdown.Text(L"");
         headline.Children().Append(tile.countdown);
     } else {
@@ -557,15 +580,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             TextBlock keyProbe, valueProbe;
             keyProbe.FontSize(meters.matrixKeyFont);
             double keyWidth = 0;
-            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-                keyProbe.Text(key);
-                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe) * meters.matrixKeyFont);
+            for (I18nKey key : kQuotaKeys) {
+                keyProbe.Text(I18nText(display.locale, key));
+                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe, display.locale) * meters.matrixKeyFont);
             }
             valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
             valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
             valueProbe.FontSize(meters.matrixFont);
             valueProbe.Text(L"100%");
-            double valueWidth = TileTextWidthPerPt(valueProbe) * meters.matrixFont;
+            double valueWidth = TileTextWidthPerPt(valueProbe, display.locale) * meters.matrixFont;
             int rows = 1, columns = 1;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!tile.matrixCells[w]) continue;

@@ -3,7 +3,9 @@
 Pure fragments (no globals, state, WinRT, registry or `Wh_Log`): `template.h` (grammar, plural
 rules), `catalog.h` (entry order), `lang-<tag>.h` (one catalog per language), `languages.h`
 (registry, pseudo-locale, explicit choice, Automatic match, `I18nLocale`), `pseudo.h`, `format.h`
-(keys, arguments, runs, fallback, lists). English is the source and has no catalog.
+(keys, arguments, runs, fallback, lists), `ui-runs.h` (runs as the toolkit's, after `ui/`).
+English is the source and has no catalog. The process's current language and the per-user
+preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Concurrency).
 
 ## Call forms
 
@@ -12,15 +14,25 @@ rules), `catalog.h` (entry order), `lang-<tag>.h` (one catalog per language), `l
   literals join, with nothing but whitespace between them. A malformed or empty English template,
   or an empty context, fails the build.
 - `I18nText(locale, key, {{L"name", value}, ...})`: plain text. `I18nRuns(...)`: runs, each plain,
-  bold or a link ID (never a bold link: bold around a link is dropped), which the UI maps to
-  `UiRun`s and actions; `I18nRunsText` joins them. `I18nList(locale,
+  bold or a link ID (never a bold link: bold around a link is dropped); `I18nUiRuns(runs,
+  {{L"id", action}, ...})` makes them `UiRun`s, each link bound to the action its ID names (an
+  unbound one plain), in the translation's order, which is the links' focus order;
+  `I18nRunsText` joins them. `I18nList(locale,
   items)`: items' runs joined by the catalog's list patterns (contexts `list-pair`, `list-start`,
   `list-middle`, `list-end`).
 - Arguments: text (inserted as is, never parsed), integers of any type (ASCII digits, `-` when
   negative, no grouping), or trusted runs (keep their bold and links, take the template's bold,
   and its link where they have none). Build them in the call: they refer to the caller's values.
   A missing one shows as `{name}`.
-- Pure code gets an `I18nLocale` (language, locale name) through its inputs, never a global.
+- Pure code gets an `I18nLocale` (language, locale name) through its inputs, never a global:
+  `SettingsView::locale`, `HistoryUiView::locale` (the controller takes it from
+  `HistoryOps::Locale`), `MeterDisplay::locale` (`MeterDisplayFor`'s), and the history formats'
+  `locale` parameter. The `ui/` toolkit gets only translated strings (toggle states, the
+  readout's hint) and `UiGraphics::locale`.
+- Account errors the mod authors are `AccountError` codes (`core/model.h`), with arguments in
+  fields and provider text in `detail`; `AccountErrorText` (`core/account-error.h`) formats them
+  for presentation in the reader's language, and for logs and their dedupe in English. Compare
+  codes, never text. `AccountErrorCode::Message` holds English text without a code of its own.
 - `I18nLanguageByTag` (explicit choice) reaches any language and `qps-ploc`;
   `I18nMatchLanguage` (Automatic) skips `inProgress` ones and never picks `qps-ploc`.
 - Intentional English literals (IDs, CSV, protocol text) carry `// i18n-en` on their line;

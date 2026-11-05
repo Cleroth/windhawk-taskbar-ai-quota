@@ -9,7 +9,7 @@
 // tints it as an info bar of that severity. Text: rich text wrapped to the rectangle's width,
 // or one line ellipsized at it (`trim`). Button: an optional glyph (`icon`) before its label,
 // centered alone without one; with options, a menu button whose activation opens them in the
-// popup. Toggle: selected = on; its label ("On"/"Off", or `text`) leads the
+// popup. Toggle: selected = on; its `text` (the state's, or a label) leads the
 // switch, or follows a leading switch when align is trailing. Dropdown: text = the chosen
 // option's label, action.value = its value; activating it opens the popup (ui/popup.h).
 // NumberBox: the drawn frame of a native text box (ui/text-box.h) showing `text`, centered
@@ -571,35 +571,44 @@ static float UiAddInfoBar(UiGraphics& g, std::vector<UiItem>& items, uint32_t& i
 // Controls placed in a card's trailing slot (mockup .ctl). Interactive controls take explicit
 // ids that stay the same across rebuilds: focus and native text boxes follow them.
 
-// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch. With a label
-// (history mockup .cmpt): the switch first, 8 DIP gap, the 13 DIP label; the label toggles too.
-static D2D1_SIZE_F UiToggleSize(UiGraphics& g, std::wstring_view label = {}) {
-    if (!label.empty()) {
-        return {40 + 8 + std::ceil(UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Note), 1000, false)).width),
-                32};
-    }
+// Toggle switch (mockup .tglwrap): its state's text (the client's "On" or "Off"; none when both
+// are empty), 12 DIP gap, a 40 x 20 DIP switch, as wide as either state needs. With a label
+// instead (history mockup .cmpt): the switch first, 8 DIP gap, the 13 DIP label; the label
+// toggles too.
+struct UiToggleText {
+    std::wstring on, off;
+};
+
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g, const UiToggleText& states) {
     UiTextStyle body = UiTextStyleFor(UiFont::Body);
-    float state = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
-                           UiLayoutSize(UiLayout(g, L"Off", body, 1000, false)).width);
+    float state = std::max(UiLayoutSize(UiLayout(g, states.on, body, 1000, false)).width,
+                           UiLayoutSize(UiLayout(g, states.off, body, 1000, false)).width);
     return {std::ceil(state) + 12 + 40, 32};
 }
 
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g, std::wstring_view label) {
+    return {40 + 8 + std::ceil(UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Note), 1000, false)).width),
+            32};
+}
+
 static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
-                        bool enabled, UiAction action, std::wstring label = {}) {
+                        bool enabled, UiAction action, const UiToggleText& states) {
     UiItem toggle;
     toggle.id = id;
     toggle.kind = UiItemKind::Toggle;
     toggle.rect = slot;
-    if (label.empty()) {
-        toggle.text = on ? L"On" : L"Off";
-    } else {
-        toggle.text = std::move(label);
-        toggle.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
-    }
+    toggle.text = on ? states.on : states.off;
     toggle.selected = on;
     toggle.enabled = enabled;
     toggle.action = std::move(action);
     items.push_back(std::move(toggle));
+}
+
+static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
+                        bool enabled, UiAction action, std::wstring label) {
+    UiAddToggle(items, id, slot, on, enabled, std::move(action), UiToggleText{});
+    items.back().text = std::move(label);
+    items.back().align = DWRITE_TEXT_ALIGNMENT_TRAILING;
 }
 
 // Segmented control (history mockup .segctl): 32 DIP tall, as wide as its segments.

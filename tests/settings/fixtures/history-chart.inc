@@ -230,7 +230,7 @@ static D2D1_POINT_2F TestBetween(D2D1_POINT_2F a, D2D1_POINT_2F b, float fractio
 
 // A time as the readout prints it at kWeekTo in the test zone.
 static std::wstring TestTime(ULONGLONG ms) {
-    return HistoryUiTime(ms, kWeekTo, TestZone());
+    return HistoryUiTime({}, ms, kWeekTo, TestZone());
 }
 
 // A time zone one hour east of UTC, two in summer: daylight saving from 01:00 UTC on 29 March to
@@ -362,36 +362,36 @@ static void RunHistoryChartTests() {
         HistoryUiLocalTime zone = TestZone();
         ULONGLONG to = kWeekTo;
         // 24 hours over 704 DIP: every second hour; midnight shows the day.
-        std::vector<HistoryChartTick> ticks = HistoryChartTicks(to - kHistoryDayMs, to, 704, zone);
+        std::vector<HistoryChartTick> ticks = HistoryChartTicks({}, to - kHistoryDayMs, to, 704, zone);
         CHECK((TestLabels(ticks) == std::vector<std::wstring>{L"16:00", L"18:00", L"20:00", L"22:00", L"Sat 31", L"02:00",
                                                               L"04:00", L"06:00", L"08:00", L"10:00", L"12:00", L"14:00"}));
         CHECK(ticks[0].time == TestLocalMs(2026, 10, 30, 16, 0) && ticks[4].time == TestLocalMs(2026, 10, 31, 0, 0));
         // Every hour when wide enough, every sixth when narrow.
-        CHECK(HistoryChartTicks(to - kHistoryDayMs, to, 2000, zone).size() == 24);
-        CHECK((TestLabels(HistoryChartTicks(to - kHistoryDayMs, to, 300, zone)) ==
+        CHECK(HistoryChartTicks({}, to - kHistoryDayMs, to, 2000, zone).size() == 24);
+        CHECK((TestLabels(HistoryChartTicks({}, to - kHistoryDayMs, to, 300, zone)) ==
                std::vector<std::wstring>{L"18:00", L"Sat 31", L"06:00", L"12:00"}));
         // 7 days: each local midnight, `Sun 25`.
-        ticks = HistoryChartTicks(kWeekFrom, to, 704, zone);
+        ticks = HistoryChartTicks({}, kWeekFrom, to, 704, zone);
         CHECK((TestLabels(ticks) == std::vector<std::wstring>{L"Sun 25", L"Mon 26", L"Tue 27", L"Wed 28", L"Thu 29",
                                                               L"Fri 30", L"Sat 31"}));
         CHECK(ticks[0].time == TestLocalMs(2026, 10, 25, 0, 0) && ticks[6].time == TestLocalMs(2026, 10, 31, 0, 0));
         // 30 days: Mondays; 90 days: every other Monday (by the weeks since 1970).
-        CHECK((TestLabels(HistoryChartTicks(to - 30 * kHistoryDayMs, to, 704, zone)) ==
+        CHECK((TestLabels(HistoryChartTicks({}, to - 30 * kHistoryDayMs, to, 704, zone)) ==
                std::vector<std::wstring>{L"Oct 5", L"Oct 12", L"Oct 19", L"Oct 26"}));
-        CHECK((TestLabels(HistoryChartTicks(to - 90 * kHistoryDayMs, to, 704, zone)) ==
+        CHECK((TestLabels(HistoryChartTicks({}, to - 90 * kHistoryDayMs, to, 704, zone)) ==
                std::vector<std::wstring>{L"Aug 3", L"Aug 17", L"Aug 31", L"Sep 14", L"Sep 28", L"Oct 12", L"Oct 26"}));
-        CHECK(HistoryChartTicks(to - 90 * kHistoryDayMs, to, 704, zone)[0].time == TestLocalMs(2026, 8, 3, 0, 0));
+        CHECK(HistoryChartTicks({}, to - 90 * kHistoryDayMs, to, 704, zone)[0].time == TestLocalMs(2026, 8, 3, 0, 0));
         // All retained, 900 days: quarters; 3650 days over a narrow plot: every other January.
-        ticks = HistoryChartTicks(to - 900 * kHistoryDayMs, to, 704, zone);
+        ticks = HistoryChartTicks({}, to - 900 * kHistoryDayMs, to, 704, zone);
         CHECK((TestLabels(ticks) == std::vector<std::wstring>{L"Jul 2024", L"Oct 2024", L"Jan 2025", L"Apr 2025",
                                                               L"Jul 2025", L"Oct 2025", L"Jan 2026", L"Apr 2026",
                                                               L"Jul 2026", L"Oct 2026"}));
         CHECK(ticks[2].time == TestLocalMs(2025, 1, 1, 0, 0));
-        CHECK((TestLabels(HistoryChartTicks(to - 3650 * kHistoryDayMs, to, 410, zone)) ==
+        CHECK((TestLabels(HistoryChartTicks({}, to - 3650 * kHistoryDayMs, to, 410, zone)) ==
                std::vector<std::wstring>{L"Jan 2018", L"Jan 2020", L"Jan 2022", L"Jan 2024", L"Jan 2026"}));
-        CHECK(HistoryChartTicks(to - 3650 * kHistoryDayMs, to, 704, zone).size() == 10);  // Each January, 2017 to 2026
+        CHECK(HistoryChartTicks({}, to - 3650 * kHistoryDayMs, to, 704, zone).size() == 10);  // Each January, 2017 to 2026
         // No clock, no ticks.
-        CHECK(HistoryChartTicks(kWeekFrom, to, 704, [](ULONGLONG) { return SYSTEMTIME{}; }).empty());
+        CHECK(HistoryChartTicks({}, kWeekFrom, to, 704, [](ULONGLONG) { return SYSTEMTIME{}; }).empty());
     });
 
     Run("history chart: ticks across daylight saving: the skipped hour gets none, the repeated one one; each "
@@ -399,7 +399,7 @@ static void RunHistoryChartTests() {
         HistoryUiLocalTime zone = TestDstZone();
         // Spring forward: 02:00 local never happens on 29 March.
         ULONGLONG from = TestLocalMs(2026, 3, 28, 18, 0, 60);
-        std::vector<HistoryChartTick> ticks = HistoryChartTicks(from, from + kHistoryDayMs, 4000, zone);
+        std::vector<HistoryChartTick> ticks = HistoryChartTicks({}, from, from + kHistoryDayMs, 4000, zone);
         std::vector<std::wstring> spring = {L"19:00", L"20:00", L"21:00", L"22:00", L"23:00", L"Sun 29", L"01:00"};
         for (int hour = 3; hour <= 18; hour++) spring.push_back((hour < 10 ? L"0" : L"") + std::to_wstring(hour) + L":00");
         CHECK(TestLabels(ticks) == spring);
@@ -407,25 +407,25 @@ static void RunHistoryChartTests() {
               ticks[8].time == TestLocalMs(2026, 3, 29, 4, 0, 120));
         // Fall back: 02:00 local happens twice on 25 October; one tick, at the first.
         from = TestLocalMs(2026, 10, 24, 18, 0, 120);
-        ticks = HistoryChartTicks(from, from + 25 * kHourMs, 4000, zone);
+        ticks = HistoryChartTicks({}, from, from + 25 * kHourMs, 4000, zone);
         std::vector<std::wstring> fall = {L"19:00", L"20:00", L"21:00", L"22:00", L"23:00", L"Sun 25", L"01:00", L"02:00"};
         for (int hour = 3; hour <= 17; hour++) fall.push_back((hour < 10 ? L"0" : L"") + std::to_wstring(hour) + L":00");
         CHECK(TestLabels(ticks) == fall);
         CHECK(ticks[7].time == TestLocalMs(2026, 10, 25, 2, 0, 120) && ticks[8].time == TestLocalMs(2026, 10, 25, 3, 0, 60) &&
               ticks[8].time - ticks[7].time == 2 * kHourMs);
         // Days across each change: every local midnight once.
-        ticks = HistoryChartTicks(TestLocalMs(2026, 3, 26, 12, 0, 60), TestLocalMs(2026, 3, 26, 12, 0, 60) + kHistoryWeekMs,
+        ticks = HistoryChartTicks({}, TestLocalMs(2026, 3, 26, 12, 0, 60), TestLocalMs(2026, 3, 26, 12, 0, 60) + kHistoryWeekMs,
                                   704, zone);
         CHECK((TestLabels(ticks) == std::vector<std::wstring>{L"Fri 27", L"Sat 28", L"Sun 29", L"Mon 30", L"Tue 31",
                                                               L"Wed 1", L"Thu 2"}));
         CHECK(ticks[2].time == TestLocalMs(2026, 3, 29, 0, 0, 60) && ticks[3].time - ticks[2].time == 23 * kHourMs);
-        ticks = HistoryChartTicks(TestLocalMs(2026, 10, 22, 12, 0, 120), TestLocalMs(2026, 10, 22, 12, 0, 120) + kHistoryWeekMs,
+        ticks = HistoryChartTicks({}, TestLocalMs(2026, 10, 22, 12, 0, 120), TestLocalMs(2026, 10, 22, 12, 0, 120) + kHistoryWeekMs,
                                   704, zone);
         CHECK((TestLabels(ticks) == std::vector<std::wstring>{L"Fri 23", L"Sat 24", L"Sun 25", L"Mon 26", L"Tue 27",
                                                               L"Wed 28", L"Thu 29"}));
         CHECK(ticks[3].time - ticks[2].time == 25 * kHourMs);
         // Months over ten years in this zone: Januaries at local midnight.
-        ticks = HistoryChartTicks(kWeekTo - 3650 * kHistoryDayMs, kWeekTo, 704, zone);
+        ticks = HistoryChartTicks({}, kWeekTo - 3650 * kHistoryDayMs, kWeekTo, 704, zone);
         CHECK(ticks.size() == 10 && ticks[0].label == L"Jan 2017" && ticks[0].time == TestLocalMs(2017, 1, 1, 0, 0, 60));
     });
 
@@ -472,7 +472,7 @@ static void RunHistoryChartTests() {
                    L"2 \u00B7 Weekly | [Previous week] 50.0% \u00B7 Sat 17 Oct 15:32",
                    L"3 \u00B7 Weekly | [Current] 53.0% \u00B7 Sat 24 Oct 15:32",
                    L"3 \u00B7 Weekly | [Previous week] 53.0% \u00B7 Sat 17 Oct 15:32"}));
-        CHECK(readout.rows[0].stroke == 3 && readout.more == L" \u2014 hide lines in the legend or select one account");
+        CHECK(readout.rows[0].stroke == 3 && readout.more(2) == L"+2 more \u2014 hide lines in the legend or select one account");
         // The same point again: no emphasis change, and the shown readout (its key, no rows) stays.
         UiTooltipContent shown;
         shown.key = readout.key;
@@ -679,7 +679,7 @@ static void RunHistoryChartTests() {
               one.lines[0].title == L"Go \u00B7 Gemini weekly used (%)");
         w->controller.Hover(TestAt(one, 0, 0, 0), readout, TestPalette(UiThemeKind::Dark));
         CHECK(readout.rows.size() == 1 && readout.rows[0].title == L"Gemini weekly" &&
-              readout.more == L" \u2014 hide lines in the legend");
+              readout.more(3) == L"+3 more \u2014 hide lines in the legend");
         CHECK(TestSameColor(readout.rows[0].color, HistoryUiHue(kHistoryColors[1], false)));
         // A reading of last year (All retained over 900 days).
         HistorySample old = TestReading(0x0A, 2, TestLocalMs(2025, 12, 17, 9, 12), {{1, 71}});

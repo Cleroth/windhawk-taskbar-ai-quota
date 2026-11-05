@@ -19,7 +19,7 @@ static std::vector<SettingsPreviewOp> OpsOfColor(const SettingsPreviewStrip& str
 
 static SettingsPreviewStrip Strip(const Settings& settings, double taskbar = 48, bool gallery = false,
                                   float scale = 1) {
-    return SettingsPreviewLayout(TestGraphics(), settings, taskbar, scale, kNow, gallery, false, 0xFFFFFFFF);
+    return SettingsPreviewLayout(TestGraphics(), settings, I18nLocale(), taskbar, scale, kNow, gallery, false, 0xFFFFFFFF);
 }
 
 // The preview of `accounts` with their `data` (and their providers' outage levels) in place of the
@@ -27,7 +27,7 @@ static SettingsPreviewStrip Strip(const Settings& settings, double taskbar = 48,
 static SettingsPreviewStrip StripOf(const Settings& settings, const std::vector<AccountConfig>& accounts,
                                     const std::vector<AccountData>& data, double taskbar = 48,
                                     const std::vector<OutageLevel>* outages = nullptr) {
-    return SettingsPreviewLayout(TestGraphics(), settings, taskbar, 1, kNow, false, false, 0xFFFFFFFF, &accounts,
+    return SettingsPreviewLayout(TestGraphics(), settings, I18nLocale(), taskbar, 1, kNow, false, false, 0xFFFFFFFF, &accounts,
                                  &data, outages);
 }
 
@@ -801,7 +801,7 @@ static void RunLayoutTests() {
         std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
         for (AccountData& d : data) {
             d.stale = true;
-            d.error = L"timeout";
+            d.error = {AccountErrorCode::Message, L"timeout"};
         }
 
         // Stale with an error: "!" on each logo's top-right corner, 4 DIPs past it, dimmed with it;
@@ -897,7 +897,7 @@ static void RunLayoutTests() {
                 std::vector<AccountData> data(3, Fresh({30, 40, -1, -1}));
                 for (AccountData& d : data) {
                     d.stale = stale;
-                    if (stale) d.error = L"timeout";
+                    if (stale) d.error = {AccountErrorCode::Message, L"timeout"};
                 }
                 const double mark = stale ? 3 : 0;
                 for (LabelPosition position : {LabelPosition::Top, LabelPosition::Bottom}) {
@@ -1000,7 +1000,7 @@ static void RunLayoutTests() {
                               Case{RGB(0x1C, 0x1C, 0x1C), false, 0xFFFFFFFF, 0xFF1C1C1C, 0xFFF3F3F3}}) {
             s = StackedSettings();
             if (c.color) s.badgeColor = *c.color;
-            strip = SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, c.light, c.text, &accounts, &data);
+            strip = SettingsPreviewLayout(TestGraphics(), s, I18nLocale(), 48, 1, kNow, false, c.light, c.text, &accounts, &data);
             std::vector<SettingsPreviewOp> badge = TextOps(strip, L"1");
             CHECK(badge.size() == 9 && badge[8].color == c.number && logos(strip)[0].color == c.text);
             for (size_t k = 0; k < 8; k++) CHECK(badge[k].color == c.halo);
@@ -1086,7 +1086,7 @@ static void RunLayoutTests() {
             Settings s = StackedSettings();
             s.barLayout = layout;
             const std::vector<SettingsPreviewOp> plain = OpsOfKind(
-                SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xFF1A1A1A, &accounts, &data),
+                SettingsPreviewLayout(TestGraphics(), s, I18nLocale(), 48, 1, kNow, false, true, 0xFF1A1A1A, &accounts, &data),
                 SettingsPreviewOp::Kind::Logo);
             CHECK(plain.size() == 3);
             for (const SettingsPreviewOp& op : plain) CHECK(!op.brand && op.color == 0xFF1A1A1A);
@@ -1094,7 +1094,7 @@ static void RunLayoutTests() {
             // contrast fallback.
             s.logoBrands = {true, true};
             const std::vector<SettingsPreviewOp> brand = OpsOfKind(
-                SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xFF1A1A1A, &accounts, &data),
+                SettingsPreviewLayout(TestGraphics(), s, I18nLocale(), 48, 1, kNow, false, true, 0xFF1A1A1A, &accounts, &data),
                 SettingsPreviewOp::Kind::Logo);
             CHECK(brand.size() == 3 && brand[0].brand == &kClaudeLogoBrand && !brand[1].brand &&
                   brand[2].brand == &kGeminiLogoBrand);
@@ -1386,7 +1386,7 @@ static void RunLayoutTests() {
 
     Run("preview: the default pace color turns dark with a light halo on a light taskbar", [] {
         auto strip = [](const Settings& settings, bool light) {
-            return SettingsPreviewLayout(TestGraphics(), settings, 48, 1, kNow, false, light,
+            return SettingsPreviewLayout(TestGraphics(), settings, I18nLocale(), 48, 1, kNow, false, light,
                                          light ? 0xE4000000 : 0xFFFFFFFF);
         };
         Settings s = StackedSettings();
@@ -1792,12 +1792,12 @@ static void RunLayoutTests() {
         data.win5h = Window(25, 9000000);
         std::vector<AccountData> one = {data};
         SettingsPreviewStrip light =
-            SettingsPreviewLayout(TestGraphics(), s, 48, 1, kNow, false, true, 0xE4000000, &accounts, &one);
+            SettingsPreviewLayout(TestGraphics(), s, I18nLocale(), 48, 1, kNow, false, true, 0xE4000000, &accounts, &one);
         CHECK(OpsOfColor(light, 0x14000000).size() == 1 && OpsOfColor(light, 0x12000000).size() == 1 &&
               OpsOfColor(light, 0x24000000).size() == 1 && OpsOfColor(light, 0x24000000)[0].kind == Kind::Stroke &&
               OpsOfColor(light, 0x801A1A1A).size() == 1 && OpsOfColor(light, 0x80000000).size() == 1 &&
               OpsOfColor(light, 0xF0000000).empty() && OpsOfColor(light, 0xFFF3F3F3).empty());
-        light = SettingsPreviewLayout(TestGraphics(), cued, 48, 1, kNow, false, true, 0xE4000000, &accounts, &one);
+        light = SettingsPreviewLayout(TestGraphics(), cued, I18nLocale(), 48, 1, kNow, false, true, 0xE4000000, &accounts, &one);
         CHECK(OpsOfColor(light, 0xF0000000).size() == 2 && OpsOfColor(light, 0xFFF3F3F3).size() == 1);
     });
 

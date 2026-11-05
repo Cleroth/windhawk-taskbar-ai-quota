@@ -85,8 +85,8 @@ static void RenderFrame(UiGraphics& g, IWICImagingFactory* wic, const std::wstri
 
 // A pointer over column `column` of a preview strip item at `r`, as the painter places it.
 static D2D1_POINT_2F PreviewPointer(UiGraphics& g, const SettingsView& view, const D2D1_RECT_F& r, int column) {
-    SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.status.taskbarHeight, view.scale,
-                                                       view.now, false, false, 0);
+    SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.locale, view.status.taskbarHeight,
+                                                       view.scale, view.now, false, false, 0);
     float left = r.left + SettingsPreviewRowAt(strip, r.right - r.left, view.previewScroll).tiles;
     const D2D1_RECT_F& c = strip.columns[size_t(column)];
     return {left + (c.left + c.right) / 2, r.top + (c.top + c.bottom) / 2};
@@ -112,12 +112,15 @@ static SettingsView LayoutView(BarLayout layout, UINT dpi) {
 // (CC 2's weekly quota is past 100%), amounts, the colorblind palette, thresholds (ordered,
 // unordered, extreme) and the stale marker (Go is stale) on bars and tiles. Placement sheet: ring
 // tiles at each position, stacked bars at each (wider than the strip, at home), stacked bars
-// scrolled to the other end, hover beside Start and in the tray, 32 and 72 DIP taskbars. Each strip
-// is a Preview item painted by the production painter.
-enum class PreviewSheet : uint8_t { Layout, Display, Placement };
+// scrolled to the other end, hover beside Start and in the tray, 32 and 72 DIP taskbars. I18n
+// sheet, in `locale`: the localized text on the taskbar (bar keys, the headline's key and
+// countdown, the gauge's key, chart keys and the weekly chart's extra usage key, the matrix's keys
+// with their reserve). Each strip is a Preview item painted by the production painter.
+enum class PreviewSheet : uint8_t { Layout, Display, Placement, I18n };
 
 static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
-                               const UiThemeInput& theme, UINT dpi, PreviewSheet sheet) {
+                               const UiThemeInput& theme, UINT dpi, PreviewSheet sheet,
+                               const I18nLocale& locale = {}) {
     struct Row {
         std::wstring caption;
         std::function<void(Settings&)> edit;
@@ -549,6 +552,29 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Bars 60, orange Claude only", [](Settings& s) { s.barLength = 60; s.logoBrands.claude = true; }},
         {L"Bars 60, Gemini gradient only", [](Settings& s) { s.barLength = 60; s.logoBrands.gemini = true; }},
     };
+    auto labels = [](Settings& s) { s.showBarLabels = true; };
+    const std::vector<Row> i18nRows = {
+        {L"Bars, keys", labels},
+        {L"Bars, keys, percent always", [&](Settings& s) { labels(s); always(s); }},
+        {L"Vertical bars, keys", [&](Settings& s) { labels(s); s.barLayout = BarLayout::Vertical; }},
+        {L"Bars, keys, 32 DIP taskbar", labels, -1, 32},
+        {L"Headline", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; }},
+        {L"Headline, countdown",
+         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.headlineCountdown = true; }},
+        {L"Headline, countdown, number 24", [](Settings& s) {
+             s.barLayout = BarLayout::LogoHeadline;
+             s.headlineCountdown = true;
+             s.headlineFontSize = 24;
+         }},
+        {L"Headline, countdown, 32 DIP taskbar",
+         [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.headlineCountdown = true; }, -1, 32},
+        {L"Gauge %", [](Settings& s) { s.barLayout = BarLayout::Gauge; }},
+        {L"Usage graph", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }},
+        {L"Sparkline, text 12", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 12; }},
+        {L"Quota matrix", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }},
+        {L"Matrix, number 24", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; s.headlineFontSize = 24; }},
+        {L"Matrix, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }, -1, 32},
+    };
     std::vector<Row> placementRows;
     const std::pair<PCWSTR, TaskbarPlacement> positions[] = {
         {L"before icons", TaskbarPlacement::BeforeIcons},     {L"before network", TaskbarPlacement::BeforeNetwork},
@@ -583,7 +609,9 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
     // The Layout and Placement sheets' strips are the window's 680 DIPs; the Display sheet's fit
     // four columns of stacked bars, so every value shows.
     const bool display = sheet == PreviewSheet::Display;
-    const std::vector<Row>& rows = display ? displayRows : sheet == PreviewSheet::Layout ? layoutRows : placementRows;
+    const std::vector<Row>& rows = display                         ? displayRows :
+                                   sheet == PreviewSheet::Layout   ? layoutRows :
+                                   sheet == PreviewSheet::I18n     ? i18nRows : placementRows;
     constexpr float kCaption = 170, kRowGap = 12;
     const float kStrip = display ? 800 : 680;
     float height = kRowGap;
@@ -597,6 +625,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
     float y = kRowGap;
     for (const Row& row : rows) {
         SettingsView view = LayoutView(BarLayout::Stacked, dpi);
+        view.locale = locale;
         row.edit(view.settings);
         view.status.taskbarHeight = row.taskbar;
         view.previewScroll = row.scroll;
@@ -1079,6 +1108,46 @@ static void RunRenders(const std::wstring& directory) {
                             false);
                 CHECK(linkCard && logos && license);
             });
+        }
+        // The localization review's languages, light at 96 and 144 DPI: Behavior and History whole
+        // (the client as tall as the page), each language stored as the choice, the toolkit in its
+        // locale as the settings client sets it.
+        for (std::string_view tag : {"zh-Hans", "qps-ploc"}) {
+            std::wstring wide(tag.begin(), tag.end());
+            I18nLocale locale(*I18nLanguageByTag(wide));
+            for (UINT dpi : {96u, 144u}) {
+                for (auto [page, pageName] : {std::pair{SettingsUiPage::Behavior, "behavior"},
+                                              std::pair{SettingsUiPage::History, "history"}}) {
+                    std::string name = "render-i18n-" + std::string(pageName) + "-" + std::string(tag) + "-light-" +
+                                       std::to_string(dpi) + ".png";
+                    Run(name, [&] {
+                        SettingsView view = TestView(page);
+                        view.locale = locale;
+                        view.settings.language = wide;
+                        g.locale = locale.LocaleName();
+                        UiFrame frame;
+                        SettingsUiBuildFrame(g, view, client, frame);
+                        D2D1_SIZE_F whole{client.width, std::max(client.height, frame.viewport.top + frame.contentHeight)};
+                        frame = {};
+                        SettingsUiBuildFrame(g, view, whole, frame);
+                        UiPaintState state;
+                        state.focus = {uint32_t(int(page) + 1)};
+                        RenderFrame(g, wic.get(), path(name), frame, view, whole, dpi, RenderThemes()[0].input, state, 0,
+                                    false);
+                        g.locale = L"en-US";
+                        CHECK(true);
+                    });
+                }
+                // The taskbar's localized text on the preview strip, measured in the locale.
+                std::string sheet = "render-i18n-preview-sheet-" + std::string(tag) + "-light-" + std::to_string(dpi) +
+                                    ".png";
+                Run(sheet, [&] {
+                    g.locale = locale.LocaleName();
+                    RenderPreviewSheet(g, wic.get(), path(sheet), RenderThemes()[0].input, dpi, PreviewSheet::I18n, locale);
+                    g.locale = L"en-US";
+                    CHECK(true);
+                });
+            }
         }
     }
     CoUninitialize();

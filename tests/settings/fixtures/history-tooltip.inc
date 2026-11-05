@@ -7,9 +7,10 @@
 // (mockups s-tooltips, q6-rows, q6a-tooltip).
 
 // A readout row's mandatory part as the production row prints it (period 0 current, 1 previous;
-// a time in the zone of TestZone, `now` deciding its year form).
-static std::vector<UiRun> TestReadoutDetail(int meter, int period, double value, ULONGLONG time, ULONGLONG now = kWeekTo) {
-    return HistoryChartRow(L"", {}, 2, meter, period, value, time, now, TestZone()).detail;
+// a time in the zone of TestZone, `now` deciding its year form) in `locale`'s language.
+static std::vector<UiRun> TestReadoutDetail(int meter, int period, double value, ULONGLONG time, ULONGLONG now = kWeekTo,
+                                            const I18nLocale& locale = {}) {
+    return HistoryChartRow(locale, L"", {}, 2, meter, period, value, time, now, TestZone()).detail;
 }
 
 static float TestRunsWidth(const std::vector<UiRun>& runs) {
@@ -22,21 +23,44 @@ static std::string TestAscii(const std::wstring& text) {
     return out;
 }
 
+static std::string TestUtf8(const std::wstring& text) {
+    std::string out(text.size() * 3, '\0');
+    out.resize(size_t(std::max(WideCharToMultiByte(CP_UTF8, 0, text.data(), int(text.size()), out.data(),
+                                                   int(out.size()), nullptr, nullptr), 0)));
+    return out;
+}
+
 // One Anthropic account in All meters while comparing: its five series in both periods (by their
 // chip names), the most rows one account's readout has. Every row carries `detail`.
 static UiTooltipContent TestAccountReadout(const std::vector<UiRun>& detail, int count = 10) {
     static constexpr PCWSTR kTitles[] = {L"5h", L"Weekly", L"Fable weekly", L"Extra budget", L"Extra spending (USD)"};
     UiTooltipContent content;
     content.key = uint64_t(count);
-    content.more = L" \u2014 hide lines in the legend";
+    content.more = [](int more) { return L"+" + std::to_wstring(more) + L" more \u2014 hide lines in the legend"; };
     for (int i = 0; i < count; i++) content.rows.push_back({kTitles[size_t(i / 2) % 5], detail, UiRgb(0xA184FF), 2});
     return content;
 }
 
-static void RunHistoryTooltipTests() {
+// A graphics' locale for a scope, as a window's client sets it for its frames.
+struct TestLocaleScope {
+    UiGraphics& g;
+    std::wstring previous;
+    TestLocaleScope(UiGraphics& g, const I18nLocale& locale)
+        : g(g), previous(std::exchange(g.locale, std::wstring(locale.LocaleName()))) {}
+    ~TestLocaleScope() { g.locale = previous; }
+};
+
+// The single-account readout guarantee in a language (`name`: none for English), measured with
+// its locale's text formats: its widest mandatory part, then ten such rows placed everywhere. The
+// width bound, the time forms and the ten rows are English's promises; other languages report
+// their widths and the fewest rows placed, and are checked to never cover the pointer.
+static void RunReadoutGuarantee(const I18nLocale& locale, const std::string& name) {
+    const bool english = locale == I18nLocale();
+    std::string suffix = english ? "" : " (" + name + ")";
     std::vector<UiRun> widest;
-    Run("readout guarantee: the widest mandatory parts the production rows print (both periods, each unit's "
-        "rounded and abbreviated values, times in and outside the current year on every day and month)", [&] {
+    Run("readout guarantee" + suffix + ": the widest mandatory parts the production rows print (both periods, each "
+        "unit's rounded and abbreviated values, times in and outside the current year on every day and month)", [&] {
+        TestLocaleScope scope(TestGraphics(), locale);
         // Segoe UI digits are tabular: 0, 8 and 9 stand for every digit.
         HistoryUiLocalTime zone = TestZone();
         struct Time {
@@ -50,20 +74,23 @@ static void RunHistoryTooltipTests() {
                 for (WORD day = 1; day <= 28; day++) {
                     for (auto [hour, minute] : {std::pair<WORD, WORD>{0, 0}, {8, 8}, {18, 48}, {23, 59}}) {
                         ULONGLONG ms = TestLocalMs(2026, month, day, hour, minute);
-                        std::wstring time = HistoryUiTime(ms, now, zone);
+                        std::wstring time = HistoryUiTime(locale, ms, now, zone);
                         times.push_back({TestRunsWidth({{time}}), time, ms, now});
                     }
                 }
             }
         }
         std::sort(times.begin(), times.end(), [](const Time& a, const Time& b) { return a.width > b.width; });
-        // The widest is a previous year's, without a weekday: `25 May 2026 23:59`.
-        CHECK(times[0].text.size() == 17 && times[0].text.find(L" 2026 ") == 6 && std::iswdigit(times[0].text[0]));
-        auto current = std::find_if(times.begin(), times.end(), [](const Time& t) { return !std::iswdigit(t.text[0]); });
-        CHECK(current != times.end());
-        std::cout << "OBSERVE readout widest current-year time: " << current->width << " DIP '"
-                  << TestAscii(current->text) << "'\n";
-        std::cout << "OBSERVE readout widest time: " << times[0].width << " DIP '" << TestAscii(times[0].text) << "'\n";
+        // English: the widest is a previous year's, without a weekday: `25 May 2026 23:59`.
+        if (english) {
+            CHECK(times[0].text.size() == 17 && times[0].text.find(L" 2026 ") == 6 && std::iswdigit(times[0].text[0]));
+            auto current = std::find_if(times.begin(), times.end(), [](const Time& t) { return !std::iswdigit(t.text[0]); });
+            CHECK(current != times.end());
+            std::cout << "OBSERVE readout widest current-year time: " << current->width << " DIP '"
+                      << TestAscii(current->text) << "'\n";
+        }
+        std::cout << "OBSERVE readout widest time" << suffix << ": " << times[0].width << " DIP '"
+                  << TestUtf8(times[0].text) << "'\n";
         const double values[] = {0,       9.95,     38.8,      99.99,      100,         999.95,       8888.88,
                                  9999.94, 9999.996, 10000,     88888.8,    99949,       999949,       9999949,
                                  99999949, 999999949, 9999999949, 99999999949, 888888888888, 999949999999, 1e12};
@@ -82,7 +109,7 @@ static void RunHistoryTooltipTests() {
                 for (size_t i = 0; i < 3; i++) {
                     for (size_t j = 0; j < 3; j++) {
                         std::vector<UiRun> runs =
-                            TestReadoutDetail(unit.meter, period, printed[i].second, times[j].ms, times[j].now);
+                            TestReadoutDetail(unit.meter, period, printed[i].second, times[j].ms, times[j].now, locale);
                         if (float width = TestRunsWidth(runs); width > best) {
                             best = width;
                             bestRuns = runs;
@@ -90,25 +117,26 @@ static void RunHistoryTooltipTests() {
                     }
                 }
             }
-            std::cout << "OBSERVE readout widest mandatory part, " << unit.name << ": " << best << " DIP '"
-                      << TestAscii(UiRunsText(bestRuns)) << "'\n";
+            std::cout << "OBSERVE readout widest mandatory part" << suffix << ", " << unit.name << ": " << best
+                      << " DIP '" << TestUtf8(UiRunsText(bestRuns)) << "'\n";
             if (best > overall) {
                 overall = best;
                 widest = bestRuns;
             }
         }
         // The plan's arithmetic took 285 DIP (two one-line columns of 64 DIP titles at the floor).
-        CHECK(overall > 200 && overall <= 285);
+        CHECK(overall > 200 && (!english || overall <= 285));
     });
 
-    Run("readout guarantee: one account's ten rows of the widest mandatory part all placed, clear of "
-        "the pointer, at every pointer position on an 800 x 590 DIP work area, with a 32 and a 256 DIP "
-        "pointer (hotspot at its corner, middle and far corner), at 96 and 144 DPI", [&] {
+    Run("readout guarantee" + suffix + ": one account's ten rows of the widest mandatory part all placed, clear "
+        "of the pointer, at every pointer position on an 800 x 590 DIP work area, with a 32 and a 256 DIP pointer "
+        "(hotspot at its corner, middle and far corner), at 96 and 144 DPI", [&] {
         UiGraphics& g = TestGraphics();
+        TestLocaleScope scope(g, locale);
         CHECK(!widest.empty());
         UiTooltipContent account = TestAccountReadout(widest), many = TestAccountReadout(widest, 200);
         UiTooltipMeasure measure = UiMeasureReadout(g, account), manyMeasure = UiMeasureReadout(g, many);
-        int failures = 0;
+        int failures = 0, covering = 0;
         for (UINT dpi : {96u, 144u}) {
             float scale = float(dpi) / 96;
             RECT work{0, 0, LONG(std::lround(800 * scale)), LONG(std::lround(590 * scale))};
@@ -120,14 +148,15 @@ static void RunHistoryTooltipTests() {
                 auto record = [&](const UiTooltipKey& key, bool capacity) {
                     UiTrimCaches(g);
                     auto spot = UiTooltipPlacement(g, account, measure, key);
+                    covering += spot && !TestClear(*spot, key);
                     int shown = spot && TestClear(*spot, key) ? spot->layout.shown : 0;
                     if (shown < fewest) {
                         fewest = shown;
                         fewestAt = std::to_string(key.cursor.x) + "," + std::to_string(key.cursor.y);
                     }
                     if (shown < 10 && failures++ < 8) {
-                        std::cout << "OBSERVE guarantee failure at " << dpi << " DPI, " << pointer << " DIP pointer, "
-                                  << key.cursor.x << "," << key.cursor.y << ": " << shown << " rows\n";
+                        std::cout << "OBSERVE guarantee" << suffix << " failure at " << dpi << " DPI, " << pointer
+                                  << " DIP pointer, " << key.cursor.x << "," << key.cursor.y << ": " << shown << " rows\n";
                     }
                     if (!capacity) return;
                     auto full = UiTooltipPlacement(g, many, manyMeasure, key);
@@ -150,13 +179,20 @@ static void RunHistoryTooltipTests() {
                 }
                 // The balanced position: the exclusion rectangle in the work area's middle.
                 record(TestKey({work.right / 2, work.bottom / 2}, work, size, {size / 2, size / 2}, dpi), true);
-                std::cout << "OBSERVE guarantee " << dpi << " DPI, " << pointer << " DIP pointer: fewest rows placed "
+                std::cout << "OBSERVE guarantee" << suffix << " " << dpi << " DPI, " << pointer
+                          << " DIP pointer: fewest rows placed "
                           << fewest << " of 10 (at " << fewestAt << "); smallest capacity " << smallest << " at "
                           << capacityAt << "\n";
             }
         }
-        CHECK(failures == 0);
+        CHECK((!english || failures == 0) && covering == 0);
     });
+}
+
+static void RunHistoryTooltipTests() {
+    RunReadoutGuarantee({}, "");
+    RunReadoutGuarantee(I18nLocale(*I18nLanguageByTag(L"zh-Hans")), "zh-Hans");
+    RunReadoutGuarantee(I18nLocale(*I18nLanguageByTag(L"qps-ploc")), "qps-ploc");
 
     Run("complete-text tooltips: the Export description and a long chip title with its explanation, "
         "measured at their full height, placed whole and clear at every pointer position at the floor "
@@ -202,9 +238,13 @@ static void RunHistoryTooltipTests() {
 // The arrow pointer of the mockups (a 32 DIP image, hotspot at its top-left).
 static constexpr PCWSTR kTestArrowPath = L"M.5,.5V17.6L4.6,13.7L7.6,20.6L10.4,19.4L7.5,12.6H13.3Z";
 
+// In `locale`'s language: its times and hint (the rest of the readout follows later phases), with
+// its text formats; the expected English text is checked only in English.
 static void RenderTooltipSheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path,
-                               const UiThemeInput& theme, UINT dpi) {
+                               const UiThemeInput& theme, UINT dpi, const I18nLocale& locale = {}) {
     constexpr float kWidth = 1180, kHeight = 1740;
+    const bool english = locale == I18nLocale();
+    TestLocaleScope scope(g, locale);
     float scale = float(dpi) / 96;
     winrt::com_ptr<IWICBitmap> bitmap = RenderBitmap(wic, {kWidth, kHeight}, dpi);
     winrt::com_ptr<ID2D1RenderTarget> target = RenderTarget(g, bitmap.get(), dpi);
@@ -235,18 +275,21 @@ static void RenderTooltipSheet(UiGraphics& g, IWICImagingFactory* wic, const std
     // Production rows (HistoryChartRow) of a meter's value at a local time (Oct 2026, now kWeekTo).
     auto row = [&](std::wstring title, size_t series, int meter, int period, double value, WORD day, WORD hour,
                    WORD minute) {
-        return HistoryChartRow(std::move(title), color(series), 2, meter, period, value,
+        return HistoryChartRow(locale, std::move(title), color(series), 2, meter, period, value,
                                TestLocalMs(2026, 10, day, hour, minute), kWeekTo, TestZone());
     };
     // The mockups' six coincident rows: three accounts' weekly lines in both periods.
     UiTooltipContent six;
     six.key = 1;
-    six.more = L" \u2014 hide lines in the legend or select one account";
+    six.more = [locale](int more) {
+        return I18nText(locale, TrCtx(L"chart-readout", L"+{count} more \u2014 hide lines in the legend or select one account"),
+                        {{L"count", more}});
+    };
     six.rows = {row(L"OAI \u00B7 Weekly", 0, 1, 0, 38.0, 27, 12, 31), row(L"OAI \u00B7 Weekly", 0, 1, 1, 37.6, 20, 12, 32),
                 row(L"CC 2 \u00B7 Weekly", 1, 1, 0, 38.3, 27, 12, 32), row(L"CC 2 \u00B7 Weekly", 1, 1, 1, 38.8, 20, 12, 31),
                 row(L"Go \u00B7 Gemini weekly", 2, 1, 0, 37.4, 27, 12, 31),
                 row(L"Go \u00B7 Gemini weekly", 2, 1, 1, 38.1, 20, 12, 31)};
-    CHECK(UiRunsText(six.rows[1].detail) == L"[Previous week] 37.6% \u00B7 Tue 20 Oct 12:32");
+    CHECK(!english || UiRunsText(six.rows[1].detail) == L"[Previous week] 37.6% \u00B7 Tue 20 Oct 12:32");
     UiTooltipMeasure sixMeasure = UiMeasureReadout(g, six);
 
     // Placement on each side of the pointer in a 540 x 260 DIP work area (s-tooltips): the
@@ -305,7 +348,8 @@ static void RenderTooltipSheet(UiGraphics& g, IWICImagingFactory* wic, const std
     UiTooltipContent one;
     one.key = 2;
     one.rows = {row(L"CC 2 \u00B7 Weekly", 1, 1, 0, 93.0, 31, 14, 31)};
-    CHECK(!region(L"One-line row: swatch, name, then the never-cut part (520 x 60 region)", one, {520, 60}).narrow);
+    UiTooltipLayout oneLine = region(L"One-line row: swatch, name, then the never-cut part (520 x 60 region)", one, {520, 60});
+    CHECK(!english || !oneLine.narrow);
     UiTooltipContent credits;
     credits.key = 3;
     credits.rows = {row(L"OAI \u00B7 Credits remaining", 0, 7, 0, 1240, 31, 14, 30),
@@ -325,27 +369,31 @@ static void RenderTooltipSheet(UiGraphics& g, IWICImagingFactory* wic, const std
     UiTooltipContent years;
     years.key = 7;
     ULONGLONG now = TestLocalMs(2027, 1, 15, 12, 0);
-    years.rows = {HistoryChartRow(L"OAI \u00B7 Credits remaining", color(0), 2, 7, 1, 9999.94,
+    years.rows = {HistoryChartRow(locale, L"OAI \u00B7 Credits remaining", color(0), 2, 7, 1, 9999.94,
                                   TestLocalMs(2026, 5, 25, 23, 59), now, TestZone()),
-                  HistoryChartRow(L"OAI \u00B7 Weekly", color(1), 2, 5, 0, 41.7, TestLocalMs(2027, 1, 12, 9, 5), now,
+                  HistoryChartRow(locale, L"OAI \u00B7 Weekly", color(1), 2, 5, 0, 41.7, TestLocalMs(2027, 1, 12, 9, 5), now,
                                   TestZone())};
-    CHECK(UiRunsText(years.rows[0].detail).ends_with(L"25 May 2026 23:59") &&
-          UiRunsText(years.rows[1].detail).ends_with(L"Tue 12 Jan 09:05"));
+    CHECK(!english || (UiRunsText(years.rows[0].detail).ends_with(L"25 May 2026 23:59") &&
+                       UiRunsText(years.rows[1].detail).ends_with(L"Tue 12 Jan 09:05")));
     region(L"Times: a previous year's in the year form (the guarantee's widest mandatory part), this year's with "
            L"the weekday (520 x 60)", years, {520, 60});
-    UiTooltipContent account = TestAccountReadout(TestReadoutDetail(1, 1, 61.4, TestLocalMs(2026, 10, 24, 14, 30)));
+    UiTooltipContent account =
+        TestAccountReadout(TestReadoutDetail(1, 1, 61.4, TestLocalMs(2026, 10, 24, 14, 30), kWeekTo, locale));
     for (size_t i = 0; i < account.rows.size(); i++) {
         account.rows[i].color = color(i / 2);
         account.rows[i].detail = TestReadoutDetail(1, int(i % 2), 30.0 + 7 * double(i),
-                                                   i % 2 ? TestLocalMs(2026, 10, 24, 14, 30) : TestLocalMs(2026, 10, 31, 14, 31));
+                                                   i % 2 ? TestLocalMs(2026, 10, 24, 14, 30) : TestLocalMs(2026, 10, 31, 14, 31),
+                                                   kWeekTo, locale);
     }
-    CHECK(region(L"Two columns: one account comparing (its ten rows) in the floor's 800 x 159 region", account,
-                 {800, 159}).columns == 2);
+    UiTooltipLayout columns =
+        region(L"Two columns: one account comparing (its ten rows) in the floor's 800 x 159 region", account, {800, 159});
+    CHECK(!english || columns.columns == 2);
     UiTooltipContent twenty = six;
     twenty.key = 5;
     for (int i = 0; i < 14; i++) twenty.rows.push_back(six.rows[size_t(i) % 6]);
-    CHECK(region(L"\"+N more\": twenty coincident rows in the same region, the hint in the last slot", twenty,
-                 {800, 159}).more == 7);
+    UiTooltipLayout more =
+        region(L"\"+N more\": twenty coincident rows in the same region, the hint in the last slot", twenty, {800, 159});
+    CHECK(!english || more.more == 7);
 
     // Complete-text tooltips (s-tooltips): a chip's full name and line styles, the icon buttons'.
     text(L"Complete-text tooltips: wrapped at 420 DIP at most, never cut", UiFont::BodyStrong, 16, y, palette.text);
@@ -356,6 +404,7 @@ static void RenderTooltipSheet(UiGraphics& g, IWICImagingFactory* wic, const std
                  {L"\nSolid / filled: current week. Dashed / hollow: previous week. Click to hide or show this line.",
                   UiRunStyle::Normal, UiInk::Secondary}};
     HistoryUiView view = TestHistoryView(theme.kind);
+    view.locale = locale;
     UiFrame frame = TestHistoryFrame(view);
     std::vector<UiTooltipContent> texts = {chip};
     for (uint32_t id : {kHistoryUiRefresh, kHistoryUiExport, kHistoryUiMore}) {
@@ -397,6 +446,18 @@ static void RunHistoryTooltipRenders(const std::wstring& directory) {
             Run(name, [&] {
                 RenderTooltipSheet(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()), theme.input,
                                    dpi);
+            });
+        }
+    }
+    // The localization review's languages, light at 96 and 144 DPI.
+    for (std::string_view tag : {"zh-Hans", "qps-ploc"}) {
+        std::wstring wide(tag.begin(), tag.end());
+        for (UINT dpi : {96u, 144u}) {
+            std::string name =
+                "render-history-tooltips-" + std::string(tag) + "-light-" + std::to_string(dpi) + ".png";
+            Run(name, [&] {
+                RenderTooltipSheet(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()),
+                                   RenderThemes()[0].input, dpi, I18nLocale(*I18nLanguageByTag(wide)));
             });
         }
     }

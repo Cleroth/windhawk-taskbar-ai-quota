@@ -434,15 +434,12 @@ static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
     return true;
 }
 
-static constexpr PCWSTR kHistoryConsentRegistryKey =
-    L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
-
 // Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared. Recording is on
 // until this user turns it off, which stores 0.
 static bool ReadHistoryConsent() {
     DWORD value = 0;
     DWORD size = sizeof(value);
-    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, L"RecordHistory",
+    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kUserRegistryKey, L"RecordHistory",
                                   RRF_RT_REG_DWORD, nullptr, &value, &size);
     if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) return true;
     return result == ERROR_SUCCESS && size == sizeof(value) && value == 1;
@@ -450,7 +447,7 @@ static bool ReadHistoryConsent() {
 
 static bool WriteHistoryConsent(bool enabled) {
     HKEY key = nullptr;
-    LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, nullptr, 0,
+    LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kUserRegistryKey, 0, nullptr, 0,
                                      KEY_SET_VALUE, nullptr, &key, nullptr);
     if (result != ERROR_SUCCESS) return false;
     DWORD value = enabled ? 1 : 0;

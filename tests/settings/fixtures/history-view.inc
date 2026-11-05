@@ -119,30 +119,30 @@ static void RunHistoryViewTests() {
         "the year in the weekday's place; any zone", [] {
         HistoryUiLocalTime zone = TestZone();
         ULONGLONG now = TestLocalMs(2026, 10, 31, 14, 32);
-        CHECK(HistoryUiTime(TestLocalMs(2026, 10, 31, 14, 31), now, zone) == L"Sat 31 Oct 14:31");
-        CHECK(HistoryUiTime(TestLocalMs(2026, 10, 26, 11, 31), now, zone) == L"Mon 26 Oct 11:31");
-        CHECK(HistoryUiTime(TestLocalMs(2026, 11, 1, 0, 5), now, zone) == L"Sun 1 Nov 00:05");
-        CHECK(HistoryUiTime(TestLocalMs(2026, 1, 1, 0, 0), now, zone) == L"Thu 1 Jan 00:00");
-        CHECK(HistoryUiTime(TestLocalMs(2025, 12, 17, 9, 12), now, zone) == L"17 Dec 2025 09:12");
-        CHECK(HistoryUiTime(TestLocalMs(2028, 2, 29, 8, 8), now, zone) == L"29 Feb 2028 08:08");
+        CHECK(HistoryUiTime({}, TestLocalMs(2026, 10, 31, 14, 31), now, zone) == L"Sat 31 Oct 14:31");
+        CHECK(HistoryUiTime({}, TestLocalMs(2026, 10, 26, 11, 31), now, zone) == L"Mon 26 Oct 11:31");
+        CHECK(HistoryUiTime({}, TestLocalMs(2026, 11, 1, 0, 5), now, zone) == L"Sun 1 Nov 00:05");
+        CHECK(HistoryUiTime({}, TestLocalMs(2026, 1, 1, 0, 0), now, zone) == L"Thu 1 Jan 00:00");
+        CHECK(HistoryUiTime({}, TestLocalMs(2025, 12, 17, 9, 12), now, zone) == L"17 Dec 2025 09:12");
+        CHECK(HistoryUiTime({}, TestLocalMs(2028, 2, 29, 8, 8), now, zone) == L"29 Feb 2028 08:08");
         // One instant in three zones: the local day and the current year are the zone's.
         ULONGLONG instant = TestLocalMs(2026, 10, 31, 23, 30, 0);
-        CHECK(HistoryUiTime(instant, now, TestZone(13 * 60)) == L"Sun 1 Nov 12:30");
-        CHECK(HistoryUiTime(instant, now, TestZone(-5 * 60)) == L"Sat 31 Oct 18:30");
+        CHECK(HistoryUiTime({}, instant, now, TestZone(13 * 60)) == L"Sun 1 Nov 12:30");
+        CHECK(HistoryUiTime({}, instant, now, TestZone(-5 * 60)) == L"Sat 31 Oct 18:30");
         // Across the year boundary: ten minutes apart, the earlier one in the previous year.
         ULONGLONG newYear = TestLocalMs(2027, 1, 1, 0, 10);
-        CHECK(HistoryUiTime(TestLocalMs(2026, 12, 31, 23, 50), newYear, zone) == L"31 Dec 2026 23:50");
-        CHECK(HistoryUiTime(TestLocalMs(2027, 1, 1, 0, 5), newYear, zone) == L"Fri 1 Jan 00:05");
+        CHECK(HistoryUiTime({}, TestLocalMs(2026, 12, 31, 23, 50), newYear, zone) == L"31 Dec 2026 23:50");
+        CHECK(HistoryUiTime({}, TestLocalMs(2027, 1, 1, 0, 5), newYear, zone) == L"Fri 1 Jan 00:05");
         // The same instants a minute before midnight on 31 December: both in the current year.
         ULONGLONG yearEnd = TestLocalMs(2026, 12, 31, 23, 59);
-        CHECK(HistoryUiTime(TestLocalMs(2026, 12, 31, 23, 50), yearEnd, zone) == L"Thu 31 Dec 23:50");
-        CHECK(HistoryUiTime(TestLocalMs(2027, 1, 1, 0, 5), yearEnd, zone) == L"1 Jan 2027 00:05");
+        CHECK(HistoryUiTime({}, TestLocalMs(2026, 12, 31, 23, 50), yearEnd, zone) == L"Thu 31 Dec 23:50");
+        CHECK(HistoryUiTime({}, TestLocalMs(2027, 1, 1, 0, 5), yearEnd, zone) == L"1 Jan 2027 00:05");
         // The year is the zone's: at 16:30 UTC on 31 December UTC+8 is already in 2027, so 15:50
         // UTC (23:50 there) is in its previous year.
         ULONGLONG utc = TestLocalMs(2026, 12, 31, 16, 30, 0);
-        CHECK(HistoryUiTime(utc - 40 * kMinute, utc, TestZone(8 * 60)) == L"31 Dec 2026 23:50");
-        CHECK(HistoryUiTime(utc - 40 * kMinute, utc, TestZone(0)) == L"Thu 31 Dec 15:50");
-        CHECK(HistoryUiTime(1, now, [](ULONGLONG) { return SYSTEMTIME{}; }) == L"\u2014");
+        CHECK(HistoryUiTime({}, utc - 40 * kMinute, utc, TestZone(8 * 60)) == L"31 Dec 2026 23:50");
+        CHECK(HistoryUiTime({}, utc - 40 * kMinute, utc, TestZone(0)) == L"Thu 31 Dec 15:50");
+        CHECK(HistoryUiTime({}, 1, now, [](ULONGLONG) { return SYSTEMTIME{}; }) == L"\u2014");
     });
 
     Run("history formats: numbers rounded, abbreviated from 10,000 with carry; units; hours", [] {

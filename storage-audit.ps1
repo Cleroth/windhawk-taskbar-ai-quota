@@ -7,8 +7,8 @@ Read-only audit of the mod's stored state: snapshot it, or compare a new snapsho
 snapshot: saves a JSON snapshot to -Folder. It reads Windhawk's LocalStorage registry key for the
 mod (settings_v1 parsed, settings_v1_len, hiddenAccounts, any other value by hash, and every auth_*
 sign-in as presence + SHA-256 of its stored encrypted string; tokens are never decrypted, copied or
-printed), the per-user RecordHistory consent value, and the history journal's files, header and
-per-day / per-history-ID sample counts. It writes nothing else.
+printed), the per-user RecordHistory consent and Language preference values, and the history
+journal's files, header and per-day / per-history-ID sample counts. It writes nothing else.
 
 compare: takes and saves a new snapshot (or loads -Current) and classifies every difference from -Baseline as
 expected (settings fields named in -Edited, accounts labelled in -Disposable), tolerated (a sign-in
@@ -28,7 +28,7 @@ param(
     # compare: a newer snapshot file instead of a new snapshot.
     [string]$Current,
     # compare: settings you changed on purpose: top-level settings_v1 fields (pollMinutes), account
-    # fields as <label>.<field> (O1.hidden), 'accountOrder' and 'consent'.
+    # fields as <label>.<field> (O1.hidden), 'accountOrder', 'consent' and 'language'.
     [string[]]$Edited = @(),
     # compare: labels of disposable test accounts; any change to them (add, rename, remove, sign-in,
     # sign-out, history ID) is expected.
@@ -44,8 +44,9 @@ $Disposable = @($Disposable | ForEach-Object { $_ -split ',' } | ForEach-Object 
 
 # Mirrors the mod's sources: auth\token-store.h (auth_<identity hash>), core\model.h
 # (AccountIdentityHash: FNV-1a 64 over the UTF-16 bytes of provider + "\n" + label, with the mod's
-# own offset basis), history\journal.h (journal path, header, consent key) and history\types.h
-# (240-byte samples: account ID at 0, time in Unix ms at 8).
+# own offset basis), history\journal.h (journal path, header, consent key), core\language.h (the
+# language value beside it) and history\types.h (240-byte samples: account ID at 0, time in Unix ms
+# at 8).
 $offsetBasis = [System.Numerics.BigInteger]::Parse('1469598103934665603')
 $wordSpace = [System.Numerics.BigInteger]::Pow(2, 64)
 $journalMagic = [uint64]0x3154534948514941
@@ -157,9 +158,12 @@ if ($Mode -eq 'snapshot' -or -not $Current) {
         }
     })
 
-    # Per-user history consent: missing = on (recording is on until the user turns it off).
+    # Per-user history consent: missing = on (recording is on until the user turns it off). The
+    # language preference beside it: a language tag; missing or empty = Automatic (the mod also reads
+    # a tag it doesn't know as Automatic).
     $consentPath = "Software\Windhawk\TaskbarAIQuota\$ModId"
     $consent = [ordered]@{ key = "HKCU\$consentPath"; present = $false; kind = $null; value = $null; recording = $true }
+    $language = [ordered]@{ key = "HKCU\$consentPath"; present = $false; kind = $null; value = $null }
     $user = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser, [Microsoft.Win32.RegistryView]::Registry64)
     $consentKey = $user.OpenSubKey($consentPath, $false)
     if ($consentKey) {
@@ -170,12 +174,18 @@ if ($Mode -eq 'snapshot' -or -not $Current) {
                 $consent.value = $consentKey.GetValue('RecordHistory')
                 $consent.recording = $consent.kind -eq 'DWord' -and $consent.value -eq 1
             }
+            if ($consentKey.GetValueNames() -contains 'Language') {
+                $language.present = $true
+                $language.kind = "$($consentKey.GetValueKind('Language'))"
+                $language.value = $consentKey.GetValue('Language')
+            }
         } finally {
             $consentKey.Close()
         }
     }
     $user.Close()
     $snapshot.consent = $consent
+    $snapshot.language = $language
 
     # History journal. Opened with full sharing so the mod's appends and atomic replace never fail.
     $directory = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "TaskbarAIQuota\$ModId"
@@ -252,6 +262,7 @@ if ($Mode -eq 'snapshot' -or -not $Current) {
     "Storage: $(if ($storage.present) { $storage.key } else { "missing ($($storage.key))" }); settings_v1 $(if ($settings) { 'parsed' } else { 'missing or invalid' })"
     "Accounts: $($accounts.Count) ($signedIn with a stored sign-in); stored sign-ins without an account: $orphans"
     "Consent: $(if ($consent.present) { "RecordHistory=$($consent.value)" } else { 'not set' }) (recording $(if ($consent.recording) { 'on' } else { 'off' }))"
+    "Language: $(if ($language.present -and $language.value) { "Language=$($language.value)" } else { 'Automatic' })$(if ($language.present -and -not $language.value) { ' (stored empty)' })"
     "Journal: $journalText"
 }
 if ($Mode -eq 'snapshot') { exit 0 }
@@ -359,6 +370,15 @@ foreach ($name in @($baseSignIns.Keys) + @($currentSignIns.Keys) | Sort-Object -
 if (-not (& $same $base.consent $latest.consent)) {
     $text = "History consent: recording $($base.consent.recording) (value $($base.consent.value)) -> $($latest.consent.recording) (value $($latest.consent.value))"
     if ($Edited -ccontains 'consent') { $found.expected.Add($text) } else { $found.unexpected.Add($text) }
+}
+
+# Language preference, like consent; snapshots older than it have none to compare.
+if (-not $base.Contains('language') -or -not $latest.Contains('language')) {
+    $found.info.Add('A snapshot predates the language value; it was not compared')
+} elseif (-not (& $same $base.language $latest.language)) {
+    $describe = { param($l) if ($l.present) { "'$($l.value)' ($($l.kind))" } else { 'not set' } }
+    $text = "Language preference: $(& $describe $base.language) -> $(& $describe $latest.language)"
+    if ($Edited -ccontains 'language') { $found.expected.Add($text) } else { $found.unexpected.Add($text) }
 }
 
 # Journal: growth and pruning older than the retention window are tolerated; anything removed inside

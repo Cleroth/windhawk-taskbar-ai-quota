@@ -58,7 +58,17 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   formatting per language, each fallback case with English plural results, reordered links,
   literal, numeric and rich arguments, list patterns per production catalog, the registry,
   explicit choices and the context, Automatic matching over tag lists, the pseudo-locale, lookup
-  with and without context.
+  with and without context. `fixtures/i18n-settings.inc`: localization in the settings window on
+  the production catalogs (`i18n/ui-runs.h` is extracted after the toolkit): localized runs bound
+  to actions, the History page's two-link sentence with its links reordered by a test catalog
+  (actions and focus order follow the IDs), the language field and its edits (a failed save, the
+  Behavior reset), the Behavior page in German, Russian and Japanese (plurals, the widened Show on
+  field) and the pseudo-locale, and the locale in the toolkit's text caches.
+  `fixtures/i18n-taskbar.inc`: the meter model's localized text on the production catalogs: the
+  quota keys and the headline countdown's forms and width reserve in zh-Hans, ru and the
+  pseudo-locale, the preview strip drawing them (the matrix's localized key reserve), an account
+  error's text per language with its English log rendering, and the Accounts page's state for
+  the coded error.
   `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,
@@ -131,7 +141,11 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   (`render-layout-placement-*`), preview strip sheets with one captioned
   row per layout and option (`render-preview-sheet-*`) or per Display option
   (`render-display-preview-sheet-*`; 1:1 at 100/125/150%) and the dropdown popup's rows
-  (`render-popup-*`). `render-backdrop-*` (Accounts, Layout, Display) and
+  (`render-popup-*`), and the localization review's Behavior and History pages, whole, in
+  zh-Hans and the pseudo-locale (`render-i18n-<page>-<tag>-light-96/144`), with a preview strip
+  sheet of the taskbar's localized text (keys, the headline's countdown, chart and matrix keys;
+  `render-i18n-preview-sheet-<tag>-light-96/144`). `render-backdrop-*`
+  (Accounts, Layout, Display) and
   `render-history-backdrop-*` (light and dark, 144 DPI) draw the windows over a stand-in backdrop
   with grayscale text, as the host does when DWM draws one. Client-drawn previews use the
   production painter. The history window's
@@ -183,8 +197,12 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   the icon buttons' tooltips; an export's progress in the status slot with every control but the
   chips disabled), `fixtures/history-tooltip.inc` (the single-account readout guarantee: the widest
   mandatory parts the production readout rows print, then ten such rows placed at every pointer
-  position of an 800 x 590 DIP work area with 32 and 256 DIP pointers at 96 and 144 DPI;
-  complete-text tooltips placed whole there; `OBSERVE` lines report widths and capacities) and
+  position of an 800 x 590 DIP work area with 32 and 256 DIP pointers at 96 and 144 DPI, again in
+  zh-Hans and the pseudo-locale, where only the pointer's clearance is checked and the rows placed
+  are reported; complete-text tooltips placed whole there; `OBSERVE` lines report widths and
+  capacities), `fixtures/i18n-history.inc` (compact dates and chart ticks per language, the
+  status pill's plural, and the controller's language switch: status, cards, ticks and readout
+  re-labeled, a modal keeping its language) and
   `fixtures/history-chart.inc` (the chart through the controller on synthetic journals in the
   mockups' shapes: axes, the plot's layout on device pixels, local time ticks per range, across
   daylight saving and over ten years; picking (every nearby or coincident line in both periods at
@@ -206,7 +224,10 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   (same themes and DPIs): the readout placed on each side of the pointer by the production
   placement, row forms, a shortened name, the production time forms (a previous year's, this
   year's), two columns, the "+N more" hint, and the complete-text tooltips (a chip's, the icon
-  buttons').
+  buttons'); also in zh-Hans and the pseudo-locale, light at 96 and 144 DPI
+  (`render-history-tooltips-<tag>-light-*`), with `render-history-i18n-<tag>-light-*`: the
+  default view, the 30-day and All retained ticks and a readout on the chart as the controller
+  composes them in that language.
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
   (`ui/system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
   `color-dialog.h`), the history window's dialog scope (`history/modal.h`) and a stub client with

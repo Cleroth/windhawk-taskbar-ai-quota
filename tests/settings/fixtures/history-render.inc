@@ -57,6 +57,8 @@ static void RenderHistorySheet(UiGraphics& g, IWICImagingFactory* wic, const std
             }
         }
         part.view.theme = theme.kind;
+        // The toolkit takes the view's language, as the window's client sets it.
+        g.locale = part.view.locale.LocaleName();
         UiFrame frame;
         HistoryUiBuildFrame(g, part.view, part.client, frame);
         UiTooltipContent readout;
@@ -516,6 +518,40 @@ static void RunHistoryRenders(const std::wstring& directory) {
                     CHECK(true);
                 });
             }
+        }
+    }
+    // The localization review's languages, light at 96 and 144 DPI, as the controller composes the
+    // window in each: the default view (pill, status, the cards' times, the ticks), the 30-day and
+    // All retained ticks, and the readout on the chart while comparing.
+    for (std::string_view tag : {"zh-Hans", "qps-ploc"}) {
+        I18nLocale locale(*I18nLanguageByTag(std::wstring(tag.begin(), tag.end())));
+        auto localized = [&](std::shared_ptr<TestChartWindow> window) {
+            window->ops.locale = locale;
+            window->controller.Load();
+            return window;
+        };
+        HistoryRenderPart view = real(L"Default view: All accounts, Weekly, 7 days", localized(TestChartOf(TestMockupWeek())), 0);
+        std::vector<HistoryRenderPart> parts = {view};
+        for (auto [range, caption] : {std::pair{HistoryUiRange::Month, L"30d ticks: dates"},
+                                      std::pair{HistoryUiRange::All, L"All retained (900 days) ticks: months"}}) {
+            int value = int(range);
+            auto spans = TestChartOf(TestMockupLong(900), [value](HistoryController& c) { c.Command(HistoryUiCommand::Range, value); });
+            spans->ops.settings.settings.historyRetentionDays = 900;
+            parts.push_back(real(caption, localized(spans)));
+        }
+        parts.push_back(real(L"The readout on the chart: six coincident lines at hour 70, comparing",
+                             localized(TestChartOf(TestMockupWeek(), [](HistoryController& c) {
+                                 c.Command(HistoryUiCommand::Compare, 1);
+                             })),
+                             640));
+        parts.back().hover = states[states.size() - 1].hover;
+        for (UINT dpi : {96u, 144u}) {
+            std::string name = "render-history-i18n-" + std::string(tag) + "-light-" + std::to_string(dpi) + ".png";
+            Run(name, [&] {
+                RenderHistorySheet(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()), parts,
+                                   RenderThemes()[0].input, dpi);
+                CHECK(true);
+            });
         }
     }
     // The default frame over a stand-in backdrop (light and dark; high contrast never gets one).

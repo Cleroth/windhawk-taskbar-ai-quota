@@ -570,9 +570,10 @@ static void RunPageTests() {
         }
         CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Reset");
         CHECK(HasText(frame, L"Notifies when a taskbar quota first reaches the chosen threshold."));
-        // Focus order: dropdown, poll dropdown, (disabled box skipped), toggles, reset.
+        // Focus order: language and display dropdowns, poll dropdown, (disabled box skipped),
+        // toggles, notifications dropdown, reset.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
-        CHECK(stops.size() == 6 + 6);
+        CHECK(stops.size() == 6 + 7);
 
         // A chosen display that is gone stays chosen, marked unavailable; Custom enables the box
         // and its draft text and error show.

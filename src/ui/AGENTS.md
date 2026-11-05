@@ -22,6 +22,10 @@ a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
   never client-drawn.
 - Colors a client derives from the theme (`UiRun::color`, a usage color) are built content: a
   theme change rebuilds the frame. High contrast ignores them.
+- Catalog-unaware: clients pass every text the toolkit draws (a toggle's `UiToggleText`, a
+  readout's "+N more" hint `UiTooltipContent::more`) and set the frame's locale name
+  (`UiGraphics::locale`) before building. Text formats take it, and `UiStyleKey` and `UiRichKey`
+  include it, so no layout or shaping of another locale is reused.
 
 ## Lifetime and teardown
 

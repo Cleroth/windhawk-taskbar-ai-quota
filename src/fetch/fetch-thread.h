@@ -24,7 +24,7 @@ static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a
 // that.
 static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
                              AccountDetailsCache* details) {
-    d->error.clear();
+    d->error = {};
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
     uint64_t idHash = AccountIdentityHash(acc);
@@ -61,7 +61,7 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = L"not signed in - click to sign in";
+        d->error = {AccountErrorCode::Message, L"not signed in - click to sign in"};
         return signInGeneration;
     }
     // GitHub refreshes through its own form-encoded endpoint.
@@ -81,8 +81,8 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = saved == TokenSaveResult::Stale ? L"token refresh failed" :
-                                                             L"could not save refreshed token";
+                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
+                                                           L"token refresh failed" : L"could not save refreshed token"};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
@@ -90,10 +90,10 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
             d->stale = true;
             if (refreshResult == TokenEndpointResult::Rejected) {
                 d->needsLogin = true;
-                d->error = L"session expired - click to sign in";
+                d->error = {AccountErrorCode::Message, L"session expired - click to sign in"};
             } else {
-                d->error = L"token refresh failed";
-                if (!refreshErr.empty()) d->error += L": " + refreshErr;
+                d->error = {AccountErrorCode::Message, L"token refresh failed"};
+                if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
                 *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             }
             return signInGeneration;
@@ -148,16 +148,16 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = saved == TokenSaveResult::Stale ? L"token refresh failed" :
-                                                             L"could not save refreshed token";
+                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
+                                                           L"token refresh failed" : L"could not save refreshed token"};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
             r = requestUsage(tok);
         } else if (refreshResult == TokenEndpointResult::TransientFailure) {
             d->stale = true;
-            d->error = L"token refresh failed";
-            if (!refreshErr.empty()) d->error += L": " + refreshErr;
+            d->error = {AccountErrorCode::Message, L"token refresh failed"};
+            if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
             *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             return signInGeneration;
         }
@@ -165,13 +165,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
 
     if (!r.ok) {
         d->stale = true;
-        d->error = L"network error";
+        d->error = {AccountErrorCode::Message, L"network error"};
         return signInGeneration;
     }
     if (r.status == 401) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = L"unauthorized - click to sign in";
+        d->error = {AccountErrorCode::Message, L"unauthorized - click to sign in"};
         return signInGeneration;
     }
     // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
@@ -185,13 +185,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     }
     if (r.status == 429 || githubRateLimited) {
         d->stale = true;
-        d->error = L"rate limited by API";
+        d->error = {AccountErrorCode::Message, L"rate limited by API"};
         *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
         return signInGeneration;
     }
     if (copilot && r.status == 403) {
         d->stale = true;
-        d->error = L"no Copilot access on this GitHub account";
+        d->error = {AccountErrorCode::Message, L"no Copilot access on this GitHub account"};
         return signInGeneration;
     }
     // OpenCode's EntitlementError: the key's workspace has no Go subscription. Other 403s (an edge
@@ -204,13 +204,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
         } catch (...) {}
         if (entitlement) {
             d->stale = true;
-            d->error = L"no OpenCode Go subscription on this key";
+            d->error = {AccountErrorCode::Message, L"no OpenCode Go subscription on this key"};
             return signInGeneration;
         }
     }
     if (r.status != 200) {
         d->stale = true;
-        d->error = L"HTTP " + std::to_wstring(r.status);
+        d->error = {AccountErrorCode::Message, L"HTTP " + std::to_wstring(r.status)};
         return signInGeneration;
     }
 
@@ -222,7 +222,7 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                              ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
-        d->error = parseError.empty() ? L"unexpected response format" : parseError;
+        d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response format" : parseError};
         return signInGeneration;
     }
 
@@ -539,7 +539,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 // where recording was disabled, even if it was shorter than two polls.
                 sample.session = historySession ^ (historyContinuityGeneration * 0x9e3779b97f4a7c15ULL);
                 sample.provider = providerCode;
-                sample.failed = !results[i].error.empty() || results[i].stale ||
+                sample.failed = bool(results[i].error) || results[i].stale ||
                                 results[i].needsLogin;
                 if (!sample.failed) {
                     const std::array<const WindowUsage*, 6> windows = {
@@ -577,7 +577,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 ULONGLONG pollDelayMs = accounts[i].provider == L"antigravity"
                                             ? 60000
                                             : (ULONGLONG)intervalMin * 60000;
-                if (!results[i].error.empty() && !results[i].needsLogin &&
+                if (results[i].error && !results[i].needsLogin &&
                     accounts[i].provider != L"antigravity") {
                     pollDelayMs = std::min<ULONGLONG>(pollDelayMs, 120000);
                 }
@@ -587,16 +587,17 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
             }
 
-            if (!results[i].error.empty()) {
+            if (results[i].error) {
                 if (retryAfter <= 0 && !results[i].needsLogin &&
                     accounts[i].provider != L"antigravity") {
                     anyError = true;
                 }
-                std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].label +
-                                          L"\n" + results[i].error;
+                // Logged and deduplicated in English, whatever the UI language.
+                std::wstring error = AccountErrorText(I18nLocale(), results[i].error);
+                std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].label + L"\n" + error;
                 if (errorState != lastLoggedErrorStates[i]) {
                     Wh_Log(L"Fetch [%d] %s (%s): %s", (int)i, accounts[i].label.c_str(),
-                           accounts[i].provider.c_str(), results[i].error.c_str());
+                           accounts[i].provider.c_str(), error.c_str());
                     lastLoggedErrorStates[i] = std::move(errorState);
                 }
             } else {

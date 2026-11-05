@@ -18,7 +18,7 @@ static float TestTextWidth(PCWSTR text, UiFont font) {
 }
 
 static MeterDisplay Display(const Settings& settings = {}, double scale = 1, double taskbar = 48) {
-    return MeterDisplayFor(settings, kNow, scale, taskbar);
+    return MeterDisplayFor(settings, I18nLocale(), kNow, scale, taskbar);
 }
 
 static AccountConfig Account(std::wstring provider = L"anthropic", std::wstring label = L"A",

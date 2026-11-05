@@ -9,9 +9,10 @@ static constexpr float kSettingsContentMaxWidth = 1000;
 
 static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
                                  UiFrame& frame) {
-    static constexpr PCWSTR kPages[][2] = {
-        {L"Accounts", L"\uE716"}, {L"Layout", L"\uE8A9"},  {L"Display", L"\uE790"},
-        {L"Behavior", L"\uE9E9"}, {L"History", L"\uE81C"}, {L"About", L"\uE946"},
+    static constexpr std::pair<I18nKey, PCWSTR> kPages[] = {
+        {TrCtx(L"settings-page", L"Accounts"), L"\uE716"}, {TrCtx(L"settings-page", L"Layout"), L"\uE8A9"},
+        {TrCtx(L"settings-page", L"Display"), L"\uE790"},  {TrCtx(L"settings-page", L"Behavior"), L"\uE9E9"},
+        {TrCtx(L"settings-page", L"History"), L"\uE81C"},  {TrCtx(L"settings-page", L"About"), L"\uE946"},
     };
     int page = std::clamp(int(view.page), 0, int(SettingsUiPage::Count) - 1);
 
@@ -21,8 +22,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
         nav.id = uint32_t(1 + i);
         nav.kind = UiItemKind::Nav;
         nav.rect = {8, 6 + 41.0f * float(i), kSettingsNavWidth - 8, 44 + 41.0f * float(i)};
-        nav.text = kPages[i][0];
-        nav.icon = kPages[i][1];
+        nav.text = I18nText(view.locale, kPages[i].first);
+        nav.icon = kPages[i].second;
         nav.selected = i == page;
         nav.action = {UiActionKind::Navigate, i};
         frame.main.push_back(std::move(nav));
@@ -38,7 +39,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     title.kind = UiItemKind::Text;
     title.font = UiFont::Title;
     title.rect = {kSettingsNavWidth + left, 6, kSettingsNavWidth + left + std::max(width, 1.0f), 42};
-    title.runs.push_back({kPages[page][0]});
+    title.runs.push_back({I18nText(view.locale, kPages[page].first)});
     frame.main.push_back(std::move(title));
 
     // Running ids are unique per page; interactive controls take fixed ones (settings/view.h).
@@ -50,7 +51,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     // Accounts: Add account (mockup .btn.accent: 14 DIP padding, 12 DIP glyph) at the title row's
     // right opens the provider menu; while accounts exist, a note under the title.
     if (SettingsUiPage(page) == SettingsUiPage::Accounts) {
-        PCWSTR label = L"Add account";
+        std::wstring label = I18nText(view.locale, TrCtx(L"button", L"Add account"));
         float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
         float right = kSettingsNavWidth + left + std::max(width, 1.0f);
         UiItem add;

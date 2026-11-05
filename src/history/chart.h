@@ -148,12 +148,14 @@ struct HistoryChart {
 
     // Layout at `scale`: the item's rectangle and the plot in it, the plot's device-pixel width,
     // the axes with their label columns (percent left, USD and credits right) and the time ticks
+    // with the language of their labels
     D2D1_RECT_F rect{}, plot{};
     float scale = 1;
     int width = 0;
     std::array<HistoryChartAxis, 3> axes;
     std::array<float, 3> columns{};
     std::vector<HistoryChartTick> ticks;
+    I18nLocale tickLocale;
 
     // Each line's periods (current, previous) reduced to the plot's pixels (hidden lines none),
     // and what for
@@ -217,16 +219,16 @@ static void HistoryChartLayout(UiGraphics& g, HistoryChart& c, D2D1_RECT_F rect,
     c.axes[0].values = kept;
 }
 
-// Time ticks over [from, to) at local boundaries (approved s-ticks), labeled at most 2 days:
-// every 1, 2, 3, 6 or 12 hours (`14:00`, midnight as `Sat 31`); at most 14 days: every 1 or 2
-// days (`Sat 24`); at most 120 days: every 1 or 2 days, or Mondays every 1, 2 or 4 weeks
-// (`Oct 5`); beyond: every 1, 2, 3, 6, 12, 24 or 60 months from January (`Oct 2026`). The step
-// is the smallest keeping labels 52, 56 and 64 DIP apart over `width`. A boundary is where the
-// local clock (`localTime`) first reaches a new hour, day or month: daylight saving moves it, a
-// repeated hour counts once, a skipped one never. A scan in steps shorter than the unit finds
-// each, a bisection its millisecond.
-static std::vector<HistoryChartTick> HistoryChartTicks(ULONGLONG from, ULONGLONG to, float width,
-                                                       const HistoryUiLocalTime& localTime) {
+// Time ticks over [from, to) at local boundaries (approved s-ticks), labeled in the locale's
+// language (English shown) at most 2 days: every 1, 2, 3, 6 or 12 hours (`14:00`, midnight as
+// `Sat 31`); at most 14 days: every 1 or 2 days (`Sat 24`); at most 120 days: every 1 or 2 days,
+// or Mondays every 1, 2 or 4 weeks (`Oct 5`); beyond: every 1, 2, 3, 6, 12, 24 or 60 months from
+// January (`Oct 2026`). The step is the smallest keeping labels 52, 56 and 64 DIP apart over
+// `width`. A boundary is where the local clock (`localTime`) first reaches a new hour, day or
+// month: daylight saving moves it, a repeated hour counts once, a skipped one never. A scan in
+// steps shorter than the unit finds each, a bisection its millisecond.
+static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale, ULONGLONG from, ULONGLONG to,
+                                                       float width, const HistoryUiLocalTime& localTime) {
     std::vector<HistoryChartTick> ticks;
     if (to <= from + 1 || width <= 0) return ticks;
     enum class Unit { Hour, Day, Month };
@@ -265,15 +267,17 @@ static std::vector<HistoryChartTick> HistoryChartTicks(ULONGLONG from, ULONGLONG
         return mod(b, 7) == 4 && mod((b - 4) / 7, step / 7) == 0;
     };
     auto label = [&](const SYSTEMTIME& t) -> std::wstring {
-        std::wstring month = kHistoryUiMonths[t.wMonth - 1];
-        if (unit == Unit::Month) return month + L' ' + std::to_wstring(t.wYear);
-        if (unit == Unit::Day && days > 14) return month + L' ' + std::to_wstring(t.wDay);
-        if (unit == Unit::Hour && t.wHour) {
-            wchar_t clock[8];
-            swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
-            return clock;
+        if (unit == Unit::Month) {
+            return I18nText(locale, TrCtx(L"chart-tick-month", L"{month} {year}"),
+                            {{L"month", I18nText(locale, kHistoryUiMonthsAlone[t.wMonth - 1])}, {L"year", t.wYear}});
         }
-        return std::wstring(kHistoryUiDays[mod(day(t) + 4, 7)]) + L' ' + std::to_wstring(t.wDay);
+        if (unit == Unit::Day && days > 14) {
+            return I18nText(locale, TrCtx(L"chart-tick-day", L"{month} {day}"),
+                            {{L"month", I18nText(locale, kHistoryUiMonths[t.wMonth - 1])}, {L"day", t.wDay}});
+        }
+        if (unit == Unit::Hour && t.wHour) return HistoryUiClock(t);
+        return I18nText(locale, TrCtx(L"chart-tick-weekday", L"{weekday} {day}"),
+                        {{L"weekday", I18nText(locale, kHistoryUiDays[mod(day(t) + 4, 7)])}, {L"day", t.wDay}});
     };
 
     SYSTEMTIME start = localTime(from);
@@ -362,21 +366,23 @@ static std::vector<HistoryChartHit> HistoryChartPick(const HistoryChart& c, D2D1
 
 // A readout row (approved q6-rows, with the chip names): the line's name and swatch, then never
 // cut its period, its value rounded with its unit and the recorded local time, compact.
-static UiReadoutRow HistoryChartRow(std::wstring name, D2D1_COLOR_F color, int stroke, int meter, int period,
-                                    double value, ULONGLONG time, ULONGLONG now, const HistoryUiLocalTime& localTime) {
+static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name, D2D1_COLOR_F color, int stroke,
+                                    int meter, int period, double value, ULONGLONG time, ULONGLONG now,
+                                    const HistoryUiLocalTime& localTime) {
     return {std::move(name),
             {{period ? L"[Previous week]" : L"[Current]", UiRunStyle::Normal, UiInk::Secondary},
              {L" " + HistoryUiValue(meter, value, 1)},
-             {L" \u00B7 " + HistoryUiTime(time, now, localTime), UiRunStyle::Normal, UiInk::Secondary}},
+             {L" \u00B7 " + HistoryUiTime(locale, time, now, localTime), UiRunStyle::Normal, UiInk::Secondary}},
             color,
             float(stroke)};
 }
 
-// The readout of picked points: one row each, in their order, keyed by the recorded samples
-// they name (none: key 0). Its overflow hint names what shows the rest.
-static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::vector<HistoryChartHit>& hits,
-                                            const UiPalette& p, bool oneAccount, ULONGLONG now,
-                                            const HistoryUiLocalTime& localTime) {
+// The readout of picked points in the locale's language: one row each, in their order, keyed by
+// the recorded samples they name and the language (none: key 0). Its overflow hint names what
+// shows the rest.
+static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const HistoryChart& c,
+                                            const std::vector<HistoryChartHit>& hits, const UiPalette& p,
+                                            bool oneAccount, ULONGLONG now, const HistoryUiLocalTime& localTime) {
     UiTooltipContent content;
     if (!c.snapshot) return content;
     uint64_t key = 14695981039346656037ULL;
@@ -384,6 +390,7 @@ static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::ve
         for (int i = 0; i < 8; i++) key = (key ^ ((value >> (8 * i)) & 0xFF)) * 1099511628211ULL;
     };
     mix(c.generation);
+    mix(std::hash<std::wstring_view>{}(locale.Language().tag));
     for (const HistoryChartHit& hit : hits) {
         const HistoryUiLine& line = c.lines[hit.line];
         const HistoryRenderPoint& point = c.render[hit.line][size_t(hit.period)].points[hit.point];
@@ -391,14 +398,19 @@ static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::ve
         mix(line.chip);
         mix(uint64_t(hit.period));
         mix(point.sourceRow);
-        content.rows.push_back(HistoryChartRow(line.name, HistoryChartColor(line, p), line.stroke, line.meter, hit.period,
-                                               HistoryUiShown(line.meter, point.value, c.remaining),
+        content.rows.push_back(HistoryChartRow(locale, line.name, HistoryChartColor(line, p), line.stroke, line.meter,
+                                               hit.period, HistoryUiShown(line.meter, point.value, c.remaining),
                                                c.snapshot->samples[point.sourceRow].timeMs, now, localTime));
     }
     if (content.rows.empty()) return {};
     content.key = key ? key : 1;
-    content.more = oneAccount ? L" \u2014 hide lines in the legend" :
-                                L" \u2014 hide lines in the legend or select one account";
+    content.more = [locale, oneAccount](int more) {
+        return oneAccount ? I18nText(locale, TrCtx(L"chart-readout", L"+{count} more \u2014 hide lines in the legend"),
+                                     {{L"count", more}}) :
+                            I18nText(locale, TrCtx(L"chart-readout", L"+{count} more \u2014 hide lines in the legend "
+                                                                     L"or select one account"),
+                                     {{L"count", more}});
+    };
     return content;
 }
 

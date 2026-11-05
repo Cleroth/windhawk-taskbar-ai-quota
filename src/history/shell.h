@@ -161,12 +161,17 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         UiInk ink;
         bool on;
     };
-    Pill pill = view.pill == HistoryUiPill::Off       ? Pill{L"Off", UiInk::Secondary, false} :
-                view.pill == HistoryUiPill::NotSaving ? Pill{L"Not saving", UiInk::Danger, true} :
-                view.pill == HistoryUiPill::Waiting   ? Pill{L"Waiting", UiInk::Caution, true} :
-                Pill{L"Recording \u00B7 " +
-                         (view.retentionDays <= 0 ? std::wstring(L"forever") :
-                          std::to_wstring(view.retentionDays) + (view.retentionDays == 1 ? L" day" : L" days")),
+    const I18nLocale& locale = view.locale;
+    Pill pill = view.pill == HistoryUiPill::Off ? Pill{I18nText(locale, TrCtx(L"history-pill", L"Off")), UiInk::Secondary,
+                                                       false} :
+                view.pill == HistoryUiPill::NotSaving ?
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Not saving")), UiInk::Danger, true} :
+                view.pill == HistoryUiPill::Waiting ?
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Waiting")), UiInk::Caution, true} :
+                view.retentionDays <= 0 ?
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Recording \u00B7 forever")), UiInk::Success, true} :
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Recording \u00B7 {days, plural, one{# day} other{# days}}"),
+                              {{L"days", view.retentionDays}}),
                      UiInk::Success, true};
     PCWSTR title = selected ? selected->label.c_str() : L"All accounts";
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);

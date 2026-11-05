@@ -8,7 +8,7 @@
 // In-memory ops: the open request (overwritten by each open, as the shared global is), a journal
 // with its stamp, status and cap, settings with their polls, the clock, unload, the window's
 // posted refresh messages and deferral timer, the consent transaction, the dialogs, the CSV write,
-// Clear, Delete history and the folder, and an operation log.
+// Clear, Delete history and the folder, the current language, and an operation log.
 struct TestHistoryOps final : HistoryOps {
     uint64_t request = 0;
     std::vector<HistorySample> journal;
@@ -59,6 +59,8 @@ struct TestHistoryOps final : HistoryOps {
     std::wstring deleteError = L"History storage is in use by another Explorer session, or is inaccessible.";
     std::function<void()> deleting;
     bool folder = true;
+    // The current language (English unless a case switches it)
+    I18nLocale locale;
     // "take", "settings", "snapshot <days before now>d", "peek" (status only),
     // "peek <days before now>d" (samples too), "consent", "notify", "post" ("post failed"),
     // "timer on", "timer off", "open settings", "open folder" ("no folder"), "ask <caption>",
@@ -192,6 +194,7 @@ struct TestHistoryOps final : HistoryOps {
     bool Unloading() override { return unloading; }
     ULONGLONG Now() override { return now; }
     SYSTEMTIME LocalTime(ULONGLONG ms) override { return TestZone()(ms); }
+    I18nLocale Locale() override { return locale; }
 };
 
 static AccountData TestPoll(double weekly, ULONGLONG lastSuccessMs) {

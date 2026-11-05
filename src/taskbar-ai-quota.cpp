@@ -221,6 +221,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "core/model.h"
 
+#include "core/account-error.h"
+
 #include "history/types.h"
 
 #include "history/state.h"
@@ -230,6 +232,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "core/forward.h"
 
 #include "core/state.h"
+
+#include "core/language.h"
 
 #include "core/helpers.h"
 
@@ -315,6 +319,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "ui/input.h"
 #include "ui/tooltip-layout.h"
+
+#include "i18n/ui-runs.h"
 
 #include "ui/system-theme.h"
 
@@ -482,7 +488,7 @@ void Wh_ModAfterInit() {
             std::lock_guard<std::mutex> lk(g_dataMutex);
             for (auto& data : g_data) {
                 data.stale = true;
-                data.error = L"fetch thread failed";
+                data.error = {AccountErrorCode::Message, L"fetch thread failed"};
             }
         }
     }

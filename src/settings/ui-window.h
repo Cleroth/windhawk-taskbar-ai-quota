@@ -149,11 +149,14 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // The preview's scroll stays within what the built strip can scroll, and a new position
-    // starts it from its home. Account cards follow the projection's order, a dragged card its
-    // drag order. The window takes the projected material at once.
+    // Each frame takes the current language, its text and the toolkit's text formats both. The
+    // preview's scroll stays within what the built strip can scroll, and a new position starts it
+    // from its home. Account cards follow the projection's order, a dragged card its drag order.
+    // The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
+        view.locale = I18nLocale(*g_language.load(std::memory_order_acquire));
+        host.graphics->locale = view.locale.LocaleName();
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
@@ -287,9 +290,10 @@ struct SettingsUiClient final : UiHostClient {
                     case SettingsField::ResetDisplay: {
                         std::wstring question =
                             field == SettingsField::ResetBehavior ?
-                                L"Reset Behavior to its defaults?\n\nShow on the primary display "
-                                L"only, show details on hover, poll every 10 minutes, do not poll "
-                                L"hidden accounts, threshold notifications at red." :
+                                I18nText(view.locale, Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show "
+                                                         L"on the primary display only, show details on hover, poll "
+                                                         L"every 10 minutes, do not poll hidden accounts, threshold "
+                                                         L"notifications at red.")) :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
                                 L"on the left, 32 px rings, logos and number badges in the taskbar\u2019s "

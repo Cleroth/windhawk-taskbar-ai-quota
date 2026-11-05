@@ -72,6 +72,7 @@ struct HistoryUiNotice {
 };
 
 struct HistoryUiView {
+    I18nLocale locale;                       // The language its text and formats are in
     UiThemeKind theme = UiThemeKind::Dark;   // Built content follows it: value inks, card lines
 
     // Accounts and controls; the view is the current mode's (All accounts or one account)
@@ -168,27 +169,51 @@ static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_
     return {part};
 }
 
-// Compact display formats (approved with the phase-3 mockups), English and independent of the
-// locale like the CSV. Local times read `Sat 31 Oct 14:31`; outside the current year the year
-// takes the weekday's place, `25 May 2026 23:59` (the readout's mandatory part keeps its width
-// bound); `localTime` converts a Unix ms time with the user's clock and zone.
+// Compact display formats (approved with the phase-3 mockups) in the locale's language: each
+// language's own order and abbreviated names (the catalog's), always 24-hour, independent of
+// Windows' regional formats like the CSV. Local times read `Sat 31 Oct 14:31` in English; outside
+// the current year the year takes the weekday's place, `25 May 2026 23:59` (the readout's
+// mandatory part keeps its width bound); `localTime` converts a Unix ms time with the user's
+// clock and zone. Months come in a date's form, and alone with a year (Russian: мая, май).
 using HistoryUiLocalTime = std::function<SYSTEMTIME(ULONGLONG)>;
-static constexpr PCWSTR kHistoryUiDays[] = {L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
-static constexpr PCWSTR kHistoryUiMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
-                                              L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
+static constexpr I18nKey kHistoryUiDays[] = {
+    TrCtx(L"date-weekday", L"Sun"), TrCtx(L"date-weekday", L"Mon"), TrCtx(L"date-weekday", L"Tue"),
+    TrCtx(L"date-weekday", L"Wed"), TrCtx(L"date-weekday", L"Thu"), TrCtx(L"date-weekday", L"Fri"),
+    TrCtx(L"date-weekday", L"Sat")};
+static constexpr I18nKey kHistoryUiMonths[] = {
+    TrCtx(L"date-month", L"Jan"), TrCtx(L"date-month", L"Feb"), TrCtx(L"date-month", L"Mar"),
+    TrCtx(L"date-month", L"Apr"), TrCtx(L"date-month", L"May"), TrCtx(L"date-month", L"Jun"),
+    TrCtx(L"date-month", L"Jul"), TrCtx(L"date-month", L"Aug"), TrCtx(L"date-month", L"Sep"),
+    TrCtx(L"date-month", L"Oct"), TrCtx(L"date-month", L"Nov"), TrCtx(L"date-month", L"Dec")};
+static constexpr I18nKey kHistoryUiMonthsAlone[] = {
+    TrCtx(L"date-month-alone", L"Jan"), TrCtx(L"date-month-alone", L"Feb"), TrCtx(L"date-month-alone", L"Mar"),
+    TrCtx(L"date-month-alone", L"Apr"), TrCtx(L"date-month-alone", L"May"), TrCtx(L"date-month-alone", L"Jun"),
+    TrCtx(L"date-month-alone", L"Jul"), TrCtx(L"date-month-alone", L"Aug"), TrCtx(L"date-month-alone", L"Sep"),
+    TrCtx(L"date-month-alone", L"Oct"), TrCtx(L"date-month-alone", L"Nov"), TrCtx(L"date-month-alone", L"Dec")};
 
-static std::wstring HistoryUiTime(ULONGLONG ms, ULONGLONG now, const HistoryUiLocalTime& localTime) {
+// A clock time, 24-hour: `14:31`.
+static std::wstring HistoryUiClock(const SYSTEMTIME& t) {
+    wchar_t clock[8];
+    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
+    return clock;
+}
+
+static std::wstring HistoryUiTime(const I18nLocale& locale, ULONGLONG ms, ULONGLONG now,
+                                  const HistoryUiLocalTime& localTime) {
     static constexpr int kMonthOffsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
     SYSTEMTIME t = localTime(ms);
     if (t.wMonth < 1 || t.wMonth > 12 || t.wDay < 1 || t.wDay > 31) return L"\u2014";
-    wchar_t clock[8];
-    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
-    std::wstring date = std::to_wstring(t.wDay) + L' ' + kHistoryUiMonths[t.wMonth - 1];
-    if (t.wYear != localTime(now).wYear) return date + L' ' + std::to_wstring(t.wYear) + L' ' + clock;
+    std::wstring month = I18nText(locale, kHistoryUiMonths[t.wMonth - 1]), clock = HistoryUiClock(t);
+    if (t.wYear != localTime(now).wYear) {
+        return I18nText(locale, TrCtx(L"date-time-year", L"{day} {month} {year} {time}"),
+                        {{L"day", t.wDay}, {L"month", month}, {L"year", t.wYear}, {L"time", clock}});
+    }
     // The weekday from the date (Sakamoto's method), whatever the conversion filled in.
     int year = t.wYear - (t.wMonth < 3);
     int weekday = (year + year / 4 - year / 100 + year / 400 + kMonthOffsets[t.wMonth - 1] + t.wDay) % 7;
-    return std::wstring(kHistoryUiDays[weekday]) + L' ' + date + L' ' + clock;
+    return I18nText(locale, TrCtx(L"date-time", L"{weekday} {day} {month} {time}"),
+                    {{L"weekday", I18nText(locale, kHistoryUiDays[weekday])}, {L"day", t.wDay}, {L"month", month},
+                     {L"time", clock}});
 }
 
 // `decimals` places below 10,000 after rounding; past that one decimal with a suffix (12.3K,
@@ -250,7 +275,7 @@ static std::wstring HistoryUiValue(int meter, double value, int percentDecimals)
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
 // accounts without readings, from the view's accounts (parallel to the set's), selection,
-// comparison, bar mode and consent: every peak and its time, coverage with its share, time at or
+// comparison, bar mode, consent and language: every peak and its time, coverage with its share, time at or
 // above the red threshold the set was analyzed with for percentages, dollar spending's last and
 // peak readings, and an account's recording status once (in All accounts, on its first card).
 // The Remaining bar mode shows percentages left: the peak is the lowest share left, the time at
@@ -281,14 +306,14 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             return HistoryUiValue(series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
         auto reading = [&](double value, ULONGLONG time) {
-            return shown(value) + L" \u00B7 " + HistoryUiTime(time, now, localTime);
+            return shown(value) + L" \u00B7 " + HistoryUiTime(view.locale, time, now, localTime);
         };
         const PCWSTR peak = left ? L"Lowest " : L"Peak ";
         const HistoryStatistics& current = series.current;
         if (current.hasValue) {
             card.value = shown(current.latest);
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
-            card.when = latestPoll ? L"now" : HistoryUiTime(current.latestTime, now, localTime);
+            card.when = latestPoll ? L"now" : HistoryUiTime(view.locale, current.latestTime, now, localTime);
         }
         // Per period (comparing: current, then previous, each first line prefixed). The headline
         // holds the current period's last dollar reading.

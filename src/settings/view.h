@@ -14,6 +14,7 @@ struct SettingsViewAccount {
 };
 
 struct SettingsView {
+    I18nLocale locale;                  // The frame's language
     SettingsUiPage page = SettingsUiPage::Accounts;
     std::wstring version;
     Settings settings;                  // Render projection (SettingsEdits::Projection)
@@ -54,25 +55,39 @@ static UiAction SettingsCommand(SettingsField field, int value = 0) {
     return {UiActionKind::Command, value, {}, uint32_t(field)};
 }
 
+// A toggle's state text in the view's language.
+static UiToggleText SettingsToggleText(const SettingsView& view) {
+    return {I18nText(view.locale, TrCtx(L"toggle", L"On")), I18nText(view.locale, TrCtx(L"toggle", L"Off"))};
+}
+
 // Shared cards; each returns its bottom.
 
 static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
                                    std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                    float width, UiCardSpec spec, SettingsField field) {
     bool on = SettingsFieldValue(view.settings, field) != 0;
-    spec.trailing = UiToggleSize(g);
+    UiToggleText states = SettingsToggleText(view);
+    spec.trailing = UiToggleSize(g, states);
     if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddToggle(items, SettingsControlId(field), card.trailing, on, spec.enabled,
-                SettingsCommand(field, !on));
+                SettingsCommand(field, !on), states);
     return card.card.bottom;
 }
 
+// The field is at least `fieldWidth` wide, wider when its widest option needs it (the label's 11
+// DIP before it and 30 DIP chevron after it), growing to at most half the card.
 static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
                                      std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                      float width, UiCardSpec spec, SettingsField field,
                                      float fieldWidth, std::vector<UiOption> options, int value,
                                      uint32_t part = 0) {
+    float widest = 0;
+    for (const UiOption& option : options) {
+        float text = UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Body), 10000, false)).width;
+        widest = std::max(widest, std::ceil(text) + 11 + 30);
+    }
+    fieldWidth = std::max(fieldWidth, std::min(widest, width / 2));
     spec.trailing = {fieldWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field); draft && !draft->text) {
         spec.error = draft->error;

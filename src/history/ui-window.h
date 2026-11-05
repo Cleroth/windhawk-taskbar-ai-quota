@@ -15,9 +15,10 @@ struct HistoryUiClient final : UiHostClient {
     HistoryController controller{ops};
 
     // The chart is laid out (and reduced, when its key changed) for the item the frame placed;
-    // the window takes the settings' material.
+    // the window takes the settings' material, and the toolkit the view's language.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         HistoryUiView view = controller.view;
+        host.graphics->locale = view.locale.LocaleName();
         UiHostSetBackdrop(host, MaterialBackdrop(view.material));
         view.theme = host.theme.kind;
         HistoryUiBuildFrame(*host.graphics, view, client, frame);

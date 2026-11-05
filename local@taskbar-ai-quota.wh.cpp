@@ -549,70 +549,1083 @@ static constexpr bool I18nCatalogSorted(std::span<const I18nEntry> catalog) {
 // German (de): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogDe[] = {
+    {L"", L"2 to 1440 minutes.", L"2 bis 1440 Minuten."},
+    {L"", L"All displays", L"Alle Bildschirme"},
+    {L"", L"Choose Custom in Cloud poll interval to edit.",
+     L"Wählen Sie „Benutzerdefiniert“ unter „Cloud-Abfrageintervall“, um dies zu bearbeiten."},
+    {L"", L"Cloud poll interval", L"Cloud-Abfrageintervall"},
+    {L"", L"Custom interval", L"Benutzerdefiniertes Intervall"},
+    {L"", L"Display {number} - unavailable", L"Bildschirm {number} – nicht verfügbar"},
+    {L"", L"Display {number} - {width}x{height}", L"Bildschirm {number} – {width}x{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)",
+     L"Bildschirm {number} – {width}x{height} (Hauptbildschirm)"},
+    {L"", L"Do not poll hidden accounts", L"Ausgeblendete Konten nicht abfragen"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
+          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+     L"Jedes Konto legt selbst fest, ob es aufzeichnet: <link id=\"accounts\">Konten</link> > Verlauf aufzeichnen. "
+     L"Ausgeblendete Konten werden nicht aufgezeichnet, solange <link id=\"hidden\">Ausgeblendete Konten nicht "
+     L"abfragen</link> unter Verhalten aktiviert ist."},
+    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
+          L"them. Shared across Windows users.",
+     L"Ausgeblendete Konten werden weder abgefragt noch aufgezeichnet, auch wenn „Verlauf aufzeichnen“ aktiviert ist. "
+     L"Deaktivieren, um sie weiter aufzuzeichnen. Gilt für alle Windows-Benutzer."},
+    {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
+          L"session every minute.",
+     L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
+     L"Sitzung jede Minute ab."},
+    {L"", L"Interface language", L"Sprache der Oberfläche"},
+    {L"", L"Language, displays, hover details, polling and notifications.",
+     L"Sprache, Bildschirme, Details beim Daraufzeigen, Abfragen und Benachrichtigungen."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
+     L"Benachrichtigt, wenn ein Taskleisten-Kontingent den gewählten Schwellenwert erstmals erreicht. Wird wieder "
+     L"aktiv, sobald es darunter fällt."},
+    {L"", L"Open AI quota settings", L"Einstellungen für KI-Kontingente öffnen"},
+    {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
+     L"Einstellungen für KI-Kontingente öffnen. Die gespeicherten Einstellungen konnten nicht gelesen werden; eine "
+     L"Sicherung wurde aufbewahrt."},
+    {L"", L"Opens an account’s details after the pointer rests on it.",
+     L"Öffnet die Details eines Kontos, wenn der Zeiger darauf verweilt."},
+    {L"", L"Primary display only", L"Nur Hauptbildschirm"},
+    {L"", L"Primary display, all displays, or one display.",
+     L"Hauptbildschirm, alle Bildschirme oder ein bestimmter Bildschirm."},
+    {L"", L"Reset Behavior to defaults", L"Verhalten auf Standard zurücksetzen"},
+    {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
+          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+     L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm anzeigen, "
+     L"Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten nicht abfragen, "
+     L"Schwellenwert-Benachrichtigungen bei Rot."},
+    {L"", L"Show details on hover", L"Details beim Daraufzeigen anzeigen"},
+    {L"", L"Show on", L"Anzeigen auf"},
+    {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
+          L"Applies to this Windows user only.",
+     L"Die Fenster Einstellungen und Nutzungsverlauf sowie die Taskleiste. „Automatisch“ folgt Ihrer "
+     L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
+    {L"", L"Threshold notifications", L"Schwellenwert-Benachrichtigungen"},
+    {L"account-error", L"Antigravity not running", L"Antigravity läuft nicht"},
+    {L"account-state", L"Local app not running", L"Lokale App läuft nicht"},
+    {L"button", L"Add account", L"Konto hinzufügen"},
+    {L"button", L"Reset", L"Zurücksetzen"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend",
+     L"+{count} weitere – Linien in der Legende ausblenden"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
+     L"+{count} weitere – Linien in der Legende ausblenden oder ein Konto auswählen"},
+    {L"chart-tick-day", L"{month} {day}", L"{day}. {month}"},
+    {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
+    {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}."},
+    {L"date-month", L"Apr", L"Apr"},
+    {L"date-month", L"Aug", L"Aug"},
+    {L"date-month", L"Dec", L"Dez"},
+    {L"date-month", L"Feb", L"Feb"},
+    {L"date-month", L"Jan", L"Jan"},
+    {L"date-month", L"Jul", L"Jul"},
+    {L"date-month", L"Jun", L"Jun"},
+    {L"date-month", L"Mar", L"Mär"},
+    {L"date-month", L"May", L"Mai"},
+    {L"date-month", L"Nov", L"Nov"},
+    {L"date-month", L"Oct", L"Okt"},
+    {L"date-month", L"Sep", L"Sep"},
+    {L"date-month-alone", L"Apr", L"Apr"},
+    {L"date-month-alone", L"Aug", L"Aug"},
+    {L"date-month-alone", L"Dec", L"Dez"},
+    {L"date-month-alone", L"Feb", L"Feb"},
+    {L"date-month-alone", L"Jan", L"Jan"},
+    {L"date-month-alone", L"Jul", L"Jul"},
+    {L"date-month-alone", L"Jun", L"Jun"},
+    {L"date-month-alone", L"Mar", L"Mär"},
+    {L"date-month-alone", L"May", L"Mai"},
+    {L"date-month-alone", L"Nov", L"Nov"},
+    {L"date-month-alone", L"Oct", L"Okt"},
+    {L"date-month-alone", L"Sep", L"Sep"},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{weekday} {day}. {month} {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{day}. {month} {year} {time}"},
+    {L"date-weekday", L"Fri", L"Fr"},
+    {L"date-weekday", L"Mon", L"Mo"},
+    {L"date-weekday", L"Sat", L"Sa"},
+    {L"date-weekday", L"Sun", L"So"},
+    {L"date-weekday", L"Thu", L"Do"},
+    {L"date-weekday", L"Tue", L"Di"},
+    {L"date-weekday", L"Wed", L"Mi"},
+    {L"history-pill", L"Not saving", L"Speichert nicht"},
+    {L"history-pill", L"Off", L"Aus"},
+    {L"history-pill", L"Recording · forever", L"Aufzeichnung · unbegrenzt"},
+    {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
+     L"Aufzeichnung · {days, plural, one{# Tag} other{# Tage}}"},
+    {L"history-pill", L"Waiting", L"Wartet"},
+    {L"history-status", L"Updated {time}", L"Aktualisiert {time}"},
+    {L"language-choice", L"Automatic ({language})", L"Automatisch ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} und {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} und {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-level", L"Off", L"Aus"},
+    {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
+    {L"notification-level", L"Red ({threshold}%)", L"Rot ({threshold}%)"},
+    {L"notification-level", L"Yellow ({threshold}%)", L"Gelb ({threshold}%)"},
+    {L"poll-interval", L"Custom", L"Benutzerdefiniert"},
+    {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
+     L"{minutes, plural, one{# Minute} other{# Minuten}}"},
+    {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
+     L"{minutes, plural, one{Minute} other{Minuten}}"},
+    {L"quota-key-2-chars", L"5h", L"5h"},
+    {L"quota-key-2-chars", L"7d", L"7T"},
+    {L"quota-key-2-chars", L"Ar", L"Ar"},
+    {L"quota-key-2-chars", L"Cr", L"Cr"},
+    {L"quota-key-2-chars", L"Ex", L"Ex"},
+    {L"quota-key-2-chars", L"Fa", L"Fa"},
+    {L"quota-key-2-chars", L"Mo", L"Mo"},
+    {L"settings-page", L"About", L"Info"},
+    {L"settings-page", L"Accounts", L"Konten"},
+    {L"settings-page", L"Behavior", L"Verhalten"},
+    {L"settings-page", L"Display", L"Darstellung"},
+    {L"settings-page", L"History", L"Verlauf"},
+    {L"settings-page", L"Layout", L"Layout"},
+    {L"settings-section", L"Alerts", L"Warnungen"},
+    {L"settings-section", L"Details", L"Details"},
+    {L"settings-section", L"Language", L"Sprache"},
+    {L"settings-section", L"Taskbar", L"Taskleiste"},
+    {L"settings-section", L"Updates", L"Aktualisierungen"},
+    {L"taskbar-action", L"Exit visual test", L"Visuellen Test beenden"},
+    {L"taskbar-action", L"Hide", L"Ausblenden"},
+    {L"taskbar-action", L"Open dashboard", L"Dashboard öffnen"},
+    {L"taskbar-action", L"Refresh", L"Aktualisieren"},
+    {L"taskbar-action", L"Refresh all", L"Alle aktualisieren"},
+    {L"taskbar-action", L"Settings", L"Einstellungen"},
+    {L"taskbar-action", L"Show on taskbar", L"Auf der Taskleiste anzeigen"},
+    {L"taskbar-action", L"Sign in", L"Anmelden"},
+    {L"taskbar-action", L"Usage history", L"Nutzungsverlauf"},
+    {L"taskbar-countdown", L"no reset", L"kein Reset"},
+    {L"taskbar-countdown", L"now", L"jetzt"},
+    {L"taskbar-countdown", L"{days}d", L"{days}T"},
+    {L"taskbar-countdown", L"{days}d {hours}h", L"{days}T {hours}h"},
+    {L"taskbar-countdown", L"{hours}h", L"{hours}h"},
+    {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
+    {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
+    {L"taskbar-setup", L"AI +", L"KI +"},
+    {L"toggle", L"Off", L"Aus"},
+    {L"toggle", L"On", L"Ein"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogDe), "sort by (context, English), no duplicates");
 // src/i18n/lang-es.h
 // Spanish (es): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogEs[] = {
+    {L"", L"2 to 1440 minutes.", L"De 2 a 1440 minutos."},
+    {L"", L"All displays", L"Todas las pantallas"},
+    {L"", L"Choose Custom in Cloud poll interval to edit.",
+     L"Elige Personalizado en Intervalo de consulta en la nube para editarlo."},
+    {L"", L"Cloud poll interval", L"Intervalo de consulta en la nube"},
+    {L"", L"Custom interval", L"Intervalo personalizado"},
+    {L"", L"Display {number} - unavailable", L"Pantalla {number}: no disponible"},
+    {L"", L"Display {number} - {width}x{height}", L"Pantalla {number}: {width}x{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)", L"Pantalla {number}: {width}x{height} (principal)"},
+    {L"", L"Do not poll hidden accounts", L"No consultar las cuentas ocultas"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
+          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+     L"Cada cuenta elige si se registra: <link id=\"accounts\">Cuentas</link> > Registrar historial. Las cuentas "
+     L"ocultas no se registran mientras <link id=\"hidden\">No consultar las cuentas ocultas</link> esté activado en "
+     L"Comportamiento."},
+    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
+          L"them. Shared across Windows users.",
+     L"Las cuentas ocultas no se consultan ni se registran, aunque Registrar historial esté activado. Desactívalo para "
+     L"seguir registrándolas. Compartido entre los usuarios de Windows."},
+    {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
+          L"session every minute.",
+     L"Con qué frecuencia se consultan Anthropic, OpenAI, GitHub Copilot y OpenCode Go. Antigravity consulta su sesión "
+     L"local cada minuto."},
+    {L"", L"Interface language", L"Idioma de la interfaz"},
+    {L"", L"Language, displays, hover details, polling and notifications.",
+     L"Idioma, pantallas, detalles al pasar el puntero, consultas y notificaciones."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
+     L"Avisa cuando una cuota de la barra de tareas alcanza por primera vez el umbral elegido. Se reactiva cuando baja "
+     L"de él."},
+    {L"", L"Open AI quota settings", L"Abrir la configuración de cuotas de IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
+     L"Abrir la configuración de cuotas de IA. No se pudo leer la configuración guardada; se conservó una copia de "
+     L"seguridad."},
+    {L"", L"Opens an account’s details after the pointer rests on it.",
+     L"Abre los detalles de una cuenta cuando el puntero se detiene sobre ella."},
+    {L"", L"Primary display only", L"Solo la pantalla principal"},
+    {L"", L"Primary display, all displays, or one display.", L"La pantalla principal, todas las pantallas o una sola."},
+    {L"", L"Reset Behavior to defaults", L"Restablecer Comportamiento a los valores predeterminados"},
+    {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
+          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+     L"¿Restablecer Comportamiento a sus valores predeterminados?\n\nIdioma automático, mostrar solo en la pantalla "
+     L"principal, mostrar detalles al pasar el puntero, consultar cada 10 minutos, no consultar las cuentas ocultas, "
+     L"notificaciones de umbral en rojo."},
+    {L"", L"Show details on hover", L"Mostrar detalles al pasar el puntero"},
+    {L"", L"Show on", L"Mostrar en"},
+    {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
+          L"Applies to this Windows user only.",
+     L"Las ventanas de configuración y del historial de uso, y la barra de tareas. Automático sigue el idioma para "
+     L"mostrar de Windows. Solo se aplica a este usuario de Windows."},
+    {L"", L"Threshold notifications", L"Notificaciones de umbral"},
+    {L"account-error", L"Antigravity not running", L"Antigravity no se está ejecutando"},
+    {L"account-state", L"Local app not running", L"La app local no está en ejecución"},
+    {L"button", L"Add account", L"Agregar cuenta"},
+    {L"button", L"Reset", L"Restablecer"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend", L"+{count} más: oculta líneas en la leyenda"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
+     L"+{count} más: oculta líneas en la leyenda o selecciona una cuenta"},
+    {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
+    {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
+    {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"date-month", L"Apr", L"abr"},
+    {L"date-month", L"Aug", L"ago"},
+    {L"date-month", L"Dec", L"dic"},
+    {L"date-month", L"Feb", L"feb"},
+    {L"date-month", L"Jan", L"ene"},
+    {L"date-month", L"Jul", L"jul"},
+    {L"date-month", L"Jun", L"jun"},
+    {L"date-month", L"Mar", L"mar"},
+    {L"date-month", L"May", L"may"},
+    {L"date-month", L"Nov", L"nov"},
+    {L"date-month", L"Oct", L"oct"},
+    {L"date-month", L"Sep", L"sept"},
+    {L"date-month-alone", L"Apr", L"abr"},
+    {L"date-month-alone", L"Aug", L"ago"},
+    {L"date-month-alone", L"Dec", L"dic"},
+    {L"date-month-alone", L"Feb", L"feb"},
+    {L"date-month-alone", L"Jan", L"ene"},
+    {L"date-month-alone", L"Jul", L"jul"},
+    {L"date-month-alone", L"Jun", L"jun"},
+    {L"date-month-alone", L"Mar", L"mar"},
+    {L"date-month-alone", L"May", L"may"},
+    {L"date-month-alone", L"Nov", L"nov"},
+    {L"date-month-alone", L"Oct", L"oct"},
+    {L"date-month-alone", L"Sep", L"sept"},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{weekday} {day} {month} {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{day} {month} {year} {time}"},
+    {L"date-weekday", L"Fri", L"vie"},
+    {L"date-weekday", L"Mon", L"lun"},
+    {L"date-weekday", L"Sat", L"sáb"},
+    {L"date-weekday", L"Sun", L"dom"},
+    {L"date-weekday", L"Thu", L"jue"},
+    {L"date-weekday", L"Tue", L"mar"},
+    {L"date-weekday", L"Wed", L"mié"},
+    {L"history-pill", L"Not saving", L"Sin guardar"},
+    {L"history-pill", L"Off", L"Desactivado"},
+    {L"history-pill", L"Recording · forever", L"Registrando · siempre"},
+    {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
+     L"Registrando · {days, plural, one{# día} many{# de días} other{# días}}"},
+    {L"history-pill", L"Waiting", L"En espera"},
+    {L"history-status", L"Updated {time}", L"Actualizado {time}"},
+    {L"language-choice", L"Automatic ({language})", L"Automático ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} y {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} y {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-level", L"Off", L"Desactivadas"},
+    {L"notification-level", L"Orange ({threshold}%)", L"Naranja ({threshold}%)"},
+    {L"notification-level", L"Red ({threshold}%)", L"Rojo ({threshold}%)"},
+    {L"notification-level", L"Yellow ({threshold}%)", L"Amarillo ({threshold}%)"},
+    {L"poll-interval", L"Custom", L"Personalizado"},
+    {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
+     L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
+    {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
+     L"{minutes, plural, one{minuto} many{de minutos} other{minutos}}"},
+    {L"quota-key-2-chars", L"5h", L"5h"},
+    {L"quota-key-2-chars", L"7d", L"7d"},
+    {L"quota-key-2-chars", L"Ar", L"Ar"},
+    {L"quota-key-2-chars", L"Cr", L"Cr"},
+    {L"quota-key-2-chars", L"Ex", L"Ex"},
+    {L"quota-key-2-chars", L"Fa", L"Fa"},
+    {L"quota-key-2-chars", L"Mo", L"Me"},
+    {L"settings-page", L"About", L"Acerca de"},
+    {L"settings-page", L"Accounts", L"Cuentas"},
+    {L"settings-page", L"Behavior", L"Comportamiento"},
+    {L"settings-page", L"Display", L"Visualización"},
+    {L"settings-page", L"History", L"Historial"},
+    {L"settings-page", L"Layout", L"Diseño"},
+    {L"settings-section", L"Alerts", L"Alertas"},
+    {L"settings-section", L"Details", L"Detalles"},
+    {L"settings-section", L"Language", L"Idioma"},
+    {L"settings-section", L"Taskbar", L"Barra de tareas"},
+    {L"settings-section", L"Updates", L"Actualizaciones"},
+    {L"taskbar-action", L"Exit visual test", L"Salir de la prueba visual"},
+    {L"taskbar-action", L"Hide", L"Ocultar"},
+    {L"taskbar-action", L"Open dashboard", L"Abrir panel"},
+    {L"taskbar-action", L"Refresh", L"Actualizar"},
+    {L"taskbar-action", L"Refresh all", L"Actualizar todo"},
+    {L"taskbar-action", L"Settings", L"Configuración"},
+    {L"taskbar-action", L"Show on taskbar", L"Mostrar en la barra de tareas"},
+    {L"taskbar-action", L"Sign in", L"Iniciar sesión"},
+    {L"taskbar-action", L"Usage history", L"Historial de uso"},
+    {L"taskbar-countdown", L"no reset", L"sin reinicio"},
+    {L"taskbar-countdown", L"now", L"ahora"},
+    {L"taskbar-countdown", L"{days}d", L"{days}d"},
+    {L"taskbar-countdown", L"{days}d {hours}h", L"{days}d {hours}h"},
+    {L"taskbar-countdown", L"{hours}h", L"{hours}h"},
+    {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
+    {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
+    {L"taskbar-setup", L"AI +", L"IA +"},
+    {L"toggle", L"Off", L"Desactivado"},
+    {L"toggle", L"On", L"Activado"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogEs), "sort by (context, English), no duplicates");
 // src/i18n/lang-fr.h
 // French (fr): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogFr[] = {
+    {L"", L"2 to 1440 minutes.", L"De 2 à 1440 minutes."},
+    {L"", L"All displays", L"Tous les écrans"},
+    {L"", L"Choose Custom in Cloud poll interval to edit.",
+     L"Choisissez Personnalisé dans Intervalle d’interrogation cloud pour le modifier."},
+    {L"", L"Cloud poll interval", L"Intervalle d’interrogation cloud"},
+    {L"", L"Custom interval", L"Intervalle personnalisé"},
+    {L"", L"Display {number} - unavailable", L"Écran {number} – indisponible"},
+    {L"", L"Display {number} - {width}x{height}", L"Écran {number} – {width}x{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)", L"Écran {number} – {width}x{height} (principal)"},
+    {L"", L"Do not poll hidden accounts", L"Ne pas interroger les comptes masqués"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
+          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+     L"Chaque compte choisit s’il est enregistré\u00A0: <link id=\"accounts\">Comptes</link> > Enregistrer "
+     L"l’historique. Les comptes masqués ne sont pas enregistrés tant que <link id=\"hidden\">Ne pas interroger les "
+     L"comptes masqués</link> est activé dans Comportement."},
+    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
+          L"them. Shared across Windows users.",
+     L"Les comptes masqués ne sont ni interrogés ni enregistrés, même si Enregistrer l’historique est activé. "
+     L"Désactivez pour continuer à les enregistrer. Partagé entre les utilisateurs Windows."},
+    {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
+          L"session every minute.",
+     L"Fréquence d’interrogation d’Anthropic, OpenAI, GitHub Copilot et OpenCode Go. Antigravity interroge sa session "
+     L"locale chaque minute."},
+    {L"", L"Interface language", L"Langue de l’interface"},
+    {L"", L"Language, displays, hover details, polling and notifications.",
+     L"Langue, écrans, détails au survol, interrogations et notifications."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
+     L"Avertit quand un quota de la barre des tâches atteint pour la première fois le seuil choisi. Se réarme quand il "
+     L"repasse en dessous."},
+    {L"", L"Open AI quota settings", L"Ouvrir les paramètres des quotas d’IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
+     L"Ouvrir les paramètres des quotas d’IA. Les paramètres enregistrés n’ont pas pu être lus ; une sauvegarde a "
+     L"été conservée."},
+    {L"", L"Opens an account’s details after the pointer rests on it.",
+     L"Ouvre les détails d’un compte quand le pointeur s’y arrête."},
+    {L"", L"Primary display only", L"Écran principal uniquement"},
+    {L"", L"Primary display, all displays, or one display.", L"L’écran principal, tous les écrans ou un seul écran."},
+    {L"", L"Reset Behavior to defaults", L"Rétablir les valeurs par défaut de Comportement"},
+    {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
+          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+     L"Rétablir les valeurs par défaut de Comportement\u00A0?\n\nLangue automatique, affichage sur l’écran principal "
+     L"uniquement, détails au survol, interrogation toutes les 10 minutes, comptes masqués non interrogés, "
+     L"notifications de seuil au rouge."},
+    {L"", L"Show details on hover", L"Afficher les détails au survol"},
+    {L"", L"Show on", L"Afficher sur"},
+    {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
+          L"Applies to this Windows user only.",
+     L"Les fenêtres des paramètres et de l’historique d’utilisation, et la barre des tâches. Automatique suit la "
+     L"langue d’affichage de Windows. S’applique uniquement à cet utilisateur Windows."},
+    {L"", L"Threshold notifications", L"Notifications de seuil"},
+    {L"account-error", L"Antigravity not running", L"Antigravity n’est pas lancé"},
+    {L"account-state", L"Local app not running", L"L’application locale n’est pas lancée"},
+    {L"button", L"Add account", L"Ajouter un compte"},
+    {L"button", L"Reset", L"Rétablir"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend",
+     L"+{count} de plus – masquez des lignes dans la légende"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
+     L"+{count} de plus – masquez des lignes dans la légende ou sélectionnez un compte"},
+    {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
+    {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
+    {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"date-month", L"Apr", L"avr."},
+    {L"date-month", L"Aug", L"août"},
+    {L"date-month", L"Dec", L"déc."},
+    {L"date-month", L"Feb", L"févr."},
+    {L"date-month", L"Jan", L"janv."},
+    {L"date-month", L"Jul", L"juil."},
+    {L"date-month", L"Jun", L"juin"},
+    {L"date-month", L"Mar", L"mars"},
+    {L"date-month", L"May", L"mai"},
+    {L"date-month", L"Nov", L"nov."},
+    {L"date-month", L"Oct", L"oct."},
+    {L"date-month", L"Sep", L"sept."},
+    {L"date-month-alone", L"Apr", L"avr."},
+    {L"date-month-alone", L"Aug", L"août"},
+    {L"date-month-alone", L"Dec", L"déc."},
+    {L"date-month-alone", L"Feb", L"févr."},
+    {L"date-month-alone", L"Jan", L"janv."},
+    {L"date-month-alone", L"Jul", L"juil."},
+    {L"date-month-alone", L"Jun", L"juin"},
+    {L"date-month-alone", L"Mar", L"mars"},
+    {L"date-month-alone", L"May", L"mai"},
+    {L"date-month-alone", L"Nov", L"nov."},
+    {L"date-month-alone", L"Oct", L"oct."},
+    {L"date-month-alone", L"Sep", L"sept."},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{weekday} {day} {month} {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{day} {month} {year} {time}"},
+    {L"date-weekday", L"Fri", L"ven."},
+    {L"date-weekday", L"Mon", L"lun."},
+    {L"date-weekday", L"Sat", L"sam."},
+    {L"date-weekday", L"Sun", L"dim."},
+    {L"date-weekday", L"Thu", L"jeu."},
+    {L"date-weekday", L"Tue", L"mar."},
+    {L"date-weekday", L"Wed", L"mer."},
+    {L"history-pill", L"Not saving", L"Non enregistré"},
+    {L"history-pill", L"Off", L"Désactivé"},
+    {L"history-pill", L"Recording · forever", L"Enregistrement · illimité"},
+    {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
+     L"Enregistrement · {days, plural, one{# jour} many{# de jours} other{# jours}}"},
+    {L"history-pill", L"Waiting", L"En attente"},
+    {L"history-status", L"Updated {time}", L"Mis à jour {time}"},
+    {L"language-choice", L"Automatic ({language})", L"Automatique ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} et {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} et {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-level", L"Off", L"Désactivées"},
+    {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
+    {L"notification-level", L"Red ({threshold}%)", L"Rouge ({threshold}%)"},
+    {L"notification-level", L"Yellow ({threshold}%)", L"Jaune ({threshold}%)"},
+    {L"poll-interval", L"Custom", L"Personnalisé"},
+    {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
+     L"{minutes, plural, one{# minute} many{# de minutes} other{# minutes}}"},
+    {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
+     L"{minutes, plural, one{minute} many{de minutes} other{minutes}}"},
+    {L"quota-key-2-chars", L"5h", L"5h"},
+    {L"quota-key-2-chars", L"7d", L"7j"},
+    {L"quota-key-2-chars", L"Ar", L"Ar"},
+    {L"quota-key-2-chars", L"Cr", L"Cr"},
+    {L"quota-key-2-chars", L"Ex", L"Ex"},
+    {L"quota-key-2-chars", L"Fa", L"Fa"},
+    {L"quota-key-2-chars", L"Mo", L"Mo"},
+    {L"settings-page", L"About", L"À propos"},
+    {L"settings-page", L"Accounts", L"Comptes"},
+    {L"settings-page", L"Behavior", L"Comportement"},
+    {L"settings-page", L"Display", L"Affichage"},
+    {L"settings-page", L"History", L"Historique"},
+    {L"settings-page", L"Layout", L"Disposition"},
+    {L"settings-section", L"Alerts", L"Alertes"},
+    {L"settings-section", L"Details", L"Détails"},
+    {L"settings-section", L"Language", L"Langue"},
+    {L"settings-section", L"Taskbar", L"Barre des tâches"},
+    {L"settings-section", L"Updates", L"Mises à jour"},
+    {L"taskbar-action", L"Exit visual test", L"Quitter le test visuel"},
+    {L"taskbar-action", L"Hide", L"Masquer"},
+    {L"taskbar-action", L"Open dashboard", L"Ouvrir le tableau de bord"},
+    {L"taskbar-action", L"Refresh", L"Actualiser"},
+    {L"taskbar-action", L"Refresh all", L"Tout actualiser"},
+    {L"taskbar-action", L"Settings", L"Paramètres"},
+    {L"taskbar-action", L"Show on taskbar", L"Afficher dans la barre des tâches"},
+    {L"taskbar-action", L"Sign in", L"Se connecter"},
+    {L"taskbar-action", L"Usage history", L"Historique d’utilisation"},
+    {L"taskbar-countdown", L"no reset", L"sans réinit."},
+    {L"taskbar-countdown", L"now", L"imminent"},
+    {L"taskbar-countdown", L"{days}d", L"{days}j"},
+    {L"taskbar-countdown", L"{days}d {hours}h", L"{days}j {hours}h"},
+    {L"taskbar-countdown", L"{hours}h", L"{hours}h"},
+    {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
+    {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
+    {L"taskbar-setup", L"AI +", L"IA +"},
+    {L"toggle", L"Off", L"Désactivé"},
+    {L"toggle", L"On", L"Activé"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogFr), "sort by (context, English), no duplicates");
 // src/i18n/lang-ja.h
 // Japanese (ja): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogJa[] = {
+    {L"", L"2 to 1440 minutes.", L"2～1440 分。"},
+    {L"", L"All displays", L"すべてのディスプレイ"},
+    {L"", L"Choose Custom in Cloud poll interval to edit.",
+     L"編集するには、［クラウドのポーリング間隔］で［カスタム］を選んでください。"},
+    {L"", L"Cloud poll interval", L"クラウドのポーリング間隔"},
+    {L"", L"Custom interval", L"カスタム間隔"},
+    {L"", L"Display {number} - unavailable", L"ディスプレイ {number} - 使用できません"},
+    {L"", L"Display {number} - {width}x{height}", L"ディスプレイ {number} - {width}x{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)", L"ディスプレイ {number} - {width}x{height} (メイン)"},
+    {L"", L"Do not poll hidden accounts", L"非表示のアカウントをポーリングしない"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
+          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+     L"記録するかどうかはアカウントごとに選べます: <link id=\"accounts\">アカウント</link> > 履歴を記録。［動作］の "
+     L"<link id=\"hidden\">非表示のアカウントをポーリングしない</link> がオンの間、非表示のアカウントは記録されません。"},
+    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
+          L"them. Shared across Windows users.",
+     L"非表示のアカウントは、［履歴を記録］がオンでもポーリングも記録もされません。記録を続けるにはオフにしてください。"
+     L"Windows のユーザー間で共有されます。"},
+    {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
+          L"session every minute.",
+     L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル "
+     L"セッションを毎分ポーリングします。"},
+    {L"", L"Interface language", L"表示言語"},
+    {L"", L"Language, displays, hover details, polling and notifications.",
+     L"言語、ディスプレイ、ホバー時の詳細、ポーリング、通知。"},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
+     L"タスク バーのクォータが選んだしきい値に初めて達したときに通知します。しきい値を下回ると再び有効になります。"},
+    {L"", L"Open AI quota settings", L"AI クォータの設定を開く"},
+    {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
+     L"AI クォータの設定を開く。保存された設定を読み込めませんでした。バックアップを保持しています。"},
+    {L"", L"Opens an account’s details after the pointer rests on it.",
+     L"ポインターを置いたままにすると、アカウントの詳細を開きます。"},
+    {L"", L"Primary display only", L"メイン ディスプレイのみ"},
+    {L"", L"Primary display, all displays, or one display.",
+     L"メイン ディスプレイ、すべてのディスプレイ、または 1 つのディスプレイ。"},
+    {L"", L"Reset Behavior to defaults", L"動作を既定値にリセット"},
+    {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
+          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+     L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 "
+     L"分ごとにポーリング、非表示のアカウントはポーリングしない、しきい値の通知は赤。"},
+    {L"", L"Show details on hover", L"ホバー時に詳細を表示"},
+    {L"", L"Show on", L"表示先"},
+    {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
+          L"Applies to this Windows user only.",
+     L"設定ウィンドウ、使用履歴ウィンドウ、タスク バー。［自動］は Windows の表示言語に従います。この Windows "
+     L"ユーザーにのみ適用されます。"},
+    {L"", L"Threshold notifications", L"しきい値の通知"},
+    {L"account-error", L"Antigravity not running", L"Antigravity が実行されていません"},
+    {L"account-state", L"Local app not running", L"ローカル アプリが実行されていません"},
+    {L"button", L"Add account", L"アカウントを追加"},
+    {L"button", L"Reset", L"リセット"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend",
+     L"ほか {count} 件 — 凡例で線を非表示にしてください"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
+     L"ほか {count} 件 — 凡例で線を非表示にするか、アカウントを 1 つ選んでください"},
+    {L"chart-tick-day", L"{month} {day}", L"{month}{day}日"},
+    {L"chart-tick-month", L"{month} {year}", L"{year}年{month}"},
+    {L"chart-tick-weekday", L"{weekday} {day}", L"{day}日({weekday})"},
+    {L"date-month", L"Apr", L"4月"},
+    {L"date-month", L"Aug", L"8月"},
+    {L"date-month", L"Dec", L"12月"},
+    {L"date-month", L"Feb", L"2月"},
+    {L"date-month", L"Jan", L"1月"},
+    {L"date-month", L"Jul", L"7月"},
+    {L"date-month", L"Jun", L"6月"},
+    {L"date-month", L"Mar", L"3月"},
+    {L"date-month", L"May", L"5月"},
+    {L"date-month", L"Nov", L"11月"},
+    {L"date-month", L"Oct", L"10月"},
+    {L"date-month", L"Sep", L"9月"},
+    {L"date-month-alone", L"Apr", L"4月"},
+    {L"date-month-alone", L"Aug", L"8月"},
+    {L"date-month-alone", L"Dec", L"12月"},
+    {L"date-month-alone", L"Feb", L"2月"},
+    {L"date-month-alone", L"Jan", L"1月"},
+    {L"date-month-alone", L"Jul", L"7月"},
+    {L"date-month-alone", L"Jun", L"6月"},
+    {L"date-month-alone", L"Mar", L"3月"},
+    {L"date-month-alone", L"May", L"5月"},
+    {L"date-month-alone", L"Nov", L"11月"},
+    {L"date-month-alone", L"Oct", L"10月"},
+    {L"date-month-alone", L"Sep", L"9月"},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{month}{day}日({weekday}) {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{year}年{month}{day}日 {time}"},
+    {L"date-weekday", L"Fri", L"金"},
+    {L"date-weekday", L"Mon", L"月"},
+    {L"date-weekday", L"Sat", L"土"},
+    {L"date-weekday", L"Sun", L"日"},
+    {L"date-weekday", L"Thu", L"木"},
+    {L"date-weekday", L"Tue", L"火"},
+    {L"date-weekday", L"Wed", L"水"},
+    {L"history-pill", L"Not saving", L"保存できません"},
+    {L"history-pill", L"Off", L"オフ"},
+    {L"history-pill", L"Recording · forever", L"記録中 · 無期限"},
+    {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"記録中 · {days, plural, other{#日}}"},
+    {L"history-pill", L"Waiting", L"待機中"},
+    {L"history-status", L"Updated {time}", L"{time} に更新"},
+    {L"language-choice", L"Automatic ({language})", L"自動 ({language})"},
     {L"list-end", L"{a} and {b}", L"{a}、{b}"},
     {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
     {L"list-pair", L"{a} and {b}", L"{a}、{b}"},
     {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+    {L"notification-level", L"Off", L"オフ"},
+    {L"notification-level", L"Orange ({threshold}%)", L"オレンジ ({threshold}%)"},
+    {L"notification-level", L"Red ({threshold}%)", L"赤 ({threshold}%)"},
+    {L"notification-level", L"Yellow ({threshold}%)", L"黄 ({threshold}%)"},
+    {L"poll-interval", L"Custom", L"カスタム"},
+    {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分}}"},
+    {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分}}"},
+    {L"quota-key-2-chars", L"5h", L"5h"},
+    {L"quota-key-2-chars", L"7d", L"7日"},
+    {L"quota-key-2-chars", L"Ar", L"Ar"},
+    {L"quota-key-2-chars", L"Cr", L"Cr"},
+    {L"quota-key-2-chars", L"Ex", L"追加"},
+    {L"quota-key-2-chars", L"Fa", L"Fa"},
+    {L"quota-key-2-chars", L"Mo", L"月"},
+    {L"settings-page", L"About", L"バージョン情報"},
+    {L"settings-page", L"Accounts", L"アカウント"},
+    {L"settings-page", L"Behavior", L"動作"},
+    {L"settings-page", L"Display", L"表示"},
+    {L"settings-page", L"History", L"履歴"},
+    {L"settings-page", L"Layout", L"レイアウト"},
+    {L"settings-section", L"Alerts", L"アラート"},
+    {L"settings-section", L"Details", L"詳細"},
+    {L"settings-section", L"Language", L"言語"},
+    {L"settings-section", L"Taskbar", L"タスク バー"},
+    {L"settings-section", L"Updates", L"更新"},
+    {L"taskbar-action", L"Exit visual test", L"ビジュアル テストを終了"},
+    {L"taskbar-action", L"Hide", L"非表示"},
+    {L"taskbar-action", L"Open dashboard", L"ダッシュボードを開く"},
+    {L"taskbar-action", L"Refresh", L"更新"},
+    {L"taskbar-action", L"Refresh all", L"すべて更新"},
+    {L"taskbar-action", L"Settings", L"設定"},
+    {L"taskbar-action", L"Show on taskbar", L"タスク バーに表示"},
+    {L"taskbar-action", L"Sign in", L"サインイン"},
+    {L"taskbar-action", L"Usage history", L"使用履歴"},
+    {L"taskbar-countdown", L"no reset", L"リセットなし"},
+    {L"taskbar-countdown", L"now", L"今"},
+    {L"taskbar-countdown", L"{days}d", L"{days}d"},
+    {L"taskbar-countdown", L"{days}d {hours}h", L"{days}d {hours}h"},
+    {L"taskbar-countdown", L"{hours}h", L"{hours}h"},
+    {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
+    {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
+    {L"taskbar-setup", L"AI +", L"AI +"},
+    {L"toggle", L"Off", L"オフ"},
+    {L"toggle", L"On", L"オン"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogJa), "sort by (context, English), no duplicates");
 // src/i18n/lang-pt-BR.h
 // Portuguese (Brazil) (pt-BR): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogPtBr[] = {
+    {L"", L"2 to 1440 minutes.", L"De 2 a 1440 minutos."},
+    {L"", L"All displays", L"Todas as telas"},
+    {L"", L"Choose Custom in Cloud poll interval to edit.",
+     L"Escolha Personalizado em Intervalo de consulta na nuvem para editar."},
+    {L"", L"Cloud poll interval", L"Intervalo de consulta na nuvem"},
+    {L"", L"Custom interval", L"Intervalo personalizado"},
+    {L"", L"Display {number} - unavailable", L"Tela {number} - indisponível"},
+    {L"", L"Display {number} - {width}x{height}", L"Tela {number} - {width}x{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)", L"Tela {number} - {width}x{height} (principal)"},
+    {L"", L"Do not poll hidden accounts", L"Não consultar contas ocultas"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
+          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+     L"Cada conta escolhe se é registrada: <link id=\"accounts\">Contas</link> > Registrar histórico. Contas ocultas "
+     L"não são registradas enquanto <link id=\"hidden\">Não consultar contas ocultas</link> estiver ativado em "
+     L"Comportamento."},
+    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
+          L"them. Shared across Windows users.",
+     L"Contas ocultas não são consultadas nem registradas, mesmo com Registrar histórico ativado. Desative para "
+     L"continuar registrando-as. Compartilhado entre os usuários do Windows."},
+    {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
+          L"session every minute.",
+     L"Com que frequência Anthropic, OpenAI, GitHub Copilot e OpenCode Go são consultados. O Antigravity consulta sua "
+     L"sessão local a cada minuto."},
+    {L"", L"Interface language", L"Idioma da interface"},
+    {L"", L"Language, displays, hover details, polling and notifications.",
+     L"Idioma, telas, detalhes ao passar o ponteiro, consultas e notificações."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
+     L"Avisa quando uma cota da barra de tarefas atinge pela primeira vez o limite escolhido. Rearma quando ela cai "
+     L"abaixo dele."},
+    {L"", L"Open AI quota settings", L"Abrir as configurações de cotas de IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
+     L"Abrir as configurações de cotas de IA. Não foi possível ler as configurações salvas; um backup foi mantido."},
+    {L"", L"Opens an account’s details after the pointer rests on it.",
+     L"Abre os detalhes de uma conta quando o ponteiro para sobre ela."},
+    {L"", L"Primary display only", L"Somente a tela principal"},
+    {L"", L"Primary display, all displays, or one display.", L"A tela principal, todas as telas ou uma tela."},
+    {L"", L"Reset Behavior to defaults", L"Redefinir Comportamento para o padrão"},
+    {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
+          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+     L"Redefinir Comportamento para o padrão?\n\nIdioma automático, mostrar somente na tela principal, mostrar "
+     L"detalhes ao passar o ponteiro, consultar a cada 10 minutos, não consultar contas ocultas, notificações de "
+     L"limite no vermelho."},
+    {L"", L"Show details on hover", L"Mostrar detalhes ao passar o ponteiro"},
+    {L"", L"Show on", L"Mostrar em"},
+    {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
+          L"Applies to this Windows user only.",
+     L"As janelas de configurações e de histórico de uso, e a barra de tarefas. Automático segue o idioma de exibição "
+     L"do Windows. Aplica-se somente a este usuário do Windows."},
+    {L"", L"Threshold notifications", L"Notificações de limite"},
+    {L"account-error", L"Antigravity not running", L"Antigravity não está em execução"},
+    {L"account-state", L"Local app not running", L"App local não está em execução"},
+    {L"button", L"Add account", L"Adicionar conta"},
+    {L"button", L"Reset", L"Redefinir"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend", L"+{count} a mais — oculte linhas na legenda"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
+     L"+{count} a mais — oculte linhas na legenda ou selecione uma conta"},
+    {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
+    {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
+    {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"date-month", L"Apr", L"abr"},
+    {L"date-month", L"Aug", L"ago"},
+    {L"date-month", L"Dec", L"dez"},
+    {L"date-month", L"Feb", L"fev"},
+    {L"date-month", L"Jan", L"jan"},
+    {L"date-month", L"Jul", L"jul"},
+    {L"date-month", L"Jun", L"jun"},
+    {L"date-month", L"Mar", L"mar"},
+    {L"date-month", L"May", L"mai"},
+    {L"date-month", L"Nov", L"nov"},
+    {L"date-month", L"Oct", L"out"},
+    {L"date-month", L"Sep", L"set"},
+    {L"date-month-alone", L"Apr", L"abr"},
+    {L"date-month-alone", L"Aug", L"ago"},
+    {L"date-month-alone", L"Dec", L"dez"},
+    {L"date-month-alone", L"Feb", L"fev"},
+    {L"date-month-alone", L"Jan", L"jan"},
+    {L"date-month-alone", L"Jul", L"jul"},
+    {L"date-month-alone", L"Jun", L"jun"},
+    {L"date-month-alone", L"Mar", L"mar"},
+    {L"date-month-alone", L"May", L"mai"},
+    {L"date-month-alone", L"Nov", L"nov"},
+    {L"date-month-alone", L"Oct", L"out"},
+    {L"date-month-alone", L"Sep", L"set"},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{weekday} {day} {month} {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{day} {month} {year} {time}"},
+    {L"date-weekday", L"Fri", L"sex"},
+    {L"date-weekday", L"Mon", L"seg"},
+    {L"date-weekday", L"Sat", L"sáb"},
+    {L"date-weekday", L"Sun", L"dom"},
+    {L"date-weekday", L"Thu", L"qui"},
+    {L"date-weekday", L"Tue", L"ter"},
+    {L"date-weekday", L"Wed", L"qua"},
+    {L"history-pill", L"Not saving", L"Sem salvar"},
+    {L"history-pill", L"Off", L"Desativado"},
+    {L"history-pill", L"Recording · forever", L"Registrando · para sempre"},
+    {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
+     L"Registrando · {days, plural, one{# dia} many{# de dias} other{# dias}}"},
+    {L"history-pill", L"Waiting", L"Aguardando"},
+    {L"history-status", L"Updated {time}", L"Atualizado {time}"},
+    {L"language-choice", L"Automatic ({language})", L"Automático ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} e {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} e {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-level", L"Off", L"Desativadas"},
+    {L"notification-level", L"Orange ({threshold}%)", L"Laranja ({threshold}%)"},
+    {L"notification-level", L"Red ({threshold}%)", L"Vermelho ({threshold}%)"},
+    {L"notification-level", L"Yellow ({threshold}%)", L"Amarelo ({threshold}%)"},
+    {L"poll-interval", L"Custom", L"Personalizado"},
+    {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
+     L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
+    {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
+     L"{minutes, plural, one{minuto} many{de minutos} other{minutos}}"},
+    {L"quota-key-2-chars", L"5h", L"5h"},
+    {L"quota-key-2-chars", L"7d", L"7d"},
+    {L"quota-key-2-chars", L"Ar", L"Ar"},
+    {L"quota-key-2-chars", L"Cr", L"Cr"},
+    {L"quota-key-2-chars", L"Ex", L"Ex"},
+    {L"quota-key-2-chars", L"Fa", L"Fa"},
+    {L"quota-key-2-chars", L"Mo", L"Me"},
+    {L"settings-page", L"About", L"Sobre"},
+    {L"settings-page", L"Accounts", L"Contas"},
+    {L"settings-page", L"Behavior", L"Comportamento"},
+    {L"settings-page", L"Display", L"Exibição"},
+    {L"settings-page", L"History", L"Histórico"},
+    {L"settings-page", L"Layout", L"Layout"},
+    {L"settings-section", L"Alerts", L"Alertas"},
+    {L"settings-section", L"Details", L"Detalhes"},
+    {L"settings-section", L"Language", L"Idioma"},
+    {L"settings-section", L"Taskbar", L"Barra de tarefas"},
+    {L"settings-section", L"Updates", L"Atualizações"},
+    {L"taskbar-action", L"Exit visual test", L"Sair do teste visual"},
+    {L"taskbar-action", L"Hide", L"Ocultar"},
+    {L"taskbar-action", L"Open dashboard", L"Abrir painel"},
+    {L"taskbar-action", L"Refresh", L"Atualizar"},
+    {L"taskbar-action", L"Refresh all", L"Atualizar tudo"},
+    {L"taskbar-action", L"Settings", L"Configurações"},
+    {L"taskbar-action", L"Show on taskbar", L"Mostrar na barra de tarefas"},
+    {L"taskbar-action", L"Sign in", L"Entrar"},
+    {L"taskbar-action", L"Usage history", L"Histórico de uso"},
+    {L"taskbar-countdown", L"no reset", L"sem reinício"},
+    {L"taskbar-countdown", L"now", L"agora"},
+    {L"taskbar-countdown", L"{days}d", L"{days}d"},
+    {L"taskbar-countdown", L"{days}d {hours}h", L"{days}d {hours}h"},
+    {L"taskbar-countdown", L"{hours}h", L"{hours}h"},
+    {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
+    {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
+    {L"taskbar-setup", L"AI +", L"IA +"},
+    {L"toggle", L"Off", L"Desativado"},
+    {L"toggle", L"On", L"Ativado"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogPtBr), "sort by (context, English), no duplicates");
 // src/i18n/lang-ru.h
 // Russian (ru): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogRu[] = {
+    {L"", L"2 to 1440 minutes.", L"От 2 до 1440 минут."},
+    {L"", L"All displays", L"Все дисплеи"},
+    {L"", L"Choose Custom in Cloud poll interval to edit.",
+     L"Чтобы изменить, выберите «Другой» в списке «Интервал опроса облака»."},
+    {L"", L"Cloud poll interval", L"Интервал опроса облака"},
+    {L"", L"Custom interval", L"Свой интервал"},
+    {L"", L"Display {number} - unavailable", L"Дисплей {number} — недоступен"},
+    {L"", L"Display {number} - {width}x{height}", L"Дисплей {number} — {width}x{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)", L"Дисплей {number} — {width}x{height} (основной)"},
+    {L"", L"Do not poll hidden accounts", L"Не опрашивать скрытые аккаунты"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
+          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+     L"Каждый аккаунт сам решает, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать историю. "
+     L"Скрытые аккаунты не записываются, пока в разделе «Поведение» включено <link id=\"hidden\">Не опрашивать скрытые "
+     L"аккаунты</link>."},
+    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
+          L"them. Shared across Windows users.",
+     L"Скрытые аккаунты не опрашиваются и не записываются, даже если включено «Записывать историю». Выключите, чтобы "
+     L"продолжить их запись. Общий параметр для всех пользователей Windows."},
+    {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
+          L"session every minute.",
+     L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Antigravity опрашивает свой локальный "
+     L"сеанс каждую минуту."},
+    {L"", L"Interface language", L"Язык интерфейса"},
+    {L"", L"Language, displays, hover details, polling and notifications.",
+     L"Язык, дисплеи, сведения при наведении, опрос и уведомления."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
+     L"Уведомляет, когда квота на панели задач впервые достигает выбранного порога. Срабатывает снова, когда она "
+     L"опустится ниже."},
+    {L"", L"Open AI quota settings", L"Открыть настройки квот ИИ"},
+    {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
+     L"Открыть настройки квот ИИ. Не удалось прочитать сохранённые настройки; резервная копия сохранена."},
+    {L"", L"Opens an account’s details after the pointer rests on it.",
+     L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
+    {L"", L"Primary display only", L"Только основной дисплей"},
+    {L"", L"Primary display, all displays, or one display.", L"Основной дисплей, все дисплеи или один дисплей."},
+    {L"", L"Reset Behavior to defaults", L"Сбросить «Поведение» к значениям по умолчанию"},
+    {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
+          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+     L"Сбросить «Поведение» к значениям по умолчанию?\n\nАвтоматический язык, показ только на основном дисплее, "
+     L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты не опрашиваются, уведомления о пороге на "
+     L"красном уровне."},
+    {L"", L"Show details on hover", L"Показывать сведения при наведении"},
+    {L"", L"Show on", L"Показывать на"},
+    {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
+          L"Applies to this Windows user only.",
+     L"Окна настроек и истории использования, а также панель задач. «Автоматически» следует языку интерфейса Windows. "
+     L"Действует только для этого пользователя Windows."},
+    {L"", L"Threshold notifications", L"Уведомления о пороге"},
+    {L"account-error", L"Antigravity not running", L"Antigravity не запущен"},
+    {L"account-state", L"Local app not running", L"Локальное приложение не запущено"},
+    {L"button", L"Add account", L"Добавить аккаунт"},
+    {L"button", L"Reset", L"Сбросить"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend", L"Ещё {count} — скройте линии в легенде"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
+     L"Ещё {count} — скройте линии в легенде или выберите один аккаунт"},
+    {L"chart-tick-day", L"{month} {day}", L"{day} {month}"},
+    {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
+    {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}"},
+    {L"date-month", L"Apr", L"апр"},
+    {L"date-month", L"Aug", L"авг"},
+    {L"date-month", L"Dec", L"дек"},
+    {L"date-month", L"Feb", L"фев"},
+    {L"date-month", L"Jan", L"янв"},
+    {L"date-month", L"Jul", L"июл"},
+    {L"date-month", L"Jun", L"июн"},
+    {L"date-month", L"Mar", L"мар"},
+    {L"date-month", L"May", L"мая"},
+    {L"date-month", L"Nov", L"ноя"},
+    {L"date-month", L"Oct", L"окт"},
+    {L"date-month", L"Sep", L"сен"},
+    {L"date-month-alone", L"Apr", L"апр"},
+    {L"date-month-alone", L"Aug", L"авг"},
+    {L"date-month-alone", L"Dec", L"дек"},
+    {L"date-month-alone", L"Feb", L"фев"},
+    {L"date-month-alone", L"Jan", L"янв"},
+    {L"date-month-alone", L"Jul", L"июл"},
+    {L"date-month-alone", L"Jun", L"июн"},
+    {L"date-month-alone", L"Mar", L"мар"},
+    {L"date-month-alone", L"May", L"май"},
+    {L"date-month-alone", L"Nov", L"ноя"},
+    {L"date-month-alone", L"Oct", L"окт"},
+    {L"date-month-alone", L"Sep", L"сен"},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{weekday} {day} {month} {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{day} {month} {year} {time}"},
+    {L"date-weekday", L"Fri", L"пт"},
+    {L"date-weekday", L"Mon", L"пн"},
+    {L"date-weekday", L"Sat", L"сб"},
+    {L"date-weekday", L"Sun", L"вс"},
+    {L"date-weekday", L"Thu", L"чт"},
+    {L"date-weekday", L"Tue", L"вт"},
+    {L"date-weekday", L"Wed", L"ср"},
+    {L"history-pill", L"Not saving", L"Не сохраняется"},
+    {L"history-pill", L"Off", L"Откл."},
+    {L"history-pill", L"Recording · forever", L"Запись · бессрочно"},
+    {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}",
+     L"Запись · {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
+    {L"history-pill", L"Waiting", L"Ожидание"},
+    {L"history-status", L"Updated {time}", L"Обновлено {time}"},
+    {L"language-choice", L"Automatic ({language})", L"Автоматически ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} и {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} и {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-level", L"Off", L"Откл."},
+    {L"notification-level", L"Orange ({threshold}%)", L"Оранжевый ({threshold}%)"},
+    {L"notification-level", L"Red ({threshold}%)", L"Красный ({threshold}%)"},
+    {L"notification-level", L"Yellow ({threshold}%)", L"Жёлтый ({threshold}%)"},
+    {L"poll-interval", L"Custom", L"Другой"},
+    {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
+     L"{minutes, plural, one{# минута} few{# минуты} many{# минут} other{# минуты}}"},
+    {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
+     L"{minutes, plural, one{минута} few{минуты} many{минут} other{минуты}}"},
+    {L"quota-key-2-chars", L"5h", L"5ч"},
+    {L"quota-key-2-chars", L"7d", L"7д"},
+    {L"quota-key-2-chars", L"Ar", L"Ar"},
+    {L"quota-key-2-chars", L"Cr", L"Кр"},
+    {L"quota-key-2-chars", L"Ex", L"Ex"},
+    {L"quota-key-2-chars", L"Fa", L"Fa"},
+    {L"quota-key-2-chars", L"Mo", L"Мс"},
+    {L"settings-page", L"About", L"О программе"},
+    {L"settings-page", L"Accounts", L"Аккаунты"},
+    {L"settings-page", L"Behavior", L"Поведение"},
+    {L"settings-page", L"Display", L"Отображение"},
+    {L"settings-page", L"History", L"История"},
+    {L"settings-page", L"Layout", L"Макет"},
+    {L"settings-section", L"Alerts", L"Оповещения"},
+    {L"settings-section", L"Details", L"Подробности"},
+    {L"settings-section", L"Language", L"Язык"},
+    {L"settings-section", L"Taskbar", L"Панель задач"},
+    {L"settings-section", L"Updates", L"Обновления"},
+    {L"taskbar-action", L"Exit visual test", L"Выйти из визуального теста"},
+    {L"taskbar-action", L"Hide", L"Скрыть"},
+    {L"taskbar-action", L"Open dashboard", L"Открыть панель управления"},
+    {L"taskbar-action", L"Refresh", L"Обновить"},
+    {L"taskbar-action", L"Refresh all", L"Обновить все"},
+    {L"taskbar-action", L"Settings", L"Настройки"},
+    {L"taskbar-action", L"Show on taskbar", L"Показывать на панели задач"},
+    {L"taskbar-action", L"Sign in", L"Войти"},
+    {L"taskbar-action", L"Usage history", L"История использования"},
+    {L"taskbar-countdown", L"no reset", L"без сброса"},
+    {L"taskbar-countdown", L"now", L"сейчас"},
+    {L"taskbar-countdown", L"{days}d", L"{days}д"},
+    {L"taskbar-countdown", L"{days}d {hours}h", L"{days}д {hours}ч"},
+    {L"taskbar-countdown", L"{hours}h", L"{hours}ч"},
+    {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}ч {minutes}м"},
+    {L"taskbar-countdown", L"{minutes}m", L"{minutes}м"},
+    {L"taskbar-setup", L"AI +", L"ИИ +"},
+    {L"toggle", L"Off", L"Откл."},
+    {L"toggle", L"On", L"Вкл."},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogRu), "sort by (context, English), no duplicates");
 // src/i18n/lang-zh-Hans.h
 // Simplified Chinese (zh-Hans): {context, English, translation}, sorted by context, then English.
 // Adding, changing and translating entries: i18n/AGENTS.md.
 static constexpr I18nEntry kI18nCatalogZhHans[] = {
+    {L"", L"2 to 1440 minutes.", L"2 至 1440 分钟。"},
+    {L"", L"All displays", L"所有显示器"},
+    {L"", L"Choose Custom in Cloud poll interval to edit.", L"在“云端轮询间隔”中选择“自定义”后即可编辑。"},
+    {L"", L"Cloud poll interval", L"云端轮询间隔"},
+    {L"", L"Custom interval", L"自定义间隔"},
+    {L"", L"Display {number} - unavailable", L"显示器 {number} - 不可用"},
+    {L"", L"Display {number} - {width}x{height}", L"显示器 {number} - {width}x{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)", L"显示器 {number} - {width}x{height}（主显示器）"},
+    {L"", L"Do not poll hidden accounts", L"不轮询隐藏的账户"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
+          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+     L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。在“行为”中开启<link "
+     L"id=\"hidden\">不轮询隐藏的账户</link>时，隐藏的账户不会被记录。"},
+    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
+          L"them. Shared across Windows users.",
+     L"即使开启了“记录历史”，隐藏的账户也不会被轮询或记录。关闭此项可继续记录它们。所有 Windows 用户共享此设置。"},
+    {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
+          L"session every minute.",
+     L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
+    {L"", L"Interface language", L"界面语言"},
+    {L"", L"Language, displays, hover details, polling and notifications.", L"语言、显示器、悬停详情、轮询和通知。"},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
+     L"任务栏配额首次达到所选阈值时通知。降到阈值以下后重新生效。"},
+    {L"", L"Open AI quota settings", L"打开 AI 配额设置"},
+    {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
+     L"打开 AI 配额设置。无法读取已保存的设置；已保留备份。"},
+    {L"", L"Opens an account’s details after the pointer rests on it.", L"指针停留在账户上时打开其详情。"},
+    {L"", L"Primary display only", L"仅主显示器"},
+    {L"", L"Primary display, all displays, or one display.", L"主显示器、所有显示器或某一个显示器。"},
+    {L"", L"Reset Behavior to defaults", L"将“行为”重置为默认值"},
+    {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
+          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+     L"将“行为”重置为默认值？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
+     L"分钟轮询一次、不轮询隐藏的账户、在红色阈值时通知。"},
+    {L"", L"Show details on hover", L"悬停时显示详情"},
+    {L"", L"Show on", L"显示位置"},
+    {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
+          L"Applies to this Windows user only.",
+     L"设置窗口、使用历史窗口和任务栏。“自动”跟随 Windows 显示语言。仅适用于当前 Windows 用户。"},
+    {L"", L"Threshold notifications", L"阈值通知"},
+    {L"account-error", L"Antigravity not running", L"Antigravity 未运行"},
+    {L"account-state", L"Local app not running", L"本地应用未运行"},
+    {L"button", L"Add account", L"添加账户"},
+    {L"button", L"Reset", L"重置"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend", L"还有 {count} 条 — 在图例中隐藏线条"},
+    {L"chart-readout", L"+{count} more — hide lines in the legend or select one account",
+     L"还有 {count} 条 — 在图例中隐藏线条或选择一个账户"},
+    {L"chart-tick-day", L"{month} {day}", L"{month}{day}日"},
+    {L"chart-tick-month", L"{month} {year}", L"{year}年{month}"},
+    {L"chart-tick-weekday", L"{weekday} {day}", L"{day}日 {weekday}"},
+    {L"date-month", L"Apr", L"4月"},
+    {L"date-month", L"Aug", L"8月"},
+    {L"date-month", L"Dec", L"12月"},
+    {L"date-month", L"Feb", L"2月"},
+    {L"date-month", L"Jan", L"1月"},
+    {L"date-month", L"Jul", L"7月"},
+    {L"date-month", L"Jun", L"6月"},
+    {L"date-month", L"Mar", L"3月"},
+    {L"date-month", L"May", L"5月"},
+    {L"date-month", L"Nov", L"11月"},
+    {L"date-month", L"Oct", L"10月"},
+    {L"date-month", L"Sep", L"9月"},
+    {L"date-month-alone", L"Apr", L"4月"},
+    {L"date-month-alone", L"Aug", L"8月"},
+    {L"date-month-alone", L"Dec", L"12月"},
+    {L"date-month-alone", L"Feb", L"2月"},
+    {L"date-month-alone", L"Jan", L"1月"},
+    {L"date-month-alone", L"Jul", L"7月"},
+    {L"date-month-alone", L"Jun", L"6月"},
+    {L"date-month-alone", L"Mar", L"3月"},
+    {L"date-month-alone", L"May", L"5月"},
+    {L"date-month-alone", L"Nov", L"11月"},
+    {L"date-month-alone", L"Oct", L"10月"},
+    {L"date-month-alone", L"Sep", L"9月"},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{month}{day}日 {weekday} {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{year}年{month}{day}日 {time}"},
+    {L"date-weekday", L"Fri", L"周五"},
+    {L"date-weekday", L"Mon", L"周一"},
+    {L"date-weekday", L"Sat", L"周六"},
+    {L"date-weekday", L"Sun", L"周日"},
+    {L"date-weekday", L"Thu", L"周四"},
+    {L"date-weekday", L"Tue", L"周二"},
+    {L"date-weekday", L"Wed", L"周三"},
+    {L"history-pill", L"Not saving", L"未保存"},
+    {L"history-pill", L"Off", L"关闭"},
+    {L"history-pill", L"Recording · forever", L"记录中 · 永久"},
+    {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"记录中 · {days, plural, other{# 天}}"},
+    {L"history-pill", L"Waiting", L"等待中"},
+    {L"history-status", L"Updated {time}", L"更新于 {time}"},
+    {L"language-choice", L"Automatic ({language})", L"自动（{language}）"},
     {L"list-end", L"{a} and {b}", L"{a}和{b}"},
     {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
     {L"list-pair", L"{a} and {b}", L"{a}和{b}"},
     {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+    {L"notification-level", L"Off", L"关闭"},
+    {L"notification-level", L"Orange ({threshold}%)", L"橙色（{threshold}%）"},
+    {L"notification-level", L"Red ({threshold}%)", L"红色（{threshold}%）"},
+    {L"notification-level", L"Yellow ({threshold}%)", L"黄色（{threshold}%）"},
+    {L"poll-interval", L"Custom", L"自定义"},
+    {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分钟}}"},
+    {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分钟}}"},
+    {L"quota-key-2-chars", L"5h", L"5h"},
+    {L"quota-key-2-chars", L"7d", L"7天"},
+    {L"quota-key-2-chars", L"Ar", L"Ar"},
+    {L"quota-key-2-chars", L"Cr", L"积分"},
+    {L"quota-key-2-chars", L"Ex", L"额外"},
+    {L"quota-key-2-chars", L"Fa", L"Fa"},
+    {L"quota-key-2-chars", L"Mo", L"月"},
+    {L"settings-page", L"About", L"关于"},
+    {L"settings-page", L"Accounts", L"账户"},
+    {L"settings-page", L"Behavior", L"行为"},
+    {L"settings-page", L"Display", L"显示"},
+    {L"settings-page", L"History", L"历史"},
+    {L"settings-page", L"Layout", L"布局"},
+    {L"settings-section", L"Alerts", L"提醒"},
+    {L"settings-section", L"Details", L"详情"},
+    {L"settings-section", L"Language", L"语言"},
+    {L"settings-section", L"Taskbar", L"任务栏"},
+    {L"settings-section", L"Updates", L"更新"},
+    {L"taskbar-action", L"Exit visual test", L"退出视觉测试"},
+    {L"taskbar-action", L"Hide", L"隐藏"},
+    {L"taskbar-action", L"Open dashboard", L"打开仪表板"},
+    {L"taskbar-action", L"Refresh", L"刷新"},
+    {L"taskbar-action", L"Refresh all", L"全部刷新"},
+    {L"taskbar-action", L"Settings", L"设置"},
+    {L"taskbar-action", L"Show on taskbar", L"在任务栏上显示"},
+    {L"taskbar-action", L"Sign in", L"登录"},
+    {L"taskbar-action", L"Usage history", L"使用历史"},
+    {L"taskbar-countdown", L"no reset", L"无重置"},
+    {L"taskbar-countdown", L"now", L"现在"},
+    {L"taskbar-countdown", L"{days}d", L"{days}d"},
+    {L"taskbar-countdown", L"{days}d {hours}h", L"{days}d {hours}h"},
+    {L"taskbar-countdown", L"{hours}h", L"{hours}h"},
+    {L"taskbar-countdown", L"{hours}h {minutes}m", L"{hours}h {minutes}m"},
+    {L"taskbar-countdown", L"{minutes}m", L"{minutes}m"},
+    {L"taskbar-setup", L"AI +", L"AI +"},
+    {L"toggle", L"Off", L"关"},
+    {L"toggle", L"On", L"开"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogZhHans), "sort by (context, English), no duplicates");
 
@@ -1209,7 +2222,10 @@ struct Settings {
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
+    // This Windows user's history recording consent and language preference (a language tag;
+    // empty: Automatic), stored per user beside settings_v1, never in it.
     bool historyEnabled = true;
+    std::wstring language;
     // Days of usage history kept; 0: forever, with neither the age limit nor the size cap.
     int historyRetentionDays = 0;
     // The range the usage history window opens on.
@@ -1315,6 +2331,23 @@ enum class CopilotUnit {
     ChatRequests,
 };
 
+// A poll's error as the mod authored it: a code, with each code's arguments in fields of their
+// own, formatted in the reader's language at presentation (AccountErrorText); logs and their
+// dedupe use its English text. Provider-supplied text rides in `detail` and is shown as is.
+enum class AccountErrorCode : uint8_t {
+    None,
+    Message,  // An English message without a code of its own: `detail`, shown and logged as is.
+    AntigravityNotRunning,
+};
+
+struct AccountError {
+    AccountErrorCode code = AccountErrorCode::None;
+    std::wstring detail;
+
+    explicit operator bool() const { return code != AccountErrorCode::None; }
+    bool operator==(const AccountError&) const = default;
+};
+
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
@@ -1349,7 +2382,7 @@ struct AccountData {
     // OpenCode Go's windows (5-hour, weekly, monthly in the extra-usage slot) that reached their
     // limit, by QuotaBarIndex.
     std::array<bool, kQuotaBarCount> opencodeLimited{};
-    std::wstring error;
+    AccountError error;
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
@@ -1413,6 +2446,20 @@ static uint64_t AccountIdentityHash(const AccountConfig& a) {
         h = (h ^ *p) * 1099511628211ull;
     }
     return h;
+}
+
+// src/core/account-error.h
+// Account errors' text (AccountError, core/model.h) in a language: presentation passes the
+// reader's locale; logs and their dedupe pass English (the default locale), so a language switch
+// never reads as a new error. Pure.
+
+static std::wstring AccountErrorText(const I18nLocale& locale, const AccountError& error) {
+    switch (error.code) {
+        case AccountErrorCode::AntigravityNotRunning:
+            return I18nText(locale, TrCtx(L"account-error", L"Antigravity not running"));
+        default:
+            return error.detail;
+    }
 }
 
 // src/history/types.h
@@ -1858,6 +2905,9 @@ struct QuotaUiInstance {
     bool edgeChanged = false;
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
+    // The language current at build, which the grid's updates, menus and flyouts keep: a grid
+    // built in another one is never reused.
+    I18nLocale buildLocale;
     BarLayout buildBarLayout = BarLayout::Stacked;
     // Usage graphs built to swap spans on hover, and the account whose charts the last update
     // swapped (-1: none).
@@ -2026,6 +3076,68 @@ static void RefreshQuotaByIdentity(uint64_t identityHash) {
         }
     }
     if (found) QueueRefresh(identityHash);
+}
+
+// src/core/language.h
+// The process's current UI language and this Windows user's language preference. Native: pure
+// code never reads these; native code snapshots one I18nLocale per frame, notification or dialog
+// and passes it down (i18n/AGENTS.md).
+
+// The current language: an immutable registry entry (i18n/languages.h) any thread reads without
+// locks; text built from it is cached under its locale. Writers hold g_configEditMutex (mod init
+// aside).
+static std::atomic<const I18nLanguage*> g_language{&kI18nLanguages[0]};
+
+// This Windows user's settings, never in machine-shared settings_v1: the recording consent
+// (history/journal.h) and the language preference, a tag (missing or empty: Automatic).
+static constexpr PCWSTR kUserRegistryKey = L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
+static constexpr PCWSTR kLanguageRegistryValue = L"Language";  // i18n-en
+
+// The stored tag, spelled as kI18nLanguages spells it; empty (Automatic) when missing, empty,
+// unreadable or naming no language.
+static std::wstring ReadLanguagePreference() {
+    wchar_t tag[64] = {};
+    DWORD size = sizeof(tag);
+    if (RegGetValueW(HKEY_CURRENT_USER, kUserRegistryKey, kLanguageRegistryValue, RRF_RT_REG_SZ, nullptr, tag,
+                     &size) != ERROR_SUCCESS) {
+        return {};
+    }
+    const I18nLanguage* language = I18nLanguageByTag(tag);
+    return language ? std::wstring(language->tag) : std::wstring();
+}
+
+// Stores a tag, or an empty one for Automatic.
+static bool WriteLanguagePreference(const std::wstring& tag) {
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kUserRegistryKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key,
+                        nullptr) != ERROR_SUCCESS) {
+        return false;
+    }
+    LSTATUS result = RegSetValueExW(key, kLanguageRegistryValue, 0, REG_SZ,
+                                    reinterpret_cast<const BYTE*>(tag.c_str()), DWORD((tag.size() + 1) * sizeof(wchar_t)));
+    RegCloseKey(key);
+    return result == ERROR_SUCCESS;
+}
+
+// The language a preference shows: its tag's, else (Automatic) the first finished language the
+// user's preferred Windows display languages name, else English.
+static const I18nLanguage& ResolveLanguage(const std::wstring& tag) {
+    if (const I18nLanguage* language = I18nLanguageByTag(tag)) return *language;
+    ULONG count = 0, size = 0;
+    std::vector<wchar_t> names;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, nullptr, &size) && size) {
+        names.resize(size);
+        if (!GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, names.data(), &size)) names.clear();
+    }
+    std::vector<std::wstring_view> preferred;
+    for (const wchar_t* name = names.data(); !names.empty() && *name; name += wcslen(name) + 1) {
+        preferred.push_back(name);
+    }
+    return I18nMatchLanguage(preferred);
+}
+
+static void SetCurrentLanguage(const I18nLanguage& language) {
+    g_language.store(&language, std::memory_order_release);
 }
 
 // src/core/helpers.h
@@ -5103,7 +6215,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
 }
 
 static void FetchAntigravityAccount(AccountData* d) {
-    d->error.clear();
+    d->error = {};
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
     if (g_unloading) return;
@@ -5134,8 +6246,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         if (!DiscoverAntigravityServer(&info, &foundServer)) {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? L"Antigravity quota unavailable" :
-                                     L"Antigravity not running";
+            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
+                                     AccountError{AccountErrorCode::AntigravityNotRunning};
             return;
         }
         info.discoveredMs = NowUnixMs();
@@ -5215,8 +6327,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         } else {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? L"Antigravity quota unavailable" :
-                                     L"Antigravity not running";
+            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
+                                     AccountError{AccountErrorCode::AntigravityNotRunning};
             return;
         }
     }
@@ -5228,16 +6340,16 @@ static void FetchAntigravityAccount(AccountData* d) {
                                 !summaryResult.ok && !statusResult.ok :
                                 !statusResult.ok;
         if (networkError) {
-            d->error = L"network error (language server)";
+            d->error = {AccountErrorCode::Message, L"network error (language server)"};
         } else if (info.quotaSource == AntigravityQuotaSource::Summary &&
                    summaryResult.ok && summaryResult.status != 200) {
-            d->error = L"HTTP " + std::to_wstring(summaryResult.status) +
-                       L" from language server";
+            d->error = {AccountErrorCode::Message,
+                        L"HTTP " + std::to_wstring(summaryResult.status) + L" from language server"};
         } else if (statusResult.ok && statusResult.status != 200) {
-            d->error = L"HTTP " + std::to_wstring(statusResult.status) +
-                       L" from language server";
+            d->error = {AccountErrorCode::Message,
+                        L"HTTP " + std::to_wstring(statusResult.status) + L" from language server"};
         } else {
-            d->error = parseError.empty() ? L"unexpected response" : parseError;
+            d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response" : parseError};
         }
         if (endpointInvalid) g_antigravityCachedInfo = {};
         return;
@@ -5917,15 +7029,12 @@ static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
     return true;
 }
 
-static constexpr PCWSTR kHistoryConsentRegistryKey =
-    L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
-
 // Consent is per Windows user; Windhawk's settings_v1 storage is machine-shared. Recording is on
 // until this user turns it off, which stores 0.
 static bool ReadHistoryConsent() {
     DWORD value = 0;
     DWORD size = sizeof(value);
-    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, L"RecordHistory",
+    LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kUserRegistryKey, L"RecordHistory",
                                   RRF_RT_REG_DWORD, nullptr, &value, &size);
     if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) return true;
     return result == ERROR_SUCCESS && size == sizeof(value) && value == 1;
@@ -5933,7 +7042,7 @@ static bool ReadHistoryConsent() {
 
 static bool WriteHistoryConsent(bool enabled) {
     HKEY key = nullptr;
-    LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kHistoryConsentRegistryKey, 0, nullptr, 0,
+    LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kUserRegistryKey, 0, nullptr, 0,
                                      KEY_SET_VALUE, nullptr, &key, nullptr);
     if (result != ERROR_SUCCESS) return false;
     DWORD value = enabled ? 1 : 0;
@@ -7183,7 +8292,7 @@ static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a
 // that.
 static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
                              AccountDetailsCache* details) {
-    d->error.clear();
+    d->error = {};
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
     uint64_t idHash = AccountIdentityHash(acc);
@@ -7220,7 +8329,7 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = L"not signed in - click to sign in";
+        d->error = {AccountErrorCode::Message, L"not signed in - click to sign in"};
         return signInGeneration;
     }
     // GitHub refreshes through its own form-encoded endpoint.
@@ -7240,8 +8349,8 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = saved == TokenSaveResult::Stale ? L"token refresh failed" :
-                                                             L"could not save refreshed token";
+                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
+                                                           L"token refresh failed" : L"could not save refreshed token"};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
@@ -7249,10 +8358,10 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
             d->stale = true;
             if (refreshResult == TokenEndpointResult::Rejected) {
                 d->needsLogin = true;
-                d->error = L"session expired - click to sign in";
+                d->error = {AccountErrorCode::Message, L"session expired - click to sign in"};
             } else {
-                d->error = L"token refresh failed";
-                if (!refreshErr.empty()) d->error += L": " + refreshErr;
+                d->error = {AccountErrorCode::Message, L"token refresh failed"};
+                if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
                 *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             }
             return signInGeneration;
@@ -7307,16 +8416,16 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = saved == TokenSaveResult::Stale ? L"token refresh failed" :
-                                                             L"could not save refreshed token";
+                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
+                                                           L"token refresh failed" : L"could not save refreshed token"};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
             r = requestUsage(tok);
         } else if (refreshResult == TokenEndpointResult::TransientFailure) {
             d->stale = true;
-            d->error = L"token refresh failed";
-            if (!refreshErr.empty()) d->error += L": " + refreshErr;
+            d->error = {AccountErrorCode::Message, L"token refresh failed"};
+            if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
             *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             return signInGeneration;
         }
@@ -7324,13 +8433,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
 
     if (!r.ok) {
         d->stale = true;
-        d->error = L"network error";
+        d->error = {AccountErrorCode::Message, L"network error"};
         return signInGeneration;
     }
     if (r.status == 401) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = L"unauthorized - click to sign in";
+        d->error = {AccountErrorCode::Message, L"unauthorized - click to sign in"};
         return signInGeneration;
     }
     // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
@@ -7344,13 +8453,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     }
     if (r.status == 429 || githubRateLimited) {
         d->stale = true;
-        d->error = L"rate limited by API";
+        d->error = {AccountErrorCode::Message, L"rate limited by API"};
         *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
         return signInGeneration;
     }
     if (copilot && r.status == 403) {
         d->stale = true;
-        d->error = L"no Copilot access on this GitHub account";
+        d->error = {AccountErrorCode::Message, L"no Copilot access on this GitHub account"};
         return signInGeneration;
     }
     // OpenCode's EntitlementError: the key's workspace has no Go subscription. Other 403s (an edge
@@ -7363,13 +8472,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
         } catch (...) {}
         if (entitlement) {
             d->stale = true;
-            d->error = L"no OpenCode Go subscription on this key";
+            d->error = {AccountErrorCode::Message, L"no OpenCode Go subscription on this key"};
             return signInGeneration;
         }
     }
     if (r.status != 200) {
         d->stale = true;
-        d->error = L"HTTP " + std::to_wstring(r.status);
+        d->error = {AccountErrorCode::Message, L"HTTP " + std::to_wstring(r.status)};
         return signInGeneration;
     }
 
@@ -7381,7 +8490,7 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                              ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
-        d->error = parseError.empty() ? L"unexpected response format" : parseError;
+        d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response format" : parseError};
         return signInGeneration;
     }
 
@@ -7698,7 +8807,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 // where recording was disabled, even if it was shorter than two polls.
                 sample.session = historySession ^ (historyContinuityGeneration * 0x9e3779b97f4a7c15ULL);
                 sample.provider = providerCode;
-                sample.failed = !results[i].error.empty() || results[i].stale ||
+                sample.failed = bool(results[i].error) || results[i].stale ||
                                 results[i].needsLogin;
                 if (!sample.failed) {
                     const std::array<const WindowUsage*, 6> windows = {
@@ -7736,7 +8845,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 ULONGLONG pollDelayMs = accounts[i].provider == L"antigravity"
                                             ? 60000
                                             : (ULONGLONG)intervalMin * 60000;
-                if (!results[i].error.empty() && !results[i].needsLogin &&
+                if (results[i].error && !results[i].needsLogin &&
                     accounts[i].provider != L"antigravity") {
                     pollDelayMs = std::min<ULONGLONG>(pollDelayMs, 120000);
                 }
@@ -7746,16 +8855,17 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
             }
 
-            if (!results[i].error.empty()) {
+            if (results[i].error) {
                 if (retryAfter <= 0 && !results[i].needsLogin &&
                     accounts[i].provider != L"antigravity") {
                     anyError = true;
                 }
-                std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].label +
-                                          L"\n" + results[i].error;
+                // Logged and deduplicated in English, whatever the UI language.
+                std::wstring error = AccountErrorText(I18nLocale(), results[i].error);
+                std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].label + L"\n" + error;
                 if (errorState != lastLoggedErrorStates[i]) {
                     Wh_Log(L"Fetch [%d] %s (%s): %s", (int)i, accounts[i].label.c_str(),
-                           accounts[i].provider.c_str(), results[i].error.c_str());
+                           accounts[i].provider.c_str(), error.c_str());
                     lastLoggedErrorStates[i] = std::move(errorState);
                 }
             } else {
@@ -8893,19 +10003,32 @@ static constexpr double kHeadlineLogoSide = 16;
 // A headline tile's window key text, in proportion to its number's (9 DIPs beside 14).
 static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // A headline countdown follows a reset arrow, at the key's size; tiles reserve the width of
-// kHeadlineCountdownReserve for it.
+// HeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
-static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
-// Quota window keys on bar labels and tiles; QuotaKey gives the per-provider ones.
-static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
-// A slot's key: Antigravity's Gemini Argon weekly shows "Ar" instead of "Fa", OpenAI credits "Cr"
-// instead of "Ex", GitHub Copilot's monthly AI credits and OpenCode Go's monthly "Mo".
-static PCWSTR QuotaKey(std::wstring_view provider, int slot) {
-    if (slot == kFableWeeklyBar) return provider == L"antigravity" ? L"Ar" : kQuotaKeys[slot];
-    if (slot != kExtraUsageBar) return kQuotaKeys[slot];
-    return provider == L"openai" ? L"Cr" : provider == L"copilot" || provider == L"opencode" ? L"Mo" :
-                                                                                              kQuotaKeys[slot];
+// The countdown's hours-and-minutes form at zeros, behind the arrow, in the locale: the width a
+// headline tile reserves, so minute ticks keep it.
+static std::wstring HeadlineCountdownReserve(const I18nLocale& locale) {
+    return kHeadlineCountdownArrow + I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"),
+                                              {{L"hours", L"00"}, {L"minutes", L"00"}});
+}
+
+// Quota window keys on bar labels and tiles, compact in every language: each slot's, then
+// Antigravity's Gemini Argon weekly ("Ar" for "Fa"), OpenAI's credits ("Cr" for "Ex"), and GitHub
+// Copilot's monthly AI credits and OpenCode Go's monthly ("Mo" for "Ex"). QuotaKey picks an
+// account's; tiles reserve the widest of them all.
+static constexpr I18nKey kQuotaKeys[] = {
+    TrCtx(L"quota-key-2-chars", L"5h"), TrCtx(L"quota-key-2-chars", L"7d"), TrCtx(L"quota-key-2-chars", L"Fa"),
+    TrCtx(L"quota-key-2-chars", L"Ex"), TrCtx(L"quota-key-2-chars", L"Ar"), TrCtx(L"quota-key-2-chars", L"Cr"),
+    TrCtx(L"quota-key-2-chars", L"Mo"),
+};
+
+static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provider, int slot) {
+    size_t key = size_t(slot);
+    if (slot == kFableWeeklyBar && provider == L"antigravity") key = 4;
+    if (slot == kExtraUsageBar && provider == L"openai") key = 5;
+    if (slot == kExtraUsageBar && (provider == L"copilot" || provider == L"opencode")) key = 6;
+    return I18nText(locale, kQuotaKeys[key]);
 }
 // Tile text's cap height, as a share of its font size (Segoe UI Variable).
 static constexpr double kTileCapShare = 0.7;
@@ -9394,6 +10517,7 @@ static BadgeColors BadgeColorsFor(COLORREF color, bool light) {
 // Display inputs of every meter. Build it with MeterDisplayFor only; the ranges below hold.
 struct MeterDisplay {
     ULONGLONG now;
+    I18nLocale locale;        // The keys' and the countdown's language.
     BarMode barMode;
     int barLength;            // 10-500 DIPs.
     int barThickness;         // 2-50 DIPs.
@@ -9449,9 +10573,9 @@ static double BarLabelColumnWidth(int percentFontSize) {
     return std::ceil(percentFontSize * 1.4) + 3.0;
 }
 
-// `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs
-// above and below them. `sideWidth`: MeterDisplay::sideWidth.
-static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
+// `locale`: the frame's language. `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or
+// on a side); tiles leave 4 DIPs above and below them. `sideWidth`: MeterDisplay::sideWidth.
+static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale, ULONGLONG now,
                                     double rasterizationScale, double taskbarHeight,
                                     double sideWidth = 0) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
@@ -9470,6 +10594,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
     double readingReach = (settings.sparklineRing ? kSparkRingOuter : kSparkPlainNowRadius) * readingScale + 0.4;
     return {
         .now = now,
+        .locale = locale,
         .barMode = settings.barMode,
         .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10,
                                    settings.showBarLabels ? BarLabelColumnWidth(settings.percentFontSize) : 0) :
@@ -9631,7 +10756,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
                 green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
             accountData.lastSuccessMs = now - 10 * 60000;
             accountData.stale = true;
-            accountData.error = L"Antigravity not running";
+            accountData.error = {AccountErrorCode::AntigravityNotRunning};
         }
         data->push_back(std::move(accountData));
     }
@@ -10146,7 +11271,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                               (ULONGLONG)display.pollMinutes) * 2 * 60000;
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
                    display.now - data.lastSuccessMs > staleAfterMs;
-    meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
+    meters.warn = display.showStaleWarning && meters.stale && bool(data.error);
     // An outage explains the staleness: its mark takes the stale mark's place.
     if (outage != OutageLevel::None) {
         meters.mark = IdentityMark::Outage;
@@ -10223,7 +11348,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             } else {
                 meters.sparkExtraText = TaskbarAmountText(data.creditsBalance, false);
             }
-            if (!dollars) meters.sparkExtraKey = QuotaKey(account.provider, kExtraUsageBar);
+            if (!dollars) meters.sparkExtraKey = QuotaKey(display.locale, account.provider, kExtraUsageBar);
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
                 UsageColor(extra.pct, meters.stale, yellow, orange, red, display.usageColors) : 0;
         }
@@ -10337,7 +11462,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         QuotaMeter& m = meters.quotas[w];
         // Color stays keyed to actual usage so depleting quota still reds out.
         m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.usageColors);
-        m.key = QuotaKey(account.provider, w);
+        m.key = QuotaKey(display.locale, account.provider, w);
         m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
                         wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
@@ -10778,27 +11903,34 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             meters.headlineKey = meters.quotas[top].key;
         }
         if (countdown && top >= 0) {
-            // Rounded up to the minute, like the details flyout's reset times.
+            // Rounded up to the minute, like the details flyout's reset times: its two largest
+            // units, dropping a zero second one.
+            const I18nLocale& locale = display.locale;
             ULONGLONG reset = usage[top]->resetUnixMs;
-            meters.headlineCountdown = kHeadlineCountdownArrow;
+            std::wstring text;
             if (!reset) {
-                meters.headlineCountdown += L"no reset";
+                text = I18nText(locale, TrCtx(L"taskbar-countdown", L"no reset"));
             } else if (reset <= display.now) {
-                meters.headlineCountdown += L"now";
+                text = I18nText(locale, TrCtx(L"taskbar-countdown", L"now"));
             } else {
                 ULONGLONG minutes = (reset - display.now + 59999) / 60000;
                 ULONGLONG days = minutes / (24 * 60), hours = minutes / 60 % 24;
                 minutes %= 60;
-                wchar_t text[24];
-                if (days) {
-                    swprintf(text, ARRAYSIZE(text), hours ? L"%llud %lluh" : L"%llud", days, hours);
+                if (days && hours) {
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d {hours}h"),
+                                    {{L"days", days}, {L"hours", hours}});
+                } else if (days) {
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d"), {{L"days", days}});
+                } else if (hours && minutes) {
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"),
+                                    {{L"hours", hours}, {L"minutes", minutes}});
                 } else if (hours) {
-                    swprintf(text, ARRAYSIZE(text), minutes ? L"%lluh %llum" : L"%lluh", hours, minutes);
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h"), {{L"hours", hours}});
                 } else {
-                    swprintf(text, ARRAYSIZE(text), L"%llum", minutes);
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{minutes}m"), {{L"minutes", minutes}});
                 }
-                meters.headlineCountdown += text;
             }
+            meters.headlineCountdown = kHeadlineCountdownArrow + text;
         }
         meters.headlineColor = UsageColor(top >= 0 ? usage[top]->pct : -1, meters.stale, yellow,
                                           orange, red, display.usageColors);
@@ -10954,9 +12086,31 @@ static void UpdateHoverSpans(QuotaUiInstance& state) {
     if (state.buildSparkHoverSwap && state.sparkSwapIndex != state.flyout.hoverIndex) UpdateQuotaUi(state);
 }
 
-// Text width per DIP of font size, measured out of the tree; estimated if measuring fails.
-static double TileTextWidthPerPt(TextBlock const& text) {
+// Gives our XAML the frame's language, which picks its font fallback and shaping (Han glyph forms
+// above all). English leaves the language Explorer's tree passes down, so labels and provider text
+// in the user's own language render as they always have.
+static void SetXamlLanguage(FrameworkElement const& element, I18nLocale const& locale) {
+    if (locale != I18nLocale()) element.Language(winrt::hstring(locale.LocaleName()));
+}
+
+// A tooltip in the frame's language: a ToolTip of its own carries it; English keeps the plain text
+// value, as SetXamlLanguage leaves it.
+static void SetXamlToolTip(DependencyObject const& element, std::wstring const& text, I18nLocale const& locale) {
+    if (locale == I18nLocale()) {
+        ToolTipService::SetToolTip(element, winrt::box_value(text));
+        return;
+    }
+    ToolTip tip;
+    tip.Content(winrt::box_value(text));
+    SetXamlLanguage(tip, locale);
+    ToolTipService::SetToolTip(element, tip);
+}
+
+// Text width per DIP of font size, measured out of the tree in the frame's language, which the
+// tree won't pass down there; estimated if measuring fails.
+static double TileTextWidthPerPt(TextBlock const& text, I18nLocale const& locale) {
     try {
+        SetXamlLanguage(text, locale);
         text.Measure({INFINITY, INFINITY});
         double width = text.DesiredSize().Width;
         if (width > 0 && text.FontSize() > 0) return width / text.FontSize();
@@ -11056,7 +12210,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         tile.text.TextLineBounds(TextLineBounds::Tight);
         tile.text.HorizontalAlignment(HorizontalAlignment::Center);
         tile.text.VerticalAlignment(VerticalAlignment::Center);
-        tile.textWidthPerPt = TileTextWidthPerPt(tile.text);
+        tile.textWidthPerPt = TileTextWidthPerPt(tile.text, display.locale);
         if (!ring) {
             // Shrinks to fit 26 DIPs, then clips.
             tile.text.FontSize(std::clamp(26 / tile.textWidthPerPt, 8.0, 12.0));
@@ -11291,25 +12445,26 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     // The key follows the number; the row reserves "100%" and the widest key so the tile keeps
     // its width as values change.
     tile.headline.Text(L"100%");
-    double reserve = std::ceil(TileTextWidthPerPt(tile.headline) * fontSize) + 3;
+    double reserve = std::ceil(TileTextWidthPerPt(tile.headline, display.locale) * fontSize) + 3;
     tile.headline.Text(L"");
     double keyWidth = 0;
-    for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-        tile.headlineKey.Text(key);
-        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey) * keySize);
+    for (I18nKey key : kQuotaKeys) {
+        tile.headlineKey.Text(I18nText(display.locale, key));
+        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey, display.locale) * keySize);
     }
     tile.headlineKey.Text(L"");
     numberRow.MinWidth(reserve + std::ceil(keyWidth));
     headline.Children().Append(numberRow);
     if (display.headlineCountdown) {
-        // Behind a reset arrow; reserves "00h 00m", so minute ticks keep the tile's width.
+        // Behind a reset arrow; reserves its hours-and-minutes form, so minute ticks keep the
+        // tile's width.
         tile.countdown = TextBlock{};
         tile.countdown.FontSize(keySize);
         tile.countdown.Opacity(0.7);
         tile.countdown.TextLineBounds(TextLineBounds::Tight);
         tile.countdown.HorizontalAlignment(HorizontalAlignment::Left);
-        tile.countdown.Text(kHeadlineCountdownReserve);
-        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown) * keySize));
+        tile.countdown.Text(HeadlineCountdownReserve(display.locale));
+        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown, display.locale) * keySize));
         tile.countdown.Text(L"");
         headline.Children().Append(tile.countdown);
     } else {
@@ -11414,15 +12569,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             TextBlock keyProbe, valueProbe;
             keyProbe.FontSize(meters.matrixKeyFont);
             double keyWidth = 0;
-            for (PCWSTR key : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-                keyProbe.Text(key);
-                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe) * meters.matrixKeyFont);
+            for (I18nKey key : kQuotaKeys) {
+                keyProbe.Text(I18nText(display.locale, key));
+                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe, display.locale) * meters.matrixKeyFont);
             }
             valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));
             valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
             valueProbe.FontSize(meters.matrixFont);
             valueProbe.Text(L"100%");
-            double valueWidth = TileTextWidthPerPt(valueProbe) * meters.matrixFont;
+            double valueWidth = TileTextWidthPerPt(valueProbe, display.locale) * meters.matrixFont;
             int rows = 1, columns = 1;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!tile.matrixCells[w]) continue;
@@ -12110,6 +13265,7 @@ struct FlyoutDisplay {
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
+    I18nLocale locale;  // The grid's language
 };
 
 // Quota rows' details cell margins (DIP).
@@ -12179,11 +13335,12 @@ static std::wstring NotificationProjectionText(uint64_t historyId, int slot, con
 }
 
 // Builds the card for `provider` into state.flyout.popup, registering its button delegates there
-// as they are created. Values are filled by UpdateAccountFlyout.
+// as they are created, in the grid's language. Values are filled by UpdateAccountFlyout.
 static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provider,
                               bool visualTestMode) {
     FlyoutPopup& popup = state.flyout.popup;
     FlyoutTheme const& theme = popup.theme;
+    const I18nLocale& locale = state.buildLocale;
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
     FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
     auto makeText = [](double size, Brush const& brush) {
@@ -12685,7 +13842,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid::SetColumn(buttons, 1);
     uint64_t identity = popup.accountIdentity;
     uint64_t historyId = state.accountRefs[popup.accountIndex].historyId;
-    auto addButton = [&](PCWSTR glyph, PCWSTR name, FlyoutFooterAction action) {
+    auto addButton = [&](PCWSTR glyph, I18nKey key, FlyoutFooterAction action) {
+        std::wstring name = I18nText(locale, key);
         Button button;
         if (theme.buttonStyle) button.Style(theme.buttonStyle);
         button.Width(32);
@@ -12698,7 +13856,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         icon.TextWrapping(TextWrapping::NoWrap);
         button.Content(icon);
         winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(button, name);
-        ToolTipService::SetToolTip(button, winrt::box_value(name));
+        SetXamlToolTip(button, name, locale);
         popup.buttonHandlers.reserve(popup.buttonHandlers.size() + 1);
         auto token = button.Click(
             [hWnd, generation, identity, historyId, action](
@@ -12724,16 +13882,18 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         popup.buttonHandlers.push_back({button, token});
         buttons.Children().Append(button);
     };
-    addButton(L"\uE81C", L"Usage history", FlyoutFooterAction::History);
+    addButton(L"\uE81C", TrCtx(L"taskbar-action", L"Usage history"), FlyoutFooterAction::History);
     if (!visualTestMode && provider != L"antigravity") {
-        addButton(L"\uE8A7", L"Open dashboard", FlyoutFooterAction::Dashboard);
+        addButton(L"\uE8A7", TrCtx(L"taskbar-action", L"Open dashboard"), FlyoutFooterAction::Dashboard);
     }
-    if (!visualTestMode) addButton(L"\uE72C", L"Refresh", FlyoutFooterAction::Refresh);
-    addButton(L"\uE713", L"Settings", FlyoutFooterAction::Settings);
+    if (!visualTestMode) addButton(L"\uE72C", TrCtx(L"taskbar-action", L"Refresh"), FlyoutFooterAction::Refresh);
+    addButton(L"\uE713", TrCtx(L"taskbar-action", L"Settings"), FlyoutFooterAction::Settings);
     footer.Children().Append(buttons);
     appendSection(footer, kAuto);
 
+    // The flyout shows outside the tree: its card takes the language itself.
     Border card;
+    SetXamlLanguage(card, locale);
     card.Width(420);
     card.CornerRadius({8, 8, 8, 8});
     card.BorderThickness({1, 1, 1, 1});
@@ -13131,8 +14291,8 @@ static void UpdateAccountFlyout(
         popup.extraLines.Text(d.extraLines);
         show(popup.extraLines, !d.extraLines.empty());
         std::wstring error;
-        if (!d.error.empty()) {
-            error = L"Error: " + d.error;
+        if (d.error) {
+            error = L"Error: " + AccountErrorText(display.locale, d.error);
             if (d.retryDeadlineMs > display.now) {
                 error += L" - retry in " +
                          FormatShortDuration((d.retryDeadlineMs - display.now + 999) / 1000);
@@ -13611,6 +14771,10 @@ static void SetMenuSubItemExpanded(wuxcp::FlyoutBase const& menu, MenuFlyoutSubI
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
+        // The grid's language for its lifetime: its updates, menus and flyouts too. A switch
+        // rebuilds it.
+        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        state.buildLocale = locale;
         Settings settings;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -13634,7 +14798,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
             } catch (...) {}
         }
-        MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+        MeterDisplay display = MeterDisplayFor(settings, locale, NowUnixMs(), state.rasterizationScale,
                                                state.taskbarHeight, state.sideWidth);
         // Down a side taskbar: accounts stack, and each fits its width (stackAccount).
         bool side = display.sideWidth > 0;
@@ -13657,6 +14821,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         Grid root;
         root.Name(kRootName);
         root.VerticalAlignment(VerticalAlignment::Center);
+        SetXamlLanguage(root, locale);
 
         StackPanel panel;
         panel.Orientation(side ? Orientation::Vertical : Orientation::Horizontal);
@@ -13680,6 +14845,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         };
 
         // Context menu items with a Fluent icon; ClearQuotaEventState revokes their Click handlers.
+        // Menus show outside the tree, so each item takes the language itself.
         FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
         auto menuIcon = [&](PCWSTR glyph) {
             FontIcon icon;
@@ -13687,9 +14853,10 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             icon.Glyph(glyph);
             return icon;
         };
-        auto menuItem = [&](PCWSTR text, PCWSTR glyph, auto const& onClick) {
+        auto menuItem = [&](I18nKey text, PCWSTR glyph, auto const& onClick) {
             MenuFlyoutItem item;
-            item.Text(text);
+            item.Text(I18nText(locale, text));
+            SetXamlLanguage(item, locale);
             item.Icon(menuIcon(glyph));
             auto token = item.Click(onClick);
             state.menuItemClickHandlers.push_back({item, token});
@@ -13705,7 +14872,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             setupTile.Background(SolidColorBrush(winrt::Windows::UI::Color{0x30, 0x80, 0x80, 0x80}));
 
             TextBlock setupText;
-            setupText.Text(L"AI +");
+            setupText.Text(I18nText(locale, TrCtx(L"taskbar-setup", L"AI +")));
             setupText.FontSize(labelFontSize);
             setupText.Opacity(0.9);
             setupTile.Child(setupText);
@@ -13718,18 +14885,19 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     e.Handled(true);
                 });
             state.pointerHandlers.push_back({setupElement, tappedToken});
-            ToolTipService::SetToolTip(
-                setupElement,
-                winrt::box_value(g_settingsLoadError.load() ?
-                    L"Open AI quota settings. Stored settings could not be read; a backup was kept." :
-                    L"Open AI quota settings"));
+            SetXamlToolTip(setupElement,
+                           I18nText(locale, g_settingsLoadError.load() ?
+                                                Tr(L"Open AI quota settings. Stored settings could not be read; a "
+                                                   L"backup was kept.") :
+                                                Tr(L"Open AI quota settings")),
+                           locale);
 
             MenuFlyout menu;
-            menu.Items().Append(menuItem(L"Usage history", L"\uE81C",
+            menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Usage history"), L"\uE81C",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenHistoryWindow();
                 }));
-            menu.Items().Append(menuItem(L"Settings", L"\uE713",
+            menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Settings"), L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
                 }));
@@ -13750,6 +14918,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 line.Text(L"A");
                 line.FontSize(labelFontSize);
                 line.UseLayoutRounding(false);
+                SetXamlLanguage(line, locale);
                 auto lineHeight = [&](TextLineBounds bounds) {
                     line.TextLineBounds(bounds);
                     line.Measure({INFINITY, INFINITY});
@@ -13928,7 +15097,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         barItem.ColumnDefinitions().Append(trackColumn);
 
                         TextBlock barLabel;
-                        barLabel.Text(QuotaKey(accounts[i].provider, w));
+                        barLabel.Text(QuotaKey(locale, accounts[i].provider, w));
                         barLabel.FontSize(compactLabelFontSize);
                         barLabel.Opacity(0.8);
                         barLabel.IsHitTestVisible(false);
@@ -14193,7 +15362,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             MenuFlyoutItem signInItem{nullptr};
             MenuFlyoutSubItem showSub{nullptr};
             if (visualTestMode) {
-                menu.Items().Append(menuItem(L"Exit visual test", L"\uE711",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Exit visual test"), L"\uE711",
                     [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                         HWND settingsWindow = g_settingsWindow.load();
                         if (settingsWindow &&
@@ -14213,6 +15382,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 menuHeader.KeyboardAcceleratorTextOverride(
                     ProviderDisplayName(accounts[i].provider));
                 menuHeader.IsEnabled(false);
+                SetXamlLanguage(menuHeader, locale);
                 if (menuHeaderTemplate) menuHeader.Template(menuHeaderTemplate);
                 try {
                     menuHeader.Icon(LoadProviderLogoShape(accounts[i].provider, nullptr)
@@ -14222,20 +15392,20 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
                 menu.Items().Append(menuHeader);
 
-                menu.Items().Append(menuItem(L"Refresh", L"\uE72C",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Refresh"), L"\uE72C",
                     [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                       RoutedEventArgs const&) {
                         RefreshQuotaByIdentity(accountIdentity);
                     }));
                 if (!antigravity) {
-                    menu.Items().Append(menuItem(L"Open dashboard", L"\uE8A7",
+                    menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Open dashboard"), L"\uE8A7",
                         [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                           RoutedEventArgs const&) {
                             OpenDashboardForIdentity(accountIdentity);
                         }));
                 }
                 uint64_t historyId = accounts[i].historyId;
-                menu.Items().Append(menuItem(L"Usage history", L"\uE81C",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Usage history"), L"\uE81C",
                     [historyId](winrt::Windows::Foundation::IInspectable const&,
                                 RoutedEventArgs const&) {
                         OpenHistoryWindow(historyId);
@@ -14243,7 +15413,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 // Sign in with the mod's own OAuth; the Opening handler shows it only while the
                 // account needs a sign-in.
                 if (!antigravity) {
-                    signInItem = menuItem(L"Sign in", L"\uE77B",
+                    signInItem = menuItem(TrCtx(L"taskbar-action", L"Sign in"), L"\uE77B",
                         [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                           RoutedEventArgs const&) {
                             StartLoginByIdentity(accountIdentity);
@@ -14252,7 +15422,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     menu.Items().Append(signInItem);
                 }
                 // UpdateQuotaUi disables it while this is the last visible account.
-                refs.hideItem = menuItem(L"Hide", L"\uED1A",
+                refs.hideItem = menuItem(TrCtx(L"taskbar-action", L"Hide"), L"\uED1A",
                     [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                       RoutedEventArgs const&) {
                         SetAccountVisibility(accountIdentity, false);
@@ -14260,7 +15430,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 menu.Items().Append(refs.hideItem);
 
                 menu.Items().Append(MenuFlyoutSeparator{});
-                menu.Items().Append(menuItem(L"Refresh all", L"\uE895",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Refresh all"), L"\uE895",
                     [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                         QueueRefresh(0);
                     }));
@@ -14269,13 +15439,15 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 // same list; toggling sets global state, persists, and re-syncs all instances.
                 // The menu stays open for more toggles, even when one hides this column.
                 showSub = MenuFlyoutSubItem{};
-                showSub.Text(L"Show on taskbar");
+                showSub.Text(I18nText(locale, TrCtx(L"taskbar-action", L"Show on taskbar")));
+                SetXamlLanguage(showSub, locale);
                 showSub.Icon(menuIcon(L"\uE890"));
                 for (size_t k = 0; k < accounts.size(); k++) {
                     ToggleMenuFlyoutItem toggle;
                     toggle.Text(accounts[k].label + L" · " +
                                 ProviderDisplayName(accounts[k].provider));
                     toggle.IsChecked(!accounts[k].hidden);
+                    SetXamlLanguage(toggle, locale);
                     int toggleIndex = (int)k;
                     uint64_t toggleIdentity = AccountIdentityHash(accounts[k]);
                     auto toggleToken = toggle.Click(
@@ -14318,7 +15490,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             }
 
             menu.Items().Append(MenuFlyoutSeparator{});
-            menu.Items().Append(menuItem(L"Settings", L"\uE713",
+            menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Settings"), L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
                 }));
@@ -14485,7 +15657,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
     std::vector<AccountConfig>& accounts = settings.accounts;
 
-    MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+    // In the grid's language, which its reserved widths and labels were built in.
+    MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, NowUnixMs(), state.rasterizationScale,
                                            state.taskbarHeight, state.sideWidth);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
@@ -14768,6 +15941,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 visualTestMode};
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
+                    flyoutDisplay.locale = display.locale;
                     UpdateAccountFlyout(state, accounts[i], d, flyoutDisplay, traces);
                 }
             }
@@ -15248,7 +16422,8 @@ static bool InjectQuotaGrid(HWND hWnd) {
             Wh_Log(L"Taskbar HWND was reused by a different UI thread");
             return false;
         }
-        // The position is read apart from the build's settings, so it must match too.
+        // The position and the language are read apart from the build's settings, so they must
+        // match too.
         ULONGLONG settingsGeneration;
         TaskbarPlacement settingsPlacement;
         {
@@ -15259,6 +16434,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (existingState->quotaGrid && !existingState->edgeChanged &&
             existingState->buildSettingsGeneration == settingsGeneration &&
             existingState->placement == settingsPlacement &&
+            &existingState->buildLocale.Language() == g_language.load(std::memory_order_acquire) &&
             existingState->buildVisualTestMode ==
                 g_visualTestMode.load(std::memory_order_acquire)) {
             return true;
@@ -16172,8 +17348,11 @@ static UiTextStyle UiIconStyle(float size) {
 // Device-independent resources shared by every target of one UI thread: font collections and
 // resolved families, text formats with their ellipsis signs, effect-free layouts (measuring and
 // plain drawing), path geometries and stroke styles. Owned by that thread's graphics scope,
-// released before the apartment is.
+// released before the apartment is. `locale`: the frame's locale name, which the client sets
+// before it builds; text formats take it, and every text cache is keyed by it, so another
+// language's layouts and shaping are never reused.
 struct UiGraphics {
+    std::wstring locale = L"en-US";
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
     winrt::com_ptr<ID2D1StrokeStyle> roundCaps;
@@ -16269,19 +17448,20 @@ static UiFontMetrics UiFontMetricsFor(UiGraphics& g, const UiTextStyle& style) {
             float(metrics.lineGap) * unit, float(metrics.capHeight) * unit};
 }
 
-static std::wstring UiStyleKey(const UiTextStyle& style) {
+static std::wstring UiStyleKey(const UiTextStyle& style, std::wstring_view locale) {
     return std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) + L'|' +
-           std::to_wstring(style.lineHeight) + L'|' + std::to_wstring(int(style.weight));
+           std::to_wstring(style.lineHeight) + L'|' + std::to_wstring(int(style.weight)) + L'|' +
+           std::wstring(locale);
 }
 
 static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
-    auto& format = g.formats[UiStyleKey(style)];
+    auto& format = g.formats[UiStyleKey(style, g.locale)];
     if (format) return format.get();
 
     IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
     winrt::check_hresult(g.dwrite->CreateTextFormat(
         g.families[size_t(style.family)].c_str(), fonts, style.weight, DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL, style.size, L"en-us", format.put()));
+        DWRITE_FONT_STRETCH_NORMAL, style.size, g.locale.c_str(), format.put()));
     // The taskbar's XAML text: optical size follows the font size.
     if (style.family == UiFamily::Taskbar) {
         if (auto format3 = format.try_as<IDWriteTextFormat3>()) {
@@ -16303,7 +17483,7 @@ static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
 // Cuts a layout to one line that ends in an ellipsis where it overflows its width; text that
 // fits is unchanged. The sign is the style's, one per format.
 static void UiTrimLayout(UiGraphics& g, IDWriteTextLayout* layout, const UiTextStyle& style) {
-    auto& sign = g.ellipses[UiStyleKey(style)];
+    auto& sign = g.ellipses[UiStyleKey(style, g.locale)];
     if (!sign) winrt::check_hresult(g.dwrite->CreateEllipsisTrimmingSign(UiFormat(g, style), sign.put()));
     DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
     layout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -16316,7 +17496,7 @@ static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const 
                                    float maxWidth, bool wrap = true,
                                    DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
                                    bool trim = false) {
-    std::wstring key = UiStyleKey(style) + L'|' + std::to_wstring(maxWidth) + L'|' +
+    std::wstring key = UiStyleKey(style, g.locale) + L'|' + std::to_wstring(maxWidth) + L'|' +
                        (trim ? L't' : wrap ? L'w' : L'n') + std::to_wstring(int(align)) + L'|';
     key += text;
     auto& layout = g.layouts[key];
@@ -16656,9 +17836,9 @@ static const UiRun* UiLinkRun(const std::vector<UiRun>& runs, int link) {
 }
 
 static std::wstring UiRichKey(const std::vector<UiRun>& runs, UiFont font, float width,
-                              DWRITE_TEXT_ALIGNMENT align, bool trim) {
-    std::wstring key = std::to_wstring(int(font)) + L'|' + std::to_wstring(width) + L'|' +
-                       std::to_wstring(int(align)) + (trim ? L"t" : L"");
+                              DWRITE_TEXT_ALIGNMENT align, bool trim, std::wstring_view locale) {
+    std::wstring key = std::wstring(locale) + L'|' + std::to_wstring(int(font)) + L'|' + std::to_wstring(width) +
+                       L'|' + std::to_wstring(int(align)) + (trim ? L"t" : L"");
     for (const UiRun& run : runs) {
         key += L'|';
         key += wchar_t(L'0' + int(run.style));
@@ -16696,7 +17876,7 @@ static IDWriteTextLayout* UiRichLayout(UiGraphics& g, const std::vector<UiRun>& 
                                        float width,
                                        DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
                                        bool trim = false) {
-    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align, trim)];
+    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align, trim, g.locale)];
     if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     return layout.get();
 }
@@ -16745,7 +17925,7 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
                                         float width, DWRITE_TEXT_ALIGNMENT align,
                                         const UiPalette& palette, UiInk baseInk, int hotLink,
                                         int pressedLink, bool trim = false) {
-    auto& layout = cache.layouts[UiRichKey(runs, font, width, align, trim)];
+    auto& layout = cache.layouts[UiRichKey(runs, font, width, align, trim, g.locale)];
     if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     UINT32 at = 0;
     int link = 0;
@@ -16779,7 +17959,7 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // tints it as an info bar of that severity. Text: rich text wrapped to the rectangle's width,
 // or one line ellipsized at it (`trim`). Button: an optional glyph (`icon`) before its label,
 // centered alone without one; with options, a menu button whose activation opens them in the
-// popup. Toggle: selected = on; its label ("On"/"Off", or `text`) leads the
+// popup. Toggle: selected = on; its `text` (the state's, or a label) leads the
 // switch, or follows a leading switch when align is trailing. Dropdown: text = the chosen
 // option's label, action.value = its value; activating it opens the popup (ui/popup.h).
 // NumberBox: the drawn frame of a native text box (ui/text-box.h) showing `text`, centered
@@ -17341,35 +18521,44 @@ static float UiAddInfoBar(UiGraphics& g, std::vector<UiItem>& items, uint32_t& i
 // Controls placed in a card's trailing slot (mockup .ctl). Interactive controls take explicit
 // ids that stay the same across rebuilds: focus and native text boxes follow them.
 
-// Toggle switch (mockup .tglwrap): "On"/"Off", 12 DIP gap, a 40 x 20 DIP switch. With a label
-// (history mockup .cmpt): the switch first, 8 DIP gap, the 13 DIP label; the label toggles too.
-static D2D1_SIZE_F UiToggleSize(UiGraphics& g, std::wstring_view label = {}) {
-    if (!label.empty()) {
-        return {40 + 8 + std::ceil(UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Note), 1000, false)).width),
-                32};
-    }
+// Toggle switch (mockup .tglwrap): its state's text (the client's "On" or "Off"; none when both
+// are empty), 12 DIP gap, a 40 x 20 DIP switch, as wide as either state needs. With a label
+// instead (history mockup .cmpt): the switch first, 8 DIP gap, the 13 DIP label; the label
+// toggles too.
+struct UiToggleText {
+    std::wstring on, off;
+};
+
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g, const UiToggleText& states) {
     UiTextStyle body = UiTextStyleFor(UiFont::Body);
-    float state = std::max(UiLayoutSize(UiLayout(g, L"On", body, 1000, false)).width,
-                           UiLayoutSize(UiLayout(g, L"Off", body, 1000, false)).width);
+    float state = std::max(UiLayoutSize(UiLayout(g, states.on, body, 1000, false)).width,
+                           UiLayoutSize(UiLayout(g, states.off, body, 1000, false)).width);
     return {std::ceil(state) + 12 + 40, 32};
 }
 
+static D2D1_SIZE_F UiToggleSize(UiGraphics& g, std::wstring_view label) {
+    return {40 + 8 + std::ceil(UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Note), 1000, false)).width),
+            32};
+}
+
 static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
-                        bool enabled, UiAction action, std::wstring label = {}) {
+                        bool enabled, UiAction action, const UiToggleText& states) {
     UiItem toggle;
     toggle.id = id;
     toggle.kind = UiItemKind::Toggle;
     toggle.rect = slot;
-    if (label.empty()) {
-        toggle.text = on ? L"On" : L"Off";
-    } else {
-        toggle.text = std::move(label);
-        toggle.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
-    }
+    toggle.text = on ? states.on : states.off;
     toggle.selected = on;
     toggle.enabled = enabled;
     toggle.action = std::move(action);
     items.push_back(std::move(toggle));
+}
+
+static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot, bool on,
+                        bool enabled, UiAction action, std::wstring label) {
+    UiAddToggle(items, id, slot, on, enabled, std::move(action), UiToggleText{});
+    items.back().text = std::move(label);
+    items.back().align = DWRITE_TEXT_ALIGNMENT_TRAILING;
 }
 
 // Segmented control (history mockup .segctl): 32 DIP tall, as wide as its segments.
@@ -17886,7 +19075,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              hot ? p.linkHover : p.link);
                 break;
             }
-            // Toggle switch at the right end, "On"/"Off" before it; or at the left end, its label
+            // Toggle switch at the right end, its state's text before it; or at the left end, its label
             // after it (align trailing). On: accent track, knob in the text-on-accent color; off:
             // strong outline. The knob grows under the pointer.
             case UiItemKind::Toggle: {
@@ -18438,11 +19627,12 @@ struct UiReadoutRow {
 };
 
 // What a tooltip shows: readout rows or a complete-text block. key 0: nothing; an unchanged key:
-// the same content. `more` follows "+N more" when not every row fits (" — select one account").
+// the same content. `more`: the client's hint for N rows that don't fit ("+N more — select one
+// account"); without one the hint is "+N".
 struct UiTooltipContent {
     uint64_t key = 0;
     std::vector<UiReadoutRow> rows;
-    std::wstring more;
+    std::function<std::wstring(int)> more;
     std::vector<UiRun> text;
 };
 
@@ -18474,8 +19664,8 @@ struct UiTooltipLayout {
     bool operator==(const UiTooltipLayout&) const = default;
 };
 
-static std::wstring UiMoreText(int more, const std::wstring& suffix) {
-    return L"+" + std::to_wstring(more) + L" more" + suffix;
+static std::wstring UiMoreText(const UiTooltipContent& content, int more) {
+    return content.more ? content.more(more) : L"+" + std::to_wstring(more);
 }
 
 // Most rows, then one-line rows, then the widest titles.
@@ -18518,7 +19708,7 @@ static std::optional<UiTooltipLayout> UiLayoutReadout(UiGraphics& g, const UiToo
                 DWRITE_TEXT_METRICS hint{};
                 while (slots <= rows) {
                     layout.more = count - (capacity - slots);
-                    winrt::check_hresult(UiLayout(g, UiMoreText(layout.more, content.more), UiTextStyleFor(UiFont::Caption),
+                    winrt::check_hresult(UiLayout(g, UiMoreText(content, layout.more), UiTextStyleFor(UiFont::Caption),
                                                   column - kUiTipSwatch)->GetMetrics(&hint));
                     int need = int(std::ceil((hint.height + kUiTipRowGap) / (line + kUiTipRowGap) - 0.001f));
                     if (need <= slots) break;
@@ -18663,7 +19853,7 @@ static std::vector<UiItem> UiTooltipItems(const UiTooltipContent& content, const
     if (layout.more) {
         D2D1_POINT_2F at = slot(layout.shown);
         text({at.x + kUiTipSwatch, at.y, at.x + layout.column, at.y + layout.hint},
-             {{UiMoreText(layout.more, content.more)}}, UiInk::Muted, false);
+             {{UiMoreText(content, layout.more)}}, UiInk::Muted, false);
     }
     return items;
 }
@@ -18709,6 +19899,33 @@ static UiTooltipChange UiTooltipUpdate(UiGraphics& g, UiTooltipModel& model, UiT
     bool moved = !shown || !same(model.spot->rect, spot->rect);
     model.spot = spot;
     return relaid ? UiTooltipChange::Layout : moved ? UiTooltipChange::Move : UiTooltipChange::None;
+}
+
+// src/i18n/ui-runs.h
+// Localized runs (i18n/format.h) as the toolkit's (ui/rich-text.h), each link bound by its ID to
+// the action the code defines for it. The runs keep the translation's order, so links take focus
+// in its reading order. Pure.
+
+struct I18nLinkAction {
+    std::wstring_view id;
+    UiAction action;
+};
+
+// Bold runs are strong; a link whose ID `links` doesn't bind shows as plain text.
+[[maybe_unused]] static std::vector<UiRun> I18nUiRuns(const std::vector<I18nRun>& runs,
+                                                       std::initializer_list<I18nLinkAction> links) {
+    std::vector<UiRun> out;
+    for (const I18nRun& run : runs) {
+        UiRun& ui = out.emplace_back();
+        ui.text = run.text;
+        ui.style = run.bold ? UiRunStyle::Strong : UiRunStyle::Normal;
+        for (const I18nLinkAction& link : links) {
+            if (run.link.empty() || link.id != run.link) continue;
+            ui.style = UiRunStyle::Link;
+            ui.action = link.action;
+        }
+    }
+    return out;
 }
 
 // src/ui/system-theme.h
@@ -21294,6 +22511,8 @@ static bool NormalizeSettings(Settings* s) {
         s->accounts[0].hidden = false;
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
+    const I18nLanguage* language = I18nLanguageByTag(s->language);
+    s->language = language ? std::wstring(language->tag) : std::wstring();
     s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
     if (s->historyDefaultRange < HistoryUiRange::Day || s->historyDefaultRange > HistoryUiRange::All) {
         s->historyDefaultRange = HistoryUiRange::Week;
@@ -21543,8 +22762,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         JsonObject root = JsonObject::Parse(json);
         if ((int)GetNum(root, L"version", 0) != kSettingsStorageVersion) return false;
         Settings s;
-        // Shared JSON never grants or revokes the caller's per-user consent.
+        // Shared JSON never grants or revokes the caller's per-user consent or sets its language.
         s.historyEnabled = out->historyEnabled;
+        s.language = out->language;
         if (root.HasKey(L"accounts") &&
             root.GetNamedValue(L"accounts").ValueType() == JsonValueType::Array) {
             for (const auto& value : root.GetNamedArray(L"accounts")) {
@@ -22069,6 +23289,25 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         previous = g_settings;
     }
+    // A language-only edit stores the preference and switches the current language, nothing
+    // more: no settings_v1 write (not even a pending ID save or the recovery a load error waits
+    // for), no normalization, no publication. The settings generation stays, so neither a poll in
+    // flight nor its history samples are dropped.
+    const I18nLanguage* requested = I18nLanguageByTag(s.language);
+    s.language = requested ? std::wstring(requested->tag) : std::wstring();
+    const bool languageChanged = s.language != previous.language;
+    const I18nLanguage* language = languageChanged ? &ResolveLanguage(s.language) : nullptr;
+    Settings languageOnly = previous;
+    languageOnly.language = s.language;
+    if (languageChanged && s == languageOnly) {
+        if (!WriteLanguagePreference(s.language)) return SettingsApplyResult::Failed;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            g_settings.language = std::move(s.language);
+        }
+        SetCurrentLanguage(*language);
+        return SettingsApplyResult::Changed;
+    }
     const bool consentChanged = s.historyEnabled != previous.historyEnabled;
     const bool requestedHistoryEnabled = s.historyEnabled;
     NormalizeSettings(&s);
@@ -22077,13 +23316,19 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     if (s == previous) return SettingsApplyResult::Unchanged;
     Settings sharedPrevious = previous;
     sharedPrevious.historyEnabled = s.historyEnabled;
+    sharedPrevious.language = s.language;
     const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || g_settingsLoadError;
     if (saveShared && !SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
-    // Save shared changes first: a failed shared save must never grant consent. Consent-only
-    // edits leave shared JSON untouched. Registry calls are short and take no history locks.
-    if (consentChanged && !WriteHistoryConsent(s.historyEnabled)) {
+    // Save shared changes first, consent last: a failed save before it must never grant consent.
+    // Per-user-only edits leave shared JSON untouched; a failed write takes back what this call
+    // saved. Registry calls are short and take no history locks.
+    const bool languageSaved = !languageChanged || WriteLanguagePreference(s.language);
+    if (!languageSaved || (consentChanged && !WriteHistoryConsent(s.historyEnabled))) {
+        if (languageChanged && languageSaved && !WriteLanguagePreference(previous.language)) {
+            Wh_Log(L"Consent save failed and language rollback failed; the stored language differs until changed");
+        }
         if (saveShared && !SaveOwnedSettings(previous)) {
-            Wh_Log(L"Consent save failed and shared settings rollback failed; runtime settings unchanged");
+            Wh_Log(L"Per-user save failed and shared settings rollback failed; runtime settings unchanged");
         }
         return SettingsApplyResult::Failed;
     }
@@ -22092,6 +23337,7 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
         g_settingsLoadError = false;
     }
     PublishSettings(std::move(s), oldIdentity, newIdentity);
+    if (language) SetCurrentLanguage(*language);
     return SettingsApplyResult::Changed;
 }
 
@@ -22118,7 +23364,10 @@ static void LoadSettings() {
 
     Settings s;
     const bool historyConsent = ReadHistoryConsent();
+    const std::wstring language = ReadLanguagePreference();
     s.historyEnabled = historyConsent;
+    s.language = language;
+    SetCurrentLanguage(ResolveLanguage(language));
     g_settingsLoadError = false;
     g_historyIdsPendingSave = false;
     bool historyIdsChanged = false;
@@ -22127,6 +23376,7 @@ static void LoadSettings() {
         bool imported = LoadLegacySettings(&s);
         if (!imported) s = Settings{};
         s.historyEnabled = historyConsent;
+        s.language = language;
         NormalizeSettings(&s);
         if (SaveOwnedSettings(s)) {
             if (imported) Wh_Log(L"Imported legacy Windhawk settings");
@@ -22154,6 +23404,7 @@ static void LoadSettings() {
         // defaults; readable invalid blobs were also backed up above.
         s = Settings{};
         s.historyEnabled = historyConsent;
+        s.language = language;
         g_settingsLoadError = true;
     }
     PublishSettings(std::move(s));
@@ -22647,6 +23898,7 @@ enum class SettingsField : uint8_t {
     PollMinutes,
     SkipHiddenPolling,
     Notifications,  // A NotificationLevel
+    Language,       // This Windows user's language: 0 Automatic, else a language (kSettingsPseudoLanguage)
     // History
     RecordHistory,  // This Windows user's recording consent
     KeepHistory,    // The retention: days, or 0 for forever
@@ -22744,6 +23996,10 @@ enum class SettingsField : uint8_t {
     AccountExpand,        // Desired: 1 expanded
 };
 
+// The language choice as a field value: 0 Automatic, 1 + a registry index (English first), then
+// the pseudo-locale, which only a stored choice reaches.
+static constexpr int kSettingsPseudoLanguage = int(std::size(kI18nLanguages)) + 1;
+
 static constexpr int kSettingsLabelLimit = 64;
 static constexpr int kSettingsTileTextLimit = 4;
 static constexpr int kSettingsCreditsLimit = 999999999;
@@ -22795,7 +24051,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
     switch (group) {
         case SettingsField::ResetBehavior:
             return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
-                    SettingsField::SkipHiddenPolling, SettingsField::Notifications};
+                    SettingsField::SkipHiddenPolling, SettingsField::Notifications, SettingsField::Language};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
@@ -22845,6 +24101,11 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PollMinutes: return s.pollMinutes;
         case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
         case SettingsField::Notifications: return int(s.notificationLevel);
+        case SettingsField::Language:
+            for (size_t i = 0; i < std::size(kI18nLanguages); i++) {
+                if (I18nTagEquals(kI18nLanguages[i].tag, s.language)) return int(i) + 1;
+            }
+            return I18nTagEquals(kI18nPseudoLanguage.tag, s.language) ? kSettingsPseudoLanguage : 0;
         case SettingsField::RecordHistory: return s.historyEnabled;
         case SettingsField::KeepHistory: return s.historyRetentionDays;
         case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
@@ -22931,6 +24192,12 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::Notifications:
             s.notificationLevel = NotificationLevel(std::clamp(value, int(NotificationLevel::Off),
                                                                int(NotificationLevel::Red)));
+            break;
+        case SettingsField::Language:
+            value = std::clamp(value, 0, kSettingsPseudoLanguage);
+            s.language = value == 0                       ? std::wstring() :
+                         value == kSettingsPseudoLanguage ? std::wstring(kI18nPseudoLanguage.tag) :
+                                                            std::wstring(kI18nLanguages[size_t(value) - 1].tag);
             break;
         case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
         case SettingsField::KeepHistory: s.historyRetentionDays = std::clamp(value, 0, 3650); break;
@@ -23097,6 +24364,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.pollMinutes = defaults.pollMinutes;
             s.skipHiddenPolling = defaults.skipHiddenPolling;
             s.notificationLevel = defaults.notificationLevel;
+            s.language = defaults.language;
             break;
         case SettingsField::ResetHistory:
             s.historyEnabled = defaults.historyEnabled;
@@ -23233,7 +24501,7 @@ enum class SettingsRecording : uint8_t { Recording, PendingSave, StorageError };
 // What is known about an account beside its settings: its last poll and its sign-in.
 struct SettingsAccountStatus {
     std::wstring plan;         // Empty if unknown
-    std::wstring error;        // The last poll's
+    AccountError error;        // The last poll's
     bool polled = false;       // A poll has succeeded
     bool signedIn = false;     // A sign-in is stored (all but Antigravity)
     bool needsSignIn = false;  // The last poll asked for one
@@ -23251,6 +24519,8 @@ struct SettingsStatus {
     // at its own DPI; 0 if unknown
     double taskbarHeight = 0;
     bool visualTest = false;   // The taskbar shows the sample accounts
+    // What Automatic shows: the current language while it is the choice, else what it would pick now
+    const I18nLanguage* automaticLanguage = &kI18nLanguages[0];
     std::vector<SettingsAccountStatus> accounts;  // Parallel to the settings' accounts
     bool signInRunning = false;                   // Some account's sign-in window is open
 };
@@ -23914,6 +25184,8 @@ struct SettingsProductionStore final : SettingsStore {
             }
         }
         status.visualTest = g_visualTestMode.load(std::memory_order_acquire);
+        status.automaticLanguage = baseline.settings.language.empty() ? g_language.load(std::memory_order_acquire) :
+                                                                        &ResolveLanguage({});
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
         PWSTR localAppData = nullptr;
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr,
@@ -23930,7 +25202,9 @@ struct SettingsProductionStore final : SettingsStore {
     }
 
     // Under the edit lock: fresh settings, the requested field set, ApplyOwnedSettings. The
-    // taskbar update runs after the lock is released.
+    // taskbar update runs after the lock is released. A language change also rebuilds the usage
+    // history window; one alone doesn't wake polling, and one that keeps the shown language
+    // (Automatic resolving to the explicit choice) rebuilds no taskbar.
     SettingsSaveResult Apply(SettingsField field, int value) override {
         std::unique_lock<std::mutex> configLock(g_configEditMutex);
         Settings settings;
@@ -23938,12 +25212,19 @@ struct SettingsProductionStore final : SettingsStore {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             settings = g_settings;
         }
+        Settings before = settings;
         SettingsAssign(settings, field, value);
+        bool language = settings.language != before.language;
+        before.language = settings.language;
+        bool poll = settings != before;
+        const I18nLanguage* shown = g_language.load(std::memory_order_acquire);
         SettingsApplyResult result = ApplyOwnedSettings(std::move(settings));
+        bool switched = g_language.load(std::memory_order_acquire) != shown;
         configLock.unlock();
         if (result == SettingsApplyResult::Failed) return SettingsSaveResult::Failed;
         if (result == SettingsApplyResult::Unchanged) return SettingsSaveResult::Unchanged;
-        FinishSettingsApply();
+        if (poll || switched) FinishSettingsApply(poll);
+        if (language) NotifySettingsWindowChanged();
         return SettingsSaveResult::Changed;
     }
 
@@ -24028,6 +25309,7 @@ struct SettingsViewAccount {
 };
 
 struct SettingsView {
+    I18nLocale locale;                  // The frame's language
     SettingsUiPage page = SettingsUiPage::Accounts;
     std::wstring version;
     Settings settings;                  // Render projection (SettingsEdits::Projection)
@@ -24068,25 +25350,39 @@ static UiAction SettingsCommand(SettingsField field, int value = 0) {
     return {UiActionKind::Command, value, {}, uint32_t(field)};
 }
 
+// A toggle's state text in the view's language.
+static UiToggleText SettingsToggleText(const SettingsView& view) {
+    return {I18nText(view.locale, TrCtx(L"toggle", L"On")), I18nText(view.locale, TrCtx(L"toggle", L"Off"))};
+}
+
 // Shared cards; each returns its bottom.
 
 static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
                                    std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                    float width, UiCardSpec spec, SettingsField field) {
     bool on = SettingsFieldValue(view.settings, field) != 0;
-    spec.trailing = UiToggleSize(g);
+    UiToggleText states = SettingsToggleText(view);
+    spec.trailing = UiToggleSize(g, states);
     if (const SettingsDraft* draft = SettingsViewDraft(view, field)) spec.error = draft->error;
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiAddToggle(items, SettingsControlId(field), card.trailing, on, spec.enabled,
-                SettingsCommand(field, !on));
+                SettingsCommand(field, !on), states);
     return card.card.bottom;
 }
 
+// The field is at least `fieldWidth` wide, wider when its widest option needs it (the label's 11
+// DIP before it and 30 DIP chevron after it), growing to at most half the card.
 static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
                                      std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                      float width, UiCardSpec spec, SettingsField field,
                                      float fieldWidth, std::vector<UiOption> options, int value,
                                      uint32_t part = 0) {
+    float widest = 0;
+    for (const UiOption& option : options) {
+        float text = UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Body), 10000, false)).width;
+        widest = std::max(widest, std::ceil(text) + 11 + 30);
+    }
+    fieldWidth = std::max(fieldWidth, std::min(widest, width / 2));
     spec.trailing = {fieldWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field); draft && !draft->text) {
         spec.error = draft->error;
@@ -24330,7 +25626,7 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
 // taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
 // their data (and their providers' outage levels, none without) to lay out instead of the samples,
 // whose outage is VisualTestOutage's; either shows only while outage marks are on.
-static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
+static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings, const I18nLocale& locale,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
                                                   const std::vector<AccountConfig>* testAccounts = nullptr,
@@ -24338,7 +25634,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                                   const std::vector<OutageLevel>* testOutages = nullptr) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
-    MeterDisplay display = MeterDisplayFor(settings, now, scale, taskbarHeight);
+    MeterDisplay display = MeterDisplayFor(settings, locale, now, scale, taskbarHeight);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
@@ -24686,8 +25982,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     }
                 }
                 if (keys) {
-                    label(ops, QuotaKey(account.provider, w), textStyle, itemLeft,
-                          itemTop + (itemHeight - measure(L"5h", textStyle).height) / 2 - 0.5f, keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
+                    label(ops, q.key, textStyle, itemLeft,
+                          itemTop + (itemHeight - measure(q.key, textStyle).height) / 2 - 0.5f, keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
                 }
                 if (settings.percentTextVisibility != PercentTextVisibility::Never && !q.text.empty()) {
                     // As wide as the bar (vertical: at least four characters), aligned per the
@@ -24861,9 +26157,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-                    keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
-                }
+                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
                 keyReserve = std::ceil(keyReserve);
                 float numberReserve = std::ceil(measure(L"100%", numberStyle).width);
                 std::array<float, 2> numberWidths{numberReserve, numberReserve};
@@ -24910,16 +26204,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 Measured number = measure(meters.headline, numberStyle);
                 Measured key = measure(meters.headlineKey, keyStyle);
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-                    keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
-                }
+                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
                 float rowWidth = std::max(std::ceil(measure(L"100%", numberStyle).width) + 3 + std::ceil(keyReserve),
                                           number.width + 3 + key.width);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
                 const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
                 const bool countdown = display.headlineCountdown;
                 Measured remaining = measure(meters.headlineCountdown, keyStyle);
-                float segments = countdown ? std::max(std::ceil(measure(kHeadlineCountdownReserve, keyStyle).width),
+                float segments = countdown ? std::max(std::ceil(measure(HeadlineCountdownReserve(locale), keyStyle).width),
                                                       remaining.width) :
                                  count     ? count * length + (count - 1) * gap : 0;
                 float panelHeight = rowHeight + (countdown ? 3 + remaining.cap : count ? 3 + thick : 0);
@@ -25038,8 +26330,8 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
     const bool gallery = item.kind == UiItemKind::Gallery;
     Settings settings = view.settings;
     if (gallery) settings.barLayout = BarLayout(item.action.value);
-    SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.status.taskbarHeight, scale, view.now,
-                                                       gallery, light, text);
+    SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.locale, view.status.taskbarHeight, scale,
+                                                       view.now, gallery, light, text);
 
     D2D1_MATRIX_3X2_F base{};
     target->GetTransform(&base);
@@ -25271,8 +26563,8 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
 static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                     uint32_t& id, float x, float y, float width) {
     constexpr float kPadX = 1 + 14, kPadTop = 1 + 12, kRow = 20, kGap = 10, kPadBottom = 14 + 1;
-    SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.status.taskbarHeight, view.scale,
-                                                       view.now, false, false, 0);
+    SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.locale, view.status.taskbarHeight,
+                                                       view.scale, view.now, false, false, 0);
     float stripWidth = std::max(width - 2 * kPadX, 1.0f);
     const SettingsPreviewRow home = SettingsPreviewRowAt(strip, stripWidth, 0);
     const bool cut = home.tiles < 0 || home.tiles + strip.width > stripWidth;
@@ -25319,8 +26611,7 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     }
     bool shown = view.status.visualTest;
     UiAddToggle(items, SettingsControlId(SettingsField::ShowOnTaskbar), {labelLeft - 4, center - 16, switchRight, center + 16},
-                shown, true, SettingsCommand(SettingsField::ShowOnTaskbar, !shown));
-    items.back().text.clear();
+                shown, true, SettingsCommand(SettingsField::ShowOnTaskbar, !shown), UiToggleText{});
 
     UiItem preview;
     preview.id = SettingsControlId(SettingsField::PreviewScroll);
@@ -25537,8 +26828,8 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
 }
 
 // src/settings/page-behavior.h
-// Settings > Behavior: where the bars show, hover details, polling and notifications (approved
-// mockup behavior.png). Pure builder.
+// Settings > Behavior: this user's language, where the bars show, hover details, polling and
+// notifications (approved mockup behavior.png). Pure builder.
 
 static constexpr int kSettingsPollPresets[] = {2, 5, 10, 15, 30, 60};
 
@@ -25547,43 +26838,71 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                      std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                      float width) {
     const Settings& s = view.settings;
+    const I18nLocale& locale = view.locale;
+
+    // Language: Automatic with what it shows, then every language by its own name; the
+    // pseudo-locale only while it is the stored choice.
+    y = UiAddSection(items, id, x, y + 16, width, I18nText(locale, TrCtx(L"settings-section", L"Language")));
+    {
+        std::vector<UiOption> options{
+            {I18nText(locale, TrCtx(L"language-choice", L"Automatic ({language})"),
+                      {{L"language", view.status.automaticLanguage->nativeName}}),
+             0}};
+        for (size_t i = 0; i < std::size(kI18nLanguages); i++) {
+            options.push_back({std::wstring(kI18nLanguages[i].nativeName), int(i) + 1});
+        }
+        int language = SettingsFieldValue(s, SettingsField::Language);
+        if (language == kSettingsPseudoLanguage) {
+            options.push_back({std::wstring(kI18nPseudoLanguage.nativeName), kSettingsPseudoLanguage});
+        }
+        UiCardSpec spec;
+        spec.title = I18nText(locale, Tr(L"Interface language"));
+        spec.description = {{I18nText(locale, Tr(L"The settings and usage history windows and the taskbar. Automatic "
+                                                 L"follows your Windows display language. Applies to this Windows user "
+                                                 L"only."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Language, 200,
+                                    std::move(options), language);
+    }
 
     // Taskbar: primary, all, each taskbar's display, and a chosen display that is gone.
-    y = UiAddSection(items, id, x, y + 16, width, L"Taskbar");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Taskbar")));
     {
-        std::vector<UiOption> options{{L"Primary display only", 0}, {L"All displays", -1}};
+        std::vector<UiOption> options{{I18nText(locale, Tr(L"Primary display only")), 0},
+                                      {I18nText(locale, Tr(L"All displays")), -1}};
         for (const SettingsDisplay& display : view.status.displays) {
-            options.push_back({L"Display " + std::to_wstring(display.number) + L" - " +
-                                   std::to_wstring(display.width) + L"x" +
-                                   std::to_wstring(display.height) +
-                                   (display.primary ? L" (primary)" : L""),
-                               display.number});
+            options.push_back(
+                {display.primary ?
+                     I18nText(locale, Tr(L"Display {number} - {width}x{height} (primary)"),
+                              {{L"number", display.number}, {L"width", display.width}, {L"height", display.height}}) :
+                     I18nText(locale, Tr(L"Display {number} - {width}x{height}"),
+                              {{L"number", display.number}, {L"width", display.width}, {L"height", display.height}}),
+                 display.number});
         }
         int showOn = SettingsFieldValue(s, SettingsField::ShowOn);
         if (std::none_of(options.begin(), options.end(),
                          [&](const UiOption& option) { return option.value == showOn; })) {
-            options.push_back({L"Display " + std::to_wstring(showOn) + L" - unavailable", showOn});
+            options.push_back({I18nText(locale, Tr(L"Display {number} - unavailable"), {{L"number", showOn}}), showOn});
         }
         UiCardSpec spec;
-        spec.title = L"Show on";
-        spec.description = {{L"Primary display, all displays, or one display."}};
+        spec.title = I18nText(locale, Tr(L"Show on"));
+        spec.description = {{I18nText(locale, Tr(L"Primary display, all displays, or one display."))}};
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::ShowOn, 260,
                                     std::move(options), showOn);
     }
 
     // Details
-    y = UiAddSection(items, id, x, y + 20, width, L"Details");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Details")));
     {
         UiCardSpec spec;
-        spec.title = L"Show details on hover";
-        spec.description = {{L"Opens an account\u2019s details after the pointer rests on it."}};
+        spec.title = I18nText(locale, Tr(L"Show details on hover"));
+        spec.description = {{I18nText(locale, Tr(L"Opens an account\u2019s details after the pointer rests on it."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec,
                                   SettingsField::ShowDetailsOnHover);
     }
 
     // Updates: a preset interval, or Custom with its own number. Text typed into the custom box
     // keeps Custom even while a partial number matches a preset.
-    y = UiAddSection(items, id, x, y + 20, width, L"Updates");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Updates")));
     bool preset = std::find(std::begin(kSettingsPollPresets), std::end(kSettingsPollPresets),
                             s.pollMinutes) != std::end(kSettingsPollPresets);
     const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::PollMinutes);
@@ -25591,59 +26910,64 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
     {
         std::vector<UiOption> options;
         for (int minutes : kSettingsPollPresets) {
-            options.push_back({std::to_wstring(minutes) + L" minutes", minutes});
+            options.push_back({I18nText(locale, TrCtx(L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}"),
+                                        {{L"minutes", minutes}}),
+                               minutes});
         }
-        options.push_back({L"Custom", 0});
+        options.push_back({I18nText(locale, TrCtx(L"poll-interval", L"Custom")), 0});
         UiCardSpec spec;
-        spec.title = L"Cloud poll interval";
-        spec.description = {{L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. "
-                             L"Antigravity polls its local session every minute."}};
+        spec.title = I18nText(locale, Tr(L"Cloud poll interval"));
+        spec.description = {{I18nText(locale, Tr(L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are "
+                                                 L"polled. Antigravity polls its local session every minute."))}};
         // It edits the same field as the custom box: a distinct control id.
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::PollMinutes,
                                     200, std::move(options), custom ? 0 : s.pollMinutes, 8);
     }
     {
         UiCardSpec spec;
-        spec.title = L"Custom interval";
-        spec.description = {{L"2 to 1440 minutes."}};
+        spec.title = I18nText(locale, Tr(L"Custom interval"));
+        spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
         spec.enabled = custom;
-        if (!custom) spec.reason = L"Choose Custom in Cloud poll interval to edit.";
+        if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Cloud poll interval to edit."));
+        // The unit agrees with the saved interval, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PollMinutes,
-                                  L"minutes");
+                                  I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
+                                           {{L"minutes", s.pollMinutes}}));
     }
     {
         UiCardSpec spec;
-        spec.title = L"Do not poll hidden accounts";
-        spec.description = {{L"Hidden accounts are neither polled nor recorded, even with Record "
-                             L"history on. Turn off to keep recording them. Shared across Windows "
-                             L"users."}};
+        spec.title = I18nText(locale, Tr(L"Do not poll hidden accounts"));
+        spec.description = {{I18nText(locale, Tr(L"Hidden accounts are neither polled nor recorded, even with Record "
+                                                 L"history on. Turn off to keep recording them. Shared across Windows "
+                                                 L"users."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec,
                                   SettingsField::SkipHiddenPolling);
     }
 
     // Alerts: each level with its threshold from Display.
-    y = UiAddSection(items, id, x, y + 20, width, L"Alerts");
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Alerts")));
     {
-        auto level = [](PCWSTR name, int threshold) {
-            return std::wstring(name) + L" (" + std::to_wstring(threshold) + L"%)";
-        };
         UiCardSpec spec;
-        spec.title = L"Threshold notifications";
-        spec.description = {{L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it "
-                             L"drops below."}};
-        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Notifications, 200,
-                                    {{L"Off", int(NotificationLevel::Off)},
-                                     {level(L"Yellow", s.yellowThreshold), int(NotificationLevel::Yellow)},
-                                     {level(L"Orange", s.orangeThreshold), int(NotificationLevel::Orange)},
-                                     {level(L"Red", s.redThreshold), int(NotificationLevel::Red)}},
-                                    int(s.notificationLevel));
+        spec.title = I18nText(locale, Tr(L"Threshold notifications"));
+        spec.description = {{I18nText(locale, Tr(L"Notifies when a taskbar quota first reaches the chosen threshold. "
+                                                 L"Re-arms after it drops below."))}};
+        y = SettingsAddDropdownCard(
+            g, view, items, id, x, y, width, spec, SettingsField::Notifications, 200,
+            {{I18nText(locale, TrCtx(L"notification-level", L"Off")), int(NotificationLevel::Off)},
+             {I18nText(locale, TrCtx(L"notification-level", L"Yellow ({threshold}%)"), {{L"threshold", s.yellowThreshold}}),
+              int(NotificationLevel::Yellow)},
+             {I18nText(locale, TrCtx(L"notification-level", L"Orange ({threshold}%)"), {{L"threshold", s.orangeThreshold}}),
+              int(NotificationLevel::Orange)},
+             {I18nText(locale, TrCtx(L"notification-level", L"Red ({threshold}%)"), {{L"threshold", s.redThreshold}}),
+              int(NotificationLevel::Red)}},
+            int(s.notificationLevel));
     }
 
     UiCardSpec reset;
-    reset.title = L"Reset Behavior to defaults";
-    reset.description = {{L"Displays, hover details, polling and notifications."}};
+    reset.title = I18nText(locale, Tr(L"Reset Behavior to defaults"));
+    reset.description = {{I18nText(locale, Tr(L"Language, displays, hover details, polling and notifications."))}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
-                                 SettingsField::ResetBehavior, L"Reset");
+                                 SettingsField::ResetBehavior, I18nText(locale, TrCtx(L"button", L"Reset")));
 }
 
 // src/settings/page-history.h
@@ -25710,13 +27034,12 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                                   SettingsField::RetentionDays, L"days");
     }
     y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::RetentionDays, 8), x, y + 3, width,
-                     {{L"Each account chooses whether it records: "},
-                      {L"Accounts", UiRunStyle::Link, UiInk::Inherit,
-                       {UiActionKind::Navigate, int(SettingsUiPage::Accounts)}},
-                      {L" > Record history. Hidden accounts are not recorded while "},
-                      {L"Do not poll hidden accounts", UiRunStyle::Link, UiInk::Inherit,
-                       {UiActionKind::Navigate, int(SettingsUiPage::Behavior)}},
-                      {L" is on in Behavior."}});
+                     I18nUiRuns(I18nRuns(view.locale, Tr(L"Each account chooses whether it records: <link "
+                                                         L"id=\"accounts\">Accounts</link> > Record history. Hidden "
+                                                         L"accounts are not recorded while <link id=\"hidden\">Do not "
+                                                         L"poll hidden accounts</link> is on in Behavior.")),
+                                {{L"accounts", {UiActionKind::Navigate, int(SettingsUiPage::Accounts)}},
+                                 {L"hidden", {UiActionKind::Navigate, int(SettingsUiPage::Behavior)}}}));
 
     // Viewer
     y = UiAddSection(items, id, x, y + 20, width, L"Viewer");
@@ -26611,12 +27934,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // The last visible account stays visible: its switch can't turn off.
         UiAddToggle(trailing, control(SettingsField::AccountHidden), {right - 40, cy - 16, right, cy + 16},
                     !account.hidden, account.hidden || visible > 1,
-                    command(SettingsField::AccountHidden, !account.hidden));
-        trailing.back().text.clear();
+                    command(SettingsField::AccountHidden, !account.hidden), UiToggleText{});
         right -= 40 + 14;
         for (int bar = kQuotaBarCount - 1; bar >= 0; bar--) {
             if (!((bars >> bar) & 1)) continue;
-            PCWSTR text = QuotaKey(account.provider, bar);
+            std::wstring text = QuotaKey(view.locale, account.provider, bar);
             float chipWidth = textWidth(text, UiFont::Caption) + 18;
             UiItem chip;
             chip.id = id++;
@@ -26648,8 +27970,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Label and "Provider · plan · status".
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
-        std::wstring error = status.error.size() > 60 ? status.error.substr(0, 59) + L"\u2026" : status.error;
-        if (!error.empty()) error[0] = wchar_t(towupper(error[0]));
+        // The last poll's error, cut at 60 characters; an English message without a code of its own
+        // starts with a capital, catalog text stays as written.
+        std::wstring error = AccountErrorText(view.locale, status.error);
+        if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
+        if (status.error.code == AccountErrorCode::Message && !error.empty()) error[0] = wchar_t(towupper(error[0]));
         if (status.signingIn) {
             stateText = L"Signing in\u2026";
             stateInk = UiInk::Accent;
@@ -26660,7 +27985,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             stateText = L"Hidden, not polled";
             stateInk = UiInk::Secondary;
         } else if (!error.empty()) {
-            stateText = !signsIn && status.error == L"Antigravity not running" ? L"Local app not running" : error;
+            stateText = !signsIn && status.error.code == AccountErrorCode::AntigravityNotRunning ?
+                            I18nText(view.locale, TrCtx(L"account-state", L"Local app not running")) : error;
             stateInk = UiInk::Caution;
         } else if (!signsIn) {
             stateText = status.polled ? L"Local app running" : L"Waiting for the local app";
@@ -26842,11 +28168,12 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.description = {{recording.mark, UiRunStyle::Normal, recording.ink},
                                     {L" \u00B7 History follows this entry, even after signing in again. Use a new "
                                      L"entry for a different login."}};
-                spec.trailing = UiToggleSize(g);
+                UiToggleText states = SettingsToggleText(view);
+                spec.trailing = UiToggleSize(g, states);
                 UiCardLayout layout = row(spec);
                 UiAddToggle(cardItems, control(SettingsField::AccountRecordHistory), layout.trailing,
                             account.recordHistory, true,
-                            command(SettingsField::AccountRecordHistory, !account.recordHistory));
+                            command(SettingsField::AccountRecordHistory, !account.recordHistory), states);
             }
 
             // Actions (mockup .aact): dashboard and sign-in buttons, Remove account at the right.
@@ -26918,9 +28245,10 @@ static constexpr float kSettingsContentMaxWidth = 1000;
 
 static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
                                  UiFrame& frame) {
-    static constexpr PCWSTR kPages[][2] = {
-        {L"Accounts", L"\uE716"}, {L"Layout", L"\uE8A9"},  {L"Display", L"\uE790"},
-        {L"Behavior", L"\uE9E9"}, {L"History", L"\uE81C"}, {L"About", L"\uE946"},
+    static constexpr std::pair<I18nKey, PCWSTR> kPages[] = {
+        {TrCtx(L"settings-page", L"Accounts"), L"\uE716"}, {TrCtx(L"settings-page", L"Layout"), L"\uE8A9"},
+        {TrCtx(L"settings-page", L"Display"), L"\uE790"},  {TrCtx(L"settings-page", L"Behavior"), L"\uE9E9"},
+        {TrCtx(L"settings-page", L"History"), L"\uE81C"},  {TrCtx(L"settings-page", L"About"), L"\uE946"},
     };
     int page = std::clamp(int(view.page), 0, int(SettingsUiPage::Count) - 1);
 
@@ -26930,8 +28258,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
         nav.id = uint32_t(1 + i);
         nav.kind = UiItemKind::Nav;
         nav.rect = {8, 6 + 41.0f * float(i), kSettingsNavWidth - 8, 44 + 41.0f * float(i)};
-        nav.text = kPages[i][0];
-        nav.icon = kPages[i][1];
+        nav.text = I18nText(view.locale, kPages[i].first);
+        nav.icon = kPages[i].second;
         nav.selected = i == page;
         nav.action = {UiActionKind::Navigate, i};
         frame.main.push_back(std::move(nav));
@@ -26947,7 +28275,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     title.kind = UiItemKind::Text;
     title.font = UiFont::Title;
     title.rect = {kSettingsNavWidth + left, 6, kSettingsNavWidth + left + std::max(width, 1.0f), 42};
-    title.runs.push_back({kPages[page][0]});
+    title.runs.push_back({I18nText(view.locale, kPages[page].first)});
     frame.main.push_back(std::move(title));
 
     // Running ids are unique per page; interactive controls take fixed ones (settings/view.h).
@@ -26959,7 +28287,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     // Accounts: Add account (mockup .btn.accent: 14 DIP padding, 12 DIP glyph) at the title row's
     // right opens the provider menu; while accounts exist, a note under the title.
     if (SettingsUiPage(page) == SettingsUiPage::Accounts) {
-        PCWSTR label = L"Add account";
+        std::wstring label = I18nText(view.locale, TrCtx(L"button", L"Add account"));
         float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
         float right = kSettingsNavWidth + left + std::max(width, 1.0f);
         UiItem add;
@@ -27189,11 +28517,14 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // The preview's scroll stays within what the built strip can scroll, and a new position
-    // starts it from its home. Account cards follow the projection's order, a dragged card its
-    // drag order. The window takes the projected material at once.
+    // Each frame takes the current language, its text and the toolkit's text formats both. The
+    // preview's scroll stays within what the built strip can scroll, and a new position starts it
+    // from its home. Account cards follow the projection's order, a dragged card its drag order.
+    // The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         view = {};
+        view.locale = I18nLocale(*g_language.load(std::memory_order_acquire));
+        host.graphics->locale = view.locale.LocaleName();
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
@@ -27327,9 +28658,10 @@ struct SettingsUiClient final : UiHostClient {
                     case SettingsField::ResetDisplay: {
                         std::wstring question =
                             field == SettingsField::ResetBehavior ?
-                                L"Reset Behavior to its defaults?\n\nShow on the primary display "
-                                L"only, show details on hover, poll every 10 minutes, do not poll "
-                                L"hidden accounts, threshold notifications at red." :
+                                I18nText(view.locale, Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show "
+                                                         L"on the primary display only, show details on hover, poll "
+                                                         L"every 10 minutes, do not poll hidden accounts, threshold "
+                                                         L"notifications at red.")) :
                             field == SettingsField::ResetLayout ?
                                 L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels "
                                 L"on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
@@ -28470,6 +29802,7 @@ struct HistoryUiNotice {
 };
 
 struct HistoryUiView {
+    I18nLocale locale;                       // The language its text and formats are in
     UiThemeKind theme = UiThemeKind::Dark;   // Built content follows it: value inks, card lines
 
     // Accounts and controls; the view is the current mode's (All accounts or one account)
@@ -28566,27 +29899,51 @@ static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_
     return {part};
 }
 
-// Compact display formats (approved with the phase-3 mockups), English and independent of the
-// locale like the CSV. Local times read `Sat 31 Oct 14:31`; outside the current year the year
-// takes the weekday's place, `25 May 2026 23:59` (the readout's mandatory part keeps its width
-// bound); `localTime` converts a Unix ms time with the user's clock and zone.
+// Compact display formats (approved with the phase-3 mockups) in the locale's language: each
+// language's own order and abbreviated names (the catalog's), always 24-hour, independent of
+// Windows' regional formats like the CSV. Local times read `Sat 31 Oct 14:31` in English; outside
+// the current year the year takes the weekday's place, `25 May 2026 23:59` (the readout's
+// mandatory part keeps its width bound); `localTime` converts a Unix ms time with the user's
+// clock and zone. Months come in a date's form, and alone with a year (Russian: мая, май).
 using HistoryUiLocalTime = std::function<SYSTEMTIME(ULONGLONG)>;
-static constexpr PCWSTR kHistoryUiDays[] = {L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
-static constexpr PCWSTR kHistoryUiMonths[] = {L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
-                                              L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
+static constexpr I18nKey kHistoryUiDays[] = {
+    TrCtx(L"date-weekday", L"Sun"), TrCtx(L"date-weekday", L"Mon"), TrCtx(L"date-weekday", L"Tue"),
+    TrCtx(L"date-weekday", L"Wed"), TrCtx(L"date-weekday", L"Thu"), TrCtx(L"date-weekday", L"Fri"),
+    TrCtx(L"date-weekday", L"Sat")};
+static constexpr I18nKey kHistoryUiMonths[] = {
+    TrCtx(L"date-month", L"Jan"), TrCtx(L"date-month", L"Feb"), TrCtx(L"date-month", L"Mar"),
+    TrCtx(L"date-month", L"Apr"), TrCtx(L"date-month", L"May"), TrCtx(L"date-month", L"Jun"),
+    TrCtx(L"date-month", L"Jul"), TrCtx(L"date-month", L"Aug"), TrCtx(L"date-month", L"Sep"),
+    TrCtx(L"date-month", L"Oct"), TrCtx(L"date-month", L"Nov"), TrCtx(L"date-month", L"Dec")};
+static constexpr I18nKey kHistoryUiMonthsAlone[] = {
+    TrCtx(L"date-month-alone", L"Jan"), TrCtx(L"date-month-alone", L"Feb"), TrCtx(L"date-month-alone", L"Mar"),
+    TrCtx(L"date-month-alone", L"Apr"), TrCtx(L"date-month-alone", L"May"), TrCtx(L"date-month-alone", L"Jun"),
+    TrCtx(L"date-month-alone", L"Jul"), TrCtx(L"date-month-alone", L"Aug"), TrCtx(L"date-month-alone", L"Sep"),
+    TrCtx(L"date-month-alone", L"Oct"), TrCtx(L"date-month-alone", L"Nov"), TrCtx(L"date-month-alone", L"Dec")};
 
-static std::wstring HistoryUiTime(ULONGLONG ms, ULONGLONG now, const HistoryUiLocalTime& localTime) {
+// A clock time, 24-hour: `14:31`.
+static std::wstring HistoryUiClock(const SYSTEMTIME& t) {
+    wchar_t clock[8];
+    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
+    return clock;
+}
+
+static std::wstring HistoryUiTime(const I18nLocale& locale, ULONGLONG ms, ULONGLONG now,
+                                  const HistoryUiLocalTime& localTime) {
     static constexpr int kMonthOffsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
     SYSTEMTIME t = localTime(ms);
     if (t.wMonth < 1 || t.wMonth > 12 || t.wDay < 1 || t.wDay > 31) return L"\u2014";
-    wchar_t clock[8];
-    swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
-    std::wstring date = std::to_wstring(t.wDay) + L' ' + kHistoryUiMonths[t.wMonth - 1];
-    if (t.wYear != localTime(now).wYear) return date + L' ' + std::to_wstring(t.wYear) + L' ' + clock;
+    std::wstring month = I18nText(locale, kHistoryUiMonths[t.wMonth - 1]), clock = HistoryUiClock(t);
+    if (t.wYear != localTime(now).wYear) {
+        return I18nText(locale, TrCtx(L"date-time-year", L"{day} {month} {year} {time}"),
+                        {{L"day", t.wDay}, {L"month", month}, {L"year", t.wYear}, {L"time", clock}});
+    }
     // The weekday from the date (Sakamoto's method), whatever the conversion filled in.
     int year = t.wYear - (t.wMonth < 3);
     int weekday = (year + year / 4 - year / 100 + year / 400 + kMonthOffsets[t.wMonth - 1] + t.wDay) % 7;
-    return std::wstring(kHistoryUiDays[weekday]) + L' ' + date + L' ' + clock;
+    return I18nText(locale, TrCtx(L"date-time", L"{weekday} {day} {month} {time}"),
+                    {{L"weekday", I18nText(locale, kHistoryUiDays[weekday])}, {L"day", t.wDay}, {L"month", month},
+                     {L"time", clock}});
 }
 
 // `decimals` places below 10,000 after rounding; past that one decimal with a suffix (12.3K,
@@ -28648,7 +30005,7 @@ static std::wstring HistoryUiValue(int meter, double value, int percentDecimals)
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
 // accounts without readings, from the view's accounts (parallel to the set's), selection,
-// comparison, bar mode and consent: every peak and its time, coverage with its share, time at or
+// comparison, bar mode, consent and language: every peak and its time, coverage with its share, time at or
 // above the red threshold the set was analyzed with for percentages, dollar spending's last and
 // peak readings, and an account's recording status once (in All accounts, on its first card).
 // The Remaining bar mode shows percentages left: the peak is the lowest share left, the time at
@@ -28679,14 +30036,14 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             return HistoryUiValue(series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
         auto reading = [&](double value, ULONGLONG time) {
-            return shown(value) + L" \u00B7 " + HistoryUiTime(time, now, localTime);
+            return shown(value) + L" \u00B7 " + HistoryUiTime(view.locale, time, now, localTime);
         };
         const PCWSTR peak = left ? L"Lowest " : L"Peak ";
         const HistoryStatistics& current = series.current;
         if (current.hasValue) {
             card.value = shown(current.latest);
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
-            card.when = latestPoll ? L"now" : HistoryUiTime(current.latestTime, now, localTime);
+            card.when = latestPoll ? L"now" : HistoryUiTime(view.locale, current.latestTime, now, localTime);
         }
         // Per period (comparing: current, then previous, each first line prefixed). The headline
         // holds the current period's last dollar reading.
@@ -28872,12 +30229,14 @@ struct HistoryChart {
 
     // Layout at `scale`: the item's rectangle and the plot in it, the plot's device-pixel width,
     // the axes with their label columns (percent left, USD and credits right) and the time ticks
+    // with the language of their labels
     D2D1_RECT_F rect{}, plot{};
     float scale = 1;
     int width = 0;
     std::array<HistoryChartAxis, 3> axes;
     std::array<float, 3> columns{};
     std::vector<HistoryChartTick> ticks;
+    I18nLocale tickLocale;
 
     // Each line's periods (current, previous) reduced to the plot's pixels (hidden lines none),
     // and what for
@@ -28941,16 +30300,16 @@ static void HistoryChartLayout(UiGraphics& g, HistoryChart& c, D2D1_RECT_F rect,
     c.axes[0].values = kept;
 }
 
-// Time ticks over [from, to) at local boundaries (approved s-ticks), labeled at most 2 days:
-// every 1, 2, 3, 6 or 12 hours (`14:00`, midnight as `Sat 31`); at most 14 days: every 1 or 2
-// days (`Sat 24`); at most 120 days: every 1 or 2 days, or Mondays every 1, 2 or 4 weeks
-// (`Oct 5`); beyond: every 1, 2, 3, 6, 12, 24 or 60 months from January (`Oct 2026`). The step
-// is the smallest keeping labels 52, 56 and 64 DIP apart over `width`. A boundary is where the
-// local clock (`localTime`) first reaches a new hour, day or month: daylight saving moves it, a
-// repeated hour counts once, a skipped one never. A scan in steps shorter than the unit finds
-// each, a bisection its millisecond.
-static std::vector<HistoryChartTick> HistoryChartTicks(ULONGLONG from, ULONGLONG to, float width,
-                                                       const HistoryUiLocalTime& localTime) {
+// Time ticks over [from, to) at local boundaries (approved s-ticks), labeled in the locale's
+// language (English shown) at most 2 days: every 1, 2, 3, 6 or 12 hours (`14:00`, midnight as
+// `Sat 31`); at most 14 days: every 1 or 2 days (`Sat 24`); at most 120 days: every 1 or 2 days,
+// or Mondays every 1, 2 or 4 weeks (`Oct 5`); beyond: every 1, 2, 3, 6, 12, 24 or 60 months from
+// January (`Oct 2026`). The step is the smallest keeping labels 52, 56 and 64 DIP apart over
+// `width`. A boundary is where the local clock (`localTime`) first reaches a new hour, day or
+// month: daylight saving moves it, a repeated hour counts once, a skipped one never. A scan in
+// steps shorter than the unit finds each, a bisection its millisecond.
+static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale, ULONGLONG from, ULONGLONG to,
+                                                       float width, const HistoryUiLocalTime& localTime) {
     std::vector<HistoryChartTick> ticks;
     if (to <= from + 1 || width <= 0) return ticks;
     enum class Unit { Hour, Day, Month };
@@ -28989,15 +30348,17 @@ static std::vector<HistoryChartTick> HistoryChartTicks(ULONGLONG from, ULONGLONG
         return mod(b, 7) == 4 && mod((b - 4) / 7, step / 7) == 0;
     };
     auto label = [&](const SYSTEMTIME& t) -> std::wstring {
-        std::wstring month = kHistoryUiMonths[t.wMonth - 1];
-        if (unit == Unit::Month) return month + L' ' + std::to_wstring(t.wYear);
-        if (unit == Unit::Day && days > 14) return month + L' ' + std::to_wstring(t.wDay);
-        if (unit == Unit::Hour && t.wHour) {
-            wchar_t clock[8];
-            swprintf(clock, ARRAYSIZE(clock), L"%02u:%02u", unsigned(t.wHour % 24), unsigned(t.wMinute % 60));
-            return clock;
+        if (unit == Unit::Month) {
+            return I18nText(locale, TrCtx(L"chart-tick-month", L"{month} {year}"),
+                            {{L"month", I18nText(locale, kHistoryUiMonthsAlone[t.wMonth - 1])}, {L"year", t.wYear}});
         }
-        return std::wstring(kHistoryUiDays[mod(day(t) + 4, 7)]) + L' ' + std::to_wstring(t.wDay);
+        if (unit == Unit::Day && days > 14) {
+            return I18nText(locale, TrCtx(L"chart-tick-day", L"{month} {day}"),
+                            {{L"month", I18nText(locale, kHistoryUiMonths[t.wMonth - 1])}, {L"day", t.wDay}});
+        }
+        if (unit == Unit::Hour && t.wHour) return HistoryUiClock(t);
+        return I18nText(locale, TrCtx(L"chart-tick-weekday", L"{weekday} {day}"),
+                        {{L"weekday", I18nText(locale, kHistoryUiDays[mod(day(t) + 4, 7)])}, {L"day", t.wDay}});
     };
 
     SYSTEMTIME start = localTime(from);
@@ -29086,21 +30447,23 @@ static std::vector<HistoryChartHit> HistoryChartPick(const HistoryChart& c, D2D1
 
 // A readout row (approved q6-rows, with the chip names): the line's name and swatch, then never
 // cut its period, its value rounded with its unit and the recorded local time, compact.
-static UiReadoutRow HistoryChartRow(std::wstring name, D2D1_COLOR_F color, int stroke, int meter, int period,
-                                    double value, ULONGLONG time, ULONGLONG now, const HistoryUiLocalTime& localTime) {
+static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name, D2D1_COLOR_F color, int stroke,
+                                    int meter, int period, double value, ULONGLONG time, ULONGLONG now,
+                                    const HistoryUiLocalTime& localTime) {
     return {std::move(name),
             {{period ? L"[Previous week]" : L"[Current]", UiRunStyle::Normal, UiInk::Secondary},
              {L" " + HistoryUiValue(meter, value, 1)},
-             {L" \u00B7 " + HistoryUiTime(time, now, localTime), UiRunStyle::Normal, UiInk::Secondary}},
+             {L" \u00B7 " + HistoryUiTime(locale, time, now, localTime), UiRunStyle::Normal, UiInk::Secondary}},
             color,
             float(stroke)};
 }
 
-// The readout of picked points: one row each, in their order, keyed by the recorded samples
-// they name (none: key 0). Its overflow hint names what shows the rest.
-static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::vector<HistoryChartHit>& hits,
-                                            const UiPalette& p, bool oneAccount, ULONGLONG now,
-                                            const HistoryUiLocalTime& localTime) {
+// The readout of picked points in the locale's language: one row each, in their order, keyed by
+// the recorded samples they name and the language (none: key 0). Its overflow hint names what
+// shows the rest.
+static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const HistoryChart& c,
+                                            const std::vector<HistoryChartHit>& hits, const UiPalette& p,
+                                            bool oneAccount, ULONGLONG now, const HistoryUiLocalTime& localTime) {
     UiTooltipContent content;
     if (!c.snapshot) return content;
     uint64_t key = 14695981039346656037ULL;
@@ -29108,6 +30471,7 @@ static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::ve
         for (int i = 0; i < 8; i++) key = (key ^ ((value >> (8 * i)) & 0xFF)) * 1099511628211ULL;
     };
     mix(c.generation);
+    mix(std::hash<std::wstring_view>{}(locale.Language().tag));
     for (const HistoryChartHit& hit : hits) {
         const HistoryUiLine& line = c.lines[hit.line];
         const HistoryRenderPoint& point = c.render[hit.line][size_t(hit.period)].points[hit.point];
@@ -29115,14 +30479,19 @@ static UiTooltipContent HistoryChartReadout(const HistoryChart& c, const std::ve
         mix(line.chip);
         mix(uint64_t(hit.period));
         mix(point.sourceRow);
-        content.rows.push_back(HistoryChartRow(line.name, HistoryChartColor(line, p), line.stroke, line.meter, hit.period,
-                                               HistoryUiShown(line.meter, point.value, c.remaining),
+        content.rows.push_back(HistoryChartRow(locale, line.name, HistoryChartColor(line, p), line.stroke, line.meter,
+                                               hit.period, HistoryUiShown(line.meter, point.value, c.remaining),
                                                c.snapshot->samples[point.sourceRow].timeMs, now, localTime));
     }
     if (content.rows.empty()) return {};
     content.key = key ? key : 1;
-    content.more = oneAccount ? L" \u2014 hide lines in the legend" :
-                                L" \u2014 hide lines in the legend or select one account";
+    content.more = [locale, oneAccount](int more) {
+        return oneAccount ? I18nText(locale, TrCtx(L"chart-readout", L"+{count} more \u2014 hide lines in the legend"),
+                                     {{L"count", more}}) :
+                            I18nText(locale, TrCtx(L"chart-readout", L"+{count} more \u2014 hide lines in the legend "
+                                                                     L"or select one account"),
+                                     {{L"count", more}});
+    };
     return content;
 }
 
@@ -29412,6 +30781,8 @@ struct HistoryOps {
     // Unix ms, and one as the user's local clock and zone (zero on failure).
     virtual ULONGLONG Now() = 0;
     virtual SYSTEMTIME LocalTime(ULONGLONG ms) = 0;
+    // The current language.
+    virtual I18nLocale Locale() = 0;
 
 protected:
     ~HistoryOps() = default;
@@ -29419,13 +30790,15 @@ protected:
 
 // What a composed series set was built for: the snapshot's generation, the settings' revision
 // (labels, account recording and visibility, weekly selections, consent, red threshold), the
-// times, the effective view, the selection (history ID) and the comparison.
+// times, the effective view, the selection (history ID), the comparison and the language of its
+// titles.
 struct HistorySeriesKey {
     uint64_t generation = 0, settings = 0;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     HistoryView view = HistoryView::Weekly;
     uint64_t selected = 0;
     bool compare = false;
+    I18nLocale locale;
     bool operator==(const HistorySeriesKey&) const = default;
 };
 
@@ -29846,7 +31219,7 @@ struct HistoryController {
             L"select one to delete its history.";
         if (snapshot && !snapshot->samples.empty()) {
             text += L"\r\nOldest loaded sample: " +
-                    HistoryUiTime(snapshot->samples.front().timeMs, ops->Now(),
+                    HistoryUiTime(view.locale, snapshot->samples.front().timeMs, ops->Now(),
                                   [this](ULONGLONG ms) { return ops->LocalTime(ms); });
         }
         Ask(text, L"About these charts", MB_OK | MB_ICONINFORMATION);
@@ -30068,14 +31441,16 @@ struct HistoryController {
     // The view from the state: the accounts with their slots, recording state and latest polls,
     // the current mode's view, the settings, the pill, status and notice, then the summary cards
     // once loaded (from the series, built again only when their key changed). A selection that
-    // isn't listed is All accounts. Returns whether the view changed.
+    // isn't listed is All accounts. The current language, except that a modal or an operation keeps
+    // the one it started in until it ends. Returns whether the view changed.
     bool Compose() {
         const Settings& s = settings.settings;
         ULONGLONG now = ops->Now();
-        MeterDisplay display = MeterDisplayFor(s, now, 1, 0);
+        HistoryUiView v;
+        v.locale = Busy() ? view.locale : ops->Locale();
+        MeterDisplay display = MeterDisplayFor(s, v.locale, now, 1, 0);
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
-        HistoryUiView v;
         for (const HistoryUiAccount& a : accounts) {
             HistoryUiViewAccount& account = v.accounts.emplace_back();
             account.historyId = a.id;
@@ -30125,11 +31500,12 @@ struct HistoryController {
         v.loading = !snapshot;
         if (snapshot) {
             HistoryUiLocalTime localTime = [this](ULONGLONG ms) { return ops->LocalTime(ms); };
-            v.status = L"Updated " + HistoryUiTime(to, now, localTime);
+            v.status = I18nText(v.locale, TrCtx(L"history-status", L"Updated {time}"),
+                                {{L"time", HistoryUiTime(v.locale, to, now, localTime)}});
             v.storageError = journalStatus;
             v.storageCapped = journalCapped;
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
-                                 v.selected >= 0 ? selectedId : 0, compare};
+                                 v.selected >= 0 ? selectedId : 0, compare, v.locale};
             if (!(key == seriesKey)) {
                 HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold, v.remaining};
                 series = HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
@@ -30167,9 +31543,9 @@ struct HistoryController {
     // Lays the chart out in its item's rectangle at `scale` (each build that shows it; never a
     // paint): the view's lines, axes and plot, then the visible lines' periods reduced to the
     // plot's device pixels, again only when that reduction's key changed (HistoryChartKey), and the
-    // time ticks. The chart keeps the snapshot its reduction indexes: a later replacement can't
-    // reach its painting or picking before the next build lays it out again. A build ended any
-    // hover: nothing is picked.
+    // time ticks, again with it or when the plot's width or the view's language changed. The chart
+    // keeps the snapshot its reduction indexes: a later replacement can't reach its painting or
+    // picking before the next build lays it out again. A build ended any hover: nothing is picked.
     void LayChart(UiGraphics& g, D2D1_RECT_F rect, float scale) {
         HistoryChart& c = chart;
         bool hiddenAll = std::all_of(view.lines.begin(), view.lines.end(), [](const HistoryUiLine& l) { return l.hidden; });
@@ -30211,9 +31587,10 @@ struct HistoryController {
             // A reduction cut short is never taken for a complete one.
             if (cancelled()) c.key = {};
         }
-        if (reduce || plotWidth != c.plot.right - c.plot.left) {
-            c.ticks = HistoryChartTicks(from, to, c.plot.right - c.plot.left,
+        if (reduce || plotWidth != c.plot.right - c.plot.left || c.tickLocale != view.locale) {
+            c.ticks = HistoryChartTicks(view.locale, from, to, c.plot.right - c.plot.left,
                                         [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+            c.tickLocale = view.locale;
         }
         picked.clear();
     }
@@ -30228,7 +31605,7 @@ struct HistoryController {
         for (const HistoryChartHit& hit : hits) {
             if (lines.empty() || lines.back() != hit.line) lines.push_back(hit.line);
         }
-        UiTooltipContent content = HistoryChartReadout(chart, hits, palette, view.selected >= 0, ops->Now(),
+        UiTooltipContent content = HistoryChartReadout(view.locale, chart, hits, palette, view.selected >= 0, ops->Now(),
                                                        [this](ULONGLONG ms) { return ops->LocalTime(ms); });
         readoutShown = content.key != 0;
         if (content.key != readout.key) readout = std::move(content);
@@ -30797,12 +32174,17 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         UiInk ink;
         bool on;
     };
-    Pill pill = view.pill == HistoryUiPill::Off       ? Pill{L"Off", UiInk::Secondary, false} :
-                view.pill == HistoryUiPill::NotSaving ? Pill{L"Not saving", UiInk::Danger, true} :
-                view.pill == HistoryUiPill::Waiting   ? Pill{L"Waiting", UiInk::Caution, true} :
-                Pill{L"Recording \u00B7 " +
-                         (view.retentionDays <= 0 ? std::wstring(L"forever") :
-                          std::to_wstring(view.retentionDays) + (view.retentionDays == 1 ? L" day" : L" days")),
+    const I18nLocale& locale = view.locale;
+    Pill pill = view.pill == HistoryUiPill::Off ? Pill{I18nText(locale, TrCtx(L"history-pill", L"Off")), UiInk::Secondary,
+                                                       false} :
+                view.pill == HistoryUiPill::NotSaving ?
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Not saving")), UiInk::Danger, true} :
+                view.pill == HistoryUiPill::Waiting ?
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Waiting")), UiInk::Caution, true} :
+                view.retentionDays <= 0 ?
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Recording \u00B7 forever")), UiInk::Success, true} :
+                Pill{I18nText(locale, TrCtx(L"history-pill", L"Recording \u00B7 {days, plural, one{# day} other{# days}}"),
+                              {{L"days", view.retentionDays}}),
                      UiInk::Success, true};
     PCWSTR title = selected ? selected->label.c_str() : L"All accounts";
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
@@ -30999,8 +32381,8 @@ static bool HistoryDialogCancel() {
 // Production ops of the usage history window's controller (history/controller.h): stateless
 // adapters over the open request, the journal, the published settings and polls, recording
 // consent, the settings window, the journal's folder, the window's dialogs (history/modal.h), the
-// CSV file and the window's own refresh and write messages and deferral timer. History thread
-// only.
+// CSV file, the window's own refresh and write messages and deferral timer, and the current
+// language. History thread only.
 
 struct HistoryProductionOps final : HistoryOps {
     // Wiring, set once the window exists: its host (the dialogs' owner; its popup and tooltip
@@ -31213,6 +32595,8 @@ struct HistoryProductionOps final : HistoryOps {
         SYSTEMTIME local{};
         return UnixMsToLocalSystemTime(ms, &local) ? local : SYSTEMTIME{};
     }
+
+    I18nLocale Locale() override { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
 };
 
 // src/history/ui-window.h
@@ -31233,9 +32617,10 @@ struct HistoryUiClient final : UiHostClient {
     HistoryController controller{ops};
 
     // The chart is laid out (and reduced, when its key changed) for the item the frame placed;
-    // the window takes the settings' material.
+    // the window takes the settings' material, and the toolkit the view's language.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         HistoryUiView view = controller.view;
+        host.graphics->locale = view.locale.LocaleName();
         UiHostSetBackdrop(host, MaterialBackdrop(view.material));
         view.theme = host.theme.kind;
         HistoryUiBuildFrame(*host.graphics, view, client, frame);
@@ -31550,7 +32935,7 @@ void Wh_ModAfterInit() {
             std::lock_guard<std::mutex> lk(g_dataMutex);
             for (auto& data : g_data) {
                 data.stale = true;
-                data.error = L"fetch thread failed";
+                data.error = {AccountErrorCode::Message, L"fetch thread failed"};
             }
         }
     }

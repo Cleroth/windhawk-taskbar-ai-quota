@@ -18,7 +18,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
     std::vector<AccountConfig>& accounts = settings.accounts;
 
-    MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+    // In the grid's language, which its reserved widths and labels were built in.
+    MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, NowUnixMs(), state.rasterizationScale,
                                            state.taskbarHeight, state.sideWidth);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
@@ -301,6 +302,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 visualTestMode};
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
+                    flyoutDisplay.locale = display.locale;
                     UpdateAccountFlyout(state, accounts[i], d, flyoutDisplay, traces);
                 }
             }

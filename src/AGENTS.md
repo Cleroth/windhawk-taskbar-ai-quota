@@ -119,6 +119,17 @@ first, then reads/updates XAML.
   owner-thread XAML handlers) may only give back the room beside Start, close the flyout and
   collapse the bars before requesting a rebuild the same way.
 - Check `g_unloading` in loops and before slow/marshaled work.
+- The current UI language (`core/language.h`: `g_language`, an immutable registry entry) is read
+  lock-free by any thread and written only under `g_configEditMutex` (and at init). Native code
+  snapshots one `I18nLocale` per frame, notification or dialog; text built from it is cached
+  under that locale. A language-only edit stores the preference and switches it, publishing
+  nothing else; callers then rebuild the taskbar (only when the shown language changed) without
+  waking polling and notify the windows.
+- A taskbar grid keeps the locale it was built in (`QuotaUiInstance::buildLocale`) for its
+  updates, menus and flyouts; a switch rebuilds it. `SetXamlLanguage` gives a non-English
+  language to our XAML roots (the grid, the flyout card, each menu item, localized tooltips
+  through `SetXamlToolTip`) and to detached measurement probes before they measure; English
+  keeps Explorer's inherited language.
 
 ## Stability (a crash takes down the shell)
 
@@ -177,7 +188,8 @@ access token without refresh or expiry and sent only to its usage endpoint.
   read in one `g_authEpochMutex` section with the token it refreshes, a sign-in with the epoch read
   when it started.
 - Usage history belongs in per-user LocalAppData, not Windhawk's machine-shared writable storage.
-  Recording consent is a separate HKCU setting, never a field in machine-shared `settings_v1`.
+  Recording consent and the language preference are separate HKCU settings
+  (`Settings::historyEnabled`, `Settings::language`), never fields in machine-shared `settings_v1`.
 - Keep the journal's size cap (maintenance and appends apply it with a number of days; kept
   forever, nothing may prune or cap it), checksum validation, atomic compaction and exclusive
   writer handle. Loads read the whole file whatever the retention; one that stops part-way (out
@@ -197,7 +209,9 @@ access token without refresh or expiry and sent only to its usage endpoint.
 - Keep a new setting in sync across `Settings`, JSON serialization/deserialization,
   normalization, the settings window (its `SettingsField` value, assignment, range and page
   reset in `settings/edits.h`, its page builder) and the
-  [README settings list](../README.md#settings).
+  [README settings list](../README.md#settings). A per-user one (consent, language) skips JSON:
+  deserialization keeps the caller's value, `LoadSettings` reads it in every branch and
+  `ApplyOwnedSettings` writes it.
 - Wide strings throughout; `swprintf`'s `%s` is wide here.
 - Localization (message keys, grammar, catalogs, translator notes, the catalog checker):
   [i18n/AGENTS.md](i18n/AGENTS.md).

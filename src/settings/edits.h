@@ -20,6 +20,7 @@ enum class SettingsField : uint8_t {
     PollMinutes,
     SkipHiddenPolling,
     Notifications,  // A NotificationLevel
+    Language,       // This Windows user's language: 0 Automatic, else a language (kSettingsPseudoLanguage)
     // History
     RecordHistory,  // This Windows user's recording consent
     KeepHistory,    // The retention: days, or 0 for forever
@@ -117,6 +118,10 @@ enum class SettingsField : uint8_t {
     AccountExpand,        // Desired: 1 expanded
 };
 
+// The language choice as a field value: 0 Automatic, 1 + a registry index (English first), then
+// the pseudo-locale, which only a stored choice reaches.
+static constexpr int kSettingsPseudoLanguage = int(std::size(kI18nLanguages)) + 1;
+
 static constexpr int kSettingsLabelLimit = 64;
 static constexpr int kSettingsTileTextLimit = 4;
 static constexpr int kSettingsCreditsLimit = 999999999;
@@ -168,7 +173,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
     switch (group) {
         case SettingsField::ResetBehavior:
             return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
-                    SettingsField::SkipHiddenPolling, SettingsField::Notifications};
+                    SettingsField::SkipHiddenPolling, SettingsField::Notifications, SettingsField::Language};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
@@ -218,6 +223,11 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::PollMinutes: return s.pollMinutes;
         case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
         case SettingsField::Notifications: return int(s.notificationLevel);
+        case SettingsField::Language:
+            for (size_t i = 0; i < std::size(kI18nLanguages); i++) {
+                if (I18nTagEquals(kI18nLanguages[i].tag, s.language)) return int(i) + 1;
+            }
+            return I18nTagEquals(kI18nPseudoLanguage.tag, s.language) ? kSettingsPseudoLanguage : 0;
         case SettingsField::RecordHistory: return s.historyEnabled;
         case SettingsField::KeepHistory: return s.historyRetentionDays;
         case SettingsField::RetentionDays: return s.historyRetentionDays > 0 ? s.historyRetentionDays : 3650;
@@ -304,6 +314,12 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::Notifications:
             s.notificationLevel = NotificationLevel(std::clamp(value, int(NotificationLevel::Off),
                                                                int(NotificationLevel::Red)));
+            break;
+        case SettingsField::Language:
+            value = std::clamp(value, 0, kSettingsPseudoLanguage);
+            s.language = value == 0                       ? std::wstring() :
+                         value == kSettingsPseudoLanguage ? std::wstring(kI18nPseudoLanguage.tag) :
+                                                            std::wstring(kI18nLanguages[size_t(value) - 1].tag);
             break;
         case SettingsField::RecordHistory: s.historyEnabled = value != 0; break;
         case SettingsField::KeepHistory: s.historyRetentionDays = std::clamp(value, 0, 3650); break;
@@ -470,6 +486,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.pollMinutes = defaults.pollMinutes;
             s.skipHiddenPolling = defaults.skipHiddenPolling;
             s.notificationLevel = defaults.notificationLevel;
+            s.language = defaults.language;
             break;
         case SettingsField::ResetHistory:
             s.historyEnabled = defaults.historyEnabled;
@@ -606,7 +623,7 @@ enum class SettingsRecording : uint8_t { Recording, PendingSave, StorageError };
 // What is known about an account beside its settings: its last poll and its sign-in.
 struct SettingsAccountStatus {
     std::wstring plan;         // Empty if unknown
-    std::wstring error;        // The last poll's
+    AccountError error;        // The last poll's
     bool polled = false;       // A poll has succeeded
     bool signedIn = false;     // A sign-in is stored (all but Antigravity)
     bool needsSignIn = false;  // The last poll asked for one
@@ -624,6 +641,8 @@ struct SettingsStatus {
     // at its own DPI; 0 if unknown
     double taskbarHeight = 0;
     bool visualTest = false;   // The taskbar shows the sample accounts
+    // What Automatic shows: the current language while it is the choice, else what it would pick now
+    const I18nLanguage* automaticLanguage = &kI18nLanguages[0];
     std::vector<SettingsAccountStatus> accounts;  // Parallel to the settings' accounts
     bool signInRunning = false;                   // Some account's sign-in window is open
 };

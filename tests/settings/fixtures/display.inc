@@ -147,7 +147,7 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 66 scalar settings changed: the four page resets restore every one, and no field
+        // All 67 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -156,6 +156,7 @@ static void RunDisplayPageTests() {
         every.showDetailsOnHover = false;
         every.skipHiddenPolling = false;
         every.notificationLevel = NotificationLevel::Off;
+        every.language = L"de";
         every.historyEnabled = false;
         every.historyDefaultRange = HistoryUiRange::Quarter;
         every.barLayout = BarLayout::LogoHeadline;
@@ -210,7 +211,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 66 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 67 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {
@@ -793,7 +794,7 @@ static void RunDisplayPageTests() {
         accounts[0].tileIdentity = TileIdentity::Logo;
         AccountData failed = Fresh({30, 40, -1, -1});
         failed.stale = true;
-        failed.error = L"HTTP 500";
+        failed.error = {AccountErrorCode::Message, L"HTTP 500"};
         std::vector<AccountData> data = {failed};
         std::vector<OutageLevel> major = {OutageLevel::Major};
         s = StackedSettings();

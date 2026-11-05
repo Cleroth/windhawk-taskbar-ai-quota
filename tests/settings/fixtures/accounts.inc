@@ -52,10 +52,10 @@ static SettingsView AccountsView(std::initializer_list<int> expanded = {}) {
     SettingsView view = TestView(SettingsUiPage::Accounts);
     AddTestAccounts(view.settings);
     const SettingsAccountStatus statuses[] = {
-        {L"Plus", L"", true, true, false, false},
-        {L"Pro", L"not signed in - click to sign in", false, false, true, false},
-        {L"Max 20x", L"", true, true, false, false},
-        {L"AI Pro", L"", true, false, false, false},
+        {L"Plus", {}, true, true, false, false},
+        {L"Pro", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true, false},
+        {L"Max 20x", {}, true, true, false, false},
+        {L"AI Pro", {}, true, false, false, false},
     };
     for (int i = 0; i < 4; i++) {
         SettingsViewAccount account;
@@ -80,15 +80,18 @@ static SettingsView NineAccountsView(std::vector<size_t> order, std::initializer
         SettingsAccountStatus status;
     };
     const Entry entries[] = {
-        {L"anthropic", L"Claude Max (personal)", {L"Max 20x", L"", true, true, false, false}},
-        {L"anthropic", L"Work", {L"Team", L"", true, true, false, false}},
-        {L"openai", L"ChatGPT Pro", {L"Pro", L"", true, true, false, false}},
-        {L"anthropic", L"Old login", {L"Pro", L"not signed in - click to sign in", false, false, true, false}},
-        {L"antigravity", L"Gemini desktop", {L"AI Pro", L"", true, false, false, false}},
-        {L"openai", L"Codex (team seat)", {L"Plus", L"", true, true, false, false}},
-        {L"anthropic", L"Side project", {L"Max 5x", L"HTTP 429: rate limited, retrying in 5 minutes", true, true, false, false}},
-        {L"openai", L"Business", {L"Business", L"", true, true, false, false}},
-        {L"antigravity", L"Laptop", {L"", L"Antigravity not running", false, false, false, false}},
+        {L"anthropic", L"Claude Max (personal)", {L"Max 20x", {}, true, true, false, false}},
+        {L"anthropic", L"Work", {L"Team", {}, true, true, false, false}},
+        {L"openai", L"ChatGPT Pro", {L"Pro", {}, true, true, false, false}},
+        {L"anthropic", L"Old login",
+         {L"Pro", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true, false}},
+        {L"antigravity", L"Gemini desktop", {L"AI Pro", {}, true, false, false, false}},
+        {L"openai", L"Codex (team seat)", {L"Plus", {}, true, true, false, false}},
+        {L"anthropic", L"Side project",
+         {L"Max 5x", {AccountErrorCode::Message, L"HTTP 429: rate limited, retrying in 5 minutes"}, true, true, false,
+          false}},
+        {L"openai", L"Business", {L"Business", {}, true, true, false, false}},
+        {L"antigravity", L"Laptop", {L"", {AccountErrorCode::AntigravityNotRunning}, false, false, false, false}},
     };
     SettingsView view = TestView(SettingsUiPage::Accounts);
     for (size_t i : order) {
@@ -675,7 +678,7 @@ static void RunAccountEditTests() {
         SettingsViewAccount card;
         card.key = 31;
         card.slot = 1;
-        card.status = {L"Free", L"", true, true, false, false};
+        card.status = {L"Free", {}, true, true, false, false};
         card.expanded = true;
         view.accounts.push_back(card);
         UiFrame frame;
@@ -701,7 +704,8 @@ static void RunAccountEditTests() {
               UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn, 1))->text == L"Sign in again" &&
               UiFindItem(frame, AccountId(1, SettingsField::AccountSignOut, 1)));
         // Without a sign-in: Sign in in its header.
-        view.accounts[0].status = {L"", L"not signed in - click to sign in", false, false, true, false};
+        view.accounts[0].status = {L"", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true,
+                                   false};
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)) && HasText(frame, L"Sign-in needed"));
@@ -716,7 +720,7 @@ static void RunAccountEditTests() {
         SettingsViewAccount card;
         card.key = 32;
         card.slot = 1;
-        card.status = {L"", L"", true, true, false, false};
+        card.status = {L"", {}, true, true, false, false};
         card.expanded = true;
         view.accounts.push_back(card);
         UiFrame frame;
@@ -763,7 +767,8 @@ static void RunAccountEditTests() {
         }
         CHECK((keys == std::vector<std::wstring>{L"Mo"}));
         // Without a sign-in: Sign in in its header; the footer keeps only the dashboard.
-        view.accounts[0].status = {L"", L"not signed in - click to sign in", false, false, true, false};
+        view.accounts[0].status = {L"", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true,
+                                   false};
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)) && HasText(frame, L"Sign-in needed"));

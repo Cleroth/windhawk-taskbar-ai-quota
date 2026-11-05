@@ -91,17 +91,17 @@ Build files go to `.out/icon/`. Nothing references the two files.
 `%LOCALAPPDATA%\TaskbarAIQuota-audit\` (`-Folder`; `-ModId`, default `local@taskbar-ai-quota`):
 Windhawk LocalStorage (`settings_v1` parsed, `hiddenAccounts`, each `auth_*` sign-in as presence
 plus a SHA-256 of its encrypted value; never decrypted, copied or printed), the HKCU
-`RecordHistory` consent, and history journal metadata (files, header, per-day and per-history-ID
-sample counts). It writes only the snapshot. Take one before installing a step that writes
-settings or sign-ins.
+`RecordHistory` consent and `Language` preference, and history journal metadata (files, header,
+per-day and per-history-ID sample counts). It writes only the snapshot. Take one before installing
+a step that writes settings or sign-ins.
 
 `pwsh storage-audit.ps1 compare -Baseline <snapshot.json>` saves a new snapshot (or reads
 `-Current`) and classifies each difference: expected (`-Edited` fields: top-level names,
-`<label>.<field>`, `accountOrder`, `consent`; `-Disposable` account labels), tolerated (sign-in hash
-changed while present, journal growth, retention pruning, storage-cap compaction; neither of the
-last two while both snapshots keep history forever) or unexpected
-(anything else, including history ID changes and sign-ins appearing or disappearing). Exit 1 means
-something unexpected.
+`<label>.<field>`, `accountOrder`, `consent`, `language`; `-Disposable` account labels), tolerated
+(sign-in hash changed while present, journal growth, retention pruning, storage-cap compaction;
+neither of the last two while both snapshots keep history forever) or unexpected (anything else,
+including history ID changes and sign-ins appearing or disappearing). A snapshot older than the
+language value skips its comparison (info). Exit 1 means something unexpected.
 
 It's an audit, not a backup. Restore only compatible scalar settings, by hand, with the mod
 disabled; restoring an old `settings_v1` after a rename can orphan the moved sign-in. Sign-in

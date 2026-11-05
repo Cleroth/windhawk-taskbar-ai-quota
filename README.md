@@ -89,6 +89,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - show provider outages (on by default): marks an account while its provider's status page reports a problem, as described under [Provider outages](#provider-outages); off reads no status pages
   - additional OpenAI rate limits as rows in the details flyout, one per window (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - **Behavior**:
+  - interface language of the settings and usage history windows and the taskbar: **Automatic** (the default; the first of your Windows display languages the mod speaks, else English), English, or a language by its own name; per Windows user, it switches the taskbar and the open windows at once, except that an open sign-in window keeps its language and the usage history window waits for its open dialog or export to finish. Translations other than English are machine-made and in progress, and Automatic doesn't pick them yet
   - show on: the primary display, all displays, or a detected display with its resolution
   - show details on hover: resting the pointer on a column opens its details flyout (on by default)
   - cloud poll interval presets plus a custom interval for Anthropic, OpenAI, GitHub Copilot and OpenCode Go (Antigravity polls its local server every minute); only the Explorer process that runs the taskbar polls, refreshes sign-ins and notifies, so another one (such as folder windows launched in a separate process) adds no requests or notifications

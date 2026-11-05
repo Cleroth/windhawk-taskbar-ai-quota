@@ -17,19 +17,32 @@ static constexpr double kHeadlineLogoSide = 16;
 // A headline tile's window key text, in proportion to its number's (9 DIPs beside 14).
 static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // A headline countdown follows a reset arrow, at the key's size; tiles reserve the width of
-// kHeadlineCountdownReserve for it.
+// HeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
-static constexpr PCWSTR kHeadlineCountdownReserve = L"\u21BB 00h 00m";
-// Quota window keys on bar labels and tiles; QuotaKey gives the per-provider ones.
-static constexpr PCWSTR kQuotaKeys[kQuotaBarCount] = {L"5h", L"7d", L"Fa", L"Ex"};
 
-// A slot's key: Antigravity's Gemini Argon weekly shows "Ar" instead of "Fa", OpenAI credits "Cr"
-// instead of "Ex", GitHub Copilot's monthly AI credits and OpenCode Go's monthly "Mo".
-static PCWSTR QuotaKey(std::wstring_view provider, int slot) {
-    if (slot == kFableWeeklyBar) return provider == L"antigravity" ? L"Ar" : kQuotaKeys[slot];
-    if (slot != kExtraUsageBar) return kQuotaKeys[slot];
-    return provider == L"openai" ? L"Cr" : provider == L"copilot" || provider == L"opencode" ? L"Mo" :
-                                                                                              kQuotaKeys[slot];
+// The countdown's hours-and-minutes form at zeros, behind the arrow, in the locale: the width a
+// headline tile reserves, so minute ticks keep it.
+static std::wstring HeadlineCountdownReserve(const I18nLocale& locale) {
+    return kHeadlineCountdownArrow + I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"),
+                                              {{L"hours", L"00"}, {L"minutes", L"00"}});
+}
+
+// Quota window keys on bar labels and tiles, compact in every language: each slot's, then
+// Antigravity's Gemini Argon weekly ("Ar" for "Fa"), OpenAI's credits ("Cr" for "Ex"), and GitHub
+// Copilot's monthly AI credits and OpenCode Go's monthly ("Mo" for "Ex"). QuotaKey picks an
+// account's; tiles reserve the widest of them all.
+static constexpr I18nKey kQuotaKeys[] = {
+    TrCtx(L"quota-key-2-chars", L"5h"), TrCtx(L"quota-key-2-chars", L"7d"), TrCtx(L"quota-key-2-chars", L"Fa"),
+    TrCtx(L"quota-key-2-chars", L"Ex"), TrCtx(L"quota-key-2-chars", L"Ar"), TrCtx(L"quota-key-2-chars", L"Cr"),
+    TrCtx(L"quota-key-2-chars", L"Mo"),
+};
+
+static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provider, int slot) {
+    size_t key = size_t(slot);
+    if (slot == kFableWeeklyBar && provider == L"antigravity") key = 4;
+    if (slot == kExtraUsageBar && provider == L"openai") key = 5;
+    if (slot == kExtraUsageBar && (provider == L"copilot" || provider == L"opencode")) key = 6;
+    return I18nText(locale, kQuotaKeys[key]);
 }
 // Tile text's cap height, as a share of its font size (Segoe UI Variable).
 static constexpr double kTileCapShare = 0.7;
@@ -518,6 +531,7 @@ static BadgeColors BadgeColorsFor(COLORREF color, bool light) {
 // Display inputs of every meter. Build it with MeterDisplayFor only; the ranges below hold.
 struct MeterDisplay {
     ULONGLONG now;
+    I18nLocale locale;        // The keys' and the countdown's language.
     BarMode barMode;
     int barLength;            // 10-500 DIPs.
     int barThickness;         // 2-50 DIPs.
@@ -573,9 +587,9 @@ static double BarLabelColumnWidth(int percentFontSize) {
     return std::ceil(percentFontSize * 1.4) + 3.0;
 }
 
-// `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs
-// above and below them. `sideWidth`: MeterDisplay::sideWidth.
-static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
+// `locale`: the frame's language. `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or
+// on a side); tiles leave 4 DIPs above and below them. `sideWidth`: MeterDisplay::sideWidth.
+static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale, ULONGLONG now,
                                     double rasterizationScale, double taskbarHeight,
                                     double sideWidth = 0) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
@@ -594,6 +608,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
     double readingReach = (settings.sparklineRing ? kSparkRingOuter : kSparkPlainNowRadius) * readingScale + 0.4;
     return {
         .now = now,
+        .locale = locale,
         .barMode = settings.barMode,
         .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10,
                                    settings.showBarLabels ? BarLabelColumnWidth(settings.percentFontSize) : 0) :
@@ -755,7 +770,7 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
                 green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.6), kWeeklyWindowMs};
             accountData.lastSuccessMs = now - 10 * 60000;
             accountData.stale = true;
-            accountData.error = L"Antigravity not running";
+            accountData.error = {AccountErrorCode::AntigravityNotRunning};
         }
         data->push_back(std::move(accountData));
     }
@@ -1270,7 +1285,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                               (ULONGLONG)display.pollMinutes) * 2 * 60000;
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
                    display.now - data.lastSuccessMs > staleAfterMs;
-    meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
+    meters.warn = display.showStaleWarning && meters.stale && bool(data.error);
     // An outage explains the staleness: its mark takes the stale mark's place.
     if (outage != OutageLevel::None) {
         meters.mark = IdentityMark::Outage;
@@ -1347,7 +1362,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             } else {
                 meters.sparkExtraText = TaskbarAmountText(data.creditsBalance, false);
             }
-            if (!dollars) meters.sparkExtraKey = QuotaKey(account.provider, kExtraUsageBar);
+            if (!dollars) meters.sparkExtraKey = QuotaKey(display.locale, account.provider, kExtraUsageBar);
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
                 UsageColor(extra.pct, meters.stale, yellow, orange, red, display.usageColors) : 0;
         }
@@ -1461,7 +1476,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         QuotaMeter& m = meters.quotas[w];
         // Color stays keyed to actual usage so depleting quota still reds out.
         m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.usageColors);
-        m.key = QuotaKey(account.provider, w);
+        m.key = QuotaKey(display.locale, account.provider, w);
         m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
                         wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
@@ -1902,27 +1917,34 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             meters.headlineKey = meters.quotas[top].key;
         }
         if (countdown && top >= 0) {
-            // Rounded up to the minute, like the details flyout's reset times.
+            // Rounded up to the minute, like the details flyout's reset times: its two largest
+            // units, dropping a zero second one.
+            const I18nLocale& locale = display.locale;
             ULONGLONG reset = usage[top]->resetUnixMs;
-            meters.headlineCountdown = kHeadlineCountdownArrow;
+            std::wstring text;
             if (!reset) {
-                meters.headlineCountdown += L"no reset";
+                text = I18nText(locale, TrCtx(L"taskbar-countdown", L"no reset"));
             } else if (reset <= display.now) {
-                meters.headlineCountdown += L"now";
+                text = I18nText(locale, TrCtx(L"taskbar-countdown", L"now"));
             } else {
                 ULONGLONG minutes = (reset - display.now + 59999) / 60000;
                 ULONGLONG days = minutes / (24 * 60), hours = minutes / 60 % 24;
                 minutes %= 60;
-                wchar_t text[24];
-                if (days) {
-                    swprintf(text, ARRAYSIZE(text), hours ? L"%llud %lluh" : L"%llud", days, hours);
+                if (days && hours) {
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d {hours}h"),
+                                    {{L"days", days}, {L"hours", hours}});
+                } else if (days) {
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d"), {{L"days", days}});
+                } else if (hours && minutes) {
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"),
+                                    {{L"hours", hours}, {L"minutes", minutes}});
                 } else if (hours) {
-                    swprintf(text, ARRAYSIZE(text), minutes ? L"%lluh %llum" : L"%lluh", hours, minutes);
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h"), {{L"hours", hours}});
                 } else {
-                    swprintf(text, ARRAYSIZE(text), L"%llum", minutes);
+                    text = I18nText(locale, TrCtx(L"taskbar-countdown", L"{minutes}m"), {{L"minutes", minutes}});
                 }
-                meters.headlineCountdown += text;
             }
+            meters.headlineCountdown = kHeadlineCountdownArrow + text;
         }
         meters.headlineColor = UsageColor(top >= 0 ? usage[top]->pct : -1, meters.stale, yellow,
                                           orange, red, display.usageColors);

@@ -12,15 +12,19 @@ I18N = [("fragment", f"i18n/{name}.h") for name in
          "languages", "pseudo", "format")]
 UI_PURE = [("fragment", f"ui/{name}.h") for name in
            ("tokens", "draw", "svg-path", "rich-text", "items", "paint", "input", "tooltip-layout")]
+# Localized runs as the toolkit's, after both.
+I18N_UI = [("fragment", "i18n/ui-runs.h")]
 
 # Pure model, toolkit and page builders: tests and offscreen renders.
 MODEL = [
     *I18N,
     ("fragment", "core/model.h"),
+    ("fragment", "core/account-error.h"),
     ("definition", "ApplyCreditsMax"),
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,
+    *I18N_UI,
     ("fragment", "settings/edits.h"),
     ("fragment", "settings/view.h"),
     ("fragment", "settings/preview.h"),
@@ -45,6 +49,7 @@ HISTORY = [
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,
+    *I18N_UI,
     ("fragment", "history/types.h"),
     ("fragment", "history/continuity.h"),
     ("fragment", "history/series.h"),

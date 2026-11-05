@@ -78,6 +78,8 @@ static bool NormalizeSettings(Settings* s) {
         s->accounts[0].hidden = false;
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
+    const I18nLanguage* language = I18nLanguageByTag(s->language);
+    s->language = language ? std::wstring(language->tag) : std::wstring();
     s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
     if (s->historyDefaultRange < HistoryUiRange::Day || s->historyDefaultRange > HistoryUiRange::All) {
         s->historyDefaultRange = HistoryUiRange::Week;
@@ -327,8 +329,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         JsonObject root = JsonObject::Parse(json);
         if ((int)GetNum(root, L"version", 0) != kSettingsStorageVersion) return false;
         Settings s;
-        // Shared JSON never grants or revokes the caller's per-user consent.
+        // Shared JSON never grants or revokes the caller's per-user consent or sets its language.
         s.historyEnabled = out->historyEnabled;
+        s.language = out->language;
         if (root.HasKey(L"accounts") &&
             root.GetNamedValue(L"accounts").ValueType() == JsonValueType::Array) {
             for (const auto& value : root.GetNamedArray(L"accounts")) {
@@ -853,6 +856,25 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         previous = g_settings;
     }
+    // A language-only edit stores the preference and switches the current language, nothing
+    // more: no settings_v1 write (not even a pending ID save or the recovery a load error waits
+    // for), no normalization, no publication. The settings generation stays, so neither a poll in
+    // flight nor its history samples are dropped.
+    const I18nLanguage* requested = I18nLanguageByTag(s.language);
+    s.language = requested ? std::wstring(requested->tag) : std::wstring();
+    const bool languageChanged = s.language != previous.language;
+    const I18nLanguage* language = languageChanged ? &ResolveLanguage(s.language) : nullptr;
+    Settings languageOnly = previous;
+    languageOnly.language = s.language;
+    if (languageChanged && s == languageOnly) {
+        if (!WriteLanguagePreference(s.language)) return SettingsApplyResult::Failed;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            g_settings.language = std::move(s.language);
+        }
+        SetCurrentLanguage(*language);
+        return SettingsApplyResult::Changed;
+    }
     const bool consentChanged = s.historyEnabled != previous.historyEnabled;
     const bool requestedHistoryEnabled = s.historyEnabled;
     NormalizeSettings(&s);
@@ -861,13 +883,19 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     if (s == previous) return SettingsApplyResult::Unchanged;
     Settings sharedPrevious = previous;
     sharedPrevious.historyEnabled = s.historyEnabled;
+    sharedPrevious.language = s.language;
     const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || g_settingsLoadError;
     if (saveShared && !SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
-    // Save shared changes first: a failed shared save must never grant consent. Consent-only
-    // edits leave shared JSON untouched. Registry calls are short and take no history locks.
-    if (consentChanged && !WriteHistoryConsent(s.historyEnabled)) {
+    // Save shared changes first, consent last: a failed save before it must never grant consent.
+    // Per-user-only edits leave shared JSON untouched; a failed write takes back what this call
+    // saved. Registry calls are short and take no history locks.
+    const bool languageSaved = !languageChanged || WriteLanguagePreference(s.language);
+    if (!languageSaved || (consentChanged && !WriteHistoryConsent(s.historyEnabled))) {
+        if (languageChanged && languageSaved && !WriteLanguagePreference(previous.language)) {
+            Wh_Log(L"Consent save failed and language rollback failed; the stored language differs until changed");
+        }
         if (saveShared && !SaveOwnedSettings(previous)) {
-            Wh_Log(L"Consent save failed and shared settings rollback failed; runtime settings unchanged");
+            Wh_Log(L"Per-user save failed and shared settings rollback failed; runtime settings unchanged");
         }
         return SettingsApplyResult::Failed;
     }
@@ -876,6 +904,7 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
         g_settingsLoadError = false;
     }
     PublishSettings(std::move(s), oldIdentity, newIdentity);
+    if (language) SetCurrentLanguage(*language);
     return SettingsApplyResult::Changed;
 }
 
@@ -902,7 +931,10 @@ static void LoadSettings() {
 
     Settings s;
     const bool historyConsent = ReadHistoryConsent();
+    const std::wstring language = ReadLanguagePreference();
     s.historyEnabled = historyConsent;
+    s.language = language;
+    SetCurrentLanguage(ResolveLanguage(language));
     g_settingsLoadError = false;
     g_historyIdsPendingSave = false;
     bool historyIdsChanged = false;
@@ -911,6 +943,7 @@ static void LoadSettings() {
         bool imported = LoadLegacySettings(&s);
         if (!imported) s = Settings{};
         s.historyEnabled = historyConsent;
+        s.language = language;
         NormalizeSettings(&s);
         if (SaveOwnedSettings(s)) {
             if (imported) Wh_Log(L"Imported legacy Windhawk settings");
@@ -938,6 +971,7 @@ static void LoadSettings() {
         // defaults; readable invalid blobs were also backed up above.
         s = Settings{};
         s.historyEnabled = historyConsent;
+        s.language = language;
         g_settingsLoadError = true;
     }
     PublishSettings(std::move(s));

@@ -86,6 +86,8 @@ struct HistoryOps {
     // Unix ms, and one as the user's local clock and zone (zero on failure).
     virtual ULONGLONG Now() = 0;
     virtual SYSTEMTIME LocalTime(ULONGLONG ms) = 0;
+    // The current language.
+    virtual I18nLocale Locale() = 0;
 
 protected:
     ~HistoryOps() = default;
@@ -93,13 +95,15 @@ protected:
 
 // What a composed series set was built for: the snapshot's generation, the settings' revision
 // (labels, account recording and visibility, weekly selections, consent, red threshold), the
-// times, the effective view, the selection (history ID) and the comparison.
+// times, the effective view, the selection (history ID), the comparison and the language of its
+// titles.
 struct HistorySeriesKey {
     uint64_t generation = 0, settings = 0;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     HistoryView view = HistoryView::Weekly;
     uint64_t selected = 0;
     bool compare = false;
+    I18nLocale locale;
     bool operator==(const HistorySeriesKey&) const = default;
 };
 
@@ -520,7 +524,7 @@ struct HistoryController {
             L"select one to delete its history.";
         if (snapshot && !snapshot->samples.empty()) {
             text += L"\r\nOldest loaded sample: " +
-                    HistoryUiTime(snapshot->samples.front().timeMs, ops->Now(),
+                    HistoryUiTime(view.locale, snapshot->samples.front().timeMs, ops->Now(),
                                   [this](ULONGLONG ms) { return ops->LocalTime(ms); });
         }
         Ask(text, L"About these charts", MB_OK | MB_ICONINFORMATION);
@@ -742,14 +746,16 @@ struct HistoryController {
     // The view from the state: the accounts with their slots, recording state and latest polls,
     // the current mode's view, the settings, the pill, status and notice, then the summary cards
     // once loaded (from the series, built again only when their key changed). A selection that
-    // isn't listed is All accounts. Returns whether the view changed.
+    // isn't listed is All accounts. The current language, except that a modal or an operation keeps
+    // the one it started in until it ends. Returns whether the view changed.
     bool Compose() {
         const Settings& s = settings.settings;
         ULONGLONG now = ops->Now();
-        MeterDisplay display = MeterDisplayFor(s, now, 1, 0);
+        HistoryUiView v;
+        v.locale = Busy() ? view.locale : ops->Locale();
+        MeterDisplay display = MeterDisplayFor(s, v.locale, now, 1, 0);
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
-        HistoryUiView v;
         for (const HistoryUiAccount& a : accounts) {
             HistoryUiViewAccount& account = v.accounts.emplace_back();
             account.historyId = a.id;
@@ -799,11 +805,12 @@ struct HistoryController {
         v.loading = !snapshot;
         if (snapshot) {
             HistoryUiLocalTime localTime = [this](ULONGLONG ms) { return ops->LocalTime(ms); };
-            v.status = L"Updated " + HistoryUiTime(to, now, localTime);
+            v.status = I18nText(v.locale, TrCtx(L"history-status", L"Updated {time}"),
+                                {{L"time", HistoryUiTime(v.locale, to, now, localTime)}});
             v.storageError = journalStatus;
             v.storageCapped = journalCapped;
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
-                                 v.selected >= 0 ? selectedId : 0, compare};
+                                 v.selected >= 0 ? selectedId : 0, compare, v.locale};
             if (!(key == seriesKey)) {
                 HistorySeriesQuery query{v.selected, v.view, from, to, readFrom, compare, v.redThreshold, v.remaining};
                 series = HistoryBuildSeries(snapshot->samples, accounts, query, [this] { return ops->Unloading(); });
@@ -841,9 +848,9 @@ struct HistoryController {
     // Lays the chart out in its item's rectangle at `scale` (each build that shows it; never a
     // paint): the view's lines, axes and plot, then the visible lines' periods reduced to the
     // plot's device pixels, again only when that reduction's key changed (HistoryChartKey), and the
-    // time ticks. The chart keeps the snapshot its reduction indexes: a later replacement can't
-    // reach its painting or picking before the next build lays it out again. A build ended any
-    // hover: nothing is picked.
+    // time ticks, again with it or when the plot's width or the view's language changed. The chart
+    // keeps the snapshot its reduction indexes: a later replacement can't reach its painting or
+    // picking before the next build lays it out again. A build ended any hover: nothing is picked.
     void LayChart(UiGraphics& g, D2D1_RECT_F rect, float scale) {
         HistoryChart& c = chart;
         bool hiddenAll = std::all_of(view.lines.begin(), view.lines.end(), [](const HistoryUiLine& l) { return l.hidden; });
@@ -885,9 +892,10 @@ struct HistoryController {
             // A reduction cut short is never taken for a complete one.
             if (cancelled()) c.key = {};
         }
-        if (reduce || plotWidth != c.plot.right - c.plot.left) {
-            c.ticks = HistoryChartTicks(from, to, c.plot.right - c.plot.left,
+        if (reduce || plotWidth != c.plot.right - c.plot.left || c.tickLocale != view.locale) {
+            c.ticks = HistoryChartTicks(view.locale, from, to, c.plot.right - c.plot.left,
                                         [this](ULONGLONG ms) { return ops->LocalTime(ms); });
+            c.tickLocale = view.locale;
         }
         picked.clear();
     }
@@ -902,7 +910,7 @@ struct HistoryController {
         for (const HistoryChartHit& hit : hits) {
             if (lines.empty() || lines.back() != hit.line) lines.push_back(hit.line);
         }
-        UiTooltipContent content = HistoryChartReadout(chart, hits, palette, view.selected >= 0, ops->Now(),
+        UiTooltipContent content = HistoryChartReadout(view.locale, chart, hits, palette, view.selected >= 0, ops->Now(),
                                                        [this](ULONGLONG ms) { return ops->LocalTime(ms); });
         readoutShown = content.key != 0;
         if (content.key != readout.key) readout = std::move(content);

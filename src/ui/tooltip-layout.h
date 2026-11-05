@@ -20,11 +20,12 @@ struct UiReadoutRow {
 };
 
 // What a tooltip shows: readout rows or a complete-text block. key 0: nothing; an unchanged key:
-// the same content. `more` follows "+N more" when not every row fits (" — select one account").
+// the same content. `more`: the client's hint for N rows that don't fit ("+N more — select one
+// account"); without one the hint is "+N".
 struct UiTooltipContent {
     uint64_t key = 0;
     std::vector<UiReadoutRow> rows;
-    std::wstring more;
+    std::function<std::wstring(int)> more;
     std::vector<UiRun> text;
 };
 
@@ -56,8 +57,8 @@ struct UiTooltipLayout {
     bool operator==(const UiTooltipLayout&) const = default;
 };
 
-static std::wstring UiMoreText(int more, const std::wstring& suffix) {
-    return L"+" + std::to_wstring(more) + L" more" + suffix;
+static std::wstring UiMoreText(const UiTooltipContent& content, int more) {
+    return content.more ? content.more(more) : L"+" + std::to_wstring(more);
 }
 
 // Most rows, then one-line rows, then the widest titles.
@@ -100,7 +101,7 @@ static std::optional<UiTooltipLayout> UiLayoutReadout(UiGraphics& g, const UiToo
                 DWRITE_TEXT_METRICS hint{};
                 while (slots <= rows) {
                     layout.more = count - (capacity - slots);
-                    winrt::check_hresult(UiLayout(g, UiMoreText(layout.more, content.more), UiTextStyleFor(UiFont::Caption),
+                    winrt::check_hresult(UiLayout(g, UiMoreText(content, layout.more), UiTextStyleFor(UiFont::Caption),
                                                   column - kUiTipSwatch)->GetMetrics(&hint));
                     int need = int(std::ceil((hint.height + kUiTipRowGap) / (line + kUiTipRowGap) - 0.001f));
                     if (need <= slots) break;
@@ -245,7 +246,7 @@ static std::vector<UiItem> UiTooltipItems(const UiTooltipContent& content, const
     if (layout.more) {
         D2D1_POINT_2F at = slot(layout.shown);
         text({at.x + kUiTipSwatch, at.y, at.x + layout.column, at.y + layout.hint},
-             {{UiMoreText(layout.more, content.more)}}, UiInk::Muted, false);
+             {{UiMoreText(content, layout.more)}}, UiInk::Muted, false);
     }
     return items;
 }

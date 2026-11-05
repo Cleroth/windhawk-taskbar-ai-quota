@@ -218,7 +218,10 @@ struct Settings {
     BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
+    // This Windows user's history recording consent and language preference (a language tag;
+    // empty: Automatic), stored per user beside settings_v1, never in it.
     bool historyEnabled = true;
+    std::wstring language;
     // Days of usage history kept; 0: forever, with neither the age limit nor the size cap.
     int historyRetentionDays = 0;
     // The range the usage history window opens on.
@@ -324,6 +327,23 @@ enum class CopilotUnit {
     ChatRequests,
 };
 
+// A poll's error as the mod authored it: a code, with each code's arguments in fields of their
+// own, formatted in the reader's language at presentation (AccountErrorText); logs and their
+// dedupe use its English text. Provider-supplied text rides in `detail` and is shown as is.
+enum class AccountErrorCode : uint8_t {
+    None,
+    Message,  // An English message without a code of its own: `detail`, shown and logged as is.
+    AntigravityNotRunning,
+};
+
+struct AccountError {
+    AccountErrorCode code = AccountErrorCode::None;
+    std::wstring detail;
+
+    explicit operator bool() const { return code != AccountErrorCode::None; }
+    bool operator==(const AccountError&) const = default;
+};
+
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
@@ -358,7 +378,7 @@ struct AccountData {
     // OpenCode Go's windows (5-hour, weekly, monthly in the extra-usage slot) that reached their
     // limit, by QuotaBarIndex.
     std::array<bool, kQuotaBarCount> opencodeLimited{};
-    std::wstring error;
+    AccountError error;
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;

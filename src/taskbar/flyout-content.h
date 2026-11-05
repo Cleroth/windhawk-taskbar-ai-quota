@@ -23,6 +23,7 @@ struct FlyoutDisplay {
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
+    I18nLocale locale;  // The grid's language
 };
 
 // Quota rows' details cell margins (DIP).
@@ -92,11 +93,12 @@ static std::wstring NotificationProjectionText(uint64_t historyId, int slot, con
 }
 
 // Builds the card for `provider` into state.flyout.popup, registering its button delegates there
-// as they are created. Values are filled by UpdateAccountFlyout.
+// as they are created, in the grid's language. Values are filled by UpdateAccountFlyout.
 static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provider,
                               bool visualTestMode) {
     FlyoutPopup& popup = state.flyout.popup;
     FlyoutTheme const& theme = popup.theme;
+    const I18nLocale& locale = state.buildLocale;
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
     FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
     auto makeText = [](double size, Brush const& brush) {
@@ -598,7 +600,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid::SetColumn(buttons, 1);
     uint64_t identity = popup.accountIdentity;
     uint64_t historyId = state.accountRefs[popup.accountIndex].historyId;
-    auto addButton = [&](PCWSTR glyph, PCWSTR name, FlyoutFooterAction action) {
+    auto addButton = [&](PCWSTR glyph, I18nKey key, FlyoutFooterAction action) {
+        std::wstring name = I18nText(locale, key);
         Button button;
         if (theme.buttonStyle) button.Style(theme.buttonStyle);
         button.Width(32);
@@ -611,7 +614,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         icon.TextWrapping(TextWrapping::NoWrap);
         button.Content(icon);
         winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(button, name);
-        ToolTipService::SetToolTip(button, winrt::box_value(name));
+        SetXamlToolTip(button, name, locale);
         popup.buttonHandlers.reserve(popup.buttonHandlers.size() + 1);
         auto token = button.Click(
             [hWnd, generation, identity, historyId, action](
@@ -637,16 +640,18 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         popup.buttonHandlers.push_back({button, token});
         buttons.Children().Append(button);
     };
-    addButton(L"\uE81C", L"Usage history", FlyoutFooterAction::History);
+    addButton(L"\uE81C", TrCtx(L"taskbar-action", L"Usage history"), FlyoutFooterAction::History);
     if (!visualTestMode && provider != L"antigravity") {
-        addButton(L"\uE8A7", L"Open dashboard", FlyoutFooterAction::Dashboard);
+        addButton(L"\uE8A7", TrCtx(L"taskbar-action", L"Open dashboard"), FlyoutFooterAction::Dashboard);
     }
-    if (!visualTestMode) addButton(L"\uE72C", L"Refresh", FlyoutFooterAction::Refresh);
-    addButton(L"\uE713", L"Settings", FlyoutFooterAction::Settings);
+    if (!visualTestMode) addButton(L"\uE72C", TrCtx(L"taskbar-action", L"Refresh"), FlyoutFooterAction::Refresh);
+    addButton(L"\uE713", TrCtx(L"taskbar-action", L"Settings"), FlyoutFooterAction::Settings);
     footer.Children().Append(buttons);
     appendSection(footer, kAuto);
 
+    // The flyout shows outside the tree: its card takes the language itself.
     Border card;
+    SetXamlLanguage(card, locale);
     card.Width(420);
     card.CornerRadius({8, 8, 8, 8});
     card.BorderThickness({1, 1, 1, 1});
@@ -1044,8 +1049,8 @@ static void UpdateAccountFlyout(
         popup.extraLines.Text(d.extraLines);
         show(popup.extraLines, !d.extraLines.empty());
         std::wstring error;
-        if (!d.error.empty()) {
-            error = L"Error: " + d.error;
+        if (d.error) {
+            error = L"Error: " + AccountErrorText(display.locale, d.error);
             if (d.retryDeadlineMs > display.now) {
                 error += L" - retry in " +
                          FormatShortDuration((d.retryDeadlineMs - display.now + 999) / 1000);

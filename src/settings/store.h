@@ -75,6 +75,8 @@ struct SettingsProductionStore final : SettingsStore {
             }
         }
         status.visualTest = g_visualTestMode.load(std::memory_order_acquire);
+        status.automaticLanguage = baseline.settings.language.empty() ? g_language.load(std::memory_order_acquire) :
+                                                                        &ResolveLanguage({});
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
         PWSTR localAppData = nullptr;
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr,
@@ -91,7 +93,9 @@ struct SettingsProductionStore final : SettingsStore {
     }
 
     // Under the edit lock: fresh settings, the requested field set, ApplyOwnedSettings. The
-    // taskbar update runs after the lock is released.
+    // taskbar update runs after the lock is released. A language change also rebuilds the usage
+    // history window; one alone doesn't wake polling, and one that keeps the shown language
+    // (Automatic resolving to the explicit choice) rebuilds no taskbar.
     SettingsSaveResult Apply(SettingsField field, int value) override {
         std::unique_lock<std::mutex> configLock(g_configEditMutex);
         Settings settings;
@@ -99,12 +103,19 @@ struct SettingsProductionStore final : SettingsStore {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             settings = g_settings;
         }
+        Settings before = settings;
         SettingsAssign(settings, field, value);
+        bool language = settings.language != before.language;
+        before.language = settings.language;
+        bool poll = settings != before;
+        const I18nLanguage* shown = g_language.load(std::memory_order_acquire);
         SettingsApplyResult result = ApplyOwnedSettings(std::move(settings));
+        bool switched = g_language.load(std::memory_order_acquire) != shown;
         configLock.unlock();
         if (result == SettingsApplyResult::Failed) return SettingsSaveResult::Failed;
         if (result == SettingsApplyResult::Unchanged) return SettingsSaveResult::Unchanged;
-        FinishSettingsApply();
+        if (poll || switched) FinishSettingsApply(poll);
+        if (language) NotifySettingsWindowChanged();
         return SettingsSaveResult::Changed;
     }
 

@@ -13,7 +13,7 @@ static UiTooltipContent TestReadout(int count, std::wstring title = L"Go \u00B7 
                                     std::wstring detail = kTestMockDetail, uint64_t key = 1) {
     UiTooltipContent content;
     content.key = key;
-    content.more = kTestHint;
+    content.more = [](int more) { return L"+" + std::to_wstring(more) + L" more" + kTestHint; };
     for (int i = 0; i < count; i++) content.rows.push_back({title, {{detail}}, UiRgb(0x9B8AFB), 2});
     return content;
 }
@@ -59,7 +59,7 @@ static void RunTooltipTests() {
         "nothing below one row or one column", [] {
         UiGraphics& g = TestGraphics();
         UiTooltipContent six = TestReadout(6);
-        six.more = L" \u2014 select one account";
+        six.more = [](int more) { return L"+" + std::to_wstring(more) + L" more \u2014 select one account"; };
         UiTooltipMeasure m = UiMeasureReadout(g, six);
         float title = TestCaptionWidth(L"Go \u00B7 Gemini weekly"), detail = std::ceil(TestCaptionWidth(kTestMockDetail));
         CHECK_NEAR(m.title, title);

@@ -671,7 +671,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
 }
 
 static void FetchAntigravityAccount(AccountData* d) {
-    d->error.clear();
+    d->error = {};
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
     if (g_unloading) return;
@@ -702,8 +702,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         if (!DiscoverAntigravityServer(&info, &foundServer)) {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? L"Antigravity quota unavailable" :
-                                     L"Antigravity not running";
+            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
+                                     AccountError{AccountErrorCode::AntigravityNotRunning};
             return;
         }
         info.discoveredMs = NowUnixMs();
@@ -783,8 +783,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         } else {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? L"Antigravity quota unavailable" :
-                                     L"Antigravity not running";
+            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
+                                     AccountError{AccountErrorCode::AntigravityNotRunning};
             return;
         }
     }
@@ -796,16 +796,16 @@ static void FetchAntigravityAccount(AccountData* d) {
                                 !summaryResult.ok && !statusResult.ok :
                                 !statusResult.ok;
         if (networkError) {
-            d->error = L"network error (language server)";
+            d->error = {AccountErrorCode::Message, L"network error (language server)"};
         } else if (info.quotaSource == AntigravityQuotaSource::Summary &&
                    summaryResult.ok && summaryResult.status != 200) {
-            d->error = L"HTTP " + std::to_wstring(summaryResult.status) +
-                       L" from language server";
+            d->error = {AccountErrorCode::Message,
+                        L"HTTP " + std::to_wstring(summaryResult.status) + L" from language server"};
         } else if (statusResult.ok && statusResult.status != 200) {
-            d->error = L"HTTP " + std::to_wstring(statusResult.status) +
-                       L" from language server";
+            d->error = {AccountErrorCode::Message,
+                        L"HTTP " + std::to_wstring(statusResult.status) + L" from language server"};
         } else {
-            d->error = parseError.empty() ? L"unexpected response" : parseError;
+            d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response" : parseError};
         }
         if (endpointInvalid) g_antigravityCachedInfo = {};
         return;

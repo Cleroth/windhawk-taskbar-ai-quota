@@ -129,7 +129,7 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
 // taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
 // their data (and their providers' outage levels, none without) to lay out instead of the samples,
 // whose outage is VisualTestOutage's; either shows only while outage marks are on.
-static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
+static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings, const I18nLocale& locale,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
                                                   const std::vector<AccountConfig>* testAccounts = nullptr,
@@ -137,7 +137,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                                   const std::vector<OutageLevel>* testOutages = nullptr) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
-    MeterDisplay display = MeterDisplayFor(settings, now, scale, taskbarHeight);
+    MeterDisplay display = MeterDisplayFor(settings, locale, now, scale, taskbarHeight);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
@@ -485,8 +485,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     }
                 }
                 if (keys) {
-                    label(ops, QuotaKey(account.provider, w), textStyle, itemLeft,
-                          itemTop + (itemHeight - measure(L"5h", textStyle).height) / 2 - 0.5f, keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
+                    label(ops, q.key, textStyle, itemLeft,
+                          itemTop + (itemHeight - measure(q.key, textStyle).height) / 2 - 0.5f, keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
                 }
                 if (settings.percentTextVisibility != PercentTextVisibility::Never && !q.text.empty()) {
                     // As wide as the bar (vertical: at least four characters), aligned per the
@@ -660,9 +660,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-                    keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
-                }
+                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
                 keyReserve = std::ceil(keyReserve);
                 float numberReserve = std::ceil(measure(L"100%", numberStyle).width);
                 std::array<float, 2> numberWidths{numberReserve, numberReserve};
@@ -709,16 +707,14 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 Measured number = measure(meters.headline, numberStyle);
                 Measured key = measure(meters.headlineKey, keyStyle);
                 float keyReserve = 0;
-                for (PCWSTR k : {kQuotaKeys[0], kQuotaKeys[1], kQuotaKeys[2], kQuotaKeys[3], L"Ar", L"Cr", L"Mo"}) {
-                    keyReserve = std::max(keyReserve, measure(k, keyStyle).width);
-                }
+                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
                 float rowWidth = std::max(std::ceil(measure(L"100%", numberStyle).width) + 3 + std::ceil(keyReserve),
                                           number.width + 3 + key.width);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
                 const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
                 const bool countdown = display.headlineCountdown;
                 Measured remaining = measure(meters.headlineCountdown, keyStyle);
-                float segments = countdown ? std::max(std::ceil(measure(kHeadlineCountdownReserve, keyStyle).width),
+                float segments = countdown ? std::max(std::ceil(measure(HeadlineCountdownReserve(locale), keyStyle).width),
                                                       remaining.width) :
                                  count     ? count * length + (count - 1) * gap : 0;
                 float panelHeight = rowHeight + (countdown ? 3 + remaining.cap : count ? 3 + thick : 0);
@@ -837,8 +833,8 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
     const bool gallery = item.kind == UiItemKind::Gallery;
     Settings settings = view.settings;
     if (gallery) settings.barLayout = BarLayout(item.action.value);
-    SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.status.taskbarHeight, scale, view.now,
-                                                       gallery, light, text);
+    SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.locale, view.status.taskbarHeight, scale,
+                                                       view.now, gallery, light, text);
 
     D2D1_MATRIX_3X2_F base{};
     target->GetTransform(&base);
@@ -1070,8 +1066,8 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
 static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                     uint32_t& id, float x, float y, float width) {
     constexpr float kPadX = 1 + 14, kPadTop = 1 + 12, kRow = 20, kGap = 10, kPadBottom = 14 + 1;
-    SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.status.taskbarHeight, view.scale,
-                                                       view.now, false, false, 0);
+    SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.locale, view.status.taskbarHeight,
+                                                       view.scale, view.now, false, false, 0);
     float stripWidth = std::max(width - 2 * kPadX, 1.0f);
     const SettingsPreviewRow home = SettingsPreviewRowAt(strip, stripWidth, 0);
     const bool cut = home.tiles < 0 || home.tiles + strip.width > stripWidth;
@@ -1118,8 +1114,7 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
     }
     bool shown = view.status.visualTest;
     UiAddToggle(items, SettingsControlId(SettingsField::ShowOnTaskbar), {labelLeft - 4, center - 16, switchRight, center + 16},
-                shown, true, SettingsCommand(SettingsField::ShowOnTaskbar, !shown));
-    items.back().text.clear();
+                shown, true, SettingsCommand(SettingsField::ShowOnTaskbar, !shown), UiToggleText{});
 
     UiItem preview;
     preview.id = SettingsControlId(SettingsField::PreviewScroll);

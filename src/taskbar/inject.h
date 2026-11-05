@@ -161,7 +161,8 @@ static bool InjectQuotaGrid(HWND hWnd) {
             Wh_Log(L"Taskbar HWND was reused by a different UI thread");
             return false;
         }
-        // The position is read apart from the build's settings, so it must match too.
+        // The position and the language are read apart from the build's settings, so they must
+        // match too.
         ULONGLONG settingsGeneration;
         TaskbarPlacement settingsPlacement;
         {
@@ -172,6 +173,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (existingState->quotaGrid && !existingState->edgeChanged &&
             existingState->buildSettingsGeneration == settingsGeneration &&
             existingState->placement == settingsPlacement &&
+            &existingState->buildLocale.Language() == g_language.load(std::memory_order_acquire) &&
             existingState->buildVisualTestMode ==
                 g_visualTestMode.load(std::memory_order_acquire)) {
             return true;

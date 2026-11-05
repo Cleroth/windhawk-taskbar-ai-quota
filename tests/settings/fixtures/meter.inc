@@ -14,7 +14,7 @@ static void RunDisplayTests() {
             s.showExtraBarAmounts = true; s.showStaleWarning = false; s.barGap = 7; s.barStyle = BarStyle::Rail;
             s.headlineFontSize = 18; s.headlineBarLength = 24; s.headlineBarThickness = 6;
         });
-        MeterDisplay d = MeterDisplayFor(settings, kNow, 1.25, 44);
+        MeterDisplay d = MeterDisplayFor(settings, I18nLocale(), kNow, 1.25, 44);
         CHECK(d.now == kNow); CHECK(d.barMode == BarMode::Remaining);
         CHECK(d.barLength == 120); CHECK(d.barThickness == 6);
         CHECK(d.barGap == 7); CHECK(d.barStyle == BarStyle::Rail);
@@ -1679,7 +1679,7 @@ static void RunAccountTests() {
         auto meters = [](bool stale, std::wstring error, bool warning = true) {
             AccountData data = Fresh({10, -1, -1, -1});
             data.stale = stale;
-            data.error = error;
+            data.error = error.empty() ? AccountError{} : AccountError{AccountErrorCode::Message, error};
             MeterDisplay d = Display(With([&](Settings& s) { s.showStaleWarning = warning; }));
             return AccountMeterState(d, BarLayout::Stacked, Account(), data, 0, 0);
         };
@@ -1697,7 +1697,7 @@ static void RunAccountTests() {
         // a logo carries the mark; either way warned and dimmed.
         AccountData failed = Fresh({10, -1, -1, -1});
         failed.stale = true;
-        failed.error = L"timeout";
+        failed.error = {AccountErrorCode::Message, L"timeout"};
         for (TileIdentity identity : {TileIdentity::LogoBadge, TileIdentity::Logo, TileIdentity::Text}) {
             AccountConfig account = Account();
             account.tileIdentity = identity;
@@ -1715,7 +1715,7 @@ static void RunAccountTests() {
             AccountData data = Fresh({10, -1, -1, -1});
             if (stale) {
                 data.stale = true;
-                data.error = L"timeout";
+                data.error = {AccountErrorCode::Message, L"timeout"};
             }
             AccountConfig account = Account();
             account.tileIdentity = identity;
@@ -1808,7 +1808,7 @@ static void RunAccountTests() {
         CHECK(size(BarLayout::Stacked, 100, 48, 32, OutageLevel::None) == 0);
         AccountData failed = Fresh({10, -1, -1, -1});
         failed.stale = true;
-        failed.error = L"timeout";
+        failed.error = {AccountErrorCode::Message, L"timeout"};
         AccountMeters stale = AccountMeterState(Display(), BarLayout::Stacked, Account(), failed, 0, 0);
         CHECK(stale.mark == IdentityMark::Stale && stale.markSize == 0);
     });
@@ -1862,7 +1862,7 @@ static void RunAccountTests() {
         loading.lastSuccessMs = 0;
         AccountData signedOut = loading;
         signedOut.needsLogin = true;
-        signedOut.error = L"not signed in - click to sign in";
+        signedOut.error = {AccountErrorCode::Message, L"not signed in - click to sign in"};
         for (int layout = 0; layout <= int(kLastBarLayout); layout++) {
             for (const AccountData& data : {loading, signedOut}) {
                 AccountMeters m = AccountMeterState(Display(), BarLayout(layout), account, data, 0, 0);
@@ -1982,10 +1982,11 @@ static void RunSnapshotTests() {
         for (size_t i = 0; i < data.size(); i++) {
             CHECK(data[i].plan == L"Visual test");
             CHECK(data[i].stale == (i == 3));
-            CHECK(data[i].error.empty() == (i != 3));
+            CHECK(!data[i].error == (i != 3));
             CHECK(data[i].lastSuccessMs == (i == 3 ? kNow - 10 * kMinute : kNow));
         }
-        CHECK(data[3].error == L"Antigravity not running");
+        CHECK(data[3].error.code == AccountErrorCode::AntigravityNotRunning &&
+              AccountErrorText(I18nLocale(), data[3].error) == L"Antigravity not running");
         std::vector<AccountConfig> only;
         BuildVisualTestSnapshot(Display(), &only, nullptr);
         CHECK(only.size() == 4);
@@ -2000,7 +2001,7 @@ static void RunSnapshotTests() {
         // Built at the time it's drawn: a day or a month later the same accounts are stale.
         for (ULONGLONG now : {kNow, kNow + 24 * 60 * kMinute, kNow + 30ULL * 24 * 60 * kMinute}) {
             for (int poll : {2, 1440}) {
-                MeterDisplay display = MeterDisplayFor(With([&](Settings& s) { s.pollMinutes = poll; }), now, 1, 48);
+                MeterDisplay display = MeterDisplayFor(With([&](Settings& s) { s.pollMinutes = poll; }), I18nLocale(), now, 1, 48);
                 std::vector<AccountConfig> accounts;
                 std::vector<AccountData> data;
                 BuildVisualTestSnapshot(display, &accounts, &data);
@@ -3519,9 +3520,9 @@ static void RunMatrixTests() {
                                           provider == L"copilot" || provider == L"opencode" ? L"Mo" : L"Ex"));
             }
         }
-        CHECK(QuotaKey(L"opencode", kFiveHourBar) == std::wstring_view(L"5h") &&
-              QuotaKey(L"opencode", kWeeklyBar) == std::wstring_view(L"7d") &&
-              QuotaKey(L"opencode", kExtraUsageBar) == std::wstring_view(L"Mo"));
+        CHECK(QuotaKey(I18nLocale(), L"opencode", kFiveHourBar) == std::wstring_view(L"5h") &&
+              QuotaKey(I18nLocale(), L"opencode", kWeeklyBar) == std::wstring_view(L"7d") &&
+              QuotaKey(I18nLocale(), L"opencode", kExtraUsageBar) == std::wstring_view(L"Mo"));
     });
 
     Run("quota matrix: the number size, two rows shrunk to fit the tile, at least 7 DIPs; keys at 9/14 of it", [] {
@@ -3555,7 +3556,7 @@ static void RunMatrixTests() {
 static void RunSideTests() {
     // A side taskbar's display: the default 48 DIP width leaves 40 DIPs across (4 each side).
     static constexpr auto side = [](const Settings& settings = {}, double width = 48) {
-        return MeterDisplayFor(settings, kNow, 1, 0, width);
+        return MeterDisplayFor(settings, I18nLocale(), kNow, 1, 0, width);
     };
 
     Run("side taskbar: meter lengths across fit inside its width, never under their minimums", [] {

@@ -181,7 +181,8 @@ static void RunControlTests() {
         UiFrame frame;
         UiAction command{UiActionKind::Command, 1, {}, 4};
         UiAddToggle(frame.main, 60, {300, 10, 300 + size.width, 42}, false, true, command, L"Compare previous week");
-        UiAddToggle(frame.main, 61, {300, 60, 300 + UiToggleSize(g).width, 92}, true, true, command);
+        UiAddToggle(frame.main, 61, {300, 60, 300 + UiToggleSize(g, UiToggleText{L"On", L"Off"}).width, 92}, true, true, command,
+                    UiToggleText{L"On", L"Off"});
         const UiItem& leading = frame.main[0];
         CHECK(leading.text == L"Compare previous week" && leading.align == DWRITE_TEXT_ALIGNMENT_TRAILING);
         CHECK(!leading.selected && leading.action.value == 1);

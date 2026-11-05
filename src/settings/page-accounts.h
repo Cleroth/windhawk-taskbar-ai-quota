@@ -186,12 +186,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // The last visible account stays visible: its switch can't turn off.
         UiAddToggle(trailing, control(SettingsField::AccountHidden), {right - 40, cy - 16, right, cy + 16},
                     !account.hidden, account.hidden || visible > 1,
-                    command(SettingsField::AccountHidden, !account.hidden));
-        trailing.back().text.clear();
+                    command(SettingsField::AccountHidden, !account.hidden), UiToggleText{});
         right -= 40 + 14;
         for (int bar = kQuotaBarCount - 1; bar >= 0; bar--) {
             if (!((bars >> bar) & 1)) continue;
-            PCWSTR text = QuotaKey(account.provider, bar);
+            std::wstring text = QuotaKey(view.locale, account.provider, bar);
             float chipWidth = textWidth(text, UiFont::Caption) + 18;
             UiItem chip;
             chip.id = id++;
@@ -223,8 +222,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Label and "Provider · plan · status".
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
-        std::wstring error = status.error.size() > 60 ? status.error.substr(0, 59) + L"\u2026" : status.error;
-        if (!error.empty()) error[0] = wchar_t(towupper(error[0]));
+        // The last poll's error, cut at 60 characters; an English message without a code of its own
+        // starts with a capital, catalog text stays as written.
+        std::wstring error = AccountErrorText(view.locale, status.error);
+        if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
+        if (status.error.code == AccountErrorCode::Message && !error.empty()) error[0] = wchar_t(towupper(error[0]));
         if (status.signingIn) {
             stateText = L"Signing in\u2026";
             stateInk = UiInk::Accent;
@@ -235,7 +237,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             stateText = L"Hidden, not polled";
             stateInk = UiInk::Secondary;
         } else if (!error.empty()) {
-            stateText = !signsIn && status.error == L"Antigravity not running" ? L"Local app not running" : error;
+            stateText = !signsIn && status.error.code == AccountErrorCode::AntigravityNotRunning ?
+                            I18nText(view.locale, TrCtx(L"account-state", L"Local app not running")) : error;
             stateInk = UiInk::Caution;
         } else if (!signsIn) {
             stateText = status.polled ? L"Local app running" : L"Waiting for the local app";
@@ -417,11 +420,12 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.description = {{recording.mark, UiRunStyle::Normal, recording.ink},
                                     {L" \u00B7 History follows this entry, even after signing in again. Use a new "
                                      L"entry for a different login."}};
-                spec.trailing = UiToggleSize(g);
+                UiToggleText states = SettingsToggleText(view);
+                spec.trailing = UiToggleSize(g, states);
                 UiCardLayout layout = row(spec);
                 UiAddToggle(cardItems, control(SettingsField::AccountRecordHistory), layout.trailing,
                             account.recordHistory, true,
-                            command(SettingsField::AccountRecordHistory, !account.recordHistory));
+                            command(SettingsField::AccountRecordHistory, !account.recordHistory), states);
             }
 
             // Actions (mockup .aact): dashboard and sign-in buttons, Remove account at the right.

@@ -59,9 +59,9 @@ static const UiRun* UiLinkRun(const std::vector<UiRun>& runs, int link) {
 }
 
 static std::wstring UiRichKey(const std::vector<UiRun>& runs, UiFont font, float width,
-                              DWRITE_TEXT_ALIGNMENT align, bool trim) {
-    std::wstring key = std::to_wstring(int(font)) + L'|' + std::to_wstring(width) + L'|' +
-                       std::to_wstring(int(align)) + (trim ? L"t" : L"");
+                              DWRITE_TEXT_ALIGNMENT align, bool trim, std::wstring_view locale) {
+    std::wstring key = std::wstring(locale) + L'|' + std::to_wstring(int(font)) + L'|' + std::to_wstring(width) +
+                       L'|' + std::to_wstring(int(align)) + (trim ? L"t" : L"");
     for (const UiRun& run : runs) {
         key += L'|';
         key += wchar_t(L'0' + int(run.style));
@@ -99,7 +99,7 @@ static IDWriteTextLayout* UiRichLayout(UiGraphics& g, const std::vector<UiRun>& 
                                        float width,
                                        DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
                                        bool trim = false) {
-    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align, trim)];
+    auto& layout = g.layouts[L"rich|" + UiRichKey(runs, font, width, align, trim, g.locale)];
     if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     return layout.get();
 }
@@ -148,7 +148,7 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
                                         float width, DWRITE_TEXT_ALIGNMENT align,
                                         const UiPalette& palette, UiInk baseInk, int hotLink,
                                         int pressedLink, bool trim = false) {
-    auto& layout = cache.layouts[UiRichKey(runs, font, width, align, trim)];
+    auto& layout = cache.layouts[UiRichKey(runs, font, width, align, trim, g.locale)];
     if (!layout) layout = UiCreateRichLayout(g, runs, font, width, align, trim);
     UINT32 at = 0;
     int link = 0;

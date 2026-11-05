@@ -5,8 +5,11 @@
 // Device-independent resources shared by every target of one UI thread: font collections and
 // resolved families, text formats with their ellipsis signs, effect-free layouts (measuring and
 // plain drawing), path geometries and stroke styles. Owned by that thread's graphics scope,
-// released before the apartment is.
+// released before the apartment is. `locale`: the frame's locale name, which the client sets
+// before it builds; text formats take it, and every text cache is keyed by it, so another
+// language's layouts and shaping are never reused.
 struct UiGraphics {
+    std::wstring locale = L"en-US";
     winrt::com_ptr<ID2D1Factory> d2d;
     winrt::com_ptr<IDWriteFactory> dwrite;
     winrt::com_ptr<ID2D1StrokeStyle> roundCaps;
@@ -102,19 +105,20 @@ static UiFontMetrics UiFontMetricsFor(UiGraphics& g, const UiTextStyle& style) {
             float(metrics.lineGap) * unit, float(metrics.capHeight) * unit};
 }
 
-static std::wstring UiStyleKey(const UiTextStyle& style) {
+static std::wstring UiStyleKey(const UiTextStyle& style, std::wstring_view locale) {
     return std::to_wstring(int(style.family)) + L'|' + std::to_wstring(style.size) + L'|' +
-           std::to_wstring(style.lineHeight) + L'|' + std::to_wstring(int(style.weight));
+           std::to_wstring(style.lineHeight) + L'|' + std::to_wstring(int(style.weight)) + L'|' +
+           std::wstring(locale);
 }
 
 static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
-    auto& format = g.formats[UiStyleKey(style)];
+    auto& format = g.formats[UiStyleKey(style, g.locale)];
     if (format) return format.get();
 
     IDWriteFontCollection* fonts = UiFontCollection(g, style.family);
     winrt::check_hresult(g.dwrite->CreateTextFormat(
         g.families[size_t(style.family)].c_str(), fonts, style.weight, DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL, style.size, L"en-us", format.put()));
+        DWRITE_FONT_STRETCH_NORMAL, style.size, g.locale.c_str(), format.put()));
     // The taskbar's XAML text: optical size follows the font size.
     if (style.family == UiFamily::Taskbar) {
         if (auto format3 = format.try_as<IDWriteTextFormat3>()) {
@@ -136,7 +140,7 @@ static IDWriteTextFormat* UiFormat(UiGraphics& g, const UiTextStyle& style) {
 // Cuts a layout to one line that ends in an ellipsis where it overflows its width; text that
 // fits is unchanged. The sign is the style's, one per format.
 static void UiTrimLayout(UiGraphics& g, IDWriteTextLayout* layout, const UiTextStyle& style) {
-    auto& sign = g.ellipses[UiStyleKey(style)];
+    auto& sign = g.ellipses[UiStyleKey(style, g.locale)];
     if (!sign) winrt::check_hresult(g.dwrite->CreateEllipsisTrimmingSign(UiFormat(g, style), sign.put()));
     DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
     layout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -149,7 +153,7 @@ static IDWriteTextLayout* UiLayout(UiGraphics& g, std::wstring_view text, const 
                                    float maxWidth, bool wrap = true,
                                    DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
                                    bool trim = false) {
-    std::wstring key = UiStyleKey(style) + L'|' + std::to_wstring(maxWidth) + L'|' +
+    std::wstring key = UiStyleKey(style, g.locale) + L'|' + std::to_wstring(maxWidth) + L'|' +
                        (trim ? L't' : wrap ? L'w' : L'n') + std::to_wstring(int(align)) + L'|';
     key += text;
     auto& layout = g.layouts[key];

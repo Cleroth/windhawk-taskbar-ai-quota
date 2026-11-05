@@ -306,7 +306,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              hot ? p.linkHover : p.link);
                 break;
             }
-            // Toggle switch at the right end, "On"/"Off" before it; or at the left end, its label
+            // Toggle switch at the right end, its state's text before it; or at the left end, its label
             // after it (align trailing). On: accent track, knob in the text-on-accent color; off:
             // strong outline. The knob grows under the pointer.
             case UiItemKind::Toggle: {

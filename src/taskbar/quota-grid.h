@@ -26,6 +26,10 @@ static void SetMenuSubItemExpanded(wuxcp::FlyoutBase const& menu, MenuFlyoutSubI
 static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
+        // The grid's language for its lifetime: its updates, menus and flyouts too. A switch
+        // rebuilds it.
+        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        state.buildLocale = locale;
         Settings settings;
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -49,7 +53,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
             } catch (...) {}
         }
-        MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
+        MeterDisplay display = MeterDisplayFor(settings, locale, NowUnixMs(), state.rasterizationScale,
                                                state.taskbarHeight, state.sideWidth);
         // Down a side taskbar: accounts stack, and each fits its width (stackAccount).
         bool side = display.sideWidth > 0;
@@ -72,6 +76,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         Grid root;
         root.Name(kRootName);
         root.VerticalAlignment(VerticalAlignment::Center);
+        SetXamlLanguage(root, locale);
 
         StackPanel panel;
         panel.Orientation(side ? Orientation::Vertical : Orientation::Horizontal);
@@ -95,6 +100,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         };
 
         // Context menu items with a Fluent icon; ClearQuotaEventState revokes their Click handlers.
+        // Menus show outside the tree, so each item takes the language itself.
         FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
         auto menuIcon = [&](PCWSTR glyph) {
             FontIcon icon;
@@ -102,9 +108,10 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             icon.Glyph(glyph);
             return icon;
         };
-        auto menuItem = [&](PCWSTR text, PCWSTR glyph, auto const& onClick) {
+        auto menuItem = [&](I18nKey text, PCWSTR glyph, auto const& onClick) {
             MenuFlyoutItem item;
-            item.Text(text);
+            item.Text(I18nText(locale, text));
+            SetXamlLanguage(item, locale);
             item.Icon(menuIcon(glyph));
             auto token = item.Click(onClick);
             state.menuItemClickHandlers.push_back({item, token});
@@ -120,7 +127,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             setupTile.Background(SolidColorBrush(winrt::Windows::UI::Color{0x30, 0x80, 0x80, 0x80}));
 
             TextBlock setupText;
-            setupText.Text(L"AI +");
+            setupText.Text(I18nText(locale, TrCtx(L"taskbar-setup", L"AI +")));
             setupText.FontSize(labelFontSize);
             setupText.Opacity(0.9);
             setupTile.Child(setupText);
@@ -133,18 +140,19 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     e.Handled(true);
                 });
             state.pointerHandlers.push_back({setupElement, tappedToken});
-            ToolTipService::SetToolTip(
-                setupElement,
-                winrt::box_value(g_settingsLoadError.load() ?
-                    L"Open AI quota settings. Stored settings could not be read; a backup was kept." :
-                    L"Open AI quota settings"));
+            SetXamlToolTip(setupElement,
+                           I18nText(locale, g_settingsLoadError.load() ?
+                                                Tr(L"Open AI quota settings. Stored settings could not be read; a "
+                                                   L"backup was kept.") :
+                                                Tr(L"Open AI quota settings")),
+                           locale);
 
             MenuFlyout menu;
-            menu.Items().Append(menuItem(L"Usage history", L"\uE81C",
+            menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Usage history"), L"\uE81C",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenHistoryWindow();
                 }));
-            menu.Items().Append(menuItem(L"Settings", L"\uE713",
+            menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Settings"), L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
                 }));
@@ -165,6 +173,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 line.Text(L"A");
                 line.FontSize(labelFontSize);
                 line.UseLayoutRounding(false);
+                SetXamlLanguage(line, locale);
                 auto lineHeight = [&](TextLineBounds bounds) {
                     line.TextLineBounds(bounds);
                     line.Measure({INFINITY, INFINITY});
@@ -343,7 +352,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         barItem.ColumnDefinitions().Append(trackColumn);
 
                         TextBlock barLabel;
-                        barLabel.Text(QuotaKey(accounts[i].provider, w));
+                        barLabel.Text(QuotaKey(locale, accounts[i].provider, w));
                         barLabel.FontSize(compactLabelFontSize);
                         barLabel.Opacity(0.8);
                         barLabel.IsHitTestVisible(false);
@@ -608,7 +617,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             MenuFlyoutItem signInItem{nullptr};
             MenuFlyoutSubItem showSub{nullptr};
             if (visualTestMode) {
-                menu.Items().Append(menuItem(L"Exit visual test", L"\uE711",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Exit visual test"), L"\uE711",
                     [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                         HWND settingsWindow = g_settingsWindow.load();
                         if (settingsWindow &&
@@ -628,6 +637,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 menuHeader.KeyboardAcceleratorTextOverride(
                     ProviderDisplayName(accounts[i].provider));
                 menuHeader.IsEnabled(false);
+                SetXamlLanguage(menuHeader, locale);
                 if (menuHeaderTemplate) menuHeader.Template(menuHeaderTemplate);
                 try {
                     menuHeader.Icon(LoadProviderLogoShape(accounts[i].provider, nullptr)
@@ -637,20 +647,20 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
                 menu.Items().Append(menuHeader);
 
-                menu.Items().Append(menuItem(L"Refresh", L"\uE72C",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Refresh"), L"\uE72C",
                     [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                       RoutedEventArgs const&) {
                         RefreshQuotaByIdentity(accountIdentity);
                     }));
                 if (!antigravity) {
-                    menu.Items().Append(menuItem(L"Open dashboard", L"\uE8A7",
+                    menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Open dashboard"), L"\uE8A7",
                         [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                           RoutedEventArgs const&) {
                             OpenDashboardForIdentity(accountIdentity);
                         }));
                 }
                 uint64_t historyId = accounts[i].historyId;
-                menu.Items().Append(menuItem(L"Usage history", L"\uE81C",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Usage history"), L"\uE81C",
                     [historyId](winrt::Windows::Foundation::IInspectable const&,
                                 RoutedEventArgs const&) {
                         OpenHistoryWindow(historyId);
@@ -658,7 +668,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 // Sign in with the mod's own OAuth; the Opening handler shows it only while the
                 // account needs a sign-in.
                 if (!antigravity) {
-                    signInItem = menuItem(L"Sign in", L"\uE77B",
+                    signInItem = menuItem(TrCtx(L"taskbar-action", L"Sign in"), L"\uE77B",
                         [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                           RoutedEventArgs const&) {
                             StartLoginByIdentity(accountIdentity);
@@ -667,7 +677,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     menu.Items().Append(signInItem);
                 }
                 // UpdateQuotaUi disables it while this is the last visible account.
-                refs.hideItem = menuItem(L"Hide", L"\uED1A",
+                refs.hideItem = menuItem(TrCtx(L"taskbar-action", L"Hide"), L"\uED1A",
                     [accountIdentity](winrt::Windows::Foundation::IInspectable const&,
                                       RoutedEventArgs const&) {
                         SetAccountVisibility(accountIdentity, false);
@@ -675,7 +685,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 menu.Items().Append(refs.hideItem);
 
                 menu.Items().Append(MenuFlyoutSeparator{});
-                menu.Items().Append(menuItem(L"Refresh all", L"\uE895",
+                menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Refresh all"), L"\uE895",
                     [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                         QueueRefresh(0);
                     }));
@@ -684,13 +694,15 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 // same list; toggling sets global state, persists, and re-syncs all instances.
                 // The menu stays open for more toggles, even when one hides this column.
                 showSub = MenuFlyoutSubItem{};
-                showSub.Text(L"Show on taskbar");
+                showSub.Text(I18nText(locale, TrCtx(L"taskbar-action", L"Show on taskbar")));
+                SetXamlLanguage(showSub, locale);
                 showSub.Icon(menuIcon(L"\uE890"));
                 for (size_t k = 0; k < accounts.size(); k++) {
                     ToggleMenuFlyoutItem toggle;
                     toggle.Text(accounts[k].label + L" · " +
                                 ProviderDisplayName(accounts[k].provider));
                     toggle.IsChecked(!accounts[k].hidden);
+                    SetXamlLanguage(toggle, locale);
                     int toggleIndex = (int)k;
                     uint64_t toggleIdentity = AccountIdentityHash(accounts[k]);
                     auto toggleToken = toggle.Click(
@@ -733,7 +745,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             }
 
             menu.Items().Append(MenuFlyoutSeparator{});
-            menu.Items().Append(menuItem(L"Settings", L"\uE713",
+            menu.Items().Append(menuItem(TrCtx(L"taskbar-action", L"Settings"), L"\uE713",
                 [](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     OpenSettingsWindow();
                 }));

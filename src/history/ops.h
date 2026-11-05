@@ -1,8 +1,8 @@
 // Production ops of the usage history window's controller (history/controller.h): stateless
 // adapters over the open request, the journal, the published settings and polls, recording
 // consent, the settings window, the journal's folder, the window's dialogs (history/modal.h), the
-// CSV file and the window's own refresh and write messages and deferral timer. History thread
-// only.
+// CSV file, the window's own refresh and write messages and deferral timer, and the current
+// language. History thread only.
 
 struct HistoryProductionOps final : HistoryOps {
     // Wiring, set once the window exists: its host (the dialogs' owner; its popup and tooltip
@@ -215,4 +215,6 @@ struct HistoryProductionOps final : HistoryOps {
         SYSTEMTIME local{};
         return UnixMsToLocalSystemTime(ms, &local) ? local : SYSTEMTIME{};
     }
+
+    I18nLocale Locale() override { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
 };

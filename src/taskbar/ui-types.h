@@ -364,6 +364,9 @@ struct QuotaUiInstance {
     bool edgeChanged = false;
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
+    // The language current at build, which the grid's updates, menus and flyouts keep: a grid
+    // built in another one is never reused.
+    I18nLocale buildLocale;
     BarLayout buildBarLayout = BarLayout::Stacked;
     // Usage graphs built to swap spans on hover, and the account whose charts the last update
     // swapped (-1: none).
