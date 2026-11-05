@@ -571,7 +571,7 @@ static void DoAnthropicLogin(const LoginRequest& req) {
     std::wstring err;
     if (PostTokenEndpoint(/*anthropic*/ true, L"application/json", body, &tok, &err) ==
         TokenEndpointResult::Success) {
-        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
         if (saved == TokenSaveResult::Stale) {
             Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
             return;
@@ -636,7 +636,7 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     std::wstring err;
     if (PostTokenEndpoint(/*anthropic*/ false, L"application/x-www-form-urlencoded", formBody,
                           &tok, &err) == TokenEndpointResult::Success) {
-        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
         if (saved == TokenSaveResult::Stale) {
             Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
             return;
@@ -789,7 +789,7 @@ static void DoCopilotLogin(const LoginRequest& req) {
         return;
     }
 
-    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
     if (saved == TokenSaveResult::Stale) {
         Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
         return;
@@ -830,7 +830,7 @@ static void DoOpenCodeLogin(const LoginRequest& req) {
         Wh_Log(L"Sign-in [%s] failed: that is not an API key", req.label.c_str());
         return;
     }
-    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
     if (saved == TokenSaveResult::Stale) {
         Wh_Log(L"Sign-in [%s]: cancelled before saving key", req.label.c_str());
         return;

@@ -178,6 +178,8 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     if (sameProviderRename) {
         oldTokenCleared = ClearStoredToken(oldIdentity);
         BumpAuthEpochLocked(oldIdentity);
+        BumpSignInGenerationLocked(oldIdentity);
+        BumpSignInGenerationLocked(newIdentity);
         g_authRenameRedirects.push_back(
             {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
         authEpochLock.unlock();

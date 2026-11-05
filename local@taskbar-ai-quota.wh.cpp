@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.10.1
+// @version         2.11.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -472,7 +472,16 @@ struct WindowUsage {
     double pct = -1;
     ULONGLONG resetUnixMs = 0;
     ULONGLONG windowDurationMs = 0;
+    bool notYetStarted = false;  // Anthropic: no usage yet and an explicitly null reset.
 };
+
+// A quota the details flyout lists after its main rows, without a taskbar bar, history or alerts:
+// Anthropic's per-model and per-surface limits, OpenAI's additional rate limits.
+struct NamedQuota {
+    std::wstring name;
+    WindowUsage usage;
+};
+static constexpr size_t kMaxExtraQuotas = 8;
 
 // What GitHub Copilot's monthly allowance counts: AI credits, premium requests where billing
 // isn't token based, or legacy Copilot Free's chat requests.
@@ -489,9 +498,13 @@ struct AccountData {
     WindowUsage extraUsage;
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;
+    std::vector<NamedQuota> extraQuotas;  // At most kMaxExtraQuotas.
     std::wstring plan;
-    std::wstring openAiExtraLimitLines;
     std::wstring extraLines;
+    // Free rate-limit resets (Anthropic, OpenAI): -1 when not reported; the next one's expiry, 0
+    // when unknown or none.
+    int freeResets = -1;
+    ULONGLONG freeResetsExpiryMs = 0;
     // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI, GitHub
     // Copilot); -1 when unknown. Left = limit - used. Used may go negative if a credits balance
     // exceeds the configured max.
@@ -518,6 +531,30 @@ struct AccountData {
     bool stale = true;
     bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
+
+// Adds a reported quota to the account's extra quotas, its name followed by its window's length
+// when known ("Sonnet weekly", "Spark 5-hour"). A quota under a name already listed replaces it
+// when more used; past kMaxExtraQuotas quotas are dropped.
+static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage) {
+    if (name.empty() || !std::isfinite(usage.pct) || usage.pct < 0) return;
+    name.resize(std::min<size_t>(name.size(), 64));
+    constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000;
+    constexpr ULONGLONG kDayMs = 24 * kHourMs;
+    ULONGLONG durationMs = usage.windowDurationMs;
+    if (durationMs == kWeeklyWindowMs) {
+        name += L" weekly";
+    } else if (durationMs && durationMs % kDayMs == 0) {
+        name += L" " + std::to_wstring(durationMs / kDayMs) + L"-day";
+    } else if (durationMs && durationMs % kHourMs == 0) {
+        name += L" " + std::to_wstring(durationMs / kHourMs) + L"-hour";
+    }
+    for (NamedQuota& listed : d->extraQuotas) {
+        if (listed.name != name) continue;
+        if (usage.pct > listed.usage.pct) listed.usage = usage;
+        return;
+    }
+    if (d->extraQuotas.size() < kMaxExtraQuotas) d->extraQuotas.push_back({std::move(name), usage});
+}
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide
 // toggle, and key the encrypted token store. FNV-1a over provider+label; relabeling an
@@ -888,13 +925,16 @@ struct FlyoutPopup {
     FrameworkElement planChip{nullptr};
     TextBlock plan{nullptr};
     std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;
+    // Rows for the account's extra quotas (AccountData::extraQuotas), after the main rows; none
+    // has a chart. Built for providers that report them, kMaxExtraQuotas of them.
+    std::vector<FlyoutQuotaRow> extraRows;
     // Quota grid columns: name/number and details. Charts give details a fixed width.
     ColumnDefinition namesColumn{nullptr};
     ColumnDefinition detailsColumn{nullptr};
     // Chart legend, shown while a row shows a chart.
     FrameworkElement legend{nullptr};
     FrameworkElement notes{nullptr};
-    TextBlock extraLimits{nullptr};
+    TextBlock freeResets{nullptr};
     TextBlock extraLines{nullptr};
     TextBlock error{nullptr};
     TextBlock status{nullptr};
@@ -1710,6 +1750,34 @@ struct AuthRenameRedirect {
 
 static std::vector<AuthRenameRedirect> g_authRenameRedirects;
 
+// Per identity, bumped under g_authEpochMutex, after the token store changes, whenever its sign-in
+// is replaced, deleted or moved by a rename; never by a token refresh. The fetch thread keeps
+// details read through a login (the Anthropic plan, the Codex free resets' expiry) under it, so
+// another login never shows them.
+static std::vector<std::pair<uint64_t, uint64_t>> g_signInGenerations;
+
+static uint64_t SignInGenerationLocked(uint64_t idHash) {
+    for (const auto& [hash, generation] : g_signInGenerations) {
+        if (hash == idHash) return generation;
+    }
+    return 0;
+}
+
+static uint64_t CurrentSignInGeneration(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    return SignInGenerationLocked(idHash);
+}
+
+static void BumpSignInGenerationLocked(uint64_t idHash) {
+    for (auto& [hash, generation] : g_signInGenerations) {
+        if (hash == idHash) {
+            generation++;
+            return;
+        }
+    }
+    g_signInGenerations.push_back({idHash, 1});
+}
+
 enum class TokenSaveResult {
     Saved,
     Stale,
@@ -1790,9 +1858,11 @@ static bool ClearStoredToken(uint64_t idHash) {
     return !stored[0];
 }
 
+// `newSignIn`: a sign-in's first token, rather than a refreshed one.
 static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
                                                 const StoredToken& t,
-                                                uint64_t* savedIdentity = nullptr) {
+                                                uint64_t* savedIdentity = nullptr,
+                                                bool newSignIn = false) {
     if (savedIdentity) *savedIdentity = 0;
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
     uint64_t destinationIdentity = idHash;
@@ -1811,6 +1881,7 @@ static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authE
         destinationEpoch = redirect->destinationEpoch;
     }
     if (!SaveStoredToken(destinationIdentity, t)) return TokenSaveResult::Failed;
+    if (newSignIn) BumpSignInGenerationLocked(destinationIdentity);
     if (savedIdentity) *savedIdentity = destinationIdentity;
     return TokenSaveResult::Saved;
 }
@@ -1829,6 +1900,7 @@ static bool ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
     bool cleared = ClearStoredToken(idHash);
     BumpAuthEpochLocked(idHash);
+    BumpSignInGenerationLocked(idHash);
     return cleared;
 }
 
@@ -2637,7 +2709,7 @@ static void DoAnthropicLogin(const LoginRequest& req) {
     std::wstring err;
     if (PostTokenEndpoint(/*anthropic*/ true, L"application/json", body, &tok, &err) ==
         TokenEndpointResult::Success) {
-        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
         if (saved == TokenSaveResult::Stale) {
             Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
             return;
@@ -2702,7 +2774,7 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     std::wstring err;
     if (PostTokenEndpoint(/*anthropic*/ false, L"application/x-www-form-urlencoded", formBody,
                           &tok, &err) == TokenEndpointResult::Success) {
-        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
         if (saved == TokenSaveResult::Stale) {
             Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
             return;
@@ -2855,7 +2927,7 @@ static void DoCopilotLogin(const LoginRequest& req) {
         return;
     }
 
-    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
     if (saved == TokenSaveResult::Stale) {
         Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
         return;
@@ -2896,7 +2968,7 @@ static void DoOpenCodeLogin(const LoginRequest& req) {
         Wh_Log(L"Sign-in [%s] failed: that is not an API key", req.label.c_str());
         return;
     }
-    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+    TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
     if (saved == TokenSaveResult::Stale) {
         Wh_Log(L"Sign-in [%s]: cancelled before saving key", req.label.c_str());
         return;
@@ -3012,7 +3084,11 @@ static bool SignOutAccountByIdentity(uint64_t identityHash) {
 }
 
 // src/providers/anthropic.h
-// Anthropic usage response parsing.
+// Anthropic usage and profile response parsing, and the user agent of those requests.
+
+// Claude Code's user agent: the usage response reports free resets (cedar_ember) only to a recent
+// Claude Code CLI. Keep it at a recent Claude Code release.
+static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.318 (external, cli)";
 
 static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::wstring* error) {
     try {
@@ -3023,72 +3099,99 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
             else if (auto wrapped = GetObj(root, L"data")) usage = wrapped;
         }
 
+        // A window that hasn't started reports no usage and an explicitly null reset; a missing or
+        // malformed reset is only unknown.
+        auto readWindow = [](JsonObject const& window, double pct, ULONGLONG durationMs) {
+            WindowUsage wu;
+            wu.pct = pct;
+            wu.resetUnixMs = ParseIso8601Ms(GetStr(window, L"resets_at"));
+            wu.windowDurationMs = durationMs;
+            wu.notYetStarted = pct == 0 && window.HasKey(L"resets_at") &&
+                               window.GetNamedValue(L"resets_at").ValueType() == JsonValueType::Null;
+            return wu;
+        };
+        // A model family's token, also in versioned names such as Fable 5.1, never inside a word.
+        auto hasFamily = [](std::wstring name, std::wstring_view family) {
+            std::transform(name.begin(), name.end(), name.begin(),
+                           [](wchar_t ch) { return (wchar_t)towlower(ch); });
+            for (size_t pos = name.find(family); pos != std::wstring::npos;
+                 pos = name.find(family, pos + 1)) {
+                if ((pos == 0 || !iswalpha(name[pos - 1])) &&
+                    (pos + family.size() == name.size() || !iswalpha(name[pos + family.size()]))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
         if (auto fh = GetObj(usage, L"five_hour")) {
-            d->win5h.pct = GetNum(fh, L"utilization");
-            d->win5h.resetUnixMs = ParseIso8601Ms(GetStr(fh, L"resets_at"));
-            d->win5h.windowDurationMs = kFiveHourWindowMs;
+            d->win5h = readWindow(fh, GetNum(fh, L"utilization"), kFiveHourWindowMs);
         }
         if (auto sd = GetObj(usage, L"seven_day")) {
-            d->winWeek.pct = GetNum(sd, L"utilization");
-            d->winWeek.resetUnixMs = ParseIso8601Ms(GetStr(sd, L"resets_at"));
-            d->winWeek.windowDurationMs = kWeeklyWindowMs;
+            d->winWeek = readWindow(sd, GetNum(sd, L"utilization"), kWeeklyWindowMs);
         }
         if (auto fable = GetObj(usage, L"seven_day_fable")) {
             double utilization = GetNum(fable, L"utilization");
             if (std::isfinite(utilization) && utilization >= 0) {
-                d->fableWeek.pct = utilization;
-                d->fableWeek.resetUnixMs = ParseIso8601Ms(GetStr(fable, L"resets_at"));
-                d->fableWeek.windowDurationMs = kWeeklyWindowMs;
+                d->fableWeek = readWindow(fable, utilization, kWeeklyWindowMs);
             }
         }
-        if (d->fableWeek.pct < 0 && usage.HasKey(L"limits")) {
-            auto limits = usage.GetNamedValue(L"limits");
-            if (limits.ValueType() == JsonValueType::Array) {
-                bool selectedActive = false;
-                for (const auto& value : limits.GetArray()) {
-                    if (value.ValueType() != JsonValueType::Object) continue;
-                    JsonObject limit = value.GetObject();
-                    if (GetStr(limit, L"kind") != L"weekly_scoped" &&
-                        GetStr(limit, L"group") != L"weekly") {
-                        continue;
-                    }
 
-                    auto scope = GetObj(limit, L"scope");
-                    auto model = GetObj(scope, L"model");
-                    std::wstring modelName = GetStr(model, L"display_name");
-                    // Match the model family token so versioned names such as Fable 5.1 keep working.
-                    std::transform(modelName.begin(), modelName.end(), modelName.begin(),
-                                   [](wchar_t ch) { return (wchar_t)towlower(ch); });
-                    size_t fablePos = modelName.find(L"fable");
-                    bool isFable = fablePos != std::wstring::npos &&
-                                    (fablePos == 0 || !iswalpha(modelName[fablePos - 1])) &&
-                                    (fablePos + 5 == modelName.size() ||
-                                     !iswalpha(modelName[fablePos + 5]));
-                    if (!isFable) continue;
+        // limits[]: the main windows (kinds session and weekly_all) and per-model and per-surface
+        // allowances. Without seven_day_fable, Fable's weekly allowance is its quota, the active one
+        // first, then the most used; every other allowance is an extra quota.
+        bool opusListed = false;
+        bool sonnetListed = false;
+        if (usage.HasKey(L"limits") &&
+            usage.GetNamedValue(L"limits").ValueType() == JsonValueType::Array) {
+            bool reportedFable = d->fableWeek.pct >= 0;
+            bool selectedActive = false;
+            for (const auto& value : usage.GetNamedArray(L"limits")) {
+                if (value.ValueType() != JsonValueType::Object) continue;
+                JsonObject limit = value.GetObject();
+                double percent = GetNum(limit, L"percent");
+                if (!std::isfinite(percent) || percent < 0) continue;
+                std::wstring kind = GetStr(limit, L"kind");
+                std::wstring group = GetStr(limit, L"group");
+                bool weekly = kind == L"weekly_scoped" || group == L"weekly";
 
-                    double percent = GetNum(limit, L"percent");
-                    if (!std::isfinite(percent) || percent < 0) continue;
+                auto scope = GetObj(limit, L"scope");
+                std::wstring modelName = GetStr(GetObj(scope, L"model"), L"display_name");
+                if (hasFamily(modelName, L"fable")) {
+                    if (!weekly || reportedFable) continue;
                     bool active = GetBool(limit, L"is_active");
                     if (d->fableWeek.pct >= 0 && !active && selectedActive) continue;
                     if (d->fableWeek.pct >= 0 && active == selectedActive &&
                         percent <= d->fableWeek.pct) {
                         continue;
                     }
-                    d->fableWeek.pct = percent;
-                    d->fableWeek.resetUnixMs = ParseIso8601Ms(GetStr(limit, L"resets_at"));
-                    d->fableWeek.windowDurationMs = kWeeklyWindowMs;
+                    d->fableWeek = readWindow(limit, percent, kWeeklyWindowMs);
                     selectedActive = active;
+                    continue;
                 }
+                if (kind == L"session" || kind == L"weekly_all") continue;
+
+                std::wstring name = !modelName.empty() ? modelName :
+                                    GetStr(GetObj(scope, L"surface"), L"display_name");
+                ULONGLONG durationMs = weekly || kind.starts_with(L"weekly") ? kWeeklyWindowMs :
+                                       group == L"session" || kind.starts_with(L"session") ?
+                                           kFiveHourWindowMs : 0;
+                opusListed |= hasFamily(modelName, L"opus");
+                sonnetListed |= hasFamily(modelName, L"sonnet");
+                AddExtraQuota(d, name, readWindow(limit, percent, durationMs));
             }
+        }
+        // Responses without those model allowances report the Opus and Sonnet weeklies here.
+        for (auto [key, name, listed] : {std::tuple{L"seven_day_opus", L"Opus", opusListed},
+                                         std::tuple{L"seven_day_sonnet", L"Sonnet", sonnetListed}}) {
+            auto legacy = GetObj(usage, key);
+            double utilization = GetNum(legacy, L"utilization");
+            if (listed || !legacy || !std::isfinite(utilization) || utilization < 0) continue;
+            AddExtraQuota(d, name, readWindow(legacy, utilization, kWeeklyWindowMs));
         }
 
         d->plan.clear();
         d->extraLines.clear();
-        if (auto op = GetObj(usage, L"seven_day_opus"); op && GetNum(op, L"utilization") >= 0) {
-            wchar_t line[64];
-            swprintf(line, ARRAYSIZE(line), L"opus week: %.0f%%", GetNum(op, L"utilization"));
-            d->extraLines += line;
-        }
         if (auto eu = GetObj(usage, L"extra_usage"); eu && GetBool(eu, L"is_enabled")) {
             // monthly_limit/used_credits are cents; an explicit null limit means unlimited (an
             // absent or malformed key must not claim that). utilization is null until the
@@ -3122,6 +3225,46 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
                 d->extraUsage.windowDurationMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
             }
         }
+
+        // Free resets, reported with ?cedar_ember=1: {eligible, grants[{id, resets_left, ends_at,
+        // paused, usable_now}], next_grant_id}. As Claude Code counts them: the resets left of the
+        // live grants (unpaused, usable now, not ended), none unless the next grant is live.
+        auto cedarEmber = GetObj(usage, L"cedar_ember");
+        if (!cedarEmber) cedarEmber = GetObj(root, L"cedar_ember");
+        if (cedarEmber && GetBool(cedarEmber, L"eligible")) {
+            std::wstring nextId = GetStr(cedarEmber, L"next_grant_id");
+            ULONGLONG nowMs = NowUnixMs();
+            double count = 0;
+            bool nextLive = false;
+            ULONGLONG nextEndsMs = 0;
+            if (cedarEmber.HasKey(L"grants") &&
+                cedarEmber.GetNamedValue(L"grants").ValueType() == JsonValueType::Array) {
+                for (const auto& value : cedarEmber.GetNamedArray(L"grants")) {
+                    if (value.ValueType() != JsonValueType::Object) continue;
+                    JsonObject grant = value.GetObject();
+                    std::wstring id = GetStr(grant, L"id");
+                    double left = GetNum(grant, L"resets_left");
+                    if (id.empty() || !std::isfinite(left) || left < 0 || left != std::floor(left) ||
+                        GetBool(grant, L"paused") || !GetBool(grant, L"usable_now")) {
+                        continue;
+                    }
+                    ULONGLONG endsMs = 0;
+                    if (grant.HasKey(L"ends_at") &&
+                        grant.GetNamedValue(L"ends_at").ValueType() != JsonValueType::Null) {
+                        endsMs = ParseIso8601Ms(GetStr(grant, L"ends_at"));
+                        if (endsMs <= nowMs) continue;
+                    }
+                    count += left;
+                    if (id == nextId) {
+                        nextLive = true;
+                        nextEndsMs = endsMs;
+                    }
+                }
+            }
+            d->freeResets = nextLive ? (int)std::min(count, 999.0) : 0;
+            d->freeResetsExpiryMs = nextLive ? nextEndsMs : 0;
+        }
+
         bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||
                       d->extraUsage.pct >= 0 || d->extraUsedAmount >= 0;
         if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
@@ -3132,8 +3275,33 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
     }
 }
 
+// The OAuth profile's plan: organization.organization_type ("claude_pro", "claude_max",
+// "claude_team", ...) as "Pro", "Max", "Team", ..., Max with its tier from rate_limit_tier
+// ("default_claude_max_20x"). Empty for a profile without one; nullopt for a malformed body.
+static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
+    try {
+        auto organization = GetObj(JsonObject::Parse(Utf8ToWide(body)), L"organization");
+        std::wstring type = GetStr(organization, L"organization_type");
+        if (type.starts_with(L"claude_")) type.erase(0, 7);
+        std::wstring plan;
+        bool wordStart = true;
+        for (wchar_t ch : type) {
+            plan += ch == L'_' ? L' ' : wordStart ? (wchar_t)towupper(ch) : ch;
+            wordStart = ch == L'_';
+        }
+        if (plan == L"Max") {
+            std::wstring tier = GetStr(organization, L"rate_limit_tier");
+            if (tier.find(L"20x") != std::wstring::npos) plan += L" 20x";
+            else if (tier.find(L"5x") != std::wstring::npos) plan += L" 5x";
+        }
+        return plan;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 // src/providers/openai.h
-// OpenAI usage response parsing and the user-set credits ceiling.
+// OpenAI usage and free-reset response parsing, and the user-set credits ceiling.
 
 static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 
@@ -3173,13 +3341,10 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
             return resetAfter > 0 ? NowUnixMs() + (ULONGLONG)(resetAfter * 1000) : 0ULL;
         };
 
-        auto applyWindow = [&](JsonObject const& window, WindowUsage* fallback) {
-            if (!window) return;
-            WindowUsage* target = fallback;
-            double windowSeconds = GetNum(window, L"limit_window_seconds", 0);
-            if (windowSeconds == 5 * 60 * 60) target = &d->win5h;
-            else if (windowSeconds == 7 * 24 * 60 * 60) target = &d->winWeek;
-
+        // A window's usage (pct -1 without one); its length is `defaultMs` unless reported.
+        auto readWindow = [&](JsonObject const& window, ULONGLONG defaultMs) {
+            WindowUsage wu;
+            if (!window) return wu;
             double pct = GetNum(window, L"used_percent");
             if (pct < 0) {
                 pct = GetNum(window, L"percent_left");
@@ -3189,14 +3354,25 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
                 pct = GetNum(window, L"remaining_percent");
                 if (pct >= 0) pct = 100 - pct;
             }
-            if (pct < 0) return;
-            target->pct = pct;
-            target->resetUnixMs = resetUnixMs(window);
-            target->windowDurationMs = target == &d->winWeek ? kWeeklyWindowMs : kFiveHourWindowMs;
+            if (pct < 0) return wu;
+            wu.pct = pct;
+            wu.resetUnixMs = resetUnixMs(window);
+            wu.windowDurationMs = defaultMs;
+            double windowSeconds = GetNum(window, L"limit_window_seconds", 0);
             if (std::isfinite(windowSeconds) && windowSeconds > 0 &&
                 windowSeconds <= 366.0 * 24 * 60 * 60) {
-                target->windowDurationMs = (ULONGLONG)(windowSeconds * 1000);
+                wu.windowDurationMs = (ULONGLONG)(windowSeconds * 1000);
             }
+            return wu;
+        };
+        auto applyWindow = [&](JsonObject const& window, WindowUsage* fallback) {
+            WindowUsage* target = fallback;
+            double windowSeconds = GetNum(window, L"limit_window_seconds", 0);
+            if (windowSeconds == 5 * 60 * 60) target = &d->win5h;
+            else if (windowSeconds == 7 * 24 * 60 * 60) target = &d->winWeek;
+            WindowUsage wu =
+                readWindow(window, target == &d->winWeek ? kWeeklyWindowMs : kFiveHourWindowMs);
+            if (wu.pct >= 0) *target = wu;
         };
 
         applyWindow(GetObj(rl, L"primary_window"), &d->win5h);
@@ -3209,37 +3385,32 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         applyWindow(GetObj(rl, L"weekly_limit"), &d->winWeek);
 
         d->plan = GetStr(usage, L"plan_type");
-        d->openAiExtraLimitLines.clear();
         d->extraLines.clear();
-        // Every additional_rate_limits entry (Codex Spark, hidden model lanes such as
-        // gpt-reserve, ...) is an opt-in tooltip line; only the primary windows drive bars.
-        int extraLimitLineCount = 0;
-        auto addLimitLine = [&](JsonObject const& item) {
-            auto itemRl = GetObj(item, L"rate_limit");
-            auto pw = GetObj(itemRl, L"primary_window");
-            auto sw = GetObj(itemRl, L"secondary_window");
+        // Each window of an additional_rate_limits entry (Codex Spark, hidden model lanes such as
+        // gpt-reserve, ...) is an extra quota, shown with its Display setting; only the primary
+        // windows drive bars.
+        auto addLimit = [&](JsonObject const& item) {
             std::wstring name = GetStr(item, L"limit_name");
-            if (name.empty() || (!pw && !sw) || extraLimitLineCount >= 6) return;
-
-            wchar_t line[128];
-            swprintf(line, ARRAYSIZE(line), L"%s: 5h %.0f%% | wk %.0f%%",
-                     name.c_str(), GetNum(pw, L"used_percent", 0),
-                     GetNum(sw, L"used_percent", 0));
-            if (!d->openAiExtraLimitLines.empty()) d->openAiExtraLimitLines += L"\n";
-            d->openAiExtraLimitLines += line;
-            extraLimitLineCount++;
+            auto itemRl = GetObj(item, L"rate_limit");
+            AddExtraQuota(d, name, readWindow(GetObj(itemRl, L"primary_window"), kFiveHourWindowMs));
+            AddExtraQuota(d, name, readWindow(GetObj(itemRl, L"secondary_window"), kWeeklyWindowMs));
         };
         if (usage.HasKey(L"additional_rate_limits")) {
             auto limits = usage.GetNamedValue(L"additional_rate_limits");
             if (limits.ValueType() == JsonValueType::Array) {
                 auto arr = limits.GetArray();
                 for (uint32_t i = 0; i < arr.Size(); i++) {
-                    if (arr.GetAt(i).ValueType() == JsonValueType::Object) addLimitLine(arr.GetAt(i).GetObject());
+                    if (arr.GetAt(i).ValueType() == JsonValueType::Object) addLimit(arr.GetAt(i).GetObject());
                 }
             } else if (limits.ValueType() == JsonValueType::Object) {
-                addLimitLine(limits.GetObject());
+                addLimit(limits.GetObject());
             }
         }
+        // Free resets: their count; FetchAccount reads the next one's expiry.
+        auto resetCredits = GetObj(usage, L"rate_limit_reset_credits");
+        if (!resetCredits) resetCredits = GetObj(root, L"rate_limit_reset_credits");
+        double available = GetNum(resetCredits, L"available_count");
+        if (std::isfinite(available) && available >= 0) d->freeResets = (int)std::min(available, 999.0);
 
         // credits: {has_credits, unlimited, balance: string|null}. The tooltip formats this
         // on the UI thread since the display depends on the account's credits max. The
@@ -3276,6 +3447,31 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
     } catch (...) {
         if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
         return false;
+    }
+}
+
+// /wham/rate-limit-reset-credits: {available_count, credits[{id, reset_type, status, granted_at,
+// expires_at, title, description}]}. The nearest future expiry of the available free resets, 0
+// when none expires; nullopt for a malformed body.
+static std::optional<ULONGLONG> ParseOpenAiResetsExpiry(const std::string& body) {
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(body));
+        if (!root.HasKey(L"credits") ||
+            root.GetNamedValue(L"credits").ValueType() != JsonValueType::Array) {
+            return std::nullopt;
+        }
+        ULONGLONG nowMs = NowUnixMs();
+        ULONGLONG soonestMs = 0;
+        for (const auto& value : root.GetNamedArray(L"credits")) {
+            if (value.ValueType() != JsonValueType::Object) continue;
+            JsonObject credit = value.GetObject();
+            if (GetStr(credit, L"status") != L"available") continue;
+            ULONGLONG expiresMs = ParseIso8601Ms(GetStr(credit, L"expires_at"));
+            if (expiresMs > nowMs && (!soonestMs || expiresMs < soonestMs)) soonestMs = expiresMs;
+        }
+        return soonestMs;
+    } catch (...) {
+        return std::nullopt;
     }
 }
 
@@ -5288,7 +5484,26 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
 // src/fetch/fetch-thread.h
 // Per-account usage fetch and the polling loop that publishes results and history.
 
-static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec) {
+// Optional account details the fetch thread keeps between polls, read through the sign-in of
+// `signInGeneration`: the Anthropic plan (OAuth profile) and the next expiry of the Codex free
+// resets, read for `resetsCount` of them. A failed read waits for its own retry time and never
+// fails the usage read.
+struct AccountDetailsCache {
+    uint64_t signInGeneration = 0;
+    std::wstring plan;
+    ULONGLONG planReadMs = 0;
+    ULONGLONG planRetryMs = 0;
+    int resetsCount = 0;
+    ULONGLONG resetsExpiryMs = 0;
+    ULONGLONG resetsReadMs = 0;
+    ULONGLONG resetsRetryMs = 0;
+};
+static constexpr ULONGLONG kPlanCacheMs = 6ULL * 60 * 60 * 1000;
+static constexpr ULONGLONG kResetsExpiryCacheMs = 3ULL * 60 * 60 * 1000;
+static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a 429 says when.
+
+static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
+                         AccountDetailsCache* details) {
     d->error.clear();
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
@@ -5299,10 +5514,13 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         return;
     }
 
+    bool anthropic = acc.provider == L"anthropic";
+    bool openAi = acc.provider == L"openai";
     bool copilot = acc.provider == L"copilot";
     bool opencode = acc.provider == L"opencode";  // An API key: never expires, never refreshes.
     uint64_t idHash = AccountIdentityHash(acc);
     ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
+    uint64_t signInGeneration = CurrentSignInGeneration(idHash);
     StoredToken tok;
     if (!LoadStoredToken(idHash, &tok) || tok.accessToken.empty()) {
         d->stale = true;
@@ -5351,13 +5569,25 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         }
     }
 
+    // Shared by the usage request and the account details requests.
+    auto anthropicHeaders = [](const StoredToken& t) {
+        return L"Authorization: Bearer " + t.accessToken +
+               L"\r\nanthropic-beta: oauth-2025-04-20"
+               L"\r\nAccept: application/json\r\n";
+    };
+    auto openAiHeaders = [](const StoredToken& t) {
+        std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+                               L"\r\nOrigin: https://chatgpt.com"
+                               L"\r\nReferer: https://chatgpt.com/"
+                               L"\r\nAccept: application/json\r\n";
+        if (!t.accountId.empty()) headers += L"ChatGPT-Account-Id: " + t.accountId + L"\r\n";
+        return headers;
+    };
     auto requestUsage = [&](const StoredToken& t) -> HttpResult {
-        if (acc.provider == L"anthropic") {
-            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
-                                   L"\r\nanthropic-beta: oauth-2025-04-20"
-                                   L"\r\nAccept: application/json\r\n";
-            return HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/usage",
-                               L"claude-code/2.1.0", headers);
+        if (anthropic) {
+            // cedar_ember=1 adds the free resets.
+            return HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/usage?cedar_ember=1",
+                               kClaudeCliUserAgent, anthropicHeaders(t));
         }
         if (copilot) {
             std::wstring headers = L"Authorization: token " + t.accessToken +
@@ -5371,13 +5601,8 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                                    L"\r\nAccept: application/json\r\n";
             return HttpRequest(L"GET", L"opencode.ai", L"/zen/go/v1/usage", kOAuthUserAgent, headers);
         }
-        std::wstring headers = L"Authorization: Bearer " + t.accessToken +
-                               L"\r\nOrigin: https://chatgpt.com"
-                               L"\r\nReferer: https://chatgpt.com/"
-                               L"\r\nAccept: application/json\r\n";
-        if (!t.accountId.empty()) headers += L"ChatGPT-Account-Id: " + t.accountId + L"\r\n";
         return HttpRequest(L"GET", L"chatgpt.com", L"/backend-api/wham/usage",
-                           L"taskbar-ai-quota/0.1", headers);
+                           L"taskbar-ai-quota/0.1", openAiHeaders(t));
     };
 
     HttpResult r = requestUsage(tok);
@@ -5465,7 +5690,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
 
     AccountData fresh;
     std::wstring parseError;
-    bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
+    bool parsed = anthropic ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
                   copilot ? ParseCopilotUsage(r.body, &fresh, &parseError) :
                   opencode ? ParseOpenCodeUsage(r.body, &fresh, &parseError) :
                              ParseOpenAiUsage(r.body, &fresh, &parseError);
@@ -5473,6 +5698,57 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->stale = true;
         d->error = parseError.empty() ? L"unexpected response format" : parseError;
         return;
+    }
+
+    // Account details through the same token: the Anthropic plan, re-read after kPlanCacheMs,
+    // and while Codex has free resets their next expiry, re-read when their count changes or
+    // after kResetsExpiryCacheMs.
+    AccountDetailsCache next;
+    if (details->signInGeneration == signInGeneration) next = *details;
+    next.signInGeneration = signInGeneration;
+    ULONGLONG nowMs = NowUnixMs();
+    auto retryAt = [nowMs](const HttpResult& failed) {
+        return nowMs + (failed.ok && failed.status == 429 && failed.retryAfterSec > 0 ?
+                            (ULONGLONG)failed.retryAfterSec * 1000 : kDetailsRetryMs);
+    };
+    if (anthropic && !g_unloading && nowMs >= next.planRetryMs &&
+        (!next.planReadMs || nowMs - next.planReadMs >= kPlanCacheMs)) {
+        HttpResult profile = HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/profile",
+                                         kClaudeCliUserAgent, anthropicHeaders(tok));
+        std::optional<std::wstring> plan;
+        if (profile.ok && profile.status == 200) plan = ParseAnthropicPlan(profile.body);
+        if (plan) {
+            next.plan = std::move(*plan);
+            next.planReadMs = nowMs;
+            next.planRetryMs = 0;
+        } else {
+            next.planRetryMs = retryAt(profile);
+        }
+    }
+    if (openAi && fresh.freeResets <= 0) next.resetsCount = 0;  // Any later ones are new.
+    if (openAi && fresh.freeResets > 0 && !g_unloading && nowMs >= next.resetsRetryMs &&
+        (next.resetsCount != fresh.freeResets || nowMs - next.resetsReadMs >= kResetsExpiryCacheMs)) {
+        HttpResult credits = HttpRequest(L"GET", L"chatgpt.com",
+                                         L"/backend-api/wham/rate-limit-reset-credits",
+                                         L"taskbar-ai-quota/0.1", openAiHeaders(tok));
+        std::optional<ULONGLONG> expiryMs;
+        if (credits.ok && credits.status == 200) expiryMs = ParseOpenAiResetsExpiry(credits.body);
+        if (expiryMs) {
+            next.resetsCount = fresh.freeResets;
+            next.resetsExpiryMs = *expiryMs;
+            next.resetsReadMs = nowMs;
+            next.resetsRetryMs = 0;
+        } else {
+            next.resetsRetryMs = retryAt(credits);
+        }
+    }
+    // After a sign-in change meanwhile, what was read may belong to either login.
+    if (CurrentSignInGeneration(idHash) == signInGeneration) {
+        if (anthropic) fresh.plan = next.plan;
+        if (openAi && next.resetsCount == fresh.freeResets) {
+            fresh.freeResetsExpiryMs = next.resetsExpiryMs;
+        }
+        *details = std::move(next);
     }
 
     ApplyCreditsMax(acc, &fresh);
@@ -5492,6 +5768,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<uint64_t> retryIdentityHashes;
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
+    std::vector<AccountDetailsCache> accountDetails;
     // Per-account red-crossing arm state, indexed by QuotaBarIndex:
     // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
     std::vector<std::array<int, kQuotaBarCount>> redState;
@@ -5569,15 +5846,18 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         if (settingsChanged) {
             lastLoggedErrorStates.assign(accounts.size(), {});
 
-            // Remap provider-directed Retry-After and normal poll deadlines by stable account
-            // identity so settings changes don't cause another request for unchanged accounts.
+            // Remap provider-directed Retry-After, normal poll deadlines and account details by
+            // stable account identity so settings changes don't cause another request for
+            // unchanged accounts.
             auto oldIdentityHashes = std::move(retryIdentityHashes);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
+            auto oldAccountDetails = std::move(accountDetails);
             std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
             retryIdentityHashes.resize(accounts.size());
             retryDeadlineMs.assign(accounts.size(), 0);
             nextPollDeadlineMs.assign(accounts.size(), 0);
+            accountDetails.assign(accounts.size(), {});
             for (size_t i = 0; i < accounts.size(); ++i) {
                 retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
                 for (size_t j = 0; j < oldIdentityHashes.size() &&
@@ -5585,6 +5865,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     if (!oldDeadlineUsed[j] &&
                         oldIdentityHashes[j] == retryIdentityHashes[i]) {
                         retryDeadlineMs[i] = oldRetryDeadlineMs[j];
+                        if (j < oldAccountDetails.size()) {
+                            accountDetails[i] = std::move(oldAccountDetails[j]);
+                        }
                         if (j < oldNextPollDeadlineMs.size()) {
                             nextPollDeadlineMs[i] = oldNextPollDeadlineMs[j];
                             ULONGLONG latestDeadline = NowUnixMs() +
@@ -5679,7 +5962,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 break;
             }
             int retryAfter = 0;
-            FetchAccount(accounts[i], &results[i], &retryAfter);
+            FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
             // The journal rejects samples without a known provider code.
             uint32_t providerCode = HistoryProviderCode(accounts[i].provider);
             if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId && providerCode) {
@@ -5766,6 +6049,19 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         int notificationRedThreshold = redThreshold;
         bool notificationsEnabled = enableNotifications;
         {
+            // Account details read through a sign-in replaced, removed or moved since (this round
+            // or an earlier one, the usage request failing since) aren't published. The lock keeps
+            // a sign-in change from falling between this check and the publication.
+            std::lock_guard<std::mutex> authLock(g_authEpochMutex);
+            for (size_t i = 0; i < accounts.size() && i < results.size() &&
+                               i < accountDetails.size(); i++) {
+                if (accountDetails[i].signInGeneration ==
+                    SignInGenerationLocked(AccountIdentityHash(accounts[i]))) {
+                    continue;
+                }
+                if (accounts[i].provider == L"anthropic") results[i].plan.clear();
+                if (accounts[i].provider == L"openai") results[i].freeResetsExpiryMs = 0;
+            }
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             if (settingsGeneration == g_settingsGeneration) {
                 std::lock_guard<std::mutex> lk2(g_dataMutex);
@@ -5788,6 +6084,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 remappedFetchedOk.assign(currentAccounts.size(), false);
                 std::vector<bool> oldResultUsed(results.size(), false);
                 for (size_t i = 0; i < currentAccounts.size(); i++) {
+                    bool matched = false;
                     for (size_t j = 0; j < accounts.size() && j < results.size(); j++) {
                         if (!oldResultUsed[j] &&
                             AccountIdentityHash(accounts[j]) ==
@@ -5798,8 +6095,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             ApplyCreditsMax(currentAccounts[i], &remappedResults[i]);
                             remappedFetchedOk[i] = fetchedOk[j];
                             oldResultUsed[j] = true;
+                            matched = true;
                             break;
                         }
+                    }
+                    // A renamed account's data, carried over, has details read through its old
+                    // identity's sign-in.
+                    if (!matched && currentAccounts[i].provider == L"anthropic") {
+                        remappedResults[i].plan.clear();
+                    } else if (!matched && currentAccounts[i].provider == L"openai") {
+                        remappedResults[i].freeResetsExpiryMs = 0;
                     }
                 }
                 g_data = remappedResults;
@@ -7538,6 +7843,24 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         accountData.plan = L"Visual test";
         accountData.lastSuccessMs = now;
         accountData.stale = false;
+        // Extra quotas (OpenAI's with their Display setting) and free resets: details flyout only.
+        if (account.label == L"CC 2") {
+            accountData.extraQuotas = {
+                {L"Sonnet weekly",
+                 {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}},
+                {L"Opus weekly", {0, 0, kWeeklyWindowMs, true}},
+            };
+            accountData.freeResets = 2;
+            accountData.freeResetsExpiryMs = now + 3 * 24 * 60 * 60000ULL;
+        } else if (openAi) {
+            accountData.extraQuotas = {
+                {L"Spark 5-hour",
+                 {orange, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.3), kFiveHourWindowMs}},
+                {L"Spark weekly",
+                 {green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.7), kWeeklyWindowMs}},
+            };
+            accountData.freeResets = 1;
+        }
         if (account.provider == L"antigravity") {
             // Claude/GPT pools, like its unselected weekly and Argon weekly, appear only in the
             // details flyout. A failed refresh keeps the last success, as the fetch thread does;
@@ -10022,7 +10345,16 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         line.StrokeEndLineCap(PenLineCap::Round);
     };
 
-    StackPanel content;
+    // Header, quota rows, chart legend, notes and footer, top to bottom. Under the card's height
+    // limit (ShowAccountFlyout) only the quota rows shrink, and scroll.
+    Grid content;
+    auto appendSection = [&](FrameworkElement const& element, GridLength height) {
+        RowDefinition definition;
+        definition.Height(height);
+        Grid::SetRow(element, (int)content.RowDefinitions().Size());
+        content.RowDefinitions().Append(definition);
+        content.Children().Append(element);
+    };
 
     // Header: logo (in its brand colors when chosen, except in high contrast), account label,
     // provider, stale marker and plan chip.
@@ -10091,11 +10423,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid::SetColumn(planChip, 4);
     header.Children().Append(planChip);
     popup.planChip = planChip;
-    content.Children().Append(header);
+    appendSection(header, kAuto);
 
     // One row per quota: name, big number with over-pace arrow, then its visual and timings.
     // Rows stay in the tree and collapse when the quota is unavailable. All rows share one grid
-    // so the number column fits its widest entry and the bars stay aligned.
+    // so the number column fits its widest entry and the bars stay aligned. The extra quotas'
+    // rows follow the main ones, without a chart.
     const std::array<std::array<winrt::Windows::Foundation::Point, 4>, 2> arrowStrokes = {{
         {{{1.5f, 12.f}, {6.f, 7.5f}, {9.f, 10.5f}, {14.5f, 5.f}}},
         {{{10.f, 5.f}, {14.5f, 5.f}, {14.5f, 9.5f}, {14.5f, 9.5f}}},
@@ -10103,9 +10436,14 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid rowsGrid;
     popup.namesColumn = addColumn(rowsGrid, kAuto);
     popup.detailsColumn = addColumn(rowsGrid, kStar);
-    content.Children().Append(rowsGrid);
-    int gridRow = 0;
-    for (FlyoutQuotaRow& row : popup.rows) {
+    ScrollViewer rowsScroller;
+    rowsScroller.HorizontalScrollMode(ScrollMode::Disabled);
+    rowsScroller.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
+    rowsScroller.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
+    rowsScroller.Content(rowsGrid);
+    appendSection(rowsScroller, kStar);
+    auto addRow = [&](FlyoutQuotaRow& row, bool charted) {
+        int gridRow = (int)rowsGrid.RowDefinitions().Size();
         RowDefinition rowDefinition;
         rowDefinition.Height({0, GridUnitType::Auto});
         rowsGrid.RowDefinitions().Append(rowDefinition);
@@ -10228,70 +10566,72 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.visual.Children().Append(paceLayer);
         details.Children().Append(row.visual);
 
-        // Usage chart: card-tinted plot and the even-pace diagonal from the window start to the
-        // reset (rising; UpdateAccountFlyout turns it in remaining mode), under the recorded
-        // usage (area, segments, isolated readings), projection, now line and current point,
-        // whose geometry UpdateAccountFlyout sets.
-        Grid chart;
-        chart.Width(kFlyoutChartWidth);
-        chart.Height(kFlyoutChartHeight);
-        chart.HorizontalAlignment(HorizontalAlignment::Left);
-        chart.IsHitTestVisible(false);
-        // The plot clips the drawing to its rounded corners and the canvas to its bounds, so
-        // edge dots, the marker and fills never overhang. A high-contrast outline goes on top
-        // so it doesn't inset the drawing.
-        Border plot;
-        plot.CornerRadius({4, 4, 4, 4});
-        plot.Background(theme.chip);
-        chart.Children().Append(plot);
-        if (theme.highContrast) {
-            Border outline;
-            outline.CornerRadius({4, 4, 4, 4});
-            outline.BorderBrush(theme.trackBorder);
-            outline.BorderThickness({1, 1, 1, 1});
-            chart.Children().Append(outline);
+        if (charted) {
+            // Usage chart: card-tinted plot and the even-pace diagonal from the window start to
+            // the reset (rising; UpdateAccountFlyout turns it in remaining mode), under the
+            // recorded usage (area, segments, isolated readings), projection, now line and
+            // current point, whose geometry UpdateAccountFlyout sets.
+            Grid chart;
+            chart.Width(kFlyoutChartWidth);
+            chart.Height(kFlyoutChartHeight);
+            chart.HorizontalAlignment(HorizontalAlignment::Left);
+            chart.IsHitTestVisible(false);
+            // The plot clips the drawing to its rounded corners and the canvas to its bounds,
+            // so edge dots, the marker and fills never overhang. A high-contrast outline goes
+            // on top so it doesn't inset the drawing.
+            Border plot;
+            plot.CornerRadius({4, 4, 4, 4});
+            plot.Background(theme.chip);
+            chart.Children().Append(plot);
+            if (theme.highContrast) {
+                Border outline;
+                outline.CornerRadius({4, 4, 4, 4});
+                outline.BorderBrush(theme.trackBorder);
+                outline.BorderThickness({1, 1, 1, 1});
+                chart.Children().Append(outline);
+            }
+            Canvas canvas;
+            RectangleGeometry bounds;
+            bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
+            canvas.Clip(bounds);
+            wuxs::Line pace;
+            pace.X1(0);
+            pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
+            pace.X2(kFlyoutChartWidth);
+            pace.Y2(kFlyoutChartInset);
+            paceStroke(pace);
+            canvas.Children().Append(pace);
+            row.chartPace = pace;
+            row.chartArea = wuxs::Path{};
+            canvas.Children().Append(row.chartArea);
+            row.chartLines = wuxs::Path{};
+            row.chartLines.StrokeThickness(1.6);
+            row.chartLines.StrokeLineJoin(PenLineJoin::Round);
+            row.chartLines.StrokeStartLineCap(PenLineCap::Round);
+            row.chartLines.StrokeEndLineCap(PenLineCap::Round);
+            canvas.Children().Append(row.chartLines);
+            row.chartDots = wuxs::Path{};
+            canvas.Children().Append(row.chartDots);
+            row.chartProjection = wuxs::Line{};
+            projectionStroke(row.chartProjection);
+            collapsed(row.chartProjection);
+            canvas.Children().Append(row.chartProjection);
+            row.chartNow = wuxs::Line{};
+            row.chartNow.Y2(kFlyoutChartHeight);
+            row.chartNow.Stroke(theme.chartGuide);
+            row.chartNow.StrokeThickness(1);
+            canvas.Children().Append(row.chartNow);
+            row.chartMarker = wuxs::Ellipse{};
+            row.chartMarker.Width(6);
+            row.chartMarker.Height(6);
+            row.chartMarker.Stroke(theme.markerRing);
+            row.chartMarker.StrokeThickness(1);
+            canvas.Children().Append(row.chartMarker);
+            plot.Child(canvas);
+            collapsed(chart);
+            details.Children().Append(chart);
+            row.chart = chart;
         }
-        Canvas canvas;
-        RectangleGeometry bounds;
-        bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
-        canvas.Clip(bounds);
-        wuxs::Line pace;
-        pace.X1(0);
-        pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
-        pace.X2(kFlyoutChartWidth);
-        pace.Y2(kFlyoutChartInset);
-        paceStroke(pace);
-        canvas.Children().Append(pace);
-        row.chartPace = pace;
-        row.chartArea = wuxs::Path{};
-        canvas.Children().Append(row.chartArea);
-        row.chartLines = wuxs::Path{};
-        row.chartLines.StrokeThickness(1.6);
-        row.chartLines.StrokeLineJoin(PenLineJoin::Round);
-        row.chartLines.StrokeStartLineCap(PenLineCap::Round);
-        row.chartLines.StrokeEndLineCap(PenLineCap::Round);
-        canvas.Children().Append(row.chartLines);
-        row.chartDots = wuxs::Path{};
-        canvas.Children().Append(row.chartDots);
-        row.chartProjection = wuxs::Line{};
-        projectionStroke(row.chartProjection);
-        collapsed(row.chartProjection);
-        canvas.Children().Append(row.chartProjection);
-        row.chartNow = wuxs::Line{};
-        row.chartNow.Y2(kFlyoutChartHeight);
-        row.chartNow.Stroke(theme.chartGuide);
-        row.chartNow.StrokeThickness(1);
-        canvas.Children().Append(row.chartNow);
-        row.chartMarker = wuxs::Ellipse{};
-        row.chartMarker.Width(6);
-        row.chartMarker.Height(6);
-        row.chartMarker.Stroke(theme.markerRing);
-        row.chartMarker.StrokeThickness(1);
-        canvas.Children().Append(row.chartMarker);
-        plot.Child(canvas);
-        collapsed(chart);
-        details.Children().Append(chart);
-        row.chart = chart;
 
         row.amount = makeText(12, theme.secondaryText);
         row.amount.LineHeight(16);
@@ -10307,7 +10647,14 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         collapsed(row.projection);
         details.Children().Append(row.projection);
         rowsGrid.Children().Append(details);
-        gridRow++;
+    };
+    for (FlyoutQuotaRow& row : popup.rows) addRow(row, true);
+    if (provider == L"anthropic" || provider == L"openai") {
+        popup.extraRows.resize(kMaxExtraQuotas);
+        for (FlyoutQuotaRow& row : popup.extraRows) {
+            addRow(row, false);
+            row.name.MaxWidth(160);  // Long limit names wrap.
+        }
     }
 
     // Chart legend: line keys, then the data source.
@@ -10350,16 +10697,16 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     legend.Padding({16, 6, 16, 9});
     collapsed(legend);
     popup.legend = legend;
-    content.Children().Append(legend);
+    appendSection(legend, kAuto);
 
-    // Free-form lines: additional limits, provider notes, errors and prompts.
+    // Free-form lines: free resets, provider notes, errors and prompts.
     StackPanel notes;
     notes.Spacing(4);
-    popup.extraLimits = makeText(12, theme.secondaryText);
+    popup.freeResets = makeText(12, theme.secondaryText);
     popup.extraLines = makeText(12, theme.secondaryText);
     popup.error = makeText(12, theme.error);
     popup.status = makeText(12, theme.accent);
-    for (TextBlock const& line : {popup.extraLimits, popup.extraLines, popup.error, popup.status}) {
+    for (TextBlock const& line : {popup.freeResets, popup.extraLines, popup.error, popup.status}) {
         line.LineHeight(16);
         collapsed(line);
         notes.Children().Append(line);
@@ -10367,7 +10714,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Border notesSection = section(notes);
     collapsed(notesSection);
     popup.notes = notesSection;
-    content.Children().Append(notesSection);
+    appendSection(notesSection, kAuto);
 
     // Footer: update status and actions.
     Grid footer;
@@ -10440,7 +10787,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     if (!visualTestMode) addButton(L"\uE72C", L"Refresh", FlyoutFooterAction::Refresh);
     addButton(L"\uE713", L"Settings", FlyoutFooterAction::Settings);
     footer.Children().Append(buttons);
-    content.Children().Append(footer);
+    appendSection(footer, kAuto);
 
     Border card;
     card.Width(420);
@@ -10538,18 +10885,26 @@ static void UpdateAccountFlyout(
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
         const auto readings = FlyoutRowReadings(d);
+        // The extra quotas follow: OpenAI's additional limits only with their Display setting.
+        const bool extrasShown = !openAi || display.showOpenAiExtraLimits;
 
         int visibleRows = 0;
         bool anyChart = false;
-        for (int r = 0; r < kFlyoutRowCount; r++) {
-            FlyoutQuotaRow& row = popup.rows[r];
-            const RowSource& source = sources[r];
+        constexpr size_t kMainRows = kFlyoutRowCount;
+        for (size_t i = 0; i < kMainRows + popup.extraRows.size(); i++) {
+            // The row's FlyoutRowIndex; -1 for an extra quota's row, which has no chart, projection
+            // or amount.
+            int r = i < kMainRows ? (int)i : -1;
+            size_t extra = i - kMainRows;
+            FlyoutQuotaRow& row = r >= 0 ? popup.rows[r] : popup.extraRows[extra];
+            bool available = r >= 0 ? sources[r].available :
+                                      extrasShown && extra < d.extraQuotas.size();
             if (!row.row) continue;
-            for (auto const& part : {row.row, row.labels, row.details}) show(part, source.available);
-            if (!source.available) continue;
+            for (auto const& part : {row.row, row.labels, row.details}) show(part, available);
+            if (!available) continue;
             visibleRows++;
-            const WindowUsage& wu = *readings[r];
-            row.name.Text(source.name);
+            const WindowUsage& wu = r >= 0 ? *readings[r] : d.extraQuotas[extra].usage;
+            row.name.Text(r >= 0 ? sources[r].name : d.extraQuotas[extra].name);
 
             if (r == kFlyoutExtraRow && creditsAmount) {
                 bool balance = !d.creditsUnlimited && d.creditsBalance >= 0;
@@ -10636,9 +10991,10 @@ static void UpdateAccountFlyout(
 
             // The usage graph tiles' projection; the text, naming the rate's span, when it
             // reaches the limit before the reset. None once the limit is reached.
-            const std::vector<TileTracePoint>& trace = traces[r];
+            static const std::vector<TileTracePoint> kNoTrace;
+            const std::vector<TileTracePoint>& trace = r >= 0 ? traces[r] : kNoTrace;
             std::optional<UsageProjection> projected;
-            if (!display.stale && !limited) {
+            if (r >= 0 && !display.stale && !limited) {
                 projected = ProjectUsage(wu, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
@@ -10782,7 +11138,8 @@ static void UpdateAccountFlyout(
             row.amount.Text(amount);
             show(row.amount, !amount.empty());
 
-            std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+            std::wstring reset = wu.notYetStarted ? L"Not yet started" :
+                                 wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
             row.reset.Text(reset);
             show(row.reset, !reset.empty());
         }
@@ -10800,10 +11157,16 @@ static void UpdateAccountFlyout(
                 GridLength{1, GridUnitType::Star});
         }
 
-        std::wstring extraLimits =
-            openAi && display.showOpenAiExtraLimits ? d.openAiExtraLimitLines : L"";
-        popup.extraLimits.Text(extraLimits);
-        show(popup.extraLimits, !extraLimits.empty());
+        std::wstring freeResets;
+        if (d.freeResets > 0) {
+            freeResets = std::to_wstring(d.freeResets) +
+                         (d.freeResets == 1 ? L" free reset available" : L" free resets available");
+            if (d.freeResetsExpiryMs > display.now) {
+                freeResets += L" \u00B7 next expires " + FormatReset(d.freeResetsExpiryMs);
+            }
+        }
+        popup.freeResets.Text(freeResets);
+        show(popup.freeResets, !freeResets.empty());
         popup.extraLines.Text(d.extraLines);
         show(popup.extraLines, !d.extraLines.empty());
         std::wstring error;
@@ -10819,13 +11182,12 @@ static void UpdateAccountFlyout(
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
             status = L"Sign-in required. Click the bars to sign in.";
-        } else if (!visibleRows && d.lastSuccessMs && error.empty() && extraLimits.empty() &&
-                   d.extraLines.empty()) {
+        } else if (!visibleRows && d.lastSuccessMs && error.empty() && d.extraLines.empty()) {
             status = L"No quotas reported.";
         }
         popup.status.Text(status);
         show(popup.status, !status.empty());
-        show(popup.notes, !extraLimits.empty() || !d.extraLines.empty() || !error.empty() ||
+        show(popup.notes, !freeResets.empty() || !d.extraLines.empty() || !error.empty() ||
                               !status.empty());
 
         std::wstring updated = display.visualTestMode ? L"Visual test data" :
@@ -10846,6 +11208,7 @@ static constexpr int kFlyoutPollMs = 100;
 // Refreshes countdowns while a flyout is open.
 static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
+static constexpr double kFlyoutScreenMargin = 12;  // At the screen's far edge.
 
 static void ShowAccountFlyout(QuotaUiInstance& state, int index);
 static void OnTilePointerExited(QuotaUiInstance& state, int index);
@@ -11060,6 +11423,20 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         popup.accountIdentity = identity;
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
+        // The card fits the screen beyond the taskbar, less the gap and a margin; its quota rows
+        // scroll past that. A taskbar down a side has the screen's height beside it.
+        RECT taskbar{};
+        MONITORINFO monitor{sizeof(monitor)};
+        double scale = xamlRoot.RasterizationScale();
+        if (scale > 0 && GetWindowRect(state.hWnd, &taskbar) &&
+            GetMonitorInfoW(MonitorFromWindow(state.hWnd, MONITOR_DEFAULTTONEAREST), &monitor)) {
+            LONG screenPx = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
+            LONG roomPx = std::max(taskbar.top - monitor.rcMonitor.top,
+                                   monitor.rcMonitor.bottom - taskbar.bottom);
+            if (roomPx < screenPx / 2) roomPx = screenPx;
+            double roomDips = roomPx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
+            card.MaxHeight(std::max(roomDips, 200.0));
+        }
         popup.card = card;
         SettleFlyoutMaterial(fo);
 
@@ -20058,6 +20435,8 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     if (sameProviderRename) {
         oldTokenCleared = ClearStoredToken(oldIdentity);
         BumpAuthEpochLocked(oldIdentity);
+        BumpSignInGenerationLocked(oldIdentity);
+        BumpSignInGenerationLocked(newIdentity);
         g_authRenameRedirects.push_back(
             {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
         authEpochLock.unlock();

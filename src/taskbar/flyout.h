@@ -6,6 +6,7 @@ static constexpr int kFlyoutPollMs = 100;
 // Refreshes countdowns while a flyout is open.
 static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
+static constexpr double kFlyoutScreenMargin = 12;  // At the screen's far edge.
 
 static void ShowAccountFlyout(QuotaUiInstance& state, int index);
 static void OnTilePointerExited(QuotaUiInstance& state, int index);
@@ -220,6 +221,20 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         popup.accountIdentity = identity;
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
+        // The card fits the screen beyond the taskbar, less the gap and a margin; its quota rows
+        // scroll past that. A taskbar down a side has the screen's height beside it.
+        RECT taskbar{};
+        MONITORINFO monitor{sizeof(monitor)};
+        double scale = xamlRoot.RasterizationScale();
+        if (scale > 0 && GetWindowRect(state.hWnd, &taskbar) &&
+            GetMonitorInfoW(MonitorFromWindow(state.hWnd, MONITOR_DEFAULTTONEAREST), &monitor)) {
+            LONG screenPx = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
+            LONG roomPx = std::max(taskbar.top - monitor.rcMonitor.top,
+                                   monitor.rcMonitor.bottom - taskbar.bottom);
+            if (roomPx < screenPx / 2) roomPx = screenPx;
+            double roomDips = roomPx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
+            card.MaxHeight(std::max(roomDips, 200.0));
+        }
         popup.card = card;
         SettleFlyoutMaterial(fo);
 

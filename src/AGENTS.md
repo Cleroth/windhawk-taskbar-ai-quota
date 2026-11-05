@@ -155,6 +155,9 @@ access token without refresh or expiry and sent only to its usage endpoint.
 - Refresh tokens go only to provider token endpoints, never as a bearer token to a quota endpoint.
 - The token store is keyed by `AccountIdentityHash` (provider+label). Keep it stable or sign-ins
   get orphaned.
+- Details read through a sign-in (Anthropic plan, Codex free resets' expiry) are cached under its
+  sign-in generation. Any new path that replaces, deletes or moves a sign-in must call
+  `BumpSignInGenerationLocked` in the same `g_authEpochMutex` section, after the token write.
 - Usage history belongs in per-user LocalAppData, not Windhawk's machine-shared writable storage.
   Recording consent is a separate HKCU setting, never a field in machine-shared `settings_v1`.
 - Keep the journal's size cap (maintenance and appends apply it with a number of days; kept

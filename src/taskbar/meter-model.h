@@ -715,6 +715,24 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         accountData.plan = L"Visual test";
         accountData.lastSuccessMs = now;
         accountData.stale = false;
+        // Extra quotas (OpenAI's with their Display setting) and free resets: details flyout only.
+        if (account.label == L"CC 2") {
+            accountData.extraQuotas = {
+                {L"Sonnet weekly",
+                 {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}},
+                {L"Opus weekly", {0, 0, kWeeklyWindowMs, true}},
+            };
+            accountData.freeResets = 2;
+            accountData.freeResetsExpiryMs = now + 3 * 24 * 60 * 60000ULL;
+        } else if (openAi) {
+            accountData.extraQuotas = {
+                {L"Spark 5-hour",
+                 {orange, now + (ULONGLONG)std::lround(kFiveHourWindowMs * 0.3), kFiveHourWindowMs}},
+                {L"Spark weekly",
+                 {green, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.7), kWeeklyWindowMs}},
+            };
+            accountData.freeResets = 1;
+        }
         if (account.provider == L"antigravity") {
             // Claude/GPT pools, like its unselected weekly and Argon weekly, appear only in the
             // details flyout. A failed refresh keeps the last success, as the fetch thread does;

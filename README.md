@@ -14,7 +14,7 @@ Each visible account gets one compact taskbar column. Choose among the provider'
 - stacked layout: horizontal bars stack vertically and fill left-to-right
 - vertical layout: selected bars sit side-by-side and fill bottom-up
 
-Hover a column to highlight it and open its details flyout: percentages, reset times, pace, when usage is projected to reach the limit, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. Click a column to refresh it. Right-click a column for Settings, Usage history, Refresh all, provider actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several accounts. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
+Hover a column to highlight it and open its details flyout: percentages, reset times, pace, when usage is projected to reach the limit, plan and provider details, errors, and retry countdowns, with buttons for usage history, the provider dashboard, refresh, and settings. The flyout also lists the limits that have no taskbar bar, each with its percentage, pace and reset: Anthropic's per-model and per-surface limits (such as Sonnet and Opus weeklies) and, with their Display setting, OpenAI's additional rate limits. It shows Anthropic's and OpenAI's free rate-limit resets with the next one's expiry, the Claude plan (Pro, Max 5x, Max 20x, Team, ...), and "Not yet started" for a Claude window that hasn't begun; past the screen's height its quota list scrolls. Click a column to refresh it. Right-click a column for Settings, Usage history, Refresh all, provider actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several accounts. Hidden accounts are not polled by default, and the last visible account cannot be hidden. History recording can explicitly enable hidden-account polling without showing taskbar bars or firing threshold notifications for those accounts.
 
 On a taskbar at the left or right of the screen (Windows 11's own taskbar position setting), the accounts stack down the taskbar and each style rearranges to fit its width: identities sit above their meters (rings keep theirs inside), a usage graph's charts stack, the quota matrix takes one column, stacked bars, charts and rings shorten to the width, and an account still wider than the taskbar (long labels, large text) shrinks as a whole. Your settings stay as they are, so moving the taskbar back restores the layout across. The bars follow the taskbar when it moves between edges, and the details flyout opens beside it (below a taskbar at the top).
 
@@ -71,7 +71,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - amounts on extra/credits bars: show `$` spent or left (Anthropic extra usage) or credits (OpenAI, and GitHub Copilot's AI credits rounded to whole credits) instead of a percentage, following the bar mode; from 1,000 on, taskbar amounts are shortened to three digits with `k` or `M` (`62.5k`)
   - colorblind palette, and the yellow, orange, and red thresholds, each with its color
   - stale-data marker (`!`)
-  - additional OpenAI rate limits in account details (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
+  - additional OpenAI rate limits as rows in the details flyout, one per window (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - **Behavior**:
   - show on: the primary display, all displays, or a detected display with its resolution
   - show details on hover: resting the pointer on a column opens its details flyout (on by default)
@@ -291,6 +291,8 @@ The mod never reads or writes the OpenCode, Claude Code, or Codex credential fil
 
 Signing in uses the public OAuth clients of the official CLIs (Claude Code for Anthropic, Codex for OpenAI) with PKCE; while their sign-in window is open, a listener bound only to `127.0.0.1` receives the browser's redirect. GitHub Copilot uses GitHub's device flow with the public client of GitHub's copilot.vim (`Iv1.b507a08c87ecfe98`) and only the `read:user` scope; the mod talks to `github.com` (sign-in and token refresh) and `api.github.com` (the Copilot usage endpoint, `copilot_internal/user`), and opens a browser only when you click **Copy code and open GitHub**. OpenCode Go's key is sent only to OpenCode's usage endpoint (`opencode.ai/zen/go/v1/usage`); the key can also make paid requests on your account, so treat it like a password. Antigravity uses only its signed-in loopback language server and stores no Google token.
 
+Anthropic's usage and profile requests identify as the Claude Code CLI (its user agent): Anthropic reports free resets only to a recent CLI. Besides the usage endpoints, the mod reads Anthropic's OAuth profile (`api.anthropic.com/api/oauth/profile`, for the plan name, about every 6 hours) and, while a ChatGPT account has free resets, `chatgpt.com/backend-api/wham/rate-limit-reset-credits` for their expiry, both with the account's usage token. It never redeems resets.
+
 ## Limitations
 
 - Windows 11 taskbar only.
@@ -304,6 +306,7 @@ Signing in uses the public OAuth clients of the official CLIs (Claude Code for A
 - Antigravity servers without pooled-quota support show only their current limiting quota; weekly stays unavailable and pace ticks are disabled.
 - OpenAI sign-in needs `localhost:1455` (or `1457`) free for the browser redirect.
 - Anthropic and OpenAI sessions refresh automatically, and GitHub Copilot sessions do when GitHub issues expiring tokens; sign in again if a stored session is missing, invalid, or revoked. The mod never refreshes an OpenCode Go key: after deleting or replacing it in the console, sign in again with the new one.
+- Model, surface and additional limits, plan names and free resets come from undocumented fields. Anthropic's free resets need the mod's Claude Code version to stay recent; they can disappear until a mod update.
 - GitHub Copilot uses an undocumented endpoint (`copilot_internal/user`, as VS Code does) that GitHub can change. Its 5-hour and weekly rate limits are reported only to editors during chats, so they aren't shown; neither are code completions.
 
 ## Building from source

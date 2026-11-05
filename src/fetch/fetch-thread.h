@@ -1,6 +1,25 @@
 // Per-account usage fetch and the polling loop that publishes results and history.
 
-static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec) {
+// Optional account details the fetch thread keeps between polls, read through the sign-in of
+// `signInGeneration`: the Anthropic plan (OAuth profile) and the next expiry of the Codex free
+// resets, read for `resetsCount` of them. A failed read waits for its own retry time and never
+// fails the usage read.
+struct AccountDetailsCache {
+    uint64_t signInGeneration = 0;
+    std::wstring plan;
+    ULONGLONG planReadMs = 0;
+    ULONGLONG planRetryMs = 0;
+    int resetsCount = 0;
+    ULONGLONG resetsExpiryMs = 0;
+    ULONGLONG resetsReadMs = 0;
+    ULONGLONG resetsRetryMs = 0;
+};
+static constexpr ULONGLONG kPlanCacheMs = 6ULL * 60 * 60 * 1000;
+static constexpr ULONGLONG kResetsExpiryCacheMs = 3ULL * 60 * 60 * 1000;
+static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a 429 says when.
+
+static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
+                         AccountDetailsCache* details) {
     d->error.clear();
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
@@ -11,10 +30,13 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         return;
     }
 
+    bool anthropic = acc.provider == L"anthropic";
+    bool openAi = acc.provider == L"openai";
     bool copilot = acc.provider == L"copilot";
     bool opencode = acc.provider == L"opencode";  // An API key: never expires, never refreshes.
     uint64_t idHash = AccountIdentityHash(acc);
     ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
+    uint64_t signInGeneration = CurrentSignInGeneration(idHash);
     StoredToken tok;
     if (!LoadStoredToken(idHash, &tok) || tok.accessToken.empty()) {
         d->stale = true;
@@ -63,13 +85,25 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         }
     }
 
+    // Shared by the usage request and the account details requests.
+    auto anthropicHeaders = [](const StoredToken& t) {
+        return L"Authorization: Bearer " + t.accessToken +
+               L"\r\nanthropic-beta: oauth-2025-04-20"
+               L"\r\nAccept: application/json\r\n";
+    };
+    auto openAiHeaders = [](const StoredToken& t) {
+        std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+                               L"\r\nOrigin: https://chatgpt.com"
+                               L"\r\nReferer: https://chatgpt.com/"
+                               L"\r\nAccept: application/json\r\n";
+        if (!t.accountId.empty()) headers += L"ChatGPT-Account-Id: " + t.accountId + L"\r\n";
+        return headers;
+    };
     auto requestUsage = [&](const StoredToken& t) -> HttpResult {
-        if (acc.provider == L"anthropic") {
-            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
-                                   L"\r\nanthropic-beta: oauth-2025-04-20"
-                                   L"\r\nAccept: application/json\r\n";
-            return HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/usage",
-                               L"claude-code/2.1.0", headers);
+        if (anthropic) {
+            // cedar_ember=1 adds the free resets.
+            return HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/usage?cedar_ember=1",
+                               kClaudeCliUserAgent, anthropicHeaders(t));
         }
         if (copilot) {
             std::wstring headers = L"Authorization: token " + t.accessToken +
@@ -83,13 +117,8 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
                                    L"\r\nAccept: application/json\r\n";
             return HttpRequest(L"GET", L"opencode.ai", L"/zen/go/v1/usage", kOAuthUserAgent, headers);
         }
-        std::wstring headers = L"Authorization: Bearer " + t.accessToken +
-                               L"\r\nOrigin: https://chatgpt.com"
-                               L"\r\nReferer: https://chatgpt.com/"
-                               L"\r\nAccept: application/json\r\n";
-        if (!t.accountId.empty()) headers += L"ChatGPT-Account-Id: " + t.accountId + L"\r\n";
         return HttpRequest(L"GET", L"chatgpt.com", L"/backend-api/wham/usage",
-                           L"taskbar-ai-quota/0.1", headers);
+                           L"taskbar-ai-quota/0.1", openAiHeaders(t));
     };
 
     HttpResult r = requestUsage(tok);
@@ -177,7 +206,7 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
 
     AccountData fresh;
     std::wstring parseError;
-    bool parsed = acc.provider == L"anthropic" ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
+    bool parsed = anthropic ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
                   copilot ? ParseCopilotUsage(r.body, &fresh, &parseError) :
                   opencode ? ParseOpenCodeUsage(r.body, &fresh, &parseError) :
                              ParseOpenAiUsage(r.body, &fresh, &parseError);
@@ -185,6 +214,57 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->stale = true;
         d->error = parseError.empty() ? L"unexpected response format" : parseError;
         return;
+    }
+
+    // Account details through the same token: the Anthropic plan, re-read after kPlanCacheMs,
+    // and while Codex has free resets their next expiry, re-read when their count changes or
+    // after kResetsExpiryCacheMs.
+    AccountDetailsCache next;
+    if (details->signInGeneration == signInGeneration) next = *details;
+    next.signInGeneration = signInGeneration;
+    ULONGLONG nowMs = NowUnixMs();
+    auto retryAt = [nowMs](const HttpResult& failed) {
+        return nowMs + (failed.ok && failed.status == 429 && failed.retryAfterSec > 0 ?
+                            (ULONGLONG)failed.retryAfterSec * 1000 : kDetailsRetryMs);
+    };
+    if (anthropic && !g_unloading && nowMs >= next.planRetryMs &&
+        (!next.planReadMs || nowMs - next.planReadMs >= kPlanCacheMs)) {
+        HttpResult profile = HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/profile",
+                                         kClaudeCliUserAgent, anthropicHeaders(tok));
+        std::optional<std::wstring> plan;
+        if (profile.ok && profile.status == 200) plan = ParseAnthropicPlan(profile.body);
+        if (plan) {
+            next.plan = std::move(*plan);
+            next.planReadMs = nowMs;
+            next.planRetryMs = 0;
+        } else {
+            next.planRetryMs = retryAt(profile);
+        }
+    }
+    if (openAi && fresh.freeResets <= 0) next.resetsCount = 0;  // Any later ones are new.
+    if (openAi && fresh.freeResets > 0 && !g_unloading && nowMs >= next.resetsRetryMs &&
+        (next.resetsCount != fresh.freeResets || nowMs - next.resetsReadMs >= kResetsExpiryCacheMs)) {
+        HttpResult credits = HttpRequest(L"GET", L"chatgpt.com",
+                                         L"/backend-api/wham/rate-limit-reset-credits",
+                                         L"taskbar-ai-quota/0.1", openAiHeaders(tok));
+        std::optional<ULONGLONG> expiryMs;
+        if (credits.ok && credits.status == 200) expiryMs = ParseOpenAiResetsExpiry(credits.body);
+        if (expiryMs) {
+            next.resetsCount = fresh.freeResets;
+            next.resetsExpiryMs = *expiryMs;
+            next.resetsReadMs = nowMs;
+            next.resetsRetryMs = 0;
+        } else {
+            next.resetsRetryMs = retryAt(credits);
+        }
+    }
+    // After a sign-in change meanwhile, what was read may belong to either login.
+    if (CurrentSignInGeneration(idHash) == signInGeneration) {
+        if (anthropic) fresh.plan = next.plan;
+        if (openAi && next.resetsCount == fresh.freeResets) {
+            fresh.freeResetsExpiryMs = next.resetsExpiryMs;
+        }
+        *details = std::move(next);
     }
 
     ApplyCreditsMax(acc, &fresh);
@@ -204,6 +284,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<uint64_t> retryIdentityHashes;
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
+    std::vector<AccountDetailsCache> accountDetails;
     // Per-account red-crossing arm state, indexed by QuotaBarIndex:
     // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
     std::vector<std::array<int, kQuotaBarCount>> redState;
@@ -281,15 +362,18 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         if (settingsChanged) {
             lastLoggedErrorStates.assign(accounts.size(), {});
 
-            // Remap provider-directed Retry-After and normal poll deadlines by stable account
-            // identity so settings changes don't cause another request for unchanged accounts.
+            // Remap provider-directed Retry-After, normal poll deadlines and account details by
+            // stable account identity so settings changes don't cause another request for
+            // unchanged accounts.
             auto oldIdentityHashes = std::move(retryIdentityHashes);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
+            auto oldAccountDetails = std::move(accountDetails);
             std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
             retryIdentityHashes.resize(accounts.size());
             retryDeadlineMs.assign(accounts.size(), 0);
             nextPollDeadlineMs.assign(accounts.size(), 0);
+            accountDetails.assign(accounts.size(), {});
             for (size_t i = 0; i < accounts.size(); ++i) {
                 retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
                 for (size_t j = 0; j < oldIdentityHashes.size() &&
@@ -297,6 +381,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     if (!oldDeadlineUsed[j] &&
                         oldIdentityHashes[j] == retryIdentityHashes[i]) {
                         retryDeadlineMs[i] = oldRetryDeadlineMs[j];
+                        if (j < oldAccountDetails.size()) {
+                            accountDetails[i] = std::move(oldAccountDetails[j]);
+                        }
                         if (j < oldNextPollDeadlineMs.size()) {
                             nextPollDeadlineMs[i] = oldNextPollDeadlineMs[j];
                             ULONGLONG latestDeadline = NowUnixMs() +
@@ -391,7 +478,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 break;
             }
             int retryAfter = 0;
-            FetchAccount(accounts[i], &results[i], &retryAfter);
+            FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
             // The journal rejects samples without a known provider code.
             uint32_t providerCode = HistoryProviderCode(accounts[i].provider);
             if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId && providerCode) {
@@ -478,6 +565,19 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         int notificationRedThreshold = redThreshold;
         bool notificationsEnabled = enableNotifications;
         {
+            // Account details read through a sign-in replaced, removed or moved since (this round
+            // or an earlier one, the usage request failing since) aren't published. The lock keeps
+            // a sign-in change from falling between this check and the publication.
+            std::lock_guard<std::mutex> authLock(g_authEpochMutex);
+            for (size_t i = 0; i < accounts.size() && i < results.size() &&
+                               i < accountDetails.size(); i++) {
+                if (accountDetails[i].signInGeneration ==
+                    SignInGenerationLocked(AccountIdentityHash(accounts[i]))) {
+                    continue;
+                }
+                if (accounts[i].provider == L"anthropic") results[i].plan.clear();
+                if (accounts[i].provider == L"openai") results[i].freeResetsExpiryMs = 0;
+            }
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             if (settingsGeneration == g_settingsGeneration) {
                 std::lock_guard<std::mutex> lk2(g_dataMutex);
@@ -500,6 +600,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 remappedFetchedOk.assign(currentAccounts.size(), false);
                 std::vector<bool> oldResultUsed(results.size(), false);
                 for (size_t i = 0; i < currentAccounts.size(); i++) {
+                    bool matched = false;
                     for (size_t j = 0; j < accounts.size() && j < results.size(); j++) {
                         if (!oldResultUsed[j] &&
                             AccountIdentityHash(accounts[j]) ==
@@ -510,8 +611,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             ApplyCreditsMax(currentAccounts[i], &remappedResults[i]);
                             remappedFetchedOk[i] = fetchedOk[j];
                             oldResultUsed[j] = true;
+                            matched = true;
                             break;
                         }
+                    }
+                    // A renamed account's data, carried over, has details read through its old
+                    // identity's sign-in.
+                    if (!matched && currentAccounts[i].provider == L"anthropic") {
+                        remappedResults[i].plan.clear();
+                    } else if (!matched && currentAccounts[i].provider == L"openai") {
+                        remappedResults[i].freeResetsExpiryMs = 0;
                     }
                 }
                 g_data = remappedResults;

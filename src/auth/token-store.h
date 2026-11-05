@@ -22,6 +22,34 @@ struct AuthRenameRedirect {
 
 static std::vector<AuthRenameRedirect> g_authRenameRedirects;
 
+// Per identity, bumped under g_authEpochMutex, after the token store changes, whenever its sign-in
+// is replaced, deleted or moved by a rename; never by a token refresh. The fetch thread keeps
+// details read through a login (the Anthropic plan, the Codex free resets' expiry) under it, so
+// another login never shows them.
+static std::vector<std::pair<uint64_t, uint64_t>> g_signInGenerations;
+
+static uint64_t SignInGenerationLocked(uint64_t idHash) {
+    for (const auto& [hash, generation] : g_signInGenerations) {
+        if (hash == idHash) return generation;
+    }
+    return 0;
+}
+
+static uint64_t CurrentSignInGeneration(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    return SignInGenerationLocked(idHash);
+}
+
+static void BumpSignInGenerationLocked(uint64_t idHash) {
+    for (auto& [hash, generation] : g_signInGenerations) {
+        if (hash == idHash) {
+            generation++;
+            return;
+        }
+    }
+    g_signInGenerations.push_back({idHash, 1});
+}
+
 enum class TokenSaveResult {
     Saved,
     Stale,
@@ -102,9 +130,11 @@ static bool ClearStoredToken(uint64_t idHash) {
     return !stored[0];
 }
 
+// `newSignIn`: a sign-in's first token, rather than a refreshed one.
 static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
                                                 const StoredToken& t,
-                                                uint64_t* savedIdentity = nullptr) {
+                                                uint64_t* savedIdentity = nullptr,
+                                                bool newSignIn = false) {
     if (savedIdentity) *savedIdentity = 0;
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
     uint64_t destinationIdentity = idHash;
@@ -123,6 +153,7 @@ static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authE
         destinationEpoch = redirect->destinationEpoch;
     }
     if (!SaveStoredToken(destinationIdentity, t)) return TokenSaveResult::Failed;
+    if (newSignIn) BumpSignInGenerationLocked(destinationIdentity);
     if (savedIdentity) *savedIdentity = destinationIdentity;
     return TokenSaveResult::Saved;
 }
@@ -141,6 +172,7 @@ static bool ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
     bool cleared = ClearStoredToken(idHash);
     BumpAuthEpochLocked(idHash);
+    BumpSignInGenerationLocked(idHash);
     return cleared;
 }
 

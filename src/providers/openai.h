@@ -1,4 +1,4 @@
-// OpenAI usage response parsing and the user-set credits ceiling.
+// OpenAI usage and free-reset response parsing, and the user-set credits ceiling.
 
 static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 
@@ -38,13 +38,10 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
             return resetAfter > 0 ? NowUnixMs() + (ULONGLONG)(resetAfter * 1000) : 0ULL;
         };
 
-        auto applyWindow = [&](JsonObject const& window, WindowUsage* fallback) {
-            if (!window) return;
-            WindowUsage* target = fallback;
-            double windowSeconds = GetNum(window, L"limit_window_seconds", 0);
-            if (windowSeconds == 5 * 60 * 60) target = &d->win5h;
-            else if (windowSeconds == 7 * 24 * 60 * 60) target = &d->winWeek;
-
+        // A window's usage (pct -1 without one); its length is `defaultMs` unless reported.
+        auto readWindow = [&](JsonObject const& window, ULONGLONG defaultMs) {
+            WindowUsage wu;
+            if (!window) return wu;
             double pct = GetNum(window, L"used_percent");
             if (pct < 0) {
                 pct = GetNum(window, L"percent_left");
@@ -54,14 +51,25 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
                 pct = GetNum(window, L"remaining_percent");
                 if (pct >= 0) pct = 100 - pct;
             }
-            if (pct < 0) return;
-            target->pct = pct;
-            target->resetUnixMs = resetUnixMs(window);
-            target->windowDurationMs = target == &d->winWeek ? kWeeklyWindowMs : kFiveHourWindowMs;
+            if (pct < 0) return wu;
+            wu.pct = pct;
+            wu.resetUnixMs = resetUnixMs(window);
+            wu.windowDurationMs = defaultMs;
+            double windowSeconds = GetNum(window, L"limit_window_seconds", 0);
             if (std::isfinite(windowSeconds) && windowSeconds > 0 &&
                 windowSeconds <= 366.0 * 24 * 60 * 60) {
-                target->windowDurationMs = (ULONGLONG)(windowSeconds * 1000);
+                wu.windowDurationMs = (ULONGLONG)(windowSeconds * 1000);
             }
+            return wu;
+        };
+        auto applyWindow = [&](JsonObject const& window, WindowUsage* fallback) {
+            WindowUsage* target = fallback;
+            double windowSeconds = GetNum(window, L"limit_window_seconds", 0);
+            if (windowSeconds == 5 * 60 * 60) target = &d->win5h;
+            else if (windowSeconds == 7 * 24 * 60 * 60) target = &d->winWeek;
+            WindowUsage wu =
+                readWindow(window, target == &d->winWeek ? kWeeklyWindowMs : kFiveHourWindowMs);
+            if (wu.pct >= 0) *target = wu;
         };
 
         applyWindow(GetObj(rl, L"primary_window"), &d->win5h);
@@ -74,37 +82,32 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         applyWindow(GetObj(rl, L"weekly_limit"), &d->winWeek);
 
         d->plan = GetStr(usage, L"plan_type");
-        d->openAiExtraLimitLines.clear();
         d->extraLines.clear();
-        // Every additional_rate_limits entry (Codex Spark, hidden model lanes such as
-        // gpt-reserve, ...) is an opt-in tooltip line; only the primary windows drive bars.
-        int extraLimitLineCount = 0;
-        auto addLimitLine = [&](JsonObject const& item) {
-            auto itemRl = GetObj(item, L"rate_limit");
-            auto pw = GetObj(itemRl, L"primary_window");
-            auto sw = GetObj(itemRl, L"secondary_window");
+        // Each window of an additional_rate_limits entry (Codex Spark, hidden model lanes such as
+        // gpt-reserve, ...) is an extra quota, shown with its Display setting; only the primary
+        // windows drive bars.
+        auto addLimit = [&](JsonObject const& item) {
             std::wstring name = GetStr(item, L"limit_name");
-            if (name.empty() || (!pw && !sw) || extraLimitLineCount >= 6) return;
-
-            wchar_t line[128];
-            swprintf(line, ARRAYSIZE(line), L"%s: 5h %.0f%% | wk %.0f%%",
-                     name.c_str(), GetNum(pw, L"used_percent", 0),
-                     GetNum(sw, L"used_percent", 0));
-            if (!d->openAiExtraLimitLines.empty()) d->openAiExtraLimitLines += L"\n";
-            d->openAiExtraLimitLines += line;
-            extraLimitLineCount++;
+            auto itemRl = GetObj(item, L"rate_limit");
+            AddExtraQuota(d, name, readWindow(GetObj(itemRl, L"primary_window"), kFiveHourWindowMs));
+            AddExtraQuota(d, name, readWindow(GetObj(itemRl, L"secondary_window"), kWeeklyWindowMs));
         };
         if (usage.HasKey(L"additional_rate_limits")) {
             auto limits = usage.GetNamedValue(L"additional_rate_limits");
             if (limits.ValueType() == JsonValueType::Array) {
                 auto arr = limits.GetArray();
                 for (uint32_t i = 0; i < arr.Size(); i++) {
-                    if (arr.GetAt(i).ValueType() == JsonValueType::Object) addLimitLine(arr.GetAt(i).GetObject());
+                    if (arr.GetAt(i).ValueType() == JsonValueType::Object) addLimit(arr.GetAt(i).GetObject());
                 }
             } else if (limits.ValueType() == JsonValueType::Object) {
-                addLimitLine(limits.GetObject());
+                addLimit(limits.GetObject());
             }
         }
+        // Free resets: their count; FetchAccount reads the next one's expiry.
+        auto resetCredits = GetObj(usage, L"rate_limit_reset_credits");
+        if (!resetCredits) resetCredits = GetObj(root, L"rate_limit_reset_credits");
+        double available = GetNum(resetCredits, L"available_count");
+        if (std::isfinite(available) && available >= 0) d->freeResets = (int)std::min(available, 999.0);
 
         // credits: {has_credits, unlimited, balance: string|null}. The tooltip formats this
         // on the UI thread since the display depends on the account's credits max. The
@@ -141,6 +144,31 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
     } catch (...) {
         if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
         return false;
+    }
+}
+
+// /wham/rate-limit-reset-credits: {available_count, credits[{id, reset_type, status, granted_at,
+// expires_at, title, description}]}. The nearest future expiry of the available free resets, 0
+// when none expires; nullopt for a malformed body.
+static std::optional<ULONGLONG> ParseOpenAiResetsExpiry(const std::string& body) {
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(body));
+        if (!root.HasKey(L"credits") ||
+            root.GetNamedValue(L"credits").ValueType() != JsonValueType::Array) {
+            return std::nullopt;
+        }
+        ULONGLONG nowMs = NowUnixMs();
+        ULONGLONG soonestMs = 0;
+        for (const auto& value : root.GetNamedArray(L"credits")) {
+            if (value.ValueType() != JsonValueType::Object) continue;
+            JsonObject credit = value.GetObject();
+            if (GetStr(credit, L"status") != L"available") continue;
+            ULONGLONG expiresMs = ParseIso8601Ms(GetStr(credit, L"expires_at"));
+            if (expiresMs > nowMs && (!soonestMs || expiresMs < soonestMs)) soonestMs = expiresMs;
+        }
+        return soonestMs;
+    } catch (...) {
+        return std::nullopt;
     }
 }
 

@@ -277,13 +277,16 @@ struct FlyoutPopup {
     FrameworkElement planChip{nullptr};
     TextBlock plan{nullptr};
     std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;
+    // Rows for the account's extra quotas (AccountData::extraQuotas), after the main rows; none
+    // has a chart. Built for providers that report them, kMaxExtraQuotas of them.
+    std::vector<FlyoutQuotaRow> extraRows;
     // Quota grid columns: name/number and details. Charts give details a fixed width.
     ColumnDefinition namesColumn{nullptr};
     ColumnDefinition detailsColumn{nullptr};
     // Chart legend, shown while a row shows a chart.
     FrameworkElement legend{nullptr};
     FrameworkElement notes{nullptr};
-    TextBlock extraLimits{nullptr};
+    TextBlock freeResets{nullptr};
     TextBlock extraLines{nullptr};
     TextBlock error{nullptr};
     TextBlock status{nullptr};

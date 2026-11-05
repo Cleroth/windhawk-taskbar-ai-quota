@@ -118,7 +118,16 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         line.StrokeEndLineCap(PenLineCap::Round);
     };
 
-    StackPanel content;
+    // Header, quota rows, chart legend, notes and footer, top to bottom. Under the card's height
+    // limit (ShowAccountFlyout) only the quota rows shrink, and scroll.
+    Grid content;
+    auto appendSection = [&](FrameworkElement const& element, GridLength height) {
+        RowDefinition definition;
+        definition.Height(height);
+        Grid::SetRow(element, (int)content.RowDefinitions().Size());
+        content.RowDefinitions().Append(definition);
+        content.Children().Append(element);
+    };
 
     // Header: logo (in its brand colors when chosen, except in high contrast), account label,
     // provider, stale marker and plan chip.
@@ -187,11 +196,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid::SetColumn(planChip, 4);
     header.Children().Append(planChip);
     popup.planChip = planChip;
-    content.Children().Append(header);
+    appendSection(header, kAuto);
 
     // One row per quota: name, big number with over-pace arrow, then its visual and timings.
     // Rows stay in the tree and collapse when the quota is unavailable. All rows share one grid
-    // so the number column fits its widest entry and the bars stay aligned.
+    // so the number column fits its widest entry and the bars stay aligned. The extra quotas'
+    // rows follow the main ones, without a chart.
     const std::array<std::array<winrt::Windows::Foundation::Point, 4>, 2> arrowStrokes = {{
         {{{1.5f, 12.f}, {6.f, 7.5f}, {9.f, 10.5f}, {14.5f, 5.f}}},
         {{{10.f, 5.f}, {14.5f, 5.f}, {14.5f, 9.5f}, {14.5f, 9.5f}}},
@@ -199,9 +209,14 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid rowsGrid;
     popup.namesColumn = addColumn(rowsGrid, kAuto);
     popup.detailsColumn = addColumn(rowsGrid, kStar);
-    content.Children().Append(rowsGrid);
-    int gridRow = 0;
-    for (FlyoutQuotaRow& row : popup.rows) {
+    ScrollViewer rowsScroller;
+    rowsScroller.HorizontalScrollMode(ScrollMode::Disabled);
+    rowsScroller.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
+    rowsScroller.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
+    rowsScroller.Content(rowsGrid);
+    appendSection(rowsScroller, kStar);
+    auto addRow = [&](FlyoutQuotaRow& row, bool charted) {
+        int gridRow = (int)rowsGrid.RowDefinitions().Size();
         RowDefinition rowDefinition;
         rowDefinition.Height({0, GridUnitType::Auto});
         rowsGrid.RowDefinitions().Append(rowDefinition);
@@ -324,70 +339,72 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.visual.Children().Append(paceLayer);
         details.Children().Append(row.visual);
 
-        // Usage chart: card-tinted plot and the even-pace diagonal from the window start to the
-        // reset (rising; UpdateAccountFlyout turns it in remaining mode), under the recorded
-        // usage (area, segments, isolated readings), projection, now line and current point,
-        // whose geometry UpdateAccountFlyout sets.
-        Grid chart;
-        chart.Width(kFlyoutChartWidth);
-        chart.Height(kFlyoutChartHeight);
-        chart.HorizontalAlignment(HorizontalAlignment::Left);
-        chart.IsHitTestVisible(false);
-        // The plot clips the drawing to its rounded corners and the canvas to its bounds, so
-        // edge dots, the marker and fills never overhang. A high-contrast outline goes on top
-        // so it doesn't inset the drawing.
-        Border plot;
-        plot.CornerRadius({4, 4, 4, 4});
-        plot.Background(theme.chip);
-        chart.Children().Append(plot);
-        if (theme.highContrast) {
-            Border outline;
-            outline.CornerRadius({4, 4, 4, 4});
-            outline.BorderBrush(theme.trackBorder);
-            outline.BorderThickness({1, 1, 1, 1});
-            chart.Children().Append(outline);
+        if (charted) {
+            // Usage chart: card-tinted plot and the even-pace diagonal from the window start to
+            // the reset (rising; UpdateAccountFlyout turns it in remaining mode), under the
+            // recorded usage (area, segments, isolated readings), projection, now line and
+            // current point, whose geometry UpdateAccountFlyout sets.
+            Grid chart;
+            chart.Width(kFlyoutChartWidth);
+            chart.Height(kFlyoutChartHeight);
+            chart.HorizontalAlignment(HorizontalAlignment::Left);
+            chart.IsHitTestVisible(false);
+            // The plot clips the drawing to its rounded corners and the canvas to its bounds,
+            // so edge dots, the marker and fills never overhang. A high-contrast outline goes
+            // on top so it doesn't inset the drawing.
+            Border plot;
+            plot.CornerRadius({4, 4, 4, 4});
+            plot.Background(theme.chip);
+            chart.Children().Append(plot);
+            if (theme.highContrast) {
+                Border outline;
+                outline.CornerRadius({4, 4, 4, 4});
+                outline.BorderBrush(theme.trackBorder);
+                outline.BorderThickness({1, 1, 1, 1});
+                chart.Children().Append(outline);
+            }
+            Canvas canvas;
+            RectangleGeometry bounds;
+            bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
+            canvas.Clip(bounds);
+            wuxs::Line pace;
+            pace.X1(0);
+            pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
+            pace.X2(kFlyoutChartWidth);
+            pace.Y2(kFlyoutChartInset);
+            paceStroke(pace);
+            canvas.Children().Append(pace);
+            row.chartPace = pace;
+            row.chartArea = wuxs::Path{};
+            canvas.Children().Append(row.chartArea);
+            row.chartLines = wuxs::Path{};
+            row.chartLines.StrokeThickness(1.6);
+            row.chartLines.StrokeLineJoin(PenLineJoin::Round);
+            row.chartLines.StrokeStartLineCap(PenLineCap::Round);
+            row.chartLines.StrokeEndLineCap(PenLineCap::Round);
+            canvas.Children().Append(row.chartLines);
+            row.chartDots = wuxs::Path{};
+            canvas.Children().Append(row.chartDots);
+            row.chartProjection = wuxs::Line{};
+            projectionStroke(row.chartProjection);
+            collapsed(row.chartProjection);
+            canvas.Children().Append(row.chartProjection);
+            row.chartNow = wuxs::Line{};
+            row.chartNow.Y2(kFlyoutChartHeight);
+            row.chartNow.Stroke(theme.chartGuide);
+            row.chartNow.StrokeThickness(1);
+            canvas.Children().Append(row.chartNow);
+            row.chartMarker = wuxs::Ellipse{};
+            row.chartMarker.Width(6);
+            row.chartMarker.Height(6);
+            row.chartMarker.Stroke(theme.markerRing);
+            row.chartMarker.StrokeThickness(1);
+            canvas.Children().Append(row.chartMarker);
+            plot.Child(canvas);
+            collapsed(chart);
+            details.Children().Append(chart);
+            row.chart = chart;
         }
-        Canvas canvas;
-        RectangleGeometry bounds;
-        bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
-        canvas.Clip(bounds);
-        wuxs::Line pace;
-        pace.X1(0);
-        pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
-        pace.X2(kFlyoutChartWidth);
-        pace.Y2(kFlyoutChartInset);
-        paceStroke(pace);
-        canvas.Children().Append(pace);
-        row.chartPace = pace;
-        row.chartArea = wuxs::Path{};
-        canvas.Children().Append(row.chartArea);
-        row.chartLines = wuxs::Path{};
-        row.chartLines.StrokeThickness(1.6);
-        row.chartLines.StrokeLineJoin(PenLineJoin::Round);
-        row.chartLines.StrokeStartLineCap(PenLineCap::Round);
-        row.chartLines.StrokeEndLineCap(PenLineCap::Round);
-        canvas.Children().Append(row.chartLines);
-        row.chartDots = wuxs::Path{};
-        canvas.Children().Append(row.chartDots);
-        row.chartProjection = wuxs::Line{};
-        projectionStroke(row.chartProjection);
-        collapsed(row.chartProjection);
-        canvas.Children().Append(row.chartProjection);
-        row.chartNow = wuxs::Line{};
-        row.chartNow.Y2(kFlyoutChartHeight);
-        row.chartNow.Stroke(theme.chartGuide);
-        row.chartNow.StrokeThickness(1);
-        canvas.Children().Append(row.chartNow);
-        row.chartMarker = wuxs::Ellipse{};
-        row.chartMarker.Width(6);
-        row.chartMarker.Height(6);
-        row.chartMarker.Stroke(theme.markerRing);
-        row.chartMarker.StrokeThickness(1);
-        canvas.Children().Append(row.chartMarker);
-        plot.Child(canvas);
-        collapsed(chart);
-        details.Children().Append(chart);
-        row.chart = chart;
 
         row.amount = makeText(12, theme.secondaryText);
         row.amount.LineHeight(16);
@@ -403,7 +420,14 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         collapsed(row.projection);
         details.Children().Append(row.projection);
         rowsGrid.Children().Append(details);
-        gridRow++;
+    };
+    for (FlyoutQuotaRow& row : popup.rows) addRow(row, true);
+    if (provider == L"anthropic" || provider == L"openai") {
+        popup.extraRows.resize(kMaxExtraQuotas);
+        for (FlyoutQuotaRow& row : popup.extraRows) {
+            addRow(row, false);
+            row.name.MaxWidth(160);  // Long limit names wrap.
+        }
     }
 
     // Chart legend: line keys, then the data source.
@@ -446,16 +470,16 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     legend.Padding({16, 6, 16, 9});
     collapsed(legend);
     popup.legend = legend;
-    content.Children().Append(legend);
+    appendSection(legend, kAuto);
 
-    // Free-form lines: additional limits, provider notes, errors and prompts.
+    // Free-form lines: free resets, provider notes, errors and prompts.
     StackPanel notes;
     notes.Spacing(4);
-    popup.extraLimits = makeText(12, theme.secondaryText);
+    popup.freeResets = makeText(12, theme.secondaryText);
     popup.extraLines = makeText(12, theme.secondaryText);
     popup.error = makeText(12, theme.error);
     popup.status = makeText(12, theme.accent);
-    for (TextBlock const& line : {popup.extraLimits, popup.extraLines, popup.error, popup.status}) {
+    for (TextBlock const& line : {popup.freeResets, popup.extraLines, popup.error, popup.status}) {
         line.LineHeight(16);
         collapsed(line);
         notes.Children().Append(line);
@@ -463,7 +487,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Border notesSection = section(notes);
     collapsed(notesSection);
     popup.notes = notesSection;
-    content.Children().Append(notesSection);
+    appendSection(notesSection, kAuto);
 
     // Footer: update status and actions.
     Grid footer;
@@ -536,7 +560,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     if (!visualTestMode) addButton(L"\uE72C", L"Refresh", FlyoutFooterAction::Refresh);
     addButton(L"\uE713", L"Settings", FlyoutFooterAction::Settings);
     footer.Children().Append(buttons);
-    content.Children().Append(footer);
+    appendSection(footer, kAuto);
 
     Border card;
     card.Width(420);
@@ -634,18 +658,26 @@ static void UpdateAccountFlyout(
              openAi ? creditsBar || creditsAmount : d.extraUsage.pct >= 0 || (copilot && d.copilotUnlimited)},
         }};
         const auto readings = FlyoutRowReadings(d);
+        // The extra quotas follow: OpenAI's additional limits only with their Display setting.
+        const bool extrasShown = !openAi || display.showOpenAiExtraLimits;
 
         int visibleRows = 0;
         bool anyChart = false;
-        for (int r = 0; r < kFlyoutRowCount; r++) {
-            FlyoutQuotaRow& row = popup.rows[r];
-            const RowSource& source = sources[r];
+        constexpr size_t kMainRows = kFlyoutRowCount;
+        for (size_t i = 0; i < kMainRows + popup.extraRows.size(); i++) {
+            // The row's FlyoutRowIndex; -1 for an extra quota's row, which has no chart, projection
+            // or amount.
+            int r = i < kMainRows ? (int)i : -1;
+            size_t extra = i - kMainRows;
+            FlyoutQuotaRow& row = r >= 0 ? popup.rows[r] : popup.extraRows[extra];
+            bool available = r >= 0 ? sources[r].available :
+                                      extrasShown && extra < d.extraQuotas.size();
             if (!row.row) continue;
-            for (auto const& part : {row.row, row.labels, row.details}) show(part, source.available);
-            if (!source.available) continue;
+            for (auto const& part : {row.row, row.labels, row.details}) show(part, available);
+            if (!available) continue;
             visibleRows++;
-            const WindowUsage& wu = *readings[r];
-            row.name.Text(source.name);
+            const WindowUsage& wu = r >= 0 ? *readings[r] : d.extraQuotas[extra].usage;
+            row.name.Text(r >= 0 ? sources[r].name : d.extraQuotas[extra].name);
 
             if (r == kFlyoutExtraRow && creditsAmount) {
                 bool balance = !d.creditsUnlimited && d.creditsBalance >= 0;
@@ -732,9 +764,10 @@ static void UpdateAccountFlyout(
 
             // The usage graph tiles' projection; the text, naming the rate's span, when it
             // reaches the limit before the reset. None once the limit is reached.
-            const std::vector<TileTracePoint>& trace = traces[r];
+            static const std::vector<TileTracePoint> kNoTrace;
+            const std::vector<TileTracePoint>& trace = r >= 0 ? traces[r] : kNoTrace;
             std::optional<UsageProjection> projected;
-            if (!display.stale && !limited) {
+            if (r >= 0 && !display.stale && !limited) {
                 projected = ProjectUsage(wu, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
@@ -878,7 +911,8 @@ static void UpdateAccountFlyout(
             row.amount.Text(amount);
             show(row.amount, !amount.empty());
 
-            std::wstring reset = wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
+            std::wstring reset = wu.notYetStarted ? L"Not yet started" :
+                                 wu.resetUnixMs ? L"Resets " + FormatReset(wu.resetUnixMs) : L"";
             row.reset.Text(reset);
             show(row.reset, !reset.empty());
         }
@@ -896,10 +930,16 @@ static void UpdateAccountFlyout(
                 GridLength{1, GridUnitType::Star});
         }
 
-        std::wstring extraLimits =
-            openAi && display.showOpenAiExtraLimits ? d.openAiExtraLimitLines : L"";
-        popup.extraLimits.Text(extraLimits);
-        show(popup.extraLimits, !extraLimits.empty());
+        std::wstring freeResets;
+        if (d.freeResets > 0) {
+            freeResets = std::to_wstring(d.freeResets) +
+                         (d.freeResets == 1 ? L" free reset available" : L" free resets available");
+            if (d.freeResetsExpiryMs > display.now) {
+                freeResets += L" \u00B7 next expires " + FormatReset(d.freeResetsExpiryMs);
+            }
+        }
+        popup.freeResets.Text(freeResets);
+        show(popup.freeResets, !freeResets.empty());
         popup.extraLines.Text(d.extraLines);
         show(popup.extraLines, !d.extraLines.empty());
         std::wstring error;
@@ -915,13 +955,12 @@ static void UpdateAccountFlyout(
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
             status = L"Sign-in required. Click the bars to sign in.";
-        } else if (!visibleRows && d.lastSuccessMs && error.empty() && extraLimits.empty() &&
-                   d.extraLines.empty()) {
+        } else if (!visibleRows && d.lastSuccessMs && error.empty() && d.extraLines.empty()) {
             status = L"No quotas reported.";
         }
         popup.status.Text(status);
         show(popup.status, !status.empty());
-        show(popup.notes, !extraLimits.empty() || !d.extraLines.empty() || !error.empty() ||
+        show(popup.notes, !freeResets.empty() || !d.extraLines.empty() || !error.empty() ||
                               !status.empty());
 
         std::wstring updated = display.visualTestMode ? L"Visual test data" :

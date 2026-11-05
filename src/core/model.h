@@ -277,7 +277,16 @@ struct WindowUsage {
     double pct = -1;
     ULONGLONG resetUnixMs = 0;
     ULONGLONG windowDurationMs = 0;
+    bool notYetStarted = false;  // Anthropic: no usage yet and an explicitly null reset.
 };
+
+// A quota the details flyout lists after its main rows, without a taskbar bar, history or alerts:
+// Anthropic's per-model and per-surface limits, OpenAI's additional rate limits.
+struct NamedQuota {
+    std::wstring name;
+    WindowUsage usage;
+};
+static constexpr size_t kMaxExtraQuotas = 8;
 
 // What GitHub Copilot's monthly allowance counts: AI credits, premium requests where billing
 // isn't token based, or legacy Copilot Free's chat requests.
@@ -294,9 +303,13 @@ struct AccountData {
     WindowUsage extraUsage;
     WindowUsage antigravityThirdParty5h;
     WindowUsage antigravityThirdPartyWeek;
+    std::vector<NamedQuota> extraQuotas;  // At most kMaxExtraQuotas.
     std::wstring plan;
-    std::wstring openAiExtraLimitLines;
     std::wstring extraLines;
+    // Free rate-limit resets (Anthropic, OpenAI): -1 when not reported; the next one's expiry, 0
+    // when unknown or none.
+    int freeResets = -1;
+    ULONGLONG freeResetsExpiryMs = 0;
     // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI, GitHub
     // Copilot); -1 when unknown. Left = limit - used. Used may go negative if a credits balance
     // exceeds the configured max.
@@ -323,6 +336,30 @@ struct AccountData {
     bool stale = true;
     bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
+
+// Adds a reported quota to the account's extra quotas, its name followed by its window's length
+// when known ("Sonnet weekly", "Spark 5-hour"). A quota under a name already listed replaces it
+// when more used; past kMaxExtraQuotas quotas are dropped.
+static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage) {
+    if (name.empty() || !std::isfinite(usage.pct) || usage.pct < 0) return;
+    name.resize(std::min<size_t>(name.size(), 64));
+    constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000;
+    constexpr ULONGLONG kDayMs = 24 * kHourMs;
+    ULONGLONG durationMs = usage.windowDurationMs;
+    if (durationMs == kWeeklyWindowMs) {
+        name += L" weekly";
+    } else if (durationMs && durationMs % kDayMs == 0) {
+        name += L" " + std::to_wstring(durationMs / kDayMs) + L"-day";
+    } else if (durationMs && durationMs % kHourMs == 0) {
+        name += L" " + std::to_wstring(durationMs / kHourMs) + L"-hour";
+    }
+    for (NamedQuota& listed : d->extraQuotas) {
+        if (listed.name != name) continue;
+        if (usage.pct > listed.usage.pct) listed.usage = usage;
+        return;
+    }
+    if (d->extraQuotas.size() < kMaxExtraQuotas) d->extraQuotas.push_back({std::move(name), usage});
+}
 
 // Stable identity used to preserve g_data across settings reloads, persist the show/hide
 // toggle, and key the encrypted token store. FNV-1a over provider+label; relabeling an
