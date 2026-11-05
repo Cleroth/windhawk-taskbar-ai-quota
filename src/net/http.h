@@ -38,6 +38,14 @@ static void CloseActiveHttpHandles() {
     for (auto it = handles.rbegin(); it != handles.rend(); ++it) WinHttpCloseHandle(*it);
 }
 
+// Requests carry bearer tokens, refresh tokens or a local CSRF token, which WinHTTP would send
+// unchanged to wherever a redirect points: never follow one. A request that can't turn redirects
+// off isn't sent.
+static bool DisableRedirects(HINTERNET req) {
+    DWORD policy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+    return WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &policy, sizeof(policy)) != FALSE;
+}
+
 static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR userAgent,
                               const std::wstring& headers, const std::string& body = {}) {
     HttpResult res;
@@ -60,7 +68,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
         if (req && !TrackHttpHandle(req)) req = nullptr;
     }
 
-    if (!g_unloading && req &&
+    if (!g_unloading && req && DisableRedirects(req) &&
         WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
                            body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
                            (DWORD)body.size(), (DWORD)body.size(), 0) &&
@@ -70,6 +78,20 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
                             WINHTTP_NO_HEADER_INDEX);
         res.status = (int)status;
+
+        // An unfollowed redirect comes back as its own response, an HTTP error to the caller. Its
+        // target, without query or fragment, shows where a moved endpoint went.
+        if (res.status >= 300 && res.status < 400) {
+            wchar_t location[1024]{};
+            DWORD locationSz = sizeof(location);
+            if (!WinHttpQueryHeaders(req, WINHTTP_QUERY_LOCATION, WINHTTP_HEADER_NAME_BY_INDEX,
+                                     location, &locationSz, WINHTTP_NO_HEADER_INDEX)) {
+                location[0] = L'\0';
+            }
+            location[wcscspn(location, L"?#")] = L'\0';
+            Wh_Log(L"HTTP %d from %s%s: redirect to %s not followed", res.status, host, path,
+                   location[0] ? location : L"an unreadable location");
+        }
 
         wchar_t ra[128]{};
         DWORD raSz = sizeof(ra);

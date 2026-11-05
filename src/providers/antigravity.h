@@ -369,7 +369,7 @@ static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR cs
         headers += L"\r\n";
     }
 
-    if (!g_unloading && req &&
+    if (!g_unloading && req && DisableRedirects(req) &&
         WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
                            (LPVOID)body.data(), (DWORD)body.size(), (DWORD)body.size(), 0) &&
         WinHttpReceiveResponse(req, nullptr)) {

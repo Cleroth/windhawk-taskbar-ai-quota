@@ -115,7 +115,8 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
 // loopback callback; for GitHub's device flow it shows the code to enter and a status line while
 // its message loop polls for the token. Runs its own message loop on the login thread; closed on
 // cancel, submit, callback, its alternate button, a granted device sign-in, or unload. A device
-// sign-in that ends otherwise stays open with the reason until closed.
+// sign-in that ends otherwise stays open with the reason until closed, as does a pasted code#state
+// from another sign-in.
 enum {
     kLoginInstructions = 100,
     kLoginCode,
@@ -134,7 +135,7 @@ struct LoginDialogState {
     SOCKET listener = INVALID_SOCKET;
     std::string callbackRoute;
     bool secret = false;
-    std::string expectedState;
+    std::string expectedState;  // OAuth state the callback or a pasted code#state must carry.
     // A loopback flow's button that closes the window to sign in another way (alternateChosen).
     PCWSTR alternate = nullptr;
     // Device flow: the code to enter on the verification page, and the token poll the message
@@ -296,6 +297,22 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     std::wstring buf(len + 1, L'\0');
                     GetWindowTextW(st->edit, buf.data(), len + 1);
                     buf.resize(len);
+                    // A code#state from another sign-in's link can't complete this one: keep the
+                    // window open and say so. A code pasted without its state is let through.
+                    if (!st->expectedState.empty()) {
+                        size_t hash = buf.find(L'#');
+                        size_t last = buf.find_last_not_of(L" \t\r\n");
+                        if (hash != std::wstring::npos && last != std::wstring::npos && last > hash &&
+                            WideToUtf8(buf.substr(hash + 1, last - hash)) != st->expectedState) {
+                            SetWindowTextW(GetDlgItem(hWnd, kLoginInstructions),
+                                           L"That code belongs to another sign-in link. Open this "
+                                           L"window's link, approve access, then paste the code its "
+                                           L"page shows.");
+                            SendMessageW(st->edit, EM_SETSEL, 0, -1);
+                            SetFocus(st->edit);
+                            return 0;
+                        }
+                    }
                     st->pastedCode = std::move(buf);
                     st->ok = true;
                     DestroyWindow(hWnd);
@@ -462,6 +479,8 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
             st.nextPollMs = ended + wait;
         }
     } else {
+        // Ends on the WM_QUIT the window's WM_DESTROY posts, so none is left pending to end the
+        // next sign-in window on this thread (Anthropic's Use a code) at once.
         while (!g_unloading) {
             int getMessageResult = GetMessageW(&msg, nullptr, 0, 0);
             if (getMessageResult <= 0) break;
@@ -469,7 +488,6 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
-            if (st.done) break;
         }
     }
     g_loginWnd.store(nullptr);
@@ -535,6 +553,7 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         redirect = WideToUtf8(kAnthropicRedirect);
         LoginDialogState dialog;
         dialog.url = BuildAnthropicAuthorizeUrl(redirect, challenge, state);
+        dialog.expectedState = state;
         std::wstring instructions =
             L"Open the sign-in link in a browser and approve access on claude.ai, then paste "
             L"the code shown on the page below.";

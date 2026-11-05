@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.14.1
+// @version         2.14.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1686,6 +1686,14 @@ static void CloseActiveHttpHandles() {
     for (auto it = handles.rbegin(); it != handles.rend(); ++it) WinHttpCloseHandle(*it);
 }
 
+// Requests carry bearer tokens, refresh tokens or a local CSRF token, which WinHTTP would send
+// unchanged to wherever a redirect points: never follow one. A request that can't turn redirects
+// off isn't sent.
+static bool DisableRedirects(HINTERNET req) {
+    DWORD policy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+    return WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &policy, sizeof(policy)) != FALSE;
+}
+
 static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR userAgent,
                               const std::wstring& headers, const std::string& body = {}) {
     HttpResult res;
@@ -1708,7 +1716,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
         if (req && !TrackHttpHandle(req)) req = nullptr;
     }
 
-    if (!g_unloading && req &&
+    if (!g_unloading && req && DisableRedirects(req) &&
         WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
                            body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
                            (DWORD)body.size(), (DWORD)body.size(), 0) &&
@@ -1718,6 +1726,20 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
                             WINHTTP_NO_HEADER_INDEX);
         res.status = (int)status;
+
+        // An unfollowed redirect comes back as its own response, an HTTP error to the caller. Its
+        // target, without query or fragment, shows where a moved endpoint went.
+        if (res.status >= 300 && res.status < 400) {
+            wchar_t location[1024]{};
+            DWORD locationSz = sizeof(location);
+            if (!WinHttpQueryHeaders(req, WINHTTP_QUERY_LOCATION, WINHTTP_HEADER_NAME_BY_INDEX,
+                                     location, &locationSz, WINHTTP_NO_HEADER_INDEX)) {
+                location[0] = L'\0';
+            }
+            location[wcscspn(location, L"?#")] = L'\0';
+            Wh_Log(L"HTTP %d from %s%s: redirect to %s not followed", res.status, host, path,
+                   location[0] ? location : L"an unreadable location");
+        }
 
         wchar_t ra[128]{};
         DWORD raSz = sizeof(ra);
@@ -2309,7 +2331,8 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
 // loopback callback; for GitHub's device flow it shows the code to enter and a status line while
 // its message loop polls for the token. Runs its own message loop on the login thread; closed on
 // cancel, submit, callback, its alternate button, a granted device sign-in, or unload. A device
-// sign-in that ends otherwise stays open with the reason until closed.
+// sign-in that ends otherwise stays open with the reason until closed, as does a pasted code#state
+// from another sign-in.
 enum {
     kLoginInstructions = 100,
     kLoginCode,
@@ -2328,7 +2351,7 @@ struct LoginDialogState {
     SOCKET listener = INVALID_SOCKET;
     std::string callbackRoute;
     bool secret = false;
-    std::string expectedState;
+    std::string expectedState;  // OAuth state the callback or a pasted code#state must carry.
     // A loopback flow's button that closes the window to sign in another way (alternateChosen).
     PCWSTR alternate = nullptr;
     // Device flow: the code to enter on the verification page, and the token poll the message
@@ -2490,6 +2513,22 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     std::wstring buf(len + 1, L'\0');
                     GetWindowTextW(st->edit, buf.data(), len + 1);
                     buf.resize(len);
+                    // A code#state from another sign-in's link can't complete this one: keep the
+                    // window open and say so. A code pasted without its state is let through.
+                    if (!st->expectedState.empty()) {
+                        size_t hash = buf.find(L'#');
+                        size_t last = buf.find_last_not_of(L" \t\r\n");
+                        if (hash != std::wstring::npos && last != std::wstring::npos && last > hash &&
+                            WideToUtf8(buf.substr(hash + 1, last - hash)) != st->expectedState) {
+                            SetWindowTextW(GetDlgItem(hWnd, kLoginInstructions),
+                                           L"That code belongs to another sign-in link. Open this "
+                                           L"window's link, approve access, then paste the code its "
+                                           L"page shows.");
+                            SendMessageW(st->edit, EM_SETSEL, 0, -1);
+                            SetFocus(st->edit);
+                            return 0;
+                        }
+                    }
                     st->pastedCode = std::move(buf);
                     st->ok = true;
                     DestroyWindow(hWnd);
@@ -2656,6 +2695,8 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
             st.nextPollMs = ended + wait;
         }
     } else {
+        // Ends on the WM_QUIT the window's WM_DESTROY posts, so none is left pending to end the
+        // next sign-in window on this thread (Anthropic's Use a code) at once.
         while (!g_unloading) {
             int getMessageResult = GetMessageW(&msg, nullptr, 0, 0);
             if (getMessageResult <= 0) break;
@@ -2663,7 +2704,6 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
-            if (st.done) break;
         }
     }
     g_loginWnd.store(nullptr);
@@ -2729,6 +2769,7 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         redirect = WideToUtf8(kAnthropicRedirect);
         LoginDialogState dialog;
         dialog.url = BuildAnthropicAuthorizeUrl(redirect, challenge, state);
+        dialog.expectedState = state;
         std::wstring instructions =
             L"Open the sign-in link in a browser and approve access on claude.ai, then paste "
             L"the code shown on the page below.";
@@ -3920,7 +3961,7 @@ static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR cs
         headers += L"\r\n";
     }
 
-    if (!g_unloading && req &&
+    if (!g_unloading && req && DisableRedirects(req) &&
         WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
                            (LPVOID)body.data(), (DWORD)body.size(), (DWORD)body.size(), 0) &&
         WinHttpReceiveResponse(req, nullptr)) {
