@@ -161,8 +161,12 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
         SetWindowPos(GetDlgItem(hWnd, kLoginCode), nullptr, sc(12), sc(68), sc(424), sc(24), flags);
         SetWindowPos(GetDlgItem(hWnd, kLoginStatus), nullptr, sc(12), sc(100), sc(424), sc(20), flags);
     }
-    SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(12), sc(buttonsTop), sc(120), sc(30), flags);
-    SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
+    // The device flow's one button spans the link flows' two.
+    SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(12), sc(buttonsTop), sc(state.poll ? 246 : 120),
+                 sc(30), flags);
+    if (!state.poll) {
+        SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
+    }
     if (state.edit) {
         SetWindowPos(state.edit, nullptr, sc(12), sc(110), sc(424), sc(24), flags);
         SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr, sc(262), sc(146), sc(84), sc(30), flags);
@@ -224,9 +228,13 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                        WS_TABSTOP | ES_READONLY | ES_CENTER | ES_AUTOHSCROLL, kLoginCode);
                 create(0, L"STATIC", L"", SS_LEFTNOWORDWRAP | SS_ENDELLIPSIS | SS_NOPREFIX, kLoginStatus);
             }
-            create(0, L"BUTTON", st->poll ? L"Copy code" : L"Copy link", WS_TABSTOP | BS_PUSHBUTTON,
-                   kLoginCopyLink);
-            create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
+            // The device flow's one button copies the code and opens the verification page.
+            if (st->poll) {
+                create(0, L"BUTTON", L"Copy code and open GitHub", WS_TABSTOP | BS_DEFPUSHBUTTON, kLoginCopyLink);
+            } else {
+                create(0, L"BUTTON", L"Copy link", WS_TABSTOP | BS_PUSHBUTTON, kLoginCopyLink);
+                create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
+            }
             if (st->listener == INVALID_SOCKET && !st->poll) {
                 st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"",
                                   WS_TABSTOP | ES_AUTOHSCROLL | (st->secret ? ES_PASSWORD : 0), kLoginCode);
@@ -253,7 +261,9 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                         }
                         CloseClipboard();
                     }
-                    SetWindowTextW(GetDlgItem(hWnd, kLoginCopyLink), copied ? L"Copied" : L"Copy failed");
+                    SetWindowTextW(GetDlgItem(hWnd, kLoginCopyLink),
+                                   !copied ? L"Copy failed" : st->poll ? L"Code copied" : L"Copied");
+                    if (st->poll) OpenUrl(st->url.c_str());
                     return 0;
                 }
                 case kLoginOpenLink:
@@ -420,13 +430,12 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
             GetWindowTextW(status, shown, ARRAYSIZE(shown));
             if (wcscmp(shown, st.status) != 0) SetWindowTextW(status, st.status);
             if (!wait) {
-                // Focus moves to Close before the buttons it could be on are disabled.
+                // Focus moves to Close before the button it could be on is disabled.
                 stopped = true;
                 HWND close = GetDlgItem(wnd, IDCANCEL);
                 SetWindowTextW(close, L"Close");
                 SetFocus(close);
                 EnableWindow(GetDlgItem(wnd, kLoginCopyLink), FALSE);
-                EnableWindow(GetDlgItem(wnd, kLoginOpenLink), FALSE);
                 continue;
             }
             st.nextPollMs = ended + wait;
@@ -708,8 +717,8 @@ static void DoCopilotLogin(const LoginRequest& req) {
     };
     std::wstring title = L"Sign in: " + req.label + L" (GitHub Copilot)";
     std::wstring instructions =
-        L"Open github.com/login/device in a browser, sign in to the GitHub account with Copilot "
-        L"and enter the code below. This window closes once sign-in completes.";
+        L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+        L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.";
     bool granted = ShowLoginDialog(title, instructions, dialog);
     if (g_unloading) return;
     if (!granted) {
