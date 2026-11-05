@@ -349,7 +349,8 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::AccountAdd:
                         // A provider from the Add account menu (the button itself opens it): the
-                        // account exists at once; its card opens on its label.
+                        // account exists at once; its card opens on its label, and its sign-in
+                        // starts once it is named (CommitLabel).
                         if (action.value < 0 || action.value >= int(std::size(kSettingsProviders))) break;
                         KillStepTimers(host);
                         if (uint64_t key = edits.AddAccount(kSettingsProviders[action.value])) ShowLabel(host, key);
@@ -361,9 +362,8 @@ struct SettingsUiClient final : UiHostClient {
                         if (action.value) {
                             expanded.push_back(action.key);
                         } else {
-                            bool queued = false;
-                            for (SettingsField text : {SettingsField::AccountLabel, SettingsField::AccountTileText,
-                                                       SettingsField::AccountCreditsMax}) {
+                            bool queued = edits.CommitLabel(action.key, true);
+                            for (SettingsField text : {SettingsField::AccountTileText, SettingsField::AccountCreditsMax}) {
                                 queued |= edits.RequestCommit(action.key, text, true);
                             }
                             if (queued) PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
@@ -445,14 +445,18 @@ struct SettingsUiClient final : UiHostClient {
                 UiHostRequestRebuild(host, false);
                 break;
             case UiActionKind::TextCommit:
-            case UiActionKind::TextBlur:
-                // Committed from the queue, never inside the focus-loss handler.
+            case UiActionKind::TextBlur: {
+                // Committed from the queue, never inside the focus-loss handler; so is the sign-in
+                // of an added account its naming starts.
                 KillStepTimer(host, field);
-                if (edits.RequestCommit(action.key, field, action.kind == UiActionKind::TextBlur)) {
+                bool blur = action.kind == UiActionKind::TextBlur;
+                if (field == SettingsField::AccountLabel ? edits.CommitLabel(action.key, blur) :
+                                                           edits.RequestCommit(action.key, field, blur)) {
                     PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
                 }
                 UiHostRequestRebuild(host, false);
                 break;
+            }
             case UiActionKind::TextRevert:
                 KillStepTimer(host, field);
                 edits.Revert(action.key, field);

@@ -273,6 +273,91 @@ static void RunAccountEditTests() {
         CHECK(edits.notices.size() == 1 && edits.notices[0].failure);
     });
 
+    Run("accounts: an added account signs in once it is named: behind its saved label, once, never past a label error "
+        "or a failed save; Antigravity has no sign-in", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        auto signIn = [](PCWSTR label) { return AccountOp(SettingsField::AccountSignIn, label, L"0"); };
+        auto lastOps = [&](size_t count) {
+            std::vector<std::wstring> ops = AccountOps(store);
+            return std::vector<std::wstring>(ops.end() - ptrdiff_t(std::min(count, ops.size())), ops.end());
+        };
+        // Left unchanged: its default label.
+        uint64_t a = edits.AddAccount(L"anthropic");
+        CHECK(edits.pendingSignIn == a);
+        CHECK(edits.CommitLabel(a, true) && edits.Process() == 0);
+        CHECK(lastOps(2) == (std::vector<std::wstring>{L"add anthropic A", signIn(L"A")}));
+        // Once: a later rename only renames.
+        edits.SetText(a, kLabel, L"Work");
+        CHECK(edits.CommitLabel(a, false) && edits.Process() == 0);
+        CHECK(lastOps(1) == std::vector<std::wstring>{AccountOp(kLabel, L"A", L"Work")});
+        // Named: the label saves first.
+        uint64_t o = edits.AddAccount(L"openai");
+        edits.SetText(o, kLabel, L"Personal");
+        CHECK(edits.CommitLabel(o, false) && edits.Process() == 0);
+        CHECK(lastOps(2) == (std::vector<std::wstring>{AccountOp(kLabel, L"O", L"Personal"), signIn(L"Personal")}));
+        // A label error queues nothing; the fixed label saves and signs in.
+        uint64_t c = edits.AddAccount(L"copilot");
+        edits.SetText(c, kLabel, L"");
+        CHECK(!edits.CommitLabel(c, true) && edits.queue.empty() && edits.pendingSignIn == c);
+        edits.SetText(c, kLabel, L"GH");
+        CHECK(edits.CommitLabel(c, false) && edits.Process() == 0);
+        CHECK(lastOps(2) == (std::vector<std::wstring>{AccountOp(kLabel, L"C", L"GH"), signIn(L"GH")}));
+        // A failed save keeps it waiting: focus loss doesn't retry the label, Enter does.
+        uint64_t oc = edits.AddAccount(L"opencode");
+        edits.SetText(oc, kLabel, L"Go plan");
+        store.failNext = 1;
+        CHECK(edits.CommitLabel(oc, false) && edits.Process() == 1);
+        CHECK(lastOps(1) == std::vector<std::wstring>{AccountOp(kLabel, L"OC", L"Go plan")});
+        CHECK(edits.pendingSignIn == oc && edits.queue.empty());
+        edits.notices.clear();
+        CHECK(!edits.CommitLabel(oc, true) && edits.queue.empty());
+        CHECK(edits.CommitLabel(oc, false) && edits.Process() == 0);
+        CHECK(lastOps(2) == (std::vector<std::wstring>{AccountOp(kLabel, L"OC", L"Go plan"), signIn(L"Go plan")}));
+        uint64_t g = edits.AddAccount(L"antigravity");
+        CHECK(!edits.pendingSignIn && !edits.CommitLabel(g, true) && edits.queue.empty());
+        CHECK(edits.notices.empty());
+    });
+
+    Run("accounts: a sign-in queued by naming survives a page change and the card's other actions; Sign in replaces "
+        "it; removal drops a waiting one", [] {
+        TestStore store;
+        AddTestAccounts(store.settings);
+        SettingsEdits edits(store);
+        edits.Reload();
+        auto lastOps = [&](size_t count) {
+            std::vector<std::wstring> ops = AccountOps(store);
+            return std::vector<std::wstring>(ops.end() - ptrdiff_t(std::min(count, ops.size())), ops.end());
+        };
+        // Focus moved to another page: the label saves, then the sign-in runs.
+        uint64_t a = edits.AddAccount(L"anthropic");
+        edits.SetText(a, kLabel, L"Work");
+        CHECK(edits.CommitLabel(a, true) && edits.Navigate() == 0 && edits.queue.empty());
+        CHECK(lastOps(2) == (std::vector<std::wstring>{AccountOp(kLabel, L"A", L"Work"),
+                                                       AccountOp(SettingsField::AccountSignIn, L"Work", L"0")}));
+        // Focus moved to the card's switch: its action saves the label; the sign-in stays queued.
+        uint64_t o = edits.AddAccount(L"openai");
+        edits.SetText(o, kLabel, L"Home");
+        CHECK(edits.CommitLabel(o, true));
+        CHECK(edits.AccountAction(o, SettingsField::AccountHidden, 1) == SettingsActionResult::Done);
+        CHECK(edits.Process() == 0);
+        CHECK(lastOps(3) == (std::vector<std::wstring>{AccountOp(kLabel, L"O", L"Home"),
+                                                       AccountOp(SettingsField::AccountHidden, L"Home", L"1"),
+                                                       AccountOp(SettingsField::AccountSignIn, L"Home", L"0")}));
+        // Its Sign in button, once the queued one waits: one sign-in.
+        uint64_t c = edits.AddAccount(L"copilot");
+        CHECK(edits.CommitLabel(c, true));
+        CHECK(edits.AccountAction(c, SettingsField::AccountSignIn, 0) == SettingsActionResult::Done);
+        CHECK(edits.queue.empty() && !edits.pendingSignIn && !edits.CommitLabel(c, true) && edits.Process() == 0);
+        CHECK(lastOps(2) == (std::vector<std::wstring>{L"add copilot C", AccountOp(SettingsField::AccountSignIn, L"C", L"0")}));
+        // Removed before its naming.
+        uint64_t oc = edits.AddAccount(L"opencode");
+        CHECK(edits.AccountAction(oc, SettingsField::AccountRemove, 0) == SettingsActionResult::Done);
+        CHECK(!edits.pendingSignIn && edits.notices.empty());
+    });
+
     Run("accounts: actions take desired values on the fresh account; the last visible stays; moves go to an index", [] {
         TestStore store;
         AddTestAccounts(store.settings);

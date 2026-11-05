@@ -67,7 +67,9 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   account edits and actions against the same store (keys and slots, label validation, drafts
   committed before an account action and an invalid label blocking it, removal invalidation,
   removal's sign-in and history deletion with a kept history's notice, the
-  Add account label choice skipping stored sign-ins, desired visibility and moves, vanished
+  Add account label choice skipping stored sign-ins, an added account's sign-in waiting for its
+  naming (label errors, failed saves, page changes, card actions, Sign in, removal), desired
+  visibility and moves, vanished
   accounts) and the Accounts page (cards with their logos' brand colors, header controls, expanded rows per provider, empty
   state, a lifted dragged card, the reorder target, a drag's in-place card moves matching a rebuild
   of nine accounts). `fixtures/layout.inc`: slider input, the

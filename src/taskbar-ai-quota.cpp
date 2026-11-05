@@ -39,9 +39,10 @@ Optional notifications warn when usage crosses the configured red threshold.
 ## Setup
 
 Click the **AI +** taskbar tile (later: right-click a quota column, **Settings**) and choose
-**Add account**. A new account is polled right away; Anthropic and OpenAI use browser
-sign-in, GitHub Copilot a code you enter on github.com and OpenCode Go an API key you paste from
-its console, with tokens and keys encrypted locally with Windows DPAPI. Antigravity uses its
+**Add account**, then name it (or keep its default label) and press Enter: its sign-in window
+opens. Anthropic and OpenAI use browser sign-in, GitHub Copilot a code you enter on github.com
+and OpenCode Go an API key you paste from its console, with tokens and keys encrypted locally
+with Windows DPAPI. Antigravity uses its
 signed-in local app or CLI session, which must remain running.
 
 ## Settings

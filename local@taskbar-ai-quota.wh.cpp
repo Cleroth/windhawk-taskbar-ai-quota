@@ -42,9 +42,10 @@ Optional notifications warn when usage crosses the configured red threshold.
 ## Setup
 
 Click the **AI +** taskbar tile (later: right-click a quota column, **Settings**) and choose
-**Add account**. A new account is polled right away; Anthropic and OpenAI use browser
-sign-in, GitHub Copilot a code you enter on github.com and OpenCode Go an API key you paste from
-its console, with tokens and keys encrypted locally with Windows DPAPI. Antigravity uses its
+**Add account**, then name it (or keep its default label) and press Enter: its sign-in window
+opens. Anthropic and OpenAI use browser sign-in, GitHub Copilot a code you enter on github.com
+and OpenCode Go an API key you paste from its console, with tokens and keys encrypted locally
+with Windows DPAPI. Antigravity uses its
 signed-in local app or CLI session, which must remain running.
 
 ## Settings
@@ -20460,6 +20461,8 @@ struct SettingsEdits {
     std::vector<std::pair<uint64_t, uint64_t>> sessionKeys;
     std::map<uint64_t, uint32_t> slots;
     uint64_t sessions = 0;
+    // The added account whose sign-in waits for its naming (CommitLabel); 0 if none
+    uint64_t pendingSignIn = 0;
 
     // Messages for the window to show once the current operation is done
     std::vector<SettingsNotice> notices;
@@ -20647,7 +20650,9 @@ struct SettingsEdits {
         return Process();
     }
 
-    // Runs the queue in order, one transaction per request, skipping superseded ones.
+    // Runs the queue in order, one transaction per request, skipping superseded ones. A sign-in
+    // queued behind its label (CommitLabel) runs only once that label saved; otherwise it waits
+    // for the next naming.
     int Process() {
         int failures = 0;
         while (!queue.empty()) {
@@ -20661,15 +20666,19 @@ struct SettingsEdits {
                 const SettingsDraft* draft = Find(request.key, request.field);
                 if (!draft || draft->revision != request.revision) continue;
             }
+            if (request.field == SettingsField::AccountSignIn && Find(request.key, SettingsField::AccountLabel)) {
+                pendingSignIn = request.key;
+                continue;
+            }
             if (!Run(request)) failures++;
         }
         return failures;
     }
 
     // Page change, which never blocks: valid drafts commit in order, invalid ones revert
-    // without saving, failed ones stay with their error.
+    // without saving, failed ones stay with their error. Sign-ins queued behind labels follow.
     int Navigate() {
-        queue.clear();
+        std::erase_if(queue, [](const SettingsRequest& r) { return r.field != SettingsField::AccountSignIn; });
         int failures = 0;
         for (const auto& [key, field] : DraftKeys()) {
             SettingsDraft* draft = Find(key, field);
@@ -20681,7 +20690,7 @@ struct SettingsEdits {
             if (store->Unloading()) break;
             if (!Run(RequestFor(*draft))) failures++;
         }
-        return failures;
+        return failures + Process();
     }
 
     // Deliberate close: every draft commits, one transaction at a time, rechecking unload in
@@ -20710,10 +20719,13 @@ struct SettingsEdits {
     // Accounts --------------------------------------------------------------------------------
 
     // Before an action on an account: its drafts commit, one transaction each, its queued
-    // requests included. An invalid label blocks before anything saves, with its error; so does
-    // a failed save. Other invalid drafts stay as they are.
+    // requests included (a sign-in queued behind its label stays queued). An invalid label blocks
+    // before anything saves, with its error; so does a failed save. Other invalid drafts stay as
+    // they are.
     SettingsActionResult FlushAccount(uint64_t key) {
-        std::erase_if(queue, [&](const SettingsRequest& request) { return request.key == key; });
+        std::erase_if(queue, [&](const SettingsRequest& request) {
+            return request.key == key && request.field != SettingsField::AccountSignIn;
+        });
         if (SettingsDraft* label = Find(key, SettingsField::AccountLabel); label && !Valid(*label)) {
             label->error = InvalidError(*label);
             return SettingsActionResult::Blocked;
@@ -20728,8 +20740,15 @@ struct SettingsEdits {
 
     // An account action (sign in or out, dashboard, visibility, reorder, remove) with its
     // desired value, after the account's drafts committed; the account is resolved again
-    // afterwards. A removal drops the account's drafts and requests.
+    // afterwards. A removal drops the account's drafts and requests. A sign-in replaces one that
+    // waits for the account's naming.
     SettingsActionResult AccountAction(uint64_t key, SettingsField action, int value) {
+        if (action == SettingsField::AccountSignIn) {
+            if (pendingSignIn == key) pendingSignIn = 0;
+            std::erase_if(queue, [&](const SettingsRequest& request) {
+                return request.key == key && request.field == SettingsField::AccountSignIn;
+            });
+        }
         if (SettingsActionResult flushed = FlushAccount(key); flushed != SettingsActionResult::Done) {
             return flushed;
         }
@@ -20748,10 +20767,22 @@ struct SettingsEdits {
         return Settle({key, action, 0, value}, result) ? SettingsActionResult::Done : SettingsActionResult::Failed;
     }
 
+    // Enter or focus loss in an account's label box, or its card collapsing: the label commits as
+    // RequestCommit's, and an added account waiting for its naming gets its sign-in queued behind
+    // it, unless the label keeps an error. Returns whether anything was queued.
+    bool CommitLabel(uint64_t key, bool focusLoss) {
+        bool queued = RequestCommit(key, SettingsField::AccountLabel, focusLoss);
+        if (!key || key != pendingSignIn || (!queued && Find(key, SettingsField::AccountLabel))) return queued;
+        pendingSignIn = 0;
+        queue.push_back({key, SettingsField::AccountSignIn, 0, 0, {}});
+        return true;
+    }
+
     // The Add account menu: an account of `provider`, created at once. Its label is the first
     // default (A, A2, A3, ...; O, G, C and OC for the others) whose identity has no stored sign-in,
     // so it never adopts an old one; the store takes the first of those no account of the provider
-    // uses. Returns its key; 0 when none was added.
+    // uses. One with a sign-in (all but Antigravity) waits for its naming to start it. Returns its
+    // key; 0 when none was added.
     uint64_t AddAccount(const std::wstring& provider) {
         if (store->Unloading()) return 0;
         std::wstring base = provider == L"openai" ? L"O" : provider == L"antigravity" ? L"G" :
@@ -20773,6 +20804,7 @@ struct SettingsEdits {
             SettingsAccountRef ref = AccountRef(i);
             if (result.account.historyId ? ref.historyId == result.account.historyId :
                                            ref.identity == result.account.identity) {
+                if (provider != L"antigravity") pendingSignIn = keys[i];
                 return keys[i];
             }
         }
@@ -20836,8 +20868,9 @@ private:
         return {account.historyId, AccountIdentityHash(account)};
     }
 
-    // A removed (or vanished) account: its drafts, requests and session key go.
+    // A removed (or vanished) account: its drafts, requests, waiting sign-in and session key go.
     void DropAccount(uint64_t key) {
+        if (pendingSignIn == key) pendingSignIn = 0;
         std::erase_if(drafts, [&](const SettingsDraft& d) { return d.key == key; });
         std::erase_if(queue, [&](const SettingsRequest& r) { return r.key == key; });
         std::erase_if(sessionKeys, [&](const auto& entry) { return entry.second == key; });
@@ -24319,7 +24352,8 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::AccountAdd:
                         // A provider from the Add account menu (the button itself opens it): the
-                        // account exists at once; its card opens on its label.
+                        // account exists at once; its card opens on its label, and its sign-in
+                        // starts once it is named (CommitLabel).
                         if (action.value < 0 || action.value >= int(std::size(kSettingsProviders))) break;
                         KillStepTimers(host);
                         if (uint64_t key = edits.AddAccount(kSettingsProviders[action.value])) ShowLabel(host, key);
@@ -24331,9 +24365,8 @@ struct SettingsUiClient final : UiHostClient {
                         if (action.value) {
                             expanded.push_back(action.key);
                         } else {
-                            bool queued = false;
-                            for (SettingsField text : {SettingsField::AccountLabel, SettingsField::AccountTileText,
-                                                       SettingsField::AccountCreditsMax}) {
+                            bool queued = edits.CommitLabel(action.key, true);
+                            for (SettingsField text : {SettingsField::AccountTileText, SettingsField::AccountCreditsMax}) {
                                 queued |= edits.RequestCommit(action.key, text, true);
                             }
                             if (queued) PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
@@ -24415,14 +24448,18 @@ struct SettingsUiClient final : UiHostClient {
                 UiHostRequestRebuild(host, false);
                 break;
             case UiActionKind::TextCommit:
-            case UiActionKind::TextBlur:
-                // Committed from the queue, never inside the focus-loss handler.
+            case UiActionKind::TextBlur: {
+                // Committed from the queue, never inside the focus-loss handler; so is the sign-in
+                // of an added account its naming starts.
                 KillStepTimer(host, field);
-                if (edits.RequestCommit(action.key, field, action.kind == UiActionKind::TextBlur)) {
+                bool blur = action.kind == UiActionKind::TextBlur;
+                if (field == SettingsField::AccountLabel ? edits.CommitLabel(action.key, blur) :
+                                                           edits.RequestCommit(action.key, field, blur)) {
                     PostMessageW(host.main, kSettingsProcessMessage, 0, 0);
                 }
                 UiHostRequestRebuild(host, false);
                 break;
+            }
             case UiActionKind::TextRevert:
                 KillStepTimer(host, field);
                 edits.Revert(action.key, field);
