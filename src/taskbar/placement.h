@@ -15,6 +15,16 @@ struct StartArea {
     FrameworkElement start{nullptr};
 };
 
+// The edge a state of the taskbar's DockingStates group (RootGrid's) docks it at; Unknown for none.
+static TaskbarEdge DockedEdge(VisualState const& state) {
+    winrt::hstring name = state ? state.Name() : winrt::hstring{};
+    if (name == L"DockedBottom") return TaskbarEdge::Bottom;
+    if (name == L"DockedTop") return TaskbarEdge::Top;
+    if (name == L"DockedLeft") return TaskbarEdge::Left;
+    if (name == L"DockedRight") return TaskbarEdge::Right;
+    return TaskbarEdge::Unknown;
+}
+
 static StartArea FindStartArea(FrameworkElement const& root) {
     StartArea area;
     FrameworkElement frame = FindChildByName(root, L"TaskbarFrame", 4);
@@ -45,8 +55,9 @@ static StartArea FindStartArea(FrameworkElement const& root) {
 // Records belong to the taskbar window's thread, which alone adds, changes and removes them and
 // uses their weak references; the settings thread reads only the plain fields. The window's
 // destruction removes them. g_placementMutex is a leaf. Never destroyed: weak references still
-// held at unload are leaked.
-enum class PlacementFallback : uint8_t { None, Unavailable, Conflict };
+// held at unload are leaked. Side: the taskbar runs down a side of the screen, where the bars
+// don't go beside Start.
+enum class PlacementFallback : uint8_t { None, Unavailable, Conflict, Side };
 
 struct PlacementRecord {
     HWND hWnd = nullptr;
@@ -93,6 +104,39 @@ static void SetPlacementFallback(HWND hWnd, bool start, PlacementFallback fallba
         PlacementRecord* record = FindPlacementRecordLocked(hWnd, start, fallback != PlacementFallback::None);
         if (record && record->fallback != fallback) {
             record->fallback = fallback;
+            changed = true;
+        }
+    }
+    if (changed) NotifySettingsWindowChanged();
+}
+
+// Taskbars on a left or right edge as their threads last built them, for the settings window: plain
+// data under g_placementMutex, removed with the window. `unsupported`: the tray isn't a stack, so no
+// bars show there.
+struct SideTaskbarRecord {
+    HWND hWnd = nullptr;
+    bool unsupported = false;
+};
+[[clang::no_destroy]] static std::vector<SideTaskbarRecord> g_sideTaskbars;
+
+// Records whether a taskbar is on a side and whether its bars can't show there, and tells an open
+// settings window when that changes.
+static void SetSideTaskbar(HWND hWnd, bool side, bool unsupported) {
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_placementMutex);
+        auto it = std::find_if(g_sideTaskbars.begin(), g_sideTaskbars.end(),
+                               [&](const SideTaskbarRecord& record) { return record.hWnd == hWnd; });
+        if (!side) {
+            if (it != g_sideTaskbars.end()) {
+                g_sideTaskbars.erase(it);
+                changed = true;
+            }
+        } else if (it == g_sideTaskbars.end()) {
+            g_sideTaskbars.push_back({hWnd, unsupported});
+            changed = true;
+        } else if (it->unsupported != unsupported) {
+            it->unsupported = unsupported;
             changed = true;
         }
     }

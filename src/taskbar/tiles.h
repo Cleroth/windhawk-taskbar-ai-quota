@@ -173,6 +173,13 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
             BadgeBox box = LogoBadgeBox(display, side, (int)identityText.badgeText.size());
             Canvas::SetLeft(tile.badge, box.left + box.width / 2 - 2 * size);
             Canvas::SetTop(tile.badge, box.top + box.height / 2 - size);
+            // Down a side taskbar the badge's reach past the logo counts across it, on both sides
+            // so the logo stays centred: an account it widens past the taskbar shrinks to fit. Bar
+            // columns replace this with their identity margins, which hold the same reach.
+            if (display.sideWidth > 0) {
+                double reach = std::max({-box.left, box.left + box.width - side, 0.0});
+                identity.Margin({reach, 0, reach, 0});
+            }
         }
         Canvas place;
         place.Children().Append(tile.badge);
@@ -213,21 +220,29 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
 }
 
 // Builds account `index`'s tile: its root (hit target and flyout anchor), identity and meter
-// containers. UpdateAccountTile sizes and fills the meters.
+// containers. UpdateAccountTile sizes and fills the meters. On a side taskbar the identity sits
+// above the meters (rings keep it inside), all centred across the tile, which takes its height
+// from them.
 static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, size_t index,
                                    BarLayout layout, MeterDisplay const& display, AccountUiRefs& refs) {
     TileUiRefs& tile = refs.tile;
     tile.layout = layout;
     bool ring = IsRingTile(layout);
+    bool side = display.sideWidth > 0;
 
     StackPanel column;
-    column.Orientation(Orientation::Horizontal);
+    column.Orientation(side && !ring ? Orientation::Vertical : Orientation::Horizontal);
     column.VerticalAlignment(VerticalAlignment::Center);
-    column.Height(display.tileHeight);
+    if (!side || ring) column.Height(display.tileHeight);
     column.CornerRadius({4, 4, 4, 4});
-    column.Padding(ring ? Thickness{4, 0, 4, 0} : Thickness{7, 0, 8, 0});
-    column.Spacing(6);
+    column.Padding(side && !ring ? Thickness{kSideInset, 4, kSideInset, 4} :
+                   ring ? Thickness{kSideInset, 0, kSideInset, 0} : Thickness{7, 0, 8, 0});
+    column.Spacing(side ? 4 : 6);
     Grid identity = BuildTileIdentity(accounts, index, layout, display, tile);
+    auto append = [&](FrameworkElement const& child) {
+        if (side) child.HorizontalAlignment(HorizontalAlignment::Center);
+        column.Children().Append(child);
+    };
 
     if (ring) {
         Grid face;
@@ -238,10 +253,10 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         face.Children().Append(identity);
         tile.face = face;
         tile.meters = meters;
-        column.Children().Append(face);
+        append(face);
         return column;
     }
-    column.Children().Append(identity);
+    append(identity);
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
 
     if (IsFaceTile(layout)) {
@@ -270,7 +285,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         }
         tile.face = face;
         tile.meters = meters;
-        column.Children().Append(face);
+        append(face);
         return column;
     }
 
@@ -286,6 +301,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
             SparkChartUi& chart = tile.charts[w];
             chart.root = Grid{};
             chart.root.HorizontalAlignment(HorizontalAlignment::Left);
+            chart.root.VerticalAlignment(VerticalAlignment::Top);
             chart.root.Visibility(Visibility::Collapsed);
             chart.plot = Border{};
             chart.plot.CornerRadius({kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius});
@@ -320,20 +336,23 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         }
         tile.face = face;
         tile.meters = face;
-        column.Children().Append(face);
+        append(face);
         return column;
     }
 
     if (layout == BarLayout::QuotaMatrix) {
-        // Up to two rows and columns of cells beside the identity, each a quota's key and number
-        // on one baseline; UpdateAccountTile places and sizes them.
+        // Up to two rows and columns of cells beside the identity (on a side taskbar, a column of
+        // up to four rows under it), each a quota's key and number on one baseline;
+        // UpdateAccountTile places and sizes them.
         Grid matrix;
         matrix.IsHitTestVisible(false);
         matrix.VerticalAlignment(VerticalAlignment::Center);
-        for (int k = 0; k < 2; k++) {
+        for (int k = 0; k < (side ? kQuotaBarCount : 2); k++) {
             RowDefinition row;
             row.Height({0, GridUnitType::Auto});
             matrix.RowDefinitions().Append(row);
+        }
+        for (int k = 0; k < (side ? 1 : 2); k++) {
             ColumnDefinition cellColumn;
             cellColumn.Width({0, GridUnitType::Auto});
             matrix.ColumnDefinitions().Append(cellColumn);
@@ -360,7 +379,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
             tile.matrixValues[w] = value;
         }
         tile.meters = matrix;
-        column.Children().Append(matrix);
+        append(matrix);
         return column;
     }
 
@@ -422,7 +441,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         meters.Spacing(display.barGap);
         headline.Children().Append(meters);
     }
-    column.Children().Append(headline);
+    append(headline);
     return column;
 }
 
@@ -532,9 +551,9 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 chart.shapes.Children().Clear();
                 chart.paths.clear();
                 if (!shown) continue;
-                chart.root.Margin({meters.quotas[w].sparkLeft, 0, 0, 0});
+                chart.root.Margin({meters.quotas[w].sparkLeft, meters.quotas[w].sparkTop, 0, 0});
                 chart.root.Width(display.sparklineWidth);
-                chart.root.Height(meters.faceHeight);
+                chart.root.Height(meters.sparkChartHeight);
                 chart.plot.Background(SolidColorBrush(ArgbColor(palette.plot)));
                 chart.key.FontSize(meters.sparkKeyFont);
                 chart.key.Text(meters.quotas[w].key);
@@ -547,7 +566,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 for (SparkShapeStyle const& style : kSparkShapeStyles) {
                     wuxs::Path path;
                     path.Width(display.sparklineWidth + 2 * kSparkOverflow);
-                    path.Height(meters.faceHeight + 2 * kSparkOverflow);
+                    path.Height(meters.sparkChartHeight + 2 * kSparkOverflow);
                     path.Margin({-kSparkOverflow, -kSparkOverflow, -kSparkOverflow, -kSparkOverflow});
                     path.Visibility(Visibility::Collapsed);
                     if (style.stroke > 0) {
@@ -613,6 +632,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                     BadgeBox const& box = meters.ringBadge;
                     Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
                     Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
+                    // Down a side taskbar, an offset badge's reach past the ring counts across it,
+                    // as on other tiles' identities.
+                    if (display.sideWidth > 0) {
+                        double reach = std::max({-box.left, box.left + box.width - meters.faceWidth, 0.0});
+                        tile.face.Margin({reach, 0, reach, 0});
+                    }
                 }
                 if (tile.text) {
                     tile.text.FontSize(meters.ringTextFont);
@@ -637,7 +662,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 Grid bar;
-                bar.Width(display.headlineBarLength);
+                bar.Width(meters.headlineBarLength);
                 bar.Height(thickness);
                 Border trackBar;
                 trackBar.CornerRadius({radius, radius, radius, radius});

@@ -254,6 +254,21 @@ static void EraseUiState(HWND hWnd) {
 }
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
+    // The edge watch goes first, so nothing the cleanup below changes reaches it.
+    if (state.dockingStatesToken) {
+        try {
+            if (auto group = state.dockingStates.get()) group.CurrentStateChanged(state.dockingStatesToken);
+        } catch (...) {}
+        state.dockingStatesToken = {};
+    }
+    state.dockingStates = nullptr;
+    if (state.taskbarFrameToken) {
+        try {
+            if (auto frame = state.taskbarFrame.get()) frame.SizeChanged(state.taskbarFrameToken);
+        } catch (...) {}
+        state.taskbarFrameToken = {};
+    }
+    state.taskbarFrame = nullptr;
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
     // Without an account index, closing leaves the tiles' highlight untouched.
     state.flyout.popup.accountIndex = -1;

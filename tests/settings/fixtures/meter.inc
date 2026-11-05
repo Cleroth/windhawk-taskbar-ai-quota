@@ -3453,8 +3453,134 @@ static void RunMatrixTests() {
     });
 }
 
+static void RunSideTests() {
+    // A side taskbar's display: the default 48 DIP width leaves 40 DIPs across (4 each side).
+    static constexpr auto side = [](const Settings& settings = {}, double width = 48) {
+        return MeterDisplayFor(settings, kNow, 1, 0, width);
+    };
+
+    Run("side taskbar: meter lengths across fit inside its width, never under their minimums", [] {
+        MeterDisplay across = Display(With([](Settings& s) { s.barLayout = BarLayout::Stacked; }));
+        CHECK_NEAR(across.sideWidth, 0); CHECK(across.barLength == 100); CHECK(across.sparklineWidth == 48);
+        // Stacked bars, charts and rings at the default sizes; tiles at the full tile height.
+        MeterDisplay d = side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; s.ringSize = 40; }));
+        CHECK_NEAR(d.sideWidth, 48); CHECK_NEAR(d.tileHeight, 40);
+        CHECK(d.barLength == 40); CHECK(d.sparklineWidth == 40); CHECK(d.ringSize == 40);
+        CHECK(side(With([](Settings& s) { s.ringSize = 32; })).ringSize == 32);
+        // Quota keys take their column (9 DIP text: ceil(12.6) + 3 = 16) out of the bars' room.
+        CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; s.showBarLabels = true; })).barLength == 24);
+        // Vertical bars run down the taskbar: their length stays.
+        CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 120; })).barLength == 120);
+        // Shorter settings stay as set; a narrow taskbar keeps each range's minimum.
+        CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; s.barLength = 30; s.sparklineWidth = 24; }))
+                  .barLength == 30);
+        MeterDisplay narrow = side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; }), 16);
+        CHECK(narrow.barLength == 10); CHECK(narrow.sparklineWidth == kSparklineWidthMin);
+        CHECK(narrow.ringSize == kRingSizeMin);
+        // A wide (labelled) taskbar keeps every setting.
+        MeterDisplay wide = side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; }), 200);
+        CHECK(wide.barLength == 100); CHECK(wide.sparklineWidth == 48); CHECK(wide.ringSize == 32);
+        // Not a number or negative: across the screen.
+        CHECK_NEAR(side({}, std::nan("")).sideWidth, 0); CHECK_NEAR(side({}, -5).sideWidth, 0);
+        // A chart's current reading mark reaches past its sides: 3.6 x 100% + 0.4 = 4 DIPs fits the
+        // 4 DIP inset; at 200% (7.6 DIPs) the chart gives up 2 x 3.6, rounded up: 40 - 8 = 32. A plain
+        // dot at 200% (4.4 DIPs) takes 2 x 0.4, rounded up to 1.
+        CHECK(side(With([](Settings& s) { s.sparklineReadingScale = 200; })).sparklineWidth == 32);
+        CHECK(side(With([](Settings& s) { s.sparklineReadingScale = 200; s.sparklineRing = false; })).sparklineWidth == 39);
+        CHECK(Display(With([](Settings& s) { s.sparklineReadingScale = 200; })).sparklineWidth == 48);
+    });
+
+    Run("side taskbar: headline segments shorten until their row fits its width", [] {
+        auto headline = [](const MeterDisplay& d, std::array<bool, kQuotaBarCount> bars) {
+            return AccountMeterState(d, BarLayout::LogoHeadline, Account(L"anthropic", L"A", bars), Fresh({10, 20, 30, 40}),
+                                     0, 0);
+        };
+        Settings long_ = With([](Settings& s) { s.headlineBarLength = 60; s.barGap = 2; });
+        // Across the screen, as set.
+        CHECK_NEAR(headline(Display(long_), {true, true, true, true}).headlineBarLength, 60);
+        // 40 DIPs across: four segments and three 2 DIP gaps leave (40 - 6) / 4 = 8.5, floored to 8;
+        // two leave 19; one keeps 40.
+        AccountMeters four = headline(side(long_), {true, true, true, true});
+        CHECK_NEAR(four.headlineBarLength, 8);
+        // Fills follow the segment: 10% of 8 is under the 2 DIP minimum.
+        CHECK_NEAR(four.quotas[0].fillLength, 2); CHECK_NEAR(four.quotas[3].fillLength, 3.2);
+        CHECK_NEAR(headline(side(long_), {true, true, false, false}).headlineBarLength, 19);
+        CHECK_NEAR(headline(side(long_), {true, false, false, false}).headlineBarLength, 40);
+        // Shorter segments stay as set; never under the minimum length.
+        CHECK_NEAR(headline(side(With([](Settings& s) { s.headlineBarLength = 12; })), {true, true, false, false})
+                       .headlineBarLength, 12);
+        Settings wideGaps = With([](Settings& s) { s.headlineBarLength = 60; s.barGap = 30; });
+        CHECK_NEAR(headline(side(wideGaps), {true, true, true, true}).headlineBarLength, kHeadlineBarLengthMin);
+    });
+
+    Run("side taskbar: bars show a left or right identity at the top", [] {
+        MeterDisplay d = side(), across = Display();
+        CHECK(BarIdentityPositionFor(LabelPosition::Left, d) == LabelPosition::Top);
+        CHECK(BarIdentityPositionFor(LabelPosition::Right, d) == LabelPosition::Top);
+        CHECK(BarIdentityPositionFor(LabelPosition::Bottom, d) == LabelPosition::Bottom);
+        CHECK(BarIdentityPositionFor(LabelPosition::Hidden, d) == LabelPosition::Hidden);
+        CHECK(BarIdentityPositionFor(LabelPosition::Left, across) == LabelPosition::Left);
+        CHECK(BarIdentityPositionFor(LabelPosition::Right, across) == LabelPosition::Right);
+    });
+
+    Run("side taskbar: usage graph charts stack down, each drawn as across at the fitted width", [] {
+        // Windows on the 5-hour and weekly quotas: two charts.
+        AccountData data = Fresh({90, 40, 60, 20});
+        data.win5h = Window(90, 9000000);
+        data.winWeek = {40, kNow + kMinute, kWeeklyWindowMs};
+        auto charts = [&](const MeterDisplay& d) {
+            return AccountMeterState(d, BarLayout::Sparkline, Account(), data, 0, 0);
+        };
+        auto flat = [](const TileOutline& outline) {
+            std::vector<double> values;
+            for (const TileOutlineFigure& figure : outline) {
+                values.insert(values.end(), {figure.x, figure.y});
+                for (const TileOutlineSegment& s : figure.segments) values.insert(values.end(), {s.x, s.y, s.radius});
+            }
+            return values;
+        };
+        Settings off = With([](Settings& s) { s.sparklineExtra = SparklineExtra::Off; });
+        AccountMeters down = charts(side(off));
+        CHECK(down.barMask == 0b0011);
+        // 40 x 32 DIP charts, 4 DIPs apart: 40 across, 68 down, the weekly one 36 DIPs down.
+        CHECK_NEAR(down.sparkChartHeight, 32);
+        CHECK_NEAR(down.faceWidth, 40); CHECK_NEAR(down.faceHeight, 68);
+        CHECK_NEAR(down.quotas[0].sparkLeft, 0); CHECK_NEAR(down.quotas[0].sparkTop, 0);
+        CHECK_NEAR(down.quotas[1].sparkLeft, 0); CHECK_NEAR(down.quotas[1].sparkTop, 36);
+        // Across the screen at the same chart width: side by side, the same shapes in each chart.
+        Settings narrowOff = off;
+        narrowOff.sparklineWidth = 40;
+        AccountMeters across = charts(Display(narrowOff));
+        CHECK_NEAR(across.sparkChartHeight, 32); CHECK_NEAR(across.faceHeight, 32); CHECK_NEAR(across.faceWidth, 84);
+        CHECK_NEAR(across.quotas[1].sparkLeft, 44); CHECK_NEAR(across.quotas[1].sparkTop, 0);
+        for (int w = 0; w < 2; w++) {
+            for (int k = 0; k < kSparkShapeCount; k++) CHECK(flat(down.quotas[w].spark[k]) == flat(across.quotas[w].spark[k]));
+        }
+        // One chart: as tall as a chart.
+        AccountMeters one = AccountMeterState(side(off), BarLayout::Sparkline,
+                                              Account(L"anthropic", L"A", {true, false, false, false}), data, 0, 0);
+        CHECK_NEAR(one.faceWidth, 40); CHECK_NEAR(one.faceHeight, 32);
+    });
+
+    Run("side taskbar: the quota matrix takes one column, at the number size", [] {
+        auto matrix = [](const MeterDisplay& d, std::array<bool, kQuotaBarCount> bars = {true, true, true, true}) {
+            return AccountMeterState(d, BarLayout::QuotaMatrix, Account(L"anthropic", L"A", bars), Fresh({10, 20, 30, 40}), 0, 0);
+        };
+        Settings large = With([](Settings& s) { s.headlineFontSize = 24; });
+        AccountMeters down = matrix(side(large));
+        for (int w = 0; w < kQuotaBarCount; w++) CHECK(down.quotas[w].matrixRow == w && down.quotas[w].matrixColumn == 0);
+        CHECK_NEAR(down.matrixFont, 24); CHECK_NEAR(down.matrixKeyFont, 24.0 * 9 / 14);
+        // After the first success an unreported quota takes no row; the next one moves up.
+        AccountMeters gap = AccountMeterState(side(), BarLayout::QuotaMatrix, Account(), Fresh({10, -1, 30, 40}), 0, 0);
+        CHECK(gap.quotas[0].matrixRow == 0 && gap.quotas[2].matrixRow == 1 && gap.quotas[3].matrixRow == 2);
+        // Across the screen, two rows still shrink to fit the tile.
+        CHECK_NEAR(matrix(Display(large)).matrixFont, 31 / 1.4);
+    });
+}
+
 static void RunMeterTests() {
     RunDisplayTests();
+    RunSideTests();
     RunColorTests();
     RunBarTests();
     RunTimeTrackTests();

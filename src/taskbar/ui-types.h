@@ -321,11 +321,30 @@ struct FlyoutUi {
     ULONGLONG pointerOutsideTick = 0;  // When the pointer left the popup and its tile; 0 inside.
 };
 
+// The screen edge Windows docks a taskbar at (its RootGrid's DockingStates); Unknown on builds
+// without the native position setting.
+enum class TaskbarEdge : uint8_t { Unknown, Bottom, Top, Left, Right };
+
 struct QuotaUiInstance {
     HWND hWnd = nullptr;
     DWORD ownerThreadId = 0;
     double rasterizationScale = 1.0;
     bool windowSubclassed = false;
+    // Read at build: the docked edge, and on a left or right edge the taskbar's width in DIPs (0
+    // across the screen). A taskbar another mod rotates reports Bottom or Unknown and keeps the
+    // layout across.
+    TaskbarEdge edge = TaskbarEdge::Unknown;
+    double sideWidth = 0;
+    // Moving the taskbar re-lays out the same tree, so the docked edge and the frame's orientation
+    // and thickness are watched; a change collapses the bars and asks for a rebuild once
+    // (`edgeChanged`). Revoked by ClearQuotaEventState.
+    winrt::weak_ref<VisualStateGroup> dockingStates;
+    winrt::event_token dockingStatesToken{};
+    winrt::weak_ref<FrameworkElement> taskbarFrame;
+    winrt::event_token taskbarFrameToken{};
+    bool frameSide = false;
+    double frameThickness = 0;
+    bool edgeChanged = false;
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;

@@ -9,6 +9,8 @@
 // Tile sizes, in DIPs.
 // Nominal; shorter taskbars get shorter tiles. Bar columns are at least as tall.
 static constexpr double kTileHeight = 40;
+// On a left or right taskbar, accounts keep this much of its width free on each side.
+static constexpr double kSideInset = 4;
 // Logo sides at 100% logo size beside bars and on headline tiles; rings size theirs to the hole.
 static constexpr double kBarLogoSide = 15;
 static constexpr double kHeadlineLogoSide = 16;
@@ -548,29 +550,54 @@ struct MeterDisplay {
     // shortest bar.
     double rasterizationScale;
     double tileHeight;        // 24-kTileHeight DIPs.
+    // A left or right taskbar's width in DIPs; 0 across the screen. Accounts stack down it, each
+    // tile's identity sits above its meters and its quotas run down it; meter lengths across it
+    // (stacked bars, chart widths, ring sizes) fit inside kSideInset of each edge.
+    double sideWidth;
 };
 
-// `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown; tiles leave 4 DIPs above and
-// below them.
+// A bar label column's width beside stacked or vertical bars, at the percent font size.
+static double BarLabelColumnWidth(int percentFontSize) {
+    return std::ceil(percentFontSize * 1.4) + 3.0;
+}
+
+// `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs
+// above and below them. `sideWidth`: MeterDisplay::sideWidth.
 static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
-                                    double rasterizationScale, double taskbarHeight) {
+                                    double rasterizationScale, double taskbarHeight,
+                                    double sideWidth = 0) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
     int orange = std::clamp(settings.orangeThreshold, yellow, 100);
+    sideWidth = std::isfinite(sideWidth) ? std::max(sideWidth, 0.0) : 0.0;
+    // A side taskbar's room across, and what fits in it, never under each range's minimum.
+    int across = (int)std::floor(sideWidth - 2 * kSideInset);
+    auto fit = [&](int value, int minimum, double reserved = 0) {
+        return sideWidth > 0 ? std::max(minimum, std::min(value, across - (int)std::ceil(reserved))) : value;
+    };
+    bool stacked = settings.barLayout == BarLayout::Stacked;
+    double readingScale =
+        std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0;
+    // A chart's current reading reaches past its sides by its mark (as kSparkOverflow); beyond
+    // kSideInset that takes room from the chart.
+    double readingReach = (settings.sparklineRing ? kSparkRingOuter : kSparkPlainNowRadius) * readingScale + 0.4;
     return {
         .now = now,
         .barMode = settings.barMode,
-        .barLength = std::clamp(settings.barLength, 10, 500),
+        .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10,
+                                   settings.showBarLabels ? BarLabelColumnWidth(settings.percentFontSize) : 0) :
+                               std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
         .barGap = std::clamp(settings.barGap, 0, 500),
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
-        .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
+        .ringSize = fit(std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax), kRingSizeMin),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
         .headlineFontSize = std::clamp(settings.headlineFontSize, kHeadlineFontSizeMin, kHeadlineFontSizeMax),
         .headlineBarLength = std::clamp(settings.headlineBarLength, kHeadlineBarLengthMin, kHeadlineBarLengthMax),
         .headlineBarThickness =
             std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
         .headlineCountdown = settings.headlineCountdown,
-        .sparklineWidth = std::clamp(settings.sparklineWidth, kSparklineWidthMin, kSparklineWidthMax),
+        .sparklineWidth = fit(std::clamp(settings.sparklineWidth, kSparklineWidthMin, kSparklineWidthMax),
+                              kSparklineWidthMin, 2 * std::max(readingReach - kSideInset, 0.0)),
         .sparklineHeight = std::clamp(settings.sparklineHeight, kSparklineHeightMin, kSparklineHeightMax),
         .sparklineTextSize = std::clamp(settings.sparklineTextSize, kSparklineTextSizeMin, kSparklineTextSizeMax),
         .sparklineOutline = settings.sparklineOutline,
@@ -580,8 +607,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .sparklineNowLine = settings.sparklineNowLine,
         .sparklineNowCaret = settings.sparklineNowCaret,
         .sparklineRing = settings.sparklineRing,
-        .sparklineReadingScale =
-            std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0,
+        .sparklineReadingScale = readingScale,
         .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
@@ -604,6 +630,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
             std::isfinite(rasterizationScale) ? std::max(rasterizationScale, 1.0) : 1.0,
         .tileHeight = taskbarHeight > 0 ?
             std::clamp(std::floor(taskbarHeight) - 8, 24.0, kTileHeight) : kTileHeight,
+        .sideWidth = sideWidth,
     };
 }
 
@@ -1004,6 +1031,13 @@ struct BarIdentityMargin {
     double left = 0, top = 0, right = 0, bottom = 0;
 };
 
+// Where bars show their identity: the identity position, except on a side taskbar, where Left and
+// Right show it at the top.
+static LabelPosition BarIdentityPositionFor(LabelPosition position, const MeterDisplay& display) {
+    bool beside = position == LabelPosition::Left || position == LabelPosition::Right;
+    return display.sideWidth > 0 && beside ? LabelPosition::Top : position;
+}
+
 static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, double side, BadgeBox badge,
                                               bool warn, double gap, double aboveCap, double belowBaseline) {
     BarIdentityMargin m;
@@ -1074,12 +1108,13 @@ struct QuotaMeter {
     TileOutline fill;          // Empty without usage.
     TileOutline paceHalo;      // Empty while the pace mark is hidden.
     TileOutline paceCore;
-    // Quota matrix: the cell, down the first column, then the second from the third quota on.
+    // Quota matrix: the cell, down the first column, then the second from the third quota on (on a
+    // side taskbar, all down the first).
     int matrixRow = 0, matrixColumn = 0;
-    // Sparklines: the quota's chart, `sparkLeft` DIPs from the face's left, its shapes
-    // (AccountMeters describes them), and its key in the plot's top-right corner instead of its
-    // bottom-right one.
-    double sparkLeft = 0;
+    // Sparklines: the quota's chart, `sparkLeft` DIPs from the face's left and `sparkTop` from its
+    // top, its shapes (AccountMeters describes them), and its key in the plot's top-right corner
+    // instead of its bottom-right one.
+    double sparkLeft = 0, sparkTop = 0;
     std::array<TileOutline, kSparkShapeCount> spark;
     bool sparkKeyTop = false;
 };
@@ -1111,9 +1146,12 @@ struct AccountMeters {
     uint32_t headlineColor = 0;
     // Logo + headline tiles with the countdown: the time until that quota resets.
     std::wstring headlineCountdown;
+    // Logo + headline tiles: each segment's length, the headline bar length, shortened on a side
+    // taskbar until the row of segments and their gaps fits its width.
+    double headlineBarLength = 0;
     // Sparklines: a chart per quota in the mask (QuotaMeter::spark), display.sparklineWidth by
-    // faceHeight, side by side in slot order in the face; the face's height is the tile's at the
-    // chart height. A chart plots used % across the window, or % left in remaining mode: the lit
+    // sparkChartHeight (the tile's height at the chart height), side by side in slot order in the
+    // face, or on a side taskbar one under another, kSparkChartGap apart. A chart plots used % across the window, or % left in remaining mode: the lit
     // part up to now (or the whole plot), the recorded usage, the even-pace diagonal (with pace
     // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
     // plain), and the projection (ProjectUsage) from the current reading to the reset or, reaching
@@ -1124,6 +1162,7 @@ struct AccountMeters {
     // window's even use across that span, and the projection stops at its end (with the limit mark
     // only when it reaches the limit before then).
     uint32_t sparkLimitColor = 0;
+    double sparkChartHeight = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
     // The weekly chart's top-left corner (bottom-left with sparkExtraBottom), at the key's font:
     // the account's selected extra usage per display.sparklineExtra, its key (empty for dollars)
@@ -1131,7 +1170,8 @@ struct AccountMeters {
     std::wstring sparkExtraKey, sparkExtraText;
     uint32_t sparkExtraColor = 0;
     bool sparkExtraBottom = false;
-    // Quota matrix: the numbers' and keys' font sizes, two rows shrunk to fit the tile.
+    // Quota matrix: the numbers' and keys' font sizes, two rows shrunk to fit the tile (on a side
+    // taskbar, one column of rows at the number size).
     double matrixFont = 0, matrixKeyFont = 0;
 };
 
@@ -1236,17 +1276,31 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
         meters.barMask = charted ? charted : top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
         count = std::popcount(unsigned(meters.barMask));
-        meters.faceHeight = std::round(display.tileHeight * display.sparklineHeight / 100.0);
-        meters.faceWidth = count * display.sparklineWidth + std::max(count - 1, 0) * kSparkChartGap;
+        meters.sparkChartHeight = std::round(display.tileHeight * display.sparklineHeight / 100.0);
+        if (display.sideWidth > 0) {
+            meters.faceWidth = count ? display.sparklineWidth : 0;
+            meters.faceHeight = count * meters.sparkChartHeight + std::max(count - 1, 0) * kSparkChartGap;
+        } else {
+            meters.faceWidth = count * display.sparklineWidth + std::max(count - 1, 0) * kSparkChartGap;
+            meters.faceHeight = meters.sparkChartHeight;
+        }
         meters.sparkKeyFont = display.sparklineTextSize;
         meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.colorblindMode);
     }
     if (matrix) {
         // Two rows' cap heights and their gap fit the tile, 2 DIPs clear above and below.
         double font = display.headlineFontSize;
-        if (count > 1) font = std::min(font, (display.tileHeight - 4 - kMatrixRowGap) / (2 * kTileCapShare));
+        if (count > 1 && display.sideWidth <= 0) {
+            font = std::min(font, (display.tileHeight - 4 - kMatrixRowGap) / (2 * kTileCapShare));
+        }
         meters.matrixFont = std::max(font, 7.0);
         meters.matrixKeyFont = meters.matrixFont * kHeadlineKeyScale;
+    }
+    meters.headlineBarLength = display.headlineBarLength;
+    if (layout == BarLayout::LogoHeadline && display.sideWidth > 0 && count > 0) {
+        double room = std::floor(display.sideWidth - 2 * kSideInset) - (count - 1) * display.barGap;
+        meters.headlineBarLength =
+            std::clamp(std::floor(room / count), double(kHeadlineBarLengthMin), double(display.headlineBarLength));
     }
     // Pies: one per quota in slot order, sized as a pair up to two, in columns of two from the
     // third on.
@@ -1513,8 +1567,12 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             // Left to right the window (or the day each side of now), bottom to top 0-100% inside
             // the insets, per the bar mode: used, or left (100 - used); positions snap to quarter
             // DIPs, so they change only when the drawing does.
-            m.sparkLeft = slotPosition * (display.sparklineWidth + kSparkChartGap);
-            double width = display.sparklineWidth, height = meters.faceHeight;
+            double width = display.sparklineWidth, height = meters.sparkChartHeight;
+            if (display.sideWidth > 0) {
+                m.sparkTop = slotPosition * (height + kSparkChartGap);
+            } else {
+                m.sparkLeft = slotPosition * (width + kSparkChartGap);
+            }
             auto snap = [](double dip) { return std::round(dip * 4) / 4; };
             std::vector<TileTracePoint> trace = timed(w) && traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
             // A rolled-back clock can put now before the newest reading: the time, the current
@@ -1730,8 +1788,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
         } else if (matrix) {
             // Per the bar mode, as the bars' text: remaining clamped to 0-100%, used unclamped.
-            m.matrixRow = slotPosition % 2;
-            m.matrixColumn = slotPosition / 2;
+            bool column = display.sideWidth > 0;
+            m.matrixRow = column ? slotPosition : slotPosition % 2;
+            m.matrixColumn = column ? 0 : slotPosition / 2;
             m.text = L"\u2013";
             if (wu.pct >= 0) {
                 wchar_t text[24];
@@ -1742,7 +1801,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         } else {
             // Headline segments: corners a quarter of the thickness; the fill cut flat until the
             // track's end. Any usage fills at least 2 DIPs, as on the bars.
-            double length = display.headlineBarLength;
+            double length = meters.headlineBarLength;
             m.fillLength = m.fillUnits ? std::clamp(length * fill, 2.0, length) : 0;
             m.fillEndRadius = std::max(0.0, display.headlineBarThickness / 4.0 - (length - m.fillLength));
         }

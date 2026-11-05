@@ -3199,6 +3199,58 @@ static void RunLayoutTests() {
             view.settings.placement = placement;
             CHECK(!note(build(view)));
         }
+
+        // A side taskbar beside Start: its line names the side.
+        view.settings.placement = TaskbarPlacement::RightOfStart;
+        view.status.placementFallbacks = {{1, false, true}};
+        frame = build(view);
+        CHECK(note(frame) &&
+              UiRunsText(note(frame)->runs) == L"Display 1 shows the bars in the tray: its taskbar is on a side of the screen.");
+
+        // Taskbars on a side: a second note under Position, whatever the position, a line per
+        // display; informational, or a caution while one of them takes no bars.
+        auto sideNote = [](const UiFrame& frame) { return UiFindItem(frame, SettingsControlId(SettingsField::Placement, 9)); };
+        const std::wstring stacked = L"Display 2\u2019s taskbar is on a side of the screen: accounts stack down it, each "
+                                     L"style rearranged to fit its width. The preview shows them across a bottom taskbar.";
+        const std::wstring unsupported = L"Display 1\u2019s taskbar is on a side of the screen: its tray takes no bars on "
+                                         L"this Windows build. Update Windows to show them.";
+        view.status.placementFallbacks.clear();
+        view.settings.placement = TaskbarPlacement::BeforeIcons;
+        CHECK(!sideNote(build(view)));
+        view.status.sideTaskbars = {{2, false}};
+        frame = build(view);
+        const UiItem* text = sideNote(frame);
+        CHECK(text && UiRunsText(text->runs) == stacked && !note(frame));
+        auto card = std::find_if(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+            return text && item.kind == UiItemKind::Card && item.rect.left <= text->rect.left &&
+                   item.rect.right >= text->rect.right && item.rect.top <= text->rect.top &&
+                   item.rect.bottom >= text->rect.bottom;
+        });
+        CHECK(card != frame.content.end() && card->ink != UiInk::Caution &&
+              card->rect.top > Control(frame, SettingsField::Placement).rect.bottom);
+        view.status.sideTaskbars = {{1, true}, {2, false}};
+        frame = build(view);
+        text = sideNote(frame);
+        CHECK(text && UiRunsText(text->runs) == unsupported + L"\n" + stacked);
+        card = std::find_if(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
+            return text && item.kind == UiItemKind::Card && item.ink == UiInk::Caution && item.rect.left <= text->rect.left &&
+                   item.rect.right >= text->rect.right && item.rect.top <= text->rect.top &&
+                   item.rect.bottom >= text->rect.bottom;
+        });
+        CHECK(card != frame.content.end());
+        // Beside Start, a side taskbar whose tray takes no bars gets only that line: no claim it
+        // shows them in the tray; another display's fallback stays.
+        view.settings.placement = TaskbarPlacement::LeftSide;
+        view.status.placementFallbacks = {{1, false, true}};
+        view.status.sideTaskbars = {{1, true}};
+        frame = build(view);
+        CHECK(!note(frame) && sideNote(frame));
+        view.status.placementFallbacks = {{1, false, true}, {2, false, true}};
+        view.status.sideTaskbars = {{1, true}, {2, false}};
+        frame = build(view);
+        CHECK(note(frame) &&
+              UiRunsText(note(frame)->runs) == L"Display 2 shows the bars in the tray: its taskbar is on a side of the screen.");
+        CHECK(sideNote(frame) && UiRunsText(sideNote(frame)->runs) == unsupported + L"\n" + stacked);
     });
 
     Run("controller: the position commits as chosen, the preview follows and the Layout reset restores it", [] {

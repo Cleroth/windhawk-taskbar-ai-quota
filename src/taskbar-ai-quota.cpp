@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.9.0
+// @version         2.10.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -16,7 +16,9 @@
 # Taskbar AI Quota Bars
 
 A Windows 11 taskbar mod that shows subscription quota bars next to the system tray, or
-elsewhere in the tray or beside Start.
+elsewhere in the tray or beside Start. On a taskbar at the left or right of the screen (Windows
+11's taskbar position setting, 26200.9457 or later), the accounts stack down it and each style
+rearranges to fit its width.
 
 Supported providers and quotas:
 

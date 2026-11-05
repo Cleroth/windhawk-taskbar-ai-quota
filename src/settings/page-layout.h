@@ -58,20 +58,45 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                      {L"Right of Start", int(TaskbarPlacement::RightOfStart)}},
                                     int(s.placement));
     }
-    if (IsStartAreaPlacement(s.placement) && !view.status.placementFallbacks.empty()) {
-        // Left side needs the taskbar's buttons; Right of Start also a shown Start.
+    if (IsStartAreaPlacement(s.placement)) {
+        // Left side needs the taskbar's buttons; Right of Start also a shown Start. A side taskbar
+        // whose tray takes no bars shows none: the note below says so instead.
         PCWSTR unavailable = s.placement == TaskbarPlacement::RightOfStart ?
                                  L"its Start button is hidden or wasn\u2019t found." :
                                  L"its taskbar buttons weren\u2019t found.";
         std::wstring text;
         for (const SettingsPlacementFallback& fallback : view.status.placementFallbacks) {
+            const auto& sides = view.status.sideTaskbars;
+            if (std::any_of(sides.begin(), sides.end(), [&](const SettingsSideTaskbar& taskbar) {
+                    return taskbar.display == fallback.display && taskbar.unsupported;
+                })) {
+                continue;
+            }
             if (!text.empty()) text += L"\n";
             text += L"Display " + std::to_wstring(fallback.display) + L" shows the bars in the tray: " +
-                    (fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
+                    (fallback.side     ? L"its taskbar is on a side of the screen." :
+                     fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
                                          unavailable);
         }
-        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
-                         UiSeverity::Caution);
+        if (!text.empty()) {
+            y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
+                             UiSeverity::Caution);
+        }
+    }
+    // Taskbars on a left or right edge: what changes there, a line per display.
+    if (!view.status.sideTaskbars.empty()) {
+        std::wstring text;
+        bool unsupported = false;
+        for (const SettingsSideTaskbar& taskbar : view.status.sideTaskbars) {
+            if (!text.empty()) text += L"\n";
+            text += L"Display " + std::to_wstring(taskbar.display) + L"\u2019s taskbar is on a side of the screen: " +
+                    (taskbar.unsupported ? L"its tray takes no bars on this Windows build. Update Windows to show them." :
+                                           L"accounts stack down it, each style rearranged to fit its width. The "
+                                           L"preview shows them across a bottom taskbar.");
+            unsupported = unsupported || taskbar.unsupported;
+        }
+        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 9), x, y + 3, width, {{text}},
+                         unsupported ? UiSeverity::Caution : UiSeverity::Info);
     }
 
     // Account identity is per account: a card that goes to Accounts. Fixed ids past the gallery's

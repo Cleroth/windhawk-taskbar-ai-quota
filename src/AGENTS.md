@@ -105,7 +105,9 @@ first, then reads/updates XAML.
   target claims it, wait for completion. Never add a timeout that lets the DLL unload while a
   worker, hook, subclass or XAML callback can still execute mod code. Hook callbacks on Explorer
   threads (e.g. taskbar restart) only request removal/injection from the retry worker; they never
-  marshal themselves.
+  marshal themselves. The taskbar edge watch (`WatchTaskbarEdge`, owner-thread XAML handlers) may
+  only give back the room beside Start, close the flyout and collapse the bars before requesting
+  a rebuild the same way.
 - Check `g_unloading` in loops and before slow/marshaled work.
 
 ## Stability (a crash takes down the shell)
@@ -122,6 +124,11 @@ first, then reads/updates XAML.
   `TaskbarHost::FrameHeight` offset can break on Windows updates. If bars stop showing, suspect
   `HookTaskbarDllSymbols` and `TryGetTaskbarElementAbi` first. Positions depend on taskbar element
   names (tray anchors, `TaskbarFrame`/`RootGrid`/`TaskbarFrameRepeater`, Start's automation ID).
+- Windows' native taskbar position setting docks a taskbar at any edge: RootGrid's
+  `DockingStates` names it, and a move re-lays out the same tree (no `TrayUI::StartTaskbar`), so
+  the edge watch rebuilds. Only that state picks the side layout, never the window's shape: a
+  taskbar another mod rotates stays laid out across. A side layout needs a StackPanel tray; a
+  grid tray there keeps a watch-only state (no grid) so moving back rebuilds.
 - Beside Start the mod writes native margins (the repeater's left, Start's right). Go through the
   placement records: add or give back only our own contribution, never touch a margin another mod
   took, and write only from owner-thread code that teardown revokes (`LayoutUpdated`, injection,

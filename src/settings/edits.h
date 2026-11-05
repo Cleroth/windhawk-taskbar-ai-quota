@@ -560,6 +560,13 @@ struct SettingsDisplay {
 struct SettingsPlacementFallback {
     int display = 0;        // As SettingsDisplay::number
     bool conflict = false;  // Another mod holds the space; else what the position needs isn't there
+    bool side = false;      // The taskbar runs down a side of the screen
+};
+
+// A taskbar on a left or right edge, where the bars stack down it.
+struct SettingsSideTaskbar {
+    int display = 0;           // As SettingsDisplay::number
+    bool unsupported = false;  // Its Windows build's side tray takes no bars: none show there
 };
 
 // Recording state while consent is on.
@@ -578,10 +585,13 @@ struct SettingsAccountStatus {
 struct SettingsStatus {
     std::vector<SettingsDisplay> displays;
     std::vector<SettingsPlacementFallback> placementFallbacks;  // Display order
+    std::vector<SettingsSideTaskbar> sideTaskbars;              // Display order
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
     wchar_t groupSeparator = L',';
-    double taskbarHeight = 0;  // The primary taskbar's, in DIPs at its own DPI; 0 if unknown
+    // The primary taskbar's thickness (its height across the screen, its width on a side), in DIPs
+    // at its own DPI; 0 if unknown
+    double taskbarHeight = 0;
     bool visualTest = false;   // The taskbar shows the sample accounts
     std::vector<SettingsAccountStatus> accounts;  // Parallel to the settings' accounts
     bool signInRunning = false;                   // Some account's sign-in window is open

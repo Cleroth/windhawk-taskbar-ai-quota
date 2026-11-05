@@ -42,7 +42,7 @@ struct SettingsProductionStore final : SettingsStore {
             accountStatus.signingIn = signingIn && signingInIdentity == identity;
         }
         // Display N is the Nth taskbar in the order the taskbar code targets (primary first).
-        // The preview takes the primary taskbar's height, converted with that taskbar's DPI.
+        // The preview takes the primary taskbar's thickness, converted with that taskbar's DPI.
         std::vector<TaskbarDisplayInfo> taskbars = FindCurrentProcessTaskbarDisplays();
         for (size_t i = 0; i < taskbars.size(); i++) {
             const RECT& rect = taskbars[i].rect;
@@ -50,20 +50,26 @@ struct SettingsProductionStore final : SettingsStore {
                                        int(std::abs(rect.bottom - rect.top)), taskbars[i].primary});
             RECT window{};
             if (taskbars[i].primary && !status.taskbarHeight && GetWindowRect(taskbars[i].hWnd, &window)) {
-                status.taskbarHeight = double(window.bottom - window.top) * 96 / WindowDpi(taskbars[i].hWnd);
+                status.taskbarHeight = double(std::min(window.bottom - window.top, window.right - window.left)) *
+                                       96 / WindowDpi(taskbars[i].hWnd);
             }
         }
-        // Taskbars that show the bars, in the tray instead of beside Start.
-        if (IsStartAreaPlacement(baseline.settings.placement)) {
+        // Taskbars that show the bars: on a side, and in the tray instead of beside Start.
+        {
+            const bool startArea = IsStartAreaPlacement(baseline.settings.placement);
             const bool start = baseline.settings.placement == TaskbarPlacement::RightOfStart;
             std::vector<HWND> shown = FindCurrentProcessTaskbarWnds();
             std::lock_guard<std::mutex> lock(g_placementMutex);
             for (size_t i = 0; i < taskbars.size(); i++) {
                 if (std::find(shown.begin(), shown.end(), taskbars[i].hWnd) == shown.end()) continue;
+                for (const SideTaskbarRecord& record : g_sideTaskbars) {
+                    if (record.hWnd == taskbars[i].hWnd) status.sideTaskbars.push_back({int(i) + 1, record.unsupported});
+                }
                 for (const PlacementRecord& record : g_placementRecords) {
-                    if (record.hWnd == taskbars[i].hWnd && record.start == start &&
+                    if (startArea && record.hWnd == taskbars[i].hWnd && record.start == start &&
                         record.fallback != PlacementFallback::None) {
-                        status.placementFallbacks.push_back({int(i) + 1, record.fallback == PlacementFallback::Conflict});
+                        status.placementFallbacks.push_back({int(i) + 1, record.fallback == PlacementFallback::Conflict,
+                                                             record.fallback == PlacementFallback::Side});
                     }
                 }
             }

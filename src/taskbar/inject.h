@@ -84,6 +84,74 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
     state.applied.clear();
 }
 
+// Watches the taskbar's docked edge (when Windows reports one) and its frame's orientation and
+// thickness (when it is found): Windows moves a taskbar by re-laying out the same tree. The first
+// change ignores the rest, gives back the room beside Start before a layout pass can write it into
+// the new layout, drops a pending hover, collapses the bars and asks the retry worker to rebuild
+// them, whatever of that fails. Owner thread; ClearQuotaEventState revokes both. False if a
+// subscription failed.
+static bool WatchTaskbarEdge(QuotaUiInstance& state, FrameworkElement const& frame,
+                             VisualStateGroup const& dockingStates) {
+    HWND hWnd = state.hWnd;
+    state.edgeChanged = false;
+    auto changed = [hWnd] {
+        auto* uiState = FindUiState(hWnd);
+        if (g_unloading || !uiState || uiState->ownerThreadId != GetCurrentThreadId() || uiState->edgeChanged) {
+            return;
+        }
+        uiState->edgeChanged = true;
+        try {
+            ReleaseStartAreaReservation(*uiState);
+        } catch (...) {}
+        try {
+            FlyoutUi& fo = uiState->flyout;
+            if (fo.dwellTimer) fo.dwellTimer.Stop();
+            fo.dwellIndex = -1;
+            CloseAccountFlyout(*uiState);
+        } catch (...) {}
+        try {
+            if (uiState->quotaGrid) uiState->quotaGrid.Visibility(Visibility::Collapsed);
+        } catch (...) {}
+        Wh_Log(L"Taskbar moved or resized on hwnd=%p; rebuilding the bars", hWnd);
+        StartRetryInject(true);
+    };
+    try {
+        if (frame) {
+            state.taskbarFrame = winrt::make_weak(frame);
+            state.frameSide = frame.ActualHeight() > frame.ActualWidth();
+            state.frameThickness = state.frameSide ? frame.ActualWidth() : frame.ActualHeight();
+            state.taskbarFrameToken = frame.SizeChanged(
+                [hWnd, changed](winrt::Windows::Foundation::IInspectable const&, SizeChangedEventArgs const& e) {
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (!uiState) return;
+                        auto size = e.NewSize();
+                        bool side = size.Height > size.Width;
+                        double thickness = side ? size.Width : size.Height;
+                        // Task buttons coming and going change its length only.
+                        if (side == uiState->frameSide && std::fabs(thickness - uiState->frameThickness) < 0.5) {
+                            return;
+                        }
+                        changed();
+                    } catch (...) {}
+                });
+        }
+        if (dockingStates) {
+            state.dockingStates = winrt::make_weak(dockingStates);
+            state.dockingStatesToken = dockingStates.CurrentStateChanged(
+                [hWnd, changed](winrt::Windows::Foundation::IInspectable const&, VisualStateChangedEventArgs const& e) {
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (uiState && DockedEdge(e.NewState()) != uiState->edge) changed();
+                    } catch (...) {}
+                });
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 static bool InjectQuotaGrid(HWND hWnd) {
     if (!hWnd) return false;
     DWORD ownerThreadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -101,7 +169,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
             settingsGeneration = g_settingsGeneration;
             settingsPlacement = g_settings.placement;
         }
-        if (existingState->quotaGrid &&
+        if (existingState->quotaGrid && !existingState->edgeChanged &&
             existingState->buildSettingsGeneration == settingsGeneration &&
             existingState->placement == settingsPlacement &&
             existingState->buildVisualTestMode ==
@@ -139,10 +207,30 @@ static bool InjectQuotaGrid(HWND hWnd) {
             placement = g_settings.placement;
         }
 
-        // Room an earlier removal failed to give back, on a margin this build doesn't use, goes
-        // back now. Records whose element is gone go too, ending any quarantine with it.
+        // The edge Windows docks the taskbar at, from the native position setting's DockingStates
+        // (absent on builds without it). Left and right lay the bars out down the taskbar, at its
+        // width.
+        FrameworkElement taskbarFrame = FindChildByName(root, L"TaskbarFrame", 4);
+        VisualStateGroup dockingStates{nullptr};
+        if (FrameworkElement rootGrid = taskbarFrame ? FindChildByName(taskbarFrame, L"RootGrid", 1) : nullptr) {
+            for (auto const& group : VisualStateManager::GetVisualStateGroups(rootGrid)) {
+                if (group.Name() == L"DockingStates") dockingStates = group;
+            }
+        }
+        const TaskbarEdge edge = DockedEdge(dockingStates ? dockingStates.CurrentState() : nullptr);
+        const bool side = edge == TaskbarEdge::Left || edge == TaskbarEdge::Right;
+        double sideWidth = 0;
+        if (side) {
+            sideWidth = taskbarFrame && taskbarFrame.ActualWidth() > 0 ? taskbarFrame.ActualWidth() :
+                                                                        xamlRoot.Size().Width;
+        }
+
+        // Room an earlier removal failed to give back, on a margin this build doesn't use (on a
+        // side, neither), goes back now. Records whose element is gone go too, ending any
+        // quarantine with it, except the current position's on a side, which only holds its note.
         for (bool start : {false, true}) {
-            if (IsStartAreaPlacement(placement) && start == (placement == TaskbarPlacement::RightOfStart)) continue;
+            bool current = IsStartAreaPlacement(placement) && start == (placement == TaskbarPlacement::RightOfStart);
+            if (current && !side) continue;
             FrameworkElement element{nullptr};
             {
                 std::lock_guard<std::mutex> lock(g_placementMutex);
@@ -150,7 +238,9 @@ static bool InjectQuotaGrid(HWND hWnd) {
                 if (!record) continue;
                 element = record->element.get();
                 if (!element) {
-                    g_placementRecords.erase(g_placementRecords.begin() + (record - g_placementRecords.data()));
+                    if (!current) {
+                        g_placementRecords.erase(g_placementRecords.begin() + (record - g_placementRecords.data()));
+                    }
                     continue;
                 }
                 if (record->lost || std::fabs(record->applied) <= 0.5) continue;
@@ -158,10 +248,10 @@ static bool InjectQuotaGrid(HWND hWnd) {
             GiveBackReservation(hWnd, start, element);
         }
 
-        // Beside Start: the element whose margin makes room for the bars. Start hidden or missing
-        // (Unavailable), or its margin taken by another mod (Conflict), puts them in the tray's
-        // first slot. A record keeps a taken margin while its element lives, and resumes a
-        // reservation an earlier removal failed to give back.
+        // Beside Start: the element whose margin makes room for the bars. A side taskbar (Side),
+        // Start hidden or missing (Unavailable), or its margin taken by another mod (Conflict),
+        // puts them in the tray's first slot. A record keeps a taken margin while its element
+        // lives, and resumes a reservation an earlier removal failed to give back.
         StartArea area;
         FrameworkElement reserved{nullptr};
         bool anchorMissing = false;
@@ -170,7 +260,9 @@ static bool InjectQuotaGrid(HWND hWnd) {
             area = FindStartArea(root);
             reserved = start ? area.start : area.repeater;
             PlacementFallback fallback = PlacementFallback::None;
-            if (!area.rootGrid || !reserved || reserved.Visibility() == Visibility::Collapsed) {
+            if (side) {
+                fallback = PlacementFallback::Side;
+            } else if (!area.rootGrid || !reserved || reserved.Visibility() == Visibility::Collapsed) {
                 fallback = PlacementFallback::Unavailable;
                 anchorMissing = true;
             } else {
@@ -192,6 +284,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
             if (fallback != PlacementFallback::None) {
                 Wh_Log(L"Placement: %s on hwnd=%p; the bars go to the tray",
                        fallback == PlacementFallback::Conflict ? L"another mod holds the margin beside Start" :
+                       fallback == PlacementFallback::Side     ? L"the taskbar is on a side" :
                                                                 L"Start or the taskbar's buttons not found",
                        hWnd);
                 reserved = nullptr;
@@ -233,6 +326,12 @@ static bool InjectQuotaGrid(HWND hWnd) {
                 }
                 anchorMissing = installedAnchor != first;
             }
+            // A side taskbar's tray stacks its children down it; a grid tray there (the first
+            // builds with the native position setting) has unknown layout semantics.
+            if (side && trayGrid) {
+                parent = nullptr;
+                anchorMissing = false;
+            }
         }
 
         if (!state) {
@@ -256,7 +355,21 @@ static bool InjectQuotaGrid(HWND hWnd) {
             state->windowSubclassed = true;
             // Remove a visual left by an earlier failed teardown, but don't guess which column
             // definition it owned.
-            RemoveQuotaChildren(parent, *state);
+            RemoveQuotaChildren(parent ? parent : Panel(trayGrid), *state);
+        }
+        state->edge = edge;
+        state->sideWidth = sideWidth;
+        SetSideTaskbar(hWnd, side, !parent);
+        if (!parent) {
+            // No bars on this taskbar, but its state and watch stay, so moving it back to an edge
+            // where they can show rebuilds them.
+            if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
+                ClearQuotaEventState(*state);
+                EraseUiState(hWnd);
+                return fail(L"side taskbar watch failed");
+            }
+            Wh_Log(L"Side taskbar on hwnd=%p has a grid tray; no bars until it moves", hWnd);
+            return true;
         }
         state->injectionParent = parent;
         state->placement = placement;
@@ -340,6 +453,13 @@ static bool InjectQuotaGrid(HWND hWnd) {
         g_uiInjected.store(true, std::memory_order_release);
         state->applied.clear();
         UpdateQuotaUi(*state);
+        // A watch that failed to subscribe would leave a moved taskbar laid out (and beside Start,
+        // reserved) for the old edge: retry the whole build instead.
+        if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
+            RemoveQuotaGridFromState(*state);
+            EraseUiState(hWnd);
+            return fail(L"taskbar edge watch failed");
+        }
         if (reserved) {
             // Every layout pass anywhere in the taskbar raises it; on the bars' own root, the
             // delegate goes with them.
@@ -436,11 +556,12 @@ static void ReleaseQuotaUiState(HWND hWnd) {
     state->startAreaElement = nullptr;
     state->applied.clear();
     EraseUiState(hWnd);
-    // The window's elements go with it, and so do its placement records.
+    // The window's elements go with it, and so do its placement and side records.
     std::lock_guard<std::mutex> lock(g_placementMutex);
     std::erase_if(g_placementRecords, [&](const PlacementRecord& record) {
         return record.hWnd == hWnd && record.ownerThreadId == GetCurrentThreadId();
     });
+    std::erase_if(g_sideTaskbars, [&](const SideTaskbarRecord& record) { return record.hWnd == hWnd; });
 }
 
 static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,

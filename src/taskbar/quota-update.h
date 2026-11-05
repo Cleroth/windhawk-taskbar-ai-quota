@@ -19,7 +19,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     std::vector<AccountConfig>& accounts = settings.accounts;
 
     MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
-                                           state.taskbarHeight);
+                                           state.taskbarHeight, state.sideWidth);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
@@ -123,8 +123,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     BadgeBox badge = ui.tile.badge ?
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
-                        settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,
-                        barMask ? settings.labelGap : 0, state.labelAboveCap, state.labelBelowBaseline);
+                        BarIdentityPositionFor(settings.labelPosition, display), ui.label != nullptr, side,
+                        badge, meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
+                        state.labelBelowBaseline);
                     Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
                         identity.Margin(margin);

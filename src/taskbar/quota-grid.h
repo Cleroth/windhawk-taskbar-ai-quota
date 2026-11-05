@@ -40,8 +40,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                                     *settings.sparklineHoverSpan != settings.sparklineSpan;
         bool tileLayout = IsTileLayout(barLayout);
         // Tiles are kTileHeight tall, less on a taskbar too short for that; bar columns at least.
+        // A side taskbar's height is the screen's: there, its width limits them instead.
         state.taskbarHeight = 0;
-        if (state.injectionParent) {
+        if (state.injectionParent && state.sideWidth <= 0) {
             try {
                 if (auto xamlRoot = state.injectionParent.XamlRoot()) {
                     state.taskbarHeight = xamlRoot.Size().Height;
@@ -49,7 +50,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             } catch (...) {}
         }
         MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
-                                               state.taskbarHeight);
+                                               state.taskbarHeight, state.sideWidth);
+        // Down a side taskbar: accounts stack, and each fits its width (stackAccount).
+        bool side = display.sideWidth > 0;
         if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, nullptr);
         BarGeometry barGeometry = BarGeometryFor(display);
         // Bar sizes and pace ticks as the meter model clamps them.
@@ -64,15 +67,32 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         bool showDetailsOnHover = settings.showDetailsOnHover;
         PercentTextVisibility percentTextVisibility = settings.percentTextVisibility;
         PercentTextAlignment percentTextAlignment = settings.percentTextAlignment;
-        LabelPosition labelPosition = settings.labelPosition;
+        LabelPosition labelPosition = BarIdentityPositionFor(settings.labelPosition, display);
         state.accountRefs.clear();
         Grid root;
         root.Name(kRootName);
         root.VerticalAlignment(VerticalAlignment::Center);
 
         StackPanel panel;
-        panel.Orientation(Orientation::Horizontal);
-        panel.Margin({4, 0, (double)rightMargin, 0});
+        panel.Orientation(side ? Orientation::Vertical : Orientation::Horizontal);
+        panel.Margin(side ? Thickness{0, 4, 0, (double)rightMargin} : Thickness{4, 0, (double)rightMargin, 0});
+        // Adds an account's box along the taskbar. On a side taskbar it is centred, and shrunk as a
+        // whole to the taskbar's width, never grown, when fixed-size content (text, identities)
+        // still overflows it after the meter model fitted the meter lengths.
+        auto stackAccount = [&](FrameworkElement const& box) {
+            if (!side) {
+                panel.Children().Append(box);
+                return;
+            }
+            box.HorizontalAlignment(HorizontalAlignment::Center);
+            Viewbox fit;
+            fit.Stretch(Stretch::Uniform);
+            fit.StretchDirection(StretchDirection::DownOnly);
+            fit.MaxWidth(display.sideWidth);
+            fit.HorizontalAlignment(HorizontalAlignment::Center);
+            fit.Child(box);
+            panel.Children().Append(fit);
+        };
 
         // Context menu items with a Fluent icon; ClearQuotaEventState revokes their Click handlers.
         FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
@@ -95,7 +115,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             Border setupTile;
             setupTile.CornerRadius({4, 4, 4, 4});
             setupTile.Padding({8, 3, 8, 3});
-            setupTile.Margin({(double)accountMargin, 0, (double)accountMargin, 0});
+            setupTile.Margin(side ? Thickness{0, (double)accountMargin, 0, (double)accountMargin} :
+                                    Thickness{(double)accountMargin, 0, (double)accountMargin, 0});
             setupTile.Background(SolidColorBrush(winrt::Windows::UI::Color{0x30, 0x80, 0x80, 0x80}));
 
             TextBlock setupText;
@@ -129,7 +150,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }));
             setupElement.ContextFlyout(menu);
 
-            panel.Children().Append(setupTile);
+            stackAccount(setupTile);
             root.Children().Append(panel);
             return root;
         }
@@ -251,7 +272,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Orientation(Orientation::Horizontal);
                 col.VerticalAlignment(VerticalAlignment::Center);
                 col.MinHeight(display.tileHeight);
-                col.Padding({7, 0, 7, 0});
+                col.Padding(side ? Thickness{kSideInset, 4, kSideInset, 4} : Thickness{7, 0, 7, 0});
                 col.CornerRadius({4, 4, 4, 4});
                 StackPanel content;
                 content.Orientation(identityAcross ? Orientation::Vertical : Orientation::Horizontal);
@@ -314,8 +335,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
-                        labelColumn.Width({std::ceil(compactLabelFontSize * 1.4) + 3.0,
-                                           GridUnitType::Pixel});
+                        labelColumn.Width({BarLabelColumnWidth(percentFontSize), GridUnitType::Pixel});
                         ColumnDefinition trackColumn;
                         trackColumn.Width({(double)(verticalBars ? barThickness : barLength),
                                            GridUnitType::Pixel});
@@ -501,13 +521,16 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Children().Append(content);
             }
 
-            // The box's side padding comes out of the account margin, so accounts' contents sit
-            // twice the margin apart; at small margins the padding shrinks with it.
+            // The box's padding along the taskbar comes out of the account margin, so accounts'
+            // contents sit twice the margin apart; at small margins the padding shrinks with it.
             Thickness padding = col.Padding();
-            padding.Left = std::min(padding.Left, (double)accountMargin);
-            padding.Right = std::min(padding.Right, (double)accountMargin);
+            double& before = side ? padding.Top : padding.Left;
+            double& after = side ? padding.Bottom : padding.Right;
+            before = std::min(before, (double)accountMargin);
+            after = std::min(after, (double)accountMargin);
             col.Padding(padding);
-            col.Margin({accountMargin - padding.Left, 0, accountMargin - padding.Right, 0});
+            col.Margin(side ? Thickness{0, accountMargin - padding.Top, 0, accountMargin - padding.Bottom} :
+                              Thickness{accountMargin - padding.Left, 0, accountMargin - padding.Right, 0});
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);
@@ -717,7 +740,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
             tappedElement.ContextFlyout(menu);
 
-            panel.Children().Append(col);
+            stackAccount(col);
             refs.menu = menu;
             state.accountRefs.push_back(std::move(refs));
             // Right-click closes any details flyout before the menu shows. The header's plan and

@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.9.0
+// @version         2.10.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -19,7 +19,9 @@
 # Taskbar AI Quota Bars
 
 A Windows 11 taskbar mod that shows subscription quota bars next to the system tray, or
-elsewhere in the tray or beside Start.
+elsewhere in the tray or beside Start. On a taskbar at the left or right of the screen (Windows
+11's taskbar position setting, 26200.9457 or later), the accounts stack down it and each style
+rearranges to fit its width.
 
 Supported providers and quotas:
 
@@ -930,11 +932,30 @@ struct FlyoutUi {
     ULONGLONG pointerOutsideTick = 0;  // When the pointer left the popup and its tile; 0 inside.
 };
 
+// The screen edge Windows docks a taskbar at (its RootGrid's DockingStates); Unknown on builds
+// without the native position setting.
+enum class TaskbarEdge : uint8_t { Unknown, Bottom, Top, Left, Right };
+
 struct QuotaUiInstance {
     HWND hWnd = nullptr;
     DWORD ownerThreadId = 0;
     double rasterizationScale = 1.0;
     bool windowSubclassed = false;
+    // Read at build: the docked edge, and on a left or right edge the taskbar's width in DIPs (0
+    // across the screen). A taskbar another mod rotates reports Bottom or Unknown and keeps the
+    // layout across.
+    TaskbarEdge edge = TaskbarEdge::Unknown;
+    double sideWidth = 0;
+    // Moving the taskbar re-lays out the same tree, so the docked edge and the frame's orientation
+    // and thickness are watched; a change collapses the bars and asks for a rebuild once
+    // (`edgeChanged`). Revoked by ClearQuotaEventState.
+    winrt::weak_ref<VisualStateGroup> dockingStates;
+    winrt::event_token dockingStatesToken{};
+    winrt::weak_ref<FrameworkElement> taskbarFrame;
+    winrt::event_token taskbarFrameToken{};
+    bool frameSide = false;
+    double frameThickness = 0;
+    bool edgeChanged = false;
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     BarLayout buildBarLayout = BarLayout::Stacked;
@@ -6155,6 +6176,21 @@ static void EraseUiState(HWND hWnd) {
 }
 
 static void ClearQuotaEventState(QuotaUiInstance& state) {
+    // The edge watch goes first, so nothing the cleanup below changes reaches it.
+    if (state.dockingStatesToken) {
+        try {
+            if (auto group = state.dockingStates.get()) group.CurrentStateChanged(state.dockingStatesToken);
+        } catch (...) {}
+        state.dockingStatesToken = {};
+    }
+    state.dockingStates = nullptr;
+    if (state.taskbarFrameToken) {
+        try {
+            if (auto frame = state.taskbarFrame.get()) frame.SizeChanged(state.taskbarFrameToken);
+        } catch (...) {}
+        state.taskbarFrameToken = {};
+    }
+    state.taskbarFrame = nullptr;
     // Routed event delegates point into this DLL, so revoke before XAML tears down the subtree.
     // Without an account index, closing leaves the tiles' highlight untouched.
     state.flyout.popup.accountIndex = -1;
@@ -6763,6 +6799,8 @@ static FlyoutTheme LoadFlyoutTheme() {
 // Tile sizes, in DIPs.
 // Nominal; shorter taskbars get shorter tiles. Bar columns are at least as tall.
 static constexpr double kTileHeight = 40;
+// On a left or right taskbar, accounts keep this much of its width free on each side.
+static constexpr double kSideInset = 4;
 // Logo sides at 100% logo size beside bars and on headline tiles; rings size theirs to the hole.
 static constexpr double kBarLogoSide = 15;
 static constexpr double kHeadlineLogoSide = 16;
@@ -7302,29 +7340,54 @@ struct MeterDisplay {
     // shortest bar.
     double rasterizationScale;
     double tileHeight;        // 24-kTileHeight DIPs.
+    // A left or right taskbar's width in DIPs; 0 across the screen. Accounts stack down it, each
+    // tile's identity sits above its meters and its quotas run down it; meter lengths across it
+    // (stacked bars, chart widths, ring sizes) fit inside kSideInset of each edge.
+    double sideWidth;
 };
 
-// `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown; tiles leave 4 DIPs above and
-// below them.
+// A bar label column's width beside stacked or vertical bars, at the percent font size.
+static double BarLabelColumnWidth(int percentFontSize) {
+    return std::ceil(percentFontSize * 1.4) + 3.0;
+}
+
+// `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs
+// above and below them. `sideWidth`: MeterDisplay::sideWidth.
 static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
-                                    double rasterizationScale, double taskbarHeight) {
+                                    double rasterizationScale, double taskbarHeight,
+                                    double sideWidth = 0) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
     int orange = std::clamp(settings.orangeThreshold, yellow, 100);
+    sideWidth = std::isfinite(sideWidth) ? std::max(sideWidth, 0.0) : 0.0;
+    // A side taskbar's room across, and what fits in it, never under each range's minimum.
+    int across = (int)std::floor(sideWidth - 2 * kSideInset);
+    auto fit = [&](int value, int minimum, double reserved = 0) {
+        return sideWidth > 0 ? std::max(minimum, std::min(value, across - (int)std::ceil(reserved))) : value;
+    };
+    bool stacked = settings.barLayout == BarLayout::Stacked;
+    double readingScale =
+        std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0;
+    // A chart's current reading reaches past its sides by its mark (as kSparkOverflow); beyond
+    // kSideInset that takes room from the chart.
+    double readingReach = (settings.sparklineRing ? kSparkRingOuter : kSparkPlainNowRadius) * readingScale + 0.4;
     return {
         .now = now,
         .barMode = settings.barMode,
-        .barLength = std::clamp(settings.barLength, 10, 500),
+        .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10,
+                                   settings.showBarLabels ? BarLabelColumnWidth(settings.percentFontSize) : 0) :
+                               std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
         .barGap = std::clamp(settings.barGap, 0, 500),
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
-        .ringSize = std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax),
+        .ringSize = fit(std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax), kRingSizeMin),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
         .headlineFontSize = std::clamp(settings.headlineFontSize, kHeadlineFontSizeMin, kHeadlineFontSizeMax),
         .headlineBarLength = std::clamp(settings.headlineBarLength, kHeadlineBarLengthMin, kHeadlineBarLengthMax),
         .headlineBarThickness =
             std::clamp(settings.headlineBarThickness, kHeadlineBarThicknessMin, kHeadlineBarThicknessMax),
         .headlineCountdown = settings.headlineCountdown,
-        .sparklineWidth = std::clamp(settings.sparklineWidth, kSparklineWidthMin, kSparklineWidthMax),
+        .sparklineWidth = fit(std::clamp(settings.sparklineWidth, kSparklineWidthMin, kSparklineWidthMax),
+                              kSparklineWidthMin, 2 * std::max(readingReach - kSideInset, 0.0)),
         .sparklineHeight = std::clamp(settings.sparklineHeight, kSparklineHeightMin, kSparklineHeightMax),
         .sparklineTextSize = std::clamp(settings.sparklineTextSize, kSparklineTextSizeMin, kSparklineTextSizeMax),
         .sparklineOutline = settings.sparklineOutline,
@@ -7334,8 +7397,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
         .sparklineNowLine = settings.sparklineNowLine,
         .sparklineNowCaret = settings.sparklineNowCaret,
         .sparklineRing = settings.sparklineRing,
-        .sparklineReadingScale =
-            std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0,
+        .sparklineReadingScale = readingScale,
         .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
@@ -7358,6 +7420,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, ULONGLONG now,
             std::isfinite(rasterizationScale) ? std::max(rasterizationScale, 1.0) : 1.0,
         .tileHeight = taskbarHeight > 0 ?
             std::clamp(std::floor(taskbarHeight) - 8, 24.0, kTileHeight) : kTileHeight,
+        .sideWidth = sideWidth,
     };
 }
 
@@ -7758,6 +7821,13 @@ struct BarIdentityMargin {
     double left = 0, top = 0, right = 0, bottom = 0;
 };
 
+// Where bars show their identity: the identity position, except on a side taskbar, where Left and
+// Right show it at the top.
+static LabelPosition BarIdentityPositionFor(LabelPosition position, const MeterDisplay& display) {
+    bool beside = position == LabelPosition::Left || position == LabelPosition::Right;
+    return display.sideWidth > 0 && beside ? LabelPosition::Top : position;
+}
+
 static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, double side, BadgeBox badge,
                                               bool warn, double gap, double aboveCap, double belowBaseline) {
     BarIdentityMargin m;
@@ -7828,12 +7898,13 @@ struct QuotaMeter {
     TileOutline fill;          // Empty without usage.
     TileOutline paceHalo;      // Empty while the pace mark is hidden.
     TileOutline paceCore;
-    // Quota matrix: the cell, down the first column, then the second from the third quota on.
+    // Quota matrix: the cell, down the first column, then the second from the third quota on (on a
+    // side taskbar, all down the first).
     int matrixRow = 0, matrixColumn = 0;
-    // Sparklines: the quota's chart, `sparkLeft` DIPs from the face's left, its shapes
-    // (AccountMeters describes them), and its key in the plot's top-right corner instead of its
-    // bottom-right one.
-    double sparkLeft = 0;
+    // Sparklines: the quota's chart, `sparkLeft` DIPs from the face's left and `sparkTop` from its
+    // top, its shapes (AccountMeters describes them), and its key in the plot's top-right corner
+    // instead of its bottom-right one.
+    double sparkLeft = 0, sparkTop = 0;
     std::array<TileOutline, kSparkShapeCount> spark;
     bool sparkKeyTop = false;
 };
@@ -7865,9 +7936,12 @@ struct AccountMeters {
     uint32_t headlineColor = 0;
     // Logo + headline tiles with the countdown: the time until that quota resets.
     std::wstring headlineCountdown;
+    // Logo + headline tiles: each segment's length, the headline bar length, shortened on a side
+    // taskbar until the row of segments and their gaps fits its width.
+    double headlineBarLength = 0;
     // Sparklines: a chart per quota in the mask (QuotaMeter::spark), display.sparklineWidth by
-    // faceHeight, side by side in slot order in the face; the face's height is the tile's at the
-    // chart height. A chart plots used % across the window, or % left in remaining mode: the lit
+    // sparkChartHeight (the tile's height at the chart height), side by side in slot order in the
+    // face, or on a side taskbar one under another, kSparkChartGap apart. A chart plots used % across the window, or % left in remaining mode: the lit
     // part up to now (or the whole plot), the recorded usage, the even-pace diagonal (with pace
     // markers on), the current time (line and caret, each with its cue on) and reading (ringed or
     // plain), and the projection (ProjectUsage) from the current reading to the reset or, reaching
@@ -7878,6 +7952,7 @@ struct AccountMeters {
     // window's even use across that span, and the projection stops at its end (with the limit mark
     // only when it reaches the limit before then).
     uint32_t sparkLimitColor = 0;
+    double sparkChartHeight = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
     // The weekly chart's top-left corner (bottom-left with sparkExtraBottom), at the key's font:
     // the account's selected extra usage per display.sparklineExtra, its key (empty for dollars)
@@ -7885,7 +7960,8 @@ struct AccountMeters {
     std::wstring sparkExtraKey, sparkExtraText;
     uint32_t sparkExtraColor = 0;
     bool sparkExtraBottom = false;
-    // Quota matrix: the numbers' and keys' font sizes, two rows shrunk to fit the tile.
+    // Quota matrix: the numbers' and keys' font sizes, two rows shrunk to fit the tile (on a side
+    // taskbar, one column of rows at the number size).
     double matrixFont = 0, matrixKeyFont = 0;
 };
 
@@ -7990,17 +8066,31 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
         meters.barMask = charted ? charted : top >= 0 ? 1 << top : meters.barMask & -meters.barMask;
         count = std::popcount(unsigned(meters.barMask));
-        meters.faceHeight = std::round(display.tileHeight * display.sparklineHeight / 100.0);
-        meters.faceWidth = count * display.sparklineWidth + std::max(count - 1, 0) * kSparkChartGap;
+        meters.sparkChartHeight = std::round(display.tileHeight * display.sparklineHeight / 100.0);
+        if (display.sideWidth > 0) {
+            meters.faceWidth = count ? display.sparklineWidth : 0;
+            meters.faceHeight = count * meters.sparkChartHeight + std::max(count - 1, 0) * kSparkChartGap;
+        } else {
+            meters.faceWidth = count * display.sparklineWidth + std::max(count - 1, 0) * kSparkChartGap;
+            meters.faceHeight = meters.sparkChartHeight;
+        }
         meters.sparkKeyFont = display.sparklineTextSize;
         meters.sparkLimitColor = UsageColor(100, false, yellow, orange, red, display.colorblindMode);
     }
     if (matrix) {
         // Two rows' cap heights and their gap fit the tile, 2 DIPs clear above and below.
         double font = display.headlineFontSize;
-        if (count > 1) font = std::min(font, (display.tileHeight - 4 - kMatrixRowGap) / (2 * kTileCapShare));
+        if (count > 1 && display.sideWidth <= 0) {
+            font = std::min(font, (display.tileHeight - 4 - kMatrixRowGap) / (2 * kTileCapShare));
+        }
         meters.matrixFont = std::max(font, 7.0);
         meters.matrixKeyFont = meters.matrixFont * kHeadlineKeyScale;
+    }
+    meters.headlineBarLength = display.headlineBarLength;
+    if (layout == BarLayout::LogoHeadline && display.sideWidth > 0 && count > 0) {
+        double room = std::floor(display.sideWidth - 2 * kSideInset) - (count - 1) * display.barGap;
+        meters.headlineBarLength =
+            std::clamp(std::floor(room / count), double(kHeadlineBarLengthMin), double(display.headlineBarLength));
     }
     // Pies: one per quota in slot order, sized as a pair up to two, in columns of two from the
     // third on.
@@ -8267,8 +8357,12 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             // Left to right the window (or the day each side of now), bottom to top 0-100% inside
             // the insets, per the bar mode: used, or left (100 - used); positions snap to quarter
             // DIPs, so they change only when the drawing does.
-            m.sparkLeft = slotPosition * (display.sparklineWidth + kSparkChartGap);
-            double width = display.sparklineWidth, height = meters.faceHeight;
+            double width = display.sparklineWidth, height = meters.sparkChartHeight;
+            if (display.sideWidth > 0) {
+                m.sparkTop = slotPosition * (height + kSparkChartGap);
+            } else {
+                m.sparkLeft = slotPosition * (width + kSparkChartGap);
+            }
             auto snap = [](double dip) { return std::round(dip * 4) / 4; };
             std::vector<TileTracePoint> trace = timed(w) && traceOf ? traceOf(w, wu) : std::vector<TileTracePoint>{};
             // A rolled-back clock can put now before the newest reading: the time, the current
@@ -8484,8 +8578,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             }
         } else if (matrix) {
             // Per the bar mode, as the bars' text: remaining clamped to 0-100%, used unclamped.
-            m.matrixRow = slotPosition % 2;
-            m.matrixColumn = slotPosition / 2;
+            bool column = display.sideWidth > 0;
+            m.matrixRow = column ? slotPosition : slotPosition % 2;
+            m.matrixColumn = column ? 0 : slotPosition / 2;
             m.text = L"\u2013";
             if (wu.pct >= 0) {
                 wchar_t text[24];
@@ -8496,7 +8591,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         } else {
             // Headline segments: corners a quarter of the thickness; the fill cut flat until the
             // track's end. Any usage fills at least 2 DIPs, as on the bars.
-            double length = display.headlineBarLength;
+            double length = meters.headlineBarLength;
             m.fillLength = m.fillUnits ? std::clamp(length * fill, 2.0, length) : 0;
             m.fillEndRadius = std::max(0.0, display.headlineBarThickness / 4.0 - (length - m.fillLength));
         }
@@ -8766,6 +8861,13 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
             BadgeBox box = LogoBadgeBox(display, side, (int)identityText.badgeText.size());
             Canvas::SetLeft(tile.badge, box.left + box.width / 2 - 2 * size);
             Canvas::SetTop(tile.badge, box.top + box.height / 2 - size);
+            // Down a side taskbar the badge's reach past the logo counts across it, on both sides
+            // so the logo stays centred: an account it widens past the taskbar shrinks to fit. Bar
+            // columns replace this with their identity margins, which hold the same reach.
+            if (display.sideWidth > 0) {
+                double reach = std::max({-box.left, box.left + box.width - side, 0.0});
+                identity.Margin({reach, 0, reach, 0});
+            }
         }
         Canvas place;
         place.Children().Append(tile.badge);
@@ -8806,21 +8908,29 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
 }
 
 // Builds account `index`'s tile: its root (hit target and flyout anchor), identity and meter
-// containers. UpdateAccountTile sizes and fills the meters.
+// containers. UpdateAccountTile sizes and fills the meters. On a side taskbar the identity sits
+// above the meters (rings keep it inside), all centred across the tile, which takes its height
+// from them.
 static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, size_t index,
                                    BarLayout layout, MeterDisplay const& display, AccountUiRefs& refs) {
     TileUiRefs& tile = refs.tile;
     tile.layout = layout;
     bool ring = IsRingTile(layout);
+    bool side = display.sideWidth > 0;
 
     StackPanel column;
-    column.Orientation(Orientation::Horizontal);
+    column.Orientation(side && !ring ? Orientation::Vertical : Orientation::Horizontal);
     column.VerticalAlignment(VerticalAlignment::Center);
-    column.Height(display.tileHeight);
+    if (!side || ring) column.Height(display.tileHeight);
     column.CornerRadius({4, 4, 4, 4});
-    column.Padding(ring ? Thickness{4, 0, 4, 0} : Thickness{7, 0, 8, 0});
-    column.Spacing(6);
+    column.Padding(side && !ring ? Thickness{kSideInset, 4, kSideInset, 4} :
+                   ring ? Thickness{kSideInset, 0, kSideInset, 0} : Thickness{7, 0, 8, 0});
+    column.Spacing(side ? 4 : 6);
     Grid identity = BuildTileIdentity(accounts, index, layout, display, tile);
+    auto append = [&](FrameworkElement const& child) {
+        if (side) child.HorizontalAlignment(HorizontalAlignment::Center);
+        column.Children().Append(child);
+    };
 
     if (ring) {
         Grid face;
@@ -8831,10 +8941,10 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         face.Children().Append(identity);
         tile.face = face;
         tile.meters = meters;
-        column.Children().Append(face);
+        append(face);
         return column;
     }
-    column.Children().Append(identity);
+    append(identity);
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");
 
     if (IsFaceTile(layout)) {
@@ -8863,7 +8973,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         }
         tile.face = face;
         tile.meters = meters;
-        column.Children().Append(face);
+        append(face);
         return column;
     }
 
@@ -8879,6 +8989,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
             SparkChartUi& chart = tile.charts[w];
             chart.root = Grid{};
             chart.root.HorizontalAlignment(HorizontalAlignment::Left);
+            chart.root.VerticalAlignment(VerticalAlignment::Top);
             chart.root.Visibility(Visibility::Collapsed);
             chart.plot = Border{};
             chart.plot.CornerRadius({kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius, kSparkPlotRadius});
@@ -8913,20 +9024,23 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         }
         tile.face = face;
         tile.meters = face;
-        column.Children().Append(face);
+        append(face);
         return column;
     }
 
     if (layout == BarLayout::QuotaMatrix) {
-        // Up to two rows and columns of cells beside the identity, each a quota's key and number
-        // on one baseline; UpdateAccountTile places and sizes them.
+        // Up to two rows and columns of cells beside the identity (on a side taskbar, a column of
+        // up to four rows under it), each a quota's key and number on one baseline;
+        // UpdateAccountTile places and sizes them.
         Grid matrix;
         matrix.IsHitTestVisible(false);
         matrix.VerticalAlignment(VerticalAlignment::Center);
-        for (int k = 0; k < 2; k++) {
+        for (int k = 0; k < (side ? kQuotaBarCount : 2); k++) {
             RowDefinition row;
             row.Height({0, GridUnitType::Auto});
             matrix.RowDefinitions().Append(row);
+        }
+        for (int k = 0; k < (side ? 1 : 2); k++) {
             ColumnDefinition cellColumn;
             cellColumn.Width({0, GridUnitType::Auto});
             matrix.ColumnDefinitions().Append(cellColumn);
@@ -8953,7 +9067,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
             tile.matrixValues[w] = value;
         }
         tile.meters = matrix;
-        column.Children().Append(matrix);
+        append(matrix);
         return column;
     }
 
@@ -9015,7 +9129,7 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
         meters.Spacing(display.barGap);
         headline.Children().Append(meters);
     }
-    column.Children().Append(headline);
+    append(headline);
     return column;
 }
 
@@ -9125,9 +9239,9 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 chart.shapes.Children().Clear();
                 chart.paths.clear();
                 if (!shown) continue;
-                chart.root.Margin({meters.quotas[w].sparkLeft, 0, 0, 0});
+                chart.root.Margin({meters.quotas[w].sparkLeft, meters.quotas[w].sparkTop, 0, 0});
                 chart.root.Width(display.sparklineWidth);
-                chart.root.Height(meters.faceHeight);
+                chart.root.Height(meters.sparkChartHeight);
                 chart.plot.Background(SolidColorBrush(ArgbColor(palette.plot)));
                 chart.key.FontSize(meters.sparkKeyFont);
                 chart.key.Text(meters.quotas[w].key);
@@ -9140,7 +9254,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 for (SparkShapeStyle const& style : kSparkShapeStyles) {
                     wuxs::Path path;
                     path.Width(display.sparklineWidth + 2 * kSparkOverflow);
-                    path.Height(meters.faceHeight + 2 * kSparkOverflow);
+                    path.Height(meters.sparkChartHeight + 2 * kSparkOverflow);
                     path.Margin({-kSparkOverflow, -kSparkOverflow, -kSparkOverflow, -kSparkOverflow});
                     path.Visibility(Visibility::Collapsed);
                     if (style.stroke > 0) {
@@ -9206,6 +9320,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                     BadgeBox const& box = meters.ringBadge;
                     Canvas::SetLeft(tile.badge, box.left + box.width / 2 - tile.badge.Width() / 2);
                     Canvas::SetTop(tile.badge, box.top + box.height / 2 - tile.badge.Height() / 2);
+                    // Down a side taskbar, an offset badge's reach past the ring counts across it,
+                    // as on other tiles' identities.
+                    if (display.sideWidth > 0) {
+                        double reach = std::max({-box.left, box.left + box.width - meters.faceWidth, 0.0});
+                        tile.face.Margin({reach, 0, reach, 0});
+                    }
                 }
                 if (tile.text) {
                     tile.text.FontSize(meters.ringTextFont);
@@ -9230,7 +9350,7 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!(barMask & (1 << w))) continue;
                 Grid bar;
-                bar.Width(display.headlineBarLength);
+                bar.Width(meters.headlineBarLength);
                 bar.Height(thickness);
                 Border trackBar;
                 trackBar.CornerRadius({radius, radius, radius, radius});
@@ -10878,10 +10998,11 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
     }
 }
 
-// Opens the account's flyout above its column, replacing any open one. It is transient: it never
-// takes focus.
+// Opens the account's flyout off its column, past the taskbar's inner edge, replacing any open one.
+// It is transient: it never takes focus.
 static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
-    if (g_unloading || !state.quotaGrid || index < 0 ||
+    // Not while the taskbar moved and the bars wait for their rebuild.
+    if (g_unloading || !state.quotaGrid || state.edgeChanged || index < 0 ||
         index >= (int)state.accountRefs.size()) {
         return;
     }
@@ -10979,13 +11100,35 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         UpdateQuotaUi(state);
         if (!popup.flyout) return;
 
-        // Centered on the column, just above the taskbar's top edge.
-        auto origin = column.TransformToVisual(rootContent).TransformPoint({0.f, 0.f});
+        // Centered on the column, just past the taskbar's inner edge: above it at the bottom of the
+        // screen (and wherever Windows doesn't say, as on a taskbar another mod rotates), below it
+        // at the top, beside it on a side. The point is the column's own; a side taskbar's column
+        // may be shrunk to its width, so it is found in the taskbar's space, then mapped back.
         wuxcp::FlyoutShowOptions options;
-        options.Placement(wuxcp::FlyoutPlacementMode::Top);
         options.ShowMode(wuxcp::FlyoutShowMode::Transient);
-        options.Position(winrt::Windows::Foundation::Point{
-            (float)column.ActualWidth() / 2.f, -origin.Y - kFlyoutTaskbarGap});
+        if (state.edge == TaskbarEdge::Top || state.edge == TaskbarEdge::Left || state.edge == TaskbarEdge::Right) {
+            float width = (float)column.ActualWidth(), height = (float)column.ActualHeight();
+            auto bounds = column.TransformToVisual(rootContent).TransformBounds({0.f, 0.f, width, height});
+            float scaleX = width > 0 && bounds.Width > 0 ? bounds.Width / width : 1.f;
+            float scaleY = height > 0 && bounds.Height > 0 ? bounds.Height / height : 1.f;
+            winrt::Windows::Foundation::Point at{bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2};
+            if (state.edge == TaskbarEdge::Top) {
+                options.Placement(wuxcp::FlyoutPlacementMode::Bottom);
+                at.Y = (float)rootContent.ActualHeight() + kFlyoutTaskbarGap;
+            } else if (state.edge == TaskbarEdge::Left) {
+                options.Placement(wuxcp::FlyoutPlacementMode::Right);
+                at.X = (float)rootContent.ActualWidth() + kFlyoutTaskbarGap;
+            } else {
+                options.Placement(wuxcp::FlyoutPlacementMode::Left);
+                at.X = -kFlyoutTaskbarGap;
+            }
+            options.Position(winrt::Windows::Foundation::Point{(at.X - bounds.X) / scaleX, (at.Y - bounds.Y) / scaleY});
+        } else {
+            auto origin = column.TransformToVisual(rootContent).TransformPoint({0.f, 0.f});
+            options.Placement(wuxcp::FlyoutPlacementMode::Top);
+            options.Position(winrt::Windows::Foundation::Point{
+                (float)column.ActualWidth() / 2.f, -origin.Y - kFlyoutTaskbarGap});
+        }
         EnumThreadWindows(GetCurrentThreadId(),
             [](HWND candidate, LPARAM param) CALLBACK -> BOOL {
                 if (IsWindowVisible(candidate)) {
@@ -11111,8 +11254,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                                     *settings.sparklineHoverSpan != settings.sparklineSpan;
         bool tileLayout = IsTileLayout(barLayout);
         // Tiles are kTileHeight tall, less on a taskbar too short for that; bar columns at least.
+        // A side taskbar's height is the screen's: there, its width limits them instead.
         state.taskbarHeight = 0;
-        if (state.injectionParent) {
+        if (state.injectionParent && state.sideWidth <= 0) {
             try {
                 if (auto xamlRoot = state.injectionParent.XamlRoot()) {
                     state.taskbarHeight = xamlRoot.Size().Height;
@@ -11120,7 +11264,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             } catch (...) {}
         }
         MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
-                                               state.taskbarHeight);
+                                               state.taskbarHeight, state.sideWidth);
+        // Down a side taskbar: accounts stack, and each fits its width (stackAccount).
+        bool side = display.sideWidth > 0;
         if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, nullptr);
         BarGeometry barGeometry = BarGeometryFor(display);
         // Bar sizes and pace ticks as the meter model clamps them.
@@ -11135,15 +11281,32 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         bool showDetailsOnHover = settings.showDetailsOnHover;
         PercentTextVisibility percentTextVisibility = settings.percentTextVisibility;
         PercentTextAlignment percentTextAlignment = settings.percentTextAlignment;
-        LabelPosition labelPosition = settings.labelPosition;
+        LabelPosition labelPosition = BarIdentityPositionFor(settings.labelPosition, display);
         state.accountRefs.clear();
         Grid root;
         root.Name(kRootName);
         root.VerticalAlignment(VerticalAlignment::Center);
 
         StackPanel panel;
-        panel.Orientation(Orientation::Horizontal);
-        panel.Margin({4, 0, (double)rightMargin, 0});
+        panel.Orientation(side ? Orientation::Vertical : Orientation::Horizontal);
+        panel.Margin(side ? Thickness{0, 4, 0, (double)rightMargin} : Thickness{4, 0, (double)rightMargin, 0});
+        // Adds an account's box along the taskbar. On a side taskbar it is centred, and shrunk as a
+        // whole to the taskbar's width, never grown, when fixed-size content (text, identities)
+        // still overflows it after the meter model fitted the meter lengths.
+        auto stackAccount = [&](FrameworkElement const& box) {
+            if (!side) {
+                panel.Children().Append(box);
+                return;
+            }
+            box.HorizontalAlignment(HorizontalAlignment::Center);
+            Viewbox fit;
+            fit.Stretch(Stretch::Uniform);
+            fit.StretchDirection(StretchDirection::DownOnly);
+            fit.MaxWidth(display.sideWidth);
+            fit.HorizontalAlignment(HorizontalAlignment::Center);
+            fit.Child(box);
+            panel.Children().Append(fit);
+        };
 
         // Context menu items with a Fluent icon; ClearQuotaEventState revokes their Click handlers.
         FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");
@@ -11166,7 +11329,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             Border setupTile;
             setupTile.CornerRadius({4, 4, 4, 4});
             setupTile.Padding({8, 3, 8, 3});
-            setupTile.Margin({(double)accountMargin, 0, (double)accountMargin, 0});
+            setupTile.Margin(side ? Thickness{0, (double)accountMargin, 0, (double)accountMargin} :
+                                    Thickness{(double)accountMargin, 0, (double)accountMargin, 0});
             setupTile.Background(SolidColorBrush(winrt::Windows::UI::Color{0x30, 0x80, 0x80, 0x80}));
 
             TextBlock setupText;
@@ -11200,7 +11364,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }));
             setupElement.ContextFlyout(menu);
 
-            panel.Children().Append(setupTile);
+            stackAccount(setupTile);
             root.Children().Append(panel);
             return root;
         }
@@ -11322,7 +11486,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Orientation(Orientation::Horizontal);
                 col.VerticalAlignment(VerticalAlignment::Center);
                 col.MinHeight(display.tileHeight);
-                col.Padding({7, 0, 7, 0});
+                col.Padding(side ? Thickness{kSideInset, 4, kSideInset, 4} : Thickness{7, 0, 7, 0});
                 col.CornerRadius({4, 4, 4, 4});
                 StackPanel content;
                 content.Orientation(identityAcross ? Orientation::Vertical : Orientation::Horizontal);
@@ -11385,8 +11549,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
-                        labelColumn.Width({std::ceil(compactLabelFontSize * 1.4) + 3.0,
-                                           GridUnitType::Pixel});
+                        labelColumn.Width({BarLabelColumnWidth(percentFontSize), GridUnitType::Pixel});
                         ColumnDefinition trackColumn;
                         trackColumn.Width({(double)(verticalBars ? barThickness : barLength),
                                            GridUnitType::Pixel});
@@ -11572,13 +11735,16 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 col.Children().Append(content);
             }
 
-            // The box's side padding comes out of the account margin, so accounts' contents sit
-            // twice the margin apart; at small margins the padding shrinks with it.
+            // The box's padding along the taskbar comes out of the account margin, so accounts'
+            // contents sit twice the margin apart; at small margins the padding shrinks with it.
             Thickness padding = col.Padding();
-            padding.Left = std::min(padding.Left, (double)accountMargin);
-            padding.Right = std::min(padding.Right, (double)accountMargin);
+            double& before = side ? padding.Top : padding.Left;
+            double& after = side ? padding.Bottom : padding.Right;
+            before = std::min(before, (double)accountMargin);
+            after = std::min(after, (double)accountMargin);
             col.Padding(padding);
-            col.Margin({accountMargin - padding.Left, 0, accountMargin - padding.Right, 0});
+            col.Margin(side ? Thickness{0, accountMargin - padding.Top, 0, accountMargin - padding.Bottom} :
+                              Thickness{accountMargin - padding.Left, 0, accountMargin - padding.Right, 0});
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);
@@ -11788,7 +11954,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
             tappedElement.ContextFlyout(menu);
 
-            panel.Children().Append(col);
+            stackAccount(col);
             refs.menu = menu;
             state.accountRefs.push_back(std::move(refs));
             // Right-click closes any details flyout before the menu shows. The header's plan and
@@ -11948,7 +12114,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     std::vector<AccountConfig>& accounts = settings.accounts;
 
     MeterDisplay display = MeterDisplayFor(settings, NowUnixMs(), state.rasterizationScale,
-                                           state.taskbarHeight);
+                                           state.taskbarHeight, state.sideWidth);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
@@ -12052,8 +12218,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     BadgeBox badge = ui.tile.badge ?
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
-                        settings.labelPosition, ui.label != nullptr, side, badge, meters.warn,
-                        barMask ? settings.labelGap : 0, state.labelAboveCap, state.labelBelowBaseline);
+                        BarIdentityPositionFor(settings.labelPosition, display), ui.label != nullptr, side,
+                        badge, meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
+                        state.labelBelowBaseline);
                     Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
                         identity.Margin(margin);
@@ -12281,6 +12448,16 @@ struct StartArea {
     FrameworkElement start{nullptr};
 };
 
+// The edge a state of the taskbar's DockingStates group (RootGrid's) docks it at; Unknown for none.
+static TaskbarEdge DockedEdge(VisualState const& state) {
+    winrt::hstring name = state ? state.Name() : winrt::hstring{};
+    if (name == L"DockedBottom") return TaskbarEdge::Bottom;
+    if (name == L"DockedTop") return TaskbarEdge::Top;
+    if (name == L"DockedLeft") return TaskbarEdge::Left;
+    if (name == L"DockedRight") return TaskbarEdge::Right;
+    return TaskbarEdge::Unknown;
+}
+
 static StartArea FindStartArea(FrameworkElement const& root) {
     StartArea area;
     FrameworkElement frame = FindChildByName(root, L"TaskbarFrame", 4);
@@ -12311,8 +12488,9 @@ static StartArea FindStartArea(FrameworkElement const& root) {
 // Records belong to the taskbar window's thread, which alone adds, changes and removes them and
 // uses their weak references; the settings thread reads only the plain fields. The window's
 // destruction removes them. g_placementMutex is a leaf. Never destroyed: weak references still
-// held at unload are leaked.
-enum class PlacementFallback : uint8_t { None, Unavailable, Conflict };
+// held at unload are leaked. Side: the taskbar runs down a side of the screen, where the bars
+// don't go beside Start.
+enum class PlacementFallback : uint8_t { None, Unavailable, Conflict, Side };
 
 struct PlacementRecord {
     HWND hWnd = nullptr;
@@ -12359,6 +12537,39 @@ static void SetPlacementFallback(HWND hWnd, bool start, PlacementFallback fallba
         PlacementRecord* record = FindPlacementRecordLocked(hWnd, start, fallback != PlacementFallback::None);
         if (record && record->fallback != fallback) {
             record->fallback = fallback;
+            changed = true;
+        }
+    }
+    if (changed) NotifySettingsWindowChanged();
+}
+
+// Taskbars on a left or right edge as their threads last built them, for the settings window: plain
+// data under g_placementMutex, removed with the window. `unsupported`: the tray isn't a stack, so no
+// bars show there.
+struct SideTaskbarRecord {
+    HWND hWnd = nullptr;
+    bool unsupported = false;
+};
+[[clang::no_destroy]] static std::vector<SideTaskbarRecord> g_sideTaskbars;
+
+// Records whether a taskbar is on a side and whether its bars can't show there, and tells an open
+// settings window when that changes.
+static void SetSideTaskbar(HWND hWnd, bool side, bool unsupported) {
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_placementMutex);
+        auto it = std::find_if(g_sideTaskbars.begin(), g_sideTaskbars.end(),
+                               [&](const SideTaskbarRecord& record) { return record.hWnd == hWnd; });
+        if (!side) {
+            if (it != g_sideTaskbars.end()) {
+                g_sideTaskbars.erase(it);
+                changed = true;
+            }
+        } else if (it == g_sideTaskbars.end()) {
+            g_sideTaskbars.push_back({hWnd, unsupported});
+            changed = true;
+        } else if (it->unsupported != unsupported) {
+            it->unsupported = unsupported;
             changed = true;
         }
     }
@@ -12559,6 +12770,74 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
     state.applied.clear();
 }
 
+// Watches the taskbar's docked edge (when Windows reports one) and its frame's orientation and
+// thickness (when it is found): Windows moves a taskbar by re-laying out the same tree. The first
+// change ignores the rest, gives back the room beside Start before a layout pass can write it into
+// the new layout, drops a pending hover, collapses the bars and asks the retry worker to rebuild
+// them, whatever of that fails. Owner thread; ClearQuotaEventState revokes both. False if a
+// subscription failed.
+static bool WatchTaskbarEdge(QuotaUiInstance& state, FrameworkElement const& frame,
+                             VisualStateGroup const& dockingStates) {
+    HWND hWnd = state.hWnd;
+    state.edgeChanged = false;
+    auto changed = [hWnd] {
+        auto* uiState = FindUiState(hWnd);
+        if (g_unloading || !uiState || uiState->ownerThreadId != GetCurrentThreadId() || uiState->edgeChanged) {
+            return;
+        }
+        uiState->edgeChanged = true;
+        try {
+            ReleaseStartAreaReservation(*uiState);
+        } catch (...) {}
+        try {
+            FlyoutUi& fo = uiState->flyout;
+            if (fo.dwellTimer) fo.dwellTimer.Stop();
+            fo.dwellIndex = -1;
+            CloseAccountFlyout(*uiState);
+        } catch (...) {}
+        try {
+            if (uiState->quotaGrid) uiState->quotaGrid.Visibility(Visibility::Collapsed);
+        } catch (...) {}
+        Wh_Log(L"Taskbar moved or resized on hwnd=%p; rebuilding the bars", hWnd);
+        StartRetryInject(true);
+    };
+    try {
+        if (frame) {
+            state.taskbarFrame = winrt::make_weak(frame);
+            state.frameSide = frame.ActualHeight() > frame.ActualWidth();
+            state.frameThickness = state.frameSide ? frame.ActualWidth() : frame.ActualHeight();
+            state.taskbarFrameToken = frame.SizeChanged(
+                [hWnd, changed](winrt::Windows::Foundation::IInspectable const&, SizeChangedEventArgs const& e) {
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (!uiState) return;
+                        auto size = e.NewSize();
+                        bool side = size.Height > size.Width;
+                        double thickness = side ? size.Width : size.Height;
+                        // Task buttons coming and going change its length only.
+                        if (side == uiState->frameSide && std::fabs(thickness - uiState->frameThickness) < 0.5) {
+                            return;
+                        }
+                        changed();
+                    } catch (...) {}
+                });
+        }
+        if (dockingStates) {
+            state.dockingStates = winrt::make_weak(dockingStates);
+            state.dockingStatesToken = dockingStates.CurrentStateChanged(
+                [hWnd, changed](winrt::Windows::Foundation::IInspectable const&, VisualStateChangedEventArgs const& e) {
+                    try {
+                        auto* uiState = FindUiState(hWnd);
+                        if (uiState && DockedEdge(e.NewState()) != uiState->edge) changed();
+                    } catch (...) {}
+                });
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 static bool InjectQuotaGrid(HWND hWnd) {
     if (!hWnd) return false;
     DWORD ownerThreadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -12576,7 +12855,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
             settingsGeneration = g_settingsGeneration;
             settingsPlacement = g_settings.placement;
         }
-        if (existingState->quotaGrid &&
+        if (existingState->quotaGrid && !existingState->edgeChanged &&
             existingState->buildSettingsGeneration == settingsGeneration &&
             existingState->placement == settingsPlacement &&
             existingState->buildVisualTestMode ==
@@ -12614,10 +12893,30 @@ static bool InjectQuotaGrid(HWND hWnd) {
             placement = g_settings.placement;
         }
 
-        // Room an earlier removal failed to give back, on a margin this build doesn't use, goes
-        // back now. Records whose element is gone go too, ending any quarantine with it.
+        // The edge Windows docks the taskbar at, from the native position setting's DockingStates
+        // (absent on builds without it). Left and right lay the bars out down the taskbar, at its
+        // width.
+        FrameworkElement taskbarFrame = FindChildByName(root, L"TaskbarFrame", 4);
+        VisualStateGroup dockingStates{nullptr};
+        if (FrameworkElement rootGrid = taskbarFrame ? FindChildByName(taskbarFrame, L"RootGrid", 1) : nullptr) {
+            for (auto const& group : VisualStateManager::GetVisualStateGroups(rootGrid)) {
+                if (group.Name() == L"DockingStates") dockingStates = group;
+            }
+        }
+        const TaskbarEdge edge = DockedEdge(dockingStates ? dockingStates.CurrentState() : nullptr);
+        const bool side = edge == TaskbarEdge::Left || edge == TaskbarEdge::Right;
+        double sideWidth = 0;
+        if (side) {
+            sideWidth = taskbarFrame && taskbarFrame.ActualWidth() > 0 ? taskbarFrame.ActualWidth() :
+                                                                        xamlRoot.Size().Width;
+        }
+
+        // Room an earlier removal failed to give back, on a margin this build doesn't use (on a
+        // side, neither), goes back now. Records whose element is gone go too, ending any
+        // quarantine with it, except the current position's on a side, which only holds its note.
         for (bool start : {false, true}) {
-            if (IsStartAreaPlacement(placement) && start == (placement == TaskbarPlacement::RightOfStart)) continue;
+            bool current = IsStartAreaPlacement(placement) && start == (placement == TaskbarPlacement::RightOfStart);
+            if (current && !side) continue;
             FrameworkElement element{nullptr};
             {
                 std::lock_guard<std::mutex> lock(g_placementMutex);
@@ -12625,7 +12924,9 @@ static bool InjectQuotaGrid(HWND hWnd) {
                 if (!record) continue;
                 element = record->element.get();
                 if (!element) {
-                    g_placementRecords.erase(g_placementRecords.begin() + (record - g_placementRecords.data()));
+                    if (!current) {
+                        g_placementRecords.erase(g_placementRecords.begin() + (record - g_placementRecords.data()));
+                    }
                     continue;
                 }
                 if (record->lost || std::fabs(record->applied) <= 0.5) continue;
@@ -12633,10 +12934,10 @@ static bool InjectQuotaGrid(HWND hWnd) {
             GiveBackReservation(hWnd, start, element);
         }
 
-        // Beside Start: the element whose margin makes room for the bars. Start hidden or missing
-        // (Unavailable), or its margin taken by another mod (Conflict), puts them in the tray's
-        // first slot. A record keeps a taken margin while its element lives, and resumes a
-        // reservation an earlier removal failed to give back.
+        // Beside Start: the element whose margin makes room for the bars. A side taskbar (Side),
+        // Start hidden or missing (Unavailable), or its margin taken by another mod (Conflict),
+        // puts them in the tray's first slot. A record keeps a taken margin while its element
+        // lives, and resumes a reservation an earlier removal failed to give back.
         StartArea area;
         FrameworkElement reserved{nullptr};
         bool anchorMissing = false;
@@ -12645,7 +12946,9 @@ static bool InjectQuotaGrid(HWND hWnd) {
             area = FindStartArea(root);
             reserved = start ? area.start : area.repeater;
             PlacementFallback fallback = PlacementFallback::None;
-            if (!area.rootGrid || !reserved || reserved.Visibility() == Visibility::Collapsed) {
+            if (side) {
+                fallback = PlacementFallback::Side;
+            } else if (!area.rootGrid || !reserved || reserved.Visibility() == Visibility::Collapsed) {
                 fallback = PlacementFallback::Unavailable;
                 anchorMissing = true;
             } else {
@@ -12667,6 +12970,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
             if (fallback != PlacementFallback::None) {
                 Wh_Log(L"Placement: %s on hwnd=%p; the bars go to the tray",
                        fallback == PlacementFallback::Conflict ? L"another mod holds the margin beside Start" :
+                       fallback == PlacementFallback::Side     ? L"the taskbar is on a side" :
                                                                 L"Start or the taskbar's buttons not found",
                        hWnd);
                 reserved = nullptr;
@@ -12708,6 +13012,12 @@ static bool InjectQuotaGrid(HWND hWnd) {
                 }
                 anchorMissing = installedAnchor != first;
             }
+            // A side taskbar's tray stacks its children down it; a grid tray there (the first
+            // builds with the native position setting) has unknown layout semantics.
+            if (side && trayGrid) {
+                parent = nullptr;
+                anchorMissing = false;
+            }
         }
 
         if (!state) {
@@ -12731,7 +13041,21 @@ static bool InjectQuotaGrid(HWND hWnd) {
             state->windowSubclassed = true;
             // Remove a visual left by an earlier failed teardown, but don't guess which column
             // definition it owned.
-            RemoveQuotaChildren(parent, *state);
+            RemoveQuotaChildren(parent ? parent : Panel(trayGrid), *state);
+        }
+        state->edge = edge;
+        state->sideWidth = sideWidth;
+        SetSideTaskbar(hWnd, side, !parent);
+        if (!parent) {
+            // No bars on this taskbar, but its state and watch stay, so moving it back to an edge
+            // where they can show rebuilds them.
+            if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
+                ClearQuotaEventState(*state);
+                EraseUiState(hWnd);
+                return fail(L"side taskbar watch failed");
+            }
+            Wh_Log(L"Side taskbar on hwnd=%p has a grid tray; no bars until it moves", hWnd);
+            return true;
         }
         state->injectionParent = parent;
         state->placement = placement;
@@ -12815,6 +13139,13 @@ static bool InjectQuotaGrid(HWND hWnd) {
         g_uiInjected.store(true, std::memory_order_release);
         state->applied.clear();
         UpdateQuotaUi(*state);
+        // A watch that failed to subscribe would leave a moved taskbar laid out (and beside Start,
+        // reserved) for the old edge: retry the whole build instead.
+        if (!WatchTaskbarEdge(*state, taskbarFrame, dockingStates)) {
+            RemoveQuotaGridFromState(*state);
+            EraseUiState(hWnd);
+            return fail(L"taskbar edge watch failed");
+        }
         if (reserved) {
             // Every layout pass anywhere in the taskbar raises it; on the bars' own root, the
             // delegate goes with them.
@@ -12911,11 +13242,12 @@ static void ReleaseQuotaUiState(HWND hWnd) {
     state->startAreaElement = nullptr;
     state->applied.clear();
     EraseUiState(hWnd);
-    // The window's elements go with it, and so do its placement records.
+    // The window's elements go with it, and so do its placement and side records.
     std::lock_guard<std::mutex> lock(g_placementMutex);
     std::erase_if(g_placementRecords, [&](const PlacementRecord& record) {
         return record.hWnd == hWnd && record.ownerThreadId == GetCurrentThreadId();
     });
+    std::erase_if(g_sideTaskbars, [&](const SideTaskbarRecord& record) { return record.hWnd == hWnd; });
 }
 
 static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
@@ -20407,6 +20739,13 @@ struct SettingsDisplay {
 struct SettingsPlacementFallback {
     int display = 0;        // As SettingsDisplay::number
     bool conflict = false;  // Another mod holds the space; else what the position needs isn't there
+    bool side = false;      // The taskbar runs down a side of the screen
+};
+
+// A taskbar on a left or right edge, where the bars stack down it.
+struct SettingsSideTaskbar {
+    int display = 0;           // As SettingsDisplay::number
+    bool unsupported = false;  // Its Windows build's side tray takes no bars: none show there
 };
 
 // Recording state while consent is on.
@@ -20425,10 +20764,13 @@ struct SettingsAccountStatus {
 struct SettingsStatus {
     std::vector<SettingsDisplay> displays;
     std::vector<SettingsPlacementFallback> placementFallbacks;  // Display order
+    std::vector<SettingsSideTaskbar> sideTaskbars;              // Display order
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
     wchar_t groupSeparator = L',';
-    double taskbarHeight = 0;  // The primary taskbar's, in DIPs at its own DPI; 0 if unknown
+    // The primary taskbar's thickness (its height across the screen, its width on a side), in DIPs
+    // at its own DPI; 0 if unknown
+    double taskbarHeight = 0;
     bool visualTest = false;   // The taskbar shows the sample accounts
     std::vector<SettingsAccountStatus> accounts;  // Parallel to the settings' accounts
     bool signInRunning = false;                   // Some account's sign-in window is open
@@ -21060,7 +21402,7 @@ struct SettingsProductionStore final : SettingsStore {
             accountStatus.signingIn = signingIn && signingInIdentity == identity;
         }
         // Display N is the Nth taskbar in the order the taskbar code targets (primary first).
-        // The preview takes the primary taskbar's height, converted with that taskbar's DPI.
+        // The preview takes the primary taskbar's thickness, converted with that taskbar's DPI.
         std::vector<TaskbarDisplayInfo> taskbars = FindCurrentProcessTaskbarDisplays();
         for (size_t i = 0; i < taskbars.size(); i++) {
             const RECT& rect = taskbars[i].rect;
@@ -21068,20 +21410,26 @@ struct SettingsProductionStore final : SettingsStore {
                                        int(std::abs(rect.bottom - rect.top)), taskbars[i].primary});
             RECT window{};
             if (taskbars[i].primary && !status.taskbarHeight && GetWindowRect(taskbars[i].hWnd, &window)) {
-                status.taskbarHeight = double(window.bottom - window.top) * 96 / WindowDpi(taskbars[i].hWnd);
+                status.taskbarHeight = double(std::min(window.bottom - window.top, window.right - window.left)) *
+                                       96 / WindowDpi(taskbars[i].hWnd);
             }
         }
-        // Taskbars that show the bars, in the tray instead of beside Start.
-        if (IsStartAreaPlacement(baseline.settings.placement)) {
+        // Taskbars that show the bars: on a side, and in the tray instead of beside Start.
+        {
+            const bool startArea = IsStartAreaPlacement(baseline.settings.placement);
             const bool start = baseline.settings.placement == TaskbarPlacement::RightOfStart;
             std::vector<HWND> shown = FindCurrentProcessTaskbarWnds();
             std::lock_guard<std::mutex> lock(g_placementMutex);
             for (size_t i = 0; i < taskbars.size(); i++) {
                 if (std::find(shown.begin(), shown.end(), taskbars[i].hWnd) == shown.end()) continue;
+                for (const SideTaskbarRecord& record : g_sideTaskbars) {
+                    if (record.hWnd == taskbars[i].hWnd) status.sideTaskbars.push_back({int(i) + 1, record.unsupported});
+                }
                 for (const PlacementRecord& record : g_placementRecords) {
-                    if (record.hWnd == taskbars[i].hWnd && record.start == start &&
+                    if (startArea && record.hWnd == taskbars[i].hWnd && record.start == start &&
                         record.fallback != PlacementFallback::None) {
-                        status.placementFallbacks.push_back({int(i) + 1, record.fallback == PlacementFallback::Conflict});
+                        status.placementFallbacks.push_back({int(i) + 1, record.fallback == PlacementFallback::Conflict,
+                                                             record.fallback == PlacementFallback::Side});
                     }
                 }
             }
@@ -22882,20 +23230,45 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                      {L"Right of Start", int(TaskbarPlacement::RightOfStart)}},
                                     int(s.placement));
     }
-    if (IsStartAreaPlacement(s.placement) && !view.status.placementFallbacks.empty()) {
-        // Left side needs the taskbar's buttons; Right of Start also a shown Start.
+    if (IsStartAreaPlacement(s.placement)) {
+        // Left side needs the taskbar's buttons; Right of Start also a shown Start. A side taskbar
+        // whose tray takes no bars shows none: the note below says so instead.
         PCWSTR unavailable = s.placement == TaskbarPlacement::RightOfStart ?
                                  L"its Start button is hidden or wasn\u2019t found." :
                                  L"its taskbar buttons weren\u2019t found.";
         std::wstring text;
         for (const SettingsPlacementFallback& fallback : view.status.placementFallbacks) {
+            const auto& sides = view.status.sideTaskbars;
+            if (std::any_of(sides.begin(), sides.end(), [&](const SettingsSideTaskbar& taskbar) {
+                    return taskbar.display == fallback.display && taskbar.unsupported;
+                })) {
+                continue;
+            }
             if (!text.empty()) text += L"\n";
             text += L"Display " + std::to_wstring(fallback.display) + L" shows the bars in the tray: " +
-                    (fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
+                    (fallback.side     ? L"its taskbar is on a side of the screen." :
+                     fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
                                          unavailable);
         }
-        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
-                         UiSeverity::Caution);
+        if (!text.empty()) {
+            y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
+                             UiSeverity::Caution);
+        }
+    }
+    // Taskbars on a left or right edge: what changes there, a line per display.
+    if (!view.status.sideTaskbars.empty()) {
+        std::wstring text;
+        bool unsupported = false;
+        for (const SettingsSideTaskbar& taskbar : view.status.sideTaskbars) {
+            if (!text.empty()) text += L"\n";
+            text += L"Display " + std::to_wstring(taskbar.display) + L"\u2019s taskbar is on a side of the screen: " +
+                    (taskbar.unsupported ? L"its tray takes no bars on this Windows build. Update Windows to show them." :
+                                           L"accounts stack down it, each style rearranged to fit its width. The "
+                                           L"preview shows them across a bottom taskbar.");
+            unsupported = unsupported || taskbar.unsupported;
+        }
+        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 9), x, y + 3, width, {{text}},
+                         unsupported ? UiSeverity::Caution : UiSeverity::Info);
     }
 
     // Account identity is per account: a card that goes to Accounts. Fixed ids past the gallery's
