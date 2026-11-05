@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
-// @version         2.6.0
+// @version         2.6.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -4617,7 +4617,7 @@ static HistoryBreak HistoryConnection(const HistorySample& a, const HistorySampl
 
 static constexpr int kBurnUpMeterCount = 6;  // History meters 0-5: percentages with windows.
 // Drawing resolution: one reduction bin per flyout chart column (DIP) across the window.
-static constexpr int kBurnUpColumns = 190;
+static constexpr int kBurnUpColumns = 250;
 static constexpr size_t kBurnUpMaxPoints = 4 * kBurnUpColumns;
 // Longest charted window; it bounds the fetch thread's journal scan. Monthly windows (Anthropic
 // extra usage, GitHub Copilot's AI credits) are the longest provider windows.
@@ -9557,7 +9557,7 @@ static constexpr double kFlyoutDetailsRight = 16;
 // pass, and curves are reduced to one bin per column; 0% and 100% sit inside the vertical inset
 // so their strokes stay in the plot.
 static constexpr double kFlyoutChartWidth = kBurnUpColumns;
-static constexpr double kFlyoutChartHeight = 40;
+static constexpr double kFlyoutChartHeight = 60;
 static constexpr double kFlyoutChartInset = 2;
 
 // The reading each flyout row shows, by FlyoutRowIndex.
@@ -10067,7 +10067,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     content.Children().Append(footer);
 
     Border card;
-    card.Width(360);
+    card.Width(420);
     card.CornerRadius({8, 8, 8, 8});
     card.BorderThickness({1, 1, 1, 1});
     card.BorderBrush(theme.cardBorder);

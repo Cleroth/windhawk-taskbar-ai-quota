@@ -29,7 +29,7 @@ static constexpr double kFlyoutDetailsRight = 16;
 // pass, and curves are reduced to one bin per column; 0% and 100% sit inside the vertical inset
 // so their strokes stay in the plot.
 static constexpr double kFlyoutChartWidth = kBurnUpColumns;
-static constexpr double kFlyoutChartHeight = 40;
+static constexpr double kFlyoutChartHeight = 60;
 static constexpr double kFlyoutChartInset = 2;
 
 // The reading each flyout row shows, by FlyoutRowIndex.
@@ -539,7 +539,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     content.Children().Append(footer);
 
     Border card;
-    card.Width(360);
+    card.Width(420);
     card.CornerRadius({8, 8, 8, 8});
     card.BorderThickness({1, 1, 1, 1});
     card.BorderBrush(theme.cardBorder);

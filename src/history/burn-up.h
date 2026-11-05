@@ -4,7 +4,7 @@
 
 static constexpr int kBurnUpMeterCount = 6;  // History meters 0-5: percentages with windows.
 // Drawing resolution: one reduction bin per flyout chart column (DIP) across the window.
-static constexpr int kBurnUpColumns = 190;
+static constexpr int kBurnUpColumns = 250;
 static constexpr size_t kBurnUpMaxPoints = 4 * kBurnUpColumns;
 // Longest charted window; it bounds the fetch thread's journal scan. Monthly windows (Anthropic
 // extra usage, GitHub Copilot's AI credits) are the longest provider windows.
