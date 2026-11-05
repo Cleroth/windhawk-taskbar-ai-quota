@@ -138,6 +138,11 @@ access token without refresh or expiry and sent only to its usage endpoint.
   or Copilot credentials (Visual Studio, GitHub CLI, Credential Manager). Tokens live only in the
   mod's Windhawk storage (`auth_<identityHash>`), DPAPI-encrypted for the current user via
   `DpapiProtect`/`DpapiUnprotect`; never persist them in plaintext.
+- Why (decided 2026-11-05; revisit only on new evidence): borrowed sessions go stale while their
+  app is idle (Claude Code 8 h, Codex 10 days; gh 2.103+ can opt into expiring tokens); refresh
+  tokens are single-use, so renewing one signs its app out, and launching the app to renew joins
+  its refresh race; a borrowed account follows the app's current login and gives one account per
+  source; gh tokens carry repo/workflow scopes. Cut setup friction in the mod's own sign-in instead.
 - Refresh tokens go only to provider token endpoints, never as a bearer token to a quota endpoint.
 - The token store is keyed by `AccountIdentityHash` (provider+label). Keep it stable or sign-ins
   get orphaned.
