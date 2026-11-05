@@ -147,10 +147,12 @@ static void LoadHistoryLocked(bool create = false) {
         }
         for (size_t i = 0; i < n; ++i) {
             const auto& sample = batch[i];
+            // Any nonzero provider code: a later version's providers stay readable after a
+            // downgrade.
             bool valid = sample.checksum == HistoryChecksum(sample) && sample.accountId &&
                          sample.timeMs && sample.timeMs < kHistoryTimestampLimitMs &&
                          sample.intervalMs > 0 && sample.intervalMs <= kHistoryDayMs &&
-                         sample.provider >= 1 && sample.provider <= 4 && sample.failed <= 1;
+                         sample.provider && sample.failed <= 1;
             for (const auto& meter : sample.meters) {
                 valid = valid && std::isfinite(meter.value) && meter.value >= -1 &&
                         meter.value <= 1e12 && meter.resetMs < kHistoryTimestampLimitMs &&

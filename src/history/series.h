@@ -228,8 +228,22 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
         if (cancelled()) break;
         if (query.selected >= 0 && size_t(query.selected) != i) continue;
         const auto& account = accounts[i];
-        unsigned meters = account.provider < ARRAYSIZE(kHistoryProviderMeters)
-            ? kHistoryProviderMeters[account.provider] & kHistoryViewMeters[size_t(query.view)] : 0;
+        // A provider this version doesn't know (a later version's) gets the lanes it recorded in
+        // [readFrom, to), under their generic names.
+        unsigned meters = 0;
+        if (account.provider < ARRAYSIZE(kHistoryProviderMeters)) {
+            meters = kHistoryProviderMeters[account.provider];
+        } else {
+            for (size_t row : account.rows) {
+                if (cancelled()) break;
+                const auto& sample = samples[row];
+                if (sample.timeMs < query.readFrom || sample.timeMs >= query.to) continue;
+                for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
+                    if (HistoryHasValue(sample, meter)) meters |= 1U << meter;
+                }
+            }
+        }
+        meters &= kHistoryViewMeters[size_t(query.view)];
         // Only Weekly follows taskbar choices; All meters and removed accounts stay unfiltered.
         if (query.view == HistoryView::Weekly && account.provider == 1 && account.configured) {
             if (!account.showWeekly) meters &= ~(1U << 1);

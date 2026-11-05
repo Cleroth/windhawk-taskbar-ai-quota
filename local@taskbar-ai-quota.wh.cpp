@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and GitHub Copilot on the Windows 11 taskbar
-// @version         2.7.0
+// @version         2.7.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -4232,10 +4232,12 @@ static void LoadHistoryLocked(bool create = false) {
         }
         for (size_t i = 0; i < n; ++i) {
             const auto& sample = batch[i];
+            // Any nonzero provider code: a later version's providers stay readable after a
+            // downgrade.
             bool valid = sample.checksum == HistoryChecksum(sample) && sample.accountId &&
                          sample.timeMs && sample.timeMs < kHistoryTimestampLimitMs &&
                          sample.intervalMs > 0 && sample.intervalMs <= kHistoryDayMs &&
-                         sample.provider >= 1 && sample.provider <= 4 && sample.failed <= 1;
+                         sample.provider && sample.failed <= 1;
             for (const auto& meter : sample.meters) {
                 valid = valid && std::isfinite(meter.value) && meter.value >= -1 &&
                         meter.value <= 1e12 && meter.resetMs < kHistoryTimestampLimitMs &&
@@ -24797,8 +24799,22 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
         if (cancelled()) break;
         if (query.selected >= 0 && size_t(query.selected) != i) continue;
         const auto& account = accounts[i];
-        unsigned meters = account.provider < ARRAYSIZE(kHistoryProviderMeters)
-            ? kHistoryProviderMeters[account.provider] & kHistoryViewMeters[size_t(query.view)] : 0;
+        // A provider this version doesn't know (a later version's) gets the lanes it recorded in
+        // [readFrom, to), under their generic names.
+        unsigned meters = 0;
+        if (account.provider < ARRAYSIZE(kHistoryProviderMeters)) {
+            meters = kHistoryProviderMeters[account.provider];
+        } else {
+            for (size_t row : account.rows) {
+                if (cancelled()) break;
+                const auto& sample = samples[row];
+                if (sample.timeMs < query.readFrom || sample.timeMs >= query.to) continue;
+                for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
+                    if (HistoryHasValue(sample, meter)) meters |= 1U << meter;
+                }
+            }
+        }
+        meters &= kHistoryViewMeters[size_t(query.view)];
         // Only Weekly follows taskbar choices; All meters and removed accounts stay unfiltered.
         if (query.view == HistoryView::Weekly && account.provider == 1 && account.configured) {
             if (!account.showWeekly) meters &= ~(1U << 1);
@@ -26295,7 +26311,7 @@ struct HistoryController {
         for (const HistorySample& sample : snapshot->samples) {
             if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
                 sample.timeMs < scope.to) {
-                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : 5;
+                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : sample.provider <= 3 ? 5 : 8;
             }
         }
         operation = HistoryOperation::Export;

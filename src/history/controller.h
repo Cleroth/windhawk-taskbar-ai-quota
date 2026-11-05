@@ -347,7 +347,7 @@ struct HistoryController {
         for (const HistorySample& sample : snapshot->samples) {
             if ((!scope.accountId || sample.accountId == scope.accountId) && sample.timeMs >= scope.from &&
                 sample.timeMs < scope.to) {
-                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : 5;
+                estimate += sample.provider == 2 ? 3 : sample.provider == 4 ? 1 : sample.provider <= 3 ? 5 : 8;
             }
         }
         operation = HistoryOperation::Export;

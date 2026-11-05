@@ -61,9 +61,47 @@
             });
         }
     }
-    for (int selected : {-1, 0}) for (uint32_t provider : {0U, 5U, UINT_MAX}) for (int view = 0; view < 4; ++view) {
-        Run("unsupported provider " + std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected), [=] {
+    for (int selected : {-1, 0}) for (int view = 0; view < 4; ++view) {
+        Run("no provider/v" + std::to_string(view) + "/mode=" + std::to_string(selected), [=] {
+            auto state = Model({0}); AllLanes(state);
+            state.view = HistoryView(view); state.selected = selected;
+            auto built = Build(state);
+            CHECK(built.series.empty()); CHECK(built.noReadingAccounts.empty());
+        });
+    }
+    // A later version's provider: every lane it recorded in range, in each view's lanes, under
+    // the lanes' generic names.
+    const std::array<std::set<int>, 4> viewLanes{{{0, 4}, {1, 2, 5}, {3, 6, 7}, {0, 1, 2, 3, 4, 5, 6, 7}}};
+    for (int selected : {-1, 0}) for (uint32_t provider : {5U, UINT_MAX}) for (int view = 0; view < 4; ++view) {
+        std::string key = std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected);
+        Run("later provider, every lane " + key, [&, provider, view, selected] {
             auto state = Model({provider}); AllLanes(state);
+            state.view = HistoryView(view); state.selected = selected;
+            auto built = Build(state);
+            CHECK(Meters(built) == viewLanes[view]);
+            CHECK(built.noReadingAccounts.empty());
+            for (const auto& line : built.series) {
+                CHECK(line.current.validSamples == 2);
+                CHECK(line.plotted == (line.meter != 6 || view == 3));
+            }
+            if (view == 0 || view == 3) CHECK(Series(built, 0, 0).hoverTitle == L"account-100 · 5h used (%)");
+            if (view == 1 || view == 3) CHECK(Series(built, 0, 2).hoverTitle == L"account-100 · Fable weekly used (%)");
+            if (view == 2 || view == 3) CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · Extra budget used (%)");
+        });
+        Run("later provider, one lane " + key, [&, provider, view, selected] {
+            auto state = Model({provider});
+            AddRow(state, 0, state.from + 1000, {{3, 40}});
+            AddRow(state, 0, state.from + 61000, {{3, 45}});
+            state.view = HistoryView(view); state.selected = selected;
+            auto built = Build(state);
+            CHECK(Meters(built) == (view == 2 || view == 3 ? std::set<int>{3} : std::set<int>{}));
+            CHECK(built.noReadingAccounts.empty());
+        });
+        Run("later provider, lanes outside the range " + key, [&, provider, view, selected] {
+            auto state = Model({provider});
+            AddRow(state, 0, state.readFrom - 1, {{0, 10}, {1, 20}, {3, 40}});
+            AddRow(state, 0, state.to, {{0, 15}, {1, 25}, {3, 45}});
+            AddRow(state, 0, state.from + 1000, {});
             state.view = HistoryView(view); state.selected = selected;
             auto built = Build(state);
             CHECK(built.series.empty()); CHECK(built.noReadingAccounts.empty());

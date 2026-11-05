@@ -203,7 +203,10 @@ exclusive journal ownership to prevent competing writers. Storage failures appea
 Downgrading to a version without history support can discard saved history IDs when settings are
 edited; old samples then appear as anonymous retained history. Versions before 2.4.0 don't know
 GitHub Copilot: they report a journal with Copilot samples as damaged (until Clear) and drop
-Copilot accounts from their settings. Versions before 2.6.0 ignore Antigravity's Argon weekly
+Copilot accounts from their settings. From 2.7.1 on, a journal with samples of a provider added
+by a later version still loads: that version drops those accounts from its settings, lists their
+history under **Removed** (provider unknown, meters under generic names) and exports them with
+provider `unknown`. Versions before 2.6.0 ignore Antigravity's Argon weekly
 and its recorded history, and saving settings there drops its selection (an account with only
 Argon selected falls back to its short window), so it is on again after updating back. Downgrading to a version without
 **Forever** keeps 3650 days but applies its size cap, permanently discarding samples beyond the
