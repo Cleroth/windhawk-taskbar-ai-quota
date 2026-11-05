@@ -8,9 +8,9 @@
 // reset falls in a month without the subscription's day (the 29th to 31st). A window the
 // response lacks isn't shown; one that isn't an object or lacks a valid percentage is an error,
 // never 0 or 100%.
-static bool ParseOpenCodeUsage(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseOpenCodeUsage(const std::string& body, AccountData* d, AccountError* error) {
     auto fail = [&] {
-        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (error) *error = UnexpectedResponseFormat(body);
         return false;
     };
     try {

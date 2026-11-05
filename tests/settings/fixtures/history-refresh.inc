@@ -89,16 +89,20 @@ static void RunHistoryRefreshTests() {
         HistoryJournalStamp stamp = held->stamp;
         ops.Append(TestReading(0x0A, 2, kWeekTo - kMinute, {{1, 64}}));
         ops.stamp.loaded = false;
-        ops.status = L"History storage is in use by another Explorer session, or is inaccessible.";
+        ops.status = HistoryJournalError::InUse;
         refresh();
         CHECK(c.snapshot == held && c.snapshot->stamp == stamp && c.generation == 3);
-        CHECK(c.view.storageError == ops.status && c.view.pill == HistoryUiPill::NotSaving);
+        CHECK(c.view.storageError ==
+              L"History storage is in use by another Explorer session, or is inaccessible." &&
+              c.view.pill == HistoryUiPill::NotSaving);
         // Loaded again, damaged: loaded isn't health; its samples replace, its error shows.
         ops.stamp.loaded = true;
         ops.stamp.revision++;
-        ops.status = L"Damaged history record. Export readable samples or clear history.";
+        ops.status = HistoryJournalError::DamagedRecord;
         refresh();
-        CHECK(c.generation == 4 && c.snapshot->samples.size() == 1 && c.view.storageError == ops.status &&
+        CHECK(c.generation == 4 && c.snapshot->samples.size() == 1 && c.view.storageError ==
+              L"Damaged history record. Export readable samples or clear history." &&
+              
               c.view.pill == HistoryUiPill::NotSaving);
     });
 
@@ -116,12 +120,15 @@ static void RunHistoryRefreshTests() {
             TestSettled(c, ops);
             return rebuild;
         };
-        ops.status = L"History write failed; the previous journal was kept.";
-        CHECK(refresh() && c.view.storageError == ops.status && c.view.pill == HistoryUiPill::NotSaving);
+        ops.status = HistoryJournalError::WriteFailed;
+        CHECK(refresh() && c.view.storageError ==
+              L"History write failed; the previous journal was kept." &&
+              c.view.pill == HistoryUiPill::NotSaving);
         CHECK(!refresh());
-        ops.status = L"History is not being saved to disk. Check disk space and permissions.";
-        CHECK(refresh() && c.view.storageError == ops.status);
-        ops.status.clear();
+        ops.status = HistoryJournalError::NotSaved;
+        CHECK(refresh() && c.view.storageError ==
+              L"History is not being saved to disk. Check disk space and permissions.");
+        ops.status = HistoryJournalError::None;
         ops.capped = true;
         CHECK(refresh() && c.view.storageError.empty() && c.view.storageCapped &&
               c.view.pill == HistoryUiPill::Recording);
@@ -133,11 +140,12 @@ static void RunHistoryRefreshTests() {
         TestHistoryOps ops = TestControllerOps();
         ops.journal.clear();
         ops.stamp = {false, 1, 2, 0};
-        ops.status = L"History storage is in use by another Explorer session, or is inaccessible.";
+        ops.status = HistoryJournalError::InUse;
         HistoryController c(ops);
         c.Open();
         c.Load();
-        CHECK(c.view.pill == HistoryUiPill::NotSaving && c.view.storageError == ops.status);
+        CHECK(c.view.pill == HistoryUiPill::NotSaving && c.view.storageError ==
+              L"History storage is in use by another Explorer session, or is inaccessible.");
         ops.log.clear();
         // An explicit load's failed attempt notifies twice (status cleared, then set again).
         c.Notify();
@@ -145,7 +153,8 @@ static void RunHistoryRefreshTests() {
         TestDeliver(c, ops);
         TestSettled(c, ops);
         CHECK((ops.log == TestLog{L"post", L"settings", L"peek", L"peek 7d"}));
-        CHECK(ops.posted == 0 && !c.timer && c.view.storageError == ops.status);
+        CHECK(ops.posted == 0 && !c.timer && c.view.storageError ==
+              L"History storage is in use by another Explorer session, or is inaccessible.");
     });
 
     Run("history refresh: retention pruning (another revision) replaces the snapshot without the pruned readings; "

@@ -222,11 +222,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Label and "Provider · plan · status".
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
-        // The last poll's error, cut at 60 characters; an English message without a code of its own
-        // starts with a capital, catalog text stays as written.
-        std::wstring error = AccountErrorText(view.locale, status.error);
+        // The last poll's error on its own, cut at 60 characters.
+        std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
         if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
-        if (status.error.code == AccountErrorCode::Message && !error.empty()) error[0] = wchar_t(towupper(error[0]));
         if (status.signingIn) {
             stateText = L"Signing in\u2026";
             stateInk = UiInk::Accent;

@@ -53,7 +53,7 @@ static SettingsView AccountsView(std::initializer_list<int> expanded = {}) {
     AddTestAccounts(view.settings);
     const SettingsAccountStatus statuses[] = {
         {L"Plus", {}, true, true, false, false},
-        {L"Pro", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true, false},
+        {L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true, false},
         {L"Max 20x", {}, true, true, false, false},
         {L"AI Pro", {}, true, false, false, false},
     };
@@ -84,7 +84,7 @@ static SettingsView NineAccountsView(std::vector<size_t> order, std::initializer
         {L"anthropic", L"Work", {L"Team", {}, true, true, false, false}},
         {L"openai", L"ChatGPT Pro", {L"Pro", {}, true, true, false, false}},
         {L"anthropic", L"Old login",
-         {L"Pro", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true, false}},
+         {L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true, false}},
         {L"antigravity", L"Gemini desktop", {L"AI Pro", {}, true, false, false, false}},
         {L"openai", L"Codex (team seat)", {L"Plus", {}, true, true, false, false}},
         {L"anthropic", L"Side project",
@@ -704,7 +704,7 @@ static void RunAccountEditTests() {
               UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn, 1))->text == L"Sign in again" &&
               UiFindItem(frame, AccountId(1, SettingsField::AccountSignOut, 1)));
         // Without a sign-in: Sign in in its header.
-        view.accounts[0].status = {L"", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true,
+        view.accounts[0].status = {L"", {AccountErrorCode::NotSignedIn}, false, false, true,
                                    false};
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
@@ -767,7 +767,7 @@ static void RunAccountEditTests() {
         }
         CHECK((keys == std::vector<std::wstring>{L"Mo"}));
         // Without a sign-in: Sign in in its header; the footer keeps only the dashboard.
-        view.accounts[0].status = {L"", {AccountErrorCode::Message, L"not signed in - click to sign in"}, false, false, true,
+        view.accounts[0].status = {L"", {AccountErrorCode::NotSignedIn}, false, false, true,
                                    false};
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);

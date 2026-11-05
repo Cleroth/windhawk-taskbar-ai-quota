@@ -7,7 +7,7 @@
 // used percentage and amounts; an unlimited one (an organization's pooled budget) only its
 // credits used, or that the pool is used up. A plan without any allowance parses with a note.
 // Missing or malformed entitlements and percentages are errors, never 0 or 100%.
-static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseCopilotUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         // A number, or a fully numeric string (entitlements come as strings), within bounds that
@@ -34,15 +34,15 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         };
 
         // Plan names as VS Code shows them: free SKUs first, then copilot_plan ("individual" is
-        // Pro); an unknown plan as reported.
+        // Pro); an unknown plan as reported. GitHub's product names, the same in every language.
         std::wstring plan = GetStr(root, L"copilot_plan"), sku = GetStr(root, L"access_type_sku");
-        d->plan = sku == L"free_limited_copilot" ? L"Free" :
-                  sku == L"free_educational_quota" || plan == L"individual_edu" ? L"Student" :
-                  plan == L"individual" ? L"Pro" :
-                  plan == L"individual_pro" ? L"Pro+" :
-                  plan == L"individual_max" ? L"Max" :
-                  plan == L"business" ? L"Business" :
-                  plan == L"enterprise" ? L"Enterprise" : plan;
+        d->plan = sku == L"free_limited_copilot" ? L"Free" :  // i18n-en
+                  sku == L"free_educational_quota" || plan == L"individual_edu" ? L"Student" :  // i18n-en
+                  plan == L"individual" ? L"Pro" :  // i18n-en
+                  plan == L"individual_pro" ? L"Pro+" :  // i18n-en
+                  plan == L"individual_max" ? L"Max" :  // i18n-en
+                  plan == L"business" ? L"Business" :  // i18n-en
+                  plan == L"enterprise" ? L"Enterprise" : plan;  // i18n-en
         // Billing in requests rather than AI credits only when explicitly not token based.
         if (isFalse(root, L"token_based_billing")) d->copilotUnit = CopilotUnit::PremiumRequests;
 
@@ -62,12 +62,11 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         if (!quota && !legacy) {
             // Never in chat requests: legacy Free's are an allowance.
             if (premiumEntitlement == 0.0 && chatEntitlement == 0.0) {
-                d->extraLines = d->copilotUnit == CopilotUnit::PremiumRequests ?
-                                    L"No premium request allowance on this plan." :
-                                    L"No AI-credit allowance on this plan.";
+                d->note = d->copilotUnit == CopilotUnit::PremiumRequests ? AccountNote::NoPremiumRequestAllowance :
+                                                                           AccountNote::NoAiCreditAllowance;
                 return true;
             }
-            if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+            if (error) *error = UnexpectedResponseFormat(body);
             return false;
         }
 
@@ -85,7 +84,7 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         } else {
             std::optional<double> percentRemaining = number(quota, L"percent_remaining");
             if (!percentRemaining) {
-                if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+                if (error) *error = UnexpectedResponseFormat(body);
                 return false;
             }
             double entitlement = fromPremium ? *premiumEntitlement : *chatEntitlement;
@@ -116,7 +115,7 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         d->extraUsage.windowDurationMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
         return true;
     } catch (...) {
-        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (error) *error = UnexpectedResponseFormat(body);
         return false;
     }
 }
@@ -124,29 +123,27 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
 // grant_type=refresh_token, form-encoded, for sign-ins whose access tokens expire (GitHub issues
 // a refresh token only with those). GitHub reports most failures as HTTP 200 with an error code:
 // only a refresh token it no longer accepts, or a client error other than a rate limit (408,
-// 429, 403 with Retry-After), needs a new sign-in.
-static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* err,
+// 429, 403 with Retry-After), needs a new sign-in. `err`: why it failed (none for a rejection
+// without a request).
+static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, AccountError* err,
                                                int* retryAfterSec) {
     if (retryAfterSec) *retryAfterSec = 0;
-    if (tok->refreshToken.empty()) {
-        *err = L"no refresh token";
-        return TokenEndpointResult::Rejected;
-    }
+    *err = {};
+    if (tok->refreshToken.empty()) return TokenEndpointResult::Rejected;
     std::string body = "client_id=" + UrlEncode(WideToUtf8(kCopilotClientId)) +
                        "&grant_type=refresh_token&refresh_token=" +
                        UrlEncode(WideToUtf8(tok->refreshToken));
     HttpResult r = HttpRequest(L"POST", kCopilotTokenHost, kCopilotTokenPath, kOAuthUserAgent,
-                               L"Content-Type: application/x-www-form-urlencoded\r\n"
+                               L"Content-Type: application/x-www-form-urlencoded\r\n"  // i18n-en
                                L"Accept: application/json\r\n",
                                body);
     if (!r.ok) {
-        *err = L"network error";
+        *err = {AccountErrorCode::Network};
         return TokenEndpointResult::TransientFailure;
     }
     if (r.status != 200) {
         if (retryAfterSec) *retryAfterSec = r.retryAfterSec;
-        std::wstring detail = ParseOAuthError(r.body);
-        *err = detail.empty() ? (L"HTTP " + std::to_wstring(r.status)) : detail;
+        *err = OAuthFailure(r);
         bool rejected = r.status >= 400 && r.status < 500 && r.status != 408 &&
                         r.status != 429 && !(r.status == 403 && r.retryAfterSec > 0);
         return rejected ? TokenEndpointResult::Rejected : TokenEndpointResult::TransientFailure;
@@ -157,7 +154,8 @@ static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* e
         if (access.empty()) {
             std::wstring code = GetStr(root, L"error");
             std::wstring detail = ParseOAuthError(r.body);
-            *err = detail.empty() ? L"no access token in response" : detail;
+            *err = detail.empty() ? AccountError{AccountErrorCode::NoAccessToken} :
+                                    AccountError{AccountErrorCode::Message, detail};
             return code == L"bad_refresh_token" || code == L"invalid_grant" ?
                        TokenEndpointResult::Rejected : TokenEndpointResult::TransientFailure;
         }
@@ -168,7 +166,7 @@ static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* e
         tok->expiresMs = expiresIn > 0 && expiresIn < 1e9 ? NowUnixMs() + (ULONGLONG)(expiresIn * 1000) : 0;
         return TokenEndpointResult::Success;
     } catch (...) {
-        *err = L"invalid token response";
+        *err = {AccountErrorCode::InvalidTokenResponse};
         return TokenEndpointResult::TransientFailure;
     }
 }

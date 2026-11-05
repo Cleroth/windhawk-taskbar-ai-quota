@@ -71,7 +71,12 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   coded error, the details flyout's extra quota names (plural forms around the reported name)
   and the extra quotas' merging, the visual test samples' text, and the flyout's plural and
   nested templates (free resets, the outage line, a reset line, a retry, a Copilot amount).
-  `fixtures/controls.inc`: the
+  `fixtures/i18n-errors.inc`: every coded account error's English in both forms, coded errors and
+  their causes (provider text, HTTP statuses, response shapes) in other languages with the English
+  log rendering, threshold notifications' titles, bodies and toast XML (`fetch/notifications.h`'s
+  pure `ThresholdNotificationText` and `ThresholdToastXml`, extracted by name with
+  `ProviderDisplayName`), the sign-in window's templates, an outage's incident and Argon's current
+  limit. `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,
   status pills, info bar severities with a button). `fixtures/tooltip.inc`: the readout layout
@@ -161,7 +166,7 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   `fixtures/render-support.inc`.
 - `extract-history`, `history-compile`, `history`, `history-render`: the history window's own
   executable (`history.cpp`, `fixtures/history-main.inc`) on `core/model.h`, the meter model,
-  logos, the pure toolkit, `history/types.h`, `continuity.h`, `series.h`, `csv.h`, `view.h`,
+  logos, the pure toolkit, `history/types.h`, `journal-error.h`, `continuity.h`, `series.h`, `csv.h`, `view.h`,
   `chart.h`, `controller.h`, `chart-paint.h`, `content.h` and `shell.h`. `history` runs
   `fixtures/history-view.inc` (compact
   formats in synthetic time zones, number rounding and abbreviation with carry, hours; summary
@@ -204,7 +209,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   are reported; complete-text tooltips placed whole there; `OBSERVE` lines report widths and
   capacities), `fixtures/i18n-history.inc` (compact dates and chart ticks per language, the
   status pill's plural, and the controller's language switch: status, cards, ticks and readout
-  re-labeled, a modal keeping its language) and
+  re-labeled, a modal keeping its language), `fixtures/i18n-journal.inc` (the journal's coded
+  errors per language, the storage bar and a failed Clear's reason in the window's language) and
   `fixtures/history-chart.inc` (the chart through the controller on synthetic journals in the
   mockups' shapes: axes, the plot's layout on device pixels, local time ticks per range, across
   daylight saving and over ten years; picking (every nearby or coincident line in both periods at

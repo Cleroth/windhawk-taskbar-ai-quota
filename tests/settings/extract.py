@@ -21,6 +21,10 @@ MODEL = [
     ("fragment", "core/model.h"),
     ("fragment", "core/account-error.h"),
     ("definition", "ApplyCreditsMax"),
+    # Threshold notifications' text and toast XML (fetch/notifications.h).
+    ("definition", "ProviderDisplayName"),
+    ("definition", "ThresholdNotificationText"),
+    ("definition", "ThresholdToastXml"),
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,
@@ -51,6 +55,7 @@ HISTORY = [
     *UI_PURE,
     *I18N_UI,
     ("fragment", "history/types.h"),
+    ("fragment", "history/journal-error.h"),
     ("fragment", "history/continuity.h"),
     ("fragment", "history/series.h"),
     ("fragment", "history/csv.h"),

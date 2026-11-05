@@ -715,9 +715,9 @@ static void UpdateAccountFlyout(
                 line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 since {time}"),
                                 {{L"status", line}, {L"time", today ? FormatLocalTime(since) : FormatLocalDayTime(since)}});
             }
-            if (!outage.title.empty()) {
+            if (std::wstring incident = ProviderOutageIncident(locale, outage); !incident.empty()) {
                 line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 {incident}"),
-                                {{L"status", line}, {L"incident", outage.title}});
+                                {{L"status", line}, {L"incident", incident}});
             }
             if (std::wstring_view(popup.outageText.Text()) != line) {
                 popup.outageText.Text(line);
@@ -1084,8 +1084,24 @@ static void UpdateAccountFlyout(
         }
         popup.freeResets.Text(freeResets);
         show(popup.freeResets, !freeResets.empty());
-        popup.extraLines.Text(d.extraLines);
-        show(popup.extraLines, !d.extraLines.empty());
+        std::wstring note;
+        switch (d.note) {
+            case AccountNote::None: break;
+            case AccountNote::ExtraUsageUnlimited:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"extra usage: unlimited"));
+                break;
+            case AccountNote::NoRateLimits:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"rate limits: none reported"));
+                break;
+            case AccountNote::NoPremiumRequestAllowance:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"No premium request allowance on this plan."));
+                break;
+            case AccountNote::NoAiCreditAllowance:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"No AI-credit allowance on this plan."));
+                break;
+        }
+        popup.extraLines.Text(note);
+        show(popup.extraLines, !note.empty());
         std::wstring error;
         if (d.error) {
             std::wstring message = AccountErrorText(locale, d.error);
@@ -1101,13 +1117,12 @@ static void UpdateAccountFlyout(
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
             status = I18nText(locale, TrCtx(L"flyout-note", L"Sign-in required. Click the bars to sign in."));
-        } else if (!visibleRows && d.lastSuccessMs && error.empty() && d.extraLines.empty()) {
+        } else if (!visibleRows && d.lastSuccessMs && error.empty() && note.empty()) {
             status = I18nText(locale, TrCtx(L"flyout-note", L"No quotas reported."));
         }
         popup.status.Text(status);
         show(popup.status, !status.empty());
-        show(popup.notes, !freeResets.empty() || !d.extraLines.empty() || !error.empty() ||
-                              !status.empty());
+        show(popup.notes, !freeResets.empty() || !note.empty() || !error.empty() || !status.empty());
 
         std::wstring updated = display.visualTestMode ? I18nText(locale, TrCtx(L"flyout-footer", L"Visual test data")) :
                                                         FormatUpdated(locale, d.lastSuccessMs, display.stale);

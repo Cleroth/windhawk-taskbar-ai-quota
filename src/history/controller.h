@@ -71,11 +71,11 @@ struct HistoryOps {
     virtual HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
                                       const std::function<void(size_t)>& progress) = 0;
     // Clears the journal (`error`: why it couldn't), then the flyout's burn-up curves are dropped.
-    virtual bool Clear(std::wstring& error) = 0;
+    virtual bool Clear(HistoryJournalError& error) = 0;
     virtual void InvalidateCurves() = 0;
     // Deletes every sample of a removed account (`error`: why it couldn't, including an account in
     // the settings holding its history ID again).
-    virtual bool DeleteHistory(uint64_t historyId, std::wstring& error) = 0;
+    virtual bool DeleteHistory(uint64_t historyId, HistoryJournalError& error) = 0;
     // Posts the window's refresh message (ProcessRefresh); false when it couldn't.
     virtual bool PostRefresh() = 0;
     // Starts or stops the window's 250 ms deferral check (DeferralTick). A check that can't
@@ -151,7 +151,7 @@ struct HistoryController {
     uint64_t generation = 0;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     std::vector<HistoryUiAccount> accounts;
-    std::wstring journalStatus;
+    HistoryJournalError journalStatus = HistoryJournalError::None;
     bool journalCapped = false;
 
     // The series the view was composed from, and what for
@@ -218,10 +218,10 @@ struct HistoryController {
         auto [start, end, readStart] = Times(read.settings.historyRetentionDays);
         auto loaded = std::make_shared<HistorySnapshot>(ops->ExplicitSnapshot(readStart));
         HistorySortSamples(loaded->samples);
-        std::wstring status = loaded->status;
+        HistoryJournalError status = loaded->status;
         bool capped = loaded->capped;
         if (!Adopt(std::move(read), std::move(loaded), readStart, start, end, readStart, request)) return;
-        journalStatus = std::move(status);
+        journalStatus = status;
         journalCapped = capped;
         liveDirty = samplesDirty = false;
         Timer(false);
@@ -428,12 +428,15 @@ struct HistoryController {
         if (Stopped()) return;
         if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
         if (answer != IDOK) return Finish({});
-        std::wstring error;
+        HistoryJournalError error = HistoryJournalError::None;
         bool cleared = ops->Clear(error);
         ops->InvalidateCurves();
         if (Stopped()) return;
         operation = HistoryOperation::None;
-        if (!cleared) return Finish({L"Could not clear all history. " + error, UiSeverity::Error});
+        if (!cleared) {
+            return Finish({L"Could not clear all history. " + HistoryJournalErrorText(view.locale, error),
+                           UiSeverity::Error});
+        }
         Load();
         Finish({L"All local history cleared. Future polls can start recording again."});
     }
@@ -455,11 +458,14 @@ struct HistoryController {
         if (Stopped()) return;
         if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
         if (answer != IDOK) return Finish({});
-        std::wstring error;
+        HistoryJournalError error = HistoryJournalError::None;
         bool deleted = ops->DeleteHistory(id, error);
         if (Stopped()) return;
         operation = HistoryOperation::None;
-        if (!deleted) return Finish({L"Could not delete this account's history. " + error, UiSeverity::Error});
+        if (!deleted) {
+            return Finish({L"Could not delete this account's history. " + HistoryJournalErrorText(view.locale, error),
+                           UiSeverity::Error});
+        }
         Load();
         Finish({L"Deleted the history of removed account " + label + L"."});
     }
@@ -661,7 +667,7 @@ struct HistoryController {
         HistorySettingsSnapshot read = ops->ReadSettings();
         if (snapshot) {
             HistoryPeek peek = ops->PeekSnapshot(readFrom, false, snapshot->stamp, heldFrom);
-            journalStatus = std::move(peek.status);
+            journalStatus = peek.status;
             journalCapped = peek.capped;
         }
         if (read.settings == settings.settings) {
@@ -688,7 +694,7 @@ struct HistoryController {
             auto replacement = std::make_shared<HistorySnapshot>();
             replacement->samples = std::move(*peek.samples);
             HistorySortSamples(replacement->samples);
-            replacement->status = std::move(peek.status);
+            replacement->status = peek.status;
             replacement->capped = peek.capped;
             replacement->stamp = peek.stamp;
             next = std::move(replacement);
@@ -795,7 +801,7 @@ struct HistoryController {
         v.exporting = operation == HistoryOperation::Writing;
         // Not saving: the journal's error (before the first load, the storage flag); waiting:
         // account IDs not saved yet, or no sample in range.
-        bool storageError = snapshot ? !journalStatus.empty() : settings.storageError;
+        bool storageError = snapshot ? journalStatus != HistoryJournalError::None : settings.storageError;
         bool waiting = settings.idsPendingSave ||
                        (snapshot && std::all_of(accounts.begin(), accounts.end(),
                                                 [](const HistoryUiAccount& a) { return a.rows.empty(); }));
@@ -807,7 +813,7 @@ struct HistoryController {
             HistoryUiLocalTime localTime = [this](ULONGLONG ms) { return ops->LocalTime(ms); };
             v.status = I18nText(v.locale, TrCtx(L"history-status", L"Updated {time}"),
                                 {{L"time", HistoryUiTime(v.locale, to, now, localTime)}});
-            v.storageError = journalStatus;
+            v.storageError = HistoryJournalErrorText(v.locale, journalStatus);
             v.storageCapped = journalCapped;
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
                                  v.selected >= 0 ? selectedId : 0, compare, v.locale};

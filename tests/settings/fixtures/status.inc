@@ -346,20 +346,24 @@ static void RunStatusTests() {
         std::optional<ProviderOutage> read =
             Parse(L"opencode", OpenCode(R"({"service":"go","status":"degraded","reason":"latency","since":1793863048523)"));
         CHECK(read && read->level == OutageLevel::Degraded && read->component == L"OpenCode Go" &&
-              read->title == L"Slow responses" && read->sinceMs == 1793863048523ULL && read->others == 0);
+              read->reason == OutageReason::Latency && read->title.empty() && read->models.empty() &&
+              read->sinceMs == 1793863048523ULL && read->others == 0);
         // Its first listed degraded model (the Go breakdown comes before pay-as-you-go's).
         std::string model = Replaced(OpenCode(R"({"service":"go","status":"degraded","reason":"errors","since":1793863048523)"),
                                      R"({"id":"deepseek-v4.1-flash","status":"operational")",
                                      R"({"id":"deepseek-v4.1-flash","status":"degraded")");
         read = Parse(L"opencode", model);
-        CHECK(read && read->title == L"Elevated errors: deepseek-v4.1-flash");
+        CHECK(read && read->reason == OutageReason::Errors && read->title.empty() && read->models == L"deepseek-v4.1-flash");
         const std::pair<std::string_view, OutageLevel> levels[] = {{"outage", OutageLevel::Major},
                                                                    {"maintenance", OutageLevel::Maintenance}};
         for (auto [status, level] : levels) {
             read = Parse(L"opencode", OpenCode(R"({"service":"go","status":")" + std::string(status) +
                                                R"(","reason":"availability","since":1793863048523)"));
-            CHECK(read && read->level == level && read->title == L"Availability issues");
+            CHECK(read && read->level == level && read->reason == OutageReason::Availability && read->title.empty());
         }
+        // A reason the mod doesn't name is the page's title, as written.
+        read = Parse(L"opencode", OpenCode(R"({"service":"go","status":"degraded","reason":"capacity","since":1793863048523)"));
+        CHECK(read && read->reason == OutageReason::None && read->title == L"capacity");
         // Pay-as-you-go isn't watched.
         read = Parse(L"opencode", Replaced(Sample("opencode-status.json"), R"({"service":"payg","status":"operational")",
                                            R"({"service":"payg","status":"degraded")"));
@@ -374,14 +378,16 @@ static void RunStatusTests() {
         std::string ongoing = R"({"id":"go-1","event":"go-1","service":"go","startedAt":1793866000000,"resolvedAt":null,)"
                               R"("status":"degraded","reason":"errors","models":[{"id":"glm-5.3-flash","reason":"errors"}]},)";
         std::optional<ProviderOutage> read = Parse(L"opencode", Replaced(page, R"("incidents":[)", R"("incidents":[)" + ongoing));
-        CHECK(read && read->level == OutageLevel::Degraded && read->title == L"Elevated errors: glm-5.3-flash" &&
+        CHECK(read && read->level == OutageLevel::Degraded && read->reason == OutageReason::Errors &&
+              read->models == L"glm-5.3-flash" &&
               read->sinceMs == 1793866000000ULL);
         // Without a resolution time at all, too; a resolved one (every captured incident) doesn't.
         std::string unresolved = Replaced(ongoing, R"("resolvedAt":null,)", "");
         read = Parse(L"opencode", Replaced(page, R"("incidents":[)", R"("incidents":[)" + unresolved));
-        CHECK(read && read->title == L"Elevated errors: glm-5.3-flash");
+        CHECK(read && read->reason == OutageReason::Errors && read->models == L"glm-5.3-flash");
         read = Parse(L"opencode", page);
-        CHECK(read && read->level == OutageLevel::Degraded && read->title.empty() && read->sinceMs == 0);
+        CHECK(read && read->level == OutageLevel::Degraded && read->reason == OutageReason::None && read->title.empty() &&
+              read->models.empty() && read->sinceMs == 0);
     });
 
     Run("OpenCode: a stale or mistyped page shows nothing", [] {

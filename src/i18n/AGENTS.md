@@ -30,9 +30,11 @@ preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Co
   `locale` parameter. The `ui/` toolkit gets only translated strings (toggle states, the
   readout's hint) and `UiGraphics::locale`.
 - Account errors the mod authors are `AccountError` codes (`core/model.h`), with arguments in
-  fields and provider text in `detail`; `AccountErrorText` (`core/account-error.h`) formats them
-  for presentation in the reader's language, and for logs and their dedupe in English. Compare
-  codes, never text. `AccountErrorCode::Message` holds English text without a code of its own.
+  fields (a cause among them) and provider text in `detail`; `AccountErrorText`
+  (`core/account-error.h`) formats them for presentation in the reader's language, inline or alone
+  (sentence case), and for logs and their dedupe in English. Compare codes, never text.
+  `AccountErrorCode::Message` holds provider text without a code of its own. The history journal's
+  errors are `HistoryJournalError` codes the same way (`history/journal-error.h`).
 - `I18nLanguageByTag` (explicit choice) reaches any language and `qps-ploc`;
   `I18nMatchLanguage` (Automatic) skips `inProgress` ones and never picks `qps-ploc`.
 - Intentional English literals (IDs, CSV, protocol text) carry `// i18n-en` on their line;

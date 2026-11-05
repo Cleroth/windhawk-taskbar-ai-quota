@@ -46,10 +46,13 @@ static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provide
 }
 
 // An extra quota's name in the details flyout: as reported, then the length of the window it was
-// listed with in whole hours, when known ("Sonnet weekly", "Spark 5-hour", "Gemini 2-day").
-// AddExtraQuota merges by its English.
+// listed with in whole hours, when known ("Sonnet weekly", "Spark 5-hour", "Gemini 2-day"), or
+// that it is a pool's current limit ("Argon current limit"). AddExtraQuota merges by its English.
 static std::wstring ExtraQuotaName(const I18nLocale& locale, const NamedQuota& quota) {
     constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+    if (quota.currentLimit) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} current limit"), {{L"name", quota.name}});
+    }
     ULONGLONG durationMs = quota.nameWindowMs;
     if (durationMs == kWeeklyWindowMs) {
         return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", quota.name}});
@@ -805,6 +808,22 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
 static ProviderOutage VisualTestOutage(std::wstring_view provider, ULONGLONG now) {
     if (provider != L"openai") return {};
     return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};  // i18n-en
+}
+
+// The details flyout's outage line ends with the incident behind the outage: the page's title as
+// written, or the reason the mod names, then the models it affects ("Elevated errors:
+// glm-5.3-flash"); empty when the page says neither.
+static std::wstring ProviderOutageIncident(const I18nLocale& locale, const ProviderOutage& outage) {
+    using enum OutageReason;
+    std::wstring incident =
+        outage.reason == Latency      ? I18nText(locale, TrCtx(L"outage-reason", L"Slow responses")) :
+        outage.reason == Errors       ? I18nText(locale, TrCtx(L"outage-reason", L"Elevated errors")) :
+        outage.reason == Upstream     ? I18nText(locale, TrCtx(L"outage-reason", L"Upstream provider issues")) :
+        outage.reason == Availability ? I18nText(locale, TrCtx(L"outage-reason", L"Availability issues")) :
+                                        outage.title;
+    if (outage.models.empty() || incident.empty()) return incident.empty() ? outage.models : incident;
+    return I18nText(locale, TrCtx(L"outage-reason", L"{reason}: {models}"),
+                    {{L"reason", incident}, {L"models", outage.models}});
 }
 
 // A recorded reading of a quota in its current window (the burn-up curve's), oldest first.

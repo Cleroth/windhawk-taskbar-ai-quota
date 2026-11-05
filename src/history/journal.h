@@ -18,7 +18,7 @@ static std::deque<HistorySample> g_historySamples;
 // retention or deleted with their account; Clear changes g_historyEpoch.
 static uint64_t g_historyAppendCount = 0;
 static uint64_t g_historyRevision = 0;
-static std::wstring g_historyStatus;
+static HistoryJournalError g_historyStatus = HistoryJournalError::None;
 static bool g_historyLoaded = false;
 static bool g_historyCapped = false;
 static std::wstring g_historyPath;
@@ -28,11 +28,11 @@ static ULONGLONG g_historyMaintenanceMs = 0;
 static ULONGLONG g_historyWriteRetryMs = 0;
 static winrt::file_handle g_historyOwnership;
 
-// Each change of the status text notifies the settings and history windows (a posted message).
-static void SetHistoryStatus(std::wstring message) {
-    bool changed = message != g_historyStatus;
-    g_historyStatus = std::move(message);
-    g_historyStorageError = !g_historyStatus.empty();
+// Each change of the status notifies the settings and history windows (a posted message).
+static void SetHistoryStatus(HistoryJournalError status) {
+    bool changed = status != g_historyStatus;
+    g_historyStatus = status;
+    g_historyStorageError = g_historyStatus != HistoryJournalError::None;
     if (changed) NotifySettingsWindowChanged();
 }
 
@@ -56,7 +56,7 @@ static void LoadHistoryLocked(bool create = false) {
     PWSTR localAppData = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &localAppData))) {
         g_historyWritable = false;
-        SetHistoryStatus(L"History storage is unavailable.");
+        SetHistoryStatus(HistoryJournalError::Unavailable);
         return;
     }
     std::wstring directory = localAppData;
@@ -74,13 +74,13 @@ static void LoadHistoryLocked(bool create = false) {
     }
     if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Cannot create the local history directory.");
+        SetHistoryStatus(HistoryJournalError::CannotCreateDirectory);
         return;
     }
     directory += L"\\" WH_MOD_ID;
     if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Cannot create the local history directory.");
+        SetHistoryStatus(HistoryJournalError::CannotCreateDirectory);
         return;
     }
     g_historyPath = directory;
@@ -93,7 +93,7 @@ static void LoadHistoryLocked(bool create = false) {
     if (!g_historyOwnership) {
         g_historyLoaded = false;  // Retry after an overlapping Explorer session exits.
         g_historyWritable = false;
-        SetHistoryStatus(L"History storage is in use by another Explorer session, or is inaccessible.");
+        SetHistoryStatus(HistoryJournalError::InUse);
         return;
     }
     winrt::file_handle file{CreateFileW(g_historyPath.c_str(), GENERIC_READ,
@@ -101,7 +101,7 @@ static void LoadHistoryLocked(bool create = false) {
     if (!file) {
         if (GetLastError() != ERROR_FILE_NOT_FOUND) {
             g_historyWritable = false;
-            SetHistoryStatus(L"Cannot read history. Check storage permissions, then reopen the mod.");
+            SetHistoryStatus(HistoryJournalError::CannotRead);
         }
         return;
     }
@@ -110,7 +110,7 @@ static void LoadHistoryLocked(bool create = false) {
     DWORD read = 0;
     if (!GetFileSizeEx(file.get(), &size)) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Cannot read the history file size.");
+        SetHistoryStatus(HistoryJournalError::CannotReadSize);
         return;
     }
     if (size.QuadPart == 0) {
@@ -122,7 +122,7 @@ static void LoadHistoryLocked(bool create = false) {
         read != sizeof(header) || header.magic != HistoryFileHeader{}.magic ||
         header.version != 1 || header.recordBytes != sizeof(HistorySample)) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Unsupported or damaged history file. Clear history to start again.");
+        SetHistoryStatus(HistoryJournalError::Unsupported);
         return;
     }
     size_t count = (size_t)((size.QuadPart - sizeof(header)) / sizeof(HistorySample));
@@ -134,7 +134,7 @@ static void LoadHistoryLocked(bool create = false) {
         DWORD bytes = (DWORD)(n * sizeof(HistorySample));
         if (!ReadFile(file.get(), batch.data(), bytes, &read, nullptr) || read != bytes) {
             g_historyWritable = false;
-            SetHistoryStatus(L"History read failed. Loaded samples remain available for export.");
+            SetHistoryStatus(HistoryJournalError::ReadFailed);
             return;
         }
         for (size_t i = 0; i < n; ++i) {
@@ -158,7 +158,7 @@ static void LoadHistoryLocked(bool create = false) {
                     return;
                 }
                 g_historyWritable = false;
-                SetHistoryStatus(L"Damaged history record. Export readable samples or clear history.");
+                SetHistoryStatus(HistoryJournalError::DamagedRecord);
                 return;
             }
             try {
@@ -167,7 +167,7 @@ static void LoadHistoryLocked(bool create = false) {
                 // Out of memory: a partial journal must never be saved over the whole one.
                 g_historyWritable = false;
                 g_historySamples.clear();
-                SetHistoryStatus(L"History is too large to load. Clear history to start again.");
+                SetHistoryStatus(HistoryJournalError::TooLarge);
                 return;
             }
         }
@@ -183,7 +183,7 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint6
     winrt::file_handle file{CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
     if (!file) {
-        SetHistoryStatus(L"Cannot write history. Check disk space and storage permissions.");
+        SetHistoryStatus(HistoryJournalError::CannotWrite);
         g_historyWriteRetryMs = NowUnixMs() + 3600000;
         return false;
     }
@@ -209,7 +209,7 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint6
     }
     if (!ok) {
         DeleteFileW(temporary.c_str());
-        SetHistoryStatus(L"History write failed; the previous journal was kept.");
+        SetHistoryStatus(HistoryJournalError::WriteFailed);
         g_historyWriteRetryMs = NowUnixMs() + 3600000;
         return false;
     }
@@ -326,7 +326,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t ep
             // Retain admitted samples in memory; next append repairs a possible torn tail.
             g_historyDirty = true;
             g_historyWriteRetryMs = now + 3600000;
-            SetHistoryStatus(L"History is not being saved to disk. Check disk space and permissions.");
+            SetHistoryStatus(HistoryJournalError::NotSaved);
         } else {
             SetHistoryStatus({});
         }
@@ -370,7 +370,7 @@ static HistoryPeek PeekHistorySnapshot(ULONGLONG fromMs, bool samples, const His
     return peek;
 }
 
-static bool ClearHistory(std::wstring* error) {
+static bool ClearHistory(HistoryJournalError* error) {
     std::lock_guard lock(g_historyMutex);
     LoadHistoryLocked();
     ++g_historyEpoch;
@@ -379,7 +379,9 @@ static bool ClearHistory(std::wstring* error) {
         return true;  // Nothing has ever been recorded; Clear is an idempotent no-op.
     }
     if (!RewriteHistoryLocked({})) {
-        if (error) *error = g_historyStatus.empty() ? L"History storage is unavailable." : g_historyStatus;
+        if (error) {
+            *error = g_historyStatus == HistoryJournalError::None ? HistoryJournalError::Unavailable : g_historyStatus;
+        }
         return false;
     }
     g_historySamples.clear();
@@ -411,7 +413,7 @@ static void EraseHistorySamplesLocked(uint64_t historyId) {
 // journal that couldn't be read (damaged, unreadable, in use by another session) stays as it is,
 // with `error` saying why. An unsaved one (a torn tail, or past the size cap, whose eviction this
 // then saves) is rewritten even without the account's samples. Holds only the history lock.
-static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
+static bool DeleteAccountHistory(uint64_t historyId, HistoryJournalError* error) {
     {
         std::lock_guard lock(g_historyMutex);
         LoadHistoryLocked();
@@ -424,7 +426,9 @@ static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
         bool kept = !g_historyLoaded || !g_historyWritable || g_unloading;
         if (!kept && !present && !g_historyDirty) return true;
         if (kept || !RewriteHistoryLocked(g_historySamples, historyId)) {
-            if (error) *error = g_historyStatus.empty() ? L"History storage is unavailable." : g_historyStatus;
+            if (error) {
+                *error = g_historyStatus == HistoryJournalError::None ? HistoryJournalError::Unavailable : g_historyStatus;
+            }
             return false;
         }
         EraseHistorySamplesLocked(historyId);

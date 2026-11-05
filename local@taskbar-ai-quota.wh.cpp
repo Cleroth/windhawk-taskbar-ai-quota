@@ -602,6 +602,70 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
     {L"", L"Threshold notifications", L"Schwellenwert-Benachrichtigungen"},
     {L"account-error", L"Antigravity not running", L"Antigravity läuft nicht"},
+    {L"account-error", L"Antigravity quota unavailable", L"Antigravity: Kontingent nicht verfügbar"},
+    {L"account-error", L"HTTP {status}", L"HTTP {status}"},
+    {L"account-error", L"HTTP {status} from language server", L"HTTP {status} vom Sprachserver"},
+    {L"account-error", L"could not save refreshed token", L"aktualisiertes Token konnte nicht gespeichert werden"},
+    {L"account-error", L"failed to parse quota summary JSON",
+     L"JSON der Kontingentübersicht konnte nicht gelesen werden"},
+    {L"account-error", L"failed to parse user status JSON", L"JSON des Benutzerstatus konnte nicht gelesen werden"},
+    {L"account-error", L"fetch thread failed", L"Abruf-Thread fehlgeschlagen"},
+    {L"account-error", L"groups is not an array", L"„groups“ ist kein Array"},
+    {L"account-error", L"internal error", L"interner Fehler"},
+    {L"account-error", L"invalid token response", L"ungültige Token-Antwort"},
+    {L"account-error", L"network error", L"Netzwerkfehler"},
+    {L"account-error", L"network error (language server)", L"Netzwerkfehler (Sprachserver)"},
+    {L"account-error", L"no Copilot access on this GitHub account", L"kein Copilot-Zugriff für dieses GitHub-Konto"},
+    {L"account-error", L"no OpenCode Go subscription on this key",
+     L"kein Abonnement von OpenCode Go für diesen Schlüssel"},
+    {L"account-error", L"no access token in response", L"kein Zugriffstoken in der Antwort"},
+    {L"account-error", L"no quota groups in response", L"keine Kontingentgruppen in der Antwort"},
+    {L"account-error", L"no usable Antigravity quota buckets in response",
+     L"keine verwendbaren Kontingent-Buckets von Antigravity in der Antwort"},
+    {L"account-error", L"no usable Antigravity quota in response",
+     L"kein verwendbares Kontingent von Antigravity in der Antwort"},
+    {L"account-error", L"no userStatus object", L"kein userStatus-Objekt"},
+    {L"account-error", L"not signed in - click to sign in", L"nicht angemeldet – zum Anmelden klicken"},
+    {L"account-error", L"rate limited by API", L"durch API-Ratenlimit begrenzt"},
+    {L"account-error", L"session expired - click to sign in", L"Sitzung abgelaufen – zum Anmelden klicken"},
+    {L"account-error", L"token refresh failed", L"Token-Aktualisierung fehlgeschlagen"},
+    {L"account-error", L"token refresh failed: {reason}", L"Token-Aktualisierung fehlgeschlagen: {reason}"},
+    {L"account-error", L"unauthorized - click to sign in", L"nicht autorisiert – zum Anmelden klicken"},
+    {L"account-error", L"unexpected response", L"unerwartete Antwort"},
+    {L"account-error", L"unexpected response format", L"unerwartetes Antwortformat"},
+    {L"account-error", L"unexpected response format ({shape})", L"unerwartetes Antwortformat ({shape})"},
+    {L"account-error", L"unexpected token response", L"unerwartete Token-Antwort"},
+    {L"account-error-alone", L"Could not save refreshed token",
+     L"Aktualisiertes Token konnte nicht gespeichert werden"},
+    {L"account-error-alone", L"Failed to parse quota summary JSON",
+     L"JSON der Kontingentübersicht konnte nicht gelesen werden"},
+    {L"account-error-alone", L"Failed to parse user status JSON",
+     L"JSON des Benutzerstatus konnte nicht gelesen werden"},
+    {L"account-error-alone", L"Fetch thread failed", L"Abruf-Thread fehlgeschlagen"},
+    {L"account-error-alone", L"Groups is not an array", L"„groups“ ist kein Array"},
+    {L"account-error-alone", L"Invalid token response", L"Ungültige Token-Antwort"},
+    {L"account-error-alone", L"Network error", L"Netzwerkfehler"},
+    {L"account-error-alone", L"Network error (language server)", L"Netzwerkfehler (Sprachserver)"},
+    {L"account-error-alone", L"No Copilot access on this GitHub account",
+     L"Kein Copilot-Zugriff für dieses GitHub-Konto"},
+    {L"account-error-alone", L"No OpenCode Go subscription on this key",
+     L"Kein Abonnement von OpenCode Go für diesen Schlüssel"},
+    {L"account-error-alone", L"No quota groups in response", L"Keine Kontingentgruppen in der Antwort"},
+    {L"account-error-alone", L"No usable Antigravity quota buckets in response",
+     L"Keine verwendbaren Kontingent-Buckets von Antigravity in der Antwort"},
+    {L"account-error-alone", L"No usable Antigravity quota in response",
+     L"Kein verwendbares Kontingent von Antigravity in der Antwort"},
+    {L"account-error-alone", L"No userStatus object", L"Kein userStatus-Objekt"},
+    {L"account-error-alone", L"Not signed in - click to sign in", L"Nicht angemeldet – zum Anmelden klicken"},
+    {L"account-error-alone", L"Rate limited by API", L"Durch API-Ratenlimit begrenzt"},
+    {L"account-error-alone", L"Session expired - click to sign in", L"Sitzung abgelaufen – zum Anmelden klicken"},
+    {L"account-error-alone", L"Token refresh failed", L"Token-Aktualisierung fehlgeschlagen"},
+    {L"account-error-alone", L"Token refresh failed: {reason}", L"Token-Aktualisierung fehlgeschlagen: {reason}"},
+    {L"account-error-alone", L"Unauthorized - click to sign in", L"Nicht autorisiert – zum Anmelden klicken"},
+    {L"account-error-alone", L"Unexpected response", L"Unerwartete Antwort"},
+    {L"account-error-alone", L"Unexpected response format", L"Unerwartetes Antwortformat"},
+    {L"account-error-alone", L"Unexpected response format ({shape})", L"Unerwartetes Antwortformat ({shape})"},
+    {L"account-error-alone", L"Unexpected token response", L"Unerwartete Token-Antwort"},
     {L"account-state", L"Local app not running", L"Lokale App läuft nicht"},
     {L"button", L"Add account", L"Konto hinzufügen"},
     {L"button", L"Reset", L"Zurücksetzen"},
@@ -665,9 +729,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"flyout-legend", L"projection", L"Prognose"},
     {L"flyout-note", L"Error: {error}", L"Fehler: {error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"Fehler: {error} – neuer Versuch in {duration}"},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"Dieser Plan enthält kein KI-Guthaben."},
+    {L"flyout-note", L"No premium request allowance on this plan.", L"Dieser Plan enthält keine Premium-Anfragen."},
     {L"flyout-note", L"No quotas reported.", L"Keine Kontingente gemeldet."},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
      L"Anmeldung erforderlich. Klicken Sie auf die Balken, um sich anzumelden."},
+    {L"flyout-note", L"extra usage: unlimited", L"zusätzliche Nutzung: unbegrenzt"},
+    {L"flyout-note", L"rate limits: none reported", L"Ratenlimits: keine gemeldet"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
@@ -681,15 +749,52 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Aufzeichnung · {days, plural, one{# Tag} other{# Tage}}"},
     {L"history-pill", L"Waiting", L"Wartet"},
     {L"history-status", L"Updated {time}", L"Aktualisiert {time}"},
+    {L"history-storage", L"An account in Settings uses this history again.",
+     L"Ein Konto in den Einstellungen verwendet diesen Verlauf wieder."},
+    {L"history-storage", L"Cannot create the local history directory.",
+     L"Der lokale Verlaufsordner kann nicht erstellt werden."},
+    {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
+     L"Der Verlauf kann nicht gelesen werden. Prüfen Sie die Speicherberechtigungen und öffnen Sie den Mod erneut."},
+    {L"history-storage", L"Cannot read the history file size.",
+     L"Die Größe der Verlaufsdatei kann nicht gelesen werden."},
+    {L"history-storage", L"Cannot write history. Check disk space and storage permissions.",
+     L"Der Verlauf kann nicht geschrieben werden. Prüfen Sie Speicherplatz und Speicherberechtigungen."},
+    {L"history-storage", L"Damaged history record. Export readable samples or clear history.",
+     L"Beschädigter Verlaufseintrag. Exportieren Sie lesbare Messwerte oder löschen Sie den Verlauf."},
+    {L"history-storage", L"History is not being saved to disk. Check disk space and permissions.",
+     L"Der Verlauf wird nicht auf dem Datenträger gespeichert. Prüfen Sie Speicherplatz und Berechtigungen."},
+    {L"history-storage", L"History is too large to load. Clear history to start again.",
+     L"Der Verlauf ist zu groß zum Laden. Löschen Sie den Verlauf, um neu zu beginnen."},
+    {L"history-storage", L"History read failed. Loaded samples remain available for export.",
+     L"Lesen des Verlaufs fehlgeschlagen. Bereits geladene Messwerte können weiterhin exportiert werden."},
+    {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
+     L"Der Verlaufsspeicher wird von einer anderen Explorer-Sitzung verwendet oder ist nicht zugänglich."},
+    {L"history-storage", L"History storage is unavailable.", L"Der Verlaufsspeicher ist nicht verfügbar."},
+    {L"history-storage", L"History write failed; the previous journal was kept.",
+     L"Schreiben des Verlaufs fehlgeschlagen; das vorherige Journal wurde beibehalten."},
+    {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
+     L"Nicht unterstützte oder beschädigte Verlaufsdatei. Löschen Sie den Verlauf, um neu zu beginnen."},
     {L"language-choice", L"Automatic ({language})", L"Automatisch ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} und {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} und {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-body", L"{provider} - resets {when}", L"{provider} – Reset {when}"},
     {L"notification-level", L"Off", L"Aus"},
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rot ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Gelb ({threshold}%)"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 Std.: {percent}% genutzt"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"KI-Guthaben: {percent}% genutzt"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"Chat-Anfragen: {percent}% genutzt"},
+    {L"notification-title", L"credits usage at {percent}%", L"Guthaben: {percent}% genutzt"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"Monatliches Extra: {percent}% genutzt"},
+    {L"notification-title", L"monthly usage at {percent}%", L"Monat: {percent}% genutzt"},
+    {L"notification-title", L"premium requests usage at {percent}%", L"Premium-Anfragen: {percent}% genutzt"},
+    {L"notification-title", L"weekly usage at {percent}%", L"Woche: {percent}% genutzt"},
+    {L"notification-title", L"{name} current limit usage at {percent}%", L"{name} aktuelles Limit: {percent}% genutzt"},
+    {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} wöchentlich: {percent}% genutzt"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} Std.: {percent}% genutzt"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nStatusseite von {provider} öffnen"},
     {L"outage-level", L"degraded performance", L"eingeschränkte Leistung"},
     {L"outage-level", L"major outage", L"schwerer Ausfall"},
@@ -700,6 +805,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
     {L"outage-line", L"{status} · since {time}", L"{status} · seit {time}"},
     {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"outage-reason", L"Availability issues", L"Verfügbarkeitsprobleme"},
+    {L"outage-reason", L"Elevated errors", L"Erhöhte Fehlerrate"},
+    {L"outage-reason", L"Slow responses", L"Langsame Antworten"},
+    {L"outage-reason", L"Upstream provider issues", L"Probleme beim vorgelagerten Anbieter"},
+    {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
     {L"plan", L"Visual test", L"Visueller Test"},
     {L"poll-interval", L"Custom", L"Benutzerdefiniert"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
@@ -747,6 +857,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"reset-when", L"in {duration}", L"in {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"in {duration} ({time})"},
     {L"reset-when", L"now", L"jetzt"},
+    {L"response-shape", L"JSON object with no keys", L"JSON-Objekt ohne Schlüssel"},
+    {L"response-shape", L"empty body", L"leerer Inhalt"},
+    {L"response-shape", L"keys: {keys}", L"Schlüssel: {keys}"},
+    {L"response-shape", L"non-object or invalid JSON body", L"kein Objekt oder ungültiges JSON"},
     {L"settings-page", L"About", L"Info"},
     {L"settings-page", L"Accounts", L"Konten"},
     {L"settings-page", L"Behavior", L"Verhalten"},
@@ -758,6 +872,55 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-section", L"Language", L"Sprache"},
     {L"settings-section", L"Taskbar", L"Taskleiste"},
     {L"settings-section", L"Updates", L"Aktualisierungen"},
+    {L"sign-in-button", L"Cancel", L"Abbrechen"},
+    {L"sign-in-button", L"Close", L"Schließen"},
+    {L"sign-in-button", L"Code copied", L"Code kopiert"},
+    {L"sign-in-button", L"Copied", L"Kopiert"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"Code kopieren und GitHub öffnen"},
+    {L"sign-in-button", L"Copy failed", L"Kopieren fehlgeschlagen"},
+    {L"sign-in-button", L"Copy link", L"Link kopieren"},
+    {L"sign-in-button", L"Open in browser", L"Im Browser öffnen"},
+    {L"sign-in-button", L"Sign in", L"Anmelden"},
+    {L"sign-in-button", L"Use a code", L"Code verwenden"},
+    {L"sign-in-page", L"Sign-in failed.", L"Anmeldung fehlgeschlagen."},
+    {L"sign-in-page", L"Signed in.", L"Angemeldet."},
+    {L"sign-in-page", L"You can close this tab and return to the taskbar.",
+     L"Sie können diesen Tab schließen und zur Taskleiste zurückkehren."},
+    {L"sign-in-page", L"You can close this tab and try again from the taskbar.",
+     L"Sie können diesen Tab schließen und es über die Taskleiste erneut versuchen."},
+    {L"sign-in-status", L"Sign-in failed. See the Windhawk log for details.",
+     L"Anmeldung fehlgeschlagen. Details finden Sie im Windhawk-Protokoll."},
+    {L"sign-in-status", L"Sign-in was denied on GitHub.", L"Die Anmeldung wurde auf GitHub abgelehnt."},
+    {L"sign-in-status", L"The code expired. Close this window and sign in again.",
+     L"Der Code ist abgelaufen. Schließen Sie dieses Fenster und melden Sie sich erneut an."},
+    {L"sign-in-status", L"Waiting for approval on GitHub…", L"Warten auf Bestätigung auf GitHub…"},
+    {L"sign-in-status", L"{reason}, retrying…", L"{reason}, neuer Versuch…"},
+    {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+          L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
+     L"Kopieren Sie den Code und öffnen Sie GitHub über die Schaltfläche unten, oder geben Sie ihn auf einem "
+     L"beliebigen Gerät unter github.com/login/device ein, angemeldet mit dem GitHub-Konto mit Copilot. Dieses Fenster "
+     L"schließt sich, sobald die Anmeldung abgeschlossen ist."},
+    {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+          L"subscription, and paste it below.",
+     L"Öffnen Sie die OpenCode-Konsole im Browser, kopieren Sie einen API-Schlüssel des Arbeitsbereichs mit Ihrem "
+     L"Go-Abonnement und fügen Sie ihn unten ein."},
+    {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
+          L"shown on the page below.",
+     L"Öffnen Sie den Anmeldelink in einem Browser und erlauben Sie den Zugriff auf claude.ai. Fügen Sie dann den auf "
+     L"der Seite angezeigten Code unten ein."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
+          L"closes once sign-in completes. On another device, choose {button}.",
+     L"Öffnen Sie den Anmeldelink in einem Browser auf diesem PC und erlauben Sie den Zugriff auf claude.ai. Dieses "
+     L"Fenster schließt sich, sobald die Anmeldung abgeschlossen ist. Auf einem anderen Gerät wählen Sie „{button}“."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
+          L"sign-in completes.",
+     L"Öffnen Sie den Anmeldelink in einem Browser auf diesem PC und erlauben Sie den Zugriff. Dieses Fenster schließt "
+     L"sich, sobald die Anmeldung abgeschlossen ist."},
+    {L"sign-in-window", L"Sign in: {label} ({provider})", L"Anmelden: {label} ({provider})"},
+    {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
+          L"paste the code its page shows.",
+     L"Dieser Code gehört zu einem anderen Anmeldelink. Öffnen Sie den Link dieses Fensters, erlauben Sie den Zugriff "
+     L"und fügen Sie dann den Code ein, den die Seite anzeigt."},
     {L"taskbar-action", L"Exit visual test", L"Visuellen Test beenden"},
     {L"taskbar-action", L"Hide", L"Ausblenden"},
     {L"taskbar-action", L"Open dashboard", L"Dashboard öffnen"},
@@ -840,6 +1003,68 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"mostrar de Windows. Solo se aplica a este usuario de Windows."},
     {L"", L"Threshold notifications", L"Notificaciones de umbral"},
     {L"account-error", L"Antigravity not running", L"Antigravity no se está ejecutando"},
+    {L"account-error", L"Antigravity quota unavailable", L"Antigravity: cuota no disponible"},
+    {L"account-error", L"HTTP {status}", L"HTTP {status}"},
+    {L"account-error", L"HTTP {status} from language server", L"HTTP {status} del servidor de lenguaje"},
+    {L"account-error", L"could not save refreshed token", L"no se pudo guardar el token renovado"},
+    {L"account-error", L"failed to parse quota summary JSON", L"no se pudo analizar el JSON del resumen de cuotas"},
+    {L"account-error", L"failed to parse user status JSON", L"no se pudo analizar el JSON del estado del usuario"},
+    {L"account-error", L"fetch thread failed", L"falló el hilo de consulta"},
+    {L"account-error", L"groups is not an array", L"«groups» no es una matriz"},
+    {L"account-error", L"internal error", L"error interno"},
+    {L"account-error", L"invalid token response", L"respuesta de token no válida"},
+    {L"account-error", L"network error", L"error de red"},
+    {L"account-error", L"network error (language server)", L"error de red (servidor de lenguaje)"},
+    {L"account-error", L"no Copilot access on this GitHub account", L"sin acceso a Copilot en esta cuenta de GitHub"},
+    {L"account-error", L"no OpenCode Go subscription on this key", L"sin suscripción a OpenCode Go en esta clave"},
+    {L"account-error", L"no access token in response", L"no hay token de acceso en la respuesta"},
+    {L"account-error", L"no quota groups in response", L"no hay grupos de cuotas en la respuesta"},
+    {L"account-error", L"no usable Antigravity quota buckets in response",
+     L"no hay contenedores de cuota de Antigravity utilizables en la respuesta"},
+    {L"account-error", L"no usable Antigravity quota in response",
+     L"no hay cuota de Antigravity utilizable en la respuesta"},
+    {L"account-error", L"no userStatus object", L"no hay objeto userStatus"},
+    {L"account-error", L"not signed in - click to sign in", L"sin sesión iniciada - haz clic para iniciar sesión"},
+    {L"account-error", L"rate limited by API", L"limitado por la tasa de la API"},
+    {L"account-error", L"session expired - click to sign in", L"sesión caducada - haz clic para iniciar sesión"},
+    {L"account-error", L"token refresh failed", L"falló la renovación del token"},
+    {L"account-error", L"token refresh failed: {reason}", L"falló la renovación del token: {reason}"},
+    {L"account-error", L"unauthorized - click to sign in", L"no autorizado - haz clic para iniciar sesión"},
+    {L"account-error", L"unexpected response", L"respuesta inesperada"},
+    {L"account-error", L"unexpected response format", L"formato de respuesta inesperado"},
+    {L"account-error", L"unexpected response format ({shape})", L"formato de respuesta inesperado ({shape})"},
+    {L"account-error", L"unexpected token response", L"respuesta de token inesperada"},
+    {L"account-error-alone", L"Could not save refreshed token", L"No se pudo guardar el token renovado"},
+    {L"account-error-alone", L"Failed to parse quota summary JSON",
+     L"No se pudo analizar el JSON del resumen de cuotas"},
+    {L"account-error-alone", L"Failed to parse user status JSON",
+     L"No se pudo analizar el JSON del estado del usuario"},
+    {L"account-error-alone", L"Fetch thread failed", L"Falló el hilo de consulta"},
+    {L"account-error-alone", L"Groups is not an array", L"«groups» no es una matriz"},
+    {L"account-error-alone", L"Invalid token response", L"Respuesta de token no válida"},
+    {L"account-error-alone", L"Network error", L"Error de red"},
+    {L"account-error-alone", L"Network error (language server)", L"Error de red (servidor de lenguaje)"},
+    {L"account-error-alone", L"No Copilot access on this GitHub account",
+     L"Sin acceso a Copilot en esta cuenta de GitHub"},
+    {L"account-error-alone", L"No OpenCode Go subscription on this key",
+     L"Sin suscripción a OpenCode Go en esta clave"},
+    {L"account-error-alone", L"No quota groups in response", L"No hay grupos de cuotas en la respuesta"},
+    {L"account-error-alone", L"No usable Antigravity quota buckets in response",
+     L"No hay contenedores de cuota de Antigravity utilizables en la respuesta"},
+    {L"account-error-alone", L"No usable Antigravity quota in response",
+     L"No hay cuota de Antigravity utilizable en la respuesta"},
+    {L"account-error-alone", L"No userStatus object", L"No hay objeto userStatus"},
+    {L"account-error-alone", L"Not signed in - click to sign in",
+     L"Sin sesión iniciada - haz clic para iniciar sesión"},
+    {L"account-error-alone", L"Rate limited by API", L"Limitado por la tasa de la API"},
+    {L"account-error-alone", L"Session expired - click to sign in", L"Sesión caducada - haz clic para iniciar sesión"},
+    {L"account-error-alone", L"Token refresh failed", L"Falló la renovación del token"},
+    {L"account-error-alone", L"Token refresh failed: {reason}", L"Falló la renovación del token: {reason}"},
+    {L"account-error-alone", L"Unauthorized - click to sign in", L"No autorizado - haz clic para iniciar sesión"},
+    {L"account-error-alone", L"Unexpected response", L"Respuesta inesperada"},
+    {L"account-error-alone", L"Unexpected response format", L"Formato de respuesta inesperado"},
+    {L"account-error-alone", L"Unexpected response format ({shape})", L"Formato de respuesta inesperado ({shape})"},
+    {L"account-error-alone", L"Unexpected token response", L"Respuesta de token inesperada"},
     {L"account-state", L"Local app not running", L"La app local no está en ejecución"},
     {L"button", L"Add account", L"Agregar cuenta"},
     {L"button", L"Reset", L"Restablecer"},
@@ -902,9 +1127,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"flyout-legend", L"projection", L"proyección"},
     {L"flyout-note", L"Error: {error}", L"Error: {error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"Error: {error} - reintento en {duration}"},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"Este plan no incluye créditos de IA."},
+    {L"flyout-note", L"No premium request allowance on this plan.", L"Este plan no incluye solicitudes premium."},
     {L"flyout-note", L"No quotas reported.", L"No se informó ninguna cuota."},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
      L"Debes iniciar sesión. Haz clic en las barras para iniciar sesión."},
+    {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
+    {L"flyout-note", L"rate limits: none reported", L"límites de tasa: no se informó ninguno"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}}"},
@@ -919,15 +1148,52 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Registrando · {days, plural, one{# día} many{# de días} other{# días}}"},
     {L"history-pill", L"Waiting", L"En espera"},
     {L"history-status", L"Updated {time}", L"Actualizado {time}"},
+    {L"history-storage", L"An account in Settings uses this history again.",
+     L"Una cuenta de Configuración vuelve a usar este historial."},
+    {L"history-storage", L"Cannot create the local history directory.",
+     L"No se puede crear la carpeta local del historial."},
+    {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
+     L"No se puede leer el historial. Comprueba los permisos de almacenamiento y vuelve a abrir el mod."},
+    {L"history-storage", L"Cannot read the history file size.",
+     L"No se puede leer el tamaño del archivo de historial."},
+    {L"history-storage", L"Cannot write history. Check disk space and storage permissions.",
+     L"No se puede escribir el historial. Comprueba el espacio en disco y los permisos de almacenamiento."},
+    {L"history-storage", L"Damaged history record. Export readable samples or clear history.",
+     L"Registro de historial dañado. Exporta las muestras legibles o borra el historial."},
+    {L"history-storage", L"History is not being saved to disk. Check disk space and permissions.",
+     L"El historial no se está guardando en el disco. Comprueba el espacio en disco y los permisos."},
+    {L"history-storage", L"History is too large to load. Clear history to start again.",
+     L"El historial es demasiado grande para cargarlo. Borra el historial para empezar de nuevo."},
+    {L"history-storage", L"History read failed. Loaded samples remain available for export.",
+     L"Error al leer el historial. Las muestras cargadas siguen disponibles para exportar."},
+    {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
+     L"El almacenamiento del historial está en uso por otra sesión del Explorador o no es accesible."},
+    {L"history-storage", L"History storage is unavailable.", L"El almacenamiento del historial no está disponible."},
+    {L"history-storage", L"History write failed; the previous journal was kept.",
+     L"Error al escribir el historial; se conservó el registro anterior."},
+    {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
+     L"Archivo de historial no compatible o dañado. Borra el historial para empezar de nuevo."},
     {L"language-choice", L"Automatic ({language})", L"Automático ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} y {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} y {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-body", L"{provider} - resets {when}", L"{provider} - se restablece {when}"},
     {L"notification-level", L"Off", L"Desactivadas"},
     {L"notification-level", L"Orange ({threshold}%)", L"Naranja ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rojo ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Amarillo ({threshold}%)"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 h: {percent}% usado"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"Créditos de IA: {percent}% usado"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"Solicitudes de chat: {percent}% usado"},
+    {L"notification-title", L"credits usage at {percent}%", L"Créditos: {percent}% usado"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"Extra mensual: {percent}% usado"},
+    {L"notification-title", L"monthly usage at {percent}%", L"Mensual: {percent}% usado"},
+    {L"notification-title", L"premium requests usage at {percent}%", L"Solicitudes premium: {percent}% usado"},
+    {L"notification-title", L"weekly usage at {percent}%", L"Semanal: {percent}% usado"},
+    {L"notification-title", L"{name} current limit usage at {percent}%", L"{name}, límite actual: {percent}% usado"},
+    {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} semanal: {percent}% usado"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} h: {percent}% usado"},
     {L"outage-action", L"{status}\nOpen the {provider} status page",
      L"{status}\nAbrir la página de estado de {provider}"},
     {L"outage-level", L"degraded performance", L"rendimiento degradado"},
@@ -939,6 +1205,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
     {L"outage-line", L"{status} · since {time}", L"{status} · desde {time}"},
     {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"outage-reason", L"Availability issues", L"Problemas de disponibilidad"},
+    {L"outage-reason", L"Elevated errors", L"Más errores de lo habitual"},
+    {L"outage-reason", L"Slow responses", L"Respuestas lentas"},
+    {L"outage-reason", L"Upstream provider issues", L"Problemas del proveedor externo"},
+    {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
     {L"plan", L"Visual test", L"Prueba visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
@@ -986,6 +1257,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"reset-when", L"in {duration}", L"en {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"en {duration} ({time})"},
     {L"reset-when", L"now", L"ahora"},
+    {L"response-shape", L"JSON object with no keys", L"objeto JSON sin claves"},
+    {L"response-shape", L"empty body", L"cuerpo vacío"},
+    {L"response-shape", L"keys: {keys}", L"claves: {keys}"},
+    {L"response-shape", L"non-object or invalid JSON body", L"cuerpo JSON no válido o que no es un objeto"},
     {L"settings-page", L"About", L"Acerca de"},
     {L"settings-page", L"Accounts", L"Cuentas"},
     {L"settings-page", L"Behavior", L"Comportamiento"},
@@ -997,6 +1272,55 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Taskbar", L"Barra de tareas"},
     {L"settings-section", L"Updates", L"Actualizaciones"},
+    {L"sign-in-button", L"Cancel", L"Cancelar"},
+    {L"sign-in-button", L"Close", L"Cerrar"},
+    {L"sign-in-button", L"Code copied", L"Código copiado"},
+    {L"sign-in-button", L"Copied", L"Copiado"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"Copiar código y abrir GitHub"},
+    {L"sign-in-button", L"Copy failed", L"Error al copiar"},
+    {L"sign-in-button", L"Copy link", L"Copiar vínculo"},
+    {L"sign-in-button", L"Open in browser", L"Abrir en el navegador"},
+    {L"sign-in-button", L"Sign in", L"Iniciar sesión"},
+    {L"sign-in-button", L"Use a code", L"Usar un código"},
+    {L"sign-in-page", L"Sign-in failed.", L"Error al iniciar sesión."},
+    {L"sign-in-page", L"Signed in.", L"Sesión iniciada."},
+    {L"sign-in-page", L"You can close this tab and return to the taskbar.",
+     L"Puedes cerrar esta pestaña y volver a la barra de tareas."},
+    {L"sign-in-page", L"You can close this tab and try again from the taskbar.",
+     L"Puedes cerrar esta pestaña y volver a intentarlo desde la barra de tareas."},
+    {L"sign-in-status", L"Sign-in failed. See the Windhawk log for details.",
+     L"Error al iniciar sesión. Consulta el registro de Windhawk para ver los detalles."},
+    {L"sign-in-status", L"Sign-in was denied on GitHub.", L"Se denegó el inicio de sesión en GitHub."},
+    {L"sign-in-status", L"The code expired. Close this window and sign in again.",
+     L"El código caducó. Cierra esta ventana e inicia sesión de nuevo."},
+    {L"sign-in-status", L"Waiting for approval on GitHub…", L"Esperando la aprobación en GitHub…"},
+    {L"sign-in-status", L"{reason}, retrying…", L"{reason}, reintentando…"},
+    {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+          L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
+     L"Copia el código y abre GitHub abajo, o introdúcelo en github.com/login/device en cualquier dispositivo, con la "
+     L"sesión iniciada en la cuenta de GitHub que tiene Copilot. Esta ventana se cierra cuando se completa el inicio "
+     L"de sesión."},
+    {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+          L"subscription, and paste it below.",
+     L"Abre la consola de OpenCode en un navegador, copia una clave de API del espacio de trabajo con tu suscripción a "
+     L"Go y pégala abajo."},
+    {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
+          L"shown on the page below.",
+     L"Abre el vínculo de inicio de sesión en un navegador y aprueba el acceso en claude.ai; después, pega abajo el "
+     L"código que muestra la página."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
+          L"closes once sign-in completes. On another device, choose {button}.",
+     L"Abre el vínculo de inicio de sesión en un navegador de este equipo y aprueba el acceso en claude.ai. Esta "
+     L"ventana se cierra cuando se completa el inicio de sesión. En otro dispositivo, elige «{button}»."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
+          L"sign-in completes.",
+     L"Abre el vínculo de inicio de sesión en un navegador de este equipo y aprueba el acceso. Esta ventana se cierra "
+     L"cuando se completa el inicio de sesión."},
+    {L"sign-in-window", L"Sign in: {label} ({provider})", L"Iniciar sesión: {label} ({provider})"},
+    {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
+          L"paste the code its page shows.",
+     L"Ese código pertenece a otro vínculo de inicio de sesión. Abre el vínculo de esta ventana, aprueba el acceso y "
+     L"pega el código que muestre su página."},
     {L"taskbar-action", L"Exit visual test", L"Salir de la prueba visual"},
     {L"taskbar-action", L"Hide", L"Ocultar"},
     {L"taskbar-action", L"Open dashboard", L"Abrir panel"},
@@ -1079,6 +1403,67 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"langue d’affichage de Windows. S’applique uniquement à cet utilisateur Windows."},
     {L"", L"Threshold notifications", L"Notifications de seuil"},
     {L"account-error", L"Antigravity not running", L"Antigravity n’est pas lancé"},
+    {L"account-error", L"Antigravity quota unavailable", L"Antigravity\u00A0: quota indisponible"},
+    {L"account-error", L"HTTP {status}", L"HTTP {status}"},
+    {L"account-error", L"HTTP {status} from language server", L"HTTP {status} du serveur de langage"},
+    {L"account-error", L"could not save refreshed token", L"impossible d’enregistrer le jeton actualisé"},
+    {L"account-error", L"failed to parse quota summary JSON", L"impossible d’analyser le JSON du résumé des quotas"},
+    {L"account-error", L"failed to parse user status JSON", L"impossible d’analyser le JSON de l’état utilisateur"},
+    {L"account-error", L"fetch thread failed", L"échec du thread de récupération"},
+    {L"account-error", L"groups is not an array", L"«\u00A0groups\u00A0» n’est pas un tableau"},
+    {L"account-error", L"internal error", L"erreur interne"},
+    {L"account-error", L"invalid token response", L"réponse de jeton non valide"},
+    {L"account-error", L"network error", L"erreur réseau"},
+    {L"account-error", L"network error (language server)", L"erreur réseau (serveur de langage)"},
+    {L"account-error", L"no Copilot access on this GitHub account", L"pas d’accès à Copilot sur ce compte GitHub"},
+    {L"account-error", L"no OpenCode Go subscription on this key", L"pas d’abonnement OpenCode Go pour cette clé"},
+    {L"account-error", L"no access token in response", L"aucun jeton d’accès dans la réponse"},
+    {L"account-error", L"no quota groups in response", L"aucun groupe de quotas dans la réponse"},
+    {L"account-error", L"no usable Antigravity quota buckets in response",
+     L"aucun compartiment de quota Antigravity exploitable dans la réponse"},
+    {L"account-error", L"no usable Antigravity quota in response",
+     L"aucun quota Antigravity exploitable dans la réponse"},
+    {L"account-error", L"no userStatus object", L"aucun objet userStatus"},
+    {L"account-error", L"not signed in - click to sign in", L"non connecté – cliquez pour vous connecter"},
+    {L"account-error", L"rate limited by API", L"limité par le débit de l’API"},
+    {L"account-error", L"session expired - click to sign in", L"session expirée – cliquez pour vous connecter"},
+    {L"account-error", L"token refresh failed", L"échec de l’actualisation du jeton"},
+    {L"account-error", L"token refresh failed: {reason}", L"échec de l’actualisation du jeton\u00A0: {reason}"},
+    {L"account-error", L"unauthorized - click to sign in", L"non autorisé – cliquez pour vous connecter"},
+    {L"account-error", L"unexpected response", L"réponse inattendue"},
+    {L"account-error", L"unexpected response format", L"format de réponse inattendu"},
+    {L"account-error", L"unexpected response format ({shape})", L"format de réponse inattendu ({shape})"},
+    {L"account-error", L"unexpected token response", L"réponse de jeton inattendue"},
+    {L"account-error-alone", L"Could not save refreshed token", L"Impossible d’enregistrer le jeton actualisé"},
+    {L"account-error-alone", L"Failed to parse quota summary JSON",
+     L"Impossible d’analyser le JSON du résumé des quotas"},
+    {L"account-error-alone", L"Failed to parse user status JSON",
+     L"Impossible d’analyser le JSON de l’état utilisateur"},
+    {L"account-error-alone", L"Fetch thread failed", L"Échec du thread de récupération"},
+    {L"account-error-alone", L"Groups is not an array", L"«\u00A0groups\u00A0» n’est pas un tableau"},
+    {L"account-error-alone", L"Invalid token response", L"Réponse de jeton non valide"},
+    {L"account-error-alone", L"Network error", L"Erreur réseau"},
+    {L"account-error-alone", L"Network error (language server)", L"Erreur réseau (serveur de langage)"},
+    {L"account-error-alone", L"No Copilot access on this GitHub account",
+     L"Pas d’accès à Copilot sur ce compte GitHub"},
+    {L"account-error-alone", L"No OpenCode Go subscription on this key",
+     L"Pas d’abonnement OpenCode Go pour cette clé"},
+    {L"account-error-alone", L"No quota groups in response", L"Aucun groupe de quotas dans la réponse"},
+    {L"account-error-alone", L"No usable Antigravity quota buckets in response",
+     L"Aucun compartiment de quota Antigravity exploitable dans la réponse"},
+    {L"account-error-alone", L"No usable Antigravity quota in response",
+     L"Aucun quota Antigravity exploitable dans la réponse"},
+    {L"account-error-alone", L"No userStatus object", L"Aucun objet userStatus"},
+    {L"account-error-alone", L"Not signed in - click to sign in", L"Non connecté – cliquez pour vous connecter"},
+    {L"account-error-alone", L"Rate limited by API", L"Limité par le débit de l’API"},
+    {L"account-error-alone", L"Session expired - click to sign in", L"Session expirée – cliquez pour vous connecter"},
+    {L"account-error-alone", L"Token refresh failed", L"Échec de l’actualisation du jeton"},
+    {L"account-error-alone", L"Token refresh failed: {reason}", L"Échec de l’actualisation du jeton\u00A0: {reason}"},
+    {L"account-error-alone", L"Unauthorized - click to sign in", L"Non autorisé – cliquez pour vous connecter"},
+    {L"account-error-alone", L"Unexpected response", L"Réponse inattendue"},
+    {L"account-error-alone", L"Unexpected response format", L"Format de réponse inattendu"},
+    {L"account-error-alone", L"Unexpected response format ({shape})", L"Format de réponse inattendu ({shape})"},
+    {L"account-error-alone", L"Unexpected token response", L"Réponse de jeton inattendue"},
     {L"account-state", L"Local app not running", L"L’application locale n’est pas lancée"},
     {L"button", L"Add account", L"Ajouter un compte"},
     {L"button", L"Reset", L"Rétablir"},
@@ -1142,9 +1527,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"flyout-legend", L"projection", L"projection"},
     {L"flyout-note", L"Error: {error}", L"Erreur\u00A0: {error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"Erreur\u00A0: {error} – nouvel essai dans {duration}"},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"Ce forfait n’inclut aucun crédit IA."},
+    {L"flyout-note", L"No premium request allowance on this plan.", L"Ce forfait n’inclut aucune requête premium."},
     {L"flyout-note", L"No quotas reported.", L"Aucun quota signalé."},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
      L"Connexion requise. Cliquez sur les barres pour vous connecter."},
+    {L"flyout-note", L"extra usage: unlimited", L"utilisation supplémentaire\u00A0: illimitée"},
+    {L"flyout-note", L"rate limits: none reported", L"limites de débit\u00A0: aucune signalée"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# réinitialisation gratuite disponible} many{# réinitialisations gratuites disponibles} "
      L"other{# réinitialisations gratuites disponibles}}"},
@@ -1159,15 +1548,57 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Enregistrement · {days, plural, one{# jour} many{# de jours} other{# jours}}"},
     {L"history-pill", L"Waiting", L"En attente"},
     {L"history-status", L"Updated {time}", L"Mis à jour {time}"},
+    {L"history-storage", L"An account in Settings uses this history again.",
+     L"Un compte des Paramètres utilise de nouveau cet historique."},
+    {L"history-storage", L"Cannot create the local history directory.",
+     L"Impossible de créer le dossier local de l’historique."},
+    {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
+     L"Impossible de lire l’historique. Vérifiez les autorisations de stockage, puis rouvrez le mod."},
+    {L"history-storage", L"Cannot read the history file size.",
+     L"Impossible de lire la taille du fichier d’historique."},
+    {L"history-storage", L"Cannot write history. Check disk space and storage permissions.",
+     L"Impossible d’écrire l’historique. Vérifiez l’espace disque et les autorisations de stockage."},
+    {L"history-storage", L"Damaged history record. Export readable samples or clear history.",
+     L"Enregistrement d’historique endommagé. Exportez les échantillons lisibles ou effacez l’historique."},
+    {L"history-storage", L"History is not being saved to disk. Check disk space and permissions.",
+     L"L’historique n’est pas enregistré sur le disque. Vérifiez l’espace disque et les autorisations."},
+    {L"history-storage", L"History is too large to load. Clear history to start again.",
+     L"L’historique est trop volumineux pour être chargé. Effacez l’historique pour recommencer."},
+    {L"history-storage", L"History read failed. Loaded samples remain available for export.",
+     L"Échec de la lecture de l’historique. Les échantillons chargés restent disponibles pour l’exportation."},
+    {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
+     L"Le stockage de l’historique est utilisé par une autre session de l’Explorateur ou est inaccessible."},
+    {L"history-storage", L"History storage is unavailable.", L"Le stockage de l’historique n’est pas disponible."},
+    {L"history-storage", L"History write failed; the previous journal was kept.",
+     L"Échec de l’écriture de l’historique\u00A0; le journal précédent a été conservé."},
+    {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
+     L"Fichier d’historique non pris en charge ou endommagé. Effacez l’historique pour recommencer."},
     {L"language-choice", L"Automatic ({language})", L"Automatique ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} et {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} et {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-body", L"{provider} - resets {when}", L"{provider} – réinitialisation {when}"},
     {L"notification-level", L"Off", L"Désactivées"},
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rouge ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Jaune ({threshold}%)"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 h\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"Crédits IA\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"Requêtes de chat\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"credits usage at {percent}%", L"Crédits\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"monthly extra usage at {percent}%",
+     L"Supplément mensuel\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"monthly usage at {percent}%", L"Mensuel\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"premium requests usage at {percent}%",
+     L"Requêtes premium\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"weekly usage at {percent}%", L"Hebdomadaire\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"{name} current limit usage at {percent}%",
+     L"{name}, limite actuelle\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"{name} weekly usage at {percent}%",
+     L"{name} hebdomadaire\u00A0: utilisation à {percent}%"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%",
+     L"{name} {hours} h\u00A0: utilisation à {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nOuvrir la page d’état de {provider}"},
     {L"outage-level", L"degraded performance", L"performances dégradées"},
     {L"outage-level", L"major outage", L"panne majeure"},
@@ -1178,6 +1609,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"outage-line", L"{component}: {level}", L"{component}\u00A0: {level}"},
     {L"outage-line", L"{status} · since {time}", L"{status} · depuis {time}"},
     {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"outage-reason", L"Availability issues", L"Problèmes de disponibilité"},
+    {L"outage-reason", L"Elevated errors", L"Taux d’erreurs élevé"},
+    {L"outage-reason", L"Slow responses", L"Réponses lentes"},
+    {L"outage-reason", L"Upstream provider issues", L"Problèmes chez le fournisseur en amont"},
+    {L"outage-reason", L"{reason}: {models}", L"{reason}\u00A0: {models}"},
     {L"plan", L"Visual test", L"Test visuel"},
     {L"poll-interval", L"Custom", L"Personnalisé"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
@@ -1225,6 +1661,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"reset-when", L"in {duration}", L"dans {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"dans {duration} ({time})"},
     {L"reset-when", L"now", L"maintenant"},
+    {L"response-shape", L"JSON object with no keys", L"objet JSON sans clés"},
+    {L"response-shape", L"empty body", L"corps vide"},
+    {L"response-shape", L"keys: {keys}", L"clés\u00A0: {keys}"},
+    {L"response-shape", L"non-object or invalid JSON body", L"corps JSON non valide ou qui n’est pas un objet"},
     {L"settings-page", L"About", L"À propos"},
     {L"settings-page", L"Accounts", L"Comptes"},
     {L"settings-page", L"Behavior", L"Comportement"},
@@ -1236,6 +1676,54 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"settings-section", L"Language", L"Langue"},
     {L"settings-section", L"Taskbar", L"Barre des tâches"},
     {L"settings-section", L"Updates", L"Mises à jour"},
+    {L"sign-in-button", L"Cancel", L"Annuler"},
+    {L"sign-in-button", L"Close", L"Fermer"},
+    {L"sign-in-button", L"Code copied", L"Code copié"},
+    {L"sign-in-button", L"Copied", L"Copié"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"Copier le code et ouvrir GitHub"},
+    {L"sign-in-button", L"Copy failed", L"Échec de la copie"},
+    {L"sign-in-button", L"Copy link", L"Copier le lien"},
+    {L"sign-in-button", L"Open in browser", L"Ouvrir dans le navigateur"},
+    {L"sign-in-button", L"Sign in", L"Se connecter"},
+    {L"sign-in-button", L"Use a code", L"Utiliser un code"},
+    {L"sign-in-page", L"Sign-in failed.", L"Échec de la connexion."},
+    {L"sign-in-page", L"Signed in.", L"Connecté."},
+    {L"sign-in-page", L"You can close this tab and return to the taskbar.",
+     L"Vous pouvez fermer cet onglet et revenir à la barre des tâches."},
+    {L"sign-in-page", L"You can close this tab and try again from the taskbar.",
+     L"Vous pouvez fermer cet onglet et réessayer depuis la barre des tâches."},
+    {L"sign-in-status", L"Sign-in failed. See the Windhawk log for details.",
+     L"Échec de la connexion. Consultez le journal de Windhawk pour plus de détails."},
+    {L"sign-in-status", L"Sign-in was denied on GitHub.", L"La connexion a été refusée sur GitHub."},
+    {L"sign-in-status", L"The code expired. Close this window and sign in again.",
+     L"Le code a expiré. Fermez cette fenêtre et reconnectez-vous."},
+    {L"sign-in-status", L"Waiting for approval on GitHub…", L"En attente d’approbation sur GitHub…"},
+    {L"sign-in-status", L"{reason}, retrying…", L"{reason}, nouvel essai…"},
+    {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+          L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
+     L"Copiez le code et ouvrez GitHub ci-dessous, ou saisissez-le sur github.com/login/device depuis n’importe quel "
+     L"appareil, connecté au compte GitHub doté de Copilot. Cette fenêtre se ferme une fois la connexion terminée."},
+    {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+          L"subscription, and paste it below.",
+     L"Ouvrez la console OpenCode dans un navigateur, copiez une clé d’API de l’espace de travail doté de votre "
+     L"abonnement Go, puis collez-la ci-dessous."},
+    {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
+          L"shown on the page below.",
+     L"Ouvrez le lien de connexion dans un navigateur et autorisez l’accès sur claude.ai, puis collez ci-dessous le "
+     L"code affiché sur la page."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
+          L"closes once sign-in completes. On another device, choose {button}.",
+     L"Ouvrez le lien de connexion dans un navigateur sur ce PC et autorisez l’accès sur claude.ai. Cette fenêtre se "
+     L"ferme une fois la connexion terminée. Sur un autre appareil, choisissez «\u00A0{button}\u00A0»."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
+          L"sign-in completes.",
+     L"Ouvrez le lien de connexion dans un navigateur sur ce PC et autorisez l’accès. Cette fenêtre se ferme une fois "
+     L"la connexion terminée."},
+    {L"sign-in-window", L"Sign in: {label} ({provider})", L"Connexion\u00A0: {label} ({provider})"},
+    {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
+          L"paste the code its page shows.",
+     L"Ce code appartient à un autre lien de connexion. Ouvrez le lien de cette fenêtre, autorisez l’accès, puis "
+     L"collez le code affiché sur sa page."},
     {L"taskbar-action", L"Exit visual test", L"Quitter le test visuel"},
     {L"taskbar-action", L"Hide", L"Masquer"},
     {L"taskbar-action", L"Open dashboard", L"Ouvrir le tableau de bord"},
@@ -1315,6 +1803,60 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"ユーザーにのみ適用されます。"},
     {L"", L"Threshold notifications", L"しきい値の通知"},
     {L"account-error", L"Antigravity not running", L"Antigravity が実行されていません"},
+    {L"account-error", L"Antigravity quota unavailable", L"Antigravity のクォータを利用できません"},
+    {L"account-error", L"HTTP {status}", L"HTTP {status}"},
+    {L"account-error", L"HTTP {status} from language server", L"言語サーバーから HTTP {status}"},
+    {L"account-error", L"could not save refreshed token", L"更新したトークンを保存できませんでした"},
+    {L"account-error", L"failed to parse quota summary JSON", L"クォータ概要の JSON を解析できませんでした"},
+    {L"account-error", L"failed to parse user status JSON", L"ユーザー状態の JSON を解析できませんでした"},
+    {L"account-error", L"fetch thread failed", L"取得スレッドが失敗しました"},
+    {L"account-error", L"groups is not an array", L"groups が配列ではありません"},
+    {L"account-error", L"internal error", L"内部エラー"},
+    {L"account-error", L"invalid token response", L"無効なトークン応答"},
+    {L"account-error", L"network error", L"ネットワーク エラー"},
+    {L"account-error", L"network error (language server)", L"ネットワーク エラー (言語サーバー)"},
+    {L"account-error", L"no Copilot access on this GitHub account", L"この GitHub アカウントには Copilot へのアクセス権がありません"},
+    {L"account-error", L"no OpenCode Go subscription on this key", L"このキーには OpenCode Go のサブスクリプションがありません"},
+    {L"account-error", L"no access token in response", L"応答にアクセス トークンがありません"},
+    {L"account-error", L"no quota groups in response", L"応答にクォータ グループがありません"},
+    {L"account-error", L"no usable Antigravity quota buckets in response", L"応答に使用可能な Antigravity のクォータ バケットがありません"},
+    {L"account-error", L"no usable Antigravity quota in response", L"応答に使用可能な Antigravity のクォータがありません"},
+    {L"account-error", L"no userStatus object", L"userStatus オブジェクトがありません"},
+    {L"account-error", L"not signed in - click to sign in", L"サインインしていません - クリックしてサインイン"},
+    {L"account-error", L"rate limited by API", L"API のレート制限中"},
+    {L"account-error", L"session expired - click to sign in", L"セッションの有効期限が切れました - クリックしてサインイン"},
+    {L"account-error", L"token refresh failed", L"トークンの更新に失敗しました"},
+    {L"account-error", L"token refresh failed: {reason}", L"トークンの更新に失敗しました: {reason}"},
+    {L"account-error", L"unauthorized - click to sign in", L"認証されていません - クリックしてサインイン"},
+    {L"account-error", L"unexpected response", L"予期しない応答"},
+    {L"account-error", L"unexpected response format", L"予期しない応答形式"},
+    {L"account-error", L"unexpected response format ({shape})", L"予期しない応答形式 ({shape})"},
+    {L"account-error", L"unexpected token response", L"予期しないトークン応答"},
+    {L"account-error-alone", L"Could not save refreshed token", L"更新したトークンを保存できませんでした"},
+    {L"account-error-alone", L"Failed to parse quota summary JSON", L"クォータ概要の JSON を解析できませんでした"},
+    {L"account-error-alone", L"Failed to parse user status JSON", L"ユーザー状態の JSON を解析できませんでした"},
+    {L"account-error-alone", L"Fetch thread failed", L"取得スレッドが失敗しました"},
+    {L"account-error-alone", L"Groups is not an array", L"groups が配列ではありません"},
+    {L"account-error-alone", L"Invalid token response", L"無効なトークン応答"},
+    {L"account-error-alone", L"Network error", L"ネットワーク エラー"},
+    {L"account-error-alone", L"Network error (language server)", L"ネットワーク エラー (言語サーバー)"},
+    {L"account-error-alone", L"No Copilot access on this GitHub account", L"この GitHub アカウントには Copilot へのアクセス権がありません"},
+    {L"account-error-alone", L"No OpenCode Go subscription on this key", L"このキーには OpenCode Go のサブスクリプションがありません"},
+    {L"account-error-alone", L"No quota groups in response", L"応答にクォータ グループがありません"},
+    {L"account-error-alone", L"No usable Antigravity quota buckets in response",
+     L"応答に使用可能な Antigravity のクォータ バケットがありません"},
+    {L"account-error-alone", L"No usable Antigravity quota in response", L"応答に使用可能な Antigravity のクォータがありません"},
+    {L"account-error-alone", L"No userStatus object", L"userStatus オブジェクトがありません"},
+    {L"account-error-alone", L"Not signed in - click to sign in", L"サインインしていません - クリックしてサインイン"},
+    {L"account-error-alone", L"Rate limited by API", L"API のレート制限中"},
+    {L"account-error-alone", L"Session expired - click to sign in", L"セッションの有効期限が切れました - クリックしてサインイン"},
+    {L"account-error-alone", L"Token refresh failed", L"トークンの更新に失敗しました"},
+    {L"account-error-alone", L"Token refresh failed: {reason}", L"トークンの更新に失敗しました: {reason}"},
+    {L"account-error-alone", L"Unauthorized - click to sign in", L"認証されていません - クリックしてサインイン"},
+    {L"account-error-alone", L"Unexpected response", L"予期しない応答"},
+    {L"account-error-alone", L"Unexpected response format", L"予期しない応答形式"},
+    {L"account-error-alone", L"Unexpected response format ({shape})", L"予期しない応答形式 ({shape})"},
+    {L"account-error-alone", L"Unexpected token response", L"予期しないトークン応答"},
     {L"account-state", L"Local app not running", L"ローカル アプリが実行されていません"},
     {L"button", L"Add account", L"アカウントを追加"},
     {L"button", L"Reset", L"リセット"},
@@ -1378,8 +1920,12 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"flyout-legend", L"projection", L"予測"},
     {L"flyout-note", L"Error: {error}", L"エラー: {error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"エラー: {error} - {duration}後に再試行"},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"このプランには AI クレジットの割り当てがありません。"},
+    {L"flyout-note", L"No premium request allowance on this plan.", L"このプランにはプレミアム リクエストの割り当てがありません。"},
     {L"flyout-note", L"No quotas reported.", L"報告されたクォータはありません。"},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"サインインが必要です。バーをクリックしてサインインしてください。"},
+    {L"flyout-note", L"extra usage: unlimited", L"追加使用量: 無制限"},
+    {L"flyout-note", L"rate limits: none reported", L"レート制限: 報告なし"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, other{無料リセットが # 回利用可能}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
@@ -1391,15 +1937,48 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"記録中 · {days, plural, other{#日}}"},
     {L"history-pill", L"Waiting", L"待機中"},
     {L"history-status", L"Updated {time}", L"{time} に更新"},
+    {L"history-storage", L"An account in Settings uses this history again.", L"設定内のアカウントがこの履歴を再び使用しています。"},
+    {L"history-storage", L"Cannot create the local history directory.", L"ローカルの履歴フォルダーを作成できません。"},
+    {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
+     L"履歴を読み取れません。ストレージのアクセス許可を確認してから、Mod を開き直してください。"},
+    {L"history-storage", L"Cannot read the history file size.", L"履歴ファイルのサイズを読み取れません。"},
+    {L"history-storage", L"Cannot write history. Check disk space and storage permissions.",
+     L"履歴を書き込めません。ディスクの空き容量とストレージのアクセス許可を確認してください。"},
+    {L"history-storage", L"Damaged history record. Export readable samples or clear history.",
+     L"履歴レコードが破損しています。読み取れるサンプルをエクスポートするか、履歴を消去してください。"},
+    {L"history-storage", L"History is not being saved to disk. Check disk space and permissions.",
+     L"履歴がディスクに保存されていません。ディスクの空き容量とアクセス許可を確認してください。"},
+    {L"history-storage", L"History is too large to load. Clear history to start again.",
+     L"履歴が大きすぎて読み込めません。履歴を消去してやり直してください。"},
+    {L"history-storage", L"History read failed. Loaded samples remain available for export.",
+     L"履歴の読み取りに失敗しました。読み込み済みのサンプルは引き続きエクスポートできます。"},
+    {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
+     L"履歴ストレージは別のエクスプローラー セッションで使用中か、アクセスできません。"},
+    {L"history-storage", L"History storage is unavailable.", L"履歴ストレージを利用できません。"},
+    {L"history-storage", L"History write failed; the previous journal was kept.", L"履歴の書き込みに失敗しました。以前のジャーナルは保持されています。"},
+    {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
+     L"履歴ファイルがサポートされていないか、破損しています。履歴を消去してやり直してください。"},
     {L"language-choice", L"Automatic ({language})", L"自動 ({language})"},
     {L"list-end", L"{a} and {b}", L"{a}、{b}"},
     {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
     {L"list-pair", L"{a} and {b}", L"{a}、{b}"},
     {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+    {L"notification-body", L"{provider} - resets {when}", L"{provider} - {when}にリセット"},
     {L"notification-level", L"Off", L"オフ"},
     {L"notification-level", L"Orange ({threshold}%)", L"オレンジ ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"赤 ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"黄 ({threshold}%)"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 時間: 使用率 {percent}%"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"AI クレジット: 使用率 {percent}%"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"チャット リクエスト: 使用率 {percent}%"},
+    {L"notification-title", L"credits usage at {percent}%", L"クレジット: 使用率 {percent}%"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"月間追加: 使用率 {percent}%"},
+    {L"notification-title", L"monthly usage at {percent}%", L"月間: 使用率 {percent}%"},
+    {L"notification-title", L"premium requests usage at {percent}%", L"プレミアム リクエスト: 使用率 {percent}%"},
+    {L"notification-title", L"weekly usage at {percent}%", L"週間: 使用率 {percent}%"},
+    {L"notification-title", L"{name} current limit usage at {percent}%", L"{name} 現在の上限: 使用率 {percent}%"},
+    {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} 週間: 使用率 {percent}%"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} 時間: 使用率 {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\n{provider} のステータス ページを開く"},
     {L"outage-level", L"degraded performance", L"パフォーマンス低下"},
     {L"outage-level", L"major outage", L"大規模な障害"},
@@ -1410,6 +1989,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
     {L"outage-line", L"{status} · since {time}", L"{status} · {time} から"},
     {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"outage-reason", L"Availability issues", L"可用性の問題"},
+    {L"outage-reason", L"Elevated errors", L"エラーの増加"},
+    {L"outage-reason", L"Slow responses", L"応答の遅延"},
+    {L"outage-reason", L"Upstream provider issues", L"上流プロバイダーの問題"},
+    {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
     {L"plan", L"Visual test", L"ビジュアル テスト"},
     {L"poll-interval", L"Custom", L"カスタム"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分}}"},
@@ -1453,6 +2037,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"reset-when", L"in {duration}", L"{duration}後"},
     {L"reset-when", L"in {duration} ({time})", L"{duration}後 ({time})"},
     {L"reset-when", L"now", L"今"},
+    {L"response-shape", L"JSON object with no keys", L"キーのない JSON オブジェクト"},
+    {L"response-shape", L"empty body", L"本文が空"},
+    {L"response-shape", L"keys: {keys}", L"キー: {keys}"},
+    {L"response-shape", L"non-object or invalid JSON body", L"オブジェクトでないか無効な JSON 本文"},
     {L"settings-page", L"About", L"バージョン情報"},
     {L"settings-page", L"Accounts", L"アカウント"},
     {L"settings-page", L"Behavior", L"動作"},
@@ -1464,6 +2052,47 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"settings-section", L"Language", L"言語"},
     {L"settings-section", L"Taskbar", L"タスク バー"},
     {L"settings-section", L"Updates", L"更新"},
+    {L"sign-in-button", L"Cancel", L"キャンセル"},
+    {L"sign-in-button", L"Close", L"閉じる"},
+    {L"sign-in-button", L"Code copied", L"コードをコピーしました"},
+    {L"sign-in-button", L"Copied", L"コピーしました"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"コードをコピーして GitHub を開く"},
+    {L"sign-in-button", L"Copy failed", L"コピーできませんでした"},
+    {L"sign-in-button", L"Copy link", L"リンクをコピー"},
+    {L"sign-in-button", L"Open in browser", L"ブラウザーで開く"},
+    {L"sign-in-button", L"Sign in", L"サインイン"},
+    {L"sign-in-button", L"Use a code", L"コードを使用"},
+    {L"sign-in-page", L"Sign-in failed.", L"サインインに失敗しました。"},
+    {L"sign-in-page", L"Signed in.", L"サインインしました。"},
+    {L"sign-in-page", L"You can close this tab and return to the taskbar.", L"このタブを閉じて、タスク バーに戻ってください。"},
+    {L"sign-in-page", L"You can close this tab and try again from the taskbar.", L"このタブを閉じて、タスク バーからもう一度お試しください。"},
+    {L"sign-in-status", L"Sign-in failed. See the Windhawk log for details.",
+     L"サインインに失敗しました。詳細は Windhawk のログを確認してください。"},
+    {L"sign-in-status", L"Sign-in was denied on GitHub.", L"GitHub でサインインが拒否されました。"},
+    {L"sign-in-status", L"The code expired. Close this window and sign in again.",
+     L"コードの有効期限が切れました。このウィンドウを閉じて、もう一度サインインしてください。"},
+    {L"sign-in-status", L"Waiting for approval on GitHub…", L"GitHub での承認を待っています…"},
+    {L"sign-in-status", L"{reason}, retrying…", L"{reason}。再試行しています…"},
+    {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+          L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
+     L"下のボタンでコードをコピーして GitHub を開くか、任意のデバイスで github.com/login/device にコードを入力してください。Copilot を利用できる GitHub "
+     L"アカウントでサインインしている必要があります。サインインが完了すると、このウィンドウは閉じます。"},
+    {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+          L"subscription, and paste it below.",
+     L"ブラウザーで OpenCode コンソールを開き、Go サブスクリプションのあるワークスペースの API キーをコピーして、下に貼り付けてください。"},
+    {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
+          L"shown on the page below.",
+     L"ブラウザーでサインイン リンクを開いて claude.ai でアクセスを承認し、ページに表示されたコードを下に貼り付けてください。"},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
+          L"closes once sign-in completes. On another device, choose {button}.",
+     L"この PC のブラウザーでサインイン リンクを開き、claude.ai でアクセスを承認してください。サインインが完了すると、このウィンドウは閉じます。別のデバイスを使う場合は [{button}] を選んでください。"},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
+          L"sign-in completes.",
+     L"この PC のブラウザーでサインイン リンクを開き、アクセスを承認してください。サインインが完了すると、このウィンドウは閉じます。"},
+    {L"sign-in-window", L"Sign in: {label} ({provider})", L"サインイン: {label} ({provider})"},
+    {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
+          L"paste the code its page shows.",
+     L"このコードは別のサインイン リンクのものです。このウィンドウのリンクを開いてアクセスを承認し、そのページに表示されたコードを貼り付けてください。"},
     {L"taskbar-action", L"Exit visual test", L"ビジュアル テストを終了"},
     {L"taskbar-action", L"Hide", L"非表示"},
     {L"taskbar-action", L"Open dashboard", L"ダッシュボードを開く"},
@@ -1542,6 +2171,64 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"do Windows. Aplica-se somente a este usuário do Windows."},
     {L"", L"Threshold notifications", L"Notificações de limite"},
     {L"account-error", L"Antigravity not running", L"Antigravity não está em execução"},
+    {L"account-error", L"Antigravity quota unavailable", L"Antigravity: cota indisponível"},
+    {L"account-error", L"HTTP {status}", L"HTTP {status}"},
+    {L"account-error", L"HTTP {status} from language server", L"HTTP {status} do servidor de linguagem"},
+    {L"account-error", L"could not save refreshed token", L"não foi possível salvar o token renovado"},
+    {L"account-error", L"failed to parse quota summary JSON", L"falha ao analisar o JSON do resumo de cotas"},
+    {L"account-error", L"failed to parse user status JSON", L"falha ao analisar o JSON do status do usuário"},
+    {L"account-error", L"fetch thread failed", L"falha na thread de consulta"},
+    {L"account-error", L"groups is not an array", L"“groups” não é uma matriz"},
+    {L"account-error", L"internal error", L"erro interno"},
+    {L"account-error", L"invalid token response", L"resposta de token inválida"},
+    {L"account-error", L"network error", L"erro de rede"},
+    {L"account-error", L"network error (language server)", L"erro de rede (servidor de linguagem)"},
+    {L"account-error", L"no Copilot access on this GitHub account", L"sem acesso ao Copilot nesta conta do GitHub"},
+    {L"account-error", L"no OpenCode Go subscription on this key", L"sem assinatura do OpenCode Go nesta chave"},
+    {L"account-error", L"no access token in response", L"nenhum token de acesso na resposta"},
+    {L"account-error", L"no quota groups in response", L"nenhum grupo de cotas na resposta"},
+    {L"account-error", L"no usable Antigravity quota buckets in response",
+     L"nenhum bucket de cota do Antigravity utilizável na resposta"},
+    {L"account-error", L"no usable Antigravity quota in response",
+     L"nenhuma cota do Antigravity utilizável na resposta"},
+    {L"account-error", L"no userStatus object", L"nenhum objeto userStatus"},
+    {L"account-error", L"not signed in - click to sign in", L"não conectado - clique para entrar"},
+    {L"account-error", L"rate limited by API", L"limitado pela taxa da API"},
+    {L"account-error", L"session expired - click to sign in", L"sessão expirada - clique para entrar"},
+    {L"account-error", L"token refresh failed", L"falha ao renovar o token"},
+    {L"account-error", L"token refresh failed: {reason}", L"falha ao renovar o token: {reason}"},
+    {L"account-error", L"unauthorized - click to sign in", L"não autorizado - clique para entrar"},
+    {L"account-error", L"unexpected response", L"resposta inesperada"},
+    {L"account-error", L"unexpected response format", L"formato de resposta inesperado"},
+    {L"account-error", L"unexpected response format ({shape})", L"formato de resposta inesperado ({shape})"},
+    {L"account-error", L"unexpected token response", L"resposta de token inesperada"},
+    {L"account-error-alone", L"Could not save refreshed token", L"Não foi possível salvar o token renovado"},
+    {L"account-error-alone", L"Failed to parse quota summary JSON", L"Falha ao analisar o JSON do resumo de cotas"},
+    {L"account-error-alone", L"Failed to parse user status JSON", L"Falha ao analisar o JSON do status do usuário"},
+    {L"account-error-alone", L"Fetch thread failed", L"Falha na thread de consulta"},
+    {L"account-error-alone", L"Groups is not an array", L"“groups” não é uma matriz"},
+    {L"account-error-alone", L"Invalid token response", L"Resposta de token inválida"},
+    {L"account-error-alone", L"Network error", L"Erro de rede"},
+    {L"account-error-alone", L"Network error (language server)", L"Erro de rede (servidor de linguagem)"},
+    {L"account-error-alone", L"No Copilot access on this GitHub account",
+     L"Sem acesso ao Copilot nesta conta do GitHub"},
+    {L"account-error-alone", L"No OpenCode Go subscription on this key", L"Sem assinatura do OpenCode Go nesta chave"},
+    {L"account-error-alone", L"No quota groups in response", L"Nenhum grupo de cotas na resposta"},
+    {L"account-error-alone", L"No usable Antigravity quota buckets in response",
+     L"Nenhum bucket de cota do Antigravity utilizável na resposta"},
+    {L"account-error-alone", L"No usable Antigravity quota in response",
+     L"Nenhuma cota do Antigravity utilizável na resposta"},
+    {L"account-error-alone", L"No userStatus object", L"Nenhum objeto userStatus"},
+    {L"account-error-alone", L"Not signed in - click to sign in", L"Não conectado - clique para entrar"},
+    {L"account-error-alone", L"Rate limited by API", L"Limitado pela taxa da API"},
+    {L"account-error-alone", L"Session expired - click to sign in", L"Sessão expirada - clique para entrar"},
+    {L"account-error-alone", L"Token refresh failed", L"Falha ao renovar o token"},
+    {L"account-error-alone", L"Token refresh failed: {reason}", L"Falha ao renovar o token: {reason}"},
+    {L"account-error-alone", L"Unauthorized - click to sign in", L"Não autorizado - clique para entrar"},
+    {L"account-error-alone", L"Unexpected response", L"Resposta inesperada"},
+    {L"account-error-alone", L"Unexpected response format", L"Formato de resposta inesperado"},
+    {L"account-error-alone", L"Unexpected response format ({shape})", L"Formato de resposta inesperado ({shape})"},
+    {L"account-error-alone", L"Unexpected token response", L"Resposta de token inesperada"},
     {L"account-state", L"Local app not running", L"App local não está em execução"},
     {L"button", L"Add account", L"Adicionar conta"},
     {L"button", L"Reset", L"Redefinir"},
@@ -1604,9 +2291,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"flyout-legend", L"projection", L"projeção"},
     {L"flyout-note", L"Error: {error}", L"Erro: {error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"Erro: {error} - nova tentativa em {duration}"},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"Este plano não inclui créditos de IA."},
+    {L"flyout-note", L"No premium request allowance on this plan.", L"Este plano não inclui solicitações premium."},
     {L"flyout-note", L"No quotas reported.", L"Nenhuma cota informada."},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
      L"É necessário entrar. Clique nas barras para entrar."},
+    {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
+    {L"flyout-note", L"rate limits: none reported", L"limites de taxa: nenhum informado"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinício gratuito disponível} many{# reinícios gratuitos disponíveis} other{# reinícios "
      L"gratuitos disponíveis}}"},
@@ -1621,15 +2312,52 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Registrando · {days, plural, one{# dia} many{# de dias} other{# dias}}"},
     {L"history-pill", L"Waiting", L"Aguardando"},
     {L"history-status", L"Updated {time}", L"Atualizado {time}"},
+    {L"history-storage", L"An account in Settings uses this history again.",
+     L"Uma conta em Configurações voltou a usar este histórico."},
+    {L"history-storage", L"Cannot create the local history directory.",
+     L"Não é possível criar a pasta local do histórico."},
+    {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
+     L"Não é possível ler o histórico. Verifique as permissões de armazenamento e reabra o mod."},
+    {L"history-storage", L"Cannot read the history file size.",
+     L"Não é possível ler o tamanho do arquivo de histórico."},
+    {L"history-storage", L"Cannot write history. Check disk space and storage permissions.",
+     L"Não é possível gravar o histórico. Verifique o espaço em disco e as permissões de armazenamento."},
+    {L"history-storage", L"Damaged history record. Export readable samples or clear history.",
+     L"Registro de histórico danificado. Exporte as amostras legíveis ou limpe o histórico."},
+    {L"history-storage", L"History is not being saved to disk. Check disk space and permissions.",
+     L"O histórico não está sendo salvo no disco. Verifique o espaço em disco e as permissões."},
+    {L"history-storage", L"History is too large to load. Clear history to start again.",
+     L"O histórico é grande demais para carregar. Limpe o histórico para começar de novo."},
+    {L"history-storage", L"History read failed. Loaded samples remain available for export.",
+     L"Falha ao ler o histórico. As amostras carregadas continuam disponíveis para exportação."},
+    {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
+     L"O armazenamento do histórico está em uso por outra sessão do Explorador ou está inacessível."},
+    {L"history-storage", L"History storage is unavailable.", L"O armazenamento do histórico não está disponível."},
+    {L"history-storage", L"History write failed; the previous journal was kept.",
+     L"Falha ao gravar o histórico; o registro anterior foi mantido."},
+    {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
+     L"Arquivo de histórico incompatível ou danificado. Limpe o histórico para começar de novo."},
     {L"language-choice", L"Automatic ({language})", L"Automático ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} e {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} e {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-body", L"{provider} - resets {when}", L"{provider} - redefine {when}"},
     {L"notification-level", L"Off", L"Desativadas"},
     {L"notification-level", L"Orange ({threshold}%)", L"Laranja ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Vermelho ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Amarelo ({threshold}%)"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 h: {percent}% usado"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"Créditos de IA: {percent}% usado"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"Solicitações de chat: {percent}% usado"},
+    {L"notification-title", L"credits usage at {percent}%", L"Créditos: {percent}% usado"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"Adicional mensal: {percent}% usado"},
+    {L"notification-title", L"monthly usage at {percent}%", L"Mensal: {percent}% usado"},
+    {L"notification-title", L"premium requests usage at {percent}%", L"Solicitações premium: {percent}% usado"},
+    {L"notification-title", L"weekly usage at {percent}%", L"Semanal: {percent}% usado"},
+    {L"notification-title", L"{name} current limit usage at {percent}%", L"{name}, limite atual: {percent}% usado"},
+    {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} semanal: {percent}% usado"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} h: {percent}% usado"},
     {L"outage-action", L"{status}\nOpen the {provider} status page",
      L"{status}\nAbrir a página de status de {provider}"},
     {L"outage-level", L"degraded performance", L"desempenho degradado"},
@@ -1641,6 +2369,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
     {L"outage-line", L"{status} · since {time}", L"{status} · desde {time}"},
     {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"outage-reason", L"Availability issues", L"Problemas de disponibilidade"},
+    {L"outage-reason", L"Elevated errors", L"Erros acima do normal"},
+    {L"outage-reason", L"Slow responses", L"Respostas lentas"},
+    {L"outage-reason", L"Upstream provider issues", L"Problemas no provedor upstream"},
+    {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
     {L"plan", L"Visual test", L"Teste visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
@@ -1688,6 +2421,10 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"reset-when", L"in {duration}", L"em {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"em {duration} ({time})"},
     {L"reset-when", L"now", L"agora"},
+    {L"response-shape", L"JSON object with no keys", L"objeto JSON sem chaves"},
+    {L"response-shape", L"empty body", L"corpo vazio"},
+    {L"response-shape", L"keys: {keys}", L"chaves: {keys}"},
+    {L"response-shape", L"non-object or invalid JSON body", L"corpo JSON inválido ou que não é um objeto"},
     {L"settings-page", L"About", L"Sobre"},
     {L"settings-page", L"Accounts", L"Contas"},
     {L"settings-page", L"Behavior", L"Comportamento"},
@@ -1699,6 +2436,54 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Taskbar", L"Barra de tarefas"},
     {L"settings-section", L"Updates", L"Atualizações"},
+    {L"sign-in-button", L"Cancel", L"Cancelar"},
+    {L"sign-in-button", L"Close", L"Fechar"},
+    {L"sign-in-button", L"Code copied", L"Código copiado"},
+    {L"sign-in-button", L"Copied", L"Copiado"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"Copiar código e abrir o GitHub"},
+    {L"sign-in-button", L"Copy failed", L"Falha ao copiar"},
+    {L"sign-in-button", L"Copy link", L"Copiar link"},
+    {L"sign-in-button", L"Open in browser", L"Abrir no navegador"},
+    {L"sign-in-button", L"Sign in", L"Entrar"},
+    {L"sign-in-button", L"Use a code", L"Usar um código"},
+    {L"sign-in-page", L"Sign-in failed.", L"Falha ao entrar."},
+    {L"sign-in-page", L"Signed in.", L"Conectado."},
+    {L"sign-in-page", L"You can close this tab and return to the taskbar.",
+     L"Você pode fechar esta guia e voltar à barra de tarefas."},
+    {L"sign-in-page", L"You can close this tab and try again from the taskbar.",
+     L"Você pode fechar esta guia e tentar de novo pela barra de tarefas."},
+    {L"sign-in-status", L"Sign-in failed. See the Windhawk log for details.",
+     L"Falha ao entrar. Veja o log do Windhawk para mais detalhes."},
+    {L"sign-in-status", L"Sign-in was denied on GitHub.", L"O acesso foi negado no GitHub."},
+    {L"sign-in-status", L"The code expired. Close this window and sign in again.",
+     L"O código expirou. Feche esta janela e entre novamente."},
+    {L"sign-in-status", L"Waiting for approval on GitHub…", L"Aguardando aprovação no GitHub…"},
+    {L"sign-in-status", L"{reason}, retrying…", L"{reason}, tentando novamente…"},
+    {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+          L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
+     L"Copie o código e abra o GitHub abaixo, ou digite-o em github.com/login/device em qualquer dispositivo, "
+     L"conectado à conta do GitHub com o Copilot. Esta janela fecha quando a entrada for concluída."},
+    {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+          L"subscription, and paste it below.",
+     L"Abra o console do OpenCode em um navegador, copie uma chave de API do espaço de trabalho com sua assinatura do "
+     L"Go e cole-a abaixo."},
+    {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
+          L"shown on the page below.",
+     L"Abra o link de entrada em um navegador e aprove o acesso em claude.ai; depois, cole abaixo o código mostrado na "
+     L"página."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
+          L"closes once sign-in completes. On another device, choose {button}.",
+     L"Abra o link de entrada em um navegador neste PC e aprove o acesso em claude.ai. Esta janela fecha quando a "
+     L"entrada for concluída. Em outro dispositivo, escolha “{button}”."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
+          L"sign-in completes.",
+     L"Abra o link de entrada em um navegador neste PC e aprove o acesso. Esta janela fecha quando a entrada for "
+     L"concluída."},
+    {L"sign-in-window", L"Sign in: {label} ({provider})", L"Entrar: {label} ({provider})"},
+    {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
+          L"paste the code its page shows.",
+     L"Esse código pertence a outro link de entrada. Abra o link desta janela, aprove o acesso e cole o código que a "
+     L"página mostrar."},
     {L"taskbar-action", L"Exit visual test", L"Sair do teste visual"},
     {L"taskbar-action", L"Hide", L"Ocultar"},
     {L"taskbar-action", L"Open dashboard", L"Abrir painel"},
@@ -1780,6 +2565,62 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Действует только для этого пользователя Windows."},
     {L"", L"Threshold notifications", L"Уведомления о пороге"},
     {L"account-error", L"Antigravity not running", L"Antigravity не запущен"},
+    {L"account-error", L"Antigravity quota unavailable", L"Antigravity: квота недоступна"},
+    {L"account-error", L"HTTP {status}", L"HTTP {status}"},
+    {L"account-error", L"HTTP {status} from language server", L"HTTP {status} от языкового сервера"},
+    {L"account-error", L"could not save refreshed token", L"не удалось сохранить обновлённый токен"},
+    {L"account-error", L"failed to parse quota summary JSON", L"не удалось разобрать JSON сводки квот"},
+    {L"account-error", L"failed to parse user status JSON", L"не удалось разобрать JSON статуса пользователя"},
+    {L"account-error", L"fetch thread failed", L"сбой потока опроса"},
+    {L"account-error", L"groups is not an array", L"«groups» не является массивом"},
+    {L"account-error", L"internal error", L"внутренняя ошибка"},
+    {L"account-error", L"invalid token response", L"недопустимый ответ с токеном"},
+    {L"account-error", L"network error", L"ошибка сети"},
+    {L"account-error", L"network error (language server)", L"ошибка сети (языковой сервер)"},
+    {L"account-error", L"no Copilot access on this GitHub account", L"нет доступа к Copilot в этом аккаунте GitHub"},
+    {L"account-error", L"no OpenCode Go subscription on this key", L"нет подписки OpenCode Go для этого ключа"},
+    {L"account-error", L"no access token in response", L"в ответе нет токена доступа"},
+    {L"account-error", L"no quota groups in response", L"в ответе нет групп квот"},
+    {L"account-error", L"no usable Antigravity quota buckets in response",
+     L"в ответе нет пригодных бакетов квот Antigravity"},
+    {L"account-error", L"no usable Antigravity quota in response", L"в ответе нет пригодной квоты Antigravity"},
+    {L"account-error", L"no userStatus object", L"нет объекта userStatus"},
+    {L"account-error", L"not signed in - click to sign in", L"вход не выполнен — нажмите, чтобы войти"},
+    {L"account-error", L"rate limited by API", L"ограничение частоты запросов API"},
+    {L"account-error", L"session expired - click to sign in", L"сеанс истёк — нажмите, чтобы войти"},
+    {L"account-error", L"token refresh failed", L"не удалось обновить токен"},
+    {L"account-error", L"token refresh failed: {reason}", L"не удалось обновить токен: {reason}"},
+    {L"account-error", L"unauthorized - click to sign in", L"нет авторизации — нажмите, чтобы войти"},
+    {L"account-error", L"unexpected response", L"неожиданный ответ"},
+    {L"account-error", L"unexpected response format", L"неожиданный формат ответа"},
+    {L"account-error", L"unexpected response format ({shape})", L"неожиданный формат ответа ({shape})"},
+    {L"account-error", L"unexpected token response", L"неожиданный ответ с токеном"},
+    {L"account-error-alone", L"Could not save refreshed token", L"Не удалось сохранить обновлённый токен"},
+    {L"account-error-alone", L"Failed to parse quota summary JSON", L"Не удалось разобрать JSON сводки квот"},
+    {L"account-error-alone", L"Failed to parse user status JSON", L"Не удалось разобрать JSON статуса пользователя"},
+    {L"account-error-alone", L"Fetch thread failed", L"Сбой потока опроса"},
+    {L"account-error-alone", L"Groups is not an array", L"«groups» не является массивом"},
+    {L"account-error-alone", L"Invalid token response", L"Недопустимый ответ с токеном"},
+    {L"account-error-alone", L"Network error", L"Ошибка сети"},
+    {L"account-error-alone", L"Network error (language server)", L"Ошибка сети (языковой сервер)"},
+    {L"account-error-alone", L"No Copilot access on this GitHub account",
+     L"Нет доступа к Copilot в этом аккаунте GitHub"},
+    {L"account-error-alone", L"No OpenCode Go subscription on this key", L"Нет подписки OpenCode Go для этого ключа"},
+    {L"account-error-alone", L"No quota groups in response", L"В ответе нет групп квот"},
+    {L"account-error-alone", L"No usable Antigravity quota buckets in response",
+     L"В ответе нет пригодных бакетов квот Antigravity"},
+    {L"account-error-alone", L"No usable Antigravity quota in response", L"В ответе нет пригодной квоты Antigravity"},
+    {L"account-error-alone", L"No userStatus object", L"Нет объекта userStatus"},
+    {L"account-error-alone", L"Not signed in - click to sign in", L"Вход не выполнен — нажмите, чтобы войти"},
+    {L"account-error-alone", L"Rate limited by API", L"Ограничение частоты запросов API"},
+    {L"account-error-alone", L"Session expired - click to sign in", L"Сеанс истёк — нажмите, чтобы войти"},
+    {L"account-error-alone", L"Token refresh failed", L"Не удалось обновить токен"},
+    {L"account-error-alone", L"Token refresh failed: {reason}", L"Не удалось обновить токен: {reason}"},
+    {L"account-error-alone", L"Unauthorized - click to sign in", L"Нет авторизации — нажмите, чтобы войти"},
+    {L"account-error-alone", L"Unexpected response", L"Неожиданный ответ"},
+    {L"account-error-alone", L"Unexpected response format", L"Неожиданный формат ответа"},
+    {L"account-error-alone", L"Unexpected response format ({shape})", L"Неожиданный формат ответа ({shape})"},
+    {L"account-error-alone", L"Unexpected token response", L"Неожиданный ответ с токеном"},
     {L"account-state", L"Local app not running", L"Локальное приложение не запущено"},
     {L"button", L"Add account", L"Добавить аккаунт"},
     {L"button", L"Reset", L"Сбросить"},
@@ -1842,8 +2683,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"flyout-legend", L"projection", L"прогноз"},
     {L"flyout-note", L"Error: {error}", L"Ошибка: {error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"Ошибка: {error} — повтор через {duration}"},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"В этом тарифе нет ИИ-кредитов."},
+    {L"flyout-note", L"No premium request allowance on this plan.", L"В этом тарифе нет премиум-запросов."},
     {L"flyout-note", L"No quotas reported.", L"Квоты не сообщены."},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
+    {L"flyout-note", L"extra usage: unlimited", L"доп. использование: без ограничений"},
+    {L"flyout-note", L"rate limits: none reported", L"лимиты частоты: не сообщены"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}}"},
@@ -1858,15 +2703,51 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Запись · {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
     {L"history-pill", L"Waiting", L"Ожидание"},
     {L"history-status", L"Updated {time}", L"Обновлено {time}"},
+    {L"history-storage", L"An account in Settings uses this history again.",
+     L"Аккаунт в настройках снова использует эту историю."},
+    {L"history-storage", L"Cannot create the local history directory.", L"Не удаётся создать локальную папку истории."},
+    {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
+     L"Не удаётся прочитать историю. Проверьте разрешения хранилища и снова откройте мод."},
+    {L"history-storage", L"Cannot read the history file size.", L"Не удаётся определить размер файла истории."},
+    {L"history-storage", L"Cannot write history. Check disk space and storage permissions.",
+     L"Не удаётся записать историю. Проверьте свободное место на диске и разрешения хранилища."},
+    {L"history-storage", L"Damaged history record. Export readable samples or clear history.",
+     L"Повреждённая запись истории. Экспортируйте читаемые замеры или очистите историю."},
+    {L"history-storage", L"History is not being saved to disk. Check disk space and permissions.",
+     L"История не сохраняется на диск. Проверьте свободное место и разрешения."},
+    {L"history-storage", L"History is too large to load. Clear history to start again.",
+     L"История слишком велика для загрузки. Очистите историю, чтобы начать заново."},
+    {L"history-storage", L"History read failed. Loaded samples remain available for export.",
+     L"Не удалось прочитать историю. Загруженные замеры по-прежнему можно экспортировать."},
+    {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
+     L"Хранилище истории используется другим сеансом проводника или недоступно."},
+    {L"history-storage", L"History storage is unavailable.", L"Хранилище истории недоступно."},
+    {L"history-storage", L"History write failed; the previous journal was kept.",
+     L"Не удалось записать историю; предыдущий журнал сохранён."},
+    {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
+     L"Файл истории не поддерживается или повреждён. Очистите историю, чтобы начать заново."},
     {L"language-choice", L"Automatic ({language})", L"Автоматически ({language})"},
     {L"list-end", L"{a} and {b}", L"{a} и {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}, {b}"},
     {L"list-pair", L"{a} and {b}", L"{a} и {b}"},
     {L"list-start", L"{a}, {b}", L"{a}, {b}"},
+    {L"notification-body", L"{provider} - resets {when}", L"{provider} — сброс {when}"},
     {L"notification-level", L"Off", L"Откл."},
     {L"notification-level", L"Orange ({threshold}%)", L"Оранжевый ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Красный ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Жёлтый ({threshold}%)"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 ч: использовано {percent}%"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"ИИ-кредиты: использовано {percent}%"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"Запросы в чате: использовано {percent}%"},
+    {L"notification-title", L"credits usage at {percent}%", L"Кредиты: использовано {percent}%"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"Доп. за месяц: использовано {percent}%"},
+    {L"notification-title", L"monthly usage at {percent}%", L"Месяц: использовано {percent}%"},
+    {L"notification-title", L"premium requests usage at {percent}%", L"Премиум-запросы: использовано {percent}%"},
+    {L"notification-title", L"weekly usage at {percent}%", L"Неделя: использовано {percent}%"},
+    {L"notification-title", L"{name} current limit usage at {percent}%",
+     L"{name}, текущий лимит: использовано {percent}%"},
+    {L"notification-title", L"{name} weekly usage at {percent}%", L"{name}, неделя: использовано {percent}%"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name}, {hours} ч: использовано {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nОткрыть страницу статуса {provider}"},
     {L"outage-level", L"degraded performance", L"снижение производительности"},
     {L"outage-level", L"major outage", L"серьёзный сбой"},
@@ -1877,6 +2758,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"outage-line", L"{component}: {level}", L"{component}: {level}"},
     {L"outage-line", L"{status} · since {time}", L"{status} · с {time}"},
     {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"outage-reason", L"Availability issues", L"Проблемы с доступностью"},
+    {L"outage-reason", L"Elevated errors", L"Повышенное число ошибок"},
+    {L"outage-reason", L"Slow responses", L"Медленные ответы"},
+    {L"outage-reason", L"Upstream provider issues", L"Проблемы у вышестоящего провайдера"},
+    {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
     {L"plan", L"Visual test", L"Визуальный тест"},
     {L"poll-interval", L"Custom", L"Другой"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
@@ -1924,6 +2810,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"reset-when", L"in {duration}", L"через {duration}"},
     {L"reset-when", L"in {duration} ({time})", L"через {duration} ({time})"},
     {L"reset-when", L"now", L"сейчас"},
+    {L"response-shape", L"JSON object with no keys", L"объект JSON без ключей"},
+    {L"response-shape", L"empty body", L"пустое тело"},
+    {L"response-shape", L"keys: {keys}", L"ключи: {keys}"},
+    {L"response-shape", L"non-object or invalid JSON body",
+     L"тело не является объектом или содержит недопустимый JSON"},
     {L"settings-page", L"About", L"О программе"},
     {L"settings-page", L"Accounts", L"Аккаунты"},
     {L"settings-page", L"Behavior", L"Поведение"},
@@ -1935,6 +2826,53 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-section", L"Language", L"Язык"},
     {L"settings-section", L"Taskbar", L"Панель задач"},
     {L"settings-section", L"Updates", L"Обновления"},
+    {L"sign-in-button", L"Cancel", L"Отмена"},
+    {L"sign-in-button", L"Close", L"Закрыть"},
+    {L"sign-in-button", L"Code copied", L"Код скопирован"},
+    {L"sign-in-button", L"Copied", L"Скопировано"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"Скопировать код и открыть GitHub"},
+    {L"sign-in-button", L"Copy failed", L"Не удалось скопировать"},
+    {L"sign-in-button", L"Copy link", L"Копировать ссылку"},
+    {L"sign-in-button", L"Open in browser", L"Открыть в браузере"},
+    {L"sign-in-button", L"Sign in", L"Войти"},
+    {L"sign-in-button", L"Use a code", L"Ввести код"},
+    {L"sign-in-page", L"Sign-in failed.", L"Не удалось войти."},
+    {L"sign-in-page", L"Signed in.", L"Вход выполнен."},
+    {L"sign-in-page", L"You can close this tab and return to the taskbar.",
+     L"Можно закрыть эту вкладку и вернуться к панели задач."},
+    {L"sign-in-page", L"You can close this tab and try again from the taskbar.",
+     L"Можно закрыть эту вкладку и повторить попытку с панели задач."},
+    {L"sign-in-status", L"Sign-in failed. See the Windhawk log for details.",
+     L"Не удалось войти. Подробности в журнале Windhawk."},
+    {L"sign-in-status", L"Sign-in was denied on GitHub.", L"Вход отклонён на GitHub."},
+    {L"sign-in-status", L"The code expired. Close this window and sign in again.",
+     L"Срок действия кода истёк. Закройте это окно и войдите снова."},
+    {L"sign-in-status", L"Waiting for approval on GitHub…", L"Ожидание подтверждения на GitHub…"},
+    {L"sign-in-status", L"{reason}, retrying…", L"{reason} — повторная попытка…"},
+    {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+          L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
+     L"Скопируйте код и откройте GitHub кнопкой ниже или введите его на github.com/login/device на любом устройстве, "
+     L"войдя в аккаунт GitHub с Copilot. Окно закроется, когда вход будет выполнен."},
+    {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+          L"subscription, and paste it below.",
+     L"Откройте консоль OpenCode в браузере, скопируйте API-ключ рабочей области с вашей подпиской Go и вставьте его "
+     L"ниже."},
+    {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
+          L"shown on the page below.",
+     L"Откройте ссылку для входа в браузере и разрешите доступ на claude.ai, затем вставьте ниже код, показанный на "
+     L"странице."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
+          L"closes once sign-in completes. On another device, choose {button}.",
+     L"Откройте ссылку для входа в браузере на этом ПК и разрешите доступ на claude.ai. Окно закроется, когда вход "
+     L"будет выполнен. На другом устройстве выберите «{button}»."},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
+          L"sign-in completes.",
+     L"Откройте ссылку для входа в браузере на этом ПК и разрешите доступ. Окно закроется, когда вход будет выполнен."},
+    {L"sign-in-window", L"Sign in: {label} ({provider})", L"Вход: {label} ({provider})"},
+    {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
+          L"paste the code its page shows.",
+     L"Этот код относится к другой ссылке для входа. Откройте ссылку этого окна, разрешите доступ и вставьте код, "
+     L"показанный на её странице."},
     {L"taskbar-action", L"Exit visual test", L"Выйти из визуального теста"},
     {L"taskbar-action", L"Hide", L"Скрыть"},
     {L"taskbar-action", L"Open dashboard", L"Открыть панель управления"},
@@ -2007,6 +2945,59 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"设置窗口、使用历史窗口和任务栏。“自动”跟随 Windows 显示语言。仅适用于当前 Windows 用户。"},
     {L"", L"Threshold notifications", L"阈值通知"},
     {L"account-error", L"Antigravity not running", L"Antigravity 未运行"},
+    {L"account-error", L"Antigravity quota unavailable", L"Antigravity 配额不可用"},
+    {L"account-error", L"HTTP {status}", L"HTTP {status}"},
+    {L"account-error", L"HTTP {status} from language server", L"语言服务器返回 HTTP {status}"},
+    {L"account-error", L"could not save refreshed token", L"无法保存刷新后的令牌"},
+    {L"account-error", L"failed to parse quota summary JSON", L"无法解析配额摘要 JSON"},
+    {L"account-error", L"failed to parse user status JSON", L"无法解析用户状态 JSON"},
+    {L"account-error", L"fetch thread failed", L"获取线程失败"},
+    {L"account-error", L"groups is not an array", L"groups 不是数组"},
+    {L"account-error", L"internal error", L"内部错误"},
+    {L"account-error", L"invalid token response", L"令牌响应无效"},
+    {L"account-error", L"network error", L"网络错误"},
+    {L"account-error", L"network error (language server)", L"网络错误（语言服务器）"},
+    {L"account-error", L"no Copilot access on this GitHub account", L"此 GitHub 账户没有 Copilot 访问权限"},
+    {L"account-error", L"no OpenCode Go subscription on this key", L"此密钥没有 OpenCode Go 订阅"},
+    {L"account-error", L"no access token in response", L"响应中没有访问令牌"},
+    {L"account-error", L"no quota groups in response", L"响应中没有配额组"},
+    {L"account-error", L"no usable Antigravity quota buckets in response", L"响应中没有可用的 Antigravity 配额桶"},
+    {L"account-error", L"no usable Antigravity quota in response", L"响应中没有可用的 Antigravity 配额"},
+    {L"account-error", L"no userStatus object", L"没有 userStatus 对象"},
+    {L"account-error", L"not signed in - click to sign in", L"未登录 - 单击以登录"},
+    {L"account-error", L"rate limited by API", L"受 API 速率限制"},
+    {L"account-error", L"session expired - click to sign in", L"会话已过期 - 单击以登录"},
+    {L"account-error", L"token refresh failed", L"令牌刷新失败"},
+    {L"account-error", L"token refresh failed: {reason}", L"令牌刷新失败：{reason}"},
+    {L"account-error", L"unauthorized - click to sign in", L"未授权 - 单击以登录"},
+    {L"account-error", L"unexpected response", L"意外的响应"},
+    {L"account-error", L"unexpected response format", L"意外的响应格式"},
+    {L"account-error", L"unexpected response format ({shape})", L"意外的响应格式（{shape}）"},
+    {L"account-error", L"unexpected token response", L"意外的令牌响应"},
+    {L"account-error-alone", L"Could not save refreshed token", L"无法保存刷新后的令牌"},
+    {L"account-error-alone", L"Failed to parse quota summary JSON", L"无法解析配额摘要 JSON"},
+    {L"account-error-alone", L"Failed to parse user status JSON", L"无法解析用户状态 JSON"},
+    {L"account-error-alone", L"Fetch thread failed", L"获取线程失败"},
+    {L"account-error-alone", L"Groups is not an array", L"groups 不是数组"},
+    {L"account-error-alone", L"Invalid token response", L"令牌响应无效"},
+    {L"account-error-alone", L"Network error", L"网络错误"},
+    {L"account-error-alone", L"Network error (language server)", L"网络错误（语言服务器）"},
+    {L"account-error-alone", L"No Copilot access on this GitHub account", L"此 GitHub 账户没有 Copilot 访问权限"},
+    {L"account-error-alone", L"No OpenCode Go subscription on this key", L"此密钥没有 OpenCode Go 订阅"},
+    {L"account-error-alone", L"No quota groups in response", L"响应中没有配额组"},
+    {L"account-error-alone", L"No usable Antigravity quota buckets in response", L"响应中没有可用的 Antigravity 配额桶"},
+    {L"account-error-alone", L"No usable Antigravity quota in response", L"响应中没有可用的 Antigravity 配额"},
+    {L"account-error-alone", L"No userStatus object", L"没有 userStatus 对象"},
+    {L"account-error-alone", L"Not signed in - click to sign in", L"未登录 - 单击以登录"},
+    {L"account-error-alone", L"Rate limited by API", L"受 API 速率限制"},
+    {L"account-error-alone", L"Session expired - click to sign in", L"会话已过期 - 单击以登录"},
+    {L"account-error-alone", L"Token refresh failed", L"令牌刷新失败"},
+    {L"account-error-alone", L"Token refresh failed: {reason}", L"令牌刷新失败：{reason}"},
+    {L"account-error-alone", L"Unauthorized - click to sign in", L"未授权 - 单击以登录"},
+    {L"account-error-alone", L"Unexpected response", L"意外的响应"},
+    {L"account-error-alone", L"Unexpected response format", L"意外的响应格式"},
+    {L"account-error-alone", L"Unexpected response format ({shape})", L"意外的响应格式（{shape}）"},
+    {L"account-error-alone", L"Unexpected token response", L"意外的令牌响应"},
     {L"account-state", L"Local app not running", L"本地应用未运行"},
     {L"button", L"Add account", L"添加账户"},
     {L"button", L"Reset", L"重置"},
@@ -2069,8 +3060,12 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"flyout-legend", L"projection", L"预测"},
     {L"flyout-note", L"Error: {error}", L"错误：{error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"错误：{error} - {duration}后重试"},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"此计划不包含 AI 积分额度。"},
+    {L"flyout-note", L"No premium request allowance on this plan.", L"此计划不包含高级请求额度。"},
     {L"flyout-note", L"No quotas reported.", L"未报告任何配额。"},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击进度条以登录。"},
+    {L"flyout-note", L"extra usage: unlimited", L"额外用量：无限制"},
+    {L"flyout-note", L"rate limits: none reported", L"速率限制：未报告"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, other{可用免费重置 # 次}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
@@ -2082,15 +3077,45 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-pill", L"Recording · {days, plural, one{# day} other{# days}}", L"记录中 · {days, plural, other{# 天}}"},
     {L"history-pill", L"Waiting", L"等待中"},
     {L"history-status", L"Updated {time}", L"更新于 {time}"},
+    {L"history-storage", L"An account in Settings uses this history again.", L"设置中的某个账户再次使用了此历史记录。"},
+    {L"history-storage", L"Cannot create the local history directory.", L"无法创建本地历史记录文件夹。"},
+    {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
+     L"无法读取历史记录。请检查存储权限，然后重新打开此模组。"},
+    {L"history-storage", L"Cannot read the history file size.", L"无法读取历史记录文件大小。"},
+    {L"history-storage", L"Cannot write history. Check disk space and storage permissions.", L"无法写入历史记录。请检查磁盘空间和存储权限。"},
+    {L"history-storage", L"Damaged history record. Export readable samples or clear history.",
+     L"历史记录条目已损坏。请导出可读取的样本或清除历史记录。"},
+    {L"history-storage", L"History is not being saved to disk. Check disk space and permissions.",
+     L"历史记录未保存到磁盘。请检查磁盘空间和权限。"},
+    {L"history-storage", L"History is too large to load. Clear history to start again.", L"历史记录过大，无法加载。请清除历史记录以重新开始。"},
+    {L"history-storage", L"History read failed. Loaded samples remain available for export.", L"读取历史记录失败。已加载的样本仍可导出。"},
+    {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
+     L"历史记录存储正被另一个资源管理器会话使用，或无法访问。"},
+    {L"history-storage", L"History storage is unavailable.", L"历史记录存储不可用。"},
+    {L"history-storage", L"History write failed; the previous journal was kept.", L"写入历史记录失败；已保留之前的日志。"},
+    {L"history-storage", L"Unsupported or damaged history file. Clear history to start again.",
+     L"历史记录文件不受支持或已损坏。请清除历史记录以重新开始。"},
     {L"language-choice", L"Automatic ({language})", L"自动（{language}）"},
     {L"list-end", L"{a} and {b}", L"{a}和{b}"},
     {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
     {L"list-pair", L"{a} and {b}", L"{a}和{b}"},
     {L"list-start", L"{a}, {b}", L"{a}、{b}"},
+    {L"notification-body", L"{provider} - resets {when}", L"{provider} - {when}重置"},
     {L"notification-level", L"Off", L"关闭"},
     {L"notification-level", L"Orange ({threshold}%)", L"橙色（{threshold}%）"},
     {L"notification-level", L"Red ({threshold}%)", L"红色（{threshold}%）"},
     {L"notification-level", L"Yellow ({threshold}%)", L"黄色（{threshold}%）"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 小时：已用 {percent}%"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"AI 积分：已用 {percent}%"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"聊天请求：已用 {percent}%"},
+    {L"notification-title", L"credits usage at {percent}%", L"积分：已用 {percent}%"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"每月额外：已用 {percent}%"},
+    {L"notification-title", L"monthly usage at {percent}%", L"每月：已用 {percent}%"},
+    {L"notification-title", L"premium requests usage at {percent}%", L"高级请求：已用 {percent}%"},
+    {L"notification-title", L"weekly usage at {percent}%", L"每周：已用 {percent}%"},
+    {L"notification-title", L"{name} current limit usage at {percent}%", L"{name} 当前限额：已用 {percent}%"},
+    {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} 每周：已用 {percent}%"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} 小时：已用 {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\n打开 {provider} 状态页面"},
     {L"outage-level", L"degraded performance", L"性能下降"},
     {L"outage-level", L"major outage", L"重大故障"},
@@ -2101,6 +3126,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"outage-line", L"{component}: {level}", L"{component}：{level}"},
     {L"outage-line", L"{status} · since {time}", L"{status} · 自 {time} 起"},
     {L"outage-line", L"{status} · {incident}", L"{status} · {incident}"},
+    {L"outage-reason", L"Availability issues", L"可用性问题"},
+    {L"outage-reason", L"Elevated errors", L"错误增多"},
+    {L"outage-reason", L"Slow responses", L"响应缓慢"},
+    {L"outage-reason", L"Upstream provider issues", L"上游提供商问题"},
+    {L"outage-reason", L"{reason}: {models}", L"{reason}：{models}"},
     {L"plan", L"Visual test", L"视觉测试"},
     {L"poll-interval", L"Custom", L"自定义"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分钟}}"},
@@ -2144,6 +3174,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"reset-when", L"in {duration}", L"{duration}后"},
     {L"reset-when", L"in {duration} ({time})", L"{duration}后 ({time})"},
     {L"reset-when", L"now", L"现在"},
+    {L"response-shape", L"JSON object with no keys", L"没有键的 JSON 对象"},
+    {L"response-shape", L"empty body", L"正文为空"},
+    {L"response-shape", L"keys: {keys}", L"键：{keys}"},
+    {L"response-shape", L"non-object or invalid JSON body", L"非对象或无效的 JSON 正文"},
     {L"settings-page", L"About", L"关于"},
     {L"settings-page", L"Accounts", L"账户"},
     {L"settings-page", L"Behavior", L"行为"},
@@ -2155,6 +3189,44 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"settings-section", L"Language", L"语言"},
     {L"settings-section", L"Taskbar", L"任务栏"},
     {L"settings-section", L"Updates", L"更新"},
+    {L"sign-in-button", L"Cancel", L"取消"},
+    {L"sign-in-button", L"Close", L"关闭"},
+    {L"sign-in-button", L"Code copied", L"已复制代码"},
+    {L"sign-in-button", L"Copied", L"已复制"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"复制代码并打开 GitHub"},
+    {L"sign-in-button", L"Copy failed", L"复制失败"},
+    {L"sign-in-button", L"Copy link", L"复制链接"},
+    {L"sign-in-button", L"Open in browser", L"在浏览器中打开"},
+    {L"sign-in-button", L"Sign in", L"登录"},
+    {L"sign-in-button", L"Use a code", L"使用代码"},
+    {L"sign-in-page", L"Sign-in failed.", L"登录失败。"},
+    {L"sign-in-page", L"Signed in.", L"已登录。"},
+    {L"sign-in-page", L"You can close this tab and return to the taskbar.", L"你可以关闭此标签页并返回任务栏。"},
+    {L"sign-in-page", L"You can close this tab and try again from the taskbar.", L"你可以关闭此标签页，然后从任务栏重试。"},
+    {L"sign-in-status", L"Sign-in failed. See the Windhawk log for details.", L"登录失败。有关详细信息，请参阅 Windhawk 日志。"},
+    {L"sign-in-status", L"Sign-in was denied on GitHub.", L"已在 GitHub 上拒绝登录。"},
+    {L"sign-in-status", L"The code expired. Close this window and sign in again.", L"代码已过期。请关闭此窗口并重新登录。"},
+    {L"sign-in-status", L"Waiting for approval on GitHub…", L"正在等待在 GitHub 上批准…"},
+    {L"sign-in-status", L"{reason}, retrying…", L"{reason}，正在重试…"},
+    {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+          L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
+     L"复制代码并通过下方按钮打开 GitHub，或在任意设备上于 github.com/login/device 输入代码，需登录拥有 Copilot 的 GitHub 账户。登录完成后此窗口将关闭。"},
+    {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
+          L"subscription, and paste it below.",
+     L"在浏览器中打开 OpenCode 控制台，复制拥有 Go 订阅的工作区的 API 密钥，然后粘贴到下方。"},
+    {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
+          L"shown on the page below.",
+     L"在浏览器中打开登录链接并在 claude.ai 上批准访问，然后将页面上显示的代码粘贴到下方。"},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
+          L"closes once sign-in completes. On another device, choose {button}.",
+     L"在此电脑的浏览器中打开登录链接，并在 claude.ai 上批准访问。登录完成后此窗口将关闭。若使用其他设备，请选择“{button}”。"},
+    {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
+          L"sign-in completes.",
+     L"在此电脑的浏览器中打开登录链接并批准访问。登录完成后此窗口将关闭。"},
+    {L"sign-in-window", L"Sign in: {label} ({provider})", L"登录：{label}（{provider}）"},
+    {L"sign-in-window", L"That code belongs to another sign-in link. Open this window's link, approve access, then "
+          L"paste the code its page shows.",
+     L"该代码属于另一个登录链接。请打开此窗口的链接，批准访问，然后粘贴其页面显示的代码。"},
     {L"taskbar-action", L"Exit visual test", L"退出视觉测试"},
     {L"taskbar-action", L"Hide", L"隐藏"},
     {L"taskbar-action", L"Open dashboard", L"打开仪表板"},
@@ -2874,6 +3946,8 @@ struct NamedQuota {
     // The window whose length the flyout adds to the name (ExtraQuotaName): the one it was first
     // listed with, kept when a later reading replaces `usage`.
     ULONGLONG nameWindowMs = 0;
+    // A pool without a reported window, named "{name} current limit" (Antigravity's Argon).
+    bool currentLimit = false;
 };
 static constexpr size_t kMaxExtraQuotas = 8;
 
@@ -2887,19 +3961,72 @@ enum class CopilotUnit {
 
 // A poll's error as the mod authored it: a code, with each code's arguments in fields of their
 // own, formatted in the reader's language at presentation (AccountErrorText); logs and their
-// dedupe use its English text. Provider-supplied text rides in `detail` and is shown as is.
+// dedupe use its English text. Provider-supplied text rides in `detail` and is shown as is. The
+// token endpoints' failures (auth/oauth.h) are AccountErrors too: a failed refresh names one as
+// its cause.
 enum class AccountErrorCode : uint8_t {
     None,
-    Message,  // An English message without a code of its own: `detail`, shown and logged as is.
+    Message,  // Provider-supplied text without a code of its own: `detail`, shown and logged as is
+    // Sign-in and tokens
+    NotSignedIn,
+    SessionExpired,
+    Unauthorized,
+    TokenRefreshFailed,  // `cause`, when known: a token endpoint's failure
+    TokenSaveFailed,
+    // Usage requests
+    Network,
+    Http,  // `status`
+    RateLimited,
+    NoCopilotAccess,
+    NoOpenCodeSubscription,
+    UnexpectedResponse,  // `cause`, when known: the body's shape
+    FetchThreadFailed,
+    // Antigravity's local language server
     AntigravityNotRunning,
+    AntigravityUnavailable,
+    LanguageServerNetwork,
+    LanguageServerHttp,  // `status`
+    LanguageServerResponse,
+    NoQuotaGroups,
+    QuotaGroupsNotArray,
+    NoUsableQuotaBuckets,
+    QuotaSummaryInvalid,
+    NoUserStatus,
+    UserStatusInvalid,
+    NoUsableQuota,
+    // Token endpoint failures, besides Network, Http and Message
+    NoAccessToken,
+    InvalidTokenResponse,
+    UnexpectedTokenResponse,
+    InternalError,
+    // Response body shapes (core/json.h)
+    EmptyBody,
+    NoBodyKeys,
+    BodyKeys,  // `detail`: its first keys
+    InvalidJsonBody,
 };
 
 struct AccountError {
     AccountErrorCode code = AccountErrorCode::None;
     std::wstring detail;
+    int status = 0;  // HTTP status
+    // What caused it, for a code whose text names a cause: a code of its own, which reads `detail`
+    // and `status` as its own.
+    AccountErrorCode cause = AccountErrorCode::None;
 
     explicit operator bool() const { return code != AccountErrorCode::None; }
     bool operator==(const AccountError&) const = default;
+};
+
+// A note the details flyout shows about what a provider reported: Anthropic's extra usage without
+// a limit, OpenAI's credits without rate-limit windows, a GitHub Copilot plan without an
+// allowance in its unit.
+enum class AccountNote : uint8_t {
+    None,
+    ExtraUsageUnlimited,
+    NoRateLimits,
+    NoPremiumRequestAllowance,
+    NoAiCreditAllowance,
 };
 
 struct AccountData {
@@ -2911,7 +4038,7 @@ struct AccountData {
     WindowUsage antigravityThirdPartyWeek;
     std::vector<NamedQuota> extraQuotas;  // At most kMaxExtraQuotas.
     std::wstring plan;
-    std::wstring extraLines;
+    AccountNote note = AccountNote::None;
     // Free rate-limit resets (Anthropic, OpenAI): -1 when not reported; the next one's expiry, 0
     // when unknown or none.
     int freeResets = -1;
@@ -2952,28 +4079,43 @@ enum class OutageLevel : uint8_t {
     Major,
 };
 
+// A status page's reason for an outage that the mod names in the reader's language (OpenCode's
+// reason codes); None: the page's own title, if any, names it.
+enum class OutageReason : uint8_t {
+    None,
+    Latency,
+    Errors,
+    Upstream,
+    Availability,
+};
+
 // What a provider's accounts show of its status page (fetch/status-feeds.h): the worst watched
 // component's name and level, how many other watched components aren't operational, and the
-// incident or reason behind it with its start (Unix ms, 0 when unknown) when the page says.
+// incident or reason behind it with its start (Unix ms, 0 when unknown) when the page says: the
+// page's title as written, or a reason the mod names, and the models it reports affected (their
+// IDs, as listed).
 struct ProviderOutage {
     OutageLevel level = OutageLevel::None;
     std::wstring component;
     int others = 0;
     std::wstring title;
     ULONGLONG sinceMs = 0;
+    OutageReason reason = OutageReason::None;
+    std::wstring models;
 
     bool operator==(const ProviderOutage&) const = default;
 };
 
-// Adds a reported quota to the account's extra quotas. One whose name reads as a listed one's in
-// English, its window's length included ("Sonnet weekly", "Spark 5-hour"), replaces that one's
-// reading when more used; past kMaxExtraQuotas quotas are dropped.
-static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage) {
+// Adds a reported quota to the account's extra quotas (`currentLimit`: NamedQuota's). One whose
+// name reads as a listed one's in English, its window's length included ("Sonnet weekly", "Spark
+// 5-hour"), replaces that one's reading when more used; past kMaxExtraQuotas quotas are dropped.
+static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage, bool currentLimit = false) {
     if (name.empty() || !std::isfinite(usage.pct) || usage.pct < 0) return;
     name.resize(std::min<size_t>(name.size(), 64));
     // ExtraQuotaName's English, which the model can't format: the merge key.
-    auto english = [](const std::wstring& name, ULONGLONG durationMs) {
+    auto english = [](const std::wstring& name, ULONGLONG durationMs, bool currentLimit) {
         constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+        if (currentLimit) return name + L" current limit";  // i18n-en
         if (durationMs == kWeeklyWindowMs) return name + L" weekly";  // i18n-en
         if (durationMs && durationMs % kDayMs == 0) {
             return name + L" " + std::to_wstring(durationMs / kDayMs) + L"-day";  // i18n-en
@@ -2983,14 +4125,14 @@ static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& 
         }
         return name;
     };
-    std::wstring key = english(name, usage.windowDurationMs);
+    std::wstring key = english(name, usage.windowDurationMs, currentLimit);
     for (NamedQuota& listed : d->extraQuotas) {
-        if (english(listed.name, listed.nameWindowMs) != key) continue;
+        if (english(listed.name, listed.nameWindowMs, listed.currentLimit) != key) continue;
         if (usage.pct > listed.usage.pct) listed.usage = usage;
         return;
     }
     if (d->extraQuotas.size() < kMaxExtraQuotas) {
-        d->extraQuotas.push_back({std::move(name), usage, usage.windowDurationMs});
+        d->extraQuotas.push_back({std::move(name), usage, usage.windowDurationMs, currentLimit});
     }
 }
 
@@ -3010,15 +4152,126 @@ static uint64_t AccountIdentityHash(const AccountConfig& a) {
 // src/core/account-error.h
 // Account errors' text (AccountError, core/model.h) in a language: presentation passes the
 // reader's locale; logs and their dedupe pass English (the default locale), so a language switch
-// never reads as a new error. Pure.
+// never reads as a new error. Inline continues running text (the details flyout's "Error: ..."
+// line, logs); Alone stands on its own, as a sentence begins (the Accounts page's state, the
+// sign-in window's status line). A cause always reads inline, inside its error's text: {reason}
+// and {shape} are complete phrases of their own, set apart (a colon, parentheses), never inflected
+// by the text around them. Pure.
 
-static std::wstring AccountErrorText(const I18nLocale& locale, const AccountError& error) {
+enum class AccountErrorForm : uint8_t { Inline, Alone };
+
+static std::wstring AccountErrorText(const I18nLocale& locale, const AccountError& error,
+                                     AccountErrorForm form = AccountErrorForm::Inline) {
+    using enum AccountErrorCode;
+    const bool alone = form == AccountErrorForm::Alone;
+    auto text = [&](I18nKey inlineKey, I18nKey aloneKey) { return I18nText(locale, alone ? aloneKey : inlineKey); };
+    std::wstring cause =
+        error.cause == None ? std::wstring() : AccountErrorText(locale, {error.cause, error.detail, error.status});
     switch (error.code) {
-        case AccountErrorCode::AntigravityNotRunning:
-            return I18nText(locale, TrCtx(L"account-error", L"Antigravity not running"));
-        default:
+        case None:
+            return {};
+        case Message:
             return error.detail;
+        case NotSignedIn:
+            return text(TrCtx(L"account-error", L"not signed in - click to sign in"),
+                        TrCtx(L"account-error-alone", L"Not signed in - click to sign in"));
+        case SessionExpired:
+            return text(TrCtx(L"account-error", L"session expired - click to sign in"),
+                        TrCtx(L"account-error-alone", L"Session expired - click to sign in"));
+        case Unauthorized:
+            return text(TrCtx(L"account-error", L"unauthorized - click to sign in"),
+                        TrCtx(L"account-error-alone", L"Unauthorized - click to sign in"));
+        case TokenRefreshFailed:
+            if (cause.empty()) {
+                return text(TrCtx(L"account-error", L"token refresh failed"),
+                            TrCtx(L"account-error-alone", L"Token refresh failed"));
+            }
+            return I18nText(locale, alone ? TrCtx(L"account-error-alone", L"Token refresh failed: {reason}") :
+                                            TrCtx(L"account-error", L"token refresh failed: {reason}"),
+                            {{L"reason", cause}});
+        case TokenSaveFailed:
+            return text(TrCtx(L"account-error", L"could not save refreshed token"),
+                        TrCtx(L"account-error-alone", L"Could not save refreshed token"));
+        case Network:
+            return text(TrCtx(L"account-error", L"network error"), TrCtx(L"account-error-alone", L"Network error"));
+        case Http:
+            return I18nText(locale, TrCtx(L"account-error", L"HTTP {status}"), {{L"status", error.status}});
+        case RateLimited:
+            return text(TrCtx(L"account-error", L"rate limited by API"),
+                        TrCtx(L"account-error-alone", L"Rate limited by API"));
+        case NoCopilotAccess:
+            return text(TrCtx(L"account-error", L"no Copilot access on this GitHub account"),
+                        TrCtx(L"account-error-alone", L"No Copilot access on this GitHub account"));
+        case NoOpenCodeSubscription:
+            return text(TrCtx(L"account-error", L"no OpenCode Go subscription on this key"),
+                        TrCtx(L"account-error-alone", L"No OpenCode Go subscription on this key"));
+        case UnexpectedResponse:
+            if (cause.empty()) {
+                return text(TrCtx(L"account-error", L"unexpected response format"),
+                            TrCtx(L"account-error-alone", L"Unexpected response format"));
+            }
+            return I18nText(locale, alone ? TrCtx(L"account-error-alone", L"Unexpected response format ({shape})") :
+                                            TrCtx(L"account-error", L"unexpected response format ({shape})"),
+                            {{L"shape", cause}});
+        case FetchThreadFailed:
+            return text(TrCtx(L"account-error", L"fetch thread failed"),
+                        TrCtx(L"account-error-alone", L"Fetch thread failed"));
+        case AntigravityNotRunning:
+            return I18nText(locale, TrCtx(L"account-error", L"Antigravity not running"));
+        case AntigravityUnavailable:
+            return I18nText(locale, TrCtx(L"account-error", L"Antigravity quota unavailable"));
+        case LanguageServerNetwork:
+            return text(TrCtx(L"account-error", L"network error (language server)"),
+                        TrCtx(L"account-error-alone", L"Network error (language server)"));
+        case LanguageServerHttp:
+            return I18nText(locale, TrCtx(L"account-error", L"HTTP {status} from language server"),
+                            {{L"status", error.status}});
+        case LanguageServerResponse:
+            return text(TrCtx(L"account-error", L"unexpected response"),
+                        TrCtx(L"account-error-alone", L"Unexpected response"));
+        case NoQuotaGroups:
+            return text(TrCtx(L"account-error", L"no quota groups in response"),
+                        TrCtx(L"account-error-alone", L"No quota groups in response"));
+        case QuotaGroupsNotArray:
+            return text(TrCtx(L"account-error", L"groups is not an array"),
+                        TrCtx(L"account-error-alone", L"Groups is not an array"));
+        case NoUsableQuotaBuckets:
+            return text(TrCtx(L"account-error", L"no usable Antigravity quota buckets in response"),
+                        TrCtx(L"account-error-alone", L"No usable Antigravity quota buckets in response"));
+        case QuotaSummaryInvalid:
+            return text(TrCtx(L"account-error", L"failed to parse quota summary JSON"),
+                        TrCtx(L"account-error-alone", L"Failed to parse quota summary JSON"));
+        case NoUserStatus:
+            return text(TrCtx(L"account-error", L"no userStatus object"),
+                        TrCtx(L"account-error-alone", L"No userStatus object"));
+        case UserStatusInvalid:
+            return text(TrCtx(L"account-error", L"failed to parse user status JSON"),
+                        TrCtx(L"account-error-alone", L"Failed to parse user status JSON"));
+        case NoUsableQuota:
+            return text(TrCtx(L"account-error", L"no usable Antigravity quota in response"),
+                        TrCtx(L"account-error-alone", L"No usable Antigravity quota in response"));
+        // Token endpoint failures: only causes, logs and the sign-in window's retries show them.
+        case NoAccessToken:
+            return I18nText(locale, TrCtx(L"account-error", L"no access token in response"));
+        case InvalidTokenResponse:
+            return text(TrCtx(L"account-error", L"invalid token response"),
+                        TrCtx(L"account-error-alone", L"Invalid token response"));
+        case UnexpectedTokenResponse:
+            return text(TrCtx(L"account-error", L"unexpected token response"),
+                        TrCtx(L"account-error-alone", L"Unexpected token response"));
+        case InternalError:
+            return I18nText(locale, TrCtx(L"account-error", L"internal error"));
+        // Response body shapes: only causes.
+        case EmptyBody:
+            return I18nText(locale, TrCtx(L"response-shape", L"empty body"));
+        case NoBodyKeys:
+            return I18nText(locale, TrCtx(L"response-shape", L"JSON object with no keys"));
+        case BodyKeys:
+            return I18nText(locale, TrCtx(L"response-shape", L"keys: {keys}"), {{L"keys", error.detail}});
+        case InvalidJsonBody:
+            return I18nText(locale, TrCtx(L"response-shape", L"non-object or invalid JSON body"));
     }
+    return {};
 }
 
 // src/history/types.h
@@ -3066,9 +4319,27 @@ struct HistoryJournalStamp {
     uint64_t epoch = 0, revision = 0, appended = 0;
     bool operator==(const HistoryJournalStamp&) const = default;
 };
+// Why the journal can't be read or saved (its status), or why an operation on it didn't run; its
+// text, in the reader's language: HistoryJournalErrorText (history/journal-error.h).
+enum class HistoryJournalError : uint8_t {
+    None,
+    Unavailable,
+    CannotCreateDirectory,
+    InUse,
+    CannotRead,
+    CannotReadSize,
+    Unsupported,
+    ReadFailed,
+    DamagedRecord,
+    TooLarge,
+    CannotWrite,
+    WriteFailed,
+    NotSaved,
+    AccountConfigured,  // A deletion's refusal: an account in the settings holds the history ID
+};
 struct HistorySnapshot {
     std::vector<HistorySample> samples;
-    std::wstring status;  // The journal's error status; empty while healthy
+    HistoryJournalError status = HistoryJournalError::None;  // The journal's error status; None while healthy
     bool capped = false;  // The storage cap pruned the oldest samples
     HistoryJournalStamp stamp;
 };
@@ -3076,10 +4347,57 @@ struct HistorySnapshot {
 // snapshot (every sample from the asked start on, possibly none) or nullopt: no replacement.
 struct HistoryPeek {
     HistoryJournalStamp stamp;
-    std::wstring status;
+    HistoryJournalError status = HistoryJournalError::None;
     bool capped = false;
     std::optional<std::vector<HistorySample>> samples;
 };
+
+// src/history/journal-error.h
+// The history journal's errors' text (HistoryJournalError, history/types.h) in the reader's
+// language. Pure.
+
+static std::wstring HistoryJournalErrorText(const I18nLocale& locale, HistoryJournalError error) {
+    using enum HistoryJournalError;
+    switch (error) {
+        case None:
+            return {};
+        case Unavailable:
+            return I18nText(locale, TrCtx(L"history-storage", L"History storage is unavailable."));
+        case CannotCreateDirectory:
+            return I18nText(locale, TrCtx(L"history-storage", L"Cannot create the local history directory."));
+        case InUse:
+            return I18nText(locale, TrCtx(L"history-storage", L"History storage is in use by another Explorer session, "
+                                                              L"or is inaccessible."));
+        case CannotRead:
+            return I18nText(locale, TrCtx(L"history-storage",
+                                          L"Cannot read history. Check storage permissions, then reopen the mod."));
+        case CannotReadSize:
+            return I18nText(locale, TrCtx(L"history-storage", L"Cannot read the history file size."));
+        case Unsupported:
+            return I18nText(locale, TrCtx(L"history-storage",
+                                          L"Unsupported or damaged history file. Clear history to start again."));
+        case ReadFailed:
+            return I18nText(locale, TrCtx(L"history-storage",
+                                          L"History read failed. Loaded samples remain available for export."));
+        case DamagedRecord:
+            return I18nText(locale, TrCtx(L"history-storage",
+                                          L"Damaged history record. Export readable samples or clear history."));
+        case TooLarge:
+            return I18nText(locale, TrCtx(L"history-storage",
+                                          L"History is too large to load. Clear history to start again."));
+        case CannotWrite:
+            return I18nText(locale, TrCtx(L"history-storage",
+                                          L"Cannot write history. Check disk space and storage permissions."));
+        case WriteFailed:
+            return I18nText(locale, TrCtx(L"history-storage", L"History write failed; the previous journal was kept."));
+        case NotSaved:
+            return I18nText(locale, TrCtx(L"history-storage",
+                                          L"History is not being saved to disk. Check disk space and permissions."));
+        case AccountConfigured:
+            return I18nText(locale, TrCtx(L"history-storage", L"An account in Settings uses this history again."));
+    }
+    return {};
+}
 
 // src/history/state.h
 // Journal coordination state shared by the history journal, fetch and settings.
@@ -3984,7 +5302,7 @@ static std::wstring CopilotUnitName(const I18nLocale& locale, CopilotUnit unit) 
 }
 
 // src/core/json.h
-// Null-tolerant JSON accessors and error-body summaries.
+// Null-tolerant JSON accessors and the error of a response body of an unexpected shape.
 
 static JsonObject GetObj(JsonObject const& o, PCWSTR name) {
     if (!o || !o.HasKey(name)) return nullptr;
@@ -4012,9 +5330,11 @@ static bool GetBool(JsonObject const& o, PCWSTR name) {
     return v.ValueType() == JsonValueType::Boolean && v.GetBoolean();
 }
 
-// A response body's shape, for an error's detail.
-static std::wstring DescribeJsonBody(const std::string& body) {
-    if (body.empty()) return L"empty body";  // i18n-en
+// An unexpected response's error, caused by its body's shape: empty, a JSON object with no keys or
+// with its first keys (as listed, then "..." past eight), or not a JSON object.
+static AccountError UnexpectedResponseFormat(const std::string& body) {
+    using enum AccountErrorCode;
+    if (body.empty()) return {.code = UnexpectedResponse, .cause = EmptyBody};
 
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
@@ -4030,9 +5350,9 @@ static std::wstring DescribeJsonBody(const std::string& body) {
             keys += std::wstring(key.c_str(), key.size());
             count++;
         }
-        return keys.empty() ? L"JSON object with no keys" : L"keys: " + keys;  // i18n-en
+        return {.code = UnexpectedResponse, .detail = keys, .cause = keys.empty() ? NoBodyKeys : BodyKeys};
     } catch (...) {
-        return L"non-object or invalid JSON body";  // i18n-en
+        return {.code = UnexpectedResponse, .cause = InvalidJsonBody};
     }
 }
 
@@ -4547,12 +5867,12 @@ static constexpr PCWSTR kAnthropicTokenHost = L"console.anthropic.com";
 static constexpr PCWSTR kAnthropicTokenPath = L"/v1/oauth/token";
 // The page that shows the code#state to paste; on this PC a localhost redirect takes its place.
 static constexpr PCWSTR kAnthropicRedirect = L"https://console.anthropic.com/oauth/code/callback";
-static constexpr PCWSTR kAnthropicScope = L"org:create_api_key user:profile user:inference";
+static constexpr PCWSTR kAnthropicScope = L"org:create_api_key user:profile user:inference";  // i18n-en
 static constexpr PCWSTR kOpenAiClientId = L"app_EMoamEEZ73f0CkXaXp7hrann";
 static constexpr PCWSTR kOpenAiTokenHost = L"auth.openai.com";
 static constexpr PCWSTR kOpenAiTokenPath = L"/oauth/token";
 static constexpr PCWSTR kOpenAiScope =
-    L"openid profile email offline_access api.connectors.read api.connectors.invoke";
+    L"openid profile email offline_access api.connectors.read api.connectors.invoke";  // i18n-en
 // GitHub's device flow; sign-in and refresh share the token endpoint.
 static constexpr PCWSTR kCopilotClientId = L"Iv1.b507a08c87ecfe98";
 static constexpr PCWSTR kCopilotScope = L"read:user";
@@ -4647,17 +5967,24 @@ static std::wstring ParseOAuthError(const std::string& body) {
     }
 }
 
+// An error answer's failure: the provider's OAuth error as written, else its HTTP status.
+static AccountError OAuthFailure(const HttpResult& r) {
+    std::wstring detail = ParseOAuthError(r.body);
+    return detail.empty() ? AccountError{.code = AccountErrorCode::Http, .status = r.status} :
+                            AccountError{AccountErrorCode::Message, std::move(detail)};
+}
+
 // Fills *tok from an OAuth token response (access/refresh/id_token), extracting the OpenAI
 // ChatGPT-Account-Id and access-token expiry from JWT claims when present. Used for both the
 // authorization-code exchange and refresh.
 static bool ParseTokenResponse(const std::string& body, bool anthropic, StoredToken* tok,
-                               std::wstring* err) {
+                               AccountError* err) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         std::wstring access = GetStr(root, L"access_token");
         std::wstring refresh = GetStr(root, L"refresh_token");
         if (access.empty()) {
-            *err = L"no access token in response";
+            *err = {AccountErrorCode::NoAccessToken};
             return false;
         }
         tok->accessToken = access;
@@ -4685,27 +6012,27 @@ static bool ParseTokenResponse(const std::string& body, bool anthropic, StoredTo
         }
         return true;
     } catch (...) {
-        *err = L"invalid token response";
+        *err = {AccountErrorCode::InvalidTokenResponse};
         return false;
     }
 }
 
+// `err`: why it failed.
 static TokenEndpointResult PostTokenEndpoint(bool anthropic, const std::wstring& contentType,
                                               const std::string& body, StoredToken* tok,
-                                              std::wstring* err, int* retryAfterSec = nullptr) {
+                                              AccountError* err, int* retryAfterSec = nullptr) {
     if (retryAfterSec) *retryAfterSec = 0;
-    std::wstring headers = L"Content-Type: " + contentType + L"\r\nAccept: application/json\r\n";
+    std::wstring headers = L"Content-Type: " + contentType + L"\r\nAccept: application/json\r\n";  // i18n-en
     PCWSTR host = anthropic ? kAnthropicTokenHost : kOpenAiTokenHost;
     PCWSTR path = anthropic ? kAnthropicTokenPath : kOpenAiTokenPath;
     HttpResult r = HttpRequest(L"POST", host, path, kOAuthUserAgent, headers, body);
     if (!r.ok) {
-        *err = L"network error";
+        *err = {AccountErrorCode::Network};
         return TokenEndpointResult::TransientFailure;
     }
     if (r.status < 200 || r.status >= 300) {
         if (retryAfterSec) *retryAfterSec = r.retryAfterSec;
-        std::wstring detail = ParseOAuthError(r.body);
-        *err = detail.empty() ? (L"HTTP " + std::to_wstring(r.status)) : detail;
+        *err = OAuthFailure(r);
         bool rejected = r.status >= 400 && r.status < 500 && r.status != 408 &&
                         r.status != 429;
         return rejected ? TokenEndpointResult::Rejected
@@ -4717,14 +6044,13 @@ static TokenEndpointResult PostTokenEndpoint(bool anthropic, const std::wstring&
 }
 
 // grant_type=refresh_token. Anthropic sends JSON; OpenAI sends JSON too (its auth-code
-// exchange is the form-encoded one). Rotated refresh tokens come back in the response.
+// exchange is the form-encoded one). Rotated refresh tokens come back in the response. `err`: why
+// it failed (none for a rejection without a request).
 static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToken* tok,
-                                        std::wstring* err, int* retryAfterSec) {
+                                        AccountError* err, int* retryAfterSec) {
     if (retryAfterSec) *retryAfterSec = 0;
-    if (tok->refreshToken.empty()) {
-        *err = L"no refresh token";
-        return TokenEndpointResult::Rejected;
-    }
+    *err = {};
+    if (tok->refreshToken.empty()) return TokenEndpointResult::Rejected;
     bool anthropic = provider == L"anthropic";
     std::string body;
     try {
@@ -4736,7 +6062,7 @@ static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToke
                                             winrt::hstring(anthropic ? kAnthropicClientId : kOpenAiClientId)));
         body = WideToUtf8(std::wstring(obj.Stringify().c_str()));
     } catch (...) {
-        *err = L"internal error";
+        *err = {AccountErrorCode::InternalError};
         return TokenEndpointResult::TransientFailure;
     }
     return PostTokenEndpoint(anthropic, L"application/json", body, tok, err, retryAfterSec);
@@ -4784,11 +6110,12 @@ static bool StartLoopback(std::initializer_list<int> ports, SOCKET* outSock, int
     return false;
 }
 
-// Answers one localhost request and closes it. Returns true once the sign-in is decided:
-// `code` receives the URL-decoded authorization code, or `terminalError` the failure. Stray
-// hits (favicon, other paths, etc.) return false so the sign-in keeps waiting.
+// Answers one localhost request with a page in `locale` and closes it. Returns true once the
+// sign-in is decided: `code` receives the URL-decoded authorization code, or `terminalError` the
+// failure (for the log). Stray hits (favicon, other paths, etc.) return false so the sign-in keeps
+// waiting.
 static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRoute,
-                                   const std::string& expectedState, std::string* code,
+                                   const std::string& expectedState, const I18nLocale& locale, std::string* code,
                                    std::wstring* terminalError) {
     auto getParam = [](const std::string& query, const std::string& key) -> std::string {
         std::string pat = key + "=";
@@ -4831,11 +6158,20 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
     bool success = !received.empty() && stateOk;
     bool terminalFailure = stateOk && (received.empty() || !oauthError.empty());
 
-    std::string html = success
-        ? "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:2em'>"
-          "<h3>Signed in.</h3><p>You can close this tab and return to the taskbar.</p></body>"
-        : "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:2em'>"
-          "<h3>Sign-in failed.</h3><p>You can close this tab and try again from the taskbar.</p></body>";
+    auto escaped = [&](I18nKey key) {
+        std::string text;
+        for (char c : WideToUtf8(I18nText(locale, key))) {
+            text += c == '&' ? "&amp;" : c == '<' ? "&lt;" : c == '>' ? "&gt;" : std::string(1, c);
+        }
+        return text;
+    };
+    std::string html =
+        "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:2em'><h3>" +
+        escaped(success ? TrCtx(L"sign-in-page", L"Signed in.") : TrCtx(L"sign-in-page", L"Sign-in failed.")) +
+        "</h3><p>" +
+        escaped(success ? TrCtx(L"sign-in-page", L"You can close this tab and return to the taskbar.") :
+                          TrCtx(L"sign-in-page", L"You can close this tab and try again from the taskbar.")) +
+        "</p></body>";
     std::string resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
                        "Connection: close\r\nContent-Length: " + std::to_string(html.size()) +
                        "\r\n\r\n" + html;
@@ -4849,7 +6185,7 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
     if (terminalFailure) {
         if (!oauthErrorDesc.empty()) *terminalError = Utf8ToWide(oauthErrorDesc);
         else if (!oauthError.empty()) *terminalError = Utf8ToWide(oauthError);
-        else *terminalError = L"missing authorization code";
+        else *terminalError = L"missing authorization code";  // i18n-en: logged
         return true;
     }
     return false;
@@ -4874,6 +6210,9 @@ constexpr UINT kLoginAccept = WM_APP + 1;  // FD_ACCEPT notification for the loo
 
 struct LoginDialogState {
     // Inputs
+    // The window's language: the current one as its sign-in builds it, kept until it closes (its
+    // text, the loopback's page).
+    I18nLocale locale{*g_language.load(std::memory_order_acquire)};
     std::wstring url;  // The authorize link, or the device flow's verification page.
     // Loopback flow when set, answered on `callbackRoute`; device flow with `poll`; otherwise a
     // code is pasted, masked when `secret`.
@@ -4881,8 +6220,9 @@ struct LoginDialogState {
     std::string callbackRoute;
     bool secret = false;
     std::string expectedState;  // OAuth state the callback or a pasted code#state must carry.
-    // A loopback flow's button that closes the window to sign in another way (alternateChosen).
-    PCWSTR alternate = nullptr;
+    // A loopback flow's button that closes the window to sign in another way (alternateChosen);
+    // empty: none.
+    std::wstring alternate;
     // Device flow: the code to enter on the verification page, and the token poll the message
     // loop runs, never the window procedure, once GetTickCount64 reaches nextPollMs. It catches
     // everything itself, may set `status`, which the loop then shows, and returns the wait before
@@ -4926,7 +6266,7 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
         SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(12), sc(buttonsTop), sc(120), sc(30), flags);
         SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
     }
-    if (state.alternate) {
+    if (!state.alternate.empty()) {
         SetWindowPos(GetDlgItem(hWnd, kLoginAlternate), nullptr, sc(264), sc(buttonsTop), sc(82), sc(30), flags);
     }
     if (state.edit) {
@@ -4948,7 +6288,7 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
     } else {
         fontDescription.lfHeight = -MulDiv(9, (int)dpi, 72);
         fontDescription.lfQuality = CLEARTYPE_QUALITY;
-        wcscpy_s(fontDescription.lfFaceName, L"Segoe UI");
+        wcscpy_s(fontDescription.lfFaceName, L"Segoe UI");  // i18n-en
     }
     HFONT font = CreateFontIndirectW(&fontDescription);
     if (font) {
@@ -4964,7 +6304,9 @@ static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
     state.dpi = dpi;
 }
 
-static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+// Its text and the loopback's answer allocate: a failure ends inside it (a window that can't be
+// created, a message ignored), never in Windows' callback frames.
+static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) try {
     auto* st = reinterpret_cast<LoginDialogState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
     switch (msg) {
         case WM_CREATE: {
@@ -4978,32 +6320,38 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 return -1;
             }
             HINSTANCE hInst = GetModuleHandleW(nullptr);
-            auto create = [&](DWORD exStyle, PCWSTR cls, PCWSTR text, DWORD style, int id) {
-                return CreateWindowExW(exStyle, cls, text, WS_CHILD | WS_VISIBLE | style,
+            auto create = [&](DWORD exStyle, PCWSTR cls, const std::wstring& text, DWORD style, int id) {
+                return CreateWindowExW(exStyle, cls, text.c_str(), WS_CHILD | WS_VISIBLE | style,
                                        0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>((INT_PTR)id),
                                        hInst, nullptr);
             };
+            auto button = [&](I18nKey key) { return I18nText(st->locale, key); };
             create(0, L"STATIC", L"", SS_LEFT, kLoginInstructions);
             if (st->poll) {
                 // Read-only but selectable, so the code can also be copied by hand.
-                create(WS_EX_CLIENTEDGE, L"EDIT", st->userCode.c_str(),
+                create(WS_EX_CLIENTEDGE, L"EDIT", st->userCode,
                        WS_TABSTOP | ES_READONLY | ES_CENTER | ES_AUTOHSCROLL, kLoginCode);
                 create(0, L"STATIC", L"", SS_LEFTNOWORDWRAP | SS_ENDELLIPSIS | SS_NOPREFIX, kLoginStatus);
             }
             // The device flow's one button copies the code and opens the verification page.
             if (st->poll) {
-                create(0, L"BUTTON", L"Copy code and open GitHub", WS_TABSTOP | BS_DEFPUSHBUTTON, kLoginCopyLink);
+                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Copy code and open GitHub")),
+                       WS_TABSTOP | BS_DEFPUSHBUTTON, kLoginCopyLink);
             } else {
-                create(0, L"BUTTON", L"Open in browser", WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
-                create(0, L"BUTTON", L"Copy link", WS_TABSTOP | BS_PUSHBUTTON, kLoginCopyLink);
+                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Open in browser")), WS_TABSTOP | BS_PUSHBUTTON,
+                       kLoginOpenLink);
+                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Copy link")), WS_TABSTOP | BS_PUSHBUTTON,
+                       kLoginCopyLink);
             }
-            if (st->alternate) create(0, L"BUTTON", st->alternate, WS_TABSTOP | BS_PUSHBUTTON, kLoginAlternate);
+            if (!st->alternate.empty()) {
+                create(0, L"BUTTON", st->alternate, WS_TABSTOP | BS_PUSHBUTTON, kLoginAlternate);
+            }
             if (st->listener == INVALID_SOCKET && !st->poll) {
                 st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"",
                                   WS_TABSTOP | ES_AUTOHSCROLL | (st->secret ? ES_PASSWORD : 0), kLoginCode);
-                create(0, L"BUTTON", L"Sign in", WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK);
+                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Sign in")), WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK);
             }
-            create(0, L"BUTTON", L"Cancel", WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
+            create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Cancel")), WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
             return 0;
         }
         case WM_COMMAND: {
@@ -5025,7 +6373,9 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                         CloseClipboard();
                     }
                     SetWindowTextW(GetDlgItem(hWnd, kLoginCopyLink),
-                                   !copied ? L"Copy failed" : st->poll ? L"Code copied" : L"Copied");
+                                   I18nText(st->locale, !copied  ? TrCtx(L"sign-in-button", L"Copy failed") :
+                                                        st->poll ? TrCtx(L"sign-in-button", L"Code copied") :
+                                                                   TrCtx(L"sign-in-button", L"Copied")).c_str());
                     if (st->poll) OpenUrl(st->url.c_str());
                     return 0;
                 }
@@ -5050,9 +6400,11 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                         if (hash != std::wstring::npos && last != std::wstring::npos && last > hash &&
                             WideToUtf8(buf.substr(hash + 1, last - hash)) != st->expectedState) {
                             SetWindowTextW(GetDlgItem(hWnd, kLoginInstructions),
-                                           L"That code belongs to another sign-in link. Open this "
-                                           L"window's link, approve access, then paste the code its "
-                                           L"page shows.");
+                                           I18nText(st->locale,
+                                                    TrCtx(L"sign-in-window",
+                                                          L"That code belongs to another sign-in link. Open this "
+                                                          L"window's link, approve access, then paste the code its "
+                                                          L"page shows.")).c_str());
                             SendMessageW(st->edit, EM_SETSEL, 0, -1);
                             SetFocus(st->edit);
                             return 0;
@@ -5078,7 +6430,7 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             WSAAsyncSelect(client, hWnd, 0, 0);
             u_long nonBlocking = 0;
             ioctlsocket(client, FIONBIO, &nonBlocking);
-            if (AnswerLoopbackCallback(client, st->callbackRoute, st->expectedState, &st->callbackCode,
+            if (AnswerLoopbackCallback(client, st->callbackRoute, st->expectedState, st->locale, &st->callbackCode,
                                        &st->callbackError)) {
                 st->ok = !st->callbackCode.empty();
                 DestroyWindow(hWnd);
@@ -5107,11 +6459,19 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             return 0;
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
+} catch (...) {
+    Wh_Log(L"Sign-in window: exception (message 0x%04X)", msg);
+    return msg == WM_CREATE ? -1 : 0;
 }
 
-// Returns true once a code was pasted or the loopback callback delivered one.
-static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instructions,
-                            LoginDialogState& st) {
+// Returns true once a code was pasted or the loopback callback delivered one. Titled by `req`'s
+// account and provider.
+static bool ShowLoginDialog(const LoginRequest& req, const std::wstring& instructions, LoginDialogState& st) {
+    // Built before the class and window exist, so a failure leaves neither behind, and the message
+    // loop itself allocates nothing outside the poll.
+    std::wstring title = I18nText(st.locale, TrCtx(L"sign-in-window", L"Sign in: {label} ({provider})"),
+                                  {{L"label", req.label}, {L"provider", ProviderDisplayName(req.provider)}});
+    const std::wstring closeLabel = I18nText(st.locale, TrCtx(L"sign-in-button", L"Close"));
     static PCWSTR kClass = L"AiQuotaLoginDlg_" WH_MOD_ID;
     HINSTANCE hInst = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc{};
@@ -5216,7 +6576,7 @@ static bool ShowLoginDialog(const std::wstring& title, const std::wstring& instr
                 // Focus moves to Close before the button it could be on is disabled.
                 stopped = true;
                 HWND close = GetDlgItem(wnd, IDCANCEL);
-                SetWindowTextW(close, L"Close");
+                SetWindowTextW(close, closeLabel.c_str());
                 SetFocus(close);
                 EnableWindow(GetDlgItem(wnd, kLoginCopyLink), FALSE);
                 continue;
@@ -5258,7 +6618,6 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         return;
     }
 
-    std::wstring title = L"Sign in: " + req.label + L" (Anthropic)";
     std::string redirect;
     std::wstring code;
     SOCKET listener = INVALID_SOCKET;
@@ -5274,11 +6633,14 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         dialog.listener = listener;
         dialog.callbackRoute = "/callback";
         dialog.expectedState = state;
-        dialog.alternate = L"Use a code";
+        dialog.alternate = I18nText(dialog.locale, TrCtx(L"sign-in-button", L"Use a code"));
         bool received = ShowLoginDialog(
-            title,
-            L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This "
-            L"window closes once sign-in completes. On another device, choose Use a code.",
+            req,
+            I18nText(dialog.locale,
+                     TrCtx(L"sign-in-window",
+                           L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This "
+                           L"window closes once sign-in completes. On another device, choose {button}."),
+                     {{L"button", dialog.alternate}}),
             dialog);
         SOCKET s = g_loginSocket.exchange(INVALID_SOCKET);
         if (s != INVALID_SOCKET) closesocket(s);
@@ -5300,9 +6662,9 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         dialog.url = BuildAnthropicAuthorizeUrl(redirect, challenge, state);
         dialog.expectedState = state;
         std::wstring instructions =
-            L"Open the sign-in link in a browser and approve access on claude.ai, then paste "
-            L"the code shown on the page below.";
-        if (!ShowLoginDialog(title, instructions, dialog) || g_unloading) return;
+            I18nText(dialog.locale, TrCtx(L"sign-in-window", L"Open the sign-in link in a browser and approve access on "
+                                                             L"claude.ai, then paste the code shown on the page below."));
+        if (!ShowLoginDialog(req, instructions, dialog) || g_unloading) return;
 
         const std::wstring& pasted = dialog.pastedCode;
         size_t b = pasted.find_first_not_of(L" \t\r\n");
@@ -5332,7 +6694,7 @@ static void DoAnthropicLogin(const LoginRequest& req) {
     }
 
     StoredToken tok;
-    std::wstring err;
+    AccountError err;
     if (PostTokenEndpoint(/*anthropic*/ true, L"application/json", body, &tok, &err) ==
         TokenEndpointResult::Success) {
         TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
@@ -5347,7 +6709,7 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         RefreshQuotaByIdentity(req.idHash);
         Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
     } else {
-        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), err.c_str());
+        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), AccountErrorText({}, err).c_str());
     }
 }
 
@@ -5373,11 +6735,11 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     dialog.url = BuildOpenAiAuthorizeUrl(port, challenge, state);
     dialog.listener = listener;
     dialog.expectedState = state;
-    std::wstring title = L"Sign in: " + req.label + L" (OpenAI)";
     std::wstring instructions =
-        L"Open the sign-in link in a browser on this PC and approve access. This window "
-        L"closes once sign-in completes.";
-    bool received = ShowLoginDialog(title, instructions, dialog);
+        I18nText(dialog.locale, TrCtx(L"sign-in-window",
+                                      L"Open the sign-in link in a browser on this PC and approve access. This window "
+                                      L"closes once sign-in completes."));
+    bool received = ShowLoginDialog(req, instructions, dialog);
     SOCKET s = g_loginSocket.exchange(INVALID_SOCKET);
     if (s != INVALID_SOCKET) closesocket(s);
     if (g_unloading) return;
@@ -5397,7 +6759,7 @@ static void DoOpenAiLogin(const LoginRequest& req) {
                            "&code_verifier=" + UrlEncode(verifier);
 
     StoredToken tok;
-    std::wstring err;
+    AccountError err;
     if (PostTokenEndpoint(/*anthropic*/ false, L"application/x-www-form-urlencoded", formBody,
                           &tok, &err) == TokenEndpointResult::Success) {
         TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok, nullptr, true);
@@ -5412,7 +6774,7 @@ static void DoOpenAiLogin(const LoginRequest& req) {
         RefreshQuotaByIdentity(req.idHash);
         Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
     } else {
-        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), err.c_str());
+        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), AccountErrorText({}, err).c_str());
     }
 }
 
@@ -5421,7 +6783,7 @@ static void DoOpenAiLogin(const LoginRequest& req) {
 // the user approves, the code expires, GitHub ends it or the window closes.
 static void DoCopilotLogin(const LoginRequest& req) {
     const std::wstring headers =
-        L"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n";
+        L"Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n";  // i18n-en
     std::string clientId = "client_id=" + UrlEncode(WideToUtf8(kCopilotClientId));
     HttpResult r = HttpRequest(L"POST", L"github.com", L"/login/device/code", kOAuthUserAgent, headers,
                                clientId + "&scope=" + UrlEncode(WideToUtf8(kCopilotScope)));
@@ -5439,9 +6801,8 @@ static void DoCopilotLogin(const LoginRequest& req) {
     }
     if (deviceCode.empty() || deviceCode.size() > 1024 || userCode.empty() || userCode.size() > 32 ||
         !std::isfinite(expiresIn) || expiresIn <= 0 || !std::isfinite(interval)) {
-        std::wstring detail = r.ok ? ParseOAuthError(r.body) : L"network error";
-        if (detail.empty()) detail = L"HTTP " + std::to_wstring(r.status);
-        Wh_Log(L"Sign-in [%s] failed: no device code (%s)", req.label.c_str(), detail.c_str());
+        Wh_Log(L"Sign-in [%s] failed: no device code (%s)", req.label.c_str(),
+               AccountErrorText({}, r.ok ? OAuthFailure(r) : AccountError{AccountErrorCode::Network}).c_str());
         return;
     }
     // At most 15 minutes, polled no faster than every 5 seconds.
@@ -5453,34 +6814,37 @@ static void DoCopilotLogin(const LoginRequest& req) {
     StoredToken tok;
     bool ended = false;  // The poll ended the sign-in and logged why.
     // The last transient failure: logged once per run of them, and named if the code expires.
-    std::wstring transient;
-    // The status line: waiting, retrying after a transient failure, or a terminal end's reason.
-    static constexpr PCWSTR kWaiting = L"Waiting for approval on GitHub\u2026";
-    static constexpr PCWSTR kExpired = L"The code expired. Close this window and sign in again.";
-    static constexpr PCWSTR kFailed = L"Sign-in failed. See the Windhawk log for details.";
+    AccountError transient;
     LoginDialogState dialog;
+    // The status line: waiting, retrying after a transient failure, or a terminal end's reason.
+    const std::wstring waiting =
+        I18nText(dialog.locale, TrCtx(L"sign-in-status", L"Waiting for approval on GitHub\u2026"));
+    const std::wstring expired =
+        I18nText(dialog.locale, TrCtx(L"sign-in-status", L"The code expired. Close this window and sign in again."));
+    const std::wstring failed =
+        I18nText(dialog.locale, TrCtx(L"sign-in-status", L"Sign-in failed. See the Windhawk log for details."));
     dialog.url = kCopilotVerificationUrl;
     dialog.userCode = userCode;
     dialog.nextPollMs = GetTickCount64() + intervalMs;
-    wcsncpy_s(dialog.status, kWaiting, _TRUNCATE);
+    wcsncpy_s(dialog.status, waiting.c_str(), _TRUNCATE);
     dialog.poll = [&]() -> ULONGLONG {
         try {
             if (GetTickCount64() >= deadline) {
                 ended = true;
                 Wh_Log(L"Sign-in [%s] failed: the code expired%s", req.label.c_str(),
-                       transient.empty() ? L"" : (L" (last poll: " + transient + L")").c_str());
-                wcsncpy_s(dialog.status, kExpired, _TRUNCATE);
+                       !transient ? L"" : (L" (last poll: " + AccountErrorText({}, transient) + L")").c_str());
+                wcsncpy_s(dialog.status, expired.c_str(), _TRUNCATE);
                 return 0;
             }
             HttpResult poll = HttpRequest(L"POST", kCopilotTokenHost, kCopilotTokenPath, kOAuthUserAgent,
                                           headers, pollBody);
             // Network errors, 408, 429, 5xx and unreadable answers keep polling until the
             // deadline; only GitHub's own error codes end the sign-in.
-            std::wstring failure;
+            AccountError failure;
             if (!poll.ok) {
-                failure = L"network error";
+                failure = {AccountErrorCode::Network};
             } else if (poll.status == 408 || poll.status == 429 || poll.status >= 500) {
-                failure = L"HTTP " + std::to_wstring(poll.status);
+                failure = {.code = AccountErrorCode::Http, .status = poll.status};
             } else {
                 try {
                     auto root = JsonObject::Parse(Utf8ToWide(poll.body));
@@ -5500,19 +6864,21 @@ static void DoCopilotLogin(const LoginRequest& req) {
                         intervalMs = std::max(intervalMs + 5000,
                                               next > 0 && next <= 900 ? (ULONGLONG)(next * 1000) : 0ULL);
                     } else if (code.empty()) {
-                        failure = L"unexpected token response";
+                        failure = {AccountErrorCode::UnexpectedTokenResponse};
                     } else if (code != L"authorization_pending") {
                         ended = true;
                         std::wstring detail = GetStr(root, L"error_description");
                         Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(),
                                detail.empty() ? code.c_str() : detail.c_str());
-                        PCWSTR reason = code == L"access_denied" ? L"Sign-in was denied on GitHub." :
-                                        code == L"expired_token" ? kExpired : kFailed;
-                        wcsncpy_s(dialog.status, reason, _TRUNCATE);
+                        std::wstring reason =
+                            code == L"access_denied" ?
+                                I18nText(dialog.locale, TrCtx(L"sign-in-status", L"Sign-in was denied on GitHub.")) :
+                            code == L"expired_token" ? expired : failed;
+                        wcsncpy_s(dialog.status, reason.c_str(), _TRUNCATE);
                         return 0;
                     }
                 } catch (winrt::hresult_error const&) {
-                    failure = L"invalid token response";
+                    failure = {AccountErrorCode::InvalidTokenResponse};
                 }
             }
             // A rate limit only ever slows polling down: 5 seconds more on 429, Retry-After when
@@ -5521,16 +6887,18 @@ static void DoCopilotLogin(const LoginRequest& req) {
                 ULONGLONG slower = poll.status == 429 ? intervalMs + 5000 : intervalMs;
                 intervalMs = std::max(slower, poll.retryAfterSec > 0 ? (ULONGLONG)poll.retryAfterSec * 1000 : 0ULL);
             }
-            if (failure.empty()) {
-                transient.clear();
-                wcsncpy_s(dialog.status, kWaiting, _TRUNCATE);
+            if (!failure) {
+                transient = {};
+                wcsncpy_s(dialog.status, waiting.c_str(), _TRUNCATE);
             } else {
                 if (failure != transient) {
                     transient = failure;
-                    Wh_Log(L"Sign-in [%s]: %s, polling on", req.label.c_str(), failure.c_str());
+                    Wh_Log(L"Sign-in [%s]: %s, polling on", req.label.c_str(), AccountErrorText({}, failure).c_str());
                 }
-                failure[0] = wchar_t(towupper(failure[0]));
-                swprintf(dialog.status, ARRAYSIZE(dialog.status), L"%s, retrying\u2026", failure.c_str());
+                std::wstring retrying =
+                    I18nText(dialog.locale, TrCtx(L"sign-in-status", L"{reason}, retrying\u2026"),
+                             {{L"reason", AccountErrorText(dialog.locale, failure, AccountErrorForm::Alone)}});
+                wcsncpy_s(dialog.status, retrying.c_str(), _TRUNCATE);
             }
             // Wakes at the expiry at the latest, where the next call ends without a request.
             ULONGLONG now = GetTickCount64();
@@ -5538,15 +6906,16 @@ static void DoCopilotLogin(const LoginRequest& req) {
         } catch (...) {
             ended = true;
             Wh_Log(L"Sign-in [%s] failed: invalid token response", req.label.c_str());
-            wcsncpy_s(dialog.status, kFailed, _TRUNCATE);
+            wcsncpy_s(dialog.status, failed.c_str(), _TRUNCATE);
             return 0;
         }
     };
-    std::wstring title = L"Sign in: " + req.label + L" (GitHub Copilot)";
     std::wstring instructions =
-        L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
-        L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.";
-    bool granted = ShowLoginDialog(title, instructions, dialog);
+        I18nText(dialog.locale,
+                 TrCtx(L"sign-in-window",
+                       L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
+                       L"signed in to the GitHub account with Copilot. This window closes once sign-in completes."));
+    bool granted = ShowLoginDialog(req, instructions, dialog);
     if (g_unloading) return;
     if (!granted) {
         if (!ended) Wh_Log(L"Sign-in [%s]: cancelled", req.label.c_str());
@@ -5572,11 +6941,11 @@ static void DoOpenCodeLogin(const LoginRequest& req) {
     LoginDialogState dialog;
     dialog.url = kOpenCodeConsoleUrl;
     dialog.secret = true;
-    std::wstring title = L"Sign in: " + req.label + L" (OpenCode Go)";
     std::wstring instructions =
-        L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
-        L"subscription, and paste it below.";
-    if (!ShowLoginDialog(title, instructions, dialog) || g_unloading) return;
+        I18nText(dialog.locale, TrCtx(L"sign-in-window",
+                                      L"Open the OpenCode console in a browser, copy an API key of the workspace with "
+                                      L"your Go subscription, and paste it below."));
+    if (!ShowLoginDialog(req, instructions, dialog) || g_unloading) return;
 
     const std::wstring& pasted = dialog.pastedCode;
     size_t b = pasted.find_first_not_of(L" \t\r\n");
@@ -5714,9 +7083,9 @@ static bool SignOutAccountByIdentity(uint64_t identityHash) {
 
 // Claude Code's user agent: the usage response reports free resets (cedar_ember) only to a recent
 // Claude Code CLI. Keep it at a recent Claude Code release.
-static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.318 (external, cli)";
+static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.318 (external, cli)";  // i18n-en
 
-static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseAnthropicUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         JsonObject usage = root;
@@ -5808,8 +7177,8 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
             }
         }
         // Responses without those model allowances report the Opus and Sonnet weeklies here.
-        for (auto [key, name, listed] : {std::tuple{L"seven_day_opus", L"Opus", opusListed},
-                                         std::tuple{L"seven_day_sonnet", L"Sonnet", sonnetListed}}) {
+        for (auto [key, name, listed] : {std::tuple{L"seven_day_opus", L"Opus", opusListed},  // i18n-en
+                                         std::tuple{L"seven_day_sonnet", L"Sonnet", sonnetListed}}) {  // i18n-en
             auto legacy = GetObj(usage, key);
             double utilization = GetNum(legacy, L"utilization");
             if (listed || !legacy || !std::isfinite(utilization) || utilization < 0) continue;
@@ -5817,7 +7186,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
         }
 
         d->plan.clear();
-        d->extraLines.clear();
+        d->note = AccountNote::None;
         if (auto eu = GetObj(usage, L"extra_usage"); eu && GetBool(eu, L"is_enabled")) {
             // monthly_limit/used_credits are cents; an explicit null limit means unlimited (an
             // absent or malformed key must not claim that). utilization is null until the
@@ -5835,8 +7204,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
                 if (std::isfinite(usedCents) && usedCents >= 0) {
                     d->extraUsedAmount = usedCents / 100.0;
                 }
-                if (!d->extraLines.empty()) d->extraLines += L"\n";
-                d->extraLines += L"extra usage: unlimited";
+                d->note = AccountNote::ExtraUsageUnlimited;
             } else if (limitCents > 0) {
                 if (!std::isfinite(utilization) || utilization < 0) {
                     utilization = usedCents > 0 ? usedCents * 100.0 / limitCents : 0;
@@ -5893,10 +7261,10 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
 
         bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||
                       d->extraUsage.pct >= 0 || d->extraUsedAmount >= 0;
-        if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (!parsed && error) *error = UnexpectedResponseFormat(body);
         return parsed;
     } catch (...) {
-        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (error) *error = UnexpectedResponseFormat(body);
         return false;
     }
 }
@@ -5915,7 +7283,7 @@ static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
             plan += ch == L'_' ? L' ' : wordStart ? (wchar_t)towupper(ch) : ch;
             wordStart = ch == L'_';
         }
-        if (plan == L"Max") {
+        if (plan == L"Max") {  // i18n-en
             std::wstring tier = GetStr(organization, L"rate_limit_tier");
             if (tier.find(L"20x") != std::wstring::npos) plan += L" 20x";
             else if (tier.find(L"5x") != std::wstring::npos) plan += L" 5x";
@@ -5931,7 +7299,7 @@ static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
 
 static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 
-static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseOpenAiUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         auto hasWindows = [](JsonObject const& o) -> bool {
@@ -6011,7 +7379,7 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         applyWindow(GetObj(rl, L"weekly_limit"), &d->winWeek);
 
         d->plan = GetStr(usage, L"plan_type");
-        d->extraLines.clear();
+        d->note = AccountNote::None;
         // Each window of an additional_rate_limits entry (Codex Spark, hidden model lanes such as
         // gpt-reserve, ...) is an extra quota, shown with its Display setting; only the primary
         // windows drive bars.
@@ -6067,11 +7435,11 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         bool hasWindowUsage = d->win5h.pct >= 0 || d->winWeek.pct >= 0;
         bool parsed = hasWindowUsage || d->creditsBalance >= 0 || d->creditsUnlimited ||
                       d->hasCredits;
-        if (parsed && !hasWindowUsage) d->extraLines = L"rate limits: none reported";
-        if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (parsed && !hasWindowUsage) d->note = AccountNote::NoRateLimits;
+        if (!parsed && error) *error = UnexpectedResponseFormat(body);
         return parsed;
     } catch (...) {
-        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (error) *error = UnexpectedResponseFormat(body);
         return false;
     }
 }
@@ -6246,9 +7614,9 @@ static std::vector<int> FindAntigravityListeningPorts(DWORD pid) {
 static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR csrfToken,
                                    DWORD timeoutMs);
 static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d,
-                                         std::wstring* error);
+                                         AccountError* error);
 static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
-                                       std::wstring* error);
+                                       AccountError* error);
 
 static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundServer = nullptr) {
     *info = {};
@@ -6331,7 +7699,7 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
             candidate.extensionCsrfToken = std::move(extensionCsrf);
             candidate.cli = cli;
             bool ide = lowerCmdLine.find(L"antigravity-ide") != std::wstring::npos ||
-                       lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||
+                       lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||  // i18n-en
                        lowerCmdLine.find(L"\\extensions\\antigravity\\") != std::wstring::npos ||
                        lowerCmdLine.find(L"/extensions/antigravity/") != std::wstring::npos;
             candidate.richQuotaLikely = cli || !ide;
@@ -6483,7 +7851,7 @@ static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR cs
 
     std::string body =
         R"({"metadata":{"ideName":"antigravity","extensionName":"antigravity","ideVersion":"unknown","locale":"en"}})";
-    std::wstring headers = L"Content-Type: application/json\r\nConnect-Protocol-Version: 1\r\n";
+    std::wstring headers = L"Content-Type: application/json\r\nConnect-Protocol-Version: 1\r\n";  // i18n-en
     if (csrfToken && *csrfToken) {
         headers += L"X-Codeium-Csrf-Token: ";
         headers += csrfToken;
@@ -6524,7 +7892,7 @@ static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR cs
     return res;
 }
 
-static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d, AccountError* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         JsonObject summary = root;
@@ -6532,12 +7900,12 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
         else if (auto wrapped = GetObj(root, L"summary")) summary = wrapped;
 
         if (!summary.HasKey(L"groups")) {
-            if (error) *error = L"no quota groups in response";
+            if (error) *error = {AccountErrorCode::NoQuotaGroups};
             return false;
         }
         auto groupsVal = summary.GetNamedValue(L"groups");
         if (groupsVal.ValueType() != JsonValueType::Array) {
-            if (error) *error = L"groups is not an array";
+            if (error) *error = {AccountErrorCode::QuotaGroupsNotArray};
             return false;
         }
 
@@ -6658,7 +8026,7 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                                      unit[0] == L'd' ? count * 24 * kHourMs : 0;
                     }
                 }
-                std::wstring name = argonBucket && !argonGroup ? L"Argon" : groupName;
+                std::wstring name = argonBucket && !argonGroup ? L"Argon" : groupName;  // i18n-en
                 if (name.empty()) name = rawBucketId;
                 if (!durationMs) {
                     std::wstring detail = bucketName;
@@ -6671,18 +8039,16 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 
         // Rows only accompany the main readings: a summary without any counts as unsupported.
         if (!parsed) d->extraQuotas.clear();
-        if (!parsed && error) {
-            *error = L"no usable Antigravity quota buckets in response";
-        }
+        if (!parsed && error) *error = {AccountErrorCode::NoUsableQuotaBuckets};
         return parsed;
     } catch (...) {
-        if (error) *error = L"failed to parse quota summary JSON";
+        if (error) *error = {AccountErrorCode::QuotaSummaryInvalid};
         return false;
     }
 }
 
 static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
-                                       std::wstring* error) {
+                                       AccountError* error) {
     try {
         bool hasSummaryGeminiShort = d->win5h.pct >= 0;
         bool hasSummaryThirdPartyShort = d->antigravityThirdParty5h.pct >= 0;
@@ -6694,7 +8060,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
         if (auto response = GetObj(root, L"response")) payload = response;
         auto userStatus = GetObj(payload, L"userStatus");
         if (!userStatus) {
-            if (error) *error = L"no userStatus object";
+            if (error) *error = {AccountErrorCode::NoUserStatus};
             return false;
         }
         std::wstring plan;
@@ -6712,7 +8078,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
         if (plan.empty()) plan = GetStr(planInfo, L"productName");
         if (plan.empty()) plan = GetStr(planInfo, L"planShortName");
         if (plan.empty()) plan = GetStr(tier, L"description");
-        if (plan.rfind(L"Google AI ", 0) == 0) plan.erase(0, 10);
+        if (plan.rfind(L"Google AI ", 0) == 0) plan.erase(0, 10);  // i18n-en
         if (!plan.empty()) d->plan = std::move(plan);
 
         auto configData = GetObj(userStatus, L"cascadeModelConfigData");
@@ -6771,8 +8137,8 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     if (!target) {
                         // Argon's models share one pool, named like the Gemini and Claude/GPT
                         // pools' current limits; other models go by their label.
-                        AddExtraQuota(d, argon ? L"Argon current limit" : label,
-                                      {usedPct, ParseIso8601Ms(resetTime), 0});
+                        AddExtraQuota(d, argon ? L"Argon" : label,  // i18n-en
+                                      {usedPct, ParseIso8601Ms(resetTime), 0}, argon);
                         continue;
                     }
                     if (target->pct < usedPct) {
@@ -6786,7 +8152,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
         }
         return true;
     } catch (...) {
-        if (error) *error = L"failed to parse user status JSON";
+        if (error) *error = {AccountErrorCode::UserStatusInvalid};
         return false;
     }
 }
@@ -6823,8 +8189,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         if (!DiscoverAntigravityServer(&info, &foundServer)) {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
-                                     AccountError{AccountErrorCode::AntigravityNotRunning};
+            d->error = {foundServer ? AccountErrorCode::AntigravityUnavailable :
+                                      AccountErrorCode::AntigravityNotRunning};
             return;
         }
         info.discoveredMs = NowUnixMs();
@@ -6833,13 +8199,13 @@ static void FetchAntigravityAccount(AccountData* d) {
 
     auto fetchFromServer = [&](const AntigravityServerInfo& server, AccountData* fresh,
                                HttpResult* summaryResult, HttpResult* statusResult,
-                               bool* summaryParsed, std::wstring* parseError) {
+                               bool* summaryParsed, AccountError* parseError) {
         *fresh = {};
         fresh->plan = d->plan;
         *summaryResult = {};
         *statusResult = {};
         *summaryParsed = false;
-        parseError->clear();
+        *parseError = {};
 
         if (server.quotaSource == AntigravityQuotaSource::Summary) {
             *summaryResult = HttpRequestLocal(
@@ -6858,9 +8224,8 @@ static void FetchAntigravityAccount(AccountData* d) {
             L"/exa.language_server_pb.LanguageServerService/GetUserStatus",
             server.csrfToken.c_str(), 5000);
         if (statusResult->ok && statusResult->status == 200) {
-            std::wstring statusError;
-            if (!ParseAntigravityUserStatus(statusResult->body, fresh, &statusError) &&
-                parseError->empty()) {
+            AccountError statusError;
+            if (!ParseAntigravityUserStatus(statusResult->body, fresh, &statusError) && !*parseError) {
                 *parseError = std::move(statusError);
             }
         }
@@ -6868,9 +8233,7 @@ static void FetchAntigravityAccount(AccountData* d) {
         bool parsed = fresh->win5h.pct >= 0 || fresh->winWeek.pct >= 0 ||
                       fresh->fableWeek.pct >= 0 || fresh->antigravityThirdParty5h.pct >= 0 ||
                       fresh->antigravityThirdPartyWeek.pct >= 0;
-        if (!parsed && parseError->empty()) {
-            *parseError = L"no usable Antigravity quota in response";
-        }
+        if (!parsed && !*parseError) *parseError = {AccountErrorCode::NoUsableQuota};
         return parsed;
     };
 
@@ -6878,7 +8241,7 @@ static void FetchAntigravityAccount(AccountData* d) {
     HttpResult summaryResult;
     HttpResult statusResult;
     bool summaryParsed = false;
-    std::wstring parseError;
+    AccountError parseError;
     bool fetched = fetchFromServer(info, &fresh, &summaryResult, &statusResult,
                                    &summaryParsed, &parseError);
 
@@ -6904,8 +8267,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         } else {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
-                                     AccountError{AccountErrorCode::AntigravityNotRunning};
+            d->error = {foundServer ? AccountErrorCode::AntigravityUnavailable :
+                                      AccountErrorCode::AntigravityNotRunning};
             return;
         }
     }
@@ -6917,16 +8280,14 @@ static void FetchAntigravityAccount(AccountData* d) {
                                 !summaryResult.ok && !statusResult.ok :
                                 !statusResult.ok;
         if (networkError) {
-            d->error = {AccountErrorCode::Message, L"network error (language server)"};
+            d->error = {AccountErrorCode::LanguageServerNetwork};
         } else if (info.quotaSource == AntigravityQuotaSource::Summary &&
                    summaryResult.ok && summaryResult.status != 200) {
-            d->error = {AccountErrorCode::Message,
-                        L"HTTP " + std::to_wstring(summaryResult.status) + L" from language server"};
+            d->error = {.code = AccountErrorCode::LanguageServerHttp, .status = summaryResult.status};
         } else if (statusResult.ok && statusResult.status != 200) {
-            d->error = {AccountErrorCode::Message,
-                        L"HTTP " + std::to_wstring(statusResult.status) + L" from language server"};
+            d->error = {.code = AccountErrorCode::LanguageServerHttp, .status = statusResult.status};
         } else {
-            d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response" : parseError};
+            d->error = parseError ? parseError : AccountError{AccountErrorCode::LanguageServerResponse};
         }
         if (endpointInvalid) g_antigravityCachedInfo = {};
         return;
@@ -6956,7 +8317,7 @@ static void FetchAntigravityAccount(AccountData* d) {
 // used percentage and amounts; an unlimited one (an organization's pooled budget) only its
 // credits used, or that the pool is used up. A plan without any allowance parses with a note.
 // Missing or malformed entitlements and percentages are errors, never 0 or 100%.
-static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseCopilotUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         // A number, or a fully numeric string (entitlements come as strings), within bounds that
@@ -6983,15 +8344,15 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         };
 
         // Plan names as VS Code shows them: free SKUs first, then copilot_plan ("individual" is
-        // Pro); an unknown plan as reported.
+        // Pro); an unknown plan as reported. GitHub's product names, the same in every language.
         std::wstring plan = GetStr(root, L"copilot_plan"), sku = GetStr(root, L"access_type_sku");
-        d->plan = sku == L"free_limited_copilot" ? L"Free" :
-                  sku == L"free_educational_quota" || plan == L"individual_edu" ? L"Student" :
-                  plan == L"individual" ? L"Pro" :
-                  plan == L"individual_pro" ? L"Pro+" :
-                  plan == L"individual_max" ? L"Max" :
-                  plan == L"business" ? L"Business" :
-                  plan == L"enterprise" ? L"Enterprise" : plan;
+        d->plan = sku == L"free_limited_copilot" ? L"Free" :  // i18n-en
+                  sku == L"free_educational_quota" || plan == L"individual_edu" ? L"Student" :  // i18n-en
+                  plan == L"individual" ? L"Pro" :  // i18n-en
+                  plan == L"individual_pro" ? L"Pro+" :  // i18n-en
+                  plan == L"individual_max" ? L"Max" :  // i18n-en
+                  plan == L"business" ? L"Business" :  // i18n-en
+                  plan == L"enterprise" ? L"Enterprise" : plan;  // i18n-en
         // Billing in requests rather than AI credits only when explicitly not token based.
         if (isFalse(root, L"token_based_billing")) d->copilotUnit = CopilotUnit::PremiumRequests;
 
@@ -7011,12 +8372,11 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         if (!quota && !legacy) {
             // Never in chat requests: legacy Free's are an allowance.
             if (premiumEntitlement == 0.0 && chatEntitlement == 0.0) {
-                d->extraLines = d->copilotUnit == CopilotUnit::PremiumRequests ?
-                                    L"No premium request allowance on this plan." :
-                                    L"No AI-credit allowance on this plan.";
+                d->note = d->copilotUnit == CopilotUnit::PremiumRequests ? AccountNote::NoPremiumRequestAllowance :
+                                                                           AccountNote::NoAiCreditAllowance;
                 return true;
             }
-            if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+            if (error) *error = UnexpectedResponseFormat(body);
             return false;
         }
 
@@ -7034,7 +8394,7 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         } else {
             std::optional<double> percentRemaining = number(quota, L"percent_remaining");
             if (!percentRemaining) {
-                if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+                if (error) *error = UnexpectedResponseFormat(body);
                 return false;
             }
             double entitlement = fromPremium ? *premiumEntitlement : *chatEntitlement;
@@ -7065,7 +8425,7 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
         d->extraUsage.windowDurationMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
         return true;
     } catch (...) {
-        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (error) *error = UnexpectedResponseFormat(body);
         return false;
     }
 }
@@ -7073,29 +8433,27 @@ static bool ParseCopilotUsage(const std::string& body, AccountData* d, std::wstr
 // grant_type=refresh_token, form-encoded, for sign-ins whose access tokens expire (GitHub issues
 // a refresh token only with those). GitHub reports most failures as HTTP 200 with an error code:
 // only a refresh token it no longer accepts, or a client error other than a rate limit (408,
-// 429, 403 with Retry-After), needs a new sign-in.
-static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* err,
+// 429, 403 with Retry-After), needs a new sign-in. `err`: why it failed (none for a rejection
+// without a request).
+static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, AccountError* err,
                                                int* retryAfterSec) {
     if (retryAfterSec) *retryAfterSec = 0;
-    if (tok->refreshToken.empty()) {
-        *err = L"no refresh token";
-        return TokenEndpointResult::Rejected;
-    }
+    *err = {};
+    if (tok->refreshToken.empty()) return TokenEndpointResult::Rejected;
     std::string body = "client_id=" + UrlEncode(WideToUtf8(kCopilotClientId)) +
                        "&grant_type=refresh_token&refresh_token=" +
                        UrlEncode(WideToUtf8(tok->refreshToken));
     HttpResult r = HttpRequest(L"POST", kCopilotTokenHost, kCopilotTokenPath, kOAuthUserAgent,
-                               L"Content-Type: application/x-www-form-urlencoded\r\n"
+                               L"Content-Type: application/x-www-form-urlencoded\r\n"  // i18n-en
                                L"Accept: application/json\r\n",
                                body);
     if (!r.ok) {
-        *err = L"network error";
+        *err = {AccountErrorCode::Network};
         return TokenEndpointResult::TransientFailure;
     }
     if (r.status != 200) {
         if (retryAfterSec) *retryAfterSec = r.retryAfterSec;
-        std::wstring detail = ParseOAuthError(r.body);
-        *err = detail.empty() ? (L"HTTP " + std::to_wstring(r.status)) : detail;
+        *err = OAuthFailure(r);
         bool rejected = r.status >= 400 && r.status < 500 && r.status != 408 &&
                         r.status != 429 && !(r.status == 403 && r.retryAfterSec > 0);
         return rejected ? TokenEndpointResult::Rejected : TokenEndpointResult::TransientFailure;
@@ -7106,7 +8464,8 @@ static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* e
         if (access.empty()) {
             std::wstring code = GetStr(root, L"error");
             std::wstring detail = ParseOAuthError(r.body);
-            *err = detail.empty() ? L"no access token in response" : detail;
+            *err = detail.empty() ? AccountError{AccountErrorCode::NoAccessToken} :
+                                    AccountError{AccountErrorCode::Message, detail};
             return code == L"bad_refresh_token" || code == L"invalid_grant" ?
                        TokenEndpointResult::Rejected : TokenEndpointResult::TransientFailure;
         }
@@ -7117,7 +8476,7 @@ static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* e
         tok->expiresMs = expiresIn > 0 && expiresIn < 1e9 ? NowUnixMs() + (ULONGLONG)(expiresIn * 1000) : 0;
         return TokenEndpointResult::Success;
     } catch (...) {
-        *err = L"invalid token response";
+        *err = {AccountErrorCode::InvalidTokenResponse};
         return TokenEndpointResult::TransientFailure;
     }
 }
@@ -7133,9 +8492,9 @@ static TokenEndpointResult RefreshCopilotToken(StoredToken* tok, std::wstring* e
 // reset falls in a month without the subscription's day (the 29th to 31st). A window the
 // response lacks isn't shown; one that isn't an object or lacks a valid percentage is an error,
 // never 0 or 100%.
-static bool ParseOpenCodeUsage(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseOpenCodeUsage(const std::string& body, AccountData* d, AccountError* error) {
     auto fail = [&] {
-        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (error) *error = UnexpectedResponseFormat(body);
         return false;
     };
     try {
@@ -7190,7 +8549,7 @@ static std::deque<HistorySample> g_historySamples;
 // retention or deleted with their account; Clear changes g_historyEpoch.
 static uint64_t g_historyAppendCount = 0;
 static uint64_t g_historyRevision = 0;
-static std::wstring g_historyStatus;
+static HistoryJournalError g_historyStatus = HistoryJournalError::None;
 static bool g_historyLoaded = false;
 static bool g_historyCapped = false;
 static std::wstring g_historyPath;
@@ -7200,11 +8559,11 @@ static ULONGLONG g_historyMaintenanceMs = 0;
 static ULONGLONG g_historyWriteRetryMs = 0;
 static winrt::file_handle g_historyOwnership;
 
-// Each change of the status text notifies the settings and history windows (a posted message).
-static void SetHistoryStatus(std::wstring message) {
-    bool changed = message != g_historyStatus;
-    g_historyStatus = std::move(message);
-    g_historyStorageError = !g_historyStatus.empty();
+// Each change of the status notifies the settings and history windows (a posted message).
+static void SetHistoryStatus(HistoryJournalError status) {
+    bool changed = status != g_historyStatus;
+    g_historyStatus = status;
+    g_historyStorageError = g_historyStatus != HistoryJournalError::None;
     if (changed) NotifySettingsWindowChanged();
 }
 
@@ -7228,7 +8587,7 @@ static void LoadHistoryLocked(bool create = false) {
     PWSTR localAppData = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &localAppData))) {
         g_historyWritable = false;
-        SetHistoryStatus(L"History storage is unavailable.");
+        SetHistoryStatus(HistoryJournalError::Unavailable);
         return;
     }
     std::wstring directory = localAppData;
@@ -7246,13 +8605,13 @@ static void LoadHistoryLocked(bool create = false) {
     }
     if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Cannot create the local history directory.");
+        SetHistoryStatus(HistoryJournalError::CannotCreateDirectory);
         return;
     }
     directory += L"\\" WH_MOD_ID;
     if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Cannot create the local history directory.");
+        SetHistoryStatus(HistoryJournalError::CannotCreateDirectory);
         return;
     }
     g_historyPath = directory;
@@ -7265,7 +8624,7 @@ static void LoadHistoryLocked(bool create = false) {
     if (!g_historyOwnership) {
         g_historyLoaded = false;  // Retry after an overlapping Explorer session exits.
         g_historyWritable = false;
-        SetHistoryStatus(L"History storage is in use by another Explorer session, or is inaccessible.");
+        SetHistoryStatus(HistoryJournalError::InUse);
         return;
     }
     winrt::file_handle file{CreateFileW(g_historyPath.c_str(), GENERIC_READ,
@@ -7273,7 +8632,7 @@ static void LoadHistoryLocked(bool create = false) {
     if (!file) {
         if (GetLastError() != ERROR_FILE_NOT_FOUND) {
             g_historyWritable = false;
-            SetHistoryStatus(L"Cannot read history. Check storage permissions, then reopen the mod.");
+            SetHistoryStatus(HistoryJournalError::CannotRead);
         }
         return;
     }
@@ -7282,7 +8641,7 @@ static void LoadHistoryLocked(bool create = false) {
     DWORD read = 0;
     if (!GetFileSizeEx(file.get(), &size)) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Cannot read the history file size.");
+        SetHistoryStatus(HistoryJournalError::CannotReadSize);
         return;
     }
     if (size.QuadPart == 0) {
@@ -7294,7 +8653,7 @@ static void LoadHistoryLocked(bool create = false) {
         read != sizeof(header) || header.magic != HistoryFileHeader{}.magic ||
         header.version != 1 || header.recordBytes != sizeof(HistorySample)) {
         g_historyWritable = false;
-        SetHistoryStatus(L"Unsupported or damaged history file. Clear history to start again.");
+        SetHistoryStatus(HistoryJournalError::Unsupported);
         return;
     }
     size_t count = (size_t)((size.QuadPart - sizeof(header)) / sizeof(HistorySample));
@@ -7306,7 +8665,7 @@ static void LoadHistoryLocked(bool create = false) {
         DWORD bytes = (DWORD)(n * sizeof(HistorySample));
         if (!ReadFile(file.get(), batch.data(), bytes, &read, nullptr) || read != bytes) {
             g_historyWritable = false;
-            SetHistoryStatus(L"History read failed. Loaded samples remain available for export.");
+            SetHistoryStatus(HistoryJournalError::ReadFailed);
             return;
         }
         for (size_t i = 0; i < n; ++i) {
@@ -7330,7 +8689,7 @@ static void LoadHistoryLocked(bool create = false) {
                     return;
                 }
                 g_historyWritable = false;
-                SetHistoryStatus(L"Damaged history record. Export readable samples or clear history.");
+                SetHistoryStatus(HistoryJournalError::DamagedRecord);
                 return;
             }
             try {
@@ -7339,7 +8698,7 @@ static void LoadHistoryLocked(bool create = false) {
                 // Out of memory: a partial journal must never be saved over the whole one.
                 g_historyWritable = false;
                 g_historySamples.clear();
-                SetHistoryStatus(L"History is too large to load. Clear history to start again.");
+                SetHistoryStatus(HistoryJournalError::TooLarge);
                 return;
             }
         }
@@ -7355,7 +8714,7 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint6
     winrt::file_handle file{CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
     if (!file) {
-        SetHistoryStatus(L"Cannot write history. Check disk space and storage permissions.");
+        SetHistoryStatus(HistoryJournalError::CannotWrite);
         g_historyWriteRetryMs = NowUnixMs() + 3600000;
         return false;
     }
@@ -7381,7 +8740,7 @@ static bool RewriteHistoryLocked(const std::deque<HistorySample>& samples, uint6
     }
     if (!ok) {
         DeleteFileW(temporary.c_str());
-        SetHistoryStatus(L"History write failed; the previous journal was kept.");
+        SetHistoryStatus(HistoryJournalError::WriteFailed);
         g_historyWriteRetryMs = NowUnixMs() + 3600000;
         return false;
     }
@@ -7498,7 +8857,7 @@ static void AppendHistory(const std::vector<HistorySample>& samples, uint64_t ep
             // Retain admitted samples in memory; next append repairs a possible torn tail.
             g_historyDirty = true;
             g_historyWriteRetryMs = now + 3600000;
-            SetHistoryStatus(L"History is not being saved to disk. Check disk space and permissions.");
+            SetHistoryStatus(HistoryJournalError::NotSaved);
         } else {
             SetHistoryStatus({});
         }
@@ -7542,7 +8901,7 @@ static HistoryPeek PeekHistorySnapshot(ULONGLONG fromMs, bool samples, const His
     return peek;
 }
 
-static bool ClearHistory(std::wstring* error) {
+static bool ClearHistory(HistoryJournalError* error) {
     std::lock_guard lock(g_historyMutex);
     LoadHistoryLocked();
     ++g_historyEpoch;
@@ -7551,7 +8910,9 @@ static bool ClearHistory(std::wstring* error) {
         return true;  // Nothing has ever been recorded; Clear is an idempotent no-op.
     }
     if (!RewriteHistoryLocked({})) {
-        if (error) *error = g_historyStatus.empty() ? L"History storage is unavailable." : g_historyStatus;
+        if (error) {
+            *error = g_historyStatus == HistoryJournalError::None ? HistoryJournalError::Unavailable : g_historyStatus;
+        }
         return false;
     }
     g_historySamples.clear();
@@ -7583,7 +8944,7 @@ static void EraseHistorySamplesLocked(uint64_t historyId) {
 // journal that couldn't be read (damaged, unreadable, in use by another session) stays as it is,
 // with `error` saying why. An unsaved one (a torn tail, or past the size cap, whose eviction this
 // then saves) is rewritten even without the account's samples. Holds only the history lock.
-static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
+static bool DeleteAccountHistory(uint64_t historyId, HistoryJournalError* error) {
     {
         std::lock_guard lock(g_historyMutex);
         LoadHistoryLocked();
@@ -7596,7 +8957,9 @@ static bool DeleteAccountHistory(uint64_t historyId, std::wstring* error) {
         bool kept = !g_historyLoaded || !g_historyWritable || g_unloading;
         if (!kept && !present && !g_historyDirty) return true;
         if (kept || !RewriteHistoryLocked(g_historySamples, historyId)) {
-            if (error) *error = g_historyStatus.empty() ? L"History storage is unavailable." : g_historyStatus;
+            if (error) {
+                *error = g_historyStatus == HistoryJournalError::None ? HistoryJournalError::Unavailable : g_historyStatus;
+            }
             return false;
         }
         EraseHistorySamplesLocked(historyId);
@@ -8110,11 +9473,11 @@ static constexpr ProviderStatusSource kProviderStatusSources[] = {
     {L"anthropic", L"status.claude.com", L"/api/v2/summary.json", L"https://status.claude.com",
      StatusFeedKind::Statuspage, {L"rwppv331jlwc", L"k8w3r06qmzrp", L"yyzkbfz2thpt"}, kStatusIntervalMs, false},
     {L"openai", L"status.openai.com", L"/proxy/status.openai.com", L"https://status.openai.com",
-     StatusFeedKind::IncidentIo, {L"01KMKF9EBTCD8BN9PG8DJZXRSQ", L"Codex", nullptr}, kStatusIntervalMs, false},
+     StatusFeedKind::IncidentIo, {L"01KMKF9EBTCD8BN9PG8DJZXRSQ", L"Codex", nullptr}, kStatusIntervalMs, false},  // i18n-en
     {L"copilot", L"www.githubstatus.com", L"/api/v2/summary.json", L"https://www.githubstatus.com",
      StatusFeedKind::Statuspage, {L"pjmpxvq2cmr2", L"cnnb39dkkk82", nullptr}, kStatusIntervalMs, false},
     {L"opencode", L"status.opencode.ai", L"/api/status", L"https://status.opencode.ai",
-     StatusFeedKind::OpenCode, {L"go", L"OpenCode Go", nullptr}, kOpenCodeStatusIntervalMs, true},
+     StatusFeedKind::OpenCode, {L"go", L"OpenCode Go", nullptr}, kOpenCodeStatusIntervalMs, true},  // i18n-en
 };
 
 // The provider's status source; none for Antigravity.
@@ -8129,7 +9492,7 @@ static const ProviderStatusSource* FindProviderStatusSource(std::wstring_view pr
 // component is operational. None (no value) when the page can't be trusted: invalid JSON, a missing
 // or mistyped part that names a level, no watched component listed, or OpenCode's own stale flag.
 // Status strings it doesn't know name no level. `problem` gets why a read failed, or the first
-// unknown status of a watched component.
+// unknown status of a watched component, in English for the log.
 static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSource& source,
                                                          const std::string& body,
                                                          std::wstring* problem = nullptr) {
@@ -8143,7 +9506,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
         if (status == L"partial_outage") return OutageLevel::Partial;
         if (status == L"major_outage" || status == L"full_outage" || status == L"outage") return OutageLevel::Major;
         if (status == L"under_maintenance" || status == L"maintenance") return OutageLevel::Maintenance;
-        if (problem && problem->empty() && !status.empty()) *problem = L"unknown status \"" + status.substr(0, 40) + L"\"";
+        if (problem && problem->empty() && !status.empty()) *problem = L"unknown status \"" + status.substr(0, 40) + L"\"";  // i18n-en: logged
         return OutageLevel::None;
     };
     auto array = [](JsonObject const& o, PCWSTR name) -> JsonArray {
@@ -8197,7 +9560,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
             // Levels from the watched components; the title and start from an unresolved incident or
             // a maintenance in progress listing the worst one, else its last status change.
             JsonArray components = array(root, L"components");
-            if (!components) return fail(L"no components");
+            if (!components) return fail(L"no components");  // i18n-en: logged
             struct Watched {
                 std::wstring id, name;
                 OutageLevel level = OutageLevel::None;
@@ -8217,7 +9580,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 auto entry = std::find_if(watched.begin(), watched.end(),
                                           [&](const Watched& w) { return w.id == id && !w.found; });
                 if (entry == watched.end()) continue;
-                if (!isString(component, L"status")) return fail(L"component status not a string");
+                if (!isString(component, L"status")) return fail(L"component status not a string");  // i18n-en: logged
                 entry->found = true;
                 entry->name = GetStr(component, L"name");
                 if (entry->name.empty()) entry->name = id;
@@ -8233,7 +9596,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 nonOperational++;
                 if (!worst || w.level > worst->level) worst = &w;
             }
-            if (!any) return fail(L"no watched component");
+            if (!any) return fail(L"no watched component");  // i18n-en: logged
             if (!worst) return outage;
             outage.level = worst->level;
             outage.component = worst->name;
@@ -8289,7 +9652,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
             // current impact covers the worst component; the start from that impact.
             JsonObject summary = GetObj(root, L"summary");
             JsonArray items = array(GetObj(summary, L"structure"), L"items");
-            if (!items) return fail(L"no structure");
+            if (!items) return fail(L"no structure");  // i18n-en: logged
             JsonObject group = nullptr;
             for (IJsonValue const& value : items) {
                 JsonObject candidate = GetObj(object(value), L"group");
@@ -8303,7 +9666,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 }
             }
             JsonArray members = array(group, L"components");
-            if (!members) return fail(L"no watched group");
+            if (!members) return fail(L"no watched group");  // i18n-en: logged
             struct Watched {
                 std::wstring id, name;
                 OutageLevel level = OutageLevel::None;
@@ -8321,7 +9684,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 watched.back().id = id;
                 watched.back().name = GetStr(member, L"name");
             }
-            if (watched.empty()) return fail(L"no watched component");
+            if (watched.empty()) return fail(L"no watched component");  // i18n-en: logged
             if (JsonArray named = array(summary, L"components")) {
                 for (IJsonValue const& value : named) {
                     JsonObject component = object(value);
@@ -8332,14 +9695,14 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 }
             }
             JsonArray affected = array(summary, L"affected_components");
-            if (!affected) return fail(L"no affected components");
+            if (!affected) return fail(L"no affected components");  // i18n-en: logged
             for (IJsonValue const& value : affected) {
                 JsonObject entry = object(value);
                 std::wstring id = GetStr(entry, L"component_id");
                 if (id.empty()) continue;
                 auto w = std::find_if(watched.begin(), watched.end(), [&](const Watched& w) { return w.id == id; });
                 if (w == watched.end()) continue;
-                if (!isString(entry, L"status")) return fail(L"affected component status not a string");
+                if (!isString(entry, L"status")) return fail(L"affected component status not a string");  // i18n-en: logged
                 w->level = std::max(w->level, levelOf(GetStr(entry, L"status")));
             }
             const Watched* worst = nullptr;
@@ -8397,11 +9760,11 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
         // aren't operational.
         if (root.HasKey(L"stale")) {
             IJsonValue stale = root.GetNamedValue(L"stale");
-            if (stale.ValueType() != JsonValueType::Boolean) return fail(L"stale flag not a boolean");
-            if (stale.GetBoolean()) return fail(L"page reports stale data");
+            if (stale.ValueType() != JsonValueType::Boolean) return fail(L"stale flag not a boolean");  // i18n-en: logged
+            if (stale.GetBoolean()) return fail(L"page reports stale data");  // i18n-en: logged
         }
         JsonArray components = array(root, L"components");
-        if (!components) return fail(L"no components");
+        if (!components) return fail(L"no components");  // i18n-en: logged
         JsonObject service = nullptr;
         for (IJsonValue const& value : components) {
             JsonObject component = object(value);
@@ -8410,8 +9773,8 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 break;
             }
         }
-        if (!service) return fail(L"no watched component");
-        if (!isString(service, L"status")) return fail(L"component status not a string");
+        if (!service) return fail(L"no watched component");  // i18n-en: logged
+        if (!isString(service, L"status")) return fail(L"component status not a string");  // i18n-en: logged
         outage.level = levelOf(GetStr(service, L"status"));
         if (outage.level == OutageLevel::None) return outage;
         outage.component = source.watched[1] ? source.watched[1] : source.watched[0];
@@ -8442,25 +9805,18 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 break;
             }
         }
-        if (reason == L"latency") {
-            outage.title = L"Slow responses";
-        } else if (reason == L"errors") {
-            outage.title = L"Elevated errors";
-        } else if (reason == L"upstream") {
-            outage.title = L"Upstream provider issues";
-        } else if (reason == L"availability") {
-            outage.title = L"Availability issues";
-        } else if (reason != L"none") {
-            outage.title = reason.substr(0, 40);
-        }
-        if (!models.empty()) {
-            std::wstring list;
-            for (const std::wstring& model : models) list += (list.empty() ? L"" : L", ") + model.substr(0, 40);
-            outage.title += (outage.title.empty() ? L"" : L": ") + list;
+        // Reasons it knows are the mod's to name; another one is the page's title, as written.
+        outage.reason = reason == L"latency"      ? OutageReason::Latency :
+                        reason == L"errors"       ? OutageReason::Errors :
+                        reason == L"upstream"     ? OutageReason::Upstream :
+                        reason == L"availability" ? OutageReason::Availability : OutageReason::None;
+        if (outage.reason == OutageReason::None && reason != L"none") outage.title = reason.substr(0, 40);
+        for (const std::wstring& model : models) {
+            outage.models += (outage.models.empty() ? L"" : L", ") + model.substr(0, 40);
         }
         return outage;
     } catch (...) {
-        return fail(L"invalid JSON");
+        return fail(L"invalid JSON");  // i18n-en: logged
     }
 }
 
@@ -8615,12 +9971,12 @@ static ULONGLONG PollProviderStatuses(ProviderStatusPoll& poll) {
         }
 
         HttpResult response = HttpRequest(L"GET", source.host, source.path, L"taskbar-ai-quota",
-                                          L"Accept: application/json\r\n", {}, kStatusRequestTimeoutMs);
+                                          L"Accept: application/json\r\n", {}, kStatusRequestTimeoutMs);  // i18n-en
         if (g_unloading) break;
         std::wstring problem;
         std::optional<ProviderOutage> read;
         if (!response.ok) {
-            problem = L"network error";
+            problem = L"network error";  // i18n-en: logged
         } else if (response.status != 200) {
             problem = L"HTTP " + std::to_wstring(response.status);
         } else {
@@ -8690,6 +10046,86 @@ static bool RemoveToastAppId() {
     return false;
 }
 
+// A threshold notification's title and body in `locale`: the quota's "... usage at {percent}%"
+// (the percentage rounded as %.0f), then the provider's name with `resets` (the reset's
+// FormatReset; empty: none) after it. A GitHub Copilot quota goes by its allowance's unit,
+// Antigravity's by their pools.
+static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18nLocale& locale,
+                                                                        const std::wstring& provider,
+                                                                        const AccountData& data, int slot,
+                                                                        const std::wstring& resets) {
+    const std::array<const WindowUsage*, kQuotaBarCount> usage = {&data.win5h, &data.winWeek, &data.fableWeek,
+                                                                  &data.extraUsage};
+    // Room for any double's digits: reported percentages have no upper bound.
+    wchar_t number[400];
+    if (swprintf(number, ARRAYSIZE(number), L"%.0f", usage[size_t(slot)]->pct) < 0) number[0] = L'\0';
+    const std::wstring_view percent = number;
+    // Its pool's name (Antigravity's Gemini and Argon, Anthropic's Fable): brands.
+    auto weekly = [&](PCWSTR name) {
+        return I18nText(locale, TrCtx(L"notification-title", L"{name} weekly usage at {percent}%"),
+                        {{L"name", name}, {L"percent", percent}});
+    };
+    std::wstring title;
+    if (provider == L"antigravity" && slot == kFiveHourBar) {
+        PCWSTR pool = L"Gemini";  // i18n-en
+        ULONGLONG durationMs = data.win5h.windowDurationMs;
+        int hours = durationMs == 3ULL * 60 * 60 * 1000 ? 3 : durationMs == 60ULL * 60 * 1000 ? 1 : 5;
+        title = durationMs ? I18nText(locale, TrCtx(L"notification-title", L"{name} {hours}h usage at {percent}%"),
+                                      {{L"name", pool}, {L"hours", hours}, {L"percent", percent}}) :
+                             I18nText(locale, TrCtx(L"notification-title", L"{name} current limit usage at {percent}%"),
+                                      {{L"name", pool}, {L"percent", percent}});
+    } else if (provider == L"antigravity" && (slot == kWeeklyBar || slot == kFableWeeklyBar)) {
+        title = weekly(slot == kWeeklyBar ? L"Gemini" : L"Argon");  // i18n-en
+    } else if (provider == L"copilot") {
+        title = I18nText(locale,
+                         data.copilotUnit == CopilotUnit::PremiumRequests ?
+                             TrCtx(L"notification-title", L"premium requests usage at {percent}%") :
+                         data.copilotUnit == CopilotUnit::ChatRequests ?
+                             TrCtx(L"notification-title", L"chat requests usage at {percent}%") :
+                             TrCtx(L"notification-title", L"AI credits usage at {percent}%"),
+                         {{L"percent", percent}});
+    } else if (slot == kFableWeeklyBar) {
+        title = weekly(L"Fable");  // i18n-en
+    } else {
+        I18nKey key = slot == kFiveHourBar    ? TrCtx(L"notification-title", L"5h usage at {percent}%") :
+                      slot == kWeeklyBar      ? TrCtx(L"notification-title", L"weekly usage at {percent}%") :
+                      provider == L"openai"   ? TrCtx(L"notification-title", L"credits usage at {percent}%") :
+                      provider == L"opencode" ? TrCtx(L"notification-title", L"monthly usage at {percent}%") :
+                                                TrCtx(L"notification-title", L"monthly extra usage at {percent}%");
+        title = I18nText(locale, key, {{L"percent", percent}});
+    }
+    std::wstring body = resets.empty() ? std::wstring(ProviderDisplayName(provider)) :
+                                         I18nText(locale, TrCtx(L"notification-body", L"{provider} - resets {when}"),
+                                                  {{L"provider", ProviderDisplayName(provider)}, {L"when", resets}});
+    return {std::move(title), std::move(body)};
+}
+
+// A toast's XML: `title`, `body` and an optional `projection` line, each a text element, opening
+// `url` (if any) through the shell. The one place their text is escaped.
+static std::wstring ThresholdToastXml(const std::wstring& title, const std::wstring& body,
+                                      const std::wstring& projection, PCWSTR url) {
+    auto escaped = [](std::wstring_view text) {
+        std::wstring xml;
+        for (wchar_t c : text) {
+            switch (c) {
+                case L'&': xml += L"&amp;"; break;
+                case L'<': xml += L"&lt;"; break;
+                case L'>': xml += L"&gt;"; break;
+                case L'"': xml += L"&quot;"; break;
+                default: xml += c; break;
+            }
+        }
+        return xml;
+    };
+    std::wstring xml = L"<toast";
+    if (url) xml += L" activationType=\"protocol\" launch=\"" + escaped(url) + L"\"";  // i18n-en
+    xml += L"><visual><binding template=\"ToastGeneric\"><text>" + escaped(title) + L"</text><text>" +  // i18n-en
+           escaped(body) + L"</text>";
+    if (!projection.empty()) xml += L"<text>" + escaped(projection) + L"</text>";
+    xml += L"</binding></visual></toast>";
+    return xml;
+}
+
 // Fetch-thread only. Shows `title`, `body` and an optional `projection` line as a toast tagged by
 // the account's identity and the quota's taskbar slot, so a repeat replaces it; clicking it opens
 // `url` (if any) through the shell, never calling into the mod. The balloon stands in only when
@@ -8741,7 +10177,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
                 return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()),
                                       DWORD((value.size() + 1) * sizeof(wchar_t)));
             };
-            status = setValue(L"DisplayName", L"Taskbar AI Quota");
+            status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
             if (status == ERROR_SUCCESS && !icon.empty()) {
                 if (LSTATUS iconStatus = setValue(L"IconUri", icon); iconStatus != ERROR_SUCCESS) {
                     Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
@@ -8751,27 +10187,8 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
         }
         winrt::check_win32(status);
 
-        auto escaped = [](const std::wstring& text) {
-            std::wstring xml;
-            for (wchar_t c : text) {
-                switch (c) {
-                    case L'&': xml += L"&amp;"; break;
-                    case L'<': xml += L"&lt;"; break;
-                    case L'>': xml += L"&gt;"; break;
-                    case L'"': xml += L"&quot;"; break;
-                    default: xml += c; break;
-                }
-            }
-            return xml;
-        };
-        std::wstring xml = L"<toast";
-        if (url) xml += L" activationType=\"protocol\" launch=\"" + escaped(url) + L"\"";
-        xml += L"><visual><binding template=\"ToastGeneric\"><text>" + escaped(title) + L"</text><text>" +
-               escaped(body) + L"</text>";
-        if (!projection.empty()) xml += L"<text>" + escaped(projection) + L"</text>";
-        xml += L"</binding></visual></toast>";
         winrt::Windows::Data::Xml::Dom::XmlDocument document;
-        document.LoadXml(xml);
+        document.LoadXml(ThresholdToastXml(title, body, projection, url));
         notifications::ToastNotification toast(document);
         wchar_t group[17];
         swprintf(group, ARRAYSIZE(group), L"%016llx", (unsigned long long)accountIdentity);
@@ -8831,8 +10248,15 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
     nid.uID = kNotifyIconId;
     nid.uFlags = NIF_INFO;
     nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
-    wcsncpy_s(nid.szInfoTitle, title.c_str(), _TRUNCATE);
-    wcsncpy_s(nid.szInfo, (projection.empty() ? body : body + L"\n" + projection).c_str(), _TRUNCATE);
+    // Cut to the fields' sizes, never inside a surrogate pair.
+    auto copy = [](auto& field, const std::wstring& text) {
+        if (wcsncpy_s(field, text.c_str(), _TRUNCATE) == STRUNCATE) {
+            size_t end = wcslen(field);
+            if (end && IS_HIGH_SURROGATE(field[end - 1])) field[end - 1] = L'\0';
+        }
+    };
+    copy(nid.szInfoTitle, title);
+    copy(nid.szInfo, projection.empty() ? body : body + L"\n" + projection);
     if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
         // Explorer can recreate the notification area without restarting this process.
         addNotifyIcon(g_notifyWnd);
@@ -8906,18 +10330,22 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = {AccountErrorCode::Message, L"not signed in - click to sign in"};
+        d->error = {AccountErrorCode::NotSignedIn};
         return signInGeneration;
     }
     // GitHub refreshes through its own form-encoded endpoint.
-    auto refresh = [&](std::wstring* err, int* retryAfterSec) {
+    auto refresh = [&](AccountError* err, int* retryAfterSec) {
         return copilot ? RefreshCopilotToken(&tok, err, retryAfterSec) :
                          RefreshToken(acc.provider, &tok, err, retryAfterSec);
+    };
+    // A failed refresh's error, naming the endpoint's failure as its cause.
+    auto refreshFailed = [](const AccountError& err) {
+        return AccountError{AccountErrorCode::TokenRefreshFailed, err.detail, err.status, err.code};
     };
 
     // Refresh just before expiry so a request rarely races the token going stale.
     if (tok.expiresMs && tok.expiresMs < NowUnixMs() + 60000) {
-        std::wstring refreshErr;
+        AccountError refreshErr;
         int refreshRetryAfter = 0;
         TokenEndpointResult refreshResult = refresh(&refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
@@ -8926,8 +10354,8 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
-                                                           L"token refresh failed" : L"could not save refreshed token"};
+                d->error = {saved == TokenSaveResult::Stale ? AccountErrorCode::TokenRefreshFailed :
+                                                              AccountErrorCode::TokenSaveFailed};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
@@ -8935,10 +10363,9 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
             d->stale = true;
             if (refreshResult == TokenEndpointResult::Rejected) {
                 d->needsLogin = true;
-                d->error = {AccountErrorCode::Message, L"session expired - click to sign in"};
+                d->error = {AccountErrorCode::SessionExpired};
             } else {
-                d->error = {AccountErrorCode::Message, L"token refresh failed"};
-                if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
+                d->error = refreshFailed(refreshErr);
                 *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             }
             return signInGeneration;
@@ -8947,12 +10374,12 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
 
     // Shared by the usage request and the account details requests.
     auto anthropicHeaders = [](const StoredToken& t) {
-        return L"Authorization: Bearer " + t.accessToken +
-               L"\r\nanthropic-beta: oauth-2025-04-20"
+        return L"Authorization: Bearer " + t.accessToken +  // i18n-en
+               L"\r\nanthropic-beta: oauth-2025-04-20"  // i18n-en
                L"\r\nAccept: application/json\r\n";
     };
     auto openAiHeaders = [](const StoredToken& t) {
-        std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+        std::wstring headers = L"Authorization: Bearer " + t.accessToken +  // i18n-en
                                L"\r\nOrigin: https://chatgpt.com"
                                L"\r\nReferer: https://chatgpt.com/"
                                L"\r\nAccept: application/json\r\n";
@@ -8966,15 +10393,15 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                                kClaudeCliUserAgent, anthropicHeaders(t));
         }
         if (copilot) {
-            std::wstring headers = L"Authorization: token " + t.accessToken +
-                                   L"\r\nAccept: application/json"
+            std::wstring headers = L"Authorization: token " + t.accessToken +  // i18n-en
+                                   L"\r\nAccept: application/json"  // i18n-en
                                    L"\r\nX-GitHub-Api-Version: 2025-04-01\r\n";
             return HttpRequest(L"GET", L"api.github.com", L"/copilot_internal/user", kOAuthUserAgent,
                                headers);
         }
         if (opencode) {
-            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
-                                   L"\r\nAccept: application/json\r\n";
+            std::wstring headers = L"Authorization: Bearer " + t.accessToken +  // i18n-en
+                                   L"\r\nAccept: application/json\r\n";  // i18n-en
             return HttpRequest(L"GET", L"opencode.ai", L"/zen/go/v1/usage", kOAuthUserAgent, headers);
         }
         return HttpRequest(L"GET", L"chatgpt.com", L"/backend-api/wham/usage",
@@ -8984,7 +10411,7 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     HttpResult r = requestUsage(tok);
     // Reactive refresh: the access token may have been revoked or expired early.
     if (r.ok && r.status == 401 && !tok.refreshToken.empty()) {
-        std::wstring refreshErr;
+        AccountError refreshErr;
         int refreshRetryAfter = 0;
         TokenEndpointResult refreshResult = refresh(&refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
@@ -8993,16 +10420,15 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
-                                                           L"token refresh failed" : L"could not save refreshed token"};
+                d->error = {saved == TokenSaveResult::Stale ? AccountErrorCode::TokenRefreshFailed :
+                                                              AccountErrorCode::TokenSaveFailed};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
             r = requestUsage(tok);
         } else if (refreshResult == TokenEndpointResult::TransientFailure) {
             d->stale = true;
-            d->error = {AccountErrorCode::Message, L"token refresh failed"};
-            if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
+            d->error = refreshFailed(refreshErr);
             *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             return signInGeneration;
         }
@@ -9010,13 +10436,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
 
     if (!r.ok) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"network error"};
+        d->error = {AccountErrorCode::Network};
         return signInGeneration;
     }
     if (r.status == 401) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = {AccountErrorCode::Message, L"unauthorized - click to sign in"};
+        d->error = {AccountErrorCode::Unauthorized};
         return signInGeneration;
     }
     // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
@@ -9030,13 +10456,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     }
     if (r.status == 429 || githubRateLimited) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"rate limited by API"};
+        d->error = {AccountErrorCode::RateLimited};
         *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
         return signInGeneration;
     }
     if (copilot && r.status == 403) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"no Copilot access on this GitHub account"};
+        d->error = {AccountErrorCode::NoCopilotAccess};
         return signInGeneration;
     }
     // OpenCode's EntitlementError: the key's workspace has no Go subscription. Other 403s (an edge
@@ -9049,25 +10475,25 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
         } catch (...) {}
         if (entitlement) {
             d->stale = true;
-            d->error = {AccountErrorCode::Message, L"no OpenCode Go subscription on this key"};
+            d->error = {AccountErrorCode::NoOpenCodeSubscription};
             return signInGeneration;
         }
     }
     if (r.status != 200) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"HTTP " + std::to_wstring(r.status)};
+        d->error = {.code = AccountErrorCode::Http, .status = r.status};
         return signInGeneration;
     }
 
     AccountData fresh;
-    std::wstring parseError;
+    AccountError parseError;
     bool parsed = anthropic ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
                   copilot ? ParseCopilotUsage(r.body, &fresh, &parseError) :
                   opencode ? ParseOpenCodeUsage(r.body, &fresh, &parseError) :
                              ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response format" : parseError};
+        d->error = parseError ? parseError : AccountError{AccountErrorCode::UnexpectedResponse};
         return signInGeneration;
     }
 
@@ -9607,42 +11033,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     }
                     if (shouldNotify && !g_unloading) {
                         const I18nLocale locale(*g_language.load(std::memory_order_acquire));
-                        std::wstring providerName =
-                            ProviderDisplayName(publishedAccounts[i].provider);
-                        std::wstring copilotUnit;
-                        wchar_t title[96];
-                        PCWSTR quotaName =
-                            w == kFiveHourBar ? L"5h" :
-                            w == kWeeklyBar ? L"weekly" :
-                            w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra";
-                        if (publishedAccounts[i].provider == L"antigravity") {
-                            if (w == kFiveHourBar) {
-                                ULONGLONG duration = publishedResults[i].win5h.windowDurationMs;
-                                quotaName = duration == 3ULL * 60 * 60 * 1000 ? L"Gemini 3h" :
-                                            duration == 60ULL * 60 * 1000 ? L"Gemini 1h" :
-                                            duration == 0 ? L"Gemini current limit" :
-                                                            L"Gemini 5h";
-                            } else if (w == kWeeklyBar) {
-                                quotaName = L"Gemini weekly";
-                            } else if (w == kFableWeeklyBar) {
-                                quotaName = L"Argon weekly";
-                            }
-                        } else if (publishedAccounts[i].provider == L"openai" &&
-                                   w == kExtraUsageBar) {
-                            quotaName = L"credits";
-                        } else if (publishedAccounts[i].provider == L"copilot") {
-                            copilotUnit = CopilotUnitName(locale, publishedResults[i].copilotUnit);
-                            quotaName = copilotUnit.c_str();
-                        } else if (publishedAccounts[i].provider == L"opencode" &&
-                                   w == kExtraUsageBar) {
-                            quotaName = L"monthly";
-                        }
-                        swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
-                                 quotaName, wu.pct);
-                        std::wstring body = providerName;
-                        if ((w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs) {
-                            body += L" - resets " + FormatReset(locale, wu.resetUnixMs);
-                        }
+                        auto [title, body] = ThresholdNotificationText(
+                            locale, publishedAccounts[i].provider, publishedResults[i], w,
+                            (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
+                                FormatReset(locale, wu.resetUnixMs) : L"");
                         // The flyout's projection to the limit; none for an OpenCode Go window at
                         // its limit, as there.
                         std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
@@ -10612,10 +12006,13 @@ static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provide
 }
 
 // An extra quota's name in the details flyout: as reported, then the length of the window it was
-// listed with in whole hours, when known ("Sonnet weekly", "Spark 5-hour", "Gemini 2-day").
-// AddExtraQuota merges by its English.
+// listed with in whole hours, when known ("Sonnet weekly", "Spark 5-hour", "Gemini 2-day"), or
+// that it is a pool's current limit ("Argon current limit"). AddExtraQuota merges by its English.
 static std::wstring ExtraQuotaName(const I18nLocale& locale, const NamedQuota& quota) {
     constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+    if (quota.currentLimit) {
+        return I18nText(locale, TrCtx(L"quota-name", L"{name} current limit"), {{L"name", quota.name}});
+    }
     ULONGLONG durationMs = quota.nameWindowMs;
     if (durationMs == kWeeklyWindowMs) {
         return I18nText(locale, TrCtx(L"quota-name", L"{name} weekly"), {{L"name", quota.name}});
@@ -11371,6 +12768,22 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
 static ProviderOutage VisualTestOutage(std::wstring_view provider, ULONGLONG now) {
     if (provider != L"openai") return {};
     return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};  // i18n-en
+}
+
+// The details flyout's outage line ends with the incident behind the outage: the page's title as
+// written, or the reason the mod names, then the models it affects ("Elevated errors:
+// glm-5.3-flash"); empty when the page says neither.
+static std::wstring ProviderOutageIncident(const I18nLocale& locale, const ProviderOutage& outage) {
+    using enum OutageReason;
+    std::wstring incident =
+        outage.reason == Latency      ? I18nText(locale, TrCtx(L"outage-reason", L"Slow responses")) :
+        outage.reason == Errors       ? I18nText(locale, TrCtx(L"outage-reason", L"Elevated errors")) :
+        outage.reason == Upstream     ? I18nText(locale, TrCtx(L"outage-reason", L"Upstream provider issues")) :
+        outage.reason == Availability ? I18nText(locale, TrCtx(L"outage-reason", L"Availability issues")) :
+                                        outage.title;
+    if (outage.models.empty() || incident.empty()) return incident.empty() ? outage.models : incident;
+    return I18nText(locale, TrCtx(L"outage-reason", L"{reason}: {models}"),
+                    {{L"reason", incident}, {L"models", outage.models}});
 }
 
 // A recorded reading of a quota in its current window (the burn-up curve's), oldest first.
@@ -14561,9 +15974,9 @@ static void UpdateAccountFlyout(
                 line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 since {time}"),
                                 {{L"status", line}, {L"time", today ? FormatLocalTime(since) : FormatLocalDayTime(since)}});
             }
-            if (!outage.title.empty()) {
+            if (std::wstring incident = ProviderOutageIncident(locale, outage); !incident.empty()) {
                 line = I18nText(locale, TrCtx(L"outage-line", L"{status} \u00B7 {incident}"),
-                                {{L"status", line}, {L"incident", outage.title}});
+                                {{L"status", line}, {L"incident", incident}});
             }
             if (std::wstring_view(popup.outageText.Text()) != line) {
                 popup.outageText.Text(line);
@@ -14930,8 +16343,24 @@ static void UpdateAccountFlyout(
         }
         popup.freeResets.Text(freeResets);
         show(popup.freeResets, !freeResets.empty());
-        popup.extraLines.Text(d.extraLines);
-        show(popup.extraLines, !d.extraLines.empty());
+        std::wstring note;
+        switch (d.note) {
+            case AccountNote::None: break;
+            case AccountNote::ExtraUsageUnlimited:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"extra usage: unlimited"));
+                break;
+            case AccountNote::NoRateLimits:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"rate limits: none reported"));
+                break;
+            case AccountNote::NoPremiumRequestAllowance:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"No premium request allowance on this plan."));
+                break;
+            case AccountNote::NoAiCreditAllowance:
+                note = I18nText(locale, TrCtx(L"flyout-note", L"No AI-credit allowance on this plan."));
+                break;
+        }
+        popup.extraLines.Text(note);
+        show(popup.extraLines, !note.empty());
         std::wstring error;
         if (d.error) {
             std::wstring message = AccountErrorText(locale, d.error);
@@ -14947,13 +16376,12 @@ static void UpdateAccountFlyout(
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
             status = I18nText(locale, TrCtx(L"flyout-note", L"Sign-in required. Click the bars to sign in."));
-        } else if (!visibleRows && d.lastSuccessMs && error.empty() && d.extraLines.empty()) {
+        } else if (!visibleRows && d.lastSuccessMs && error.empty() && note.empty()) {
             status = I18nText(locale, TrCtx(L"flyout-note", L"No quotas reported."));
         }
         popup.status.Text(status);
         show(popup.status, !status.empty());
-        show(popup.notes, !freeResets.empty() || !d.extraLines.empty() || !error.empty() ||
-                              !status.empty());
+        show(popup.notes, !freeResets.empty() || !note.empty() || !error.empty() || !status.empty());
 
         std::wstring updated = display.visualTestMode ? I18nText(locale, TrCtx(L"flyout-footer", L"Visual test data")) :
                                                         FormatUpdated(locale, d.lastSuccessMs, display.stale);
@@ -24438,10 +25866,10 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
         return result;
     }
     if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
-    std::wstring error;
+    HistoryJournalError error = HistoryJournalError::None;
     if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &error)) {
         result.message = L"The account was removed, but its usage history could not be deleted and was kept.\n\n" +
-                         error;
+                         HistoryJournalErrorText(I18nLocale(*g_language.load(std::memory_order_acquire)), error);
         result.icon = MB_ICONWARNING;
     }
     return result;
@@ -28616,11 +30044,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Label and "Provider · plan · status".
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
-        // The last poll's error, cut at 60 characters; an English message without a code of its own
-        // starts with a capital, catalog text stays as written.
-        std::wstring error = AccountErrorText(view.locale, status.error);
+        // The last poll's error on its own, cut at 60 characters.
+        std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
         if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
-        if (status.error.code == AccountErrorCode::Message && !error.empty()) error[0] = wchar_t(towupper(error[0]));
         if (status.signingIn) {
             stateText = L"Signing in\u2026";
             stateInk = UiInk::Accent;
@@ -31412,11 +32838,11 @@ struct HistoryOps {
     virtual HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
                                       const std::function<void(size_t)>& progress) = 0;
     // Clears the journal (`error`: why it couldn't), then the flyout's burn-up curves are dropped.
-    virtual bool Clear(std::wstring& error) = 0;
+    virtual bool Clear(HistoryJournalError& error) = 0;
     virtual void InvalidateCurves() = 0;
     // Deletes every sample of a removed account (`error`: why it couldn't, including an account in
     // the settings holding its history ID again).
-    virtual bool DeleteHistory(uint64_t historyId, std::wstring& error) = 0;
+    virtual bool DeleteHistory(uint64_t historyId, HistoryJournalError& error) = 0;
     // Posts the window's refresh message (ProcessRefresh); false when it couldn't.
     virtual bool PostRefresh() = 0;
     // Starts or stops the window's 250 ms deferral check (DeferralTick). A check that can't
@@ -31492,7 +32918,7 @@ struct HistoryController {
     uint64_t generation = 0;
     ULONGLONG from = 0, to = 0, readFrom = 0;
     std::vector<HistoryUiAccount> accounts;
-    std::wstring journalStatus;
+    HistoryJournalError journalStatus = HistoryJournalError::None;
     bool journalCapped = false;
 
     // The series the view was composed from, and what for
@@ -31559,10 +32985,10 @@ struct HistoryController {
         auto [start, end, readStart] = Times(read.settings.historyRetentionDays);
         auto loaded = std::make_shared<HistorySnapshot>(ops->ExplicitSnapshot(readStart));
         HistorySortSamples(loaded->samples);
-        std::wstring status = loaded->status;
+        HistoryJournalError status = loaded->status;
         bool capped = loaded->capped;
         if (!Adopt(std::move(read), std::move(loaded), readStart, start, end, readStart, request)) return;
-        journalStatus = std::move(status);
+        journalStatus = status;
         journalCapped = capped;
         liveDirty = samplesDirty = false;
         Timer(false);
@@ -31769,12 +33195,15 @@ struct HistoryController {
         if (Stopped()) return;
         if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
         if (answer != IDOK) return Finish({});
-        std::wstring error;
+        HistoryJournalError error = HistoryJournalError::None;
         bool cleared = ops->Clear(error);
         ops->InvalidateCurves();
         if (Stopped()) return;
         operation = HistoryOperation::None;
-        if (!cleared) return Finish({L"Could not clear all history. " + error, UiSeverity::Error});
+        if (!cleared) {
+            return Finish({L"Could not clear all history. " + HistoryJournalErrorText(view.locale, error),
+                           UiSeverity::Error});
+        }
         Load();
         Finish({L"All local history cleared. Future polls can start recording again."});
     }
@@ -31796,11 +33225,14 @@ struct HistoryController {
         if (Stopped()) return;
         if (!answer) return Finish({kHistoryUntracked, UiSeverity::Error});
         if (answer != IDOK) return Finish({});
-        std::wstring error;
+        HistoryJournalError error = HistoryJournalError::None;
         bool deleted = ops->DeleteHistory(id, error);
         if (Stopped()) return;
         operation = HistoryOperation::None;
-        if (!deleted) return Finish({L"Could not delete this account's history. " + error, UiSeverity::Error});
+        if (!deleted) {
+            return Finish({L"Could not delete this account's history. " + HistoryJournalErrorText(view.locale, error),
+                           UiSeverity::Error});
+        }
         Load();
         Finish({L"Deleted the history of removed account " + label + L"."});
     }
@@ -32002,7 +33434,7 @@ struct HistoryController {
         HistorySettingsSnapshot read = ops->ReadSettings();
         if (snapshot) {
             HistoryPeek peek = ops->PeekSnapshot(readFrom, false, snapshot->stamp, heldFrom);
-            journalStatus = std::move(peek.status);
+            journalStatus = peek.status;
             journalCapped = peek.capped;
         }
         if (read.settings == settings.settings) {
@@ -32029,7 +33461,7 @@ struct HistoryController {
             auto replacement = std::make_shared<HistorySnapshot>();
             replacement->samples = std::move(*peek.samples);
             HistorySortSamples(replacement->samples);
-            replacement->status = std::move(peek.status);
+            replacement->status = peek.status;
             replacement->capped = peek.capped;
             replacement->stamp = peek.stamp;
             next = std::move(replacement);
@@ -32136,7 +33568,7 @@ struct HistoryController {
         v.exporting = operation == HistoryOperation::Writing;
         // Not saving: the journal's error (before the first load, the storage flag); waiting:
         // account IDs not saved yet, or no sample in range.
-        bool storageError = snapshot ? !journalStatus.empty() : settings.storageError;
+        bool storageError = snapshot ? journalStatus != HistoryJournalError::None : settings.storageError;
         bool waiting = settings.idsPendingSave ||
                        (snapshot && std::all_of(accounts.begin(), accounts.end(),
                                                 [](const HistoryUiAccount& a) { return a.rows.empty(); }));
@@ -32148,7 +33580,7 @@ struct HistoryController {
             HistoryUiLocalTime localTime = [this](ULONGLONG ms) { return ops->LocalTime(ms); };
             v.status = I18nText(v.locale, TrCtx(L"history-status", L"Updated {time}"),
                                 {{L"time", HistoryUiTime(v.locale, to, now, localTime)}});
-            v.storageError = journalStatus;
+            v.storageError = HistoryJournalErrorText(v.locale, journalStatus);
             v.storageCapped = journalCapped;
             HistorySeriesKey key{generation, settingsRevision, from, to, readFrom, v.view,
                                  v.selected >= 0 ? selectedId : 0, compare, v.locale};
@@ -33203,18 +34635,18 @@ struct HistoryProductionOps final : HistoryOps {
         return result;
     }
 
-    bool Clear(std::wstring& error) override { return ClearHistory(&error); }
+    bool Clear(HistoryJournalError& error) override { return ClearHistory(&error); }
 
     void InvalidateCurves() override { InvalidateBurnUpCurves(); }
 
     // Refused while an account in the settings holds the history ID: only a removal's settings
     // publication fences out batches still carrying its samples (DeleteAccountHistory).
-    bool DeleteHistory(uint64_t historyId, std::wstring& error) override {
+    bool DeleteHistory(uint64_t historyId, HistoryJournalError& error) override {
         {
             std::lock_guard lock(g_settingsMutex);
             if (std::any_of(g_settings.accounts.begin(), g_settings.accounts.end(),
                             [&](const AccountConfig& account) { return account.historyId == historyId; })) {
-                error = L"An account in Settings uses this history again.";
+                error = HistoryJournalError::AccountConfigured;
                 return false;
             }
         }
@@ -33581,7 +35013,7 @@ void Wh_ModAfterInit() {
             std::lock_guard<std::mutex> lk(g_dataMutex);
             for (auto& data : g_data) {
                 data.stale = true;
-                data.error = {AccountErrorCode::Message, L"fetch thread failed"};
+                data.error = {AccountErrorCode::FetchThreadFailed};
             }
         }
     }

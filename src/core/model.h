@@ -319,6 +319,8 @@ struct NamedQuota {
     // The window whose length the flyout adds to the name (ExtraQuotaName): the one it was first
     // listed with, kept when a later reading replaces `usage`.
     ULONGLONG nameWindowMs = 0;
+    // A pool without a reported window, named "{name} current limit" (Antigravity's Argon).
+    bool currentLimit = false;
 };
 static constexpr size_t kMaxExtraQuotas = 8;
 
@@ -332,19 +334,72 @@ enum class CopilotUnit {
 
 // A poll's error as the mod authored it: a code, with each code's arguments in fields of their
 // own, formatted in the reader's language at presentation (AccountErrorText); logs and their
-// dedupe use its English text. Provider-supplied text rides in `detail` and is shown as is.
+// dedupe use its English text. Provider-supplied text rides in `detail` and is shown as is. The
+// token endpoints' failures (auth/oauth.h) are AccountErrors too: a failed refresh names one as
+// its cause.
 enum class AccountErrorCode : uint8_t {
     None,
-    Message,  // An English message without a code of its own: `detail`, shown and logged as is.
+    Message,  // Provider-supplied text without a code of its own: `detail`, shown and logged as is
+    // Sign-in and tokens
+    NotSignedIn,
+    SessionExpired,
+    Unauthorized,
+    TokenRefreshFailed,  // `cause`, when known: a token endpoint's failure
+    TokenSaveFailed,
+    // Usage requests
+    Network,
+    Http,  // `status`
+    RateLimited,
+    NoCopilotAccess,
+    NoOpenCodeSubscription,
+    UnexpectedResponse,  // `cause`, when known: the body's shape
+    FetchThreadFailed,
+    // Antigravity's local language server
     AntigravityNotRunning,
+    AntigravityUnavailable,
+    LanguageServerNetwork,
+    LanguageServerHttp,  // `status`
+    LanguageServerResponse,
+    NoQuotaGroups,
+    QuotaGroupsNotArray,
+    NoUsableQuotaBuckets,
+    QuotaSummaryInvalid,
+    NoUserStatus,
+    UserStatusInvalid,
+    NoUsableQuota,
+    // Token endpoint failures, besides Network, Http and Message
+    NoAccessToken,
+    InvalidTokenResponse,
+    UnexpectedTokenResponse,
+    InternalError,
+    // Response body shapes (core/json.h)
+    EmptyBody,
+    NoBodyKeys,
+    BodyKeys,  // `detail`: its first keys
+    InvalidJsonBody,
 };
 
 struct AccountError {
     AccountErrorCode code = AccountErrorCode::None;
     std::wstring detail;
+    int status = 0;  // HTTP status
+    // What caused it, for a code whose text names a cause: a code of its own, which reads `detail`
+    // and `status` as its own.
+    AccountErrorCode cause = AccountErrorCode::None;
 
     explicit operator bool() const { return code != AccountErrorCode::None; }
     bool operator==(const AccountError&) const = default;
+};
+
+// A note the details flyout shows about what a provider reported: Anthropic's extra usage without
+// a limit, OpenAI's credits without rate-limit windows, a GitHub Copilot plan without an
+// allowance in its unit.
+enum class AccountNote : uint8_t {
+    None,
+    ExtraUsageUnlimited,
+    NoRateLimits,
+    NoPremiumRequestAllowance,
+    NoAiCreditAllowance,
 };
 
 struct AccountData {
@@ -356,7 +411,7 @@ struct AccountData {
     WindowUsage antigravityThirdPartyWeek;
     std::vector<NamedQuota> extraQuotas;  // At most kMaxExtraQuotas.
     std::wstring plan;
-    std::wstring extraLines;
+    AccountNote note = AccountNote::None;
     // Free rate-limit resets (Anthropic, OpenAI): -1 when not reported; the next one's expiry, 0
     // when unknown or none.
     int freeResets = -1;
@@ -397,28 +452,43 @@ enum class OutageLevel : uint8_t {
     Major,
 };
 
+// A status page's reason for an outage that the mod names in the reader's language (OpenCode's
+// reason codes); None: the page's own title, if any, names it.
+enum class OutageReason : uint8_t {
+    None,
+    Latency,
+    Errors,
+    Upstream,
+    Availability,
+};
+
 // What a provider's accounts show of its status page (fetch/status-feeds.h): the worst watched
 // component's name and level, how many other watched components aren't operational, and the
-// incident or reason behind it with its start (Unix ms, 0 when unknown) when the page says.
+// incident or reason behind it with its start (Unix ms, 0 when unknown) when the page says: the
+// page's title as written, or a reason the mod names, and the models it reports affected (their
+// IDs, as listed).
 struct ProviderOutage {
     OutageLevel level = OutageLevel::None;
     std::wstring component;
     int others = 0;
     std::wstring title;
     ULONGLONG sinceMs = 0;
+    OutageReason reason = OutageReason::None;
+    std::wstring models;
 
     bool operator==(const ProviderOutage&) const = default;
 };
 
-// Adds a reported quota to the account's extra quotas. One whose name reads as a listed one's in
-// English, its window's length included ("Sonnet weekly", "Spark 5-hour"), replaces that one's
-// reading when more used; past kMaxExtraQuotas quotas are dropped.
-static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage) {
+// Adds a reported quota to the account's extra quotas (`currentLimit`: NamedQuota's). One whose
+// name reads as a listed one's in English, its window's length included ("Sonnet weekly", "Spark
+// 5-hour"), replaces that one's reading when more used; past kMaxExtraQuotas quotas are dropped.
+static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& usage, bool currentLimit = false) {
     if (name.empty() || !std::isfinite(usage.pct) || usage.pct < 0) return;
     name.resize(std::min<size_t>(name.size(), 64));
     // ExtraQuotaName's English, which the model can't format: the merge key.
-    auto english = [](const std::wstring& name, ULONGLONG durationMs) {
+    auto english = [](const std::wstring& name, ULONGLONG durationMs, bool currentLimit) {
         constexpr ULONGLONG kHourMs = 60ULL * 60 * 1000, kDayMs = 24 * kHourMs;
+        if (currentLimit) return name + L" current limit";  // i18n-en
         if (durationMs == kWeeklyWindowMs) return name + L" weekly";  // i18n-en
         if (durationMs && durationMs % kDayMs == 0) {
             return name + L" " + std::to_wstring(durationMs / kDayMs) + L"-day";  // i18n-en
@@ -428,14 +498,14 @@ static void AddExtraQuota(AccountData* d, std::wstring name, const WindowUsage& 
         }
         return name;
     };
-    std::wstring key = english(name, usage.windowDurationMs);
+    std::wstring key = english(name, usage.windowDurationMs, currentLimit);
     for (NamedQuota& listed : d->extraQuotas) {
-        if (english(listed.name, listed.nameWindowMs) != key) continue;
+        if (english(listed.name, listed.nameWindowMs, listed.currentLimit) != key) continue;
         if (usage.pct > listed.usage.pct) listed.usage = usage;
         return;
     }
     if (d->extraQuotas.size() < kMaxExtraQuotas) {
-        d->extraQuotas.push_back({std::move(name), usage, usage.windowDurationMs});
+        d->extraQuotas.push_back({std::move(name), usage, usage.windowDurationMs, currentLimit});
     }
 }
 

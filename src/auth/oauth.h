@@ -8,12 +8,12 @@ static constexpr PCWSTR kAnthropicTokenHost = L"console.anthropic.com";
 static constexpr PCWSTR kAnthropicTokenPath = L"/v1/oauth/token";
 // The page that shows the code#state to paste; on this PC a localhost redirect takes its place.
 static constexpr PCWSTR kAnthropicRedirect = L"https://console.anthropic.com/oauth/code/callback";
-static constexpr PCWSTR kAnthropicScope = L"org:create_api_key user:profile user:inference";
+static constexpr PCWSTR kAnthropicScope = L"org:create_api_key user:profile user:inference";  // i18n-en
 static constexpr PCWSTR kOpenAiClientId = L"app_EMoamEEZ73f0CkXaXp7hrann";
 static constexpr PCWSTR kOpenAiTokenHost = L"auth.openai.com";
 static constexpr PCWSTR kOpenAiTokenPath = L"/oauth/token";
 static constexpr PCWSTR kOpenAiScope =
-    L"openid profile email offline_access api.connectors.read api.connectors.invoke";
+    L"openid profile email offline_access api.connectors.read api.connectors.invoke";  // i18n-en
 // GitHub's device flow; sign-in and refresh share the token endpoint.
 static constexpr PCWSTR kCopilotClientId = L"Iv1.b507a08c87ecfe98";
 static constexpr PCWSTR kCopilotScope = L"read:user";
@@ -108,17 +108,24 @@ static std::wstring ParseOAuthError(const std::string& body) {
     }
 }
 
+// An error answer's failure: the provider's OAuth error as written, else its HTTP status.
+static AccountError OAuthFailure(const HttpResult& r) {
+    std::wstring detail = ParseOAuthError(r.body);
+    return detail.empty() ? AccountError{.code = AccountErrorCode::Http, .status = r.status} :
+                            AccountError{AccountErrorCode::Message, std::move(detail)};
+}
+
 // Fills *tok from an OAuth token response (access/refresh/id_token), extracting the OpenAI
 // ChatGPT-Account-Id and access-token expiry from JWT claims when present. Used for both the
 // authorization-code exchange and refresh.
 static bool ParseTokenResponse(const std::string& body, bool anthropic, StoredToken* tok,
-                               std::wstring* err) {
+                               AccountError* err) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         std::wstring access = GetStr(root, L"access_token");
         std::wstring refresh = GetStr(root, L"refresh_token");
         if (access.empty()) {
-            *err = L"no access token in response";
+            *err = {AccountErrorCode::NoAccessToken};
             return false;
         }
         tok->accessToken = access;
@@ -146,27 +153,27 @@ static bool ParseTokenResponse(const std::string& body, bool anthropic, StoredTo
         }
         return true;
     } catch (...) {
-        *err = L"invalid token response";
+        *err = {AccountErrorCode::InvalidTokenResponse};
         return false;
     }
 }
 
+// `err`: why it failed.
 static TokenEndpointResult PostTokenEndpoint(bool anthropic, const std::wstring& contentType,
                                               const std::string& body, StoredToken* tok,
-                                              std::wstring* err, int* retryAfterSec = nullptr) {
+                                              AccountError* err, int* retryAfterSec = nullptr) {
     if (retryAfterSec) *retryAfterSec = 0;
-    std::wstring headers = L"Content-Type: " + contentType + L"\r\nAccept: application/json\r\n";
+    std::wstring headers = L"Content-Type: " + contentType + L"\r\nAccept: application/json\r\n";  // i18n-en
     PCWSTR host = anthropic ? kAnthropicTokenHost : kOpenAiTokenHost;
     PCWSTR path = anthropic ? kAnthropicTokenPath : kOpenAiTokenPath;
     HttpResult r = HttpRequest(L"POST", host, path, kOAuthUserAgent, headers, body);
     if (!r.ok) {
-        *err = L"network error";
+        *err = {AccountErrorCode::Network};
         return TokenEndpointResult::TransientFailure;
     }
     if (r.status < 200 || r.status >= 300) {
         if (retryAfterSec) *retryAfterSec = r.retryAfterSec;
-        std::wstring detail = ParseOAuthError(r.body);
-        *err = detail.empty() ? (L"HTTP " + std::to_wstring(r.status)) : detail;
+        *err = OAuthFailure(r);
         bool rejected = r.status >= 400 && r.status < 500 && r.status != 408 &&
                         r.status != 429;
         return rejected ? TokenEndpointResult::Rejected
@@ -178,14 +185,13 @@ static TokenEndpointResult PostTokenEndpoint(bool anthropic, const std::wstring&
 }
 
 // grant_type=refresh_token. Anthropic sends JSON; OpenAI sends JSON too (its auth-code
-// exchange is the form-encoded one). Rotated refresh tokens come back in the response.
+// exchange is the form-encoded one). Rotated refresh tokens come back in the response. `err`: why
+// it failed (none for a rejection without a request).
 static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToken* tok,
-                                        std::wstring* err, int* retryAfterSec) {
+                                        AccountError* err, int* retryAfterSec) {
     if (retryAfterSec) *retryAfterSec = 0;
-    if (tok->refreshToken.empty()) {
-        *err = L"no refresh token";
-        return TokenEndpointResult::Rejected;
-    }
+    *err = {};
+    if (tok->refreshToken.empty()) return TokenEndpointResult::Rejected;
     bool anthropic = provider == L"anthropic";
     std::string body;
     try {
@@ -197,7 +203,7 @@ static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToke
                                             winrt::hstring(anthropic ? kAnthropicClientId : kOpenAiClientId)));
         body = WideToUtf8(std::wstring(obj.Stringify().c_str()));
     } catch (...) {
-        *err = L"internal error";
+        *err = {AccountErrorCode::InternalError};
         return TokenEndpointResult::TransientFailure;
     }
     return PostTokenEndpoint(anthropic, L"application/json", body, tok, err, retryAfterSec);

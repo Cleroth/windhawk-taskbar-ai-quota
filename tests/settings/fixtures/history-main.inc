@@ -12,6 +12,7 @@
 #include "history-tooltip.inc"
 #include "history-chart.inc"
 #include "i18n-history.inc"
+#include "i18n-journal.inc"
 #include "history-render.inc"
 
 int main(int argc, char** argv) {
@@ -36,6 +37,7 @@ int main(int argc, char** argv) {
         RunHistoryTooltipTests();
         RunHistoryChartTests();
         RunHistoryI18nTests();
+        RunJournalErrorI18nTests();
     }
     std::cout << "RESULT " << passed << " passed, " << failed << " failed; " << assertions << " assertions\n";
     CoUninitialize();

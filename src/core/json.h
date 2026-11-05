@@ -1,4 +1,4 @@
-// Null-tolerant JSON accessors and error-body summaries.
+// Null-tolerant JSON accessors and the error of a response body of an unexpected shape.
 
 static JsonObject GetObj(JsonObject const& o, PCWSTR name) {
     if (!o || !o.HasKey(name)) return nullptr;
@@ -26,9 +26,11 @@ static bool GetBool(JsonObject const& o, PCWSTR name) {
     return v.ValueType() == JsonValueType::Boolean && v.GetBoolean();
 }
 
-// A response body's shape, for an error's detail.
-static std::wstring DescribeJsonBody(const std::string& body) {
-    if (body.empty()) return L"empty body";  // i18n-en
+// An unexpected response's error, caused by its body's shape: empty, a JSON object with no keys or
+// with its first keys (as listed, then "..." past eight), or not a JSON object.
+static AccountError UnexpectedResponseFormat(const std::string& body) {
+    using enum AccountErrorCode;
+    if (body.empty()) return {.code = UnexpectedResponse, .cause = EmptyBody};
 
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
@@ -44,8 +46,8 @@ static std::wstring DescribeJsonBody(const std::string& body) {
             keys += std::wstring(key.c_str(), key.size());
             count++;
         }
-        return keys.empty() ? L"JSON object with no keys" : L"keys: " + keys;  // i18n-en
+        return {.code = UnexpectedResponse, .detail = keys, .cause = keys.empty() ? NoBodyKeys : BodyKeys};
     } catch (...) {
-        return L"non-object or invalid JSON body";  // i18n-en
+        return {.code = UnexpectedResponse, .cause = InvalidJsonBody};
     }
 }

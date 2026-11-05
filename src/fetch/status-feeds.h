@@ -32,11 +32,11 @@ static constexpr ProviderStatusSource kProviderStatusSources[] = {
     {L"anthropic", L"status.claude.com", L"/api/v2/summary.json", L"https://status.claude.com",
      StatusFeedKind::Statuspage, {L"rwppv331jlwc", L"k8w3r06qmzrp", L"yyzkbfz2thpt"}, kStatusIntervalMs, false},
     {L"openai", L"status.openai.com", L"/proxy/status.openai.com", L"https://status.openai.com",
-     StatusFeedKind::IncidentIo, {L"01KMKF9EBTCD8BN9PG8DJZXRSQ", L"Codex", nullptr}, kStatusIntervalMs, false},
+     StatusFeedKind::IncidentIo, {L"01KMKF9EBTCD8BN9PG8DJZXRSQ", L"Codex", nullptr}, kStatusIntervalMs, false},  // i18n-en
     {L"copilot", L"www.githubstatus.com", L"/api/v2/summary.json", L"https://www.githubstatus.com",
      StatusFeedKind::Statuspage, {L"pjmpxvq2cmr2", L"cnnb39dkkk82", nullptr}, kStatusIntervalMs, false},
     {L"opencode", L"status.opencode.ai", L"/api/status", L"https://status.opencode.ai",
-     StatusFeedKind::OpenCode, {L"go", L"OpenCode Go", nullptr}, kOpenCodeStatusIntervalMs, true},
+     StatusFeedKind::OpenCode, {L"go", L"OpenCode Go", nullptr}, kOpenCodeStatusIntervalMs, true},  // i18n-en
 };
 
 // The provider's status source; none for Antigravity.
@@ -51,7 +51,7 @@ static const ProviderStatusSource* FindProviderStatusSource(std::wstring_view pr
 // component is operational. None (no value) when the page can't be trusted: invalid JSON, a missing
 // or mistyped part that names a level, no watched component listed, or OpenCode's own stale flag.
 // Status strings it doesn't know name no level. `problem` gets why a read failed, or the first
-// unknown status of a watched component.
+// unknown status of a watched component, in English for the log.
 static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSource& source,
                                                          const std::string& body,
                                                          std::wstring* problem = nullptr) {
@@ -65,7 +65,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
         if (status == L"partial_outage") return OutageLevel::Partial;
         if (status == L"major_outage" || status == L"full_outage" || status == L"outage") return OutageLevel::Major;
         if (status == L"under_maintenance" || status == L"maintenance") return OutageLevel::Maintenance;
-        if (problem && problem->empty() && !status.empty()) *problem = L"unknown status \"" + status.substr(0, 40) + L"\"";
+        if (problem && problem->empty() && !status.empty()) *problem = L"unknown status \"" + status.substr(0, 40) + L"\"";  // i18n-en: logged
         return OutageLevel::None;
     };
     auto array = [](JsonObject const& o, PCWSTR name) -> JsonArray {
@@ -119,7 +119,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
             // Levels from the watched components; the title and start from an unresolved incident or
             // a maintenance in progress listing the worst one, else its last status change.
             JsonArray components = array(root, L"components");
-            if (!components) return fail(L"no components");
+            if (!components) return fail(L"no components");  // i18n-en: logged
             struct Watched {
                 std::wstring id, name;
                 OutageLevel level = OutageLevel::None;
@@ -139,7 +139,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 auto entry = std::find_if(watched.begin(), watched.end(),
                                           [&](const Watched& w) { return w.id == id && !w.found; });
                 if (entry == watched.end()) continue;
-                if (!isString(component, L"status")) return fail(L"component status not a string");
+                if (!isString(component, L"status")) return fail(L"component status not a string");  // i18n-en: logged
                 entry->found = true;
                 entry->name = GetStr(component, L"name");
                 if (entry->name.empty()) entry->name = id;
@@ -155,7 +155,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 nonOperational++;
                 if (!worst || w.level > worst->level) worst = &w;
             }
-            if (!any) return fail(L"no watched component");
+            if (!any) return fail(L"no watched component");  // i18n-en: logged
             if (!worst) return outage;
             outage.level = worst->level;
             outage.component = worst->name;
@@ -211,7 +211,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
             // current impact covers the worst component; the start from that impact.
             JsonObject summary = GetObj(root, L"summary");
             JsonArray items = array(GetObj(summary, L"structure"), L"items");
-            if (!items) return fail(L"no structure");
+            if (!items) return fail(L"no structure");  // i18n-en: logged
             JsonObject group = nullptr;
             for (IJsonValue const& value : items) {
                 JsonObject candidate = GetObj(object(value), L"group");
@@ -225,7 +225,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 }
             }
             JsonArray members = array(group, L"components");
-            if (!members) return fail(L"no watched group");
+            if (!members) return fail(L"no watched group");  // i18n-en: logged
             struct Watched {
                 std::wstring id, name;
                 OutageLevel level = OutageLevel::None;
@@ -243,7 +243,7 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 watched.back().id = id;
                 watched.back().name = GetStr(member, L"name");
             }
-            if (watched.empty()) return fail(L"no watched component");
+            if (watched.empty()) return fail(L"no watched component");  // i18n-en: logged
             if (JsonArray named = array(summary, L"components")) {
                 for (IJsonValue const& value : named) {
                     JsonObject component = object(value);
@@ -254,14 +254,14 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 }
             }
             JsonArray affected = array(summary, L"affected_components");
-            if (!affected) return fail(L"no affected components");
+            if (!affected) return fail(L"no affected components");  // i18n-en: logged
             for (IJsonValue const& value : affected) {
                 JsonObject entry = object(value);
                 std::wstring id = GetStr(entry, L"component_id");
                 if (id.empty()) continue;
                 auto w = std::find_if(watched.begin(), watched.end(), [&](const Watched& w) { return w.id == id; });
                 if (w == watched.end()) continue;
-                if (!isString(entry, L"status")) return fail(L"affected component status not a string");
+                if (!isString(entry, L"status")) return fail(L"affected component status not a string");  // i18n-en: logged
                 w->level = std::max(w->level, levelOf(GetStr(entry, L"status")));
             }
             const Watched* worst = nullptr;
@@ -319,11 +319,11 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
         // aren't operational.
         if (root.HasKey(L"stale")) {
             IJsonValue stale = root.GetNamedValue(L"stale");
-            if (stale.ValueType() != JsonValueType::Boolean) return fail(L"stale flag not a boolean");
-            if (stale.GetBoolean()) return fail(L"page reports stale data");
+            if (stale.ValueType() != JsonValueType::Boolean) return fail(L"stale flag not a boolean");  // i18n-en: logged
+            if (stale.GetBoolean()) return fail(L"page reports stale data");  // i18n-en: logged
         }
         JsonArray components = array(root, L"components");
-        if (!components) return fail(L"no components");
+        if (!components) return fail(L"no components");  // i18n-en: logged
         JsonObject service = nullptr;
         for (IJsonValue const& value : components) {
             JsonObject component = object(value);
@@ -332,8 +332,8 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 break;
             }
         }
-        if (!service) return fail(L"no watched component");
-        if (!isString(service, L"status")) return fail(L"component status not a string");
+        if (!service) return fail(L"no watched component");  // i18n-en: logged
+        if (!isString(service, L"status")) return fail(L"component status not a string");  // i18n-en: logged
         outage.level = levelOf(GetStr(service, L"status"));
         if (outage.level == OutageLevel::None) return outage;
         outage.component = source.watched[1] ? source.watched[1] : source.watched[0];
@@ -364,25 +364,18 @@ static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSou
                 break;
             }
         }
-        if (reason == L"latency") {
-            outage.title = L"Slow responses";
-        } else if (reason == L"errors") {
-            outage.title = L"Elevated errors";
-        } else if (reason == L"upstream") {
-            outage.title = L"Upstream provider issues";
-        } else if (reason == L"availability") {
-            outage.title = L"Availability issues";
-        } else if (reason != L"none") {
-            outage.title = reason.substr(0, 40);
-        }
-        if (!models.empty()) {
-            std::wstring list;
-            for (const std::wstring& model : models) list += (list.empty() ? L"" : L", ") + model.substr(0, 40);
-            outage.title += (outage.title.empty() ? L"" : L": ") + list;
+        // Reasons it knows are the mod's to name; another one is the page's title, as written.
+        outage.reason = reason == L"latency"      ? OutageReason::Latency :
+                        reason == L"errors"       ? OutageReason::Errors :
+                        reason == L"upstream"     ? OutageReason::Upstream :
+                        reason == L"availability" ? OutageReason::Availability : OutageReason::None;
+        if (outage.reason == OutageReason::None && reason != L"none") outage.title = reason.substr(0, 40);
+        for (const std::wstring& model : models) {
+            outage.models += (outage.models.empty() ? L"" : L", ") + model.substr(0, 40);
         }
         return outage;
     } catch (...) {
-        return fail(L"invalid JSON");
+        return fail(L"invalid JSON");  // i18n-en: logged
     }
 }
 

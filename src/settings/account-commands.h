@@ -250,10 +250,10 @@ static AccountCommandResult RemoveAccountCommand(AccountTarget target, bool dele
         return result;
     }
     if (result.apply == SettingsApplyResult::Changed) FinishSettingsApply();
-    std::wstring error;
+    HistoryJournalError error = HistoryJournalError::None;
     if (deleteHistory && historyId && !DeleteAccountHistory(historyId, &error)) {
         result.message = L"The account was removed, but its usage history could not be deleted and was kept.\n\n" +
-                         error;
+                         HistoryJournalErrorText(I18nLocale(*g_language.load(std::memory_order_acquire)), error);
         result.icon = MB_ICONWARNING;
     }
     return result;

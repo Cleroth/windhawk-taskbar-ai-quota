@@ -177,18 +177,18 @@ struct HistoryProductionOps final : HistoryOps {
         return result;
     }
 
-    bool Clear(std::wstring& error) override { return ClearHistory(&error); }
+    bool Clear(HistoryJournalError& error) override { return ClearHistory(&error); }
 
     void InvalidateCurves() override { InvalidateBurnUpCurves(); }
 
     // Refused while an account in the settings holds the history ID: only a removal's settings
     // publication fences out batches still carrying its samples (DeleteAccountHistory).
-    bool DeleteHistory(uint64_t historyId, std::wstring& error) override {
+    bool DeleteHistory(uint64_t historyId, HistoryJournalError& error) override {
         {
             std::lock_guard lock(g_settingsMutex);
             if (std::any_of(g_settings.accounts.begin(), g_settings.accounts.end(),
                             [&](const AccountConfig& account) { return account.historyId == historyId; })) {
-                error = L"An account in Settings uses this history again.";
+                error = HistoryJournalError::AccountConfigured;
                 return false;
             }
         }

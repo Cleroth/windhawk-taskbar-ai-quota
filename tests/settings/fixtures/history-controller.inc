@@ -13,7 +13,7 @@ struct TestHistoryOps final : HistoryOps {
     uint64_t request = 0;
     std::vector<HistorySample> journal;
     HistoryJournalStamp stamp{true, 1, 1, 0};
-    std::wstring status;
+    HistoryJournalError status = HistoryJournalError::None;
     bool capped = false;
     // Kept for 90 days, so All retained spans a fixed period (kept forever: its own cases)
     HistorySettingsSnapshot settings = [] {
@@ -51,12 +51,12 @@ struct TestHistoryOps final : HistoryOps {
     // Clear's result (and its error; the epoch moves either way, as the journal's does), what
     // happens during it; whether the journal's folder exists
     bool clearResult = true;
-    std::wstring clearError = L"History storage is in use by another Explorer session, or is inaccessible.";
+    HistoryJournalError clearError = HistoryJournalError::InUse;
     std::function<void()> clearing;
     // Delete history's result (and its error; a success removes the account's samples and moves
     // the revision, as the journal's does), what happens during it
     bool deleteResult = true;
-    std::wstring deleteError = L"History storage is in use by another Explorer session, or is inaccessible.";
+    HistoryJournalError deleteError = HistoryJournalError::InUse;
     std::function<void()> deleting;
     bool folder = true;
     // The current language (English unless a case switches it)
@@ -160,7 +160,7 @@ struct TestHistoryOps final : HistoryOps {
         }
         return result;
     }
-    bool Clear(std::wstring& error) override {
+    bool Clear(HistoryJournalError& error) override {
         log.push_back(L"clear");
         if (clearing) clearing();
         stamp.epoch++;
@@ -169,7 +169,7 @@ struct TestHistoryOps final : HistoryOps {
         return clearResult;
     }
     void InvalidateCurves() override { log.push_back(L"invalidate"); }
-    bool DeleteHistory(uint64_t historyId, std::wstring& error) override {
+    bool DeleteHistory(uint64_t historyId, HistoryJournalError& error) override {
         wchar_t entry[32];
         swprintf(entry, ARRAYSIZE(entry), L"delete %llx", static_cast<unsigned long long>(historyId));
         log.push_back(entry);
@@ -511,12 +511,14 @@ static void RunHistoryControllerTests() {
         CHECK(v.pill == HistoryUiPill::Recording && v.status == L"Updated Sat 31 Oct 14:32" && v.storageError.empty() &&
               !v.storageCapped);
         // The journal's error and its cap, apart.
-        ops.status = L"History write failed; the previous journal was kept.";
+        ops.status = HistoryJournalError::WriteFailed;
         ops.capped = true;
         c.Load();
-        CHECK(c.view.pill == HistoryUiPill::NotSaving && c.view.storageError == ops.status && c.view.storageCapped);
+        CHECK(c.view.pill == HistoryUiPill::NotSaving && c.view.storageError ==
+              L"History write failed; the previous journal was kept." &&
+              c.view.storageCapped);
         // No sample in range, or account IDs not saved yet: waiting.
-        ops.status.clear();
+        ops.status = HistoryJournalError::None;
         ops.capped = false;
         ops.journal.clear();
         c.Load();

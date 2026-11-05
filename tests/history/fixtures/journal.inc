@@ -17,7 +17,7 @@
             }
             g_historyLoaded = true;
             g_historyEpoch = 3; g_historyRevision = 5; g_historyAppendCount = 7;
-            g_historyStatus.clear(); g_historyCapped = false;
+            g_historyStatus = HistoryJournalError::None; g_historyCapped = false;
             return HistoryJournalStamp{true, 3, 5, 7};
         };
         auto times = [](const std::vector<HistorySample>& samples) {
@@ -62,7 +62,7 @@
             // Unloaded (ownership lost): no replacement whatever was held.
             journal();
             g_historyLoaded = false;
-            g_historyStatus = L"History storage is in use by another Explorer session, or is inaccessible.";
+            g_historyStatus = HistoryJournalError::InUse;
             g_historyCapped = true;
             auto unloaded = PeekHistorySnapshot(at(0), true, {}, ULLONG_MAX);
             CHECK(!unloaded.samples && !unloaded.stamp.loaded && unloaded.stamp.revision == 5 &&
@@ -70,7 +70,7 @@
         });
         Run("journal/peek: memory only, under the history lock, changing nothing and notifying nothing", [&] {
             const HistoryJournalStamp held = journal();
-            g_historyStatus = L"Damaged history record. Export readable samples or clear history.";
+            g_historyStatus = HistoryJournalError::DamagedRecord;
             settingsNotifications = 0;
             std::atomic<bool> done{false};
             bool waited = false;
@@ -92,21 +92,21 @@
             CHECK(peek.stamp == held && peek.status == g_historyStatus && g_historyLoaded && g_historyRevision == 5 &&
                   g_historySamples.size() == 5 && settingsNotifications == 0);
         });
-        Run("journal/status: every change of the text notifies once, an unchanged text doesn't; the storage "
+        Run("journal/status: every change of the status notifies once, an unchanged one doesn't; the storage "
             "error flag follows", [&] {
-            g_historyStatus.clear();
+            g_historyStatus = HistoryJournalError::None;
             g_historyStorageError = false;
             settingsNotifications = 0;
             SetHistoryStatus({});
             CHECK(settingsNotifications == 0 && !g_historyStorageError);
-            SetHistoryStatus(L"History write failed; the previous journal was kept.");
+            SetHistoryStatus(HistoryJournalError::WriteFailed);
             CHECK(settingsNotifications == 1 && g_historyStorageError);
-            SetHistoryStatus(L"History write failed; the previous journal was kept.");
+            SetHistoryStatus(HistoryJournalError::WriteFailed);
             CHECK(settingsNotifications == 1);
-            SetHistoryStatus(L"History is not being saved to disk. Check disk space and permissions.");
+            SetHistoryStatus(HistoryJournalError::NotSaved);
             CHECK(settingsNotifications == 2 && g_historyStorageError);
             SetHistoryStatus({});
-            CHECK(settingsNotifications == 3 && !g_historyStorageError && g_historyStatus.empty());
+            CHECK(settingsNotifications == 3 && !g_historyStorageError && g_historyStatus == HistoryJournalError::None);
             SetHistoryStatus({});
             CHECK(settingsNotifications == 3);
         });

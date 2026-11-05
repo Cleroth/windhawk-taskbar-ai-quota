@@ -42,9 +42,27 @@ struct HistoryJournalStamp {
     uint64_t epoch = 0, revision = 0, appended = 0;
     bool operator==(const HistoryJournalStamp&) const = default;
 };
+// Why the journal can't be read or saved (its status), or why an operation on it didn't run; its
+// text, in the reader's language: HistoryJournalErrorText (history/journal-error.h).
+enum class HistoryJournalError : uint8_t {
+    None,
+    Unavailable,
+    CannotCreateDirectory,
+    InUse,
+    CannotRead,
+    CannotReadSize,
+    Unsupported,
+    ReadFailed,
+    DamagedRecord,
+    TooLarge,
+    CannotWrite,
+    WriteFailed,
+    NotSaved,
+    AccountConfigured,  // A deletion's refusal: an account in the settings holds the history ID
+};
 struct HistorySnapshot {
     std::vector<HistorySample> samples;
-    std::wstring status;  // The journal's error status; empty while healthy
+    HistoryJournalError status = HistoryJournalError::None;  // The journal's error status; None while healthy
     bool capped = false;  // The storage cap pruned the oldest samples
     HistoryJournalStamp stamp;
 };
@@ -52,7 +70,7 @@ struct HistorySnapshot {
 // snapshot (every sample from the asked start on, possibly none) or nullopt: no replacement.
 struct HistoryPeek {
     HistoryJournalStamp stamp;
-    std::wstring status;
+    HistoryJournalError status = HistoryJournalError::None;
     bool capped = false;
     std::optional<std::vector<HistorySample>> samples;
 };

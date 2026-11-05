@@ -2,7 +2,7 @@
 
 static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 
-static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseOpenAiUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         auto hasWindows = [](JsonObject const& o) -> bool {
@@ -82,7 +82,7 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         applyWindow(GetObj(rl, L"weekly_limit"), &d->winWeek);
 
         d->plan = GetStr(usage, L"plan_type");
-        d->extraLines.clear();
+        d->note = AccountNote::None;
         // Each window of an additional_rate_limits entry (Codex Spark, hidden model lanes such as
         // gpt-reserve, ...) is an extra quota, shown with its Display setting; only the primary
         // windows drive bars.
@@ -138,11 +138,11 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
         bool hasWindowUsage = d->win5h.pct >= 0 || d->winWeek.pct >= 0;
         bool parsed = hasWindowUsage || d->creditsBalance >= 0 || d->creditsUnlimited ||
                       d->hasCredits;
-        if (parsed && !hasWindowUsage) d->extraLines = L"rate limits: none reported";
-        if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (parsed && !hasWindowUsage) d->note = AccountNote::NoRateLimits;
+        if (!parsed && error) *error = UnexpectedResponseFormat(body);
         return parsed;
     } catch (...) {
-        if (error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
+        if (error) *error = UnexpectedResponseFormat(body);
         return false;
     }
 }

@@ -225,6 +225,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "history/types.h"
 
+#include "history/journal-error.h"
+
 #include "history/state.h"
 
 #include "taskbar/ui-types.h"
@@ -488,7 +490,7 @@ void Wh_ModAfterInit() {
             std::lock_guard<std::mutex> lk(g_dataMutex);
             for (auto& data : g_data) {
                 data.stale = true;
-                data.error = {AccountErrorCode::Message, L"fetch thread failed"};
+                data.error = {AccountErrorCode::FetchThreadFailed};
             }
         }
     }

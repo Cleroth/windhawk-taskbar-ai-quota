@@ -36,6 +36,86 @@ static bool RemoveToastAppId() {
     return false;
 }
 
+// A threshold notification's title and body in `locale`: the quota's "... usage at {percent}%"
+// (the percentage rounded as %.0f), then the provider's name with `resets` (the reset's
+// FormatReset; empty: none) after it. A GitHub Copilot quota goes by its allowance's unit,
+// Antigravity's by their pools.
+static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18nLocale& locale,
+                                                                        const std::wstring& provider,
+                                                                        const AccountData& data, int slot,
+                                                                        const std::wstring& resets) {
+    const std::array<const WindowUsage*, kQuotaBarCount> usage = {&data.win5h, &data.winWeek, &data.fableWeek,
+                                                                  &data.extraUsage};
+    // Room for any double's digits: reported percentages have no upper bound.
+    wchar_t number[400];
+    if (swprintf(number, ARRAYSIZE(number), L"%.0f", usage[size_t(slot)]->pct) < 0) number[0] = L'\0';
+    const std::wstring_view percent = number;
+    // Its pool's name (Antigravity's Gemini and Argon, Anthropic's Fable): brands.
+    auto weekly = [&](PCWSTR name) {
+        return I18nText(locale, TrCtx(L"notification-title", L"{name} weekly usage at {percent}%"),
+                        {{L"name", name}, {L"percent", percent}});
+    };
+    std::wstring title;
+    if (provider == L"antigravity" && slot == kFiveHourBar) {
+        PCWSTR pool = L"Gemini";  // i18n-en
+        ULONGLONG durationMs = data.win5h.windowDurationMs;
+        int hours = durationMs == 3ULL * 60 * 60 * 1000 ? 3 : durationMs == 60ULL * 60 * 1000 ? 1 : 5;
+        title = durationMs ? I18nText(locale, TrCtx(L"notification-title", L"{name} {hours}h usage at {percent}%"),
+                                      {{L"name", pool}, {L"hours", hours}, {L"percent", percent}}) :
+                             I18nText(locale, TrCtx(L"notification-title", L"{name} current limit usage at {percent}%"),
+                                      {{L"name", pool}, {L"percent", percent}});
+    } else if (provider == L"antigravity" && (slot == kWeeklyBar || slot == kFableWeeklyBar)) {
+        title = weekly(slot == kWeeklyBar ? L"Gemini" : L"Argon");  // i18n-en
+    } else if (provider == L"copilot") {
+        title = I18nText(locale,
+                         data.copilotUnit == CopilotUnit::PremiumRequests ?
+                             TrCtx(L"notification-title", L"premium requests usage at {percent}%") :
+                         data.copilotUnit == CopilotUnit::ChatRequests ?
+                             TrCtx(L"notification-title", L"chat requests usage at {percent}%") :
+                             TrCtx(L"notification-title", L"AI credits usage at {percent}%"),
+                         {{L"percent", percent}});
+    } else if (slot == kFableWeeklyBar) {
+        title = weekly(L"Fable");  // i18n-en
+    } else {
+        I18nKey key = slot == kFiveHourBar    ? TrCtx(L"notification-title", L"5h usage at {percent}%") :
+                      slot == kWeeklyBar      ? TrCtx(L"notification-title", L"weekly usage at {percent}%") :
+                      provider == L"openai"   ? TrCtx(L"notification-title", L"credits usage at {percent}%") :
+                      provider == L"opencode" ? TrCtx(L"notification-title", L"monthly usage at {percent}%") :
+                                                TrCtx(L"notification-title", L"monthly extra usage at {percent}%");
+        title = I18nText(locale, key, {{L"percent", percent}});
+    }
+    std::wstring body = resets.empty() ? std::wstring(ProviderDisplayName(provider)) :
+                                         I18nText(locale, TrCtx(L"notification-body", L"{provider} - resets {when}"),
+                                                  {{L"provider", ProviderDisplayName(provider)}, {L"when", resets}});
+    return {std::move(title), std::move(body)};
+}
+
+// A toast's XML: `title`, `body` and an optional `projection` line, each a text element, opening
+// `url` (if any) through the shell. The one place their text is escaped.
+static std::wstring ThresholdToastXml(const std::wstring& title, const std::wstring& body,
+                                      const std::wstring& projection, PCWSTR url) {
+    auto escaped = [](std::wstring_view text) {
+        std::wstring xml;
+        for (wchar_t c : text) {
+            switch (c) {
+                case L'&': xml += L"&amp;"; break;
+                case L'<': xml += L"&lt;"; break;
+                case L'>': xml += L"&gt;"; break;
+                case L'"': xml += L"&quot;"; break;
+                default: xml += c; break;
+            }
+        }
+        return xml;
+    };
+    std::wstring xml = L"<toast";
+    if (url) xml += L" activationType=\"protocol\" launch=\"" + escaped(url) + L"\"";  // i18n-en
+    xml += L"><visual><binding template=\"ToastGeneric\"><text>" + escaped(title) + L"</text><text>" +  // i18n-en
+           escaped(body) + L"</text>";
+    if (!projection.empty()) xml += L"<text>" + escaped(projection) + L"</text>";
+    xml += L"</binding></visual></toast>";
+    return xml;
+}
+
 // Fetch-thread only. Shows `title`, `body` and an optional `projection` line as a toast tagged by
 // the account's identity and the quota's taskbar slot, so a repeat replaces it; clicking it opens
 // `url` (if any) through the shell, never calling into the mod. The balloon stands in only when
@@ -87,7 +167,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
                 return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()),
                                       DWORD((value.size() + 1) * sizeof(wchar_t)));
             };
-            status = setValue(L"DisplayName", L"Taskbar AI Quota");
+            status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
             if (status == ERROR_SUCCESS && !icon.empty()) {
                 if (LSTATUS iconStatus = setValue(L"IconUri", icon); iconStatus != ERROR_SUCCESS) {
                     Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
@@ -97,27 +177,8 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
         }
         winrt::check_win32(status);
 
-        auto escaped = [](const std::wstring& text) {
-            std::wstring xml;
-            for (wchar_t c : text) {
-                switch (c) {
-                    case L'&': xml += L"&amp;"; break;
-                    case L'<': xml += L"&lt;"; break;
-                    case L'>': xml += L"&gt;"; break;
-                    case L'"': xml += L"&quot;"; break;
-                    default: xml += c; break;
-                }
-            }
-            return xml;
-        };
-        std::wstring xml = L"<toast";
-        if (url) xml += L" activationType=\"protocol\" launch=\"" + escaped(url) + L"\"";
-        xml += L"><visual><binding template=\"ToastGeneric\"><text>" + escaped(title) + L"</text><text>" +
-               escaped(body) + L"</text>";
-        if (!projection.empty()) xml += L"<text>" + escaped(projection) + L"</text>";
-        xml += L"</binding></visual></toast>";
         winrt::Windows::Data::Xml::Dom::XmlDocument document;
-        document.LoadXml(xml);
+        document.LoadXml(ThresholdToastXml(title, body, projection, url));
         notifications::ToastNotification toast(document);
         wchar_t group[17];
         swprintf(group, ARRAYSIZE(group), L"%016llx", (unsigned long long)accountIdentity);
@@ -177,8 +238,15 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
     nid.uID = kNotifyIconId;
     nid.uFlags = NIF_INFO;
     nid.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME;
-    wcsncpy_s(nid.szInfoTitle, title.c_str(), _TRUNCATE);
-    wcsncpy_s(nid.szInfo, (projection.empty() ? body : body + L"\n" + projection).c_str(), _TRUNCATE);
+    // Cut to the fields' sizes, never inside a surrogate pair.
+    auto copy = [](auto& field, const std::wstring& text) {
+        if (wcsncpy_s(field, text.c_str(), _TRUNCATE) == STRUNCATE) {
+            size_t end = wcslen(field);
+            if (end && IS_HIGH_SURROGATE(field[end - 1])) field[end - 1] = L'\0';
+        }
+    };
+    copy(nid.szInfoTitle, title);
+    copy(nid.szInfo, projection.empty() ? body : body + L"\n" + projection);
     if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
         // Explorer can recreate the notification area without restarting this process.
         addNotifyIcon(g_notifyWnd);

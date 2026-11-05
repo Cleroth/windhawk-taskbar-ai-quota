@@ -125,9 +125,9 @@ static std::vector<int> FindAntigravityListeningPorts(DWORD pid) {
 static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR csrfToken,
                                    DWORD timeoutMs);
 static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d,
-                                         std::wstring* error);
+                                         AccountError* error);
 static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
-                                       std::wstring* error);
+                                       AccountError* error);
 
 static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundServer = nullptr) {
     *info = {};
@@ -210,7 +210,7 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
             candidate.extensionCsrfToken = std::move(extensionCsrf);
             candidate.cli = cli;
             bool ide = lowerCmdLine.find(L"antigravity-ide") != std::wstring::npos ||
-                       lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||
+                       lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||  // i18n-en
                        lowerCmdLine.find(L"\\extensions\\antigravity\\") != std::wstring::npos ||
                        lowerCmdLine.find(L"/extensions/antigravity/") != std::wstring::npos;
             candidate.richQuotaLikely = cli || !ide;
@@ -362,7 +362,7 @@ static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR cs
 
     std::string body =
         R"({"metadata":{"ideName":"antigravity","extensionName":"antigravity","ideVersion":"unknown","locale":"en"}})";
-    std::wstring headers = L"Content-Type: application/json\r\nConnect-Protocol-Version: 1\r\n";
+    std::wstring headers = L"Content-Type: application/json\r\nConnect-Protocol-Version: 1\r\n";  // i18n-en
     if (csrfToken && *csrfToken) {
         headers += L"X-Codeium-Csrf-Token: ";
         headers += csrfToken;
@@ -403,7 +403,7 @@ static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR cs
     return res;
 }
 
-static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d, std::wstring* error) {
+static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d, AccountError* error) {
     try {
         auto root = JsonObject::Parse(Utf8ToWide(body));
         JsonObject summary = root;
@@ -411,12 +411,12 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
         else if (auto wrapped = GetObj(root, L"summary")) summary = wrapped;
 
         if (!summary.HasKey(L"groups")) {
-            if (error) *error = L"no quota groups in response";
+            if (error) *error = {AccountErrorCode::NoQuotaGroups};
             return false;
         }
         auto groupsVal = summary.GetNamedValue(L"groups");
         if (groupsVal.ValueType() != JsonValueType::Array) {
-            if (error) *error = L"groups is not an array";
+            if (error) *error = {AccountErrorCode::QuotaGroupsNotArray};
             return false;
         }
 
@@ -537,7 +537,7 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
                                      unit[0] == L'd' ? count * 24 * kHourMs : 0;
                     }
                 }
-                std::wstring name = argonBucket && !argonGroup ? L"Argon" : groupName;
+                std::wstring name = argonBucket && !argonGroup ? L"Argon" : groupName;  // i18n-en
                 if (name.empty()) name = rawBucketId;
                 if (!durationMs) {
                     std::wstring detail = bucketName;
@@ -550,18 +550,16 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 
         // Rows only accompany the main readings: a summary without any counts as unsupported.
         if (!parsed) d->extraQuotas.clear();
-        if (!parsed && error) {
-            *error = L"no usable Antigravity quota buckets in response";
-        }
+        if (!parsed && error) *error = {AccountErrorCode::NoUsableQuotaBuckets};
         return parsed;
     } catch (...) {
-        if (error) *error = L"failed to parse quota summary JSON";
+        if (error) *error = {AccountErrorCode::QuotaSummaryInvalid};
         return false;
     }
 }
 
 static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
-                                       std::wstring* error) {
+                                       AccountError* error) {
     try {
         bool hasSummaryGeminiShort = d->win5h.pct >= 0;
         bool hasSummaryThirdPartyShort = d->antigravityThirdParty5h.pct >= 0;
@@ -573,7 +571,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
         if (auto response = GetObj(root, L"response")) payload = response;
         auto userStatus = GetObj(payload, L"userStatus");
         if (!userStatus) {
-            if (error) *error = L"no userStatus object";
+            if (error) *error = {AccountErrorCode::NoUserStatus};
             return false;
         }
         std::wstring plan;
@@ -591,7 +589,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
         if (plan.empty()) plan = GetStr(planInfo, L"productName");
         if (plan.empty()) plan = GetStr(planInfo, L"planShortName");
         if (plan.empty()) plan = GetStr(tier, L"description");
-        if (plan.rfind(L"Google AI ", 0) == 0) plan.erase(0, 10);
+        if (plan.rfind(L"Google AI ", 0) == 0) plan.erase(0, 10);  // i18n-en
         if (!plan.empty()) d->plan = std::move(plan);
 
         auto configData = GetObj(userStatus, L"cascadeModelConfigData");
@@ -650,8 +648,8 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                     if (!target) {
                         // Argon's models share one pool, named like the Gemini and Claude/GPT
                         // pools' current limits; other models go by their label.
-                        AddExtraQuota(d, argon ? L"Argon current limit" : label,
-                                      {usedPct, ParseIso8601Ms(resetTime), 0});
+                        AddExtraQuota(d, argon ? L"Argon" : label,  // i18n-en
+                                      {usedPct, ParseIso8601Ms(resetTime), 0}, argon);
                         continue;
                     }
                     if (target->pct < usedPct) {
@@ -665,7 +663,7 @@ static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
         }
         return true;
     } catch (...) {
-        if (error) *error = L"failed to parse user status JSON";
+        if (error) *error = {AccountErrorCode::UserStatusInvalid};
         return false;
     }
 }
@@ -702,8 +700,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         if (!DiscoverAntigravityServer(&info, &foundServer)) {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
-                                     AccountError{AccountErrorCode::AntigravityNotRunning};
+            d->error = {foundServer ? AccountErrorCode::AntigravityUnavailable :
+                                      AccountErrorCode::AntigravityNotRunning};
             return;
         }
         info.discoveredMs = NowUnixMs();
@@ -712,13 +710,13 @@ static void FetchAntigravityAccount(AccountData* d) {
 
     auto fetchFromServer = [&](const AntigravityServerInfo& server, AccountData* fresh,
                                HttpResult* summaryResult, HttpResult* statusResult,
-                               bool* summaryParsed, std::wstring* parseError) {
+                               bool* summaryParsed, AccountError* parseError) {
         *fresh = {};
         fresh->plan = d->plan;
         *summaryResult = {};
         *statusResult = {};
         *summaryParsed = false;
-        parseError->clear();
+        *parseError = {};
 
         if (server.quotaSource == AntigravityQuotaSource::Summary) {
             *summaryResult = HttpRequestLocal(
@@ -737,9 +735,8 @@ static void FetchAntigravityAccount(AccountData* d) {
             L"/exa.language_server_pb.LanguageServerService/GetUserStatus",
             server.csrfToken.c_str(), 5000);
         if (statusResult->ok && statusResult->status == 200) {
-            std::wstring statusError;
-            if (!ParseAntigravityUserStatus(statusResult->body, fresh, &statusError) &&
-                parseError->empty()) {
+            AccountError statusError;
+            if (!ParseAntigravityUserStatus(statusResult->body, fresh, &statusError) && !*parseError) {
                 *parseError = std::move(statusError);
             }
         }
@@ -747,9 +744,7 @@ static void FetchAntigravityAccount(AccountData* d) {
         bool parsed = fresh->win5h.pct >= 0 || fresh->winWeek.pct >= 0 ||
                       fresh->fableWeek.pct >= 0 || fresh->antigravityThirdParty5h.pct >= 0 ||
                       fresh->antigravityThirdPartyWeek.pct >= 0;
-        if (!parsed && parseError->empty()) {
-            *parseError = L"no usable Antigravity quota in response";
-        }
+        if (!parsed && !*parseError) *parseError = {AccountErrorCode::NoUsableQuota};
         return parsed;
     };
 
@@ -757,7 +752,7 @@ static void FetchAntigravityAccount(AccountData* d) {
     HttpResult summaryResult;
     HttpResult statusResult;
     bool summaryParsed = false;
-    std::wstring parseError;
+    AccountError parseError;
     bool fetched = fetchFromServer(info, &fresh, &summaryResult, &statusResult,
                                    &summaryParsed, &parseError);
 
@@ -783,8 +778,8 @@ static void FetchAntigravityAccount(AccountData* d) {
         } else {
             if (g_unloading) return;
             d->stale = true;
-            d->error = foundServer ? AccountError{AccountErrorCode::Message, L"Antigravity quota unavailable"} :
-                                     AccountError{AccountErrorCode::AntigravityNotRunning};
+            d->error = {foundServer ? AccountErrorCode::AntigravityUnavailable :
+                                      AccountErrorCode::AntigravityNotRunning};
             return;
         }
     }
@@ -796,16 +791,14 @@ static void FetchAntigravityAccount(AccountData* d) {
                                 !summaryResult.ok && !statusResult.ok :
                                 !statusResult.ok;
         if (networkError) {
-            d->error = {AccountErrorCode::Message, L"network error (language server)"};
+            d->error = {AccountErrorCode::LanguageServerNetwork};
         } else if (info.quotaSource == AntigravityQuotaSource::Summary &&
                    summaryResult.ok && summaryResult.status != 200) {
-            d->error = {AccountErrorCode::Message,
-                        L"HTTP " + std::to_wstring(summaryResult.status) + L" from language server"};
+            d->error = {.code = AccountErrorCode::LanguageServerHttp, .status = summaryResult.status};
         } else if (statusResult.ok && statusResult.status != 200) {
-            d->error = {AccountErrorCode::Message,
-                        L"HTTP " + std::to_wstring(statusResult.status) + L" from language server"};
+            d->error = {.code = AccountErrorCode::LanguageServerHttp, .status = statusResult.status};
         } else {
-            d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response" : parseError};
+            d->error = parseError ? parseError : AccountError{AccountErrorCode::LanguageServerResponse};
         }
         if (endpointInvalid) g_antigravityCachedInfo = {};
         return;

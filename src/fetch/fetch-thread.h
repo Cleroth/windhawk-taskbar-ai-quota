@@ -61,18 +61,22 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = {AccountErrorCode::Message, L"not signed in - click to sign in"};
+        d->error = {AccountErrorCode::NotSignedIn};
         return signInGeneration;
     }
     // GitHub refreshes through its own form-encoded endpoint.
-    auto refresh = [&](std::wstring* err, int* retryAfterSec) {
+    auto refresh = [&](AccountError* err, int* retryAfterSec) {
         return copilot ? RefreshCopilotToken(&tok, err, retryAfterSec) :
                          RefreshToken(acc.provider, &tok, err, retryAfterSec);
+    };
+    // A failed refresh's error, naming the endpoint's failure as its cause.
+    auto refreshFailed = [](const AccountError& err) {
+        return AccountError{AccountErrorCode::TokenRefreshFailed, err.detail, err.status, err.code};
     };
 
     // Refresh just before expiry so a request rarely races the token going stale.
     if (tok.expiresMs && tok.expiresMs < NowUnixMs() + 60000) {
-        std::wstring refreshErr;
+        AccountError refreshErr;
         int refreshRetryAfter = 0;
         TokenEndpointResult refreshResult = refresh(&refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
@@ -81,8 +85,8 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
-                                                           L"token refresh failed" : L"could not save refreshed token"};
+                d->error = {saved == TokenSaveResult::Stale ? AccountErrorCode::TokenRefreshFailed :
+                                                              AccountErrorCode::TokenSaveFailed};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
@@ -90,10 +94,9 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
             d->stale = true;
             if (refreshResult == TokenEndpointResult::Rejected) {
                 d->needsLogin = true;
-                d->error = {AccountErrorCode::Message, L"session expired - click to sign in"};
+                d->error = {AccountErrorCode::SessionExpired};
             } else {
-                d->error = {AccountErrorCode::Message, L"token refresh failed"};
-                if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
+                d->error = refreshFailed(refreshErr);
                 *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             }
             return signInGeneration;
@@ -102,12 +105,12 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
 
     // Shared by the usage request and the account details requests.
     auto anthropicHeaders = [](const StoredToken& t) {
-        return L"Authorization: Bearer " + t.accessToken +
-               L"\r\nanthropic-beta: oauth-2025-04-20"
+        return L"Authorization: Bearer " + t.accessToken +  // i18n-en
+               L"\r\nanthropic-beta: oauth-2025-04-20"  // i18n-en
                L"\r\nAccept: application/json\r\n";
     };
     auto openAiHeaders = [](const StoredToken& t) {
-        std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+        std::wstring headers = L"Authorization: Bearer " + t.accessToken +  // i18n-en
                                L"\r\nOrigin: https://chatgpt.com"
                                L"\r\nReferer: https://chatgpt.com/"
                                L"\r\nAccept: application/json\r\n";
@@ -121,15 +124,15 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                                kClaudeCliUserAgent, anthropicHeaders(t));
         }
         if (copilot) {
-            std::wstring headers = L"Authorization: token " + t.accessToken +
-                                   L"\r\nAccept: application/json"
+            std::wstring headers = L"Authorization: token " + t.accessToken +  // i18n-en
+                                   L"\r\nAccept: application/json"  // i18n-en
                                    L"\r\nX-GitHub-Api-Version: 2025-04-01\r\n";
             return HttpRequest(L"GET", L"api.github.com", L"/copilot_internal/user", kOAuthUserAgent,
                                headers);
         }
         if (opencode) {
-            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
-                                   L"\r\nAccept: application/json\r\n";
+            std::wstring headers = L"Authorization: Bearer " + t.accessToken +  // i18n-en
+                                   L"\r\nAccept: application/json\r\n";  // i18n-en
             return HttpRequest(L"GET", L"opencode.ai", L"/zen/go/v1/usage", kOAuthUserAgent, headers);
         }
         return HttpRequest(L"GET", L"chatgpt.com", L"/backend-api/wham/usage",
@@ -139,7 +142,7 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     HttpResult r = requestUsage(tok);
     // Reactive refresh: the access token may have been revoked or expired early.
     if (r.ok && r.status == 401 && !tok.refreshToken.empty()) {
-        std::wstring refreshErr;
+        AccountError refreshErr;
         int refreshRetryAfter = 0;
         TokenEndpointResult refreshResult = refresh(&refreshErr, &refreshRetryAfter);
         if (refreshResult == TokenEndpointResult::Success) {
@@ -148,16 +151,15 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
                 SaveStoredTokenIfCurrent(idHash, authEpoch, tok, &savedIdentity);
             if (saved != TokenSaveResult::Saved) {
                 d->stale = true;
-                d->error = {AccountErrorCode::Message, saved == TokenSaveResult::Stale ?
-                                                           L"token refresh failed" : L"could not save refreshed token"};
+                d->error = {saved == TokenSaveResult::Stale ? AccountErrorCode::TokenRefreshFailed :
+                                                              AccountErrorCode::TokenSaveFailed};
                 return signInGeneration;
             }
             if (savedIdentity != idHash) RefreshQuotaByIdentity(savedIdentity);
             r = requestUsage(tok);
         } else if (refreshResult == TokenEndpointResult::TransientFailure) {
             d->stale = true;
-            d->error = {AccountErrorCode::Message, L"token refresh failed"};
-            if (!refreshErr.empty()) d->error.detail += L": " + refreshErr;
+            d->error = refreshFailed(refreshErr);
             *retryAfterSec = refreshRetryAfter > 0 ? refreshRetryAfter : 120;
             return signInGeneration;
         }
@@ -165,13 +167,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
 
     if (!r.ok) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"network error"};
+        d->error = {AccountErrorCode::Network};
         return signInGeneration;
     }
     if (r.status == 401) {
         d->stale = true;
         d->needsLogin = true;
-        d->error = {AccountErrorCode::Message, L"unauthorized - click to sign in"};
+        d->error = {AccountErrorCode::Unauthorized};
         return signInGeneration;
     }
     // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
@@ -185,13 +187,13 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     }
     if (r.status == 429 || githubRateLimited) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"rate limited by API"};
+        d->error = {AccountErrorCode::RateLimited};
         *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
         return signInGeneration;
     }
     if (copilot && r.status == 403) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"no Copilot access on this GitHub account"};
+        d->error = {AccountErrorCode::NoCopilotAccess};
         return signInGeneration;
     }
     // OpenCode's EntitlementError: the key's workspace has no Go subscription. Other 403s (an edge
@@ -204,25 +206,25 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
         } catch (...) {}
         if (entitlement) {
             d->stale = true;
-            d->error = {AccountErrorCode::Message, L"no OpenCode Go subscription on this key"};
+            d->error = {AccountErrorCode::NoOpenCodeSubscription};
             return signInGeneration;
         }
     }
     if (r.status != 200) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, L"HTTP " + std::to_wstring(r.status)};
+        d->error = {.code = AccountErrorCode::Http, .status = r.status};
         return signInGeneration;
     }
 
     AccountData fresh;
-    std::wstring parseError;
+    AccountError parseError;
     bool parsed = anthropic ? ParseAnthropicUsage(r.body, &fresh, &parseError) :
                   copilot ? ParseCopilotUsage(r.body, &fresh, &parseError) :
                   opencode ? ParseOpenCodeUsage(r.body, &fresh, &parseError) :
                              ParseOpenAiUsage(r.body, &fresh, &parseError);
     if (!parsed) {
         d->stale = true;
-        d->error = {AccountErrorCode::Message, parseError.empty() ? L"unexpected response format" : parseError};
+        d->error = parseError ? parseError : AccountError{AccountErrorCode::UnexpectedResponse};
         return signInGeneration;
     }
 
@@ -762,42 +764,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     }
                     if (shouldNotify && !g_unloading) {
                         const I18nLocale locale(*g_language.load(std::memory_order_acquire));
-                        std::wstring providerName =
-                            ProviderDisplayName(publishedAccounts[i].provider);
-                        std::wstring copilotUnit;
-                        wchar_t title[96];
-                        PCWSTR quotaName =
-                            w == kFiveHourBar ? L"5h" :
-                            w == kWeeklyBar ? L"weekly" :
-                            w == kFableWeeklyBar ? L"Fable weekly" : L"monthly extra";
-                        if (publishedAccounts[i].provider == L"antigravity") {
-                            if (w == kFiveHourBar) {
-                                ULONGLONG duration = publishedResults[i].win5h.windowDurationMs;
-                                quotaName = duration == 3ULL * 60 * 60 * 1000 ? L"Gemini 3h" :
-                                            duration == 60ULL * 60 * 1000 ? L"Gemini 1h" :
-                                            duration == 0 ? L"Gemini current limit" :
-                                                            L"Gemini 5h";
-                            } else if (w == kWeeklyBar) {
-                                quotaName = L"Gemini weekly";
-                            } else if (w == kFableWeeklyBar) {
-                                quotaName = L"Argon weekly";
-                            }
-                        } else if (publishedAccounts[i].provider == L"openai" &&
-                                   w == kExtraUsageBar) {
-                            quotaName = L"credits";
-                        } else if (publishedAccounts[i].provider == L"copilot") {
-                            copilotUnit = CopilotUnitName(locale, publishedResults[i].copilotUnit);
-                            quotaName = copilotUnit.c_str();
-                        } else if (publishedAccounts[i].provider == L"opencode" &&
-                                   w == kExtraUsageBar) {
-                            quotaName = L"monthly";
-                        }
-                        swprintf(title, ARRAYSIZE(title), L"%s usage at %.0f%%",
-                                 quotaName, wu.pct);
-                        std::wstring body = providerName;
-                        if ((w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs) {
-                            body += L" - resets " + FormatReset(locale, wu.resetUnixMs);
-                        }
+                        auto [title, body] = ThresholdNotificationText(
+                            locale, publishedAccounts[i].provider, publishedResults[i], w,
+                            (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
+                                FormatReset(locale, wu.resetUnixMs) : L"");
                         // The flyout's projection to the limit; none for an OpenCode Go window at
                         // its limit, as there.
                         std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :

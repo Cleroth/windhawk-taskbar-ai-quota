@@ -117,12 +117,12 @@ static ULONGLONG PollProviderStatuses(ProviderStatusPoll& poll) {
         }
 
         HttpResult response = HttpRequest(L"GET", source.host, source.path, L"taskbar-ai-quota",
-                                          L"Accept: application/json\r\n", {}, kStatusRequestTimeoutMs);
+                                          L"Accept: application/json\r\n", {}, kStatusRequestTimeoutMs);  // i18n-en
         if (g_unloading) break;
         std::wstring problem;
         std::optional<ProviderOutage> read;
         if (!response.ok) {
-            problem = L"network error";
+            problem = L"network error";  // i18n-en: logged
         } else if (response.status != 200) {
             problem = L"HTTP " + std::to_wstring(response.status);
         } else {
